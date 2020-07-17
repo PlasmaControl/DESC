@@ -13,7 +13,8 @@ r = r(:);  v = v(:);  dim = length(r);
 t = pi - v;  p = -z;
 
 % Zernike polynomial basis
-[iM,ZERN] = zernfun(M,r,v);  ZERN(:,dimZern+1:end) = [];
+[iM,ZERN] = zernfun(M,r,v);  
+ZERN(:,dimZern+1:end) = [];
 
 % format boundary wave numbers
 [lm,ln] = size(bndryR);  I = ones(dim,dimFourN,(lm+1)/2,ln);
@@ -29,6 +30,7 @@ cZb = I.*permute(bndryZ((lm+1)/2:end,:),[4,3,1,2]);
 % boundary surface
 R = sum(sum(sRb.*sin(m.*t-n.*NFP.*p),3),4)+sum(sum(cRb.*cos(m.*t-n.*NFP.*p),3),4);
 Z = sum(sum(sZb.*sin(m.*t-n.*NFP.*p),3),4)+sum(sum(cZb.*cos(m.*t-n.*NFP.*p),3),4);
+% magnetic axis guess = centroid
 R0 = sum(sum(sRb(1,:,1,:).*sin(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4) ...
    + sum(sum(cRb(1,:,1,:).*cos(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4);
 Z0 = sum(sum(sZb(1,:,1,:).*sin(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4) ...
@@ -58,7 +60,8 @@ end
 X = phys2four(y')';
 
 if symm
-    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;iM(1:dimZern-dimFourM)>=0],[N,1]);repmat([true(M,1);false(M+1,1);iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
+    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;iM(1:dimZern-dimFourM)>=0],[N,1]);...
+        repmat([true(M,1);false(M+1,1);iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
     x = X(:);  x(~ssf) = [];
 else
     ssi = logical([ones(2*M,1); 0; ones(2*(dimZern-dimFourM),1)]);

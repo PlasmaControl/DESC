@@ -12,7 +12,7 @@ squr = false;
 % N = maximum toroidal resolution
 % resolutions are given as an vector for continuation method
 
-M = 6:16;
+M = 6:20;
 N = zeros(size(M));
 
 % options = fsolve algorithm options

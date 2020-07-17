@@ -1,6 +1,11 @@
 %% f=f(x) is the system of equations for the equilibrium force balance errors
 
-function f = f_err(x,cP,cI,Psi,bndryR,bndryZ,NFP,M,N,iM,ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rC0,drC0,dvC0,rS0,drS0,dvS0,rC1,drC1,dvC1,rS1,drS1,dvS1,symm,squr)
+function f = f_err(x,cP,cI,Psi,bndryR,bndryZ,NFP,M,N,iM,...
+    ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,...
+    ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,...
+    ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,...
+    ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,...
+    rC0,drC0,dvC0,rS0,drS0,dvS0,rC1,drC1,dvC1,rS1,drS1,dvS1,symm,squr)
 
 %% ---- constants & profiles -------------------------------------------- %
 
@@ -101,6 +106,22 @@ Rzrv  = ZERNrv  *cRz;           Zzrv  = ZERNrv  *cZz;
 Rrrvv = ZERNrrvv*cR;            Zrrvv = ZERNrrvv*cZ;
 
 %% ---- covariant basis vectors ----------------------------------------- %
+er = zeros(numPts,numSlc,3);
+ev = zeros(numPts,numSlc,3);
+ez = zeros(numPts,numSlc,3);
+err = zeros(numPts,numSlc,3);
+erv = zeros(numPts,numSlc,3);
+erz = zeros(numPts,numSlc,3);
+evv = zeros(numPts,numSlc,3);
+evz = zeros(numPts,numSlc,3);
+ezr = zeros(numPts,numSlc,3);
+ezv = zeros(numPts,numSlc,3);
+ezz = zeros(numPts,numSlc,3);
+ervv = zeros(numPts,numSlc,3);
+ervz = zeros(numPts,numSlc,3);
+ezrv = zeros(numPts,numSlc,3);
+
+
 
 er(:,:,1)   = Rr;    er(:,:,3)   = Zr;    er(:,:,2)   = zeros(numPts,numSlc);
 ev(:,:,1)   = Rv;    ev(:,:,3)   = Zv;    ev(:,:,2)   = zeros(numPts,numSlc);

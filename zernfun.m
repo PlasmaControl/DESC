@@ -3,6 +3,7 @@
 % f = ZERN*c gives the values of the function interpolated at the points (r,v)
 % df/drho = ZERNr*c, df/dvartheta = ZERNv*c, etc.
 % iM = poloidal modes of the Zernike basis functions
+% iL = radial modes of basis fns.
 % fringe indexing is assumed
 
 function [iM,ZERN,ZERNr,ZERNv,ZERNrr,ZERNvv,ZERNrv,ZERNrrv,ZERNrvv,ZERNrrvv] = zernfun(M,r,v)
@@ -57,25 +58,25 @@ end
 pos = iM >= 0;
 neg = iM < 0;
 
-ZERN(:,pos)   = J(:,pos).*  cos(v.*abs(iM(pos))');
-ZERN(:,neg)   = J(:,neg).*  sin(v.*abs(iM(neg))');
-ZERNr(:,pos)  = Jr(:,pos).* cos(v.*abs(iM(pos))');
-ZERNr(:,neg)  = Jr(:,neg).* sin(v.*abs(iM(neg))');
-ZERNrr(:,pos) = Jrr(:,pos).*cos(v.*abs(iM(pos))');
-ZERNrr(:,neg) = Jrr(:,neg).*sin(v.*abs(iM(neg))');
+ZERN(:,pos)   = J(:,pos).*  cos(v*abs(iM(pos))');
+ZERN(:,neg)   = J(:,neg).*  sin(v*abs(iM(neg))');
+ZERNr(:,pos)  = Jr(:,pos).* cos(v*abs(iM(pos))');
+ZERNr(:,neg)  = Jr(:,neg).* sin(v*abs(iM(neg))');
+ZERNrr(:,pos) = Jrr(:,pos).*cos(v*abs(iM(pos))');
+ZERNrr(:,neg) = Jrr(:,neg).*sin(v*abs(iM(neg))');
 
-ZERNv(:,pos)   = J(:,pos).*  -abs(iM(pos))'.*sin(v.*abs(iM(pos))');
-ZERNv(:,neg)   = J(:,neg).*   abs(iM(neg))'.*cos(v.*abs(iM(neg))');
-ZERNrv(:,pos)  = Jr(:,pos).* -abs(iM(pos))'.*sin(v.*abs(iM(pos))');
-ZERNrv(:,neg)  = Jr(:,neg).*  abs(iM(neg))'.*cos(v.*abs(iM(neg))');
-ZERNrrv(:,pos) = Jrr(:,pos).*-abs(iM(pos))'.*sin(v.*abs(iM(pos))');
-ZERNrrv(:,neg) = Jrr(:,neg).* abs(iM(neg))'.*cos(v.*abs(iM(neg))');
+ZERNv(:,pos)   = J(:,pos).*  -repmat(abs(iM(pos))',numPts,1).*sin(v*abs(iM(pos))');
+ZERNv(:,neg)   = J(:,neg).*   repmat(abs(iM(neg))',numPts,1).*cos(v*abs(iM(neg))');
+ZERNrv(:,pos)  = Jr(:,pos).* -repmat(abs(iM(pos))',numPts,1).*sin(v*abs(iM(pos))');
+ZERNrv(:,neg)  = Jr(:,neg).*  repmat(abs(iM(neg))',numPts,1).*cos(v*abs(iM(neg))');
+ZERNrrv(:,pos) = Jrr(:,pos).*-repmat(abs(iM(pos))',numPts,1).*sin(v*abs(iM(pos))');
+ZERNrrv(:,neg) = Jrr(:,neg).* repmat(abs(iM(neg))',numPts,1).*cos(v*abs(iM(neg))');
 
-ZERNvv(:,pos)   = J(:,pos).*  -abs(iM(pos)).^2'.*cos(v.*abs(iM(pos))');
-ZERNvv(:,neg)   = J(:,neg).*  -abs(iM(neg)).^2'.*sin(v.*abs(iM(neg))');
-ZERNrvv(:,pos)  = Jr(:,pos).* -abs(iM(pos)).^2'.*cos(v.*abs(iM(pos))');
-ZERNrvv(:,neg)  = Jr(:,neg).* -abs(iM(neg)).^2'.*sin(v.*abs(iM(neg))');
-ZERNrrvv(:,pos) = Jrr(:,pos).*-abs(iM(pos)).^2'.*cos(v.*abs(iM(pos))');
-ZERNrrvv(:,neg) = Jrr(:,neg).*-abs(iM(neg)).^2'.*sin(v.*abs(iM(neg))');
+ZERNvv(:,pos)   = J(:,pos).*  -repmat(abs(iM(pos)).^2',numPts,1).*cos(v*abs(iM(pos))');
+ZERNvv(:,neg)   = J(:,neg).*  -repmat(abs(iM(neg)).^2',numPts,1).*sin(v*abs(iM(neg))');
+ZERNrvv(:,pos)  = Jr(:,pos).* -repmat(abs(iM(pos)).^2',numPts,1).*cos(v*abs(iM(pos))');
+ZERNrvv(:,neg)  = Jr(:,neg).* -repmat(abs(iM(neg)).^2',numPts,1).*sin(v*abs(iM(neg))');
+ZERNrrvv(:,pos) = Jrr(:,pos).*-repmat(abs(iM(pos)).^2',numPts,1).*cos(v*abs(iM(pos))');
+ZERNrrvv(:,neg) = Jrr(:,neg).*-repmat(abs(iM(neg)).^2',numPts,1).*sin(v*abs(iM(neg))');
 
 end

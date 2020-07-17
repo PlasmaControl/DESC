@@ -11,24 +11,34 @@ dimFourMM = 2*MM+1;
 dimFourN  = 2*N+1;
 dimFourNN = 2*NN+1;
 Mpad = (dimFourMM-dimFourM)/2;
-Npad = (dimFourNN-dimFourN)/2;
+Npad = (dimFourNN-dimFourN)/2; % padding with zeros
 
 % Fourier-Zernike coefficients
 if symm
-    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;iM(1:dimZern-dimFourM)>=0],[N,1]);repmat([true(M,1);false(M+1,1);iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
-    X = zeros((2*dimZern-dimFourM)*dimFourN,1);  X(ssf) = x;  X = reshape(X,[2*dimZern-dimFourM,dimFourN]);
+    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;...
+        iM(1:dimZern-dimFourM)>=0],[N,1]);repmat([true(M,1);false(M+1,1);...
+        iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
+    X = zeros((2*dimZern-dimFourM)*dimFourN,1);  
+    X(ssf) = x;  
+    X = reshape(X,[2*dimZern-dimFourM,dimFourN]);
 else
     ssi = logical([ones(2*M,1); 0; ones(2*(dimZern-dimFourM),1)]);
     ssf = [true((2*dimZern-dimFourM)*(dimFourN-1),1); ssi];
-    y = zeros((2*dimZern-dimFourM)*dimFourN,1);  y(ssf) = x;  X = reshape(y,[],dimFourN);
+    y = zeros((2*dimZern-dimFourM)*dimFourN,1);  
+    y(ssf) = x;  
+    X = reshape(y,[],dimFourN);
 end
 X(dimFourM,dimFourN) = -sum(sum(X(M+1:dimFourM,N+1:dimFourN)));  % lambda(v=0,z=0) = 0
 aL = X(1:dimFourM,:);
-aR = zeros(dimZern,dimFourN);  aR(1:dimZern-dimFourM,:) = X(dimFourM+1:dimZern,:);
-aZ = zeros(dimZern,dimFourN);  aZ(1:dimZern-dimFourM,:) = X(dimZern+1:end,:);
+aR = zeros(dimZern,dimFourN);  
+aZ = zeros(dimZern,dimFourN);  
+aR(1:dimZern-dimFourM,:) = X(dimFourM+1:dimZern,:);
+aZ(1:dimZern-dimFourM,:) = X(dimZern+1:end,:);
 
 % theta & zeta
-L = four2phys(four2phys([zeros(Mpad,dimFourNN);[zeros(dimFourM,Npad),aL,zeros(dimFourM,Npad)];zeros(Mpad,dimFourNN)]')');
+L = four2phys(four2phys([zeros(Mpad,dimFourNN);...
+    [zeros(dimFourM,Npad),aL,zeros(dimFourM,Npad)];...
+    zeros(Mpad,dimFourNN)]')');
 dv = 2*pi/dimFourMM;        v = (0:dv:(2*pi-dv))';   t = pi - v + L;
 dz = 2*pi/(NFP*dimFourNN);  z = 0:dz:(2*pi/NFP-dz);  p = -z;
 
@@ -48,6 +58,7 @@ Rb = sum(sum(sRb.*sin(m.*t-n.*p),3),4)+sum(sum(cRb.*cos(m.*t-n.*p),3),4);
 Zb = sum(sum(sZb.*sin(m.*t-n.*p),3),4)+sum(sum(cZb.*cos(m.*t-n.*p),3),4);
 
 % boundary Fourier modes
+% tilde vars from paper
 aRb = phys2four(phys2four(Rb)')';  aRb = aRb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
 aZb = phys2four(phys2four(Zb)')';  aZb = aZb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
 

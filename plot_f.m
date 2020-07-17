@@ -1,6 +1,9 @@
 %% plot force balance error
 
-function [] = plot_f(x,Pres,Iota,Psi,bndryR,bndryZ,NFP,M,N,symm)
+function [] = plot_f(x,Pres,Iota,Psi,bndryR,bndryZ,NFP,M,N,lm,ln,symm,squr)
+
+bndryR = reshape(bndryR,[lm,ln]);
+bndryZ = reshape(bndryZ,[lm,ln]);
 
 % constants
 mu0 = 4*pi/1e7;
@@ -27,7 +30,7 @@ psir  = 2*Psi*r;
 psirr = 2*Psi;
 
 % state variables
-[aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm);
+[aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm,squr);
 
 % toroidal derivatives
 dk = (-(dimFour-1)/2:(dimFour-1)/2);

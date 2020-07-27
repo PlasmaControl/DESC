@@ -37,8 +37,8 @@ for m = 0:M-1
             drC0(i) = (cos((M-m-1)*pi/M)-cos((M-m+1)*pi/M))/4;
             drS0(i) = (cos((M-m-2)*pi/M)-cos((M-m+0)*pi/M))/4;
         end
-        dvC0(i) = pi/(m+1);
-        dvS0(i) = pi/(m+1);
+        dvC0(i) = 2*pi/(m+1);
+        dvS0(i) = 2*pi/(m+1);
         i = i+1;
     end
 end
@@ -69,7 +69,7 @@ for m = 0:M
         vS1(i) = 2*pi/(2*m+1)*j;
         if m == 0
             drS1(i) = (cos((M-m-1)*pi/M)+1)/4;
-        elseif m == M-1
+        elseif m == M
             drS1(i) = 1-(cos((M-m)*pi/M)+cos((M-m+1)*pi/M)+2)/4;
         else
             drS1(i) = (cos((M-m-1)*pi/M)-cos((M-m+1)*pi/M))/4;
@@ -78,11 +78,5 @@ for m = 0:M
         i = i+1;
     end
 end
-
-% extra points are added at rho=0 to average the magnetic axis results
-dv = 2*pi/(2*M+1);
-rC0 = [zeros(2*M,1); rC0];  vC0 = [(2*pi-dv:-dv:dv)'; vC0];
-rC1 = [zeros(2*M,1); rC1];  vC1 = [(2*pi-dv:-dv:dv)'; vC1];
-rS1 = [zeros(2*M,1); rS1];  vS1 = [(2*pi-dv:-dv:dv)'; vS1];
 
 end

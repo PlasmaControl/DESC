@@ -28,6 +28,14 @@ for m = 0:M
     iM(j+1:j+2*m+1) = -m:1:m;
     j = j+2*m+1;
 end
+% iNorm = zeros(dimZern,1);
+% for i = 1:dimZern
+%     if iM(i) == 0
+%         iNorm(i) = sqrt((iL(i)+1)/pi);
+%     else
+%         iNorm(i) = sqrt(2*(iL(i)+1)/pi);
+%     end
+% end
 
 % Jacobi polynomials
 J   = zeros(numPts,dimZern);

@@ -1,25 +1,28 @@
 %% f=f(x) is the system of equations for the equilibrium force balance errors
 
-function f = f_err(x,cP,cI,Psi,bndryR,bndryZ,NFP,M,N,iM,...
-    ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,...
-    ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,...
-    ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,...
-    ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,...
-    rC0,drC0,dvC0,rS0,drS0,dvS0,rC1,drC1,dvC1,rS1,drS1,dvS1,symm,squr)
+function f = f_err(x,Pres,Iota,Psi,bndryR,bndryZ,NFP,M,N,lm,ln,iM,ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rC0,drC0,dvC0,rS0,drS0,dvS0,rC1,drC1,dvC1,rS1,drS1,dvS1,w,symm,squr)
 
 %% ---- constants & profiles -------------------------------------------- %
 
 % constants
 dimZern = (M+1)^2;
 dimFour = 2*N+1;
-if squr;  Mnodes = M;            numSlc = dimFour;
-else;     Mnodes = ceil(1.5*M);  numSlc = 2*ceil(1.5*N)+1;  end
+if squr;  numSlc = dimFour;
+else;     numSlc = 2*ceil(1.5*N)+1;  end
 Npad = (numSlc-dimFour)/2;
+
+% profile Zernike coefficients
+cP = zeros(dimZern,1);  cP(find(iM==0,length(Pres))) = Pres;
+cI = zeros(dimZern,1);  cI(find(iM==0,length(Iota))) = Iota;
+
+% boundary
+bndryR = reshape(bndryR,[lm,ln]);
+bndryZ = reshape(bndryZ,[lm,ln]);
 
 %% ---- toroidal Fourier transform -------------------------------------- %
 
 % state variables
-[aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm);
+[aR,aZ,aRb,aZb] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm,squr);
 
 % toroidal derivatives
 dk = (-(dimFour-1)/2:(dimFour-1)/2);
@@ -55,30 +58,34 @@ if symm
     cRzz(:,((numSlc+1)/2+1):end) = [];
     cZzz(:,((numSlc+1)/2+1):end) = [];
     % force balance errors
-    [frho_C0,~] = fberr(Psi,cR(:,1),cZ(:,1),cRz(:,1),cZz(:,1),cRzz(:,1),cZzz(:,1),cP,cI,ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,rC0,drC0,dvC0,Mnodes);
-    [~,fbta_S0] = fberr(Psi,cR(:,1),cZ(:,1),cRz(:,1),cZz(:,1),cRzz(:,1),cZzz(:,1),cP,cI,ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,rS0,drS0,dvS0,Mnodes);
-    [frho_C1,~] = fberr(Psi,cR(:,2:end),cZ(:,2:end),cRz(:,2:end),cZz(:,2:end),cRzz(:,2:end),cZzz(:,2:end),cP,cI,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,rC1,drC1,dvC1,Mnodes);
-    [~,fbta_S1] = fberr(Psi,cR(:,2:end),cZ(:,2:end),cRz(:,2:end),cZz(:,2:end),cRzz(:,2:end),cZzz(:,2:end),cP,cI,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rS1,drS1,dvS1,Mnodes);
+    [frho_C0,~] = fberr(Psi,cR(:,1),cZ(:,1),cRz(:,1),cZz(:,1),cRzz(:,1),cZzz(:,1),cP,cI,ZERN_C0,ZERNr_C0,ZERNv_C0,ZERNrr_C0,ZERNvv_C0,ZERNrv_C0,ZERNrrv_C0,ZERNrvv_C0,ZERNrrvv_C0,rC0,drC0,dvC0);
+    [~,fbta_S0] = fberr(Psi,cR(:,1),cZ(:,1),cRz(:,1),cZz(:,1),cRzz(:,1),cZzz(:,1),cP,cI,ZERN_S0,ZERNr_S0,ZERNv_S0,ZERNrr_S0,ZERNvv_S0,ZERNrv_S0,ZERNrrv_S0,ZERNrvv_S0,ZERNrrvv_S0,rS0,drS0,dvS0);
+    [frho_C1,~] = fberr(Psi,cR(:,2:end),cZ(:,2:end),cRz(:,2:end),cZz(:,2:end),cRzz(:,2:end),cZzz(:,2:end),cP,cI,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,rC1,drC1,dvC1);
+    [~,fbta_S1] = fberr(Psi,cR(:,2:end),cZ(:,2:end),cRz(:,2:end),cZz(:,2:end),cRzz(:,2:end),cZzz(:,2:end),cP,cI,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rS1,drS1,dvS1);
+    % boundary errors
+    ssi = [true(M,N),false(M,N+1);false(M+1,N),true(M+1,N+1)];
+    aRb = aRb(:);  aRb(~ssi) = [];
+    aZb = aZb(:);  aZb( ssi) = [];
     % output
-    f = [frho_C0(:); frho_C1(:); fbta_S0(:); fbta_S1(:)];
+    f = [frho_C0(:); frho_C1(:); fbta_S0(:); fbta_S1(:); w*aRb; w*aZb];
 else
     % force balance errors
-    [frho_C1,~] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,rC1,drC1,dvC1,Mnodes);
-    [~,fbta_S1] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rS1,drS1,dvS1,Mnodes);
+    [frho_C1,~] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN_C1,ZERNr_C1,ZERNv_C1,ZERNrr_C1,ZERNvv_C1,ZERNrv_C1,ZERNrrv_C1,ZERNrvv_C1,ZERNrrvv_C1,rC1,drC1,dvC1);
+    [~,fbta_S1] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN_S1,ZERNr_S1,ZERNv_S1,ZERNrr_S1,ZERNvv_S1,ZERNrv_S1,ZERNrrv_S1,ZERNrvv_S1,ZERNrrvv_S1,rS1,drS1,dvS1);
     % output
-    f = [frho_C1(:); fbta_S1(:)];
+    f = [frho_C1(:); fbta_S1(:); w*aRb(:); w*aZb(:)];
     if squr;  f(1) = [];  end
 end
 
 end
 
-function [frho,fbta] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN,ZERNr,ZERNv,ZERNrr,ZERNvv,ZERNrv,ZERNrrv,ZERNrvv,ZERNrrvv,r,dr,dv,M)
+function [frho,fbta] = fberr(Psi,cR,cZ,cRz,cZz,cRzz,cZzz,cP,cI,ZERN,ZERNr,ZERNv,ZERNrr,ZERNvv,ZERNrv,ZERNrrv,ZERNrvv,ZERNrrvv,r,dr,dv)
 
 % constants
 mu0 = 4*pi/1e7;
 numSlc = size(cR,2);
 numPts = length(r);
-dz = pi/numSlc;
+dz = 2*pi/numSlc;
 
 % profiles
 presr = ZERNr*cP;
@@ -106,22 +113,6 @@ Rzrv  = ZERNrv  *cRz;           Zzrv  = ZERNrv  *cZz;
 Rrrvv = ZERNrrvv*cR;            Zrrvv = ZERNrrvv*cZ;
 
 %% ---- covariant basis vectors ----------------------------------------- %
-er = zeros(numPts,numSlc,3);
-ev = zeros(numPts,numSlc,3);
-ez = zeros(numPts,numSlc,3);
-err = zeros(numPts,numSlc,3);
-erv = zeros(numPts,numSlc,3);
-erz = zeros(numPts,numSlc,3);
-evv = zeros(numPts,numSlc,3);
-evz = zeros(numPts,numSlc,3);
-ezr = zeros(numPts,numSlc,3);
-ezv = zeros(numPts,numSlc,3);
-ezz = zeros(numPts,numSlc,3);
-ervv = zeros(numPts,numSlc,3);
-ervz = zeros(numPts,numSlc,3);
-ezrv = zeros(numPts,numSlc,3);
-
-
 
 er(:,:,1)   = Rr;    er(:,:,3)   = Zr;    er(:,:,2)   = zeros(numPts,numSlc);
 ev(:,:,1)   = Rv;    ev(:,:,3)   = Zv;    ev(:,:,2)   = zeros(numPts,numSlc);
@@ -211,14 +202,10 @@ if sum(axn) == 0
     frho = Frho .* vol;
     fbta = Fbta .* vol;
 else
-    vol0 = g(2*M+2,:)/2.*dr(1).*dv(1).*dz;
-    frho0 = mean(Frho(1:2*M+1,:),1) .* vol0;
-    fbta0 = mean(Fbta(1:2*M+1,:),1) .* vol0;
-    vol  = g(2*M+1:end,:).*dr.*dv.*dz;
-    frho = Frho(2*M+1:end,:) .* vol;
-    fbta = Fbta(2*M+1:end,:) .* vol;
-    frho(1,:) = frho0;
-    fbta(1,:) = fbta0;
+    vol = g.*dr.*dv.*dz;
+    vol(1,:) = g(2,:)/2.*dr(1).*dv(1).*dz;
+    frho = Frho .* vol;
+    fbta = Fbta .* vol;
 end
 
 end

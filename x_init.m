@@ -1,7 +1,10 @@
 %% create initial guess for equilibrium flux surfaces
 % boundary surface is scaled proportional to rho
 
-function x = x_init(bndryR,bndryZ,NFP,M,N,symm)
+function x = x_init(bndryR,bndryZ,NFP,M,N,lm,ln,symm)
+
+bndryR = reshape(bndryR,[lm,ln]);
+bndryZ = reshape(bndryZ,[lm,ln]);
 
 dimZern  = (M+1)^2;
 dimFourM = 2*M+1;
@@ -13,8 +16,7 @@ r = r(:);  v = v(:);  dim = length(r);
 t = pi - v;  p = -z;
 
 % Zernike polynomial basis
-[iM,ZERN] = zernfun(M,r,v);  
-ZERN(:,dimZern+1:end) = [];
+[iM,ZERN] = zernfun(M,r,v);  ZERN(:,dimZern+1:end) = [];
 
 % format boundary wave numbers
 [lm,ln] = size(bndryR);  I = ones(dim,dimFourN,(lm+1)/2,ln);
@@ -30,7 +32,6 @@ cZb = I.*permute(bndryZ((lm+1)/2:end,:),[4,3,1,2]);
 % boundary surface
 R = sum(sum(sRb.*sin(m.*t-n.*NFP.*p),3),4)+sum(sum(cRb.*cos(m.*t-n.*NFP.*p),3),4);
 Z = sum(sum(sZb.*sin(m.*t-n.*NFP.*p),3),4)+sum(sum(cZb.*cos(m.*t-n.*NFP.*p),3),4);
-% magnetic axis guess = centroid
 R0 = sum(sum(sRb(1,:,1,:).*sin(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4) ...
    + sum(sum(cRb(1,:,1,:).*cos(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4);
 Z0 = sum(sum(sZb(1,:,1,:).*sin(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4) ...
@@ -40,15 +41,13 @@ Z0 = sum(sum(sZb(1,:,1,:).*sin(-n(1,:,1,:).*NFP.*p(1,:,1,:)),3),4) ...
 R = r.*(R-R0) + R0;
 Z = r.*(Z-Z0) + Z0;
 
-y = zeros(2*dimZern-dimFourM,dimFourN);
+y = zeros(2*dimZern+dimFourM,dimFourN);
 
 for k = 1:dimFourN
     
     % Zernike coefficients
-    CR = ZERN \ R(:,k);
-    CZ = ZERN \ Z(:,k);
-    cR = CR(1:end-dimFourM);
-    cZ = CZ(1:end-dimFourM);
+    cR = ZERN \ R(:,k);
+    cZ = ZERN \ Z(:,k);
     
     % Fourier coefficients
     cL = zeros(dimFourM,1);
@@ -59,14 +58,14 @@ end
 
 X = phys2four(y')';
 
+% stellarator symmetry indices
 if symm
-    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;iM(1:dimZern-dimFourM)>=0],[N,1]);...
-        repmat([true(M,1);false(M+1,1);iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
-    x = X(:);  x(~ssf) = [];
+    ssi = [repmat([false(M,1);true(M+1,1);iM<0;iM>=0],[N,1]);repmat([true(M,1);false(M+1,1);iM>=0;iM<0],[N+1,1])];
+    x = X(:);  x(~ssi) = [];
 else
-    ssi = logical([ones(2*M,1); 0; ones(2*(dimZern-dimFourM),1)]);
-    ssf = [true((2*dimZern-dimFourM)*(dimFourN-1),1); ssi];
-    x = X(:);  x(~ssf) = [];
+    ssi = logical([ones(2*M,1); 0; ones(2*dimZern,1)]);
+    ssi = [true((2*dimZern+dimFourM)*(dimFourN-1),1); ssi];
+    x = X(:);  x(~ssi) = [];
 end
 
 end

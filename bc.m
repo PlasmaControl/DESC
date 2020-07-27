@@ -1,44 +1,38 @@
 %% apply boundary conditions and return Fourier-Zernike coefficients for R & Z
 
-function [aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm)
+function [aR,aZ,aRb_err,aZb_err] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm,squr)
 
 % constants
+if squr;  MM = M;            NN = M;
+else;     MM = ceil(1.5*M);  NN = ceil(1.5*N);  end
 dimZern = (M+1)^2;
-MM = ceil(3*M/2);
-NN = ceil(3*N/2);
-dimFourM  = 2*M+1;
+dimFourM = 2*M+1;
+dimFourN = 2*N+1;
 dimFourMM = 2*MM+1;
-dimFourN  = 2*N+1;
 dimFourNN = 2*NN+1;
 Mpad = (dimFourMM-dimFourM)/2;
-Npad = (dimFourNN-dimFourN)/2; % padding with zeros
+Npad = (dimFourNN-dimFourN)/2;
+
+% stellarator symmetry indices
+if symm
+    ssi = [repmat([false(M,1);true(M+1,1);iM<0;iM>=0],[N,1]);repmat([true(M,1);false(M+1,1);iM>=0;iM<0],[N+1,1])];
+    X = zeros((2*dimZern+dimFourM)*dimFourN,1);  X(ssi) = x;  X = reshape(X,[2*dimZern+dimFourM,dimFourN]);
+else
+    ssi = logical([ones(2*M,1); 0; ones(2*dimZern,1)]);
+    ssi = [true((2*dimZern+dimFourM)*(dimFourN-1),1); ssi];
+    y = zeros((2*dimZern+dimFourM)*dimFourN,1);  y(ssi) = x;  X = reshape(y,[],dimFourN);
+end
 
 % Fourier-Zernike coefficients
-if symm
-    ssf = [repmat([false(M,1);true(M+1,1);iM(1:dimZern-dimFourM)<0;...
-        iM(1:dimZern-dimFourM)>=0],[N,1]);repmat([true(M,1);false(M+1,1);...
-        iM(1:dimZern-dimFourM)>=0;iM(1:dimZern-dimFourM)<0],[N+1,1])];
-    X = zeros((2*dimZern-dimFourM)*dimFourN,1);  
-    X(ssf) = x;  
-    X = reshape(X,[2*dimZern-dimFourM,dimFourN]);
-else
-    ssi = logical([ones(2*M,1); 0; ones(2*(dimZern-dimFourM),1)]);
-    ssf = [true((2*dimZern-dimFourM)*(dimFourN-1),1); ssi];
-    y = zeros((2*dimZern-dimFourM)*dimFourN,1);  
-    y(ssf) = x;  
-    X = reshape(y,[],dimFourN);
-end
-X(dimFourM,dimFourN) = -sum(sum(X(M+1:dimFourM,N+1:dimFourN)));  % lambda(v=0,z=0) = 0
 aL = X(1:dimFourM,:);
-aR = zeros(dimZern,dimFourN);  
-aZ = zeros(dimZern,dimFourN);  
-aR(1:dimZern-dimFourM,:) = X(dimFourM+1:dimZern,:);
-aZ(1:dimZern-dimFourM,:) = X(dimZern+1:end,:);
+aR = X(dimFourM+1:dimFourM+dimZern,:);
+aZ = X(dimFourM+dimZern+1:end,:);
 
-% theta & zeta
-L = four2phys(four2phys([zeros(Mpad,dimFourNN);...
-    [zeros(dimFourM,Npad),aL,zeros(dimFourM,Npad)];...
-    zeros(Mpad,dimFourNN)]')');
+% lambda(v=0,z=0) = 0
+aL(end,end) = -sum(sum(aL(M+1:end,N+1:end)));
+
+% theta & phi
+L = four2phys(four2phys([zeros(Mpad,dimFourNN);[zeros(dimFourM,Npad),aL,zeros(dimFourM,Npad)];zeros(Mpad,dimFourNN)]')');
 dv = 2*pi/dimFourMM;        v = (0:dv:(2*pi-dv))';   t = pi - v + L;
 dz = 2*pi/(NFP*dimFourNN);  z = 0:dz:(2*pi/NFP-dz);  p = -z;
 
@@ -58,14 +52,19 @@ Rb = sum(sum(sRb.*sin(m.*t-n.*p),3),4)+sum(sum(cRb.*cos(m.*t-n.*p),3),4);
 Zb = sum(sum(sZb.*sin(m.*t-n.*p),3),4)+sum(sum(cZb.*cos(m.*t-n.*p),3),4);
 
 % boundary Fourier modes
-% tilde vars from paper
-aRb = phys2four(phys2four(Rb)')';  aRb = aRb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
-aZb = phys2four(phys2four(Zb)')';  aZb = aZb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
+aRb = phys2four(phys2four(Rb)')';
+aZb = phys2four(phys2four(Zb)')';
 
-% boundary coefficients
+% toroidal reduction
+aRb = aRb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
+aZb = aZb(Mpad+(1:dimFourM),Npad+(1:dimFourN));
+
+% boundary errors
+aRb_err = zeros(dimFourM,dimFourN);
+aZb_err = zeros(dimFourM,dimFourN);
 for i = 1:dimFourM
-    aR(end-dimFourM+i,:) = aRb(end-dimFourM+i,:) - sum(aR(iM==i-M-1,:));
-    aZ(end-dimFourM+i,:) = aZb(end-dimFourM+i,:) - sum(aZ(iM==i-M-1,:));
+    aRb_err(i,:) = aRb(i,:) - sum(aR(iM==i-M-1,:));
+    aZb_err(i,:) = aZb(i,:) - sum(aZ(iM==i-M-1,:));
 end
 
 end

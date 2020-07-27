@@ -6,22 +6,22 @@
 % squr = true for square system
 
 symm = true;
-squr = false;
+squr = true;
 
 % M = maximum poloidal Fourier mode
 % N = maximum toroidal Fourier mode
 % max radial resolution = rho^{2M}
 % resolutions are given as an vector for continuation method
 
-M = 6:12;
-N = M;
+M = 6:10;
+N = M-4;
 
 % options = fsolve algorithm options
 
 options = optimoptions('fsolve','Display','iter-detailed',...
     'Algorithm','levenberg-marquardt','SpecifyObjectiveGradient',false,...
     'MaxFunctionEvaluations',1e8,'MaxIterations',1e4,...
-    'FunctionTolerance',1e-6,'StepTolerance',1e-4);
+    'FunctionTolerance',1e-6,'StepTolerance',1e-3);
 
 %% boundary
 
@@ -44,6 +44,9 @@ options = optimoptions('fsolve','Display','iter-detailed',...
 
 bndryR = zeros(3);  bndryR(2:3,2) = [10; -1];  bndryR(3,3) = -0.3;
 bndryZ = zeros(3);  bndryZ(1,2) = 1;           bndryZ(1,3) = -0.3;
+[lm,ln] = size(bndryR);
+bndryR = bndryR(:);
+bndryZ = bndryZ(:);
 
 % NFP = number of field periods
 

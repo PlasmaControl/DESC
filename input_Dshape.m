@@ -8,11 +8,12 @@
 symm = true;
 squr = false;
 
-% M = maximum poloidal resolution (max radial resolution = rho^{2M})
-% N = maximum toroidal resolution
+% M = maximum poloidal Fourier mode
+% N = maximum toroidal Fourier mode
+% max radial resolution = rho^{2M}
 % resolutions are given as an vector for continuation method
 
-M = 6:20;
+M = 6:12;
 N = zeros(size(M));
 
 % options = fsolve algorithm options
@@ -43,6 +44,9 @@ options = optimoptions('fsolve','Display','iter-detailed',...
 
 bndryR = [0.000; 0.00; 3.51; -1.00; 0.106];
 bndryZ = [0.160; 1.47; 0.00;  0.00; 0.000];
+[lm,ln] = size(bndryR);
+bndryR = bndryR(:);
+bndryZ = bndryZ(:);
 
 % NFP = number of field periods
 

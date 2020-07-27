@@ -1,8 +1,9 @@
 %% plots equilibrium solution
 
-% input_Dshape
-% input_Heliotron
+clearvars
 
-load('xequil.mat')
-plot_x(xequil,bndryR,bndryZ,NFP,M(end),N(end),symm)
-plot_f(xequil,Pres,Iota,Psi,bndryR,bndryZ,NFP,M(end),N(end),symm)
+input_Dshape
+
+load('xequil.mat','xequil')
+plot_x(xequil,bndryR,bndryZ,NFP,M(end),N(end),lm,ln,symm,squr)
+plot_f(xequil,Pres,Iota,Psi,bndryR,bndryZ,NFP,M(end),N(end),lm,ln,symm,squr)

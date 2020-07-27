@@ -1,6 +1,9 @@
 %% plot flux surfaces
 
-function [] = plot_x(x,bndryR,bndryZ,NFP,M,N,symm)
+function [] = plot_x(x,bndryR,bndryZ,NFP,M,N,lm,ln,symm,squr)
+
+bndryR = reshape(bndryR,[lm,ln]);
+bndryZ = reshape(bndryZ,[lm,ln]);
 
 dz = 2*pi/6;  z = 0:dz:(2*pi-dz);
 zeta = {'0','\pi/3','2\pi/3','\pi','4\pi/3','5\pi/3'};
@@ -10,7 +13,7 @@ zeta = {'0','\pi/3','2\pi/3','\pi','4\pi/3','5\pi/3'};
 [RHOr,THETAr] = meshgrid(0:1e-2:1,0:pi/6:2*pi);
 [~,ZERNr] = zernfun(M,RHOr(:),THETAr(:));
 
-[aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm);
+[aR,aZ] = bc(x,bndryR,bndryZ,NFP,M,N,iM,symm,squr);
 cR  = four2phys(aR')';     cZ  = four2phys(aZ')';
 cR  = interpfour(cR',z)';  cZ  = interpfour(cZ',z)';
 R_v = ZERNv*cR;            Z_v = ZERNv*cZ;

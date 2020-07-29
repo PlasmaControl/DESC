@@ -10,3 +10,13 @@ The main script is DESC.py, which allows the user to specify the spectral resolu
 * init_guess.py - functions for generating initial guesses for solution
 * utils.py - wrappers for simple operations, plotting, etc
 * zernike.py - Zernike/Fourier transforms and basis functions
+
+
+TODO:
+* BC using fourier modes
+* figure out asymptotics for contravariant basis at axis
+* R_zz, Z_zz minimization instead of force
+* autodiff hessian
+* clean up backend implementation
+* break out jax code into module
+* stellarator symmetry stuff

@@ -12,6 +12,7 @@ The main script is DESC.py, which allows the user to specify the spectral resolu
 * init_guess.py - functions for generating initial guesses for solution
 * plotting.py - routines for plotting solutions
 * zernike.py - Zernike/Fourier transforms and basis functions
+* nodes.py - generate collocation nodes
 
 TODO:
 * figure out asymptotics for contravariant basis at axis

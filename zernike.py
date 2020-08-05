@@ -433,20 +433,20 @@ def zernike_norm(l, m):
     """Norm of a Zernike polynomial with l, m indexing.
     Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
     """
-    return np.sqrt((2 * (l + 1)) / (np.pi*(1 + np.kronecker(m, 0))))
+    return jnp.sqrt((2 * (l + 1)) / (jnp.pi*(1 + jnp.kronecker(m, 0))))
 
 def lm_to_fringe(l, m):
     """Convert (l,m) double index to single Fringe index.
     """
-    M = (l + np.abs(m)) / 2
+    M = (l + jnp.abs(m)) / 2
     return int(M**2 + M + m)
 
 def fringe_to_lm(idx):
     """Convert single Fringe index to (l,m) double index.
     """
-    M = (np.ceil(np.sqrt(idx+1)) - 1)
+    M = (jnp.ceil(jnp.sqrt(idx+1)) - 1)
     m = idx - M**2 - M
-    l = 2*M - np.abs(m)
+    l = 2*M - jnp.abs(m)
     return int(l), int(m)
 
 class JacobiCoeffs():

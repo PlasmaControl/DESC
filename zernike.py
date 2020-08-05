@@ -539,3 +539,31 @@ def axis_posn(cR,cZ,zern_idx,NFP):
     Z0 = eval_four_zern(cZ,zern_idx,NFP,0.,0.,0.,dr=0,dv=0,dz=0)[0]
     
     return R0,Z0
+
+
+def symmetric_x(M,N):
+    """Compute stellarator symmetry linear constraint matrix
+    
+    Args:
+        M (int): maximum poloidal mode number of solution
+        N (int): maximum toroidal mode number of solution
+    
+    Returns:
+        A (2D array): matrix such that x=A*y and y=A^T*x
+                      where y are the stellarator symmetric components of x
+    """
+    
+    dimZern = (M+1)**2
+    m = np.zeros(dimZern)
+    for i in range(dimZern):
+        li,mi = fringe_to_lm(i)
+        m[i] = mi
+    
+    # symmetric indices of R, Z, lambda
+    sym_R = np.concatenate([np.tile((m<0)[np.newaxis].T,(1,N)),np.tile((m>=0)[np.newaxis].T,(1,N+1))],axis=1).flatten()
+    sym_Z = np.concatenate([np.tile((m>=0)[np.newaxis].T,(1,N)),np.tile((m<0)[np.newaxis].T,(1,N+1))],axis=1).flatten()
+    sym_L = np.concatenate([np.tile(np.concatenate([np.zeros(M,dtype=bool),np.ones(M+1,dtype=bool)])[np.newaxis],(1,N)),np.tile(np.concatenate([np.ones(M,dtype=bool),np.zeros(M+1,dtype=bool)])[np.newaxis],(1,N+1))],axis=1).flatten()
+    sym_x = np.concatenate([sym_R,sym_Z,sym_L])
+    
+    A = np.diag(sym_x,k=0).astype(int)
+    return A[:,sym_x]

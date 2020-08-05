@@ -3,7 +3,8 @@ import functools
 import scipy.optimize
 import matplotlib.pyplot as plt
 from init_guess import get_initial_guess_scale_bdry
-from zernike import ZernikeTransform, get_zern_basis_idx_dense, get_double_four_basis_idx_dense, axis_posn
+from nodes import compute_nodes
+from zernike import ZernikeTransform, get_zern_basis_idx_dense, get_double_four_basis_idx_dense, axis_posn, symmetric_x
 from force_balance import compute_force_error_nodes
 from boundary_conditions import compute_bc_err_RZ, compute_bc_err_four, compute_lambda_err
 from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, pressfun, iotafun
@@ -11,6 +12,7 @@ from backend import get_needed_derivatives, unpack_x, rms, jacfwd, jacrev
 from plotting import plot_IC, plot_coord_surfaces, plot_coeffs, plot_fb_err
 
 # Inputs
+sym = True
 Psi_total = 1
 M = 6
 N = 0
@@ -26,22 +28,8 @@ iotafun_params = (iota0,0,-iota0)
 
 
 # Node locations
-r = np.linspace(0.05,1,20)
-dr = np.diff(r)[0]
-v = np.linspace(0,2*jnp.pi,21)[:-1]
-dv = np.diff(v)[0]
-# z = np.linspace(0,2*np.pi/NFP,N*)
-dz = 2*np.pi/NFP
-rr,vv = np.meshgrid(r,v,indexing='ij')
-rr = rr.flatten()
-vv = vv.flatten()
-zz = np.zeros_like(rr)
-nodes = np.stack([rr,vv,zz])
-dr = dr*np.ones_like(rr)
-dv = dv*np.ones_like(vv)
-dz = dz*np.ones_like(zz)
-node_volume = np.stack([dr,dv,dz])
-axn = np.where(rr == 0)[0]
+nodes,volumes = compute_nodes(2*M,N,NFP,surfs='cheb2')
+axn = np.where(nodes[0] == 0)[0]
 
 # interpolator
 print('precomputing Fourier-Zernike basis')
@@ -86,7 +74,16 @@ bdry_toroidal = bdryN
 # bdry_poloidal = bdry_theta
 # bdry_toroidal = bdry_psi
 
+# TODO: make this implementation more efficient for non-symmetric case
+if sym:
+    sym_mat = symmetric_x(M,N)
+else:
+    sym_mat = np.diag(np.ones(zern_idx.size+lambda_idx.size),k=0)
 
+if bdry_mode == 'real':
+    bdry_fun = compute_bc_err_RZ
+elif bdry_mode == 'spectral':
+    bdry_fun = compute_bc_err_four
 
 
 print('computing initial guess')
@@ -103,25 +100,20 @@ weights = {'F':1e6,     # force balance error
 
 
 nodes = jnp.asarray(nodes)
-node_volume = jnp.asarray(node_volume)
+volumes = jnp.asarray(volumes)
 
 args = (zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_params,Psi_total,
-        node_volume,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights)
+        volumes,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights)
 
 fig, ax = plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_params)
 plt.show()
 
-if bdry_mode == 'real':
-    bdry_fun = compute_bc_err_RZ
-elif bdry_mode == 'spectral':
-    bdry_fun = compute_bc_err_four
-
 @conditional_decorator(functools.partial(jit,static_argnums=np.arange(1,15)), use_jax)
 def lstsq_obj(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_params,
-              Psi_total,node_volume,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights):
+              Psi_total,volumes,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights):
     
-    cR,cZ,cL = unpack_x(x,zern_idx)
-    errF = compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,node_volume)
+    cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),zern_idx)
+    errF = compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes)
     errR,errZ = bdry_fun(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
     errL = compute_lambda_err(cL,lambda_idx,NFP)
     # divide through by size of the array so weighting isn't thrown off by more points
@@ -133,10 +125,10 @@ def lstsq_obj(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_para
 
 
 def callback(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_params,
-             Psi_total,node_volume,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights):
+             Psi_total,volumes,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,weights):
     
     cR,cZ,cL = unpack_x(x,zern_idx)
-    errF = compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,node_volume)
+    errF = compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes)
     errR,errZ = bdry_fun(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
     errL = compute_lambda_err(cL,lambda_idx,NFP)
 
@@ -165,7 +157,7 @@ else:
 
 print('starting optimization')
 out = scipy.optimize.least_squares(lstsq_obj,
-                                   x_init,
+                                   jnp.matmul(sym_mat.T,x_init),
                                    args=args,
                                    jac=jac,
                                    x_scale='jac',
@@ -174,7 +166,7 @@ out = scipy.optimize.least_squares(lstsq_obj,
                                    gtol=1e-4, 
                                    max_nfev=100, 
                                    verbose=2)
-x = out['x']
+x = jnp.matmul(sym_mat,out['x'])
 print('Initial')
 callback(x_init, *args)
 print('Final')
@@ -192,8 +184,8 @@ for k, mn in enumerate(lambda_idx):
     print('m: {:3d}, n: {:3d}, cL: {:10.3e}'.format(mn[0],mn[1],cL[k]))
 
 fig, ax = plt.subplots(1,2,figsize=(6,3))
-plot_coord_surfaces(cR_init,cZ_init,zern_idx,NFP,nr=10,ntheta=10,ax=ax[0])
-plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,ntheta=10,ax=ax[1])
+plot_coord_surfaces(cR_init,cZ_init,zern_idx,NFP,nr=10,nt=12,ax=ax[0])
+plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=ax[1])
 ax[0].set_title('Initial')
 ax[1].set_title('Final')
 plt.show()

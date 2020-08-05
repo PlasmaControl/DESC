@@ -15,8 +15,8 @@ except:
     jnp = np
     use_jax = False
     print('JAX borked, using numpy')
-    
-    
+
+
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
@@ -51,8 +51,8 @@ else:
             val = body_fun(i, val)
         return val
 
-    
-    
+
+
 def conditional_decorator(dec, condition, *args, **kwargs):
     """apply arbitrary decorator to a function if condition is met"""
     @functools.wraps(dec)
@@ -114,8 +114,8 @@ def get_needed_derivatives(mode):
                          [1,1,1],[2,2,0]])
     else:
         raise NotImplementedError
-        
-        
+
+
 def unpack_x(x,zern_idx):
     """Unpacks the optimization state vector x into cR,cZ,cL components
     
@@ -169,4 +169,3 @@ if use_jax:
 else:
     jacfwd = FiniteDifferenceJacobian
     jacrev = FiniteDifferenceJacobian
-    

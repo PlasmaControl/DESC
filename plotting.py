@@ -45,7 +45,7 @@ rcParams['axes.prop_cycle'] =  color_cycle
 
 
 
-def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=20,ntheta=30,ax=None,bdryR=None,bdryZ=None):
+def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=None):
     """Plots solutions (currently only zeta=0 plane)
 
     Args:
@@ -54,27 +54,27 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=20,ntheta=30,ax=None,bdryR=None,bd
         zern_idx (ndarray, shape(Nc,3)): indices for R,Z spectral basis, ie an array of [l,m,n] for each spectral coefficient
         NFP (int): number of field periods
         nr (int): number of flux surfaces to show
-        ntheta (int): number of theta lines to show
+        nt (int): number of theta lines to show
         ax (matplotlib.axes): axes to plot on. If None, a new figure is created.
     
     Returns:
         ax (matplotlib.axes): handle to axes used for the plot
-    """           
-        
+    """
+    
     Nr = 100
-    Ntheta = 100
+    Nt = 361
     rstep = Nr//nr
-    thetastep = Ntheta//ntheta
+    tstep = Nt//nt
     r = np.linspace(0,1,Nr)
-    theta = np.linspace(0,2*np.pi,Ntheta)
-    rr,tt = np.meshgrid(r,theta,indexing='ij')
-    rr = rr.flatten()
-    tt = tt.flatten()
-    zz = np.zeros_like(rr)
-    zernt = ZernikeTransform([rr,tt,zz],zern_idx,NFP)
+    t = np.linspace(0,2*np.pi,Nt)
+    r,t = np.meshgrid(r,t,indexing='ij')
+    r = r.flatten()
+    t = t.flatten()
+    z = np.zeros_like(r)
+    zernt = ZernikeTransform([r,t,z],zern_idx,NFP)
 
-    R = zernt.transform(cR,0,0,0).reshape((Nr,Ntheta))
-    Z = zernt.transform(cZ,0,0,0).reshape((Nr,Ntheta))
+    R = zernt.transform(cR,0,0,0).reshape((Nr,Nt))
+    Z = zernt.transform(cZ,0,0,0).reshape((Nr,Nt))
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -86,7 +86,7 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=20,ntheta=30,ax=None,bdryR=None,bd
     # plot actual bdry
     ax.plot(R.T[:,-1],Z.T[:,-1],color=colorblind_colors[0],lw=.5)
     # plot theta contours
-    ax.plot(R[:,::thetastep],Z[:,::thetastep],color=colorblind_colors[0],lw=.5,ls='--');
+    ax.plot(R[:,::tstep],Z[:,::tstep],color=colorblind_colors[0],lw=.5,ls='--');
     ax.axis('equal')
     ax.set_xlabel('$R$')
     ax.set_ylabel('$Z$')
@@ -282,7 +282,7 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_par
     ax2 = plt.subplot(gs[0,2])
     ax3 = plt.subplot(gs[1,2])
 
-    plot_coord_surfaces(cR_init,cZ_init,zern_idx,NFP,nr=20,ntheta=30,ax=ax0)
+    plot_coord_surfaces(cR_init,cZ_init,zern_idx,NFP,nr=10,nt=12,ax=ax0)
     ax0.axis('equal');
     ax0.set_title(r'Initial guess, $\zeta=0$ plane')
     ax1.plot(nodes[1],nodes[0],'o',markersize=1)

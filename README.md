@@ -17,14 +17,14 @@ TODO:
 * figure out asymptotics for contravariant basis at axis
 * expanding solution to higher resolution
 * expanding basis fn matrices to higher spectral/real space resolution without full recompute
-* R_zz, Z_zz minimization instead of force
+* function for R_zz, Z_zz minimization instead of force balance
+* function for quasi-symmetry
+* allow option for square system
+* use "root" algorithms instead of "least_squares" (and compare results)
 * autodiff hessian
-* stellarator symmetry stuff -> maybe just linear constraint setting half coeffs to zero
-* squareness
+* make stellarator symmetry implementation more efficient (especially for non-sym case)
 * default node setups
 * better plotting for stellarator stuff
-
-
 * I/O compatibiltiy with VMEC
 * command line interface
 * documentation

@@ -34,7 +34,7 @@ def get_initial_guess_scale_bdry(bdryR,bdryZ,poloidal,toroidal,zern_idx,NFP,mode
     else:
         bdry_theta = poloidal
         bdry_phi = toroidal
-        
+    
     # set up grid for zernike basis
     r = np.linspace(1e-2,1,nr)
     rr,tt = np.meshgrid(r,bdry_theta,indexing='ij')

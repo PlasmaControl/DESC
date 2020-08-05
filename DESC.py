@@ -26,7 +26,7 @@ iotafun_params = (iota0,0,-iota0)
 
 
 # Node locations
-r = np.linspace(0.,1,20)
+r = np.linspace(0.05,1,20)
 dr = np.diff(r)[0]
 v = np.linspace(0,2*jnp.pi,21)[:-1]
 dv = np.diff(v)[0]
@@ -126,9 +126,9 @@ def lstsq_obj(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_para
     errL = compute_lambda_err(cL,lambda_idx,NFP)
     # divide through by size of the array so weighting isn't thrown off by more points
     loss = jnp.concatenate([weights['F']*errF.flatten()/errF.size,   
-                           weights['R']*errR.flatten()/errR.size,
-                           weights['Z']*errZ.flatten()/errZ.size,
-                           weights['L']*errL.flatten()/errL.size])
+                            weights['R']*errR.flatten()/errR.size,
+                            weights['Z']*errZ.flatten()/errZ.size,
+                            weights['L']*errL.flatten()/errL.size])
     return loss
 
 
@@ -161,7 +161,7 @@ if use_jax:
     foo = lstsq_obj(x_init,*args).block_until_ready() 
     foo = jac(x_init,*args).block_until_ready() 
 else:
-    jac = None
+    jac = '2-point'
 
 print('starting optimization')
 out = scipy.optimize.least_squares(lstsq_obj,
@@ -169,10 +169,10 @@ out = scipy.optimize.least_squares(lstsq_obj,
                                    args=args,
                                    jac=jac,
                                    x_scale='jac',
-                                   ftol=1e-10, 
-                                   xtol=1e-8, 
-                                   gtol=1e-8, 
-                                   max_nfev=1000, 
+                                   ftol=1e-6, 
+                                   xtol=1e-4, 
+                                   gtol=1e-4, 
+                                   max_nfev=100, 
                                    verbose=2)
 x = out['x']
 print('Initial')

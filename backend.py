@@ -41,6 +41,8 @@ else:
     arange = np.arange
     def put(arr,inds,vals):
         """basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff"""
+        if isinstance(inds,tuple):
+            inds = np.ravel_multi_index(inds,arr.shape)
         np.put(arr,inds,vals)
         return arr
     def fori_loop(lower, upper, body_fun, init_val):

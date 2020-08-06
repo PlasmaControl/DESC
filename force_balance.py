@@ -1,8 +1,5 @@
-import numpy as np
 import functools
 from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, cross, dot, sign, pressfun, iotafun
-
-
 
 @conditional_decorator(functools.partial(jit,static_argnums=(2)), use_jax)
 def compute_coordinate_derivatives(cR,cZ,zernt):
@@ -36,17 +33,10 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
     coordinate_derivatives['R_rz'] = zernt.transform(cR,1,0,1)
     coordinate_derivatives['Z_rz'] = zernt.transform(cZ,1,0,1)
 
-    coordinate_derivatives['R_vr'] = zernt.transform(cR,1,1,0)
-    coordinate_derivatives['Z_vr'] = zernt.transform(cZ,1,1,0)
     coordinate_derivatives['R_vv'] = zernt.transform(cR,0,2,0)
     coordinate_derivatives['Z_vv'] = zernt.transform(cZ,0,2,0)
     coordinate_derivatives['R_vz'] = zernt.transform(cR,0,1,1)
     coordinate_derivatives['Z_vz'] = zernt.transform(cZ,0,1,1)
-
-    coordinate_derivatives['R_zr'] = zernt.transform(cR,1,0,1)
-    coordinate_derivatives['Z_zr'] = zernt.transform(cZ,1,0,1)
-    coordinate_derivatives['R_zv'] = zernt.transform(cR,0,1,1)
-    coordinate_derivatives['Z_zv'] = zernt.transform(cZ,0,1,1)
     coordinate_derivatives['R_zz'] = zernt.transform(cR,0,0,2)
     coordinate_derivatives['Z_zz'] = zernt.transform(cZ,0,0,2)
 
@@ -54,8 +44,8 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
     coordinate_derivatives['Z_rrv'] = zernt.transform(cZ,2,1,0)
     coordinate_derivatives['R_rvv'] = zernt.transform(cR,1,2,0)
     coordinate_derivatives['Z_rvv'] = zernt.transform(cZ,1,2,0)
-    coordinate_derivatives['R_zrv'] = zernt.transform(cR,1,1,1)
-    coordinate_derivatives['Z_zrv'] = zernt.transform(cZ,1,1,1)
+    coordinate_derivatives['R_rvz'] = zernt.transform(cR,1,1,1)
+    coordinate_derivatives['Z_rvz'] = zernt.transform(cZ,1,1,1)
 
     coordinate_derivatives['R_rrvv'] = zernt.transform(cR,2,2,0)
     coordinate_derivatives['Z_rrvv'] = zernt.transform(cZ,2,2,0)
@@ -84,17 +74,17 @@ def compute_covariant_basis(coordinate_derivatives):
     cov_basis['e_rho_v']    = jnp.array([coordinate_derivatives['R_rv'], coordinate_derivatives['0'],   coordinate_derivatives['Z_rv']])
     cov_basis['e_rho_z']    = jnp.array([coordinate_derivatives['R_rz'], coordinate_derivatives['0'],   coordinate_derivatives['Z_rz']])
 
-    cov_basis['e_theta_r']  = jnp.array([coordinate_derivatives['R_vr'], coordinate_derivatives['0'],   coordinate_derivatives['Z_vr']])
+    cov_basis['e_theta_r']  = jnp.array([coordinate_derivatives['R_rz'], coordinate_derivatives['0'],   coordinate_derivatives['Z_rv']])
     cov_basis['e_theta_v']  = jnp.array([coordinate_derivatives['R_vv'], coordinate_derivatives['0'],   coordinate_derivatives['Z_vv']])
     cov_basis['e_theta_z']  = jnp.array([coordinate_derivatives['R_vz'], coordinate_derivatives['0'],   coordinate_derivatives['Z_vz']])
 
-    cov_basis['e_zeta_r']  = jnp.array([coordinate_derivatives['R_zr'], -coordinate_derivatives['R_r'], coordinate_derivatives['Z_zr']])
-    cov_basis['e_zeta_v']  = jnp.array([coordinate_derivatives['R_zv'], -coordinate_derivatives['R_v'], coordinate_derivatives['Z_zv']])
+    cov_basis['e_zeta_r']  = jnp.array([coordinate_derivatives['R_rz'], -coordinate_derivatives['R_r'], coordinate_derivatives['Z_rz']])
+    cov_basis['e_zeta_v']  = jnp.array([coordinate_derivatives['R_vz'], -coordinate_derivatives['R_v'], coordinate_derivatives['Z_vz']])
     cov_basis['e_zeta_z']  = jnp.array([coordinate_derivatives['R_zz'], -coordinate_derivatives['R_z'], coordinate_derivatives['Z_zz']])
 
     cov_basis['e_rho_vv']  = jnp.array([coordinate_derivatives['R_rvv'], coordinate_derivatives['0'],   coordinate_derivatives['Z_rvv']])
-    cov_basis['e_rho_vz']  = jnp.array([coordinate_derivatives['R_zrv'], coordinate_derivatives['0'],   coordinate_derivatives['Z_zrv']])
-    cov_basis['e_zeta_rv'] = jnp.array([coordinate_derivatives['R_zrv'],-coordinate_derivatives['R_rv'],coordinate_derivatives['Z_zrv']])
+    cov_basis['e_rho_vz']  = jnp.array([coordinate_derivatives['R_rvz'], coordinate_derivatives['0'],   coordinate_derivatives['Z_rvz']])
+    cov_basis['e_zeta_rv'] = jnp.array([coordinate_derivatives['R_rvz'],-coordinate_derivatives['R_rv'],coordinate_derivatives['Z_rvz']])
     
     return cov_basis
 
@@ -134,10 +124,10 @@ def compute_jacobian(coordinate_derivatives,covariant_basis):
                                                      - coordinate_derivatives['R_rvv']*coordinate_derivatives['Z_r'])
     jacobian['g_zr']  = coordinate_derivatives['R_z']*(coordinate_derivatives['R_r']*coordinate_derivatives['Z_rv'] 
                                                        - coordinate_derivatives['R_rv']*coordinate_derivatives['Z_r']) \
-                            + coordinate_derivatives['R']*(coordinate_derivatives['R_zr']*coordinate_derivatives['Z_rv'] 
-                                                           + coordinate_derivatives['R_r']*coordinate_derivatives['Z_zrv']
-                                                           - coordinate_derivatives['R_zrv']*coordinate_derivatives['Z_r']
-                                                           - coordinate_derivatives['R_rv']*coordinate_derivatives['Z_zr'])
+                            + coordinate_derivatives['R']*(coordinate_derivatives['R_rz']*coordinate_derivatives['Z_rv'] 
+                                                           + coordinate_derivatives['R_r']*coordinate_derivatives['Z_rvz']
+                                                           - coordinate_derivatives['R_rvz']*coordinate_derivatives['Z_r']
+                                                           - coordinate_derivatives['R_rv']*coordinate_derivatives['Z_rz'])
     jacobian['g_rrv'] = 2*coordinate_derivatives['R_rv']*(coordinate_derivatives['Z_rv']*coordinate_derivatives['R_r']
                                                           - coordinate_derivatives['R_rv']*coordinate_derivatives['Z_r']) \
                             + 2*coordinate_derivatives['R_r']*(coordinate_derivatives['Z_rvv']*coordinate_derivatives['R_r']
@@ -338,31 +328,33 @@ def compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobia
 
 
 @conditional_decorator(functools.partial(jit,static_argnums=(2,3,4,5,6,7)), use_jax)
-def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,node_volume):
+def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
     """Computes force balance error at each node
     
     Args:
         cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
+        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
         pressfun_params (array-like): parameters to pass to pressure function
         iotafun_params (array-like): parameters to pass to rotational transform function
         Psi_total (float): total toroidal flux within LCFS
-        node_volume (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
+        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
         
     Returns:
-        F_err (ndarray, shape(2*N_nodes,)): R,phi,Z components of force balance error at each grid point
+        F_rho (ndarray, shape(N_nodes,)): radial component of force balance error at each grid point (in Newtons)
+        F_beta (ndarray, shape(N_nodes,)): helical component of force balance error at each grid point (in Newtons)
     """
-    N_nodes = nodes[0].size
+    
     r = nodes[0]
     axn = jnp.where(r == 0)[0]
     # value of r one step out from axis
     r1 = jnp.min(r[r != 0])
     r1idx = jnp.where(r == r1)[0]
     
-    pres = pressfun(r,0,pressfun_params)
+    mu0 = 4*jnp.pi*1e-7
     presr = pressfun(r,1, pressfun_params)
-
+    
     # compute coordinates, fields etc.
     coordinate_derivatives = compute_coordinate_derivatives(cR,cZ,zernt)
     covariant_basis = compute_covariant_basis(coordinate_derivatives)
@@ -370,29 +362,28 @@ def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,P
     B_field = compute_B_field(Psi_total, jacobian, nodes, axn, covariant_basis, iotafun_params)
     J_field = compute_J_field(B_field, jacobian, nodes, axn)
     contravariant_basis = compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobian, nodes, axn)
-
+    
     # helical basis vector
     beta = B_field['B^zeta']*contravariant_basis['e^theta'] - B_field['B^theta']*contravariant_basis['e^zeta']
-
-    # force balance error in radial and helical direction
-    Frho = (J_field['J^theta']*B_field['B^zeta'] - J_field['J^zeta']*B_field['B^theta']) - presr
-    Fbeta = J_field['J^rho']
     
+    # force balance error in radial and helical direction
+    f_rho = (J_field['J^theta']*B_field['B^zeta'] - J_field['J^zeta']*B_field['B^theta']) - mu0*presr
+    f_beta = J_field['J^rho']
     
     radial  = jnp.sqrt(contravariant_basis['g^rr']) * jnp.sign(dot(contravariant_basis['e^rho'],covariant_basis['e_rho'],0));
     helical = jnp.sqrt(contravariant_basis['g^vv']*B_field['B^zeta']**2 + contravariant_basis['g^zz']*B_field['B^theta']**2 \
                - 2*contravariant_basis['g^vz']*B_field['B^theta']*B_field['B^zeta']) * jnp.sign(
             dot(beta,covariant_basis['e_theta'],0))*jnp.sign(dot(beta,covariant_basis['e_zeta'],0));
     put(helical,axn,jnp.sqrt(contravariant_basis['g^vv'][axn]*B_field['B^zeta'][axn]**2) * jnp.sign(B_field['B^zeta'][axn]))
-
+    
+    F_rho = f_rho * radial
+    F_beta = f_beta * helical
     
     # weight by local volume
-    if node_volume is not None:
-        vol = jacobian['g']*node_volume[0]*node_volume[1]*node_volume[2];
-        vol = put(vol, axn, jnp.mean(jacobian['g'][r1idx])/2*node_volume[0,axn]*node_volume[1,axn]*node_volume[2,axn])
-        Frho = Frho*vol
-        Fbeta = Fbeta*vol
-        
-    F_err = jnp.concatenate([Frho*radial,Fbeta*helical])
- 
-    return F_err
+    if volumes is not None:
+        vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2];
+        vol = put(vol, axn, jnp.mean(jacobian['g'][r1idx])/2*volumes[0,axn]*volumes[1,axn]*volumes[2,axn])
+        F_rho = F_rho*vol
+        F_beta = F_beta*vol
+    
+    return F_rho,F_beta

@@ -93,17 +93,16 @@ def iotafun(rho,nu, params):
     
     return jnp.polyval(jnp.polyder(params[::-1],nu),rho)
         
-def pressfun(rho,nu, params):
-    """Plasma pressure * mu0
+def pressfun(rho,nu,params):
+    """Plasma pressure
     
     Args:
         rho (array-like): coordinates at which to evaluate
         nu (int): order of derivative (for compatibility with scipy spline routines)
         params (array-like): parameters to use for calculating profile
     """
-    mu0 = 4*jnp.pi*1e-7
 
-    return mu0*jnp.polyval(jnp.polyder(params[::-1],nu),rho)
+    return jnp.polyval(jnp.polyder(params[::-1],nu),rho)
 
 
 def get_needed_derivatives(mode):

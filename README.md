@@ -12,19 +12,21 @@ The main script is DESC.py, which allows the user to specify the spectral resolu
 * init_guess.py - functions for generating initial guesses for solution
 * plotting.py - routines for plotting solutions
 * zernike.py - Zernike/Fourier transforms and basis functions
+* nodes.py - generate collocation nodes
 
 TODO:
 * figure out asymptotics for contravariant basis at axis
 * expanding solution to higher resolution
 * expanding basis fn matrices to higher spectral/real space resolution without full recompute
-* R_zz, Z_zz minimization instead of force
+* function for quasi-symmetry
+* enforce stellarator symmetry on the function output
+* make stellarator symmetry implementation more efficient (especially for non-sym case)
+* allow option for square system
+* use "root" algorithms instead of "least_squares" (and compare results)
 * autodiff hessian
-* stellarator symmetry stuff -> maybe just linear constraint setting half coeffs to zero
-* squareness
-* default node setups
+* option for 3/2 rule to prevent spectral aliasing in BC error function
+* add node option to avoid rational surfaces
 * better plotting for stellarator stuff
-
-
 * I/O compatibiltiy with VMEC
 * command line interface
 * documentation

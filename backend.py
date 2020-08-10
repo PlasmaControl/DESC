@@ -15,8 +15,8 @@ except:
     jnp = np
     use_jax = False
     print('JAX borked, using numpy')
-    
-    
+
+
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
@@ -41,6 +41,8 @@ else:
     arange = np.arange
     def put(arr,inds,vals):
         """basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff"""
+        if isinstance(inds,tuple):
+            inds = np.ravel_multi_index(inds,arr.shape)
         np.put(arr,inds,vals)
         return arr
     def fori_loop(lower, upper, body_fun, init_val):
@@ -49,8 +51,8 @@ else:
             val = body_fun(i, val)
         return val
 
-    
-    
+
+
 def conditional_decorator(dec, condition, *args, **kwargs):
     """apply arbitrary decorator to a function if condition is met"""
     @functools.wraps(dec)
@@ -91,17 +93,16 @@ def iotafun(rho,nu, params):
     
     return jnp.polyval(jnp.polyder(params[::-1],nu),rho)
         
-def pressfun(rho,nu, params):
-    """Plasma pressure * mu0
+def pressfun(rho,nu,params):
+    """Plasma pressure
     
     Args:
         rho (array-like): coordinates at which to evaluate
         nu (int): order of derivative (for compatibility with scipy spline routines)
         params (array-like): parameters to use for calculating profile
     """
-    mu0 = 4*jnp.pi*1e-7
 
-    return mu0*jnp.polyval(jnp.polyder(params[::-1],nu),rho)
+    return jnp.polyval(jnp.polyder(params[::-1],nu),rho)
 
 
 def get_needed_derivatives(mode):
@@ -112,8 +113,8 @@ def get_needed_derivatives(mode):
                          [1,1,1],[2,2,0]])
     else:
         raise NotImplementedError
-        
-        
+
+
 def unpack_x(x,zern_idx):
     """Unpacks the optimization state vector x into cR,cZ,cL components
     
@@ -167,4 +168,3 @@ if use_jax:
 else:
     jacfwd = FiniteDifferenceJacobian
     jacrev = FiniteDifferenceJacobian
-    

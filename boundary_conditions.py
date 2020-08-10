@@ -40,7 +40,7 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
 
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    vartheta = jnp.pi - bdry_theta + L
+    vartheta = jnp.pi - bdry_theta - L
     zeta = -bdry_phi
     zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
@@ -48,7 +48,7 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
 
     four_bdry_interp = jnp.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m, n in zip(bdryM,bdryN)]).T
 
-    cRb, cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T)[0].T
+    cRb, cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
 
     # compute errors
     errR = cRb - bdryR
@@ -84,7 +84,7 @@ def compute_bc_err_RZ(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_theta,bdry_p
 
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    vartheta = jnp.pi - bdry_theta + L
+    vartheta = jnp.pi - bdry_theta - L
     zeta = -bdry_phi
     zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
     R = jnp.matmul(zern_bdry_interp,cR).flatten()

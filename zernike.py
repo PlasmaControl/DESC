@@ -431,45 +431,23 @@ def get_double_four_basis_idx_dense(M,N):
 
 def zernike_norm(l, m):
     """Norm of a Zernike polynomial with l, m indexing.
-    Borrowed from prysm: https://github.com/brandondube/prysm
+    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
     """
-    return jnp.sqrt((2 * (l + 1)) / (1 + jnp.kronecker(m, 0)))
+    return jnp.sqrt((2 * (l + 1)) / (jnp.pi*(1 + jnp.kronecker(m, 0))))
 
 def lm_to_fringe(l, m):
-    """Convert (l,m) two term index to Fringe index.
-    Borrowed from prysm: https://github.com/brandondube/prysm
+    """Convert (l,m) double index to single Fringe index.
     """
-    term1 = (1 + (l + jnp.abs(m))/2)**2
-    term2 = 2 * jnp.abs(m)
-    term3 = (1 + jnp.sign(m)) / 2
-    return int(term1 - term2 - term3)  
+    M = (l + jnp.abs(m)) / 2
+    return int(M**2 + M + m)
 
 def fringe_to_lm(idx):
-    """Convert Fringe Z to (l, m) two-term index.
-    Borrowed from prysm: https://github.com/brandondube/prysm
+    """Convert single Fringe index to (l,m) double index.
     """
-    idx += 1 # shift 0 base to 1 base
-    m_l = 2 * (jnp.ceil(jnp.sqrt(idx)) - 1)  # sum of n+m
-    g_s = (m_l / 2)**2 + 1  # start of each group of equal n+m given as idx index
-    l = m_l / 2 + jnp.floor((idx - g_s) / 2)
-    m = (m_l - l) * (1 - jnp.mod(idx-g_s, 2) * 2)
+    M = (jnp.ceil(jnp.sqrt(idx+1)) - 1)
+    m = idx - M**2 - M
+    l = 2*M - jnp.abs(m)
     return int(l), int(m)
-
-def lm_to_ansi_j(l, m):
-    """Convert (n,m) two term index to ANSI single term index.
-    Borrowed from prysm: https://github.com/brandondube/prysm
-    """
-    return int((l * (l + 2) + m) / 2)
-
-
-def ansi_j_to_lm(idx):
-    """Convert ANSI single term to (n,m) two-term index.
-    Borrowed from prysm: https://github.com/brandondube/prysm
-    """
-    l = int(jnp.ceil((-3 + jnp.sqrt(9 + 8*idx))/2))
-    m = 2 * idx - l * (l + 2)
-    return l, m
-
 
 class JacobiCoeffs():
     def __init__(self,M):
@@ -561,3 +539,31 @@ def axis_posn(cR,cZ,zern_idx,NFP):
     Z0 = eval_four_zern(cZ,zern_idx,NFP,0.,0.,0.,dr=0,dv=0,dz=0)[0]
     
     return R0,Z0
+
+
+def symmetric_x(M,N):
+    """Compute stellarator symmetry linear constraint matrix
+    
+    Args:
+        M (int): maximum poloidal mode number of solution
+        N (int): maximum toroidal mode number of solution
+    
+    Returns:
+        A (2D array): matrix such that x=A*y and y=A^T*x
+                      where y are the stellarator symmetric components of x
+    """
+    
+    dimZern = (M+1)**2
+    m = np.zeros(dimZern)
+    for i in range(dimZern):
+        li,mi = fringe_to_lm(i)
+        m[i] = mi
+    
+    # symmetric indices of R, Z, lambda
+    sym_R = np.concatenate([np.tile((m<0)[np.newaxis].T,(1,N)),np.tile((m>=0)[np.newaxis].T,(1,N+1))],axis=1).flatten()
+    sym_Z = np.concatenate([np.tile((m>=0)[np.newaxis].T,(1,N)),np.tile((m<0)[np.newaxis].T,(1,N+1))],axis=1).flatten()
+    sym_L = np.concatenate([np.tile(np.concatenate([np.zeros(M,dtype=bool),np.ones(M+1,dtype=bool)])[np.newaxis],(1,N)),np.tile(np.concatenate([np.ones(M,dtype=bool),np.zeros(M+1,dtype=bool)])[np.newaxis],(1,N+1))],axis=1).flatten()
+    sym_x = np.concatenate([sym_R,sym_Z,sym_L])
+    
+    A = np.diag(sym_x,k=0).astype(int)
+    return A[:,sym_x]

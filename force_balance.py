@@ -52,7 +52,6 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
 
     return coordinate_derivatives
 
-
 @conditional_decorator(functools.partial(jit), use_jax)
 def compute_covariant_basis(coordinate_derivatives):
     """Computes covariant basis vectors at grid points
@@ -87,7 +86,6 @@ def compute_covariant_basis(coordinate_derivatives):
     cov_basis['e_zeta_rv'] = jnp.array([coordinate_derivatives['R_rvz'],-coordinate_derivatives['R_rv'],coordinate_derivatives['Z_rvz']])
     
     return cov_basis
-
 
 @conditional_decorator(functools.partial(jit), use_jax)
 def compute_jacobian(coordinate_derivatives,covariant_basis):
@@ -143,7 +141,6 @@ def compute_jacobian(coordinate_derivatives,covariant_basis):
     
     return jacobian
 
-
 @conditional_decorator(functools.partial(jit,static_argnums=(0,2,3,5)), use_jax)
 def compute_B_field(Psi_total, jacobian, nodes, axn, covariant_basis, iotafun_params):
     """Computes magnetic field at node locations
@@ -172,7 +169,7 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, covariant_basis, iotafun_pa
     B_field['B^rho'] = jnp.zeros_like(r)
     B_field['B^zeta'] = B_field['psi_r'] / (2*jnp.pi*jacobian['g'])
     B_field['B^theta'] = iota * B_field['B^zeta']
-
+    
     # B^{zeta} derivatives
     B_field['B^zeta_r'] = B_field['psi_rr'] / (2*jnp.pi*jacobian['g']) - (B_field['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
     B_field['B^zeta_v'] = - (B_field['psi_r']*jacobian['g_v']) / (2*jnp.pi*jacobian['g']**2)
@@ -180,14 +177,14 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, covariant_basis, iotafun_pa
     # rho=0 terms only
     B_field['B^zeta_rv'] = B_field['psi_rr']*(2*jacobian['g_rr']*jacobian['g_rv'] 
                                               - jacobian['g_r']*jacobian['g_rrv']) / (4*jnp.pi*jacobian['g_r']**3)
-
+    
     # magnetic axis
     B_field['B^zeta'] = put(B_field['B^zeta'], axn, Psi_total / (jnp.pi*jacobian['g_r'][axn]))
     B_field['B^theta'] = put(B_field['B^theta'], axn, Psi_total*iota[axn] / (jnp.pi*jacobian['g_r'][axn]))
     B_field['B^zeta_r'] = put(B_field['B^zeta_r'], axn, -(B_field['psi_rr'][axn]*jacobian['g_rr'][axn]) / (4*jnp.pi*jacobian['g_r'][axn]**2))
     B_field['B^zeta_v'] = put(B_field['B^zeta_v'], axn, 0)
     B_field['B^zeta_z'] = put(B_field['B^zeta_z'], axn, -(B_field['psi_rr'][axn]*jacobian['g_zr'][axn]) / (2*jnp.pi*jacobian['g_r'][axn]**2))
-
+    
     # covariant B-component derivatives
     B_field['B_theta_r'] = B_field['B^zeta_r']*dot(iota*covariant_basis['e_theta']
                                                    +covariant_basis['e_zeta'],covariant_basis['e_theta'],0) \
@@ -238,7 +235,6 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, covariant_basis, iotafun_pa
 
     return B_field
 
-
 @conditional_decorator(functools.partial(jit,static_argnums=(2,3)), use_jax)
 def compute_J_field(B_field, jacobian, nodes, axn):
     """Computes J from B
@@ -267,7 +263,6 @@ def compute_J_field(B_field, jacobian, nodes, axn):
         J_field[key] = val.flatten()
     
     return J_field
-
 
 @conditional_decorator(functools.partial(jit,static_argnums=(3,4)), use_jax)
 def compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobian, nodes, axn):
@@ -299,7 +294,7 @@ def compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobia
     contravariant_basis['grad_zeta'] = jnp.array([coordinate_derivatives['0'],
                                                  -1/coordinate_derivatives['R'],
                                                  coordinate_derivatives['0']])
-
+    
     # axis terms. need some weird indexing because we're indexing into a 2d array with 
     # a 1d array of columns where we want to overwrite stuff
     # basically this gets the linear (flattened) indices we want to overwrite
@@ -313,7 +308,7 @@ def compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobia
     contravariant_basis['grad_theta'] = put(contravariant_basis['grad_theta'], (idx0,idx1), 
                                             (cross(covariant_basis['e_zeta'][:,axn],
                                                    covariant_basis['e_rho'][:,axn],0)).flatten())
-
+    
     # just different names for the same thing
     contravariant_basis['e^rho'] = contravariant_basis['grad_rho']
     contravariant_basis['e^theta'] = contravariant_basis['grad_theta']
@@ -325,7 +320,6 @@ def compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobia
     contravariant_basis['g^vz'] = dot(contravariant_basis['grad_theta'],contravariant_basis['grad_zeta'],0)   
     
     return contravariant_basis
-
 
 @conditional_decorator(functools.partial(jit,static_argnums=(2,3,4,5,6,7)), use_jax)
 def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):

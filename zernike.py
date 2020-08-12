@@ -353,41 +353,114 @@ class ZernikeTransform():
     Args:
         nodes (ndarray, shape(3,N)): nodes where basis functions are evaluated. 
             First index is (rho,theta,phi), 2nd index is node number
-        idx (ndarray of int, shape(Nc,3)): mode numbers for spectra basis. each row is one basis function with 
+        mode_idx (ndarray of int, shape(Nc,3)): mode numbers for spectral basis. each row is one basis function with 
             modes (l,m,n)
         NFP (int): number of field periods   
         derivatives (array-like, shape(n,3)): orders of derivatives to compute in rho,theta,zeta.
             Each row of the array should contain 3 elements corresponding to derivatives in rho,theta,zeta
     """
-    def __init__(self,nodes, idx,NFP,derivatives=[0,0,0]):
+    def __init__(self,nodes, mode_idx,NFP,derivatives=[0,0,0]):
         # array of which l,m,n is at which column of the interpolation matrix
-        self.idx = idx
+        self.mode_idx = mode_idx
         # array of which r,v,z is at which row of the interpolation matrix
         self.nodes = nodes
         self.NFP = NFP
         self.derivatives = np.atleast_2d(derivatives)
         self.matrices = {i:{j:{k:{} for k in range(4)} for j in range(4)} for i in range(4)}
-        self._build(self.derivatives,self.idx)
+        self._build(self.derivatives,self.mode_idx)
     
-    def _build(self,derivs, idx):
+    def _build(self,derivs, mode_idx):
         for d in derivs:
             dr = d[0]
             dv = d[1]
             dz = d[2]
             self.matrices[dr][dv][dz] = jnp.stack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2],
-                                               lmn[0],lmn[1],lmn[2],self.NFP,dr,dv,dz) for lmn in idx]).T 
+                                               lmn[0],lmn[1],lmn[2],self.NFP,dr,dv,dz) for lmn in mode_idx]).T 
             
     def expand_nodes(self,new_nodes):
-        pass
+        """Change the real space resolution by adding new nodes without full recompute
+        
+        Only computes basis at spatial nodes that aren't already in the basis
+        
+        Args:
+            new_nodes (ndarray, side(3,N)): new node locations. each column is the location of one node (rho,theta,zeta)
+        """
+        
+        new_nodes = jnp.atleast_2d(new_nodes).T
+        # first remove nodes that are no longer needed
+        old_in_new = (self.nodes.T[:, None] == new_nodes).all(-1).any(-1)
+        for d in self.derivatives:
+            self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]][d[1]][d[2]][old_in_new]
+        self.nodes = self.nodes[:,old_in_new]
+
+        # then add new nodes
+        new_not_in_old = ~(new_nodes[:, None] == self.nodes.T).all(-1).any(-1)
+        nodes_to_add = new_nodes[new_not_in_old]
+        if len(nodes_to_add)>0:
+            for d in self.derivatives:
+                self.matrices[d[0]][d[1]][d[2]] = jnp.vstack([
+                    self.matrices[d[0]][d[1]][d[2]], # old
+                    jnp.stack([fourzern(nodes_to_add[:,0],nodes_to_add[:,1],nodes_to_add[:,2], # new
+                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in self.mode_idx]).T ])
+
+        # update indices
+        self.nodes = np.hstack([self.nodes, nodes_to_add.T])
+        # permute indexes so they're in the same order as the input
+        permute_idx = [self.nodes.T.tolist().index(i) for i in new_nodes.tolist()]
+        for d in self.derivatives:
+            self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]][d[1]][d[2]][permute_idx]
+        self.nodes = self.nodes[:,permute_idx]
+        
     
-    def expand_M(self,Mnew):
-        pass
-    
-    def expand_N(self,Nnew):
-        pass
-    
+    def expand_spectral_resolution(self,mode_idx_new):
+        """Change the spectral resolution of the transform without full recompute
+        
+        Only computes modes that aren't already in the basis
+        
+        Args:
+            mode_idx_new (ndarray of int, shape(Nc,3)): new mode numbers for spectral basis. 
+                each row is one basis function with modes (l,m,n)        
+        """
+        
+        mode_idx_new = jnp.atleast_2d(mode_idx_new)
+        # first remove modes that are no longer needed
+        old_in_new = (self.mode_idx[:, None] == mode_idx_new).all(-1).any(-1)
+        for d in self.derivatives:
+            self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]][d[1]][d[2]][:,old_in_new]
+        self.mode_idx = self.mode_idx[old_in_new]
+        
+        # then add new modes
+        new_not_in_old = ~(mode_idx_new[:, None] == self.mode_idx).all(-1).any(-1)
+        modes_to_add = mode_idx_new[new_not_in_old]
+        if len(modes_to_add)>0:
+            for d in self.derivatives:
+                self.matrices[d[0]][d[1]][d[2]] = jnp.hstack([
+                    self.matrices[d[0]][d[1]][d[2]], # old
+                    jnp.stack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2], # new
+                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in modes_to_add]).T ])
+        
+        # update indices
+        self.mode_idx = np.vstack([self.mode_idx, modes_to_add])
+        # permute indexes so they're in the same order as the input
+        permute_idx = [self.mode_idx.tolist().index(i) for i in mode_idx_new.tolist()]
+        for d in self.derivatives:
+            self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]][d[1]][d[2]][:,permute_idx]
+        self.mode_idx = self.mode_idx[permute_idx]
+                
     def expand_derivatives(self,new_derivatives):
-        pass
+        """Computes new derivative matrices
+        
+        Args:
+            new_derivatives (array-like, shape(n,3)): orders of derivatives 
+                to compute in rho,theta,zeta. Each row of the array should 
+                contain 3 elements corresponding to derivatives in rho,theta,zeta
+        """
+
+        new_not_in_old = (new_derivatives[:, None] == self.derivatives).all(-1).any(-1)
+        derivs_to_add = new_derivatives[~new_not_in_old]
+        self._build(derivs_to_add, self.mode_idx)
+        self.derivatives = jnp.vstack([self.derivatives,derivs_to_add])
+        
         
     @conditional_decorator(functools.partial(jit,static_argnums=(0,2,3,4)), use_jax)    
     def transform(self,c,dr,dv,dz):
@@ -405,7 +478,7 @@ class ZernikeTransform():
         return jnp.matmul(self.matrices[dr][dv][dz],c)
 
     @conditional_decorator(functools.partial(jit,static_argnums=(0,2)), use_jax)    
-    def fit(self,x,rcond=1e-6):
+    def fit(self,x,rcond):
         """Transform from physical domain to spectral
         
         Args:
@@ -416,7 +489,7 @@ class ZernikeTransform():
             c (ndarray, shape(N_coeffs,)): spectral coefficients in Fourier-Zernike basis
         """
         return jnp.linalg.lstsq(self.matrices[0][0][0],x,rcond=rcond)[0]
-        
+                
         
 def get_zern_basis_idx_dense(M,N):
     num_lm_modes = (M+1)**2

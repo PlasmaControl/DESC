@@ -86,7 +86,7 @@ def compute_accel_error_spectral(cR,cZ,zernt,nodes,pressfun_params,iotafun_param
     R_zz_err = coordinate_derivatives['R_zz'] - R_zz
     Z_zz_err = coordinate_derivatives['Z_zz'] - Z_zz
     
-    cR_zz_err = zernt.fit(R_zz_err)
-    cZ_zz_err = zernt.fit(Z_zz_err)
+    cR_zz_err = zernt.fit(R_zz_err,1e-6)
+    cZ_zz_err = zernt.fit(Z_zz_err,1e-6)
     
     return cR_zz_err,cZ_zz_err

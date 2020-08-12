@@ -117,24 +117,52 @@ def get_needed_derivatives(mode):
         raise NotImplementedError
 
 
-def unpack_x(x,zern_idx):
+def unpack_x(x,nRZ):
     """Unpacks the optimization state vector x into cR,cZ,cL components
     
     Args:
         x (ndarray): vector to unpack
-        zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
-        
+        nRZ (int): number of R,Z coeffs        
     Returns:
         cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         cL (ndarray, shape(2M+1)*(2N+1)): spectral coefficients of lambda           
     """
     
-    nRZ = len(zern_idx)
     cR = x[:nRZ]
     cZ = x[nRZ:2*nRZ]
     cL = x[2*nRZ:]
     return cR,cZ,cL
+
+
+def expand_resolution(x,zern_idx_old,zern_idx_new,lambda_idx_old,lambda_idx_new):
+    """Expands solution to a higher resolution by filling with zeros
+    
+    Args:
+        x (ndarray): solution at initial resolution
+        zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
+        zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
+        lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
+        lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
+    
+    Returns:
+        x_new (ndarray): solution expanded to new resolution
+    """
+    
+    
+    cR,cZ,cL = unpack_x(x,len(zern_idx_old))
+    
+    cR_new = np.zeros(len(zern_idx_new))
+    cZ_new = np.zeros(len(zern_idx_new))
+    cL_new = np.zeros(len(lambda_idx_new))
+    old_in_new = np.where((zern_idx_new[:, None] == zern_idx_old).all(-1))[0]
+    cR_new[old_in_new] = cR
+    cR_new[old_in_new] = cR
+    old_in_new = np.where((lambda_idx_new[:, None] == lambda_idx_old).all(-1))[0]
+    cL_new[old_in_new] = cL
+    x_new = np.concatenate([cR_new,cZ_new,cL_new])
+    
+    return x_new
 
 
 class FiniteDifferenceJacobian():

@@ -80,13 +80,13 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=
         fig, ax = plt.subplots()
     # plot desired bdry
     if bdryR is not None and bdryZ is not None:
-        ax.plot(bdryR,bdryZ,color=colorblind_colors[1])
+        ax.plot(bdryR,bdryZ,color=colorblind_colors[1],dashes=(None,None))
     # plot r contours
-    ax.plot(R.T[:,::rstep],Z.T[:,::rstep],color=colorblind_colors[0],lw=.5)
+    ax.plot(R.T[:,::rstep],Z.T[:,::rstep],color=colorblind_colors[0],lw=.5, dashes=(None,None))
     # plot actual bdry
-    ax.plot(R.T[:,-1],Z.T[:,-1],color=colorblind_colors[0],lw=.5)
+    ax.plot(R.T[:,-1],Z.T[:,-1],color=colorblind_colors[0],lw=.5, dashes=(None,None))
     # plot theta contours
-    ax.plot(R[:,::tstep],Z[:,::tstep],color=colorblind_colors[0],lw=.5,ls='--');
+    ax.plot(R[:,::tstep],Z[:,::tstep],color=colorblind_colors[0],lw=.5,dashes=dashes[2]);
     ax.axis('equal')
     ax.set_xlabel('$R$')
     ax.set_ylabel('$Z$')
@@ -387,16 +387,22 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_par
     ax2 = plt.subplot(gs[0,2])
     ax3 = plt.subplot(gs[1,2])
     
+    # coordinate surfaces
     plot_coord_surfaces(cR_init,cZ_init,zern_idx,NFP,nr=10,nt=12,ax=ax0)
     ax0.axis('equal');
     ax0.set_title(r'Initial guess, $\zeta=0$ plane')
-    ax1.plot(nodes[1],nodes[0],'o',markersize=1)
+    
+    # node locations
+    ax1.scatter(nodes[1],nodes[0],s=1)
+    ax1.set_ylim(0,1)
     ax1.set_xticks([0, np.pi/4, np.pi/2, 3/4*np.pi, 
                     np.pi, 5/4*np.pi, 3/2*np.pi, 7/4*np.pi])
     ax1.set_xticklabels(['$0$', r'$\frac{\pi}{4}$', r'$\frac{\pi}{2}$', r'$\frac{3\pi}{4}$',
                         r'$\pi$', r'$\frac{4\pi}{4}$', r'$\frac{3\pi}{2}$', r'$2\pi$'])
     ax1.set_yticklabels([])
     ax1.set_title(r'Node locations, $\zeta=0$ plane',pad=20)
+    
+    # profiles
     xx = np.linspace(0,1,100)
     ax2.plot(xx,pressfun(xx,0,pressfun_params),lw=1)
     ax2.set_ylabel(r'$p$')

@@ -116,7 +116,7 @@ plt.show()
 def lstsq_obj(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_params,
               Psi_total,volumes,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,bdry_fun,weights,sym_mat):
     
-    cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),zern_idx)
+    cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
     errRf,errZf = equil_fun(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes)
     errRb,errZb = bdry_fun(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
     errL0 = compute_lambda_err(cL,lambda_idx,NFP)
@@ -131,7 +131,7 @@ def lstsq_obj(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_para
 def callback(x,zern_idx,lambda_idx,NFP,zernt,nodes,pressfun_params,iotafun_params,
              Psi_total,volumes,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,bdry_fun,weights,sym_mat):
     
-    cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),zern_idx)
+    cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
     errRf,errZf = equil_fun(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes)
     errRb,errZb = bdry_fun(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
     errL0 = compute_lambda_err(cL,lambda_idx,NFP)
@@ -178,7 +178,7 @@ callback(x_init, *args)
 print('Final')
 callback(x, *args)
 
-cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),zern_idx)
+cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
 print('(R0,Z0) = ({:.4e},{:.4e})'.format(*axis_posn(cR,cZ,zern_idx,NFP)))
 
 print('Fourier-Zernike coefficients:')

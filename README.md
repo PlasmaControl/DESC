@@ -16,8 +16,8 @@ The main script is DESC.py, which allows the user to specify the spectral resolu
 
 TODO:
 * figure out asymptotics for contravariant basis at axis
-* expanding solution to higher resolution
-* expanding basis fn matrices to higher spectral/real space resolution without full recompute
+* oversampling nodes?
+* zernike transform using FFT
 * function for quasi-symmetry
 * enforce stellarator symmetry on the function output
 * make stellarator symmetry implementation more efficient (especially for non-sym case)

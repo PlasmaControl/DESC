@@ -1,6 +1,6 @@
 import numpy as np
 
-def compute_nodes(M,N,NFP,surfs='cheb1'):
+def get_nodes(M,N,NFP,surfs='cheb1'):
     """Compute interpolation nodes
     
     Args:
@@ -11,8 +11,8 @@ def compute_nodes(M,N,NFP,surfs='cheb1'):
             any other value defaults to linear spacing
         
     Returns:
-        r (float array): radial (rho) coordinates
-        t (float array): poloidal (theta) coordinates
+        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
+        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
     """
     
     dimZern = (M+1)**2

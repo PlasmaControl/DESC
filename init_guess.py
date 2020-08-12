@@ -1,5 +1,5 @@
 import numpy as np
-from zernike import ZernikeTransform, eval_double_fourier
+from zernike import fourzern, double_fourier_basis
 
 def get_initial_guess_scale_bdry(bdryR,bdryZ,poloidal,toroidal,zern_idx,NFP,mode,nr=20,rcond=1e-6):
     """Generate initial guess by scaling boundary shape
@@ -21,16 +21,25 @@ def get_initial_guess_scale_bdry(bdryR,bdryZ,poloidal,toroidal,zern_idx,NFP,mode
     if mode == 'spectral':
         # convert to real space by evaluating spectral coefficients on grid in theta, phi
         dimFourN = 2*np.max(np.abs(toroidal))+1
-        dv = np.pi/64
+        dimZernM = 2*np.max(np.abs(poloidal))+1
+        dv = 2*np.pi/dimZernM
         dz = 2*np.pi/(NFP*dimFourN)
         bdry_theta = np.arange(0,2*np.pi,dv)
         bdry_phi = np.arange(0,2*np.pi/NFP,dz)
         bdry_theta, bdry_phi = np.meshgrid(bdry_theta,bdry_phi,indexing='ij')
         bdry_theta = bdry_theta.flatten()
         bdry_phi = bdry_phi.flatten()
-        bdry_idx = np.stack([poloidal,toroidal]).T
-        bdryR = eval_double_fourier(bdryR,bdry_idx,NFP,bdry_theta,bdry_phi)
-        bdryZ = eval_double_fourier(bdryZ,bdry_idx,NFP,bdry_theta,bdry_phi)
+
+        temp_bdryR = np.zeros_like(bdry_theta)
+        temp_bdryZ = np.zeros_like(bdry_theta)
+        for k, (cRb, cZb) in enumerate(zip(bdryR,bdryZ)):
+            m = poloidal[k]
+            n = toroidal[k]
+            temp_f = double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP)
+            temp_bdryR += cRb*temp_f
+            temp_bdryZ += cZb*temp_f
+        bdryR = temp_bdryR
+        bdryZ = temp_bdryZ
     else:
         bdry_theta = poloidal
         bdry_phi = toroidal
@@ -44,7 +53,8 @@ def get_initial_guess_scale_bdry(bdryR,bdryZ,poloidal,toroidal,zern_idx,NFP,mode
     pp = pp.flatten()
     vv = np.pi - tt
     zz = -pp
-    zernt = ZernikeTransform([rr,vv,zz],zern_idx,NFP,derivatives=[0,0,0])
+    nodes = np.stack([rr,vv,zz])
+    zern_mat = np.stack([fourzern(nodes[0],nodes[1],nodes[2], lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T     
     
     # estimate axis location as center of bdry
     R0_est = (np.max(bdryR) + np.min(bdryR))/2
@@ -53,9 +63,11 @@ def get_initial_guess_scale_bdry(bdryR,bdryZ,poloidal,toroidal,zern_idx,NFP,mode
     # scale boundary
     Rinit = (r[:,np.newaxis]*(bdryR[np.newaxis,:]-R0_est) + R0_est).flatten()
     Zinit = (r[:,np.newaxis]*(bdryZ[np.newaxis,:]-Z0_est) + Z0_est).flatten()
+    Xinit = np.stack([Rinit,Zinit]).T
 
     # fit to zernike basis for initial guess
-    cR = zernt.fit(Rinit,rcond).flatten()
-    cZ = zernt.fit(Zinit,rcond).flatten()
+    c = np.linalg.lstsq(zern_mat,Xinit,rcond)[0]
+    cR = c[:,0]
+    cZ = c[:,1]
     
     return cR, cZ

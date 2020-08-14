@@ -1,9 +1,83 @@
 import numpy as np
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, fori_loop
+from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put
 from zernike import fourzern, double_fourier_basis, eval_double_fourier
 
-@conditional_decorator(functools.partial(jit,static_argnums=(3,4,7,8,9)), use_jax)
+
+def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
+    """Formats arrays for boundary conditions and converts between 
+    real space and fourier representations
+    
+    Args:
+        M (int): maximum poloidal resolution. 
+        N (int): maximum toroidal resolution. 
+        NFP (int): number of field periods
+        bdry (ndarray, shape(Nbdry,4)): array of fourier coeffs [m,n,Rcoeff, Zcoeff]
+            OR
+            array of real space coordinates, [theta,phi,R,Z]
+        in_mode (str): one of 'real', 'spectral'. Whether bdry is specified in real space or fourier.
+        out_mode (str): one of 'real', 'spectral'. Whether output should be specified in real space or fourier.
+        ntheta,nphi (int): number of grid points to use in poloidal and toroidal directions.
+            only used if in_mode = 'spectral' and out_mode = 'real'. Defaults to 4*M and 4*N respectively
+    Returns:
+        bdry_poloidal (ndarray): poloidal mode numbers OR poloidal angle variables
+        bdry_toroidal (ndarray): toroidal mode numbers OR toroidal angle variables
+        bdryR (ndarray): R coeffs, where bdryR[i] has m=bdry_poloidal[i], n=bdry_toroidal[i]
+            OR R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], phi = bdry_toroidal[i]
+        bdryZ (ndarray): Z coeffs, where bdryZ[i] has m=bdry_poloidal[i], n=bdry_toroidal[i]
+            OR R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], phi = bdry_toroidal[i]
+
+    """
+    
+    if in_mode == 'real' and out_mode == 'real':
+        # just need to unpack the array
+        bdry_theta = bdry[:,0]
+        bdry_phi = bdry[:,1]
+        bdryR = bdry[:,2]
+        bdryZ = bdry[:,3]
+        return bdry_theta, bdry_phi, bdryR, bdryZ
+    
+    if in_mode == 'spectral' and out_mode == 'spectral':
+        # basically going from a sparse matrix representation to dense
+        bdryM = np.arange(-M,M+1)
+        bdryN = np.arange(-N,N+1)
+        bdryM, bdryN = np.meshgrid(bdryM, bdryN, indexing='ij')
+        bdryM = bdryM.flatten()
+        bdryN = bdryN.flatten()
+        bdryR = np.zeros(len(bdryM),dtype=np.float64)
+        bdryZ = np.zeros(len(bdryM),dtype=np.float64)
+
+        for m,n,cR,cZ in bdry:
+            bdryR = put(bdryR, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], cR)
+            bdryZ = put(bdryZ, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], cZ)
+        return bdryM, bdryN, bdryR, bdryZ
+            
+    if in_mode == 'spectral' and out_mode == 'real':
+        # just evaulate fourier series at nodes
+        ntheta = ntheta if ntheta else 4*M
+        nphi = nphi if nphi else 4*N
+        bdry_theta = np.linspace(0,2*np.pi,ntheta)
+        bdry_phi = np.linspace(0,2*np.pi/NFP,nphi)
+        bdryR = eval_double_fourier(bdry[:,2],bdry[:,:2],NFP,bdry_theta,bdry_phi)
+        bdryZ = eval_double_fourier(bdry[:,3],bdry[:,:2],NFP,bdry_theta,bdry_phi)
+        return bdry_theta, bdry_phi, bdryR,bdryZ
+    
+    if in_mode == 'real' and out_mode == 'spectral':
+        # fit to fourier series
+        bdry_theta = bdry[:,0]
+        bdry_phi = bdry[:,1]
+        bdryR = bdry[:,2]
+        bdryZ = bdry[:,3]
+        bdryM = np.arange(-M,M+1)
+        bdryN = np.arange(-N,N+1)
+        bdryM, bdryN = np.meshgrid(bdryM, bdryN, indexing='ij')
+        bdryM = bdryM.flatten()
+        bdryN = bdryN.flatten()
+        interp = np.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m,n in zip(bdryM,bdryN)]).T
+        cR, cZ = np.linalg.lstsq(interp,np.array([bdryR,bdryZ]).T)[0].T
+        return bdryM, bdryN, cR, cZ
+        
+
 def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP):
     """Compute boundary error in fourier coefficients
     
@@ -57,7 +131,6 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
     return errR,errZ
 
 
-@conditional_decorator(functools.partial(jit,static_argnums=(3,4,7,8,9)), use_jax)
 def compute_bc_err_RZ(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_theta,bdry_phi,NFP):
     """Compute boundary error at discrete points
     
@@ -98,7 +171,6 @@ def compute_bc_err_RZ(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_theta,bdry_p
     return errR,errZ
 
 
-@conditional_decorator(functools.partial(jit,static_argnums=(1,2)), use_jax)
 def compute_lambda_err(cL,idx,NFP):
     """Compute the error in sum(lambda_mn) to enforce 
     vartheta(0,0) = 0

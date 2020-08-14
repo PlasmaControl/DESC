@@ -1,7 +1,7 @@
 import functools
 from backend import jnp, conditional_decorator, jit, use_jax, put, pressfun, iotafun
 
-@conditional_decorator(functools.partial(jit,static_argnums=(2)), use_jax)
+
 def compute_coordinate_derivatives(cR,cZ,zernt):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
     
@@ -49,7 +49,7 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
 
     return coordinate_derivatives
 
-@conditional_decorator(functools.partial(jit,static_argnums=(2,3,4,5,6,7)), use_jax)
+
 def compute_accel_error_spectral(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
     """Computes acceleration error in spectral space
     

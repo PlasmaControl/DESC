@@ -32,7 +32,7 @@ rcParams['axes.spines.top'] = False
 rcParams['axes.spines.right'] = False
 rcParams['axes.labelsize'] =  'small'
 rcParams['axes.titlesize'] = 'medium'
-rcParams['lines.linewidth'] = 2.5
+rcParams['lines.linewidth'] = 1
 rcParams['lines.solid_capstyle'] = 'round'
 rcParams['lines.dash_capstyle'] = 'round'
 rcParams['lines.dash_joinstyle'] = 'round'
@@ -45,7 +45,19 @@ rcParams['axes.prop_cycle'] =  color_cycle
 
 
 
-def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=None):
+def print_coeffs(cR,cZ,cL,zern_idx,lambda_idx):
+    """prints coeffs to the terminal"""
+    
+    print('Fourier-Zernike coefficients:')
+    for k, lmn in enumerate(zern_idx):
+        print('l: {:3d}, m: {:3d}, n: {:3d}, cR: {:16.8e}, cZ: {:16.8e}'.format(lmn[0],lmn[1],lmn[2],cR[k],cZ[k]))
+
+    print('Lambda coefficients')
+    for k, mn in enumerate(lambda_idx):
+        print('m: {:3d}, n: {:3d}, cL: {:16.8e}'.format(mn[0],mn[1],cL[k]))
+        
+
+def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=None, **kwargs):
     """Plots solutions (currently only zeta=0 plane)
 
     Args:
@@ -65,12 +77,13 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=
     Nt = 361
     rstep = Nr//nr
     tstep = Nt//nt
+    zeta = kwargs.get('zeta',0)
     r = np.linspace(0,1,Nr)
     t = np.linspace(0,2*np.pi,Nt)
     r,t = np.meshgrid(r,t,indexing='ij')
     r = r.flatten()
     t = t.flatten()
-    z = np.zeros_like(r)
+    z = zeta*np.ones_like(r)
     zernt = ZernikeTransform([r,t,z],zern_idx,NFP)
 
     R = zernt.transform(cR,0,0,0).reshape((Nr,Nt))
@@ -79,8 +92,8 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=
     if ax is None:
         fig, ax = plt.subplots()
     # plot desired bdry
-    if bdryR is not None and bdryZ is not None:
-        ax.plot(bdryR,bdryZ,color=colorblind_colors[1],dashes=(None,None))
+    if (bdryR is not None) and (bdryZ is not None):
+        ax.plot(bdryR,bdryZ,color=colorblind_colors[1],lw=2,alpha=.5,dashes=(None,None))
     # plot r contours
     ax.plot(R.T[:,::rstep],Z.T[:,::rstep],color=colorblind_colors[0],lw=.5, dashes=(None,None))
     # plot actual bdry
@@ -90,10 +103,11 @@ def plot_coord_surfaces(cR,cZ,zern_idx,NFP,nr=10,nt=12,ax=None,bdryR=None,bdryZ=
     ax.axis('equal')
     ax.set_xlabel('$R$')
     ax.set_ylabel('$Z$')
+    ax.set_title(kwargs.get('title'))
     return ax
 
 
-def plot_coeffs(cR,cZ,cL,zern_idx,lambda_idx,cR_init=None,cZ_init=None,cL_init=None):
+def plot_coeffs(cR,cZ,cL,zern_idx,lambda_idx,cR_init=None,cZ_init=None,cL_init=None, **kwargs):
     """Scatter plots of zernike and lambda coefficients, before and after solving
     
     Args:
@@ -151,7 +165,7 @@ def plot_coeffs(cR,cZ,cL,zern_idx,lambda_idx,cR_init=None,cZ_init=None,cL_init=N
 
 
 def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params, Psi_total,
-                domain='real', normalize='local',ax=None, log=False, cmap='plasma'):
+                domain='real', normalize='local',ax=None, log=False, cmap='plasma', **kwargs):
     """Plots force balance error
     
     Args:
@@ -184,11 +198,12 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
         raise ValueError("domain expected one of 'real', 'sfl'")
     if normalize not in ['local','global',None,True,False]:
         raise ValueError("normalize expected one of 'local','global',None,True")
-    nr = 100
-    nv = 100
+        
+    nr = kwargs.get('nr',100)
+    nv = kwargs.get('nv',100)
     r = np.linspace(0,1,nr)
     v = np.linspace(0,2*np.pi,nv)
-    z = 0
+    z = kwargs.get('zeta',0)
     rr,vv,zz = np.meshgrid(r,v,z,indexing='ij')
     rr = rr.flatten()
     vv = vv.flatten()
@@ -210,7 +225,8 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
     errF = np.concatenate([errRf,errZf])
     errF = errF.reshape((N_nodes,2),order='F')
     radial  = np.sqrt(contravariant_basis['g^rr']) * np.sign(dot(contravariant_basis['e^rho'],covariant_basis['e_rho'],0));
-    press = pressfun(rr,1,pressfun_params)*radial
+    mu0 = 4*np.pi*1e-7
+    press = mu0*pressfun(rr,1,pressfun_params)*radial
     
     if normalize == 'global' or normalize == True:
         norm_errF = np.linalg.norm(errF,axis=1)/rms(press[halfn])
@@ -220,23 +236,33 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
     else:
         mu0 = 4*np.pi*1e-7
         norm_errF = np.linalg.norm(errF/mu0,axis=1)
+
+    nlevels = kwargs.get('nlevels',100)
     
-    if log:
-        norm_errF = np.log10(norm_errF)
+    if normalize and log:
+        locator = matplotlib.ticker.LogLocator(subs=np.linspace(1,10,nlevels)[:-1])
+        levels=None
+        norm = matplotlib.colors.LogNorm()
+    elif normalize:
+        levels = kwargs.get('levels',np.linspace(0,1,nlevels))
+        locator = None
+    else:
+        levels = kwargs.get('levels',nlevels)
+    
     if ax is None:
         fig, ax = plt.subplots()
     
     if domain == 'real':
         R = zernt.transform(cR,0,0,0)
         Z = zernt.transform(cZ,0,0,0)
-        levels=100
-        im = ax.tricontourf(R,Z,norm_errF,levels=levels,cmap=cmap)
+        im = ax.tricontourf(R,Z,norm_errF, cmap=cmap, extend='both', levels=levels,locator=locator)
+
         ax.set_xlabel(r'$R$')
         ax.set_ylabel(r'$Z$')
+        ax.axis('equal')
         ax.set_aspect('equal')
     elif domain == 'sfl':
-        levels=100
-        im = ax.tricontourf(vv,rr,norm_errF,levels=levels,cmap=cmap)
+        im = ax.tricontourf(vv,rr,norm_errF, cmap=cmap, extend='both', levels=levels, locator=locator)
         ax.set_xticks([0,np.pi/2,np.pi,3/2*np.pi,2*np.pi])
         ax.set_xticklabels(['$0$',r'$\frac{\pi}{2}$',r'$\pi$',r'$\frac{3\pi}{2}$', r'$2\pi$'])
         ax.set_xlabel(r'$\theta$')
@@ -248,11 +274,9 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
         title = '\\frac{||F||}{||\\nabla P||}' 
     else:
         title = '||F||'
-    if log:
-        title = 'log_{10} \\left(' + title + '\\right)'
     title = '$' + title + '$'
     ax.set_title(title)
-    
+    plt.colorbar(im,ax=ax)
     return ax, im
 
 
@@ -276,7 +300,6 @@ def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_t
             'local' - normalize by local pressure gradient
             'global' - normalize by pressure gradient at rho=0.5
             True - same as 'global'
-        ax (matplotlib.axes): axes to use for plotting
         log (bool): plot logarithm of error or absolute value
         cmap (str,matplotlib.colors.Colormap): colormap to use
     
@@ -363,7 +386,7 @@ def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_t
     return ax,imR,imZ
 
 
-def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_params):
+def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_params, **kwargs):
     """Plot initial conditions, such as the initial guess for flux surfaces,
     node locations, and profiles.
     
@@ -380,7 +403,7 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_par
         ax (ndarray of matplotlib.axes): handles to axes used for plotting
     """
     
-    fig = plt.figure(figsize=(9,3))
+    fig = plt.figure(figsize=kwargs.get('figsize',(9,3)))
     gs = matplotlib.gridspec.GridSpec(2, 3) 
     ax0 = plt.subplot(gs[:,0])
     ax1 = plt.subplot(gs[:,1],projection='polar')

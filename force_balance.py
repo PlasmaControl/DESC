@@ -1,7 +1,7 @@
 import functools
 from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, cross, dot, sign, pressfun, iotafun
 
-@conditional_decorator(functools.partial(jit,static_argnums=(2)), use_jax)
+
 def compute_coordinate_derivatives(cR,cZ,zernt):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
     
@@ -54,7 +54,6 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
     return coord_der
 
 
-@conditional_decorator(functools.partial(jit), use_jax)
 def compute_covariant_basis(coord_der):
     """Computes covariant basis vectors at grid points
     
@@ -89,7 +88,7 @@ def compute_covariant_basis(coord_der):
     
     return cov_basis
 
-@conditional_decorator(functools.partial(jit), use_jax)
+
 def compute_jacobian(coord_der,cov_basis):
     """Computes coordinate jacobian and derivatives
     
@@ -131,7 +130,7 @@ def compute_jacobian(coord_der,cov_basis):
     
     return jacobian
 
-@conditional_decorator(functools.partial(jit,static_argnums=(0,2,3,5)), use_jax)
+
 def compute_B_field(Psi_total, jacobian, nodes, axn, cov_basis, iotafun_params):
     """Computes magnetic field at node locations
     
@@ -219,7 +218,7 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, cov_basis, iotafun_params):
 
     return B_field
 
-@conditional_decorator(functools.partial(jit,static_argnums=(2,3)), use_jax)
+
 def compute_J_field(B_field, jacobian, nodes, axn):
     """Computes J from B
     (note it actually just computes curl(B), ie mu0*J)
@@ -248,7 +247,7 @@ def compute_J_field(B_field, jacobian, nodes, axn):
     
     return J_field
 
-@conditional_decorator(functools.partial(jit,static_argnums=(3,4)), use_jax)
+
 def compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn):
     """Computes contravariant basis vectors and jacobian elements
     
@@ -303,7 +302,7 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn):
     
     return con_basis
 
-@conditional_decorator(functools.partial(jit,static_argnums=(2,3,4,5,6,7)), use_jax)
+
 def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
     """Computes force balance error at each node
     
@@ -317,7 +316,8 @@ def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,P
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
         
     Returns:
-        F_err (ndarray, shape(2*N_nodes,)): R,phi,Z components of force balance error at each grid point
+        F_rho (ndarray, shape(N_nodes,)): Radial force balance error at each node
+        F_beta (ndarray, shape(N_nodes,)): Helical force balance error at each node
     """
     N_nodes = nodes[0].size
     r = nodes[0]
@@ -361,3 +361,55 @@ def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,P
         F_beta = F_beta*vol
     
     return F_rho,F_beta
+
+
+def compute_force_error_RphiZ(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
+    """Computes force balance error at each node
+    
+    Args:
+        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
+        zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
+        pressfun_params (array-like): parameters to pass to pressure function
+        iotafun_params (array-like): parameters to pass to rotational transform function
+        Psi_total (float): total toroidal flux within LCFS
+        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
+        
+    Returns:
+        F_err (ndarray, shape(3,N_nodes,)): F_R, F_phi, F_Z at each node
+    """
+    N_nodes = nodes[0].size
+    r = nodes[0]
+    axn = jnp.where(r == 0)[0]
+    # value of r one step out from axis
+    r1 = jnp.min(r[r != 0])
+    r1idx = jnp.where(r == r1)[0]
+    
+    mu0 = 4*jnp.pi*1e-7
+    presr = pressfun(r,1, pressfun_params)
+
+    # compute coordinates, fields etc.
+    coord_der = compute_coordinate_derivatives(cR,cZ,zernt)
+    cov_basis = compute_covariant_basis(coord_der)
+    jacobian = compute_jacobian(coord_der,cov_basis)
+    B_field = compute_B_field(Psi_total, jacobian, nodes, axn, cov_basis, iotafun_params)
+    J_field = compute_J_field(B_field, jacobian, nodes, axn)
+    con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn)
+
+    # helical basis vector
+    beta = B_field['B^zeta']*con_basis['e^theta'] - B_field['B^theta']*con_basis['e^zeta']
+
+    # force balance error in radial and helical direction
+    f_rho = (J_field['J^theta']*B_field['B^zeta'] - J_field['J^zeta']*B_field['B^theta']) - mu0*presr
+    f_beta = J_field['J^rho']
+    
+    F_err = f_rho * con_basis['grad_rho'] + f_beta * beta
+
+    
+    # weight by local volume
+    if volumes is not None:
+        vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2];
+        vol = put(vol, axn, jnp.mean(jacobian['g'][r1idx])/2*volumes[0,axn]*volumes[1,axn]*volumes[2,axn])
+        F_err = F_err*vol
+    
+    return F_err

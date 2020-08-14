@@ -108,7 +108,7 @@ def pressfun(rho,nu,params):
 
 
 def get_needed_derivatives(mode):
-    if mode == 'force':
+    if mode == 'force' or mode == 'accel':
         return np.array([[0,0,0],[1,0,0],[0,1,0],[0,0,1],
                          [2,0,0],[1,1,0],[1,0,1],[0,2,0],
                          [0,1,1],[0,0,2],[2,1,0],[1,2,0],

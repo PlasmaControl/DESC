@@ -1,5 +1,5 @@
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, put, pressfun, iotafun
+from backend import jnp, conditional_decorator, jit, use_jax, put, presfun, iotafun
 
 
 def compute_coordinate_derivatives(cR,cZ,zernt):
@@ -50,7 +50,7 @@ def compute_coordinate_derivatives(cR,cZ,zernt):
     return coordinate_derivatives
 
 
-def compute_accel_error_spectral(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
+def compute_accel_error_spectral(cR,cZ,zernt,nodes,presfun_params,iotafun_params,Psi_total,volumes):
     """Computes acceleration error in spectral space
     
     Args:
@@ -58,7 +58,7 @@ def compute_accel_error_spectral(cR,cZ,zernt,nodes,pressfun_params,iotafun_param
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
         nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
-        pressfun_params (array-like): parameters to pass to pressure function
+        presfun_params (array-like): parameters to pass to pressure function
         iotafun_params (array-like): parameters to pass to rotational transform function
         Psi_total (float): total toroidal flux within LCFS
         volumes (ndarray, shape(3,N_nodes)): not used
@@ -71,8 +71,8 @@ def compute_accel_error_spectral(cR,cZ,zernt,nodes,pressfun_params,iotafun_param
     mu0 = 4*jnp.pi*1e-7
     r = nodes[0]
     axn = jnp.where(r == 0)[0]
-    presr = pressfun(r,1, pressfun_params)
-    iota = iotafun(r,0, iotafun_params)
+    presr = presfun(r,1, presfun_params)
+    iota  = iotafun(r,0, iotafun_params)
     iotar = iotafun(r,1, iotafun_params)
     
     coordinate_derivatives = compute_coordinate_derivatives(cR,cZ,zernt)

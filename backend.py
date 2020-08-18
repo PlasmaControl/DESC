@@ -95,7 +95,7 @@ def iotafun(rho,nu, params):
     
     return jnp.polyval(jnp.polyder(params[::-1],nu),rho)
         
-def pressfun(rho,nu,params):
+def presfun(rho,nu,params):
     """Plasma pressure
     
     Args:
@@ -191,7 +191,8 @@ class FiniteDifferenceJacobian():
         if m == 1:
             J_transposed = jnp.ravel(J_transposed)
         return J_transposed.T
-    
+
+# TODO: this stuff doesn't work without JAX
 if use_jax:
     jacfwd = jax.jacfwd
     jacrev = jax.jacrev

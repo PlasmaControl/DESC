@@ -3,7 +3,7 @@ import numpy as np
 from zernike import ZernikeTransform, eval_double_fourier
 from force_balance import compute_coordinate_derivatives, compute_covariant_basis, compute_jacobian
 from force_balance import compute_contravariant_basis, compute_force_error_nodes
-from backend import pressfun, get_needed_derivatives, iotafun, pressfun, dot, rms, put
+from backend import presfun, get_needed_derivatives, iotafun, presfun, dot, rms, put
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000), # blue
                      (0.8359, 0.3682, 0.0000), # vermillion
@@ -164,7 +164,7 @@ def plot_coeffs(cR,cZ,cL,zern_idx,lambda_idx,cR_init=None,cZ_init=None,cL_init=N
     return fig, ax
 
 
-def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params, Psi_total,
+def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, presfun_params, Psi_total,
                 domain='real', normalize='local',ax=None, log=False, cmap='plasma', **kwargs):
     """Plots force balance error
     
@@ -176,7 +176,7 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
         lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient        
         NFP (int): number of field periods
         iotafun_params (array-like): paramters to pass to rotational transform function
-        pressfun_params (array-like): parameters to pass to pressure function
+        presfun_params (array-like): parameters to pass to pressure function
         Psi_total (float): total toroidal flux in the plasma
         domain (str): one of 'real', 'sfl'. What basis to use for plotting, 
             real (R,Z) coordinates or straight field line (rho,vartheta)
@@ -221,12 +221,12 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
     jacobian = compute_jacobian(coordinate_derivatives,covariant_basis)
     contravariant_basis = compute_contravariant_basis(coordinate_derivatives, covariant_basis, jacobian, nodes, axn)
     
-    errRf,errZf = compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,None)
+    errRf,errZf = compute_force_error_nodes(cR,cZ,zernt,nodes,presfun_params,iotafun_params,Psi_total,None)
     errF = np.concatenate([errRf,errZf])
     errF = errF.reshape((N_nodes,2),order='F')
     radial  = np.sqrt(contravariant_basis['g^rr']) * np.sign(dot(contravariant_basis['e^rho'],covariant_basis['e_rho'],0));
     mu0 = 4*np.pi*1e-7
-    press = mu0*pressfun(rr,1,pressfun_params)*radial
+    press = mu0*presfun(rr,1,presfun_params)*radial
     
     if normalize == 'global' or normalize == True:
         norm_errF = np.linalg.norm(errF,axis=1)/rms(press[halfn])
@@ -280,7 +280,7 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, pressfun_params
     return ax, im
 
 
-def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_total,domain='real',log=False,cmap='plasma'):
+def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,presfun_params,iotafun_params,Psi_total,domain='real',log=False,cmap='plasma'):
     """Plots acceleration error
     
     Args:
@@ -291,7 +291,7 @@ def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_t
         lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient        
         NFP (int): number of field periods
         iotafun_params (array-like): paramters to pass to rotational transform function
-        pressfun_params (array-like): parameters to pass to pressure function
+        presfun_params (array-like): parameters to pass to pressure function
         Psi_total (float): total toroidal flux in the plasma
         domain (str): one of 'real', 'sfl'. What basis to use for plotting, 
             real (R,Z) coordinates or straight field line (rho,vartheta)
@@ -327,7 +327,7 @@ def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_t
     axn = np.where(r == 0)[0]
     
     mu0 = 4*np.pi*1e-7
-    presr = pressfun(r,1, pressfun_params)
+    presr = presfun(r,1, presfun_params)
     iota = iotafun(r,0, iotafun_params)
     iotar = iotafun(r,1, iotafun_params)
     
@@ -386,7 +386,7 @@ def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_t
     return ax,imR,imZ
 
 
-def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_params, **kwargs):
+def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_params, **kwargs):
     """Plot initial conditions, such as the initial guess for flux surfaces,
     node locations, and profiles.
     
@@ -396,7 +396,7 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_par
         zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
         NFP (int): number of field periods
         iotafun_params (array-like): paramters to pass to rotational transform function
-        pressfun_params (array-like): parameters to pass to pressure function
+        presfun_params (array-like): parameters to pass to pressure function
 
     Returns:
         fig (matplotlib.figure): handle to figure used for plotting
@@ -427,7 +427,7 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, pressfun_params, iotafun_par
     
     # profiles
     xx = np.linspace(0,1,100)
-    ax2.plot(xx,pressfun(xx,0,pressfun_params),lw=1)
+    ax2.plot(xx,presfun(xx,0,presfun_params),lw=1)
     ax2.set_ylabel(r'$p$')
     ax2.set_xticklabels([])
     ax2.set_title('Profiles')

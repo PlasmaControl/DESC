@@ -1,5 +1,5 @@
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, cross, dot, sign, pressfun, iotafun
+from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, cross, dot, sign, presfun, iotafun
 
 
 def compute_coordinate_derivatives(cR,cZ,zernt):
@@ -303,14 +303,14 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn):
     return con_basis
 
 
-def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,Psi_total,volumes):
+def compute_force_error_nodes(cR,cZ,zernt,nodes,presfun_params,iotafun_params,Psi_total,volumes):
     """Computes force balance error at each node
     
     Args:
         cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
-        pressfun_params (array-like): parameters to pass to pressure function
+        presfun_params (array-like): parameters to pass to pressure function
         iotafun_params (array-like): parameters to pass to rotational transform function
         Psi_total (float): total toroidal flux within LCFS
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
@@ -327,7 +327,7 @@ def compute_force_error_nodes(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,P
     r1idx = jnp.where(r == r1)[0]
     
     mu0 = 4*jnp.pi*1e-7
-    presr = pressfun(r,1, pressfun_params)
+    presr = presfun(r,1, presfun_params)
 
     # compute coordinates, fields etc.
     coord_der = compute_coordinate_derivatives(cR,cZ,zernt)
@@ -386,7 +386,7 @@ def compute_force_error_RphiZ(cR,cZ,zernt,nodes,pressfun_params,iotafun_params,P
     r1idx = jnp.where(r == r1)[0]
     
     mu0 = 4*jnp.pi*1e-7
-    presr = pressfun(r,1, pressfun_params)
+    presr = presfun(r,1, pressfun_params)
 
     # compute coordinates, fields etc.
     coord_der = compute_coordinate_derivatives(cR,cZ,zernt)

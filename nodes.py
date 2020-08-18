@@ -16,30 +16,27 @@ def get_nodes(M,N,NFP,surfs='cheb1',nr=None,nt=None,nz=None):
         nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
         volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
     """
-    M = int(M)
-    N = int(N)
     
     dimZern = (M+1)**2
     dimFourN = 2*N+1
     
     if surfs == 'grid':
-        r = np.linspace(0.,1,nr)
+        r = np.linspace(0,1,nr)
         dr = np.diff(r)[0]
-        v = np.linspace(0,2*np.pi,nt+1)[:-1]
-        dv = np.diff(v)[0]
+        t = np.linspace(0,2*np.pi,nt+1)[:-1]
+        dt = np.diff(t)[0]
         z = np.linspace(0,2*np.pi/NFP,nz+1)
         dz = 2*np.pi/NFP/(nz+1)
-        r,v,z = np.meshgrid(r,v,z,indexing='ij')
+        r,t,z = np.meshgrid(r,t,z,indexing='ij')
         r = r.flatten()
-        v = v.flatten()
+        t = t.flatten()
         z = z.flatten()
         dr = dr*np.ones_like(r)
-        dv = dv*np.ones_like(v)
+        dt = dt*np.ones_like(t)
         dz = dz*np.ones_like(z)
-        nodes = np.stack([r,v,z])
-        volumes = np.stack([dr,dv,dz])
+        nodes = np.stack([r,t,z])
+        volumes = np.stack([dr,dt,dz])
         return nodes,volumes
-    
     
     pattern = {
         'cheb1' : (np.cos(np.arange(M,-1,-1)*np.pi/M)+1)/2,

@@ -5,14 +5,13 @@ def get_initial_guess_scale_bdry(axis,bdry,zern_idx,NFP,mode='spectral',rcond=1e
     """Generate initial guess by scaling boundary shape
     
     Args:
-        bdryR (ndarray, shape(N_bdry_vals,)): R coordinates of boundary, or spectral coefficients of boundary R shape
-        bdryZ (ndarray, shape(N_bdry_vals,)): Z coordinates of boundary, or spectral coefficients of boundary Z shape
-        poloidal (ndarray, shape(N_bdry_vals,)): poloidal coordinates where bdryR,bdryZ are given, or poloidal mode numbers
-        toroidal (ndarray, shape(N_bdry_vals,)): toroidal coordinates where bdryR,bdryZ are given, or toroidal mode numbers
+        axis (ndarray, shape(Naxis,3)): array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
+        bdry (ndarray, shape(Nbdry,4)): array of boundary Fourier coeffs [m,n,Rcoeff, Zcoeff]
+            OR
+            array of real space coordinates, [theta,phi,R,Z]
         zern_idx (ndarray, shape(Nc,3)): indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
         NFP (int): number of field periods
         mode (str): one of 'real', 'spectral' - which format is being used for bdryR,bdryZ,poloidal,toroidal
-        nr (int): number of radial points to use when generating guess
         rcond (float): relative limit on singular values for least squares fit to Zernike basis
     Returns:
         cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients for R, following indexing given in zern_idx

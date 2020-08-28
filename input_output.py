@@ -408,13 +408,18 @@ def read_vmec_output(fname):
 
 
 def vmec_interpolate(Cmn,Smn,xm,xn,theta,phi):
-    """
+    """Interpolates VMEC data on a flux surface
     
     Args:
-        
+        Cmn (ndarray, shape(MN,)): cos(mt-np) Fourier coefficients
+        Smn (ndarray, shape(MN,)): sin(mt-np) Fourier coefficients
+        xm (ndarray, shape(M,)): poloidal mode numbers
+        xn (ndarray, shape(N,)): toroidal mode numbers
+        theta (ndarray): poloidal angles
+        phi (ndarray): toroidal angles
     
     Returns:
-        
+        VMEC data interpolated at the angles (theta,phi)
     """
     
     R_arr = []

@@ -93,7 +93,8 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
         bdryZ (ndarray, shape(N_bdry_modes,)): Z coefficients of boundary shape
         bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
         bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
-        NFP (int): number of field periods   
+        NFP (int): number of field periods
+        sample (float): sampling factor (eg, 1.0 would be no oversampling)
         
     Returns:
         errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs

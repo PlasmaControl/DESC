@@ -467,10 +467,6 @@ def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     Z_desc = zernt.transform(cZ,0,0,0).reshape((Nr,Nt,Nz))
     
     R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][0::16],vmec_data['zmns'][0::16],vmec_data['xm'],vmec_data['xn'],t,-z)
-    """
-    R_vmec = vmec_interpolate(vmec_data['rmnc'],np.zeros_like(vmec_data['rmnc']),vmec_data['xm'],vmec_data['xn'],t,-z)
-    Z_vmec = vmec_interpolate(np.zeros_like(vmec_data['rmnc']),vmec_data['zmns'],vmec_data['xm'],vmec_data['xn'],t,-z)
-    """
     
     plt.figure()
     for k in range(Nz):

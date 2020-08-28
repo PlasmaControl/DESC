@@ -2,11 +2,8 @@ import re
 import warnings
 import numpy as np
 from datetime import datetime
-from netCDF4 import Dataset
 from backend import unpack_x
 
-# TODO: fix the boundary mode conversion
-# VMEC uses cos(mt-np) basis but DESC uses sin(mt)*sin(np)+cos(mt)*cos(np)
 def vmec_to_desc_input(vmec_fname,desc_fname):
     """Converts a VMEC input file to an equivalent DESC input file
     
@@ -164,16 +161,13 @@ def read_input(fname):
     # default values
     inputs = {
         'stell_sym' : False,
+        'Mpol' : 0,
+        'Ntor' : 0,
+        'Mnodes' : 0,
+        'Nnodes' : 0,
         'NFP' : 1,
         'Psi_total' : 1.0,
-        'Mpol' : np.array([0]),
-        'Ntor' : np.array([0]),
-        'Mnodes' : np.array([0]),
-        'Nnodes' : np.array([0]),
-        'bdry_ratio' : np.array([1.0]),
-        'pres_ratio' : np.array([1.0]),
-        'errr_ratio' : np.array([1.0]),
-        'errr_mode' : 'force',
+        'error_mode' : 'force',
         'bdry_mode' : 'spectral',
         'node_mode' : 'cheb1',
         'presfun_params' : np.array([0.0]),
@@ -181,6 +175,8 @@ def read_input(fname):
         'axis' : np.array([[0,0.0,0.0]]),
         'bdry' : np.array([[0,0,0.0,0.0]])
     }
+    
+    # TODO: allow M,N arrays for continuation method
     
     # file objects
     file = open(fname,'r')
@@ -198,6 +194,14 @@ def read_input(fname):
             numbers = [int(x) for x in re.findall(number_format,match.group(0))]
             if numbers[0] == 1:
                 inputs['stell_sym'] = True
+        match = re.search('Mpol[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
+        if match:
+            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
+            inputs['Mpol'] = numbers[0]
+        match = re.search('Ntor[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
+        if match:
+            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
+            inputs['Ntor'] = numbers[0]
         match = re.search('NFP[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(number_format,match.group(0))]
@@ -206,42 +210,10 @@ def read_input(fname):
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
             inputs['Psi_total'] = numbers[0]
-        match = re.search('pres_scale[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
-        if match:
-            numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            pres_scale = numbers[0]
-        match = re.search('Mpol[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
-            inputs['Mpol'] = np.array(numbers)
-        match = re.search('Ntor[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
-            inputs['Ntor'] = np.array(numbers)
-        match = re.search('Mnodes[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
-            inputs['Mnodes'] = np.array(numbers)
-        match = re.search('Nnodes[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
-            inputs['Nnodes'] = np.array(numbers)
-        match = re.search('bdry_ratio[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            inputs['bdry_ratio'] = np.array(numbers)
-        match = re.search('pres_ratio[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            inputs['pres_ratio'] = np.array(numbers)
-        match = re.search('errr_ratio[\ \t]*=([\ \t]*'+number_format+')*',command,re.IGNORECASE)
-        if match:
-            numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            inputs['errr_ratio'] = np.array(numbers)
-        match = re.search('errr_mode[\ \t]*=[\ \t]*\w*',command,re.IGNORECASE)
+        match = re.search('error_mode[\ \t]*=[\ \t]*\w*',command,re.IGNORECASE)
         if match:
             words = match.group(0).split()
-            inputs['errr_mode'] = words[-1]
+            inputs['error_mode'] = words[-1]
         match = re.search('bdry_mode[\ \t]*=[\ \t]*\w*',command,re.IGNORECASE)
         if match:
             words = match.group(0).split()
@@ -252,6 +224,10 @@ def read_input(fname):
             inputs['node_mode'] = words[-1]
         
         # profile coefficients
+        match = re.search('pres_scale[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
+        if match:
+            numbers = [float(x) for x in re.findall(number_format,match.group(0))]
+            pres_scale = numbers[0]
         match = re.search('l:[\ \t]*'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(number_format,match.group(0))]
@@ -272,24 +248,22 @@ def read_input(fname):
                 inputs['iotafun_params'][l] = cI
         
         # magnetic axis Fourier modes
-        match_m = re.search('m:[\ \t]*'+number_format,command,re.IGNORECASE)
-        match_n = re.search('n:[\ \t]*'+number_format,command,re.IGNORECASE)
-        if match_n and not match_m:
-            numbers = [int(x) for x in re.findall(number_format,match_n.group(0))]
+        match = re.search('n:[\ \t]*'+number_format,command,re.IGNORECASE)
+        if match:
+            numbers = [int(x) for x in re.findall(number_format,match.group(0))]
             n = numbers[0]
-            if np.sum(np.absolute(inputs['axis'][-1,:])) != 0:
-                    inputs['axis'] = np.pad(inputs['axis'],((0,1),(0,0)),mode='constant')
+            if np.sum(np.absolute(inputs['axis'])) != 0:
+                inputs['axis'] = np.pad(inputs['axis'],((0,1),(0,0)),mode='constant')
+            inputs['axis'][-1,0] = n
             match_axis = re.search('aR[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
             if match_axis:
                 numbers = [float(x) for x in re.findall(number_format,match_axis.group(0))]
                 aR = numbers[0]
-                inputs['axis'][-1,0] = n
                 inputs['axis'][-1,1] = aR
             match_axis = re.search('aZ[\ \t]*=[\ \t]*'+number_format,command,re.IGNORECASE)
             if match_axis:
                 numbers = [float(x) for x in re.findall(number_format,match_axis.group(0))]
                 aZ = numbers[0]
-                inputs['axis'][-1,0] = n
                 inputs['axis'][-1,2] = aZ
         
         # boundary Fourier modes
@@ -300,7 +274,7 @@ def read_input(fname):
             numbers_n = [int(x) for x in re.findall(number_format,match_n.group(0))]
             m = numbers_m[0]
             n = numbers_n[0]
-            if np.sum(np.absolute(inputs['bdry'][-1,:])) != 0:
+            if np.sum(np.absolute(inputs['bdry'])) != 0:
                 inputs['bdry'] = np.pad(inputs['bdry'],((0,1),(0,0)),mode='constant')
             inputs['bdry'][-1,0] = m
             inputs['bdry'][-1,1] = n
@@ -316,9 +290,9 @@ def read_input(fname):
                 inputs['bdry'][-1,3] = bZ
     
     inputs['presfun_params'] = pres_scale*inputs['presfun_params']
-    if np.sum(inputs['Mnodes']) == 0:
+    if inputs['Mnodes'] == 0:
         inputs['Mnodes'] = inputs['Mpol']
-    if np.sum(inputs['Nnodes']) == 0:
+    if inputs['Nnodes'] == 0:
         inputs['Nnodes'] = inputs['Ntor']
     
     return inputs
@@ -334,29 +308,22 @@ def output_to_file(fname,x,zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iota
     """
     
     cR,cZ,cL = unpack_x(x,len(zern_idx))
-    M = np.amax(lambda_idx[:,0])
-    N = np.amax(lambda_idx[:,1])
     
     # open file
     file = open(fname,'w+')
     file.seek(0)
     
-    # grid parameters
-    file.write('! grid parameters\n')
-    file.write('M\t= {:3d}\n'.format(M))
-    file.write('N\t= {:3d}\n'.format(N))
+    # scaling factors
     file.write('NFP\t= {:3d}\n'.format(NFP))
     file.write('Psi\t= {:16.8E}\n'.format(Psi_total))
     
-    # boundary shape
+    # boundary paramters
     file.write('\n')
-    file.write('! boundary shape\n')
-    for k in range(np.shape(bdry)[0]):
+    for k in range(np.shape(bdry)[1]):
         file.write('\t\tm: {:3d}\tn: {:3d}\tbR = {:16.8E}\tbZ = {:16.8E}\n'.format(int(bdry[k,0]),int(bdry[k,1]),bdry[k,2],bdry[k,3]))
     
-    # profiles
+    # profile coefficients
     file.write('\n')
-    file.write('! profiles\n')
     for k in range(max(presfun_params.size,iotafun_params.size)):
         if k >= presfun_params.size:
             file.write('l: {:3d}\t\t\t\t\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,0,iotafun_params[k]))
@@ -365,15 +332,13 @@ def output_to_file(fname,x,zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iota
         else:
             file.write('l: {:3d}\t\t\t\t\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],iotafun_params[k]))
     
-    # flux surfaces
+    # R & Z Fourier-Zernike coefficients
     file.write('\n')
-    file.write('! flux surfaces\n')
     for k, lmn in enumerate(zern_idx):
         file.write('l: {:3d}\tm: {:3d}\tn: {:3d}\tcR = {:16.8E}\tcZ = {:16.8E}\n'.format(lmn[0],lmn[1],lmn[2],cR[k],cZ[k]))
     
-    # lambda
+    # lambda Fourier coefficients
     file.write('\n')
-    file.write('! lambda\n')
     for k, mn in enumerate(lambda_idx):
         file.write('\t\tm: {:3d}\tn: {:3d}\tcL = {:16.8E}\n'.format(mn[0],mn[1],cL[k]))
     
@@ -382,54 +347,3 @@ def output_to_file(fname,x,zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iota
     file.close()
     
     return None
-
-# TODO: add other fields including B, rmns, zmnc, lmnc, etc
-def read_vmec_output(fname):
-    """Reads VMEC data from wout nc file
-    
-    Args:
-        fname (string): filename of VMEC output file
-    
-    Returns:
-        vmec_data (dictionary): the VMEC data fields
-    """
-    
-    file = Dataset(fname,mode='r')
-    
-    vmec_data = {
-        'xm' : file.variables['xm'][:],
-        'xn' : file.variables['xn'][:],
-        'rmnc' : file.variables['rmnc'][:],
-        'zmns' : file.variables['zmns'][:],
-        'lmns' : file.variables['lmns'][:]
-        }
-    
-    return vmec_data
-
-
-def vmec_interpolate(Cmn,Smn,xm,xn,theta,phi):
-    """
-    
-    Args:
-        
-    
-    Returns:
-        
-    """
-    
-    R_arr = []
-    Z_arr = []
-    dim = Cmn.shape
-    
-    for j in range(dim[1]):
-        
-        m = xm[j]
-        n = xn[j]
-        
-        R = [[[Cmn[s,j]*np.cos(m*t - n*p) for p in phi] for t in theta] for s in range(dim[0])]
-        Z = [[[Smn[s,j]*np.sin(m*t - n*p) for p in phi] for t in theta] for s in range(dim[0])]
-        R_arr.append(R)
-        Z_arr.append(Z)
-    
-    return np.sum(R_arr,axis=0), np.sum(Z_arr,axis=0)
-    

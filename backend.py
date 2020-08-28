@@ -192,7 +192,6 @@ class FiniteDifferenceJacobian():
             J_transposed = jnp.ravel(J_transposed)
         return J_transposed.T
 
-
 # TODO: this stuff doesn't work without JAX
 if use_jax:
     jacfwd = jax.jacfwd

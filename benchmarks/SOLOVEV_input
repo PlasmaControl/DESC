@@ -7,7 +7,7 @@ Ntor		=   0
 Mnodes		=  12
 Nnodes		=   0
 NFP			=   1
-errr_mode	= force
+error_mode	= force
 bdry_mode	= spectral
 node_mode	= cheb1
 

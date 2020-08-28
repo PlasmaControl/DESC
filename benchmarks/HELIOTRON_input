@@ -1,0 +1,30 @@
+! This is the DESC input file for a heliotron
+
+! solver parameters
+stell_sym	=   1
+Mpol		=   6
+Ntor		=   2
+Mnodes		=   9
+Nnodes		=   3
+NFP			=  19
+Psi_total	=   1.00000000E+00
+error_mode	= force
+bdry_mode	= spectral
+node_mode	= cheb1
+
+! profile coefficients
+pres_scale 	=   1.80000000E+04
+l:   0	cP =   1.00000000E+00	cI =   1.00000000E+00
+l:   2	cP =  -2.00000000E+00	cI =   1.50000000E+00
+l:   4	cP =   1.00000000E+00
+
+! magnetic axis Fourier modes
+n:   0	aR =   1.00000000E+01
+n:   0	aZ =   0.00000000E+00
+
+! boundary Fourier modes
+m:   0	n:   0	bR =   1.00000000E+01
+m:   1	n:   0	bR =   1.00000000E+00
+m:   1	n:  -1	bR =   3.00000000E-01
+m:  -1	n:   0	bZ =   1.00000000E+00
+m:  -1	n:  -1	bZ =  -3.00000000E-01

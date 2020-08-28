@@ -8,7 +8,7 @@ Mnodes		=  18
 Nnodes		=   0
 NFP			=   1
 Psi_total	=   1.00000000E+00
-errr_mode	= force
+error_mode	= force
 bdry_mode	= spectral
 node_mode	= cheb1
 

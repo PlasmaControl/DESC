@@ -46,12 +46,12 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         bdryN = bdryN.flatten()
         bdryR = np.zeros(len(bdryM),dtype=np.float64)
         bdryZ = np.zeros(len(bdryM),dtype=np.float64)
-        
-        for m,n,bR,bZ in bdry:
-            bdryR = put(bdryR, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], bR)
-            bdryZ = put(bdryZ, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], bZ)
+
+        for m,n,cR,cZ in bdry:
+            bdryR = put(bdryR, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], cR)
+            bdryZ = put(bdryZ, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], cZ)
         return bdryM, bdryN, bdryR, bdryZ
-    
+            
     if in_mode == 'spectral' and out_mode == 'real':
         # just evaulate fourier series at nodes
         ntheta = ntheta if ntheta else 4*M
@@ -74,11 +74,11 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         bdryM = bdryM.flatten()
         bdryN = bdryN.flatten()
         interp = np.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m,n in zip(bdryM,bdryN)]).T
-        bR, bZ = np.linalg.lstsq(interp,np.array([bdryR,bdryZ]).T)[0].T
-        return bdryM, bdryN, bR, bZ
+        cR, cZ = np.linalg.lstsq(interp,np.array([bdryR,bdryZ]).T)[0].T
+        return bdryM, bdryN, cR, cZ
+        
 
-
-def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP,sample=1.5):
+def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP):
     """Compute boundary error in fourier coefficients
     
     Args:
@@ -101,10 +101,10 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
     """
     
     # get grid for bdry eval
-    dimFourM = 2*np.ceil(sample*np.max(np.abs(bdryM)))+1
-    dimFourN = 2*np.ceil(sample*np.max(np.abs(bdryN)))+1
-    dv = 2*np.pi/dimFourM
-    dz = 2*np.pi/(NFP*dimFourN)
+    dimZernM = 2*np.max(np.abs(bdryM))+1
+    dimFourN = 2*np.max(np.abs(bdryN))+1
+    dv = 2*np.pi/(4*dimZernM)
+    dz = 2*np.pi/(4*NFP*dimFourN)
     bdry_theta = jnp.arange(0,2*jnp.pi,dv)
     bdry_phi = jnp.arange(0,2*jnp.pi/NFP,dz)
     bdry_theta, bdry_phi = jnp.meshgrid(bdry_theta,bdry_phi,indexing='ij')

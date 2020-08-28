@@ -44,4 +44,3 @@ TODO:
 * command line interface
 * documentation
 * clean up backend implementation
-* read input from output file

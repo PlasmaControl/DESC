@@ -116,8 +116,8 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
 
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    vartheta = jnp.pi - bdry_theta - L
-    zeta = -bdry_phi
+    vartheta = bdry_theta + L
+    zeta = bdry_phi
     zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
@@ -159,8 +159,8 @@ def compute_bc_err_RZ(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdry_theta,bdry_p
 
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    vartheta = jnp.pi - bdry_theta - L
-    zeta = -bdry_phi
+    vartheta = bdry_theta + L
+    zeta = bdry_phi
     zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()

@@ -66,25 +66,25 @@ def compute_covariant_basis(coord_der):
     # notation: subscript word is direction of unit vector, subscript letters denote partial derivatives
     # eg, e_rho_v is the v derivative of the covariant basis vector in the rho direction
     cov_basis = {}
-    cov_basis['e_rho']      = jnp.array([coord_der['R_r'],  coord_der['0'],   coord_der['Z_r']])
-    cov_basis['e_theta']    = jnp.array([coord_der['R_v'],  coord_der['0'],   coord_der['Z_v']])
-    cov_basis['e_zeta']     = jnp.array([coord_der['R_z'], -coord_der['R'],   coord_der['Z_z']])
+    cov_basis['e_rho']      = jnp.array([coord_der['R_r'], coord_der['0'],   coord_der['Z_r']])
+    cov_basis['e_theta']    = jnp.array([coord_der['R_v'], coord_der['0'],   coord_der['Z_v']])
+    cov_basis['e_zeta']     = jnp.array([coord_der['R_z'], coord_der['R'],   coord_der['Z_z']])
 
-    cov_basis['e_rho_r']    = jnp.array([coord_der['R_rr'], coord_der['0'],   coord_der['Z_rr']])
-    cov_basis['e_rho_v']    = jnp.array([coord_der['R_rv'], coord_der['0'],   coord_der['Z_rv']])
-    cov_basis['e_rho_z']    = jnp.array([coord_der['R_rz'], coord_der['0'],   coord_der['Z_rz']])
+    cov_basis['e_rho_r']    = jnp.array([coord_der['R_rr'],coord_der['0'],   coord_der['Z_rr']])
+    cov_basis['e_rho_v']    = jnp.array([coord_der['R_rv'],coord_der['0'],   coord_der['Z_rv']])
+    cov_basis['e_rho_z']    = jnp.array([coord_der['R_rz'],coord_der['0'],   coord_der['Z_rz']])
 
-    cov_basis['e_theta_r']  = jnp.array([coord_der['R_rv'], coord_der['0'],   coord_der['Z_rv']])
-    cov_basis['e_theta_v']  = jnp.array([coord_der['R_vv'], coord_der['0'],   coord_der['Z_vv']])
-    cov_basis['e_theta_z']  = jnp.array([coord_der['R_vz'], coord_der['0'],   coord_der['Z_vz']])
+    cov_basis['e_theta_r']  = jnp.array([coord_der['R_rv'],coord_der['0'],   coord_der['Z_rv']])
+    cov_basis['e_theta_v']  = jnp.array([coord_der['R_vv'],coord_der['0'],   coord_der['Z_vv']])
+    cov_basis['e_theta_z']  = jnp.array([coord_der['R_vz'],coord_der['0'],   coord_der['Z_vz']])
 
-    cov_basis['e_zeta_r']  = jnp.array([coord_der['R_rz'], -coord_der['R_r'], coord_der['Z_rz']])
-    cov_basis['e_zeta_v']  = jnp.array([coord_der['R_vz'], -coord_der['R_v'], coord_der['Z_vz']])
-    cov_basis['e_zeta_z']  = jnp.array([coord_der['R_zz'], -coord_der['R_z'], coord_der['Z_zz']])
+    cov_basis['e_zeta_r']  = jnp.array([coord_der['R_rz'], coord_der['R_r'], coord_der['Z_rz']])
+    cov_basis['e_zeta_v']  = jnp.array([coord_der['R_vz'], coord_der['R_v'], coord_der['Z_vz']])
+    cov_basis['e_zeta_z']  = jnp.array([coord_der['R_zz'], coord_der['R_z'], coord_der['Z_zz']])
 
-    cov_basis['e_rho_vv']  = jnp.array([coord_der['R_rvv'], coord_der['0'],   coord_der['Z_rvv']])
-    cov_basis['e_rho_vz']  = jnp.array([coord_der['R_rvz'], coord_der['0'],   coord_der['Z_rvz']])
-    cov_basis['e_zeta_rv'] = jnp.array([coord_der['R_rvz'],-coord_der['R_rv'],coord_der['Z_rvz']])
+    cov_basis['e_rho_vv']  = jnp.array([coord_der['R_rvv'],coord_der['0'],   coord_der['Z_rvv']])
+    cov_basis['e_rho_vz']  = jnp.array([coord_der['R_rvz'],coord_der['0'],   coord_der['Z_rvz']])
+    cov_basis['e_zeta_rv'] = jnp.array([coord_der['R_rvz'],coord_der['R_rv'],coord_der['Z_rvz']])
     
     return cov_basis
 
@@ -113,18 +113,20 @@ def compute_jacobian(coord_der,cov_basis):
                       + dot(cov_basis['e_rho'],cross(cov_basis['e_theta_z'],cov_basis['e_zeta'],0),0) \
                       + dot(cov_basis['e_rho'],cross(cov_basis['e_theta'],cov_basis['e_zeta_z'],0),0)
     # need these later for rho=0
-    jacobian['g_rr']  = coord_der['R']*(coord_der['R_r']*coord_der['Z_rrv'] - coord_der['Z_r']*coord_der['R_rrv']
-                                        + 2*coord_der['R_rr']*coord_der['Z_rv'] - 2*coord_der['R_rv']*coord_der['Z_rr']) \
-                                        + 2*coord_der['R_r']*(coord_der['Z_rv']*coord_der['R_r'] - coord_der['R_rv']*coord_der['Z_r'])
-    jacobian['g_rv']  = coord_der['R']*(coord_der['Z_rvv']*coord_der['R_r'] - coord_der['R_rvv']*coord_der['Z_r'])
-    jacobian['g_rz']  = coord_der['R_z']*(coord_der['R_r']*coord_der['Z_rv'] - coord_der['R_rv']*coord_der['Z_r']) \
-                                          + coord_der['R']*(coord_der['R_rz']*coord_der['Z_rv'] + coord_der['R_r']*coord_der['Z_rvz']
-                                          - coord_der['R_rvz']*coord_der['Z_r'] - coord_der['R_rv']*coord_der['Z_rz'])
-    jacobian['g_rrv'] = 2*coord_der['R_rv']*(coord_der['Z_rv']*coord_der['R_r'] - coord_der['R_rv']*coord_der['Z_r']) \
-                            + 2*coord_der['R_r']*(coord_der['Z_rvv']*coord_der['R_r'] - coord_der['R_rvv']*coord_der['Z_r']) \
-                            + coord_der['R']*(coord_der['R_r']*coord_der['Z_rrvv'] - coord_der['Z_r']*coord_der['R_rrvv']
-                                              + 2*coord_der['R_rr']*coord_der['Z_rvv'] - coord_der['R_rv']*coord_der['Z_rrv']
-                                              - 2*coord_der['Z_rr']*coord_der['R_rvv'] + coord_der['Z_rv']*coord_der['R_rrv'])
+    jacobian['g_rr']  = coord_der['R']*(2*coord_der['Z_rr']*coord_der['R_rv'] - 2*coord_der['R_rr']*coord_der['Z_rv'] \
+                                        + coord_der['Z_r']*coord_der['R_rrv'] - coord_der['R_r']*coord_der['Z_rrv']) \
+                      + 2*coord_der['R_r']*(coord_der['Z_r']*coord_der['R_rv'] - coord_der['R_r']*coord_der['Z_rv'])
+    jacobian['g_rv']  = coord_der['R']*(coord_der['R_rvv']*coord_der['Z_r'] - coord_der['Z_rvv']*coord_der['R_r'])
+    jacobian['g_rz']  = coord_der['R_z']*(coord_der['Z_r']*coord_der['R_rv'] - coord_der['R_r']*coord_der['Z_rv']) \
+                      + coord_der['R']*(coord_der['Z_rz']*coord_der['R_rv'] - coord_der['R_rz']*coord_der['Z_rv'] \
+                                      - coord_der['R_r']*coord_der['Z_rvz'] + coord_der['Z_r']*coord_der['R_rvz'])
+    
+    jacobian['g_rrv'] = 2*coord_der['R_rv']*(coord_der['Z_r']*coord_der['R_rv'] - coord_der['R_r']*coord_der['Z_rv']) \
+                      + 2*coord_der['R_r']*(coord_der['Z_r']*coord_der['R_rvv'] - coord_der['R_r']*coord_der['Z_rvv']) \
+                      + coord_der['R']*(2*coord_der['Z_rr']*coord_der['R_rvv'] - 2*coord_der['R_rr']*coord_der['Z_rvv'] \
+                                        + coord_der['R_rv']*coord_der['Z_rrv'] - coord_der['Z_rv']*coord_der['R_rrv'] \
+                                        + coord_der['Z_r']*coord_der['R_rrvv'] - coord_der['R_r']*coord_der['Z_rrvv'])
+    
     for key, val in jacobian.items():
         jacobian[key] = val.flatten()
     
@@ -270,13 +272,9 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn):
     
     con_basis = {}
     # contravariant basis vectors
-    con_basis['grad_rho'] = cross(cov_basis['e_theta'],
-                                            cov_basis['e_zeta'],0)/jacobian['g']  
-    con_basis['grad_theta'] = cross(cov_basis['e_zeta'],
-                                              cov_basis['e_rho'],0)/jacobian['g']  
-    con_basis['grad_zeta'] = jnp.array([coord_der['0'],
-                                                 -1/coord_der['R'],
-                                                 coord_der['0']])
+    con_basis['grad_rho'] = cross(cov_basis['e_theta'],cov_basis['e_zeta'],0)/jacobian['g']
+    con_basis['grad_theta'] = cross(cov_basis['e_zeta'],cov_basis['e_rho'],0)/jacobian['g']
+    con_basis['grad_zeta'] = jnp.array([coord_der['0'],1/coord_der['R'],coord_der['0']])
 
     # axis terms. need some weird indexing because we're indexing into a 2d array with 
     # a 1d array of columns where we want to overwrite stuff
@@ -296,9 +294,9 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn):
     con_basis['e^zeta'] = con_basis['grad_zeta']
     # metric coefficients
     con_basis['g^rr'] = dot(con_basis['grad_rho'],con_basis['grad_rho'],0)
-    con_basis['g^vv'] = dot(con_basis['grad_theta'],con_basis['grad_theta'],0)  
-    con_basis['g^zz'] = dot(con_basis['grad_zeta'],con_basis['grad_zeta'],0)  
-    con_basis['g^vz'] = dot(con_basis['grad_theta'],con_basis['grad_zeta'],0)   
+    con_basis['g^vv'] = dot(con_basis['grad_theta'],con_basis['grad_theta'],0)
+    con_basis['g^zz'] = dot(con_basis['grad_zeta'],con_basis['grad_zeta'],0)
+    con_basis['g^vz'] = dot(con_basis['grad_theta'],con_basis['grad_zeta'],0)
     
     return con_basis
 

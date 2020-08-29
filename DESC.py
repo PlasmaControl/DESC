@@ -154,7 +154,7 @@ out = scipy.optimize.least_squares(lstsq_obj_jit,
                                    ftol=1e-8,
                                    xtol=1e-8,
                                    gtol=1e-8,
-                                   max_nfev=10,
+                                   max_nfev=100,
                                    verbose=2)
 x = out['x']
 print('Initial')

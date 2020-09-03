@@ -4,6 +4,7 @@ from zernike import ZernikeTransform, eval_double_fourier
 from force_balance import compute_coordinate_derivatives, compute_covariant_basis, compute_jacobian
 from force_balance import compute_contravariant_basis, compute_force_error_nodes
 from backend import presfun, get_needed_derivatives, iotafun, presfun, dot, rms, put
+from input_output import vmec_interpolate
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000), # blue
                      (0.8359, 0.3682, 0.0000), # vermillion
@@ -438,3 +439,62 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_para
     ax = np.array([ax0,ax1,ax2,ax3])
     
     return fig, ax
+
+
+def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
+    """Plots comparison of VMEC and DESC solutions
+    
+    Args:
+        
+    
+    Returns:
+        
+    """
+    
+    Nr = 8
+    Nt = 360
+    if np.max(zern_idx[:,2]==0):
+        Nz = 1
+        rows = 1
+    else:
+        Nz = 6
+        rows = 2
+    
+    Nr_vmec = vmec_data['rmnc'].shape[0]-1
+    s_idx = Nr_vmec % np.floor(Nr_vmec/(Nr-1))
+    idxes = np.linspace(s_idx,Nr_vmec,Nr).astype(int)
+    if s_idx != 0:
+        idxes = np.pad(idxes,(1,0),mode='constant')
+    r = np.sqrt(idxes/Nr_vmec)
+    t = np.linspace(0,2*np.pi,Nt)
+    z = np.linspace(0,2*np.pi/NFP,Nz)
+    rr,tt,zz = np.meshgrid(r,t,z,indexing='ij')
+    rr = rr.flatten()
+    tt = tt.flatten()
+    zz = zz.flatten()
+    zernt = ZernikeTransform([rr,tt,zz],zern_idx,NFP)
+    
+    R_desc = zernt.transform(cR,0,0,0).reshape((r.size,Nt,Nz))
+    Z_desc = zernt.transform(cZ,0,0,0).reshape((r.size,Nt,Nz))
+    
+    R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][idxes],vmec_data['zmns'][idxes],vmec_data['xm'],vmec_data['xn'],t,z)
+    
+    plt.figure()
+    for k in range(Nz):
+        ax = plt.subplot(rows,Nz/rows,k+1)
+        ax.plot(R_vmec[0,0,k],Z_vmec[0,0,k],'bo')
+        s_vmec = ax.plot(R_vmec[:,:,k].T,Z_vmec[:,:,k].T,'b-')
+        ax.plot(R_desc[0,0,k],Z_desc[0,0,k],'ro')
+        s_desc = ax.plot(R_desc[:,:,k].T,Z_desc[:,:,k].T,'r--')
+        ax.axis('equal')
+        ax.set_xlabel('R')
+        ax.set_ylabel('Z')
+        if k == 0:
+            s_vmec[0].set_label('VMEC')
+            s_desc[0].set_label('DESC')
+            ax.legend(fontsize='xx-small')
+    plt.show()
+    
+
+
+

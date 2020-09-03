@@ -1,0 +1,27 @@
+! This is the DESC input file for a Solov'ev equilibrium
+
+! solver parameters
+stell_sym 	=   1
+Mpol		=   8
+Ntor		=   0
+Mnodes		=  12
+Nnodes		=   0
+NFP			=   1
+errr_mode	= force
+bdry_mode	= spectral
+node_mode	= cheb2
+
+! pressure and rotational transform profiles
+Psi_total	=   1.00000000E+00
+l:   0	cP =   1.25000000E-01	cI =   1.00000000E+00
+l:   2	cP =  -1.25000000E-01	cI =   0.00000000E+00
+
+! magnetic axis initial guess
+n:   0	aR =   4.00000000E+00	aZ =   0.00000000E+00
+
+! fixed-boundary surface
+m:   0	n:   0	bR =   3.99900000E+00	bZ =   0.00000000E+00
+m:   1	n:   0	bR =   1.02600000E+00	bZ =   0.00000000E+00
+m:  -1	n:   0	bR =   0.00000000E+00	bZ =   1.58000000E+00
+m:   2	n:   0	bR =  -6.80000000E-02	bZ =   0.00000000E+00
+m:  -2	n:   0	bR =   0.00000000E+00	bZ =   1.00000000E-02

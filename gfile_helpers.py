@@ -120,7 +120,7 @@ def plot_gfile(g,bf=None, figsize=(8,6)):
 
 def write_gfile(filename, date, shot, time, efit, nw, nh, rdim, zdim, rcentr, rleft, zmid,
                 rmaxis, zmaxis, axis_flux, boundary_flux, bcentr, current,
-                fpol, pres, ffprime, pprime, psirz, qpsi, **kwargs):
+                fpol, pres, ffprime, pprime, psirz, qpsi, rbbbs=None, zbbbs=None, rlimitr=None, zlimitr=None, **kwargs):
 
     s = '  EFITD    {}    #{:06d}{:>6d}ms  {:<8} 0{:>4d}{:>4d}\n'.format(pytime.strftime("%m/%d/%Y",date),
         int(shot), int(time), efit if efit else "", int(nw), int(nh))
@@ -155,6 +155,34 @@ def write_gfile(filename, date, shot, time, efit, nw, nh, rdim, zdim, rcentr, rl
     for i, elem in enumerate(qpsi.flatten()):
         s += '{: 16.8e}'.format(elem)
         if (i+1) % 5 == 0 or (i+1) == qpsi.size:
+            s += ' \n'
+    if rbbbs is not None and zbbbs is not None:
+        nbbbs = len(rbbbs)
+        if nbbbs != len(zbbbs):
+            raise ValueError('unequal number of boundary pts for R,Z')
+    else:
+        nbbbs = 0
+        rbbbs = np.array([])
+        zbbbs = np.array([])
+    if rlimitr is not None and zlimitr is not None:
+        nlimitr = len(rlimitr)
+        if nlimitr != len(zlimitr):
+            raise ValueError('unequal number of limiter points for R,Z')
+    else:
+        nlimitr = 0
+        rlimitr = np.array([])
+        zlimitr = np.array([])
+    s += ' {:>3d}  {:>3d}'.format(nbbbs,nlimitr)
+    rzbbbs = np.stack([rbbbs.flatten(),zbbbs.flatten()]).T.flatten()
+    rzlimitr = np.stack([rlimitr.flatten(),zlimitr.flatten()]).T.flatten
+    
+    for i, elem in enumerate(rzbbbs):
+        s += '{: 16.8e}'.format(elem)
+        if (i+1) % 5 == 0 or (i+1) == rzbbbs.size:
+            s += ' \n'
+    for i, elem in enumerate(rzlimitr):
+        s += '{: 16.8e}'.format(elem)
+        if (i+1) % 5 == 0 or (i+1) == rzlimitr.size:
             s += ' \n'
     with open(filename, 'w+') as f:
         f.write(s)
@@ -223,17 +251,21 @@ def read_gfile(filename, **kwargs):
     g['qpsi'] = np.array([float(foo)
                           for foo in splitarr(lines[:lines_per_profile])])
     lines = lines[lines_per_profile:]
-    [g['nbbbs'], g['limitr']] = [int(foo) for foo in lines[0].split()]
-    lines = lines[1:]
-    lines_nbbbs = int(np.ceil(2*g['nbbbs']/5))
-    lines_limitr = int(np.ceil(2*g['limitr']/5))
-    rzbbbs = np.array([float(foo) for foo in splitarr(
-        lines[:lines_nbbbs])]).reshape((g['nbbbs'], 2))
-    g['rbbbs'], g['zbbbs'] = rzbbbs[:, 0], rzbbbs[:, 1]
-    lines = lines[lines_nbbbs:]
-    rzlimitr = np.array([float(foo) for foo in splitarr(
-        lines[:lines_limitr])]).reshape((g['limitr'], 2))
-    g['rlimitr'], g['zlimitr'] = rzlimitr[:, 0], rzlimitr[:, 1]
+
+    if len(lines)>0:
+        [g['nbbbs'], g['limitr']] = [int(foo) for foo in lines[0].split()]
+        lines = lines[1:]
+        lines_nbbbs = int(np.ceil(2*g['nbbbs']/5))
+        lines_limitr = int(np.ceil(2*g['limitr']/5))
+    if len(lines)>=lines_nbbs:
+        rzbbbs = np.array([float(foo) for foo in splitarr(
+            lines[:lines_nbbbs])]).reshape((g['nbbbs'], 2))
+        g['rbbbs'], g['zbbbs'] = rzbbbs[:, 0], rzbbbs[:, 1]
+        lines = lines[lines_nbbbs:]
+    if len(lines)>=lines_limitr:
+        rzlimitr = np.array([float(foo) for foo in splitarr(
+            lines[:lines_limitr])]).reshape((g['limitr'], 2))
+        g['rlimitr'], g['zlimitr'] = rzlimitr[:, 0], rzlimitr[:, 1]
     lines = lines[lines_limitr:]
     
     # fix zero pressure

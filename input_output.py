@@ -314,33 +314,42 @@ def output_to_file(fname,x,zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iota
     file.seek(0)
     
     # scaling factors
-    file.write('NFP\t= {:3d}\n'.format(NFP))
-    file.write('Psi\t= {:16.8E}\n'.format(Psi_total))
+    file.write('NFP = {:3d}\n'.format(NFP))
+    file.write('Psi = {:16.8E}\n'.format(Psi_total))
     
+
     # boundary paramters
+    nbdry = len(bdry)
+    file.write('Nbdry = {:3d}'.format(nbdry))
     file.write('\n')
-    for k in range(np.shape(bdry)[1]):
-        file.write('\t\tm: {:3d}\tn: {:3d}\tbR = {:16.8E}\tbZ = {:16.8E}\n'.format(int(bdry[k,0]),int(bdry[k,1]),bdry[k,2],bdry[k,3]))
+    for k in range(nbdry):
+        file.write('m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n'.format(int(bdry[k,0]),int(bdry[k,1]),bdry[k,2],bdry[k,3]))
     
     # profile coefficients
+    nprof = max(presfun_params.size,iotafun_params.size)
+    file.write('Nprof = {:3d}'.format(nprof))
     file.write('\n')
-    for k in range(max(presfun_params.size,iotafun_params.size)):
+    for k in range(nprof):
         if k >= presfun_params.size:
-            file.write('l: {:3d}\t\t\t\t\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,0,iotafun_params[k]))
+            file.write('l: {:3d} cP = {:16.8E} cI = {:16.8E}\n'.format(k,0,iotafun_params[k]))
         elif k >= iotafun_params.size:
-            file.write('l: {:3d}\t\t\t\t\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],0))
+            file.write('l: {:3d} cP = {:16.8E} cI = {:16.8E}\n'.format(k,presfun_params[k],0))
         else:
-            file.write('l: {:3d}\t\t\t\t\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],iotafun_params[k]))
+            file.write('l: {:3d} cP = {:16.8E} cI = {:16.8E}\n'.format(k,presfun_params[k],iotafun_params[k]))
     
     # R & Z Fourier-Zernike coefficients
+    nRZ = len(zern_idx)
+    file.write('NRZ = {:5d}'.format(nRZ))
     file.write('\n')
     for k, lmn in enumerate(zern_idx):
-        file.write('l: {:3d}\tm: {:3d}\tn: {:3d}\tcR = {:16.8E}\tcZ = {:16.8E}\n'.format(lmn[0],lmn[1],lmn[2],cR[k],cZ[k]))
+        file.write('l: {:3d} m: {:3d} n: {:3d} cR = {:16.8E} cZ = {:16.8E}\n'.format(lmn[0],lmn[1],lmn[2],cR[k],cZ[k]))
     
     # lambda Fourier coefficients
+    nL = len(lambda_idx)
+    file.write('NL = {:5d}'.format(nL))
     file.write('\n')
     for k, mn in enumerate(lambda_idx):
-        file.write('\t\tm: {:3d}\tn: {:3d}\tcL = {:16.8E}\n'.format(mn[0],mn[1],cL[k]))
+        file.write('m: {:3d} n: {:3d} cL = {:16.8E}\n'.format(mn[0],mn[1],cL[k]))
     
     # close file
     file.truncate()

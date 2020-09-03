@@ -9,8 +9,8 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
     real space and fourier representations
     
     Args:
-        M (int): maximum poloidal resolution. 
-        N (int): maximum toroidal resolution. 
+        M (int): maximum poloidal resolution
+        N (int): maximum toroidal resolution
         NFP (int): number of field periods
         bdry (ndarray, shape(Nbdry,4)): array of fourier coeffs [m,n,Rcoeff, Zcoeff]
             OR
@@ -123,8 +123,7 @@ def compute_bc_err_four(cR,cZ,cL,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
 
     four_bdry_interp = jnp.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m, n in zip(bdryM,bdryN)]).T
-
-    cRb, cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
+    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
 
     # compute errors
     errR = cRb - bdryR

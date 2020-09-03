@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 from datetime import datetime
 from netCDF4 import Dataset
-from backend import unpack_x
+from backend import unpack_x, sign
 
 # TODO: fix the boundary mode conversion
 # VMEC uses cos(mt-np) basis but DESC uses sin(mt)*sin(np)+cos(mt)*cos(np)
@@ -22,15 +22,21 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
     vmec_file = open(vmec_fname,'r')
     desc_file = open(desc_fname,'w+')
     
+    desc_file.seek(0)
     now = datetime.now()
     date = now.strftime('%m/%d/%Y')
     time = now.strftime('%H:%M:%S')
     desc_file.write('! This DESC input file was auto generated from the VMEC input file \n! '+vmec_fname+' on '+date+' at '+time+'.\n\n')
+    desc_file.write('! solver parameters\n')
     
     number_format = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
     Ntor = 99
     
-    desc_file.seek(0)
+    presfun_params = np.array([0.0])
+    iotafun_params = np.array([0.0])
+    axis = np.array([[0,0,0.0]])
+    bdry = np.array([[0,0,0.0,0.0]])
+    
     for line in vmec_file:
         comment = line.find('!')
         command = (line.strip()+' ')[0:comment]
@@ -90,7 +96,10 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
             for k in range(len(numbers)):
-                desc_file.write('l: {:3d}\tcP = {:16.8E}\n'.format(int(2*k),numbers[k]))
+                l = 2*k
+                if presfun_params.size < l+1:
+                    presfun_params = np.pad(presfun_params,(0,l+1-presfun_params.size),mode='constant')
+                presfun_params[l] = numbers[k]
         
         # rotational transform paramters
         match = re.search('NCURR\ *=(\ *'+number_format+')*',command,re.IGNORECASE)
@@ -105,7 +114,10 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
             for k in range(len(numbers)):
-                desc_file.write('l: {:3d}\tcI = {:16.8E}\n'.format(k,numbers[k]))
+                l = 2*k
+                if iotafun_params.size < l+1:
+                    iotafun_params = np.pad(iotafun_params,(0,l+1-iotafun_params.size),mode='constant')
+                iotafun_params[l] = numbers[k]
         
         # magnetic axis paramters
         match = re.search('RAXIS\ *=(\ *'+number_format+')*',command,re.IGNORECASE)
@@ -113,35 +125,165 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
             for k in range(len(numbers)):
                 if k > Ntor:
-                    desc_file.write('n: {:3d}\taR = {:16.8E}\n'.format(-k+Ntor+1,numbers[k]))
+                    l = -k+Ntor+1
                 else:
-                    desc_file.write('n: {:3d}\taR = {:16.8E}\n'.format(k,numbers[k]))
+                    l = k
+                idx = np.where(axis[:,0]==l)[0]
+                if np.size(idx) > 0:
+                    axis[idx[0],1] = numbers[k]
+                else:
+                    axis = np.pad(axis,((0,1),(0,0)),mode='constant')
+                    axis[-1,:] = np.array([l,numbers[k],0.0])
         match = re.search('ZAXIS\ *=(\ *'+number_format+')*',command,re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
             for k in range(len(numbers)):
                 if k > Ntor:
-                    desc_file.write('n: {:3d}\taR = {:16.8E}\n'.format(k-Ntor-1,numbers[k]))
+                    l = k-Ntor-1
                 else:
-                    desc_file.write('n: {:3d}\taR = {:16.8E}\n'.format(-k,numbers[k]))
+                    l = -k
+                idx = np.where(axis[:,0]==l)[0]
+                if np.size(idx) > 0:
+                    axis[idx[0],2] = numbers[k]
+                else:
+                    axis = np.pad(axis,((0,1),(0,0)),mode='constant')
+                    axis[-1,:] = np.array([l,0.0,numbers[k]])
         
         # boundary shape parameters
+        # RBS * sin(m*t - n*p) = RBS * sin(m*t)*cos(n*p) - RBS * cos(m*t)*sin(n*p)
         match = re.search('RBS\(\ *'+number_format+'\ *,\ *'+number_format+'\ *\)\ *=\ *'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            desc_file.write('m: {:3d}\tn: {:3d}\tbR = {:16.8E}\n'.format(int(-numbers[1]),int(numbers[0]),numbers[2]))
+            n = int(numbers[0])
+            m = int(numbers[1])
+            n_sgn = sign(np.array([n]))[0]
+            n *= n_sgn
+            if sign(m) < 0:
+                warnings.warn('m is negative!')
+            RBS = numbers[2]
+            if m != 0:
+                m_idx = np.where(bdry[:,0]==-m)[0]
+                n_idx = np.where(bdry[:,1]== n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],2] = RBS
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([-m,n,RBS,0.0])
+            if n != 0:
+                m_idx = np.where(bdry[:,0]== m)[0]
+                n_idx = np.where(bdry[:,1]==-n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],2] = -n_sgn*RBS
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([m,-n,-n_sgn*RBS,0.0])
+        # RBC * cos(m*t - n*p) = RBC * cos(m*t)*cos(n*p) + RBC * sin(m*t)*sin(n*p)
         match = re.search('RBC\(\ *'+number_format+'\ *,\ *'+number_format+'\ *\)\ *=\ *'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            desc_file.write('m: {:3d}\tn: {:3d}\tbR = {:16.8E}\n'.format(int(numbers[1]),int(numbers[0]),numbers[2]))
+            n = int(numbers[0])
+            m = int(numbers[1])
+            n_sgn = sign(np.array([n]))[0]
+            n *= n_sgn
+            if sign(m) < 0:
+                warnings.warn('m is negative!')
+            RBC = numbers[2]
+            m_idx = np.where(bdry[:,0]== m)[0]
+            n_idx = np.where(bdry[:,1]== n)[0]
+            idx = np.where(np.isin(m_idx,n_idx))[0]
+            if np.size(idx) > 0:
+                bdry[m_idx[idx[0]],2] = RBC
+            else:
+                bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                bdry[-1,:] = np.array([m,n,RBC,0.0])
+            if m != 0 and n != 0:
+                m_idx = np.where(bdry[:,0]==-m)[0]
+                n_idx = np.where(bdry[:,1]==-n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],2] = n_sgn*RBC
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([-m,-n,n_sgn*RBC,0.0])
+        # ZBS * sin(m*t - n*p) = ZBS * sin(m*t)*cos(n*p) - ZBS * cos(m*t)*sin(n*p)
         match = re.search('ZBS\(\ *'+number_format+'\ *,\ *'+number_format+'\ *\)\ *=\ *'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            desc_file.write('m: {:3d}\tn: {:3d}\tbZ = {:16.8E}\n'.format(int(-numbers[1]),int(numbers[0]),numbers[2]))
+            n = int(numbers[0])
+            m = int(numbers[1])
+            n_sgn = sign(np.array([n]))[0]
+            n *= n_sgn
+            if sign(m) < 0:
+                warnings.warn('m is negative!')
+            ZBS = numbers[2]
+            if m != 0:
+                m_idx = np.where(bdry[:,0]==-m)[0]
+                n_idx = np.where(bdry[:,1]== n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],3] = ZBS
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([-m,n,0.0,ZBS])
+            if n != 0:
+                m_idx = np.where(bdry[:,0]== m)[0]
+                n_idx = np.where(bdry[:,1]==-n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],3] = -n_sgn*ZBS
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([m,-n,0.0,-n_sgn*ZBS])
+        # ZBC * cos(m*t - n*p) = ZBC * cos(m*t)*cos(n*p) + ZBC * sin(m*t)*sin(n*p)
         match = re.search('ZBC\(\ *'+number_format+'\ *,\ *'+number_format+'\ *\)\ *=\ *'+number_format,command,re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(number_format,match.group(0))]
-            desc_file.write('m: {:3d}\tn: {:3d}\tbZ = {:16.8E}\n'.format(int(numbers[1]),int(numbers[0]),numbers[2]))
+            n = int(numbers[0])
+            m = int(numbers[1])
+            n_sgn = sign(np.array([n]))[0]
+            n *= n_sgn
+            if sign(m) < 0:
+                warnings.warn('m is negative!')
+            ZBC = numbers[2]
+            m_idx = np.where(bdry[:,0]== m)[0]
+            n_idx = np.where(bdry[:,1]== n)[0]
+            idx = np.where(np.isin(m_idx,n_idx))[0]
+            if np.size(idx) > 0:
+                bdry[m_idx[idx[0]],3] = ZBC
+            else:
+                bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                bdry[-1,:] = np.array([m,n,0.0,ZBC])
+            if m != 0 and n != 0:
+                m_idx = np.where(bdry[:,0]==-m)[0]
+                n_idx = np.where(bdry[:,1]==-n)[0]
+                idx = np.where(np.isin(m_idx,n_idx))[0]
+                if np.size(idx) > 0:
+                    bdry[m_idx[idx[0]],3] = n_sgn*ZBC
+                else:
+                    bdry = np.pad(bdry,((0,1),(0,0)),mode='constant')
+                    bdry[-1,:] = np.array([-m,-n,0.0,n_sgn*ZBC])
+    
+    desc_file.write('\n')
+    desc_file.write('! pressure and rotational transform profiles\n')
+    for k in range(max(presfun_params.size,iotafun_params.size)):
+        if k >= presfun_params.size:
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,0.0,iotafun_params[k]))
+        elif k >= iotafun_params.size:
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],0.0))
+        else:
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],iotafun_params[k]))
+    
+    desc_file.write('\n')
+    desc_file.write('! magnetic axis initial guess\n')
+    for k in range(np.shape(axis)[0]):
+        desc_file.write('n: {:3d}\taR = {:16.8E}\taZ = {:16.8E}\n'.format(int(axis[k,0]),axis[k,1],axis[k,2]))
+    
+    desc_file.write('\n')
+    desc_file.write('! fixed-boundary surface\n')
+    for k in range(np.shape(bdry)[0]):
+        desc_file.write('m: {:3d}\tn: {:3d}\tbR = {:16.8E}\tbZ = {:16.8E}\n'.format(int(bdry[k,0]),int(bdry[k,1]),bdry[k,2],bdry[k,3]))
     
     desc_file.truncate()
     

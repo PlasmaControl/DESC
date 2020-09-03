@@ -148,7 +148,7 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, cov_basis, iotafun_params):
     """
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi/dr^2
     # word sub or superscripts denote co and contravariant components of the field
-    r = nodes[0]   
+    r = nodes[0]
     iota = iotafun(r,0, iotafun_params)
     iotar = iotafun(r,1, iotafun_params)
     

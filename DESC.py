@@ -13,8 +13,8 @@ from backend import get_needed_derivatives, unpack_x, rms, jacfwd, jacrev
 from plotting import plot_IC, plot_coord_surfaces, plot_coeffs, plot_fb_err, plot_accel_err, print_coeffs, plot_vmec_comparison
 from input_output import read_input, output_to_file, read_vmec_output
 
-filename = 'HELIOTRON'
-inputs = read_input('benchmarks/input.'+filename)
+filename = 'SOLOVEV'
+inputs = read_input('benchmarks/DESC/inputs/input.'+filename)
 
 stell_sym      = inputs['stell_sym']
 NFP            = inputs['NFP']
@@ -169,9 +169,9 @@ print('initial: R0 = {:.3f}, Z0 = {:.3f}'.format(axis_init[0],axis_init[1]))
 print('final:   R0 = {:.3f}, Z0 = {:.3f}'.format(axis_final[0],axis_final[1]))
 
 # print_coeffs(cR,cZ,cL,zern_idx,lambda_idx)
-output_to_file('benchmarks/output.'+filename,np.matmul(sym_mat,x),zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iotafun_params,bdry)
+output_to_file('benchmarks/DESC/outputs/output.'+filename,np.matmul(sym_mat,x),zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iotafun_params,bdry)
 
-vmec_data = read_vmec_output('benchmarks/VMEC/wout_'+filename+'.nc')
+vmec_data = read_vmec_output('benchmarks/VMEC/outputs/wout_'+filename+'.nc')
 plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP)
 
 theta = np.linspace(0,2*np.pi,1000)

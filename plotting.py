@@ -453,8 +453,19 @@ def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     
     Nr = 8
     Nt = 360
-    Nz = 6
-    r = np.sqrt(np.linspace(0,1,Nr))
+    if np.max(zern_idx[:,2]==0):
+        Nz = 1
+        rows = 1
+    else:
+        Nz = 6
+        rows = 2
+    
+    Nr_vmec = vmec_data['rmnc'].shape[0]-1
+    s_idx = Nr_vmec % np.floor(Nr_vmec/(Nr-1))
+    idxes = np.linspace(s_idx,Nr_vmec,Nr).astype(int)
+    if s_idx != 0:
+        idxes = np.pad(idxes,(1,0),mode='constant')
+    r = np.sqrt(idxes/Nr_vmec)
     t = np.linspace(0,2*np.pi,Nt)
     z = np.linspace(0,2*np.pi/NFP,Nz)
     rr,tt,zz = np.meshgrid(r,t,z,indexing='ij')
@@ -463,18 +474,18 @@ def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     zz = zz.flatten()
     zernt = ZernikeTransform([rr,tt,zz],zern_idx,NFP)
     
-    R_desc = zernt.transform(cR,0,0,0).reshape((Nr,Nt,Nz))
-    Z_desc = zernt.transform(cZ,0,0,0).reshape((Nr,Nt,Nz))
+    R_desc = zernt.transform(cR,0,0,0).reshape((r.size,Nt,Nz))
+    Z_desc = zernt.transform(cZ,0,0,0).reshape((r.size,Nt,Nz))
     
-    R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][0::16],vmec_data['zmns'][0::16],vmec_data['xm'],vmec_data['xn'],t,z)
+    R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][idxes],vmec_data['zmns'][idxes],vmec_data['xm'],vmec_data['xn'],t,z)
     
     plt.figure()
     for k in range(Nz):
-        ax = plt.subplot(2,Nz/2,k+1)
+        ax = plt.subplot(rows,Nz/rows,k+1)
         ax.plot(R_vmec[0,0,k],Z_vmec[0,0,k],'bo')
         s_vmec = ax.plot(R_vmec[:,:,k].T,Z_vmec[:,:,k].T,'b-')
         ax.plot(R_desc[0,0,k],Z_desc[0,0,k],'ro')
-        s_desc = ax.plot(R_desc[:,:,k].T,Z_desc[:,:,k].T,'r-')
+        s_desc = ax.plot(R_desc[:,:,k].T,Z_desc[:,:,k].T,'r--')
         ax.axis('equal')
         ax.set_xlabel('R')
         ax.set_ylabel('Z')

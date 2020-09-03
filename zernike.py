@@ -320,7 +320,7 @@ def double_fourier_basis(theta,phi,m,n,NFP):
     n_neg = n < 0
     m = jnp.abs(m)
     n = jnp.abs(n)
-    m_term = m_pos*jnp.cos(m*theta) + m_neg*jnp.sin(m*theta)
+    m_term = m_pos*jnp.cos(m*theta)   + m_neg*jnp.sin(m*theta)
     n_term = n_pos*jnp.cos(n*NFP*phi) + n_neg*jnp.sin(n*NFP*phi)
 
     return m_term*n_term

@@ -16,15 +16,15 @@ errr_mode	= force				! 'force' or 'accel'
 bdry_mode	= spectral			! 'spectral' or 'real'
 node_mode	= cheb1				! 'cheb1' or 'cheb2', otherwise linear
 
-! profile coefficients
+! pressure and rotational transform profiles
 l:   0	cP =   1.00000000E+00	cI =   1.00000000E+00
 l:   2	cP =  -2.00000000E+00	cI =   1.50000000E+00
 l:   4	cP =   1.00000000E+00
 
-! magnetic axis Fourier modes
+! magnetic axis initial guess
 n:   0	aR =   1.00000000E+01	aZ =   0.00000000E+00
 
-! boundary Fourier modes
+! fixed-boundary surface
 m:   0	n:   0	bR =   1.00000000E+01
 m:   1	n:   0	bR =   1.00000000E+00
 m:   1	n:   1	bR =   3.00000000E-01

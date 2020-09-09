@@ -31,10 +31,10 @@ def get_initial_guess_scale_bdry(axis,bdry,zern_idx,NFP,mode='spectral',rcond=1e
                 else:
                     aR = axis[idx,1]
                     aZ = axis[idx,2]
-                cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bR+aR)/2)
-                cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bZ+aZ)/2)
-                cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bR-aR)/2)
-                cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bZ-aZ)/2)
+                cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], ((bR+aR)/2)[0,0])
+                cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], ((bZ+aZ)/2)[0,0])
+                cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], ((bR-aR)/2)[0,0])
+                cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], ((bZ-aZ)/2)[0,0])
             else:
                 cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==np.absolute(m), zern_idx[:,1]==m, zern_idx[:,2]==n)))[0], bR)
                 cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==np.absolute(m), zern_idx[:,1]==m, zern_idx[:,2]==n)))[0], bZ)

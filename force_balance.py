@@ -142,7 +142,7 @@ def compute_B_field(Psi_total, jacobian, nodes, axn, cov_basis, iotafun_params):
         nodes (ndarray, shape(3,N_nodes)): array of node locations in rho, vartheta, zeta coordinates
         axn (array-like): indices of nodes at the magnetic axis
         cov_basis (dict): dictionary of ndarray, shape(N_nodes,) of covariant basis vectors and derivatives at each node 
-        iotafun_params (array-like): parameters to pass to rotational transform function   
+        iotafun_params (array-like): parameters to pass to rotational transform function
     Return:
         B_field (dict): dictionary of ndarray, shape(N_nodes,) of magnetic field and derivatives
     """

@@ -19,29 +19,28 @@ TODO:
 * memory management for gpu
 * what needs jit, which devices
 * precompute SVD for fitting
-
 * force balance
     - project back to get R_tt,Z_tt
     - incompressibility constraint
-
 * symmetry, symmetric nodes, best way to enforce and reduce size
     - masking
-    
 * avoiding recompilation
     - masking?
     - comparing masked arrays for bdry
 
+Known bugs:
+* force balance error plot is not correct
+* bdry_ratio does not work with compute_bc_err_RZ function
+
+Other tasks to complete:
 * figure out asymptotics for contravariant basis at axis
 * zernike transform using FFT
-* function for quasi-symmetry
+* QS function specifying M/N
 * allow option for square system
 * use "root" algorithms instead of "least_squares" (and compare results)
 * autodiff hessian
-* option for 3/2 rule to prevent spectral aliasing in BC error function
 * add node option to avoid rational surfaces
-* better plotting for stellarator stuff
 * I/O compatibiltiy with VMEC, GS solvers
 * command line interface
 * documentation
 * clean up backend implementation
-* read input from output file

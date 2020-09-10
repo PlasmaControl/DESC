@@ -147,6 +147,88 @@ def compute_force_error_nodes(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,
     return f_rho, f_beta
 
 
+def compute_force_error_RphiZ(cR,cZ,zernt,nodes,cP,cI,Psi_total,volumes):
+    """Computes force balance error at each node
+    
+    Args:
+        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
+        zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
+        cP (array-like): coefficients to pass to pressure function
+        cI (array-like): coefficients to pass to rotational transform function
+        Psi_total (float): total toroidal flux within LCFS
+        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
+        
+    Returns:
+        F_err (ndarray, shape(3,N_nodes,)): F_R, F_phi, F_Z at each node
+    """
+    
+    r = nodes[0]
+    axn = jnp.where(r == 0)[0]
+    # value of r one step out from axis
+    r1 = jnp.min(r[r != 0])
+    r1idx = jnp.where(r == r1)[0]
+    
+    mu0 = 4*jnp.pi*1e-7
+    presr = presfun(r,1, cP)
+    
+    # compute fields components
+    coord_der = compute_coordinate_derivatives(cR,cZ,zernt)
+    cov_basis = compute_covariant_basis(coord_der)
+    jacobian  = compute_jacobian(coord_der,cov_basis)
+    con_basis = compute_contravariant_basis(coord_der,cov_basis,jacobian,nodes)
+    B_field   = compute_B_field(cov_basis,jacobian,cI,Psi_total,nodes)
+    J_field   = compute_J_field(coord_der,cov_basis,jacobian,B_field,cI,Psi_total,nodes)
+    
+    # helical basis vector
+    beta = B_field['B^zeta']*con_basis['e^theta'] - B_field['B^theta']*con_basis['e^zeta']
+    
+    # force balance error in radial and helical direction
+    f_rho = mu0*(J_field['J^theta']*B_field['B^zeta'] - J_field['J^zeta']*B_field['B^theta']) - mu0*presr
+    f_beta = mu0*J_field['J^rho']
+    
+    F_err = f_rho * con_basis['grad_rho'] + f_beta * beta
+    
+    # weight by local volume
+    if volumes is not None:
+        vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2];
+        vol = put(vol, axn, jnp.mean(jacobian['g'][r1idx])/2*volumes[0,axn]*volumes[1,axn]*volumes[2,axn])
+        F_err = F_err*vol
+    
+    return F_err
+
+
+def compute_force_error_RddotZddot(cR,cZ,zernt,nodes,cP,cI,Psi_total,volumes):
+    """Computes force balance error at each node
+    
+    Args:
+        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
+        zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
+        cP (array-like): coefficients to pass to pressure function
+        cI (array-like): coefficients to pass to rotational transform function
+        Psi_total (float): total toroidal flux within LCFS
+        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
+
+    Returns:
+        cRddot (ndarray, shape(Ncoeffs,)): spectral coefficients for d^2R/dt^2
+        cZddot (ndarray, shape(Ncoeffs,)): spectral coefficients for d^2Z/dt^2
+    """
+    
+    coord_der = compute_coordinate_derivatives(cR,cZ,zernt)
+    F_err = compute_force_error_RphiZ(cR,cZ,zernt,nodes,cP,cI,Psi_total,volumes)
+    num_nodes = len(nodes[0])
+    
+    AR = jnp.stack([jnp.ones(num_nodes),-coord_der['R_z'],jnp.zeros(num_nodes)],axis=1)
+    AZ = jnp.stack([jnp.zeros(num_nodes),-coord_der['Z_z'],jnp.ones(num_nodes)],axis=1)
+    A = jnp.stack([AR,AZ],axis=1)
+    Rddot, Zddot = jnp.squeeze(jnp.matmul(A,F_err.T[:,:,jnp.newaxis])).T
+    
+    cRddot, cZddot = zernt.fit(jnp.array([Rddot,Zddot]).T,1e-6).T
+    
+    return cRddot, cZddot
+
+
 def compute_accel_error_spectral(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes):
     """Computes acceleration error in spectral space
     

@@ -1,7 +1,7 @@
 import functools
 from backend import jnp, conditional_decorator, jit, use_jax, put, cross, dot, iotafun
 
-def compute_coordinate_derivatives(cR,cZ,zernt,zeta_ratio):
+def compute_coordinate_derivatives(cR,cZ,zernt,zeta_ratio=1.0):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
     
     Args:

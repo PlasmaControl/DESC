@@ -8,11 +8,11 @@ from zernike import ZernikeTransform, get_zern_basis_idx_dense, get_double_four_
 from boundary_conditions import format_bdry
 from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put, presfun, iotafun
 from backend import get_needed_derivatives, unpack_x, jacfwd
-from plotting import plot_IC, plot_coord_surfaces, plot_coeffs, plot_fb_err, plot_accel_err, print_coeffs, plot_vmec_comparison
+from plotting import plot_IC, plot_coord_surfaces, plot_coeffs, plot_fb_err, plot_accel_err, print_coeffs, plot_vmec_comparison, plot_comparison
 from input_output import read_input, output_to_file, read_vmec_output
 from objective_funs import get_equil_obj_fun
 
-filename = 'SOLOVEV'
+filename = 'W7X'
 inputs = read_input('benchmarks/DESC/inputs/input.'+filename)
 
 stell_sym  = inputs['stell_sym']
@@ -108,7 +108,7 @@ out = scipy.optimize.least_squares(equil_obj_jit,
                                    ftol=1e-8,
                                    xtol=1e-8,
                                    gtol=1e-8,
-                                   max_nfev=1000,
+                                   max_nfev=10,
                                    verbose=2)
 x = out['x']
 print('Initial')
@@ -125,9 +125,17 @@ print('final:   R0 = {:.3f}, Z0 = {:.3f}'.format(axis_final[0],axis_final[1]))
 # print_coeffs(cR,cZ,cL,zern_idx,lambda_idx)
 output_to_file('benchmarks/DESC/outputs/output.'+filename,np.matmul(sym_mat,x),zern_idx,lambda_idx,NFP,Psi_total,cP,cI,bdry)
 
+# plot comparison to initial guess
+plot_comparison(np.matmul(sym_mat,x_init),jnp.matmul(sym_mat,x),zern_idx,NFP,'Initial','Solution')
+
+# plot comparison to VMEC
 vmec_data = read_vmec_output('benchmarks/VMEC/outputs/wout_'+filename+'.nc')
 plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP)
 
+# plot force balance error
+plot_fb_err(cR,cZ,cP,cI,zern_idx,NFP,Psi_total,domain='real',normalize='global',log=True,cmap='plasma')
+
+"""
 theta = np.linspace(0,2*np.pi,1000)
 phi = np.zeros_like(theta)
 Rlcfs = eval_double_fourier(bdryR,np.array([bdry_poloidal,bdry_toroidal]).T,NFP,theta,phi)
@@ -141,4 +149,5 @@ ax[2], im = plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,cI,cP,Psi_total,
 plt.show()
 
 # plot acceleration error
-# ax,imR,imZ = plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_total,domain='sfl',log=False,cmap='plasma')
+ax,imR,imZ = plot_accel_err(cR,cZ,zernt,zern_idx,NFP,pressfun_params,iotafun_params,Psi_total,domain='sfl',log=False,cmap='plasma')
+"""

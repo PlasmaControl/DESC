@@ -121,7 +121,7 @@ def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
     
-    four_bdry_interp = jnp.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m, n in zip(bdryM,bdryN)]).T
+    four_bdry_interp = jnp.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m,n in zip(bdryM,bdryN)]).T
     cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
     
     # ratio of non-axisymmetric boundary modes to use

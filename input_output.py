@@ -5,8 +5,7 @@ from datetime import datetime
 from netCDF4 import Dataset
 from backend import unpack_x, sign
 
-# TODO: fix the boundary mode conversion
-# VMEC uses cos(mt-np) basis but DESC uses sin(mt)*sin(np)+cos(mt)*cos(np)
+
 def vmec_to_desc_input(vmec_fname,desc_fname):
     """Converts a VMEC input file to an equivalent DESC input file
     
@@ -463,7 +462,7 @@ def read_input(fname):
                 inputs['bdry'][-1,3] = bZ
     
     # error handling
-    if inputs['Mpol'] == 0:
+    if np.any(inputs['Mpol'] == 0):
         raise Exception('Mpol is not assigned')
     if np.sum(inputs['bdry']) == 0:
         raise Exception('fixed-boundary surface is not assigned')

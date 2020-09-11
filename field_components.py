@@ -1,5 +1,6 @@
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, put, cross, dot, iotafun
+from backend import jnp, conditional_decorator, jit, use_jax, put, cross, dot, presfun, iotafun
+
 
 def compute_coordinate_derivatives(cR,cZ,zernt,zeta_ratio=1.0):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
@@ -64,6 +65,7 @@ def compute_coordinate_derivatives(cR,cZ,zernt,zeta_ratio=1.0):
     
     return coord_der
 
+
 def compute_covariant_basis(coord_der):
     """Computes covariant basis vectors at grid points
     
@@ -115,6 +117,7 @@ def compute_covariant_basis(coord_der):
     
     return cov_basis
 
+
 def compute_contravariant_basis(coord_der,cov_basis,jacobian,nodes):
     """Computes contravariant basis vectors and jacobian elements
     
@@ -144,7 +147,7 @@ def compute_contravariant_basis(coord_der,cov_basis,jacobian,nodes):
     idx1 = jnp.ones((3,axn.size))
     idx0 = (idx0*jnp.array([[0,1,2]]).T).flatten().astype(jnp.int32) # this gets the flattened indices we want to overwrite
     idx1 = (idx1*axn).flatten().astype(jnp.int32)
-    con_basis['e^rho']   = put(con_basis['e^rho'], (idx0,idx1), (cross(cov_basis['e_theta_r'][:,axn],cov_basis['e_zeta'][:,axn],0)/jacobian['g_r'][axn]).flatten())
+    con_basis['e^rho'] = put(con_basis['e^rho'], (idx0,idx1), (cross(cov_basis['e_theta_r'][:,axn],cov_basis['e_zeta'][:,axn],0)/jacobian['g_r'][axn]).flatten())
     # e^theta = infinite at the axis
     
     # metric coefficients
@@ -156,6 +159,7 @@ def compute_contravariant_basis(coord_der,cov_basis,jacobian,nodes):
     con_basis['g^zz'] = dot(con_basis['e^zeta'], con_basis['e^zeta'], 0)
     
     return con_basis
+
 
 def compute_jacobian(coord_der,cov_basis):
     """Computes coordinate jacobian and derivatives
@@ -232,6 +236,7 @@ def compute_jacobian(coord_der,cov_basis):
         jacobian[key] = val.flatten()
     
     return jacobian
+
 
 def compute_B_field(cov_basis,jacobian,cI,Psi_total,nodes):
     """Computes magnetic field components at node locations
@@ -313,6 +318,7 @@ def compute_B_field(cov_basis,jacobian,cI,Psi_total,nodes):
     
     return B_field
 
+
 def compute_J_field(coord_der,cov_basis,jacobian,B_field,cI,Psi_total,nodes):
     """Computes current density field at node locations
     
@@ -361,6 +367,7 @@ def compute_J_field(coord_der,cov_basis,jacobian,B_field,cI,Psi_total,nodes):
         J_field[key] = val.flatten()
     
     return J_field
+
 
 def compute_B_magnitude(cov_basis,B_field,cI,nodes):
     """Computes magnetic field magnitude at node locations
@@ -421,3 +428,61 @@ def compute_B_magnitude(cov_basis,B_field,cI,nodes):
         B_mag[key] = val.flatten()
     
     return B_mag
+
+
+def compute_F_magnitude(coord_der,cov_basis,con_basis,jacobian,B_field,J_field,cP,cI,Psi_total,nodes):
+    """Computes force error magnitude at node locations
+    
+    Args:
+        coord_der (dict): dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations
+        cov_basis (dict): dictionary of ndarray, shape(N_nodes,) of covariant basis vectors and derivatives at each node
+        con_basis (dict): dictionary of ndarray, shape(N_nodes,) of contravariant basis vectors and metric elements at each node
+        jacobian (dict): dictionary of ndarray, shape(N_nodes,) of coordinate jacobian and partial derivatives
+        B_field (dict): dictionary of ndarray, shape(N_nodes,) of magnetic field and derivatives
+        J_field (dict): dictionary of ndarray, shape(N_nodes,) of current field
+        cP (array-like): parameters to pass to pressure function
+        cI (array-like): parameters to pass to rotational transform function
+        Psi_total (float): total toroidal flux within LCFS
+        nodes (ndarray, shape(3,N_nodes)): array of node locations in rho, vartheta, zeta coordinates
+        
+    Return:
+        F (ndarray, shape(N_nodes,)): force error magnitudes
+    """
+    
+    mu0 = 4*jnp.pi*1e-7
+    r = nodes[0]
+    axn = jnp.where(r == 0)[0]
+    pres_r = presfun(r,1, cP)
+    
+    # force balance error covariant components
+    F_rho   = jacobian['g']*(J_field['J^theta']*B_field['B^zeta'] - J_field['J^zeta']*B_field['B^theta']) - pres_r
+    F_theta = jacobian['g']*J_field['J^rho']*B_field['B^zeta']
+    F_zeta  = -jacobian['g']*J_field['J^rho']*B_field['B^theta']
+    
+    # axis terms
+    Jsup_theta = (B_field['B_rho_z']   - B_field['B_zeta_r']) / mu0
+    Jsup_zeta  = (B_field['B_theta_r'] - B_field['B_rho_v'])  / mu0
+    F_rho      = put(F_rho,axn, Jsup_theta[axn]*B_field['B^zeta'][axn] - Jsup_zeta[axn]*B_field['B^theta'][axn])
+    grad_theta = cross(cov_basis['e_zeta'],cov_basis['e_rho'],0)
+    gsup_vv    = dot(grad_theta,grad_theta,0)
+    gsup_rv    = dot(con_basis['e^rho'],grad_theta,0)
+    gsup_vz    = dot(grad_theta,con_basis['e^zeta'],0)
+    F_theta    = put(F_theta,axn, J_field['J^rho'][axn]*B_field['B^zeta'][axn])
+    F_zeta     = put(F_zeta,axn, -J_field['J^rho'][axn]*B_field['B^theta'][axn])
+    con_basis['g^vv'] = put(con_basis['g^vv'],axn, gsup_vv[axn])
+    con_basis['g^rv'] = put(con_basis['g^rv'],axn, gsup_rv[axn])
+    con_basis['g^vz'] = put(con_basis['g^vz'],axn, gsup_vz[axn])
+    
+    # F_i*F_j*g^ij terms
+    Fg_rr = F_rho*  F_rho*  con_basis['g^rr']
+    Fg_vv = F_theta*F_theta*con_basis['g^vv']
+    Fg_zz = F_zeta* F_zeta* con_basis['g^zz']
+    Fg_rv = F_rho*  F_theta*con_basis['g^rv']
+    Fg_rz = F_rho*  F_zeta* con_basis['g^rz']
+    Fg_vz = F_theta*F_zeta* con_basis['g^vz']
+    
+    # magnitudes
+    F_mag = jnp.sqrt(Fg_rr + Fg_vv + Fg_zz + 2*Fg_rv + 2*Fg_rz + 2*Fg_vz)
+    p_mag = jnp.sqrt(pres_r*pres_r*con_basis['g^rr'])
+    
+    return F_mag, p_mag

@@ -1,10 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from zernike import ZernikeTransform, eval_double_fourier
-from force_balance import compute_coordinate_derivatives, compute_covariant_basis, compute_jacobian
-from force_balance import compute_contravariant_basis, compute_force_error_nodes
-from backend import presfun, get_needed_derivatives, iotafun, presfun, dot, rms, put
+from backend import presfun, get_needed_derivatives, iotafun, presfun, dot, rms, put, unpack_x
 from input_output import vmec_interpolate
+from field_components import compute_coordinate_derivatives, compute_covariant_basis, compute_contravariant_basis, compute_jacobian
+from field_components import compute_B_field, compute_J_field, compute_F_magnitude
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000), # blue
                      (0.8359, 0.3682, 0.0000), # vermillion
@@ -165,19 +165,17 @@ def plot_coeffs(cR,cZ,cL,zern_idx,lambda_idx,cR_init=None,cZ_init=None,cL_init=N
     return fig, ax
 
 
-def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, presfun_params, Psi_total,
-                domain='real', normalize='local',ax=None, log=False, cmap='plasma', **kwargs):
+def plot_fb_err(cR,cZ,cP,cI,zern_idx,NFP,Psi_total,
+                domain='real',normalize='local',log=True,cmap='plasma',**kwargs):
     """Plots force balance error
     
     Args:
         cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        cL (ndarray, shape(2M+1)*(2N+1)): spectral coefficients of lambda
+        cP (array-like): coefficients to pass to pressure function
+        cI (array-like): coefficients to pass to rotational transform function
         zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
-        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient        
         NFP (int): number of field periods
-        iotafun_params (array-like): paramters to pass to rotational transform function
-        presfun_params (array-like): parameters to pass to pressure function
         Psi_total (float): total toroidal flux in the plasma
         domain (str): one of 'real', 'sfl'. What basis to use for plotting, 
             real (R,Z) coordinates or straight field line (rho,vartheta)
@@ -186,97 +184,87 @@ def plot_fb_err(cR,cZ,cL,zern_idx,lambda_idx,NFP,iotafun_params, presfun_params,
             'local' - normalize by local pressure gradient
             'global' - normalize by pressure gradient at rho=0.5
             True - same as 'global'
-        ax (matplotlib.axes): axes to use for plotting
         log (bool): plot logarithm of error or absolute value
         cmap (str,matplotlib.colors.Colormap): colormap to use
     
     Returns:
-        ax (matplotlib.axes): handle to axes used for plotting
-        im (TriContourSet): handle to contourf plot
+        Nothing, makes plot
     """
-
-    if domain not in ['real','sfl']:
-        raise ValueError("domain expected one of 'real', 'sfl'")
-    if normalize not in ['local','global',None,True,False]:
-        raise ValueError("normalize expected one of 'local','global',None,True")
-        
-    nr = kwargs.get('nr',100)
-    nv = kwargs.get('nv',100)
-    r = np.linspace(0,1,nr)
-    v = np.linspace(0,2*np.pi,nv)
-    z = kwargs.get('zeta',0)
+    
+    if np.max(zern_idx[:,2])==0:
+        Nz = 1
+        rows = 1
+    else:
+        Nz = 6
+        rows = 2
+    
+    Nr = kwargs.get('Nr',100)
+    Nv = kwargs.get('Nv',100)
+    Nlevels = kwargs.get('Nlevels',100)
+    
+    r = np.linspace(0,1,Nr)
+    v = np.linspace(0,2*np.pi,Nv)
+    z = np.linspace(0,2*np.pi/NFP,Nz)
     rr,vv,zz = np.meshgrid(r,v,z,indexing='ij')
     rr = rr.flatten()
     vv = vv.flatten()
     zz = zz.flatten()
-    
-    nodes = np.stack([rr,vv,zz])
-    derivatives = get_needed_derivatives('force')
+    nodes = [rr,vv,zz]
+    derivatives = get_needed_derivatives('all')
     zernt = ZernikeTransform(nodes,zern_idx,NFP,derivatives)
-    axn = np.where(rr == 0)[0]
-    halfn = np.where(rr == r[nr//2])[0]
-    N_nodes = rr.size
     
+    # compute fields components
     coord_der = compute_coordinate_derivatives(cR,cZ,zernt)
     cov_basis = compute_covariant_basis(coord_der)
-    jacobian = compute_jacobian(coord_der,cov_basis)
-    con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian, nodes, axn)
-    
-    errRf,errZf = compute_force_error_nodes(cR,cZ,zernt,nodes,presfun_params,iotafun_params,Psi_total,None)
-    errF = np.concatenate([errRf,errZf])
-    errF = errF.reshape((N_nodes,2),order='F')
-    radial = np.sqrt(con_basis['g^rr']) * np.sign(dot(con_basis['e^rho'],cov_basis['e_rho'],0))
-    pres_r = presfun(rr,1, presfun_params)
-    
-    if normalize == 'global' or normalize == True:
-        norm_errF = np.linalg.norm(errF,axis=1)/rms(pres_r[halfn])
-    elif normalize == 'local':
-        JxB = errF[:,0] + pres_r
-        norm_errF = np.linalg.norm(errF,axis=1)/(np.abs(JxB) + np.abs(pres_r))
-    else:
-        norm_errF = np.linalg.norm(errF,axis=1)
-
-    nlevels = kwargs.get('nlevels',100)
-    
-    if normalize and log:
-        locator = matplotlib.ticker.LogLocator(subs=np.linspace(1,10,nlevels)[:-1])
-        levels=None
-        norm = matplotlib.colors.LogNorm()
-    elif normalize:
-        levels = kwargs.get('levels',np.linspace(0,1,nlevels))
-        locator = None
-    else:
-        levels = kwargs.get('levels',nlevels)
-    
-    if ax is None:
-        fig, ax = plt.subplots()
+    jacobian  = compute_jacobian(coord_der,cov_basis)
+    con_basis = compute_contravariant_basis(coord_der,cov_basis,jacobian,nodes)
+    B_field   = compute_B_field(cov_basis,jacobian,cI,Psi_total,nodes)
+    J_field   = compute_J_field(coord_der,cov_basis,jacobian,B_field,cI,Psi_total,nodes)
+    F_mag,p_mag = compute_F_magnitude(coord_der,cov_basis,con_basis,jacobian,B_field,J_field,cP,cI,Psi_total,nodes)
     
     if domain == 'real':
-        R = zernt.transform(cR,0,0,0)
-        Z = zernt.transform(cZ,0,0,0)
-        im = ax.tricontourf(R,Z,norm_errF, cmap=cmap, extend='both', levels=levels,locator=locator)
-
-        ax.set_xlabel(r'$R$')
-        ax.set_ylabel(r'$Z$')
-        ax.axis('equal')
-        ax.set_aspect('equal')
+        xlabel = r'R'
+        ylabel = r'Z'
+        R = zernt.transform(cR,0,0,0).reshape((Nr,Nv,Nz))
+        Z = zernt.transform(cZ,0,0,0).reshape((Nr,Nv,Nz))
     elif domain == 'sfl':
-        im = ax.tricontourf(vv,rr,norm_errF, cmap=cmap, extend='both', levels=levels, locator=locator)
-        ax.set_xticks([0,np.pi/2,np.pi,3/2*np.pi,2*np.pi])
-        ax.set_xticklabels(['$0$',r'$\frac{\pi}{2}$',r'$\pi$',r'$\frac{3\pi}{2}$', r'$2\pi$'])
-        ax.set_xlabel(r'$\theta$')
-        ax.set_ylabel(r'$\rho$')
-        
-    if normalize == 'global' or normalize == True:
-        title = '\\frac{||F||}{||\\nabla P(\\rho=0.5)||}' 
-    elif normalize == 'local':
-        title = '\\frac{||F||}{||\\nabla P||}' 
+        xlabel = r'$\vartheta$'
+        ylabel = r'$\rho$'
+        R = vv.reshape((Nr,Nv,Nz))
+        Z = rr.reshape((Nr,Nv,Nz))
     else:
-        title = '||F||'
-    title = '$' + title + '$'
-    ax.set_title(title)
-    plt.colorbar(im,ax=ax)
-    return ax, im
+        raise ValueError("domain must be either 'real' or 'sfl'")
+    
+    if normalize == 'local':
+        label = r'||F||/$\nabla$p'
+        norm_errF = F_mag / p_mag
+    elif normalize == 'global':
+        label = r'||F||/$\nabla$p($\rho$=0.5)'
+        halfn = np.where(rr == r[Nr//2])[0][0]
+        norm_errF = F_mag / p_mag[halfn]
+    else:
+        label = r'||F||'
+        norm_errF = F_mag
+    
+    if log:
+        label = r'$\mathregular{log}_{10}$('+label+')'
+        norm_errF = np.log10(norm_errF)
+    
+    norm_errF = norm_errF.reshape((Nr,Nv,Nz))
+    
+    plt.figure()
+    for k in range(Nz):
+        ax = plt.subplot(rows,Nz/rows,k+1)
+        cf = ax.contourf(R[:,:,k],Z[:,:,k],norm_errF[:,:,k],cmap=cmap,extend='both',levels=Nlevels)
+        if domain == 'real':
+            ax.axis('equal')
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        cbar = plt.colorbar(cf)
+        if k == 0:
+            cbar.ax.set_ylabel(label)
+    plt.show()
+    
 
 
 def plot_accel_err(cR,cZ,zernt,zern_idx,NFP,presfun_params,iotafun_params,Psi_total,domain='real',log=False,cmap='plasma'):
@@ -439,6 +427,90 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_para
     return fig, ax
 
 
+def plot_comparison(x0,x1,zern_idx,NFP,label0='x0',label1='x1',**kwargs):
+    """Plots force balance error
+    
+    Args:
+        
+        zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
+        NFP (int): number of field periods
+        
+    
+    Returns:
+        Nothing, makes plot
+    """
+    
+    cR0,cZ0,cL0 = unpack_x(x0,len(zern_idx))
+    cR1,cZ1,cL1 = unpack_x(x1,len(zern_idx))
+    
+    if np.max(zern_idx[:,2])==0:
+        Nz = 1
+        rows = 1
+    else:
+        Nz = 6
+        rows = 2
+    
+    Nr = kwargs.get('Nr',8)
+    Nv = kwargs.get('Nv',13)
+    
+    NNr = 100
+    NNv = 360
+    
+    # constant rho surfaces
+    r = np.linspace(0,1,Nr)
+    v = np.linspace(0,2*np.pi,NNv)
+    z = np.linspace(0,2*np.pi/NFP,Nz)
+    rr,vv,zz = np.meshgrid(r,v,z,indexing='ij')
+    rr = rr.flatten()
+    vv = vv.flatten()
+    zz = zz.flatten()
+    nodes = [rr,vv,zz]
+    zernt_r = ZernikeTransform(nodes,zern_idx,NFP)
+    
+    # constant theta surfaces
+    r = np.linspace(0,1,NNr)
+    v = np.linspace(0,2*np.pi,Nv)
+    z = np.linspace(0,2*np.pi/NFP,Nz)
+    rr,vv,zz = np.meshgrid(r,v,z,indexing='ij')
+    rr = rr.flatten()
+    vv = vv.flatten()
+    zz = zz.flatten()
+    nodes = [rr,vv,zz]
+    zernt_v = ZernikeTransform(nodes,zern_idx,NFP)
+    
+    R0r = zernt_r.transform(cR0,0,0,0).reshape((Nr,NNv,Nz))
+    Z0r = zernt_r.transform(cZ0,0,0,0).reshape((Nr,NNv,Nz))
+    R1r = zernt_r.transform(cR1,0,0,0).reshape((Nr,NNv,Nz))
+    Z1r = zernt_r.transform(cZ1,0,0,0).reshape((Nr,NNv,Nz))
+    
+    R0v = zernt_v.transform(cR0,0,0,0).reshape((NNr,Nv,Nz))
+    Z0v = zernt_v.transform(cZ0,0,0,0).reshape((NNr,Nv,Nz))
+    R1v = zernt_v.transform(cR1,0,0,0).reshape((NNr,Nv,Nz))
+    Z1v = zernt_v.transform(cZ1,0,0,0).reshape((NNr,Nv,Nz))
+    
+    plt.figure()
+    for k in range(Nz):
+        ax = plt.subplot(rows,Nz/rows,k+1)
+        
+        ax.plot(R0r[0,0,k],Z0r[0,0,k],'bo')
+        s0 = ax.plot(R0r[:,:,k].T,Z0r[:,:,k].T,'b-')
+        ax.plot(R0v[:,:,k],Z0v[:,:,k],'b:')
+        
+        ax.plot(R1r[0,0,k],Z1r[0,0,k],'ro')
+        s1 = ax.plot(R1r[:,:,k].T,Z1r[:,:,k].T,'r-')
+        ax.plot(R1v[:,:,k],Z1v[:,:,k],'r:')
+        
+        ax.axis('equal')
+        ax.set_xlabel('R')
+        ax.set_ylabel('Z')
+        if k == 0:
+            s0[0].set_label(label0)
+            s1[0].set_label(label1)
+            ax.legend(fontsize='xx-small')
+    plt.show()
+    
+
+
 def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     """Plots comparison of VMEC and DESC solutions
     
@@ -450,8 +522,8 @@ def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     """
     
     Nr = 8
-    Nt = 360
-    if np.max(zern_idx[:,2]==0):
+    Nv = 360
+    if np.max(zern_idx[:,2])==0:
         Nz = 1
         rows = 1
     else:
@@ -464,18 +536,19 @@ def plot_vmec_comparison(vmec_data,cR,cZ,zern_idx,NFP):
     if s_idx != 0:
         idxes = np.pad(idxes,(1,0),mode='constant')
     r = np.sqrt(idxes/Nr_vmec)
-    t = np.linspace(0,2*np.pi,Nt)
+    v = np.linspace(0,2*np.pi,Nv)
     z = np.linspace(0,2*np.pi/NFP,Nz)
-    rr,tt,zz = np.meshgrid(r,t,z,indexing='ij')
+    rr,vv,zz = np.meshgrid(r,v,z,indexing='ij')
     rr = rr.flatten()
-    tt = tt.flatten()
+    vv = vv.flatten()
     zz = zz.flatten()
-    zernt = ZernikeTransform([rr,tt,zz],zern_idx,NFP)
+    nodes = [rr,vv,zz]
+    zernt = ZernikeTransform(nodes,zern_idx,NFP)
     
-    R_desc = zernt.transform(cR,0,0,0).reshape((r.size,Nt,Nz))
-    Z_desc = zernt.transform(cZ,0,0,0).reshape((r.size,Nt,Nz))
+    R_desc = zernt.transform(cR,0,0,0).reshape((r.size,Nv,Nz))
+    Z_desc = zernt.transform(cZ,0,0,0).reshape((r.size,Nv,Nz))
     
-    R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][idxes],vmec_data['zmns'][idxes],vmec_data['xm'],vmec_data['xn'],t,z)
+    R_vmec,Z_vmec = vmec_interpolate(vmec_data['rmnc'][idxes],vmec_data['zmns'][idxes],vmec_data['xm'],vmec_data['xn'],v,z)
     
     plt.figure()
     for k in range(Nz):

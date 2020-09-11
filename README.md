@@ -39,7 +39,7 @@ Additional documentation on specific parts of the code can be found in [document
 - what needs jit, which devices
 - precompute SVD for fitting
 - force balance
-    - project back to get R_tt,Z_tt
+    - project back to get `R_tt`,`Z_tt`
     - incompressibility constraint
 - symmetry, symmetric nodes, best way to enforce and reduce size
     - masking
@@ -51,7 +51,7 @@ Additional documentation on specific parts of the code can be found in [document
 ### Known Issues
 
 - vmec input conversion cannot handle multi-line inputs
-- bdry_ratio does not work with compute_bc_err_RZ function
+- `bdry_ratio` does not work with `compute_bc_err_RZ` function
 
 ### Features to Add
 
@@ -59,7 +59,7 @@ Additional documentation on specific parts of the code can be found in [document
 - zernike transform using FFT
 - QS function specifying M/N
 - allow option for square system
-- use "root" algorithms instead of "least_squares" (and compare results)
+- use `root` algorithms instead of `least_squares` (and compare results)
 - autodiff hessian
 - add node option to avoid rational surfaces
 - I/O compatibiltiy with VMEC, GS solvers

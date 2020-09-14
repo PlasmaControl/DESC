@@ -353,8 +353,7 @@ class ZernikeTransform():
     Args:
         nodes (ndarray, shape(3,N)): nodes where basis functions are evaluated. 
             First index is (rho,theta,phi), 2nd index is node number
-        mode_idx (ndarray of int, shape(Nc,3)): mode numbers for spectral basis. each row is one basis function with 
-            modes (l,m,n)
+        mode_idx (ndarray of int, shape(Nc,3)): mode numbers for spectral basis. each row is one basis function with modes (l,m,n)
         NFP (int): number of field periods   
         derivatives (array-like, shape(n,3)): orders of derivatives to compute in rho,theta,zeta.
             Each row of the array should contain 3 elements corresponding to derivatives in rho,theta,zeta

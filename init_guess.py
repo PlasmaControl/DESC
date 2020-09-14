@@ -23,18 +23,22 @@ def get_initial_guess_scale_bdry(axis,bdry,zern_idx,NFP,mode='spectral',rcond=1e
         cZ = np.zeros((dimZern,))
         
         for m,n,bR,bZ in bdry:
+            
             if m == 0:
+                
                 idx = np.where(axis[:,0]==n)
                 if idx[0].size == 0:
                     aR = bR
                     aZ = bZ
                 else:
-                    aR = axis[idx,1]
-                    aZ = axis[idx,2]
+                    aR = axis[idx,1][0,0]
+                    aZ = axis[idx,2][0,0]
+                
                 cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bR+aR)/2)
                 cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==0, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bZ+aZ)/2)
                 cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bR-aR)/2)
                 cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==2, zern_idx[:,1]==0, zern_idx[:,2]==n)))[0], (bZ-aZ)/2)
+                
             else:
                 cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:,0]==np.absolute(m), zern_idx[:,1]==m, zern_idx[:,2]==n)))[0], bR)
                 cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:,0]==np.absolute(m), zern_idx[:,1]==m, zern_idx[:,2]==n)))[0], bZ)
@@ -43,3 +47,4 @@ def get_initial_guess_scale_bdry(axis,bdry,zern_idx,NFP,mode='spectral',rcond=1e
         print("I can't compute the initial guess in real space!")
     
     return cR, cZ
+    

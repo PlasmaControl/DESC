@@ -6,15 +6,16 @@ NFP			=  19				! number of field periods
 Psi_total	=   1.00000000E+00	! total toroidal magnetic flux (Wb)
 pres_scale 	=   1.80000000E+04	! scale of pressure profile (Pa)
 Mpol		=   6   6			! poloidal resolution of surfaces
-Ntor		=   0   1			! toroidal resolution of surfaces
+Ntor		=   0   2			! toroidal resolution of surfaces
 Mnodes		=   9  12			! poloidal resolution of nodes
 Nnodes		=   0   4			! toroidal resolution of nodes
-bdry_ratio	=   0   1			! fraction of full 3D boundary
-pres_ratio	=   0   1			! fraction of full pressure
-errr_ratio	=  10 100			! ratio of error weight boundary weight
+bdry_ratio	=   0   1			! fraction of full 3D boundary modes
+pres_ratio	=   0   1			! fraction of full pressure profile
+zeta_ratio	=   0   1			! fraction of full toroidal derivatives
+errr_ratio	=  1 0.001			! ratio of error weight boundary weight
 errr_mode	= force				! 'force' or 'accel'
 bdry_mode	= spectral			! 'spectral' or 'real'
-node_mode	= cheb1				! 'cheb1' or 'cheb2', otherwise linear
+node_mode	= cheb2				! 'cheb1' or 'cheb2', otherwise linear
 
 ! pressure and rotational transform profiles
 l:   0	cP =   1.00000000E+00	cI =   1.00000000E+00

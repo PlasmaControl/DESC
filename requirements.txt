@@ -3,3 +3,4 @@ scipy >= 1.3.0
 matplotlib >= 3.0.0
 jaxlib
 jax
+h5py

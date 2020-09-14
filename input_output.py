@@ -1,5 +1,6 @@
 import re
 import warnings
+import h5py
 import numpy as np
 from datetime import datetime
 from backend import unpack_x
@@ -356,3 +357,68 @@ def output_to_file(fname,x,zern_idx,lambda_idx,NFP,Psi_total,presfun_params,iota
     file.close()
     
     return None
+
+def read_desc(filename):
+    """reads a previously generated DESC ascii output file"""
+
+    equil = {}
+    f = open(filename,'r')
+    lines = list(f)
+    equil['NFP'] = int(lines[0].strip('\n').split()[-1])
+    equil['Psi_total'] = float(lines[1].strip('\n').split()[-1])
+    lines = lines[2:]
+
+    Nbdry = int(lines[0].strip('\n').split()[-1])
+    equil['bdry_idx'] = np.zeros((Nbdry,2),dtype=int)
+    equil['r_bdry_coef'] = np.zeros(Nbdry)
+    equil['z_bdry_coef'] = np.zeros(Nbdry)
+    for i in range(Nbdry):
+        equil['bdry_idx'][i,0] = int(lines[i+1].strip('\n').split()[1])
+        equil['bdry_idx'][i,1] = int(lines[i+1].strip('\n').split()[3])
+        equil['r_bdry_coef'][i] = float(lines[i+1].strip('\n').split()[6])
+        equil['z_bdry_coef'][i] = float(lines[i+1].strip('\n').split()[9])
+    lines = lines[Nbdry+1:]
+
+    Nprof = int(lines[0].strip('\n').split()[-1])
+    equil['pres_coef'] = np.zeros(Nprof)
+    equil['iota_coef'] = np.zeros(Nprof)
+    for i in range(Nprof):
+        equil['pres_coef'][i] = float(lines[i+1].strip('\n').split()[4])
+        equil['iota_coef'][i] = float(lines[i+1].strip('\n').split()[7])
+    lines = lines[Nprof+1:]
+
+    NRZ = int(lines[0].strip('\n').split()[-1])
+    equil['zern_idx'] = np.zeros((NRZ,3),dtype=int)
+    equil['r_coef'] = np.zeros(NRZ)
+    equil['z_coef'] = np.zeros(NRZ)
+    for i in range(NRZ):
+        equil['zern_idx'][i,0] = int(lines[i+1].strip('\n').split()[1])
+        equil['zern_idx'][i,1] = int(lines[i+1].strip('\n').split()[3])
+        equil['zern_idx'][i,2] = int(lines[i+1].strip('\n').split()[5])
+        equil['r_coef'][i] = float(lines[i+1].strip('\n').split()[8])
+        equil['z_coef'][i] = float(lines[i+1].strip('\n').split()[11])
+    lines = lines[NRZ+1:]
+
+    NL = int(lines[0].strip('\n').split()[-1])
+    equil['lambda_idx'] = np.zeros((NL,2),dtype=int)
+    equil['lambda_coef'] = np.zeros(NL)
+    for i in range(NL):
+        equil['lambda_idx'][i,0] = int(lines[i+1].strip('\n').split()[1])
+        equil['lambda_idx'][i,1] = int(lines[i+1].strip('\n').split()[3])
+        equil['lambda_coef'][i] = float(lines[i+1].strip('\n').split()[6])
+    lines = lines[NL+1:]
+    
+    return equil
+
+
+def write_desc_h5(filename,equilibrium):
+    """Writes a DESC equilibrium to a hdf5 format binary file"""
+
+    f = h5py.File(filename,'w')
+    equil = f.create_group('equilibrium')
+    for key,val in equilibrium.items():
+        equil.create_dataset(key,data=val)
+    equil['zern_idx'].attrs.create('column_labels',['l','m','n'])
+    equil['bdry_idx'].attrs.create('column_labels',['m','n'])
+    equil['lambda_idx'].attrs.create('column_labels',['m','n'])
+    f.close()

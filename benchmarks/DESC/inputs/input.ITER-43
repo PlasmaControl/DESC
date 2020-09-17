@@ -14,6 +14,10 @@ errr_ratio	= 100				! ratio of error weight boundary weight
 errr_mode	= force				! 'force' or 'accel'
 bdry_mode	= spectral			! 'spectral' or 'real'
 node_mode	= cheb2				! 'cheb1' or 'cheb2', otherwise linear
+ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
+xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
+gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
+max_nfev    = 100               ! max number of function evaluations per step
 
 ! pressure and rotational transform profiles
 l:   0	cP =   8.26272585E+05	cI =   4.30000000E-01

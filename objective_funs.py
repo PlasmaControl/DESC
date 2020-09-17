@@ -37,7 +37,8 @@ def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
     elif bdry_mode == 'spectral':
         bdry_fun = compute_bc_err_four
     
-    def equil_obj(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
+    def equil_obj(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,
+                  NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
         
         cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
         errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes)
@@ -52,7 +53,8 @@ def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
                                     weights['L']*errL0.flatten()/errL0.size])
         return residual
     
-    def callback(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
+    def callback(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,
+                 NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
         
         cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
         errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes)

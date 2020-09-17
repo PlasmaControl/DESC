@@ -4,3 +4,4 @@ matplotlib >= 3.0.0
 jaxlib
 jax
 h5py
+netcdf4

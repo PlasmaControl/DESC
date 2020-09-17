@@ -125,7 +125,7 @@ def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry
     cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
     
     # ratio of non-axisymmetric boundary modes to use
-    ratio = np.clip(bdry_ratio+(bdryN==0),0,1)
+    ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)
     
     # compute errors
     errR = cRb - bdryR*ratio

@@ -140,36 +140,6 @@ def unpack_x(x,nRZ):
     return cR,cZ,cL
 
 
-def expand_resolution(x,zern_idx_old,zern_idx_new,lambda_idx_old,lambda_idx_new):
-    """Expands solution to a higher resolution by filling with zeros
-    
-    Args:
-        x (ndarray): solution at initial resolution
-        zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
-        zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
-        lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
-        lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
-    
-    Returns:
-        x_new (ndarray): solution expanded to new resolution
-    """
-    
-    
-    cR,cZ,cL = unpack_x(x,len(zern_idx_old))
-    
-    cR_new = np.zeros(len(zern_idx_new))
-    cZ_new = np.zeros(len(zern_idx_new))
-    cL_new = np.zeros(len(lambda_idx_new))
-    old_in_new = np.where((zern_idx_new[:, None] == zern_idx_old).all(-1))[0]
-    cR_new[old_in_new] = cR
-    cR_new[old_in_new] = cR
-    old_in_new = np.where((lambda_idx_new[:, None] == lambda_idx_old).all(-1))[0]
-    cL_new[old_in_new] = cL
-    x_new = np.concatenate([cR_new,cZ_new,cL_new])
-    
-    return x_new
-
-
 class FiniteDifferenceJacobian():
     def __init__(self, fun, rel_step=jnp.finfo(jnp.float64).eps**(1/3)):
         self.fun = fun

@@ -12,6 +12,10 @@ pres_scale	=   2.00000000E+06
 errr_mode	= force
 bdry_mode	= spectral
 node_mode	= cheb1
+ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
+xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
+gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
+max_nfev    = 100               ! max number of function evaluations per step
 
 ! pressure and rotational transform profiles
 l:   0	cP =   1.00000000E+00	cI =   3.50000000E-01

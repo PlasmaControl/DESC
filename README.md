@@ -35,6 +35,10 @@ Additional documentation on specific parts of the code can be found in [document
 ### Priorities
 
 - continuation method
+    - more testing to make sure it gives good results
+    - checkpointing
+    - how much output to give? just final or all steps?
+    - find good default solver parameters
 - memory management for gpu
 - what needs jit, which devices
 - precompute SVD for fitting
@@ -47,6 +51,7 @@ Additional documentation on specific parts of the code can be found in [document
     - masking?
     - comparing masked arrays for bdry
 - profiling to find speed bottlenecks
+- Don't compute all field components if not necessary
 
 ### Known Issues
 

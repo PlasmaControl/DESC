@@ -265,7 +265,6 @@ toroidal_derivatives = {0: four_toroidal,
                         2: four_toroidal_zz,
                         3: four_toroidal_zzz}
 
-@conditional_decorator(functools.partial(jit,static_argnums=(4,5)), use_jax)
 def zern(r,theta,l,m,dr,dtheta):
     """Zernike 2D basis function
     
@@ -285,7 +284,6 @@ def zern(r,theta,l,m,dr,dtheta):
     
     return radial*azimuthal    
 
-@conditional_decorator(functools.partial(jit,static_argnums=(3,)), use_jax)
 def four(zeta,n,NFP,dz):
     """Toroidal Fourier basis function
     
@@ -325,7 +323,6 @@ def double_fourier_basis(theta,phi,m,n,NFP):
 
     return m_term*n_term
 
-@conditional_decorator(functools.partial(jit,static_argnums=(7,8,9)), use_jax)
 def fourzern(r,theta,zeta,l,m,n,NFP,dr,dv,dz):
     """Combined 3D Fourier-Zernike basis function
     
@@ -460,7 +457,7 @@ class ZernikeTransform():
         self._build(derivs_to_add, self.mode_idx)
         self.derivatives = jnp.vstack([self.derivatives,derivs_to_add])
         
-        
+    # TODO: make new wrapper function for jitted matmul, don't jit this thing with static args    
     @conditional_decorator(functools.partial(jit,static_argnums=(0,2,3,4)), use_jax)    
     def transform(self,c,dr,dv,dz):
         """Transform from spectral domain to physical
@@ -475,7 +472,8 @@ class ZernikeTransform():
             x (ndarray, shape(N_nodes,)): array of values of function at node locations
         """
         return jnp.matmul(self.matrices[dr][dv][dz],c)
-
+    
+    # TODO: precompute SVD
     @conditional_decorator(functools.partial(jit,static_argnums=(0,2)), use_jax)    
     def fit(self,x,rcond):
         """Transform from physical domain to spectral

@@ -1,16 +1,16 @@
 import numpy as np
 
-def get_nodes(M,N,NFP,surfs='cheb1',nr=None,nt=None,nz=None):
-    """Compute interpolation nodes
+def get_nodes_pattern(M,N,NFP,surfs='cheb1'):
+    """Compute interpolation nodes on a patterned grid
     
     Args:
         M (int): maximum poloidal mode number
         N (int): maximum toroidal mode number
+        NFP (int): number of field periods
         surfs (string): pattern for radial surfaces
             cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
             cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-            grid = uniform grid with number of points given by nr,nt,nz
-            any other value defaults to linear spacing
+            any other value defaults to linear spacing in r
         
     Returns:
         nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
@@ -19,24 +19,6 @@ def get_nodes(M,N,NFP,surfs='cheb1',nr=None,nt=None,nz=None):
     
     dimZern = (M+1)**2
     dimFourN = 2*N+1
-    
-    if surfs == 'grid':
-        r = np.linspace(0,1,nr)
-        dr = np.diff(r)[0]
-        t = np.linspace(0,2*np.pi,nt+1)[:-1]
-        dt = np.diff(t)[0]
-        z = np.linspace(0,2*np.pi/NFP,nz+1)
-        dz = 2*np.pi/NFP/(nz+1)
-        r,t,z = np.meshgrid(r,t,z,indexing='ij')
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
-        dr = dr*np.ones_like(r)
-        dt = dt*np.ones_like(t)
-        dz = dz*np.ones_like(z)
-        nodes = np.stack([r,t,z])
-        volumes = np.stack([dr,dt,dz])
-        return nodes,volumes
     
     pattern = {
         'cheb1' : (np.cos(np.arange(M,-1,-1)*np.pi/M)+1)/2,
@@ -72,16 +54,90 @@ def get_nodes(M,N,NFP,surfs='cheb1',nr=None,nt=None,nz=None):
             dt[i] = dtheta
             i += 1
     
-    dzeta = 2*np.pi/(NFP*dimFourN)
-    zeta = np.arange(0,2*np.pi/NFP,dzeta)
+    dz = 2*np.pi/(NFP*dimFourN)
+    z = np.arange(0,2*np.pi/NFP,dz)
     
     r = np.tile(r,dimFourN)
     t = np.tile(t,dimFourN)
-    z = np.tile(zeta[np.newaxis],(dimZern,1)).flatten(order='F')
+    z = np.tile(z[np.newaxis],(dimZern,1)).flatten(order='F')
     dr = np.tile(dr,dimFourN)
     dt = np.tile(dt,dimFourN)
-    dz = np.ones_like(r)
+    dz = np.ones_like(z)*dz
+    
+    nodes = np.stack([r,t,z])
+    volumes = np.stack([dr,dt,dz])
+    return nodes,volumes
 
+
+def get_nodes_grid(NFP,nr=None,nt=None,nz=None):
+    """Compute interpolation nodes on a linear grid
+    
+    Args:
+        NFP (int): number of field periods
+        nr (int): number of radial grid points
+        nt (int): number of poloidal grid points
+        nz (int): number of toroidal grid points
+        
+    Returns:
+        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
+        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    """
+    
+    r = np.linspace(0,1,nr)
+    dr = 1/nr
+    
+    t = np.linspace(0,2*np.pi,nt)
+    dt = 2*np.pi/nt
+    
+    z = np.linspace(0,2*np.pi/NFP,nz)
+    dz = 2*np.pi/NFP/nz
+    
+    r,t,z = np.meshgrid(r,t,z,indexing='ij')
+    r = r.flatten()
+    t = t.flatten()
+    z = z.flatten()
+    
+    dr = dr*np.ones_like(r)
+    dt = dt*np.ones_like(t)
+    dz = dz*np.ones_like(z)
+    
+    nodes = np.stack([r,t,z])
+    volumes = np.stack([dr,dt,dz])
+    return nodes,volumes
+
+
+def get_nodes_surf(M,N,NFP,surf=1.0):
+    """Compute interpolation nodes on a single surface
+    
+    Args:
+        M (int): maximum poloidal mode number
+        N (int): maximum toroidal mode number
+        NFP (int): number of field periods
+        surf (double): radial coordinate of flux surface
+        
+    Returns:
+        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
+        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    """
+    
+    dimFourM = 2*M+1
+    dimFourN = 2*N+1
+    
+    dt = 2*np.pi/dimFourM
+    t  = np.arange(0,2*np.pi,dt)
+
+    dz = 2*np.pi/(NFP*dimFourN)
+    z  = np.arange(0,2*np.pi/NFP,dz)
+    
+    t,z = np.meshgrid(t,z,indexing='ij')
+    t = t.flatten()
+    z = z.flatten()
+    r = np.ones_like(t)*surf
+    
+    dr = np.ones_like(r)
+    dt = np.ones_like(t)*dt
+    dz = np.ones_like(z)*dz
+    
     nodes = np.stack([r,t,z])
     volumes = np.stack([dr,dt,dz])
     return nodes,volumes

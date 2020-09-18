@@ -11,10 +11,11 @@ Psi_lcfs	=   1.00000000E+00
 errr_mode	= force
 bdry_mode	= spectral
 node_mode	= cheb2
-ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
-xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
-gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
-nfev        = 1000               ! max number of function evaluations per step
+ftol		= 1e-6
+xtol		= 1e-6
+gtol		= 1e-6
+nfev		= 100
+verbose		= 2
 
 ! profile coefficients
 pres_scale	=   1.60000000E+03

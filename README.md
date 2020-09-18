@@ -7,24 +7,24 @@ This is the primary version of the DESC code in Python.
 
 ### Python files
 
-DESC.py is the main script which calls the following supplemental scripts:
+DESC.py is the main script which computes and plots equilibrium solutions.
+The following files contain supplemental functions: 
 - backend.py - set of core functions and jax/numpy compatibility layer
 - boundary_conditions.py - functions for calculating boundary errors
+- continuation.py - calls the optimization routine and functions for perturbing solutions
 - field_components.py - functions for calculating B and J components
 - gfile_helpers.py - functions for reading/writing gfiles for tokamak GS equilibria
 - init_guess.py - functions for generating initial guesses for the solution
 - input_output.py - functions for reading/writing input/output
 - nodes.py - functions for generating collocation nodes
 - objective_funs.py - assembles the objective functions to be minimized
-- plotting.py - routines for plotting solutions and their errors
+- plotting.py - functions for plotting solutions and their errors
 - zernike.py - Zernike/Fourier transforms and basis functions
 
 ### Benchmarks
 
-Sample VMEC input files are contained in [benchmarks/VMEC/inputs](https://github.com/ddudt/DESC/tree/python/benchmarks/VMEC/inputs), 
-and their corresponding wout files are in [benchmarks/VMEC/outputs](https://github.com/ddudt/DESC/tree/python/benchmarks/VMEC/outputs).
-The equivalent DESC input files are contained in [benchmarks/DESC/inputs](https://github.com/ddudt/DESC/tree/python/benchmarks/DESC/inputs), 
-and the solution outputs are saved in [benchmarks/DESC/outputs](https://github.com/ddudt/DESC/tree/python/benchmarks/DESC/outputs).
+Sample VMEC input files and their corresponding wout files are contained in [benchmarks/VMEC](https://github.com/ddudt/DESC/tree/python/benchmarks/VMEC).
+The equivalent DESC input files are contained in [benchmarks/DESC](https://github.com/ddudt/DESC/tree/python/benchmarks/DESC).
 
 ### Documentation
 
@@ -37,7 +37,6 @@ Additional documentation on specific parts of the code can be found in [document
 - continuation method
     - more testing to make sure it gives good results
     - checkpointing
-    - how much output to give? just final or all steps?
     - find good default solver parameters
 - memory management for gpu
 - what needs jit, which devices
@@ -51,6 +50,7 @@ Additional documentation on specific parts of the code can be found in [document
     - masking?
     - comparing masked arrays for bdry
 - profiling to find speed bottlenecks
+    - evaluate bdry error in (v,z) coordinates?
 - Don't compute all field components if not necessary
 
 ### Known Issues

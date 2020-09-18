@@ -1,25 +1,26 @@
 ! This DESC input file for W7-X in standard configuration
 
 ! solver parameters
-stell_sym	=   0				! true for stellarator symmetry
-NFP			=   5				! number of field periods
-Psi_total	=  -2.13300000E+00	! total toroidal magnetic flux (Wb)
-pres_scale 	=   1.80000000E+04	! scale of pressure profile (Pa)
-Mpol		=  12				! poloidal resolution of surfaces
-Ntor		=  12				! toroidal resolution of surfaces
-Mnodes		=  18				! poloidal resolution of nodes
-Nnodes		=  18				! toroidal resolution of nodes
-bdry_ratio	=   1				! fraction of full 3D boundary modes
-pres_ratio	=   1				! fraction of full pressure profile
-zeta_ratio	=   1				! fraction of full toroidal derivatives
-errr_ratio	=   1				! ratio of error weight boundary weight
-errr_mode	= force				! 'force' or 'accel'
-bdry_mode	= spectral			! 'spectral' or 'real'
-node_mode	= cheb2				! 'cheb1' or 'cheb2', otherwise linear
-ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
-xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
-gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
-max_nfev    = 100               ! max number of function evaluations per step
+stell_sym	=   0
+NFP			=   5
+Psi_lcfs	=  -2.13300000E+00
+pres_scale 	=   1.80000000E+04
+Mpol		=  12
+Ntor		=  12
+Mnodes		=  18
+Nnodes		=  18
+bdry_ratio	=   1
+pres_ratio	=   1
+zeta_ratio	=   1
+errr_ratio	=   1
+errr_mode	= force
+bdry_mode	= spectral
+node_mode	= cheb2
+ftol		= 1e-6
+xtol		= 1e-6
+gtol		= 1e-6
+nfev		= 100
+verbose		= 2
 
 ! pressure and rotational transform profiles
 l:   0	cP =   1.00000000E-06	cI =   8.55700000E-01

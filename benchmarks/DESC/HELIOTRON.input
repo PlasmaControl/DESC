@@ -3,7 +3,7 @@
 ! solver parameters
 stell_sym	= 1
 NFP			= 19
-Psi_edge	= 1.00000000E+00
+Psi_lcfs	= 1.00000000E+00
 pres_scale	= 1.80000000E+04
 Mpol		= 6
 Ntor		= 2

@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 from datetime import datetime
 from netCDF4 import Dataset
-from backend import unpack_x, sign
+from backend import sign
 
 
 def read_input(fname):
@@ -49,7 +49,6 @@ def read_input(fname):
     file = open(fname,'r')
     
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
-    pres_scale = 1.0
     
     for line in file:
         
@@ -80,9 +79,6 @@ def read_input(fname):
         match = re.search('Psi_lcfs',argument,re.IGNORECASE)
         if match:
             inputs['Psi_lcfs'] = numbers[0]
-        match = re.search('pres_scale',argument,re.IGNORECASE)
-        if match:
-            pres_scale = numbers[0]
         match = re.search('Mpol',argument,re.IGNORECASE)
         if match:
             inputs['Mpol'] = np.array(numbers).astype(int)
@@ -229,9 +225,6 @@ def read_input(fname):
     if np.sum(inputs['axis']) == 0:
         axis_idx = np.where(inputs['bdry'][:,0] == 0)[0]
         inputs['axis'] = inputs['bdry'][axis_idx,1:]
-    
-    # pressure scale
-    inputs['cP'] = pres_scale*inputs['cP']
     
     return inputs
 
@@ -464,8 +457,8 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
     Ntor = 99
     
-    presfun_params = np.array([0.0])
-    iotafun_params = np.array([0.0])
+    cP = np.array([0.0])
+    cI = np.array([0.0])
     axis = np.array([[0,0,0.0]])
     bdry = np.array([[0,0,0.0,0.0]])
     
@@ -529,9 +522,9 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
             numbers = [float(x) for x in re.findall(num_form,match.group(0))]
             for k in range(len(numbers)):
                 l = 2*k
-                if presfun_params.size < l+1:
-                    presfun_params = np.pad(presfun_params,(0,l+1-presfun_params.size),mode='constant')
-                presfun_params[l] = numbers[k]
+                if cP.size < l+1:
+                    cP = np.pad(cP,(0,l+1-cP.size),mode='constant')
+                cP[l] = numbers[k]
         
         # rotational transform paramters
         match = re.search('NCURR\ *=(\ *'+num_form+')*',command,re.IGNORECASE)
@@ -547,9 +540,9 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
             numbers = [float(x) for x in re.findall(num_form,match.group(0))]
             for k in range(len(numbers)):
                 l = 2*k
-                if iotafun_params.size < l+1:
-                    iotafun_params = np.pad(iotafun_params,(0,l+1-iotafun_params.size),mode='constant')
-                iotafun_params[l] = numbers[k]
+                if cI.size < l+1:
+                    cI = np.pad(cI,(0,l+1-cI.size),mode='constant')
+                cI[l] = numbers[k]
         
         # magnetic axis paramters
         match = re.search('RAXIS\ *=(\ *'+num_form+')*',command,re.IGNORECASE)
@@ -699,13 +692,13 @@ def vmec_to_desc_input(vmec_fname,desc_fname):
     
     desc_file.write('\n')
     desc_file.write('! pressure and rotational transform profiles\n')
-    for k in range(max(presfun_params.size,iotafun_params.size)):
-        if k >= presfun_params.size:
-            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,0.0,iotafun_params[k]))
-        elif k >= iotafun_params.size:
-            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],0.0))
+    for k in range(max(cP.size,cI.size)):
+        if k >= cP.size:
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,0.0,cI[k]))
+        elif k >= cI.size:
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,cP[k],0.0))
         else:
-            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,presfun_params[k],iotafun_params[k]))
+            desc_file.write('l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k,cP[k],cI[k]))
     
     desc_file.write('\n')
     desc_file.write('! magnetic axis initial guess\n')

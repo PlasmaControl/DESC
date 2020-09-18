@@ -55,7 +55,9 @@ Additional documentation on specific parts of the code can be found in [document
 
 ### Known Issues
 
-- vmec input conversion cannot handle multi-line inputs
+- in `vmec_to_desc_input` function:
+    - cannot handle multi-line VMEC inputs
+    - need to remove `pres_scale` from DESC input file
 - `bdry_ratio` does not work with `compute_bc_err_RZ` function
 
 ### Features to Add

@@ -4,14 +4,13 @@
 stell_sym	= 1
 NFP			= 19
 Psi_lcfs	= 1.00000000E+00
-pres_scale	= 1.80000000E+04
-Mpol		= 6
-Ntor		= 2
-Mnodes		= 9
-Nnodes		= 3
-bdry_ratio	= 1
-pres_ratio	= 0, 0,    0,   0,    0, 1
-zeta_ratio	= 0, 0.25, 0.5, 0.75, 1, 1
+Mpol		= 6,    6,    6,    6,    7,    8,    9,    10,   11,   12,   12
+Ntor		= 0,    1,    1,    1,    2,    2,    2,    2,    2,    2,    2
+Mnodes		= 9,    9,    9,    9,    11,   12,   14,   15,   17,   18,   18
+Nnodes		= 0,    2,    2,    2,    3,    3,    3,    3,    3,    3,    3
+bdry_ratio	= 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00
+pres_ratio	= 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00, 1.00
+zeta_ratio	= 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00
 errr_ratio	= 1e-3
 errr_mode	= force
 bdry_mode	= spectral
@@ -23,9 +22,9 @@ nfev		= 100
 verbose		= 2
 
 ! pressure and rotational transform profiles
-l:   0	cP =   1.00000000E+00	cI =   1.00000000E+00
-l:   2	cP =  -2.00000000E+00	cI =   1.50000000E+00
-l:   4	cP =   1.00000000E+00
+l:   0	cP =   1.80000000E+04	cI =   1.00000000E+00
+l:   2	cP =  -3.60000000E+04	cI =   1.50000000E+00
+l:   4	cP =   1.80000000E+04
 
 ! magnetic axis initial guess
 n:   0	aR =   1.00000000E+01	aZ =   0.00000000E+00

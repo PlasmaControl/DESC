@@ -55,15 +55,15 @@ def perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args):
         bdry_jac = jacfwd(equil_obj,argnums=6)
         Jb = bdry_jac(x,*args)
         RHS += Jb*delta_bdry
-    if delta_bdry != 0:
+    if delta_pres != 0:
         pres_jac = jacfwd(equil_obj,argnums=7)
         Jp = pres_jac(x,*args)
         RHS += Jp*delta_pres
-    if delta_bdry != 0:
+    if delta_zeta != 0:
         zeta_jac = jacfwd(equil_obj,argnums=8)
         Jz = zeta_jac(x,*args)
         RHS += Jz*delta_zeta
-    if delta_bdry != 0:
+    if delta_errr != 0:
         errr_jac = jacfwd(equil_obj,argnums=9)
         Je = errr_jac(x,*args)
         RHS += Je*delta_errr
@@ -207,11 +207,12 @@ def solve_eq_continuation(inputs):
             # equilibrium objective function
             equil_obj,callback = get_equil_obj_fun(stell_sym,errr_mode,bdry_mode,M[ii],N[ii],
                                  NFP,zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes)
-            args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii],pres_ratio[ii],zeta_ratio[ii],errr_ratio[ii]]
+            args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii-1],pres_ratio[ii-1],zeta_ratio[ii-1],errr_ratio[ii-1]]
             
             if use_jax:
                 x = perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args)
         
+        args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii],pres_ratio[ii],zeta_ratio[ii],errr_ratio[ii]]
         if use_jax:
             if verbose > 0:
                 print('Compiling objective function')

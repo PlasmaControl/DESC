@@ -4,7 +4,6 @@
 stell_sym	=   0
 NFP			=   5
 Psi_lcfs	=  -2.13300000E+00
-pres_scale 	=   1.80000000E+04
 Mpol		=  12
 Ntor		=  12
 Mnodes		=  18
@@ -23,9 +22,9 @@ nfev		= 100
 verbose		= 2
 
 ! pressure and rotational transform profiles
-l:   0	cP =   1.00000000E-06	cI =   8.55700000E-01
+l:   0	cP =   0.00000000E+00	cI =   8.55700000E-01
 l:   1	cP =   0.00000000E+00	cI =   1.10000000E-03
-l:   2	cP =  -1.00000000E-06	cI =   2.99000000E-02
+l:   2	cP =   0.00000000E+00	cI =   2.99000000E-02
 l:   3	cP =   0.00000000E+00	cI =   6.53000000E-02
 l:   4	cP =   0.00000000E+00	cI =  -1.26700000E-01
 l:   5	cP =   0.00000000E+00	cI =   2.64100000E-01

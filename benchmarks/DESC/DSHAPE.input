@@ -7,14 +7,14 @@ Ntor		=   0
 Mnodes		=  18
 Nnodes		=   0
 NFP			=   1
-Psi_total	=   1.00000000E+00
+Psi_lcfs	=   1.00000000E+00
 errr_mode	= force
 bdry_mode	= spectral
-node_mode	= cheb1
+node_mode	= cheb2
 ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
 xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
 gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
-max_nfev    = 100               ! max number of function evaluations per step
+nfev        = 1000               ! max number of function evaluations per step
 
 ! profile coefficients
 pres_scale	=   1.60000000E+03

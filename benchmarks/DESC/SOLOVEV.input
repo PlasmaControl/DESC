@@ -7,9 +7,10 @@ Ntor		=   0
 Mnodes		=  12
 Nnodes		=   0
 NFP			=   1
+Psi_lcfs	=   1.00000000E+00
 bdry_ratio	=   1
-pres_ratio	=   1
-zeta_ratio	=   1
+pres_ratio	=   0 1
+zeta_ratio	=   0 1
 errr_ratio	=  0.05
 errr_mode	= force
 bdry_mode	= spectral
@@ -17,10 +18,9 @@ node_mode	= cheb2
 ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
 xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
 gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
-max_nfev    = 100               ! max number of function evaluations per step
+nfev        = 1000              ! max number of function evaluations per step
 
 ! pressure and rotational transform profiles
-Psi_total	=   1.00000000E+00
 l:   0	cP =   1.25000000E-01	cI =   1.00000000E+00
 l:   2	cP =  -1.25000000E-01	cI =   0.00000000E+00
 

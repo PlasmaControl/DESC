@@ -167,7 +167,7 @@ def zern_azimuthal_vv(theta,m):
     return y
 
 @conditional_decorator(functools.partial(jit), use_jax)
-def zern_azimuthal_vvv(theta,l,m):
+def zern_azimuthal_vvv(theta,m):
     """Zernike azimuthal basis function, third azimuthal derivative
     
     Args:
@@ -307,7 +307,7 @@ def zern(r,theta,l,m,dr,dtheta):
     Returns:
         y (ndarray with shape(N,)): basis function evaluated at specified points
     """
-    radial = radial_derivatives[dr](r,l,m)
+    radial = radial_derivatives[dr](r,l,m)[:,jnp.newaxis]
     azimuthal = poloidal_derivatives[dtheta](theta,m)
     
     return radial*azimuthal    
@@ -406,9 +406,9 @@ class ZernikeTransform():
             dr = d[0]
             dv = d[1]
             dz = d[2]
-            self.matrices[dr][dv][dz] = jnp.stack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2],
-                                               lmn[0],lmn[1],lmn[2],self.NFP,dr,dv,dz) for lmn in mode_idx]).T 
-            
+            self.matrices[dr][dv][dz] = jnp.hstack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2],
+                                               lmn[0],lmn[1],lmn[2],self.NFP,dr,dv,dz) for lmn in mode_idx])
+
     def expand_nodes(self,new_nodes):
         """Change the real space resolution by adding new nodes without full recompute
         
@@ -432,8 +432,8 @@ class ZernikeTransform():
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = jnp.vstack([
                     self.matrices[d[0]][d[1]][d[2]], # old
-                    jnp.stack([fourzern(nodes_to_add[:,0],nodes_to_add[:,1],nodes_to_add[:,2], # new
-                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in self.mode_idx]).T ])
+                    jnp.hstack([fourzern(nodes_to_add[:,0],nodes_to_add[:,1],nodes_to_add[:,2], # new
+                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in self.mode_idx]) ])
 
         # update indices
         self.nodes = np.hstack([self.nodes, nodes_to_add.T])
@@ -468,8 +468,8 @@ class ZernikeTransform():
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = jnp.hstack([
                     self.matrices[d[0]][d[1]][d[2]], # old
-                    jnp.stack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2], # new
-                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in modes_to_add]).T ])
+                    jnp.hstack([fourzern(self.nodes[0],self.nodes[1],self.nodes[2], # new
+                    lmn[0],lmn[1],lmn[2],self.NFP,d[0],d[1],d[2]) for lmn in modes_to_add]) ])
         
         # update indices
         self.mode_idx = np.vstack([self.mode_idx, modes_to_add])
@@ -590,7 +590,7 @@ def eval_four_zern(c,idx,NFP,rho,theta,zeta,dr=0,dv=0,dz=0):
     rho = jnp.asarray(rho)
     theta = jnp.asarray(theta)
     zeta = jnp.asarray(zeta)
-    Z = jnp.stack([fourzern(rho,theta,zeta,lmn[0],lmn[1],lmn[2],NFP,dr,dv,dz) for lmn in idx]).T 
+    Z = jnp.stack([fourzern(rho,theta,zeta,lmn[0],lmn[1],lmn[2],NFP,dr,dv,dz) for lmn in idx]) 
     Z = jnp.atleast_2d(Z)
     f = jnp.matmul(Z,c)
     return f
@@ -616,7 +616,7 @@ def eval_double_fourier(c,idx,NFP,theta,phi):
 
     c = c.flatten()
     interp = double_fourier_basis(theta,phi,idx[:,0],idx[:,1],NFP)
-    f = jnp.matmul(f,c)    
+    f = jnp.matmul(interp,c)    
     return f
 
 

@@ -117,7 +117,7 @@ def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry
     lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_theta,bdry_phi)
     vartheta = bdry_theta + lamda
     zeta = bdry_phi
-    zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
+    zern_bdry_interp = jnp.hstack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx])
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
     
@@ -161,7 +161,7 @@ def compute_bc_err_RZ(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_t
     lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_theta,bdry_phi)
     vartheta = bdry_theta + lamda
     zeta = bdry_phi
-    zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx]).T
+    zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx])
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
     

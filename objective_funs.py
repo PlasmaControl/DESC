@@ -311,7 +311,7 @@ def compute_qs_error_spectral(cR,cZ,zernt,nodes,modesM,modesN,cI,Psi_total,NFP,z
     
     theta = nodes[1]
     zeta  = nodes[2]
-    four_bdry_interp = jnp.stack([double_fourier_basis(theta,zeta,m,n,NFP) for m,n in zip(modesM,modesN)]).T
+    four_bdry_interp = double_fourier_basis(theta,zeta,modesM,modesN,NFP)
     cQS = jnp.linalg.lstsq(four_bdry_interp,jnp.array([QS]).T,rcond=None)[0].T
     
     return cQS

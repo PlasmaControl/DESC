@@ -167,6 +167,65 @@ class FiniteDifferenceJacobian():
             J_transposed = jnp.ravel(J_transposed)
         return J_transposed.T
 
+    
+def polyder_vec(p,m=1,pad=True):
+    """Vectorized version of polyder for differentiating multiple polynomials of the same degree
+    
+    Args:
+        p (ndarray, shape(N,M)): polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
+            each column is a power of x
+        m (int >=0): order of derivative
+        pad (bool): whether to pad output with zeros to be the same shape as input
+            
+    Returns:
+        der (ndarray, shape(N,M) if pad, else shape(N,M-m)): polynomial coefficients for derivative in descending order
+    
+    """
+    m = int(m)
+    if m < 0:
+        raise ValueError("Order of derivative must be positive")
+
+    p = np.atleast_2d(p)
+    n = p.shape[1] - 1 # order of polynomials
+    y = p[:,:-1] * np.arange(n, 0, -1)
+    if pad:
+        y = np.pad(y,((0,0),(1,0)))
+    if m == 0:
+        val = p
+    else:
+        val = polyder_vec(y, m - 1,pad)
+    return val
+
+
+def polyval_vec(p, x):
+    """Evaluate a polynomial at specific values, 
+    vectorized for evaluating multiple polynomials of the same degree.
+
+    Parameters:
+        p (ndarray, shape(N,M)): Array of coefficient for N polynomials of order M. 
+            Each row is one polynomial, given in descending powers of x. 
+        x (array-like, len(K,)): A number, or 1d array of numbers at
+            which to evaluate p. If greater than 1d it is flattened.
+       
+    Returns:
+        y (ndarray, shape(N,K)): polynomials evaluated at x.
+            Each row corresponds to a polynomial, each column to a value of x
+
+    Notes:
+        Horner's scheme is used to evaluate the polynomial. Even so,
+        for polynomials of high degree the values may be inaccurate due to
+        rounding errors. Use carefully.
+
+    """
+    p = np.atleast_2d(p)
+    npoly = p.shape[0]
+    order = p.shape[1]
+    x = np.asarray(x).flatten()
+    nx = len(x)
+    y = np.zeros((npoly,nx))
+    for i in range(order):
+        y = y * x + p[:,i][:,np.newaxis]
+    return y
 
 # TODO: this stuff doesn't work without JAX
 if use_jax:

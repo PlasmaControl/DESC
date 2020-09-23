@@ -72,7 +72,7 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         bdryM, bdryN = np.meshgrid(bdryM, bdryN, indexing='ij')
         bdryM = bdryM.flatten()
         bdryN = bdryN.flatten()
-        interp = np.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m,n in zip(bdryM,bdryN)]).T
+        interp = double_fourier_basis(bdry_theta,bdry_phi,bdryM,bdryN,NFP)
         bR, bZ = np.linalg.lstsq(interp,np.array([bdryR,bdryZ]).T)[0].T
         return bdryM, bdryN, bR, bZ
 
@@ -121,8 +121,8 @@ def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry
     R = jnp.matmul(zern_bdry_interp,cR).flatten()
     Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
     
-    four_bdry_interp = jnp.stack([double_fourier_basis(bdry_theta,bdry_phi,m,n,NFP) for m,n in zip(bdryM,bdryN)]).T
-    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=None)[0].T
+    four_bdry_interp = double_fourier_basis(bdry_theta,bdry_phi,bdryM,bdryN,NFP)
+    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=1e-6)[0].T
     
     # ratio of non-axisymmetric boundary modes to use
     ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)

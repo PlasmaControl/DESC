@@ -100,17 +100,20 @@ def zern_radial_rrr(x,l,m):
     return y*lm_even
 
 @conditional_decorator(functools.partial(jit), use_jax)
-def zern_azimuthal(theta,l,m):
+def zern_azimuthal(theta,m):
     """Zernike azimuthal basis function
     
     Args:
         theta (ndarray with shape(N,)): points to evaluate basis
-        l (int): radial mode number
-        m (int): azimuthal mode number
+        m (ndarray of int, shape(M,)): azimuthal mode number
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis functions evaluated at specified points
     """
+    m = jnp.atleast_1d(m)
+    theta = jnp.atleast_1d(theta)
+    theta = theta[:,jnp.newaxis]
+    m = m[jnp.newaxis]
     m_pos = m >= 0
     m_neg = m < 0
     m = jnp.abs(m)
@@ -119,36 +122,43 @@ def zern_azimuthal(theta,l,m):
     return y
 
 @conditional_decorator(functools.partial(jit), use_jax)
-def zern_azimuthal_v(theta,l,m):
+def zern_azimuthal_v(theta,m):
     """Zernike azimuthal basis function, first azimuthal derivative
     
     Args:
         theta (ndarray with shape(N,)): points to evaluate basis
-        l (int): radial mode number
-        m (int): azimuthal mode number
+        m (ndarray of int, shape(M,)): azimuthal mode number
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis functions evaluated at specified points
     """
+    m = jnp.atleast_1d(m)
+    theta = jnp.atleast_1d(theta)
+    theta = theta[:,jnp.newaxis]
+    m = m[jnp.newaxis]
     m_pos = m >= 0
     m_neg = m < 0
     m = jnp.abs(m)
     y = m_pos*(-m*jnp.sin(m*theta)) + m_neg*(m*jnp.cos(m*theta))
 
     return y
+
     
 @conditional_decorator(functools.partial(jit), use_jax)
-def zern_azimuthal_vv(theta,l,m):
+def zern_azimuthal_vv(theta,m):
     """Zernike azimuthal basis function, second azimuthal derivative
     
     Args:
         theta (ndarray with shape(N,)): points to evaluate basis
-        l (int): radial mode number
-        m (int): azimuthal mode number
+        m (ndarray of int, shape(M,)): azimuthal mode number
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    m = jnp.atleast_1d(m)
+    theta = jnp.atleast_1d(theta)
+    theta = theta[:,jnp.newaxis]
+    m = m[jnp.newaxis]
     m_pos = m >= 0
     m_neg = m < 0
     m = jnp.abs(m)
@@ -162,12 +172,15 @@ def zern_azimuthal_vvv(theta,l,m):
     
     Args:
         theta (ndarray with shape(N,)): points to evaluate basis
-        l (int): radial mode number
-        m (int): azimuthal mode number
+        m (ndarray of int, shape(M,)): azimuthal mode number
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    m = jnp.atleast_1d(m)
+    theta = jnp.atleast_1d(theta)
+    theta = theta[:,jnp.newaxis]
+    m = m[jnp.newaxis]
     m_pos = m >= 0
     m_neg = m < 0
     m = jnp.abs(m)
@@ -181,19 +194,22 @@ def four_toroidal(zeta,n,NFP):
     
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (int): toroidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    zeta = jnp.atleast_1d(zeta)
+    n = jnp.atleast_1d(n)
+    n = n[jnp.newaxis]
+    zeta = zeta[:,jnp.newaxis]
     n_pos = n >= 0
     n_neg = n < 0
-
     n = jnp.abs(n)
-    y0 = n_pos*(jnp.cos(n*NFP*zeta)) + n_neg*(jnp.sin(n*NFP*zeta))
+    y = n_pos*(jnp.cos(n*NFP*zeta)) + n_neg*(jnp.sin(n*NFP*zeta))
     
-    return y0
+    return y
 
 @conditional_decorator(functools.partial(jit), use_jax)
 def four_toroidal_z(zeta,n,NFP):
@@ -201,18 +217,22 @@ def four_toroidal_z(zeta,n,NFP):
     
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (int): toroidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    zeta = jnp.atleast_1d(zeta)
+    n = jnp.atleast_1d(n)
+    n = n[jnp.newaxis]
+    zeta = zeta[:,jnp.newaxis]
     n_pos = n >= 0
     n_neg = n < 0
     n = jnp.abs(n)
-    y1 = n_pos*(-n*NFP*jnp.sin(n*NFP*zeta)) + n_neg*(n*NFP*jnp.cos(n*NFP*zeta))
+    y = n_pos*(-n*NFP*jnp.sin(n*NFP*zeta)) + n_neg*(n*NFP*jnp.cos(n*NFP*zeta))
     
-    return y1
+    return y
 
 @conditional_decorator(functools.partial(jit), use_jax)
 def four_toroidal_zz(zeta,n,NFP):
@@ -220,18 +240,22 @@ def four_toroidal_zz(zeta,n,NFP):
     
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (int): toroidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    zeta = jnp.atleast_1d(zeta)
+    n = jnp.atleast_1d(n)
+    n = n[jnp.newaxis]
+    zeta = zeta[:,jnp.newaxis]
     n_pos = n >= 0
     n_neg = n < 0
     n = jnp.abs(n)
-    y2 = n_pos*(-(n*NFP)**2*jnp.cos(n*NFP*zeta)) + n_neg*(-(n*NFP)**2*jnp.sin(n*NFP*zeta))
+    y = n_pos*(-(n*NFP)**2*jnp.cos(n*NFP*zeta)) + n_neg*(-(n*NFP)**2*jnp.sin(n*NFP*zeta))
     
-    return y2
+    return y
 
 @conditional_decorator(functools.partial(jit), use_jax)
 def four_toroidal_zzz(zeta,n,NFP):
@@ -239,18 +263,22 @@ def four_toroidal_zzz(zeta,n,NFP):
     
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (int): toroidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    zeta = jnp.atleast_1d(zeta)
+    n = jnp.atleast_1d(n)
+    n = n[jnp.newaxis]
+    zeta = zeta[:,jnp.newaxis]
     n_pos = n >= 0
     n_neg = n < 0
     n = jnp.abs(n)
-    y2 = n_pos*((n*NFP)**3*jnp.sin(n*NFP*zeta)) + n_neg*(-(n*NFP)**3*jnp.cos(n*NFP*zeta))
+    y = n_pos*((n*NFP)**3*jnp.sin(n*NFP*zeta)) + n_neg*(-(n*NFP)**3*jnp.cos(n*NFP*zeta))
     
-    return y2
+    return y
 
 radial_derivatives = {0: zern_radial,
                       1: zern_radial_r,
@@ -280,7 +308,7 @@ def zern(r,theta,l,m,dr,dtheta):
         y (ndarray with shape(N,)): basis function evaluated at specified points
     """
     radial = radial_derivatives[dr](r,l,m)
-    azimuthal = poloidal_derivatives[dtheta](theta,l,m)
+    azimuthal = poloidal_derivatives[dtheta](theta,m)
     
     return radial*azimuthal    
 
@@ -289,7 +317,7 @@ def four(zeta,n,NFP,dz):
     
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (int): toroidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
         dz (int): order of toroidal derivative
     
@@ -305,13 +333,21 @@ def double_fourier_basis(theta,phi,m,n,NFP):
     Args:
         theta (ndarray with shape(N,)): poloidal angle to evaluate basis
         phi (ndarray with shape(N,)): toroidal angle to evaluate basis
-        m (int): poloidal mode number
-        n (int): toroidal mode number
+        m (ndarray of int, shape(M,)): poloidal mode number
+        n (ndarray of int, shape(M,)): toroidal mode number
         NFP (int): number of field periods
     
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,M)): basis function evaluated at specified points
     """
+    theta = jnp.atleast_1d(theta)
+    phi = jnp.atleast_1d(phi)
+    m = jnp.atleast_1d(m)
+    n = jnp.atleast_1d(n)
+    theta = theta[:,jnp.newaxis]
+    phi = phi[:,jnp.newaxis]
+    m = m[jnp.newaxis]
+    n = n[jnp.newaxis]
     m_pos = m >= 0
     m_neg = m < 0
     n_pos = n >= 0
@@ -457,8 +493,6 @@ class ZernikeTransform():
         self._build(derivs_to_add, self.mode_idx)
         self.derivatives = jnp.vstack([self.derivatives,derivs_to_add])
         
-    # TODO: make new wrapper function for jitted matmul, don't jit this thing with static args    
-    @conditional_decorator(functools.partial(jit,static_argnums=(0,2,3,4)), use_jax)    
     def transform(self,c,dr,dv,dz):
         """Transform from spectral domain to physical
         
@@ -471,7 +505,13 @@ class ZernikeTransform():
         Returns:
             x (ndarray, shape(N_nodes,)): array of values of function at node locations
         """
-        return jnp.matmul(self.matrices[dr][dv][dz],c)
+        return self._matmul(self.matrices[dr][dv][dz],c)
+
+    @conditional_decorator(functools.partial(jit,static_argnums=(0,)), use_jax)    
+    def _matmul(self,A,x):
+        """helper function for matrix multiplication that we can jit more easily"""
+        return jnp.matmul(A,x)
+    
     
     # TODO: precompute SVD
     @conditional_decorator(functools.partial(jit,static_argnums=(0,2)), use_jax)    
@@ -491,12 +531,12 @@ class ZernikeTransform():
 def get_zern_basis_idx_dense(M,N):
     num_lm_modes = (M+1)**2
     num_four = 2*N+1
-    return jnp.array([(*fringe_to_lm(i),n-N) for i in range(num_lm_modes) for n in range(num_four)])
+    return np.array([(*fringe_to_lm(i),n-N) for i in range(num_lm_modes) for n in range(num_four)])
 
 def get_double_four_basis_idx_dense(M,N):
     dimFourM = 2*M+1
     dimFourN = 2*N+1
-    return jnp.array([[m-M,n-N] for m in range(dimFourM) for n in range(dimFourN)])
+    return np.array([[m-M,n-N] for m in range(dimFourM) for n in range(dimFourN)])
 
 def zernike_norm(l, m):
     """Norm of a Zernike polynomial with l, m indexing.
@@ -507,35 +547,28 @@ def zernike_norm(l, m):
 def lm_to_fringe(l, m):
     """Convert (l,m) double index to single Fringe index.
     """
-    M = (l + jnp.abs(m)) / 2
+    M = (l + np.abs(m)) / 2
     return int(M**2 + M + m)
 
 def fringe_to_lm(idx):
     """Convert single Fringe index to (l,m) double index.
     """
-    M = (jnp.ceil(jnp.sqrt(idx+1)) - 1)
+    M = (np.ceil(np.sqrt(idx+1)) - 1)
     m = idx - M**2 - M
-    l = 2*M - jnp.abs(m)
+    l = 2*M - np.abs(m)
     return int(l), int(m)
 
-class JacobiCoeffs():
-    def __init__(self,M):
-        self.coeffs = {}
-        for i in range((M+1)**2):
-            l,m = fringe_to_lm(i)
-            self._compute_coeffs(l,m)
-    def _compute_coeffs(self,l,m):
-        lm_even = (l-m)%2 == 0
-        m = abs(m)
-        self.coeffs[(l,m)] = np.array([lm_even*(-1)**k* factorial(l-k)/(
-            factorial(k) * factorial((l+m)//2-k) * factorial((l-m)//2-k)) for k in np.arange(0,(l-m)/2+1,1).astype(np.float64)]) 
-    def __call__(self,l,m):
-        m = abs(m)
-        if (l,m) in self.coeffs:
-            return self.coeffs.get((l,m))
-        else:
-            self._compute_coeffs(l,m)
-            return self.coeffs[(l,m)]
+def lm_to_ansi_j(l, m):
+    """Convert (l,m) two term index to ANSI single term index.
+    """
+    return int((l * (l + 2) + m) / 2)
+
+def ansi_j_to_lm(idx):
+    """Convert ANSI single term to (l,m) two-term index.
+    """
+    l = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
+    m = 2 * idx - l * (l + 2)
+    return l, m
 
 def eval_four_zern(c,idx,NFP,rho,theta,zeta,dr=0,dv=0,dz=0):
     """Evaluates Fourier-Zernike basis function at a point
@@ -582,12 +615,8 @@ def eval_double_fourier(c,idx,NFP,theta,phi):
     """
 
     c = c.flatten()
-    f = jnp.zeros_like(theta)
-    for k, cc in enumerate(c):
-        m = idx[k,0]
-        n = idx[k,1]
-        f = f + cc*double_fourier_basis(theta,phi,m,n,NFP)
-        
+    interp = double_fourier_basis(theta,phi,idx[:,0],idx[:,1],NFP)
+    f = jnp.matmul(f,c)    
     return f
 
 
@@ -636,3 +665,28 @@ def symmetric_x(M,N):
     
     A = np.diag(sym_x,k=0).astype(int)
     return A[:,sym_x]
+
+def get_jacobi_coeffs(l,m):
+    """Computes coefficients for Jacobi polynomials used in Zernike basis
+    
+    Args:
+        l (ndarray of int, shape(N,)): radial mode numbers
+        m (ndarray of int, shape(N,)): azimuthal mode numbers
+    
+    Returns:
+        jacobi_coeffs (ndarray, shape(N,max(l)+1)): matrix of polynomial coefficients in
+            order of descending powers. Each row contains the coeffs for a given l,m.
+    """
+    
+    l = np.atleast_1d(l)
+    m = np.atleast_1d(abs(m))
+    lmax = np.max(l)
+    npoly = len(l)
+    coeffs = np.zeros((npoly,lmax+1))
+    for ii, (ll,mm) in enumerate(zip(l,m)):
+        if (ll-mm)%2 != 0:
+            continue
+        for s in range(mm,ll+1,2):
+            coeffs[ii,s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
+                factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
+    return np.fliplr(coeffs)

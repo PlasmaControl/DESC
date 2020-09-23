@@ -5,7 +5,7 @@ from zernike import symmetric_x, double_fourier_basis
 from backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
 
 
-def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
+def get_equil_obj_fun(stell_sym,errr_mode,bdry_mode,M,N,NFP,zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes):
     """Gets the equilibrium objective function
     
     Args:
@@ -27,9 +27,9 @@ def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
     else:
         sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
     
-    if error_mode == 'force':
+    if errr_mode == 'force':
         equil_fun = compute_force_error_nodes
-    elif error_mode == 'accel':
+    elif errr_mode == 'accel':
         equil_fun = compute_accel_error_spectral
     
     if bdry_mode == 'real':
@@ -37,28 +37,26 @@ def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
     elif bdry_mode == 'spectral':
         bdry_fun = compute_bc_err_four
     
-    def equil_obj(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,
-                  NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
+    def equil_obj(x,bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio=1.0,pres_ratio=1.0,zeta_ratio=1.0,errr_ratio=1.0):
         
         cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
-        errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes)
-        errRb,errZb = bdry_fun(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
+        errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_lcfs,pres_ratio,zeta_ratio,zernt,nodes,volumes)
+        errRb,errZb = bdry_fun(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_pol,bdry_tor,NFP)
         errL0 = compute_lambda_err(cL,lambda_idx,NFP)
         
         # normalize weighting by numper of nodes
-        residual = jnp.concatenate([weights['F']*errRf.flatten()/errRf.size*error_ratio,
-                                    weights['F']*errZf.flatten()/errZf.size*error_ratio,
-                                    weights['B']*errRb.flatten()/errRb.size,
-                                    weights['B']*errZb.flatten()/errZb.size,
-                                    weights['L']*errL0.flatten()/errL0.size])
+        residual = jnp.concatenate([errRf.flatten()/errRf.size*errr_ratio,
+                                    errZf.flatten()/errZf.size*errr_ratio,
+                                    errRb.flatten()/errRb.size,
+                                    errZb.flatten()/errZb.size,
+                                    errL0.flatten()/errL0.size])
         return residual
     
-    def callback(x,bdryR,bdryZ,cP,cI,Psi_total,bdry_ratio,pres_ratio,zeta_ratio,error_ratio,
-                 NFP,bdry_poloidal,bdry_toroidal,zernt,zern_idx,lambda_idx,nodes,volumes,weights):
+    def callback(x,bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio=1.0,pres_ratio=1.0,zeta_ratio=1.0,errr_ratio=1.0):
         
         cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
-        errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes)
-        errRb,errZb = bdry_fun(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_poloidal,bdry_toroidal,NFP)
+        errRf,errZf = equil_fun(cR,cZ,cP,cI,Psi_lcfs,pres_ratio,zeta_ratio,zernt,nodes,volumes)
+        errRb,errZb = bdry_fun(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_pol,bdry_tor,NFP)
         errL0 = compute_lambda_err(cL,lambda_idx,NFP)
         
         errRf_rms = rms(errRf)
@@ -68,17 +66,48 @@ def get_equil_obj_fun(M,N,zern_idx,lambda_idx,stell_sym,error_mode,bdry_mode):
         errL0_rms = rms(errL0)
         
         # normalize weighting by numper of nodes
-        residual = np.concatenate([weights['F']*errRf.flatten(),
-                               weights['F']*errZf.flatten()*error_ratio,
-                               weights['B']*errRb.flatten()*error_ratio,
-                               weights['B']*errZb.flatten(),
-                               weights['L']*errL0.flatten()])
+        residual = np.concatenate([errRf.flatten()*errr_ratio,
+                                   errZf.flatten()*errr_ratio,
+                                   errRb.flatten(),
+                                   errZb.flatten(),
+                                   errL0.flatten()])
         resid_rms = jnp.sum(residual**2)
         
         print('Weighted Loss: {:10.3e}  errRf: {:10.3e}  errZf: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
         resid_rms,errRf_rms,errZf_rms,errRb_rms,errZb_rms,errL0_rms))
         
     return equil_obj, callback
+
+
+def get_qisym_obj_fun(stell_sym,M,N,NFP,zernt,zern_idx,lambda_idx,modes_pol,modes_tor,nodes):
+    """Gets the quasisymmetry objective function
+    
+    Args:
+        M (int): maximum poloidal resolution
+        N (int): maximum toroidal resolution
+        zern_idx (ndarray of int, shape(Nc,3)): mode numbers for Zernike basis
+        lambda_idx (ndarray of int, shape(Nc,2)): mode numbers for Fourier basis
+        stell_sym (bool): True if stellarator symmetry is enforced
+        
+    Returns:
+        qsym_obj (function): quasisymmetry objective function
+    """
+    
+    if stell_sym:
+        sym_mat = symmetric_x(M,N)
+    else:
+        sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
+    
+    def qisym_obj(x,cI,Psi_total):
+        
+        cR,cZ,cL = unpack_x(jnp.matmul(sym_mat,x),len(zern_idx))
+        errQS = compute_qs_error_spectral(cR,cZ,cI,Psi_total,NFP,zernt,modes_pol,modes_tor,1.0,nodes)
+        
+        # normalize weighting by numper of nodes
+        residual = errQS.flatten()/errQS.size
+        return residual
+        
+    return qisym_obj
 
 
 def compute_force_error_nodes(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,nodes,volumes):
@@ -89,9 +118,9 @@ def compute_force_error_nodes(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zernt,
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         cP (array-like): parameters to pass to pressure function
         cI (array-like): parameters to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
-        pres_ratio (float): fraction in range [0,1] of the full pressure profile to use
-        zeta_ratio (float): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
+        Psi_lcfs (float): total toroidal flux within LCFS
+        pres_ratio (double): fraction in range [0,1] of the full pressure profile to use
+        zeta_ratio (double): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
         nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume
@@ -158,7 +187,7 @@ def compute_force_error_RphiZ(cR,cZ,zernt,nodes,cP,cI,Psi_total,volumes):
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
         cP (array-like): coefficients to pass to pressure function
         cI (array-like): coefficients to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
+        Psi_lcfs (float): total toroidal flux within LCFS
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
         
     Returns:
@@ -209,7 +238,7 @@ def compute_force_error_RddotZddot(cR,cZ,zernt,nodes,cP,cI,Psi_total,volumes):
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
         cP (array-like): coefficients to pass to pressure function
         cI (array-like): coefficients to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
+        Psi_lcfs (float): total toroidal flux within LCFS
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
 
     Returns:
@@ -239,9 +268,9 @@ def compute_accel_error_spectral(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zer
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         cP (array-like): parameters to pass to pressure function
         cI (array-like): parameters to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
-        pres_ratio (float): fraction in range [0,1] of the full pressure profile to use
-        zeta_ratio (float): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
+        Psi_lcfs (float): total toroidal flux within LCFS
+        pres_ratio (double): fraction in range [0,1] of the full pressure profile to use
+        zeta_ratio (double): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
         nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
         volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume
@@ -275,19 +304,20 @@ def compute_accel_error_spectral(cR,cZ,cP,cI,Psi_total,pres_ratio,zeta_ratio,zer
     return cR_zz_err,cZ_zz_err
 
 
-def compute_qs_error_spectral(cR,cZ,zernt,nodes,modesM,modesN,cI,Psi_total,NFP,zeta_ratio):
-    """Computes quasi-symmetry error in spectral space
+def compute_qs_error_spectral(cR,cZ,cI,Psi_total,NFP,zernt,modes_pol,modes_tor,zeta_ratio,nodes):
+    """Computes quasisymmetry error in spectral space
     
     Args:
         cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
-        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
-        modesM (ndarray, shape(N_modes)): poloidal Fourier modes
-        modesN (ndarray, shape(N_modes)): toroidal Fourier modes
         cI (array-like): coefficients to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
+        Psi_lcfs (float): total toroidal flux within LCFS
         NFP (int): number of field periods
+        zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
+        modes_pol (ndarray, shape(N_modes)): poloidal Fourier modes
+        modes_tor (ndarray, shape(N_modes)): toroidal Fourier modes
+        zeta_ratio (float): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
+        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
         
     Returns:
         cQS (ndarray, shape(N_modes,)): quasisymmetry error Fourier coefficients
@@ -300,7 +330,7 @@ def compute_qs_error_spectral(cR,cZ,zernt,nodes,modesM,modesN,cI,Psi_total,NFP,z
     cov_basis = compute_covariant_basis(coord_der)
     jacobian  = compute_jacobian(coord_der,cov_basis)
     B_field   = compute_B_field(cov_basis,jacobian,cI,Psi_total,nodes)
-    B_mag     = compute_B_magnitude(nodes,cI,cov_basis,B_field)
+    B_mag     = compute_B_magnitude(cov_basis,B_field,cI,nodes)
     
     # B-tilde derivatives
     Bt_v = B_field['B^zeta_v']*(iota*B_mag['|B|_v']+B_mag['|B|_z']) + B_field['B^zeta']*(iota*B_mag['|B|_vv']+B_mag['|B|_vz'])
@@ -311,7 +341,8 @@ def compute_qs_error_spectral(cR,cZ,zernt,nodes,modesM,modesN,cI,Psi_total,NFP,z
     
     theta = nodes[1]
     zeta  = nodes[2]
-    four_bdry_interp = double_fourier_basis(theta,zeta,modesM,modesN,NFP)
-    cQS = jnp.linalg.lstsq(four_bdry_interp,jnp.array([QS]).T,rcond=None)[0].T
+
+    four_interp = double_fourier_basis(theta,zeta,modes_pol,modes_tor,NFP)
+    cQS = jnp.linalg.lstsq(four_interp,jnp.array([QS]).T,rcond=None)[0].T
     
     return cQS

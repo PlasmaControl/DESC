@@ -1,7 +1,15 @@
 *.mat
 *.png
 *.pdf
+*.gif
 __pycache__/
 .ipynb_checkpoints/
+*.pyc
+.coverage
 matlab/
 local/
+documentation/_build
+documentation/_static
+*.egg-info
+build/
+dist/

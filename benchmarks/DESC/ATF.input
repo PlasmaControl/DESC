@@ -7,22 +7,22 @@ Ntor		=   4
 Mnodes		=  18
 Nnodes		=   6
 NFP			=  12
-Psi_total	=   1.00000000E+00
-pres_scale	=   2.00000000E+06
+Psi_lcfs	=   1.00000000E+00
 errr_mode	= force
 bdry_mode	= spectral
 node_mode	= cheb1
-ftol        = 1e-6              ! solver stopping tolerance on relative norm of dF
-xtol        = 1e-6              ! solver stopping tolerance on relative norm of dx
-gtol        = 1e-6              ! solver stopping tolerance on norm of gradient
-max_nfev    = 100               ! max number of function evaluations per step
+ftol		= 1e-6
+xtol		= 1e-6
+gtol		= 1e-6
+nfev		= 100
+verbose		= 2
 
 ! pressure and rotational transform profiles
-l:   0	cP =   1.00000000E+00	cI =   3.50000000E-01
+l:   0	cP =   2.00000000E+06	cI =   3.50000000E-01
 l:   1	cP =   0.00000000E+00	cI =   0.00000000E+00
-l:   2	cP =  -2.00000000E+00	cI =   6.50000000E-01
+l:   2	cP =  -4.00000000E+06	cI =   6.50000000E-01
 l:   3	cP =   0.00000000E+00	cI =   0.00000000E+00
-l:   4	cP =   1.00000000E+00	cI =   0.00000000E+00
+l:   4	cP =   2.00000000E+06	cI =   0.00000000E+00
 
 ! magnetic axis initial guess
 n:   0	aR =   2.10000000E+00	aZ =   0.00000000E+00

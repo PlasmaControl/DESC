@@ -6,6 +6,11 @@
 Welcome to DESC's documentation!
 ================================
 
+
+Guide
+^^^^^
+
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:

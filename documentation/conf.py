@@ -253,25 +253,15 @@ latex_elements = {
         \vspace*{80mm} %% % * is used to give space from top
     
         \centering
-        \textbf{\Huge {GASTOp Documentation}}
+        \textbf{\Huge {DESC Documentation}}
             
         \vspace*{2mm}
-        
-        \begin{figure}[!h]
-        \centering
-        \includegraphics[scale=0.3]{images/logo.jpg}
-        \end{figure}
-            
+                   
         \vspace*{10mm}
         
         \centering
-        \textbf{ \Large {Rory Conlin, Paul Kaneelil, Cristian Lacey, Susan Redmond,}}
-        
-        \vspace{1mm}
-        
-        \centering
-        \textbf{ \Large {Dan Shaw, Amlan Sinha}}
-            
+        \textbf{ \Large {Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen}}
+                   
         \vspace*{10mm}
         
         \centering
@@ -303,8 +293,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'gastop.tex', 'GASTOp Documentation',
-     'Rory Conlin, Paul Kaneelil, Cristian Lacey, Susan Redmond, Dan Shaw, Amlan Sinha', 'report', True),
+    (master_doc, 'desc.tex', 'DESC Documentation',
+     'Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen', 'report', True),
 ]
 
 latex_toplevel_sectioning = 'chapter'

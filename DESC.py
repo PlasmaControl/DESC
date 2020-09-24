@@ -1,6 +1,10 @@
 from continuation import solve_eq_continuation
 from plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
 from input_output import read_input, output_to_file, read_vmec_output
+import jax
+# from jax.config import config
+# config.update("jax_debug_nans", True)
+
 
 # input & output filenames
 filename = 'HELIOTRON'

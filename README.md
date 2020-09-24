@@ -52,6 +52,11 @@ Additional documentation on specific parts of the code can be found in [document
 - profiling to find speed bottlenecks
     - evaluate bdry error in (v,z) coordinates?
 - Don't compute all field components if not necessary
+- cleanup / standardize calling signatures
+    - wrapped definitions for obj fun
+    - do we need to pass nodes/volumes around? maybe just put them in zernt?
+    - unified bdry format?
+- add node options to avoid axis, rationals
 
 ### Known Issues
 

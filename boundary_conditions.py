@@ -77,6 +77,55 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         return bdryM, bdryN, bR, bZ
 
 
+def compute_bc_err_four_sfl(cR,cZ,cL,bdry_ratio,bdry_zernt,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP,sample=1.5):
+    """Compute boundary error in fourier coefficients using SFL coord nodes
+    
+    Args:
+        cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
+        cL (ndarray, shape(2M+1)*(2N+1)): double Fourier coefficients of lambda
+        bdry_ratio (float): fraction in range [0,1] of the full non-axisymmetric boundary to use
+        bdry_zernt (ZernikeTransform): zernike transform object for evaluating spectral coefficients on bdry
+        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, 
+            ie an array of [m,n] for each spectral coefficient
+        bdryR (ndarray, shape(N_bdry_modes,)): R coefficients of boundary shape
+        bdryZ (ndarray, shape(N_bdry_modes,)): Z coefficients of boundary shape
+        bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
+        bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
+        NFP (int): number of field periods
+        sample (float): sampling factor (eg, 1.0 would be no oversampling)
+        
+    Returns:
+        errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs
+        errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary spectral coeffs
+    """
+    
+    # get grid for bdry eval
+    bdry_rho = bdry_zernt.nodes[0]
+    bdry_vartheta = bdry_zernt.nodes[1]
+    bdry_zeta = bdry_zernt.nodes[2]
+    lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_vartheta,bdry_zeta)
+    theta = bdry_vartheta - lamda
+    phi = bdry_zeta    
+
+    # find values of R,Z at pts specified
+    R = bdry_zernt.transform(cR,0,0,0).flatten()
+    Z = bdry_zernt.transform(cZ,0,0,0).flatten()
+    
+    # interpolate R,Z to fourier basis in non sfl coords
+    four_bdry_interp = double_fourier_basis(theta,phi,bdryM,bdryN,NFP)
+    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=1e-6)[0].T
+    
+    # ratio of non-axisymmetric boundary modes to use
+    ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)
+    
+    # compute errors
+    errR = cRb - bdryR*ratio
+    errZ = cZb - bdryZ*ratio
+    return errR,errZ
+
+    
+    
 def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP,sample=1.5):
     """Compute boundary error in fourier coefficients
     

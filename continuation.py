@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.optimize
+import time
 
 from backend import jnp, jit, use_jax
 from backend import get_needed_derivatives, unpack_x, jacfwd
@@ -7,21 +8,22 @@ from zernike import ZernikeTransform, get_zern_basis_idx_dense, get_double_four_
 from init_guess import get_initial_guess_scale_bdry
 from boundary_conditions import format_bdry
 from objective_funs import get_equil_obj_fun
-from nodes import get_nodes_pattern
+from nodes import get_nodes_pattern, get_nodes_surf
 
 
-def expand_resolution(x,zernt,zern_idx_old,zern_idx_new,lambda_idx_old,lambda_idx_new,nodes_new=None):
+def expand_resolution(x,zernt,bdry_zernt,zern_idx_old,zern_idx_new,
+                      lambda_idx_old,lambda_idx_new):
     """Expands solution to a higher resolution by filling with zeros
     Also modifies zernike transform object to work at higher resolution
     
     Args:
         x (ndarray): solution at initial resolution
         zernt (ZernikeTransform): zernike transform object corresponding to initial x
+        bdry_zernt (ZernikeTransform): zernike transform object corresponding to initial x at bdry
         zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
         zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
         lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
         lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
-        nodes_new (ndarray of float, size(Nn_new,3))(optional): new node locations
     Returns:
         x_new (ndarray): solution expanded to new resolution
     """
@@ -37,11 +39,10 @@ def expand_resolution(x,zernt,zern_idx_old,zern_idx_new,lambda_idx_old,lambda_id
     cL_new[old_in_new] = cL
     x_new = np.concatenate([cR_new,cZ_new,cL_new])
     
-    if nodes_new is not None:
-        zernt.expand_nodes(nodes_new)
     zernt.expand_spectral_resolution(zern_idx_new)
+    bdry_zernt.expand_spectral_resolution(zern_idx_new)
     
-    return x_new, zernt
+    return x_new, zernt, bdry_zernt
 
 
 def perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args):
@@ -49,23 +50,29 @@ def perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args):
     
     obj_jac  = jacfwd(equil_obj,argnums=0)
     Jx = obj_jac(x,*args)
-    RHS = equil_obj(x,*args)
+    print(np.any(np.isnan(Jx)))
+#     RHS = equil_obj(x,*args)
+    RHS = 0
     
     if delta_bdry != 0:
         bdry_jac = jacfwd(equil_obj,argnums=6)
         Jb = bdry_jac(x,*args)
+        print('Jb=',Jb)
         RHS += Jb*delta_bdry
     if delta_pres != 0:
         pres_jac = jacfwd(equil_obj,argnums=7)
         Jp = pres_jac(x,*args)
+        print('Jp=',Jp)
         RHS += Jp*delta_pres
     if delta_zeta != 0:
         zeta_jac = jacfwd(equil_obj,argnums=8)
         Jz = zeta_jac(x,*args)
+        print('Jz=',Jz)
         RHS += Jz*delta_zeta
     if delta_errr != 0:
         errr_jac = jacfwd(equil_obj,argnums=9)
         Je = errr_jac(x,*args)
+        print('Je=',Je)
         RHS += Je*delta_errr
     
     dx = -np.linalg.lstsq(Jx,RHS,rcond=1e-6)[0]
@@ -138,6 +145,10 @@ def solve_eq_continuation(inputs):
             zern_idx = get_zern_basis_idx_dense(M[ii],N[ii])
             lambda_idx = get_double_four_basis_idx_dense(M[ii],N[ii])
             zernt = ZernikeTransform(nodes,zern_idx,NFP,derivatives)
+            # bdry interpolator
+            bdry_nodes, _ = get_nodes_surf(Mnodes[ii],Nnodes[ii],NFP,surf=1.0)
+            bdry_zernt = ZernikeTransform(bdry_nodes,zern_idx,NFP,[0,0,0])
+            
             
             # format boundary shape
             bdry_pol,bdry_tor,bdryR,bdryZ = format_bdry(M[ii],N[ii],NFP,bdry,bdry_mode,bdry_mode)
@@ -173,7 +184,7 @@ def solve_eq_continuation(inputs):
             
             # equilibrium objective function
             equil_obj,callback = get_equil_obj_fun(stell_sym,errr_mode,bdry_mode,M[ii],N[ii],
-                                 NFP,zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes)
+                                 NFP,zernt,bdry_zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes)
             args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii],pres_ratio[ii],zeta_ratio[ii],errr_ratio[ii]]
         
         # continuing from prev soln
@@ -186,7 +197,8 @@ def solve_eq_continuation(inputs):
                 lambda_idx = get_double_four_basis_idx_dense(M[ii],N[ii])
                 bdry_pol,bdry_tor,bdryR,bdryZ = format_bdry(M[ii],N[ii],NFP,bdry,bdry_mode,bdry_mode)
                 
-                x,zent = expand_resolution(jnp.matmul(sym_mat,x),zernt,zern_idx_old,zern_idx,lambda_idx_old,lambda_idx)
+                x, zernt, bdry_zernt = expand_resolution(jnp.matmul(sym_mat,x),zernt,bdry_zernt,
+                                                       zern_idx_old,zern_idx,lambda_idx_old,lambda_idx)
                 if stell_sym:
                     sym_mat = symmetric_x(M[ii],N[ii])
                 else:
@@ -196,8 +208,9 @@ def solve_eq_continuation(inputs):
             # collocation nodes
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 nodes,volumes = get_nodes_pattern(Mnodes[ii],Nnodes[ii],NFP,surfs=node_mode)
+                bdry_nodes, _ = get_nodes_surf(Mnodes[ii],Nnodes[ii],NFP,surf=1.0)
                 zernt.expand_nodes(nodes)
-            
+                bdry_zernt.expand_nodes(bdry_nodes)
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
@@ -206,7 +219,7 @@ def solve_eq_continuation(inputs):
             
             # equilibrium objective function
             equil_obj,callback = get_equil_obj_fun(stell_sym,errr_mode,bdry_mode,M[ii],N[ii],
-                                 NFP,zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes)
+                                 NFP,zernt,bdry_zernt,zern_idx,lambda_idx,bdry_pol,bdry_tor,nodes,volumes)
             args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii-1],pres_ratio[ii-1],zeta_ratio[ii-1],errr_ratio[ii-1]]
             
             if use_jax:
@@ -217,6 +230,11 @@ def solve_eq_continuation(inputs):
             if verbose > 0:
                 print('Compiling objective function')
             equil_obj_jit = jit(equil_obj,static_argnums=())
+            t0 = time.perf_counter()
+            foo = equil_obj_jit(x,*args)
+            t1 = time.perf_counter()
+            if verbose > 0:
+                print('Objective function compiled, time= {} s'.format(t1-t0))
         else:
             equil_obj_jit = equil_obj
         if verbose > 0:
@@ -237,9 +255,9 @@ def solve_eq_continuation(inputs):
         x = out['x']
         if verbose:
             print('Start of Iteration {}:'.format(ii+1))
-            callback(x_init, *args)
+#             callback(x_init, *args)
             print('End of Iteration {}:'.format(ii+1))
-            callback(x, *args)
+#             callback(x, *args)
         
         # TODO: checkpoint saving after each iteration
     

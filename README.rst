@@ -1,6 +1,8 @@
 ###################################
 DESC Stellarator Equilibrium Solver
 ###################################
+|License|
+
 This is the primary version of the DESC code in Python.
 
 Repository Contents
@@ -85,3 +87,7 @@ Features to Add
 - documentation
 - clean up backend implementation
 
+
+.. |License| image:: https://img.shields.io/github/license/ddudt/DESC
+    :target: https://github.com/ddudt/DESC/blob/master/LICENSE
+    :alt: License: MIT

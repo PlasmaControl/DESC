@@ -16,6 +16,9 @@
 
 
 # -- Project information -----------------------------------------------------
+import sys, os
+sys.path.insert(0, os.path.abspath('.'))
+sys.path.append(os.path.abspath('../'))
 
 project = 'DESC'
 copyright = '2020, Plasma Control Group at Princeton University'

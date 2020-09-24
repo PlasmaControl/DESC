@@ -114,7 +114,8 @@ def compute_bc_err_four_sfl(cR,cZ,cL,bdry_ratio,bdry_zernt,lambda_idx,bdryR,bdry
     
     # interpolate R,Z to fourier basis in non sfl coords
     four_bdry_interp = double_fourier_basis(theta,phi,bdryM,bdryN,NFP)
-    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=1e-6)[0].T
+    four_bdry_interp_pinv = jnp.linalg.pinv(four_bdry_interp,rcond=1e-6)
+    cRb,cZb = jnp.matmul(four_bdry_interp_pinv,jnp.array([R,Z]).T).T
     
     # ratio of non-axisymmetric boundary modes to use
     ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)

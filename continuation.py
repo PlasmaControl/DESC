@@ -45,37 +45,56 @@ def expand_resolution(x,zernt,bdry_zernt,zern_idx_old,zern_idx_new,
     return x_new, zernt, bdry_zernt
 
 
-def perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args):
+def perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args,verbose):
     """perturbs an equilibrium"""
     
+    if verbose > 0:
+        print("Perturbing equilibrium")
+    t00 = time.perf_counter()
     obj_jac  = jacfwd(equil_obj,argnums=0)
     Jx = obj_jac(x,*args)
-    print(np.any(np.isnan(Jx)))
-#     RHS = equil_obj(x,*args)
-    RHS = 0
-    
+    RHS = equil_obj(x,*args)
+    t1 = time.perf_counter()
+    if verbose > 0:
+        print("dF/dx computation time: {} s".format(t1-t00))
+        
     if delta_bdry != 0:
+        t0 = time.perf_counter()
         bdry_jac = jacfwd(equil_obj,argnums=6)
         Jb = bdry_jac(x,*args)
-        print('Jb=',Jb)
         RHS += Jb*delta_bdry
+        t1 = time.perf_counter()
+        if verbose > 0:
+            print("dF/dbdry computation time: {} s".format(t1-t0))
     if delta_pres != 0:
+        t0 = time.perf_counter()
         pres_jac = jacfwd(equil_obj,argnums=7)
         Jp = pres_jac(x,*args)
-        print('Jp=',Jp)
         RHS += Jp*delta_pres
+        t1 = time.perf_counter()
+        if verbose > 0:
+            print("dF/dpres computation time: {} s".format(t1-t0))
     if delta_zeta != 0:
+        t0 = time.perf_counter()
         zeta_jac = jacfwd(equil_obj,argnums=8)
         Jz = zeta_jac(x,*args)
-        print('Jz=',Jz)
         RHS += Jz*delta_zeta
+        t1 = time.perf_counter()
+        if verbose > 0:
+            print("dF/dzeta computation time: {} s".format(t1-t0))
     if delta_errr != 0:
+        t0 = time.perf_counter()
         errr_jac = jacfwd(equil_obj,argnums=9)
         Je = errr_jac(x,*args)
-        print('Je=',Je)
         RHS += Je*delta_errr
-    
+        t1 = time.perf_counter()
+        if verbose > 0:
+            print("dF/derrr computation time: {} s".format(t1-t0))
+            
     dx = -np.linalg.lstsq(Jx,RHS,rcond=1e-6)[0]
+    t1 = time.perf_counter()
+    if verbose > 0:
+        print("Total perturbation time: {} s".format(t1-t00))
     return x + dx
 
 
@@ -223,7 +242,7 @@ def solve_eq_continuation(inputs):
             args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii-1],pres_ratio[ii-1],zeta_ratio[ii-1],errr_ratio[ii-1]]
             
             if use_jax:
-                x = perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args)
+                x = perturb(x,equil_obj,delta_bdry,delta_pres,delta_zeta,delta_errr,args,verbose)
         
         args = [bdryR,bdryZ,cP,cI,Psi_lcfs,bdry_ratio[ii],pres_ratio[ii],zeta_ratio[ii],errr_ratio[ii]]
         if use_jax:
@@ -241,6 +260,7 @@ def solve_eq_continuation(inputs):
             print('Starting optimization')
         
         x_init = x
+        t0 = time.perf_counter()
         out = scipy.optimize.least_squares(equil_obj_jit,
                                            x0=x_init,
                                            args=args,
@@ -252,12 +272,15 @@ def solve_eq_continuation(inputs):
                                            gtol=gtol[ii],
                                            max_nfev=nfev[ii],
                                            verbose=verbose)
+        t1 = time.perf_counter()
         x = out['x']
+        
         if verbose:
+            print('Avg time per step: {} s'.format((t1-t0)/out['nfev']))
             print('Start of Iteration {}:'.format(ii+1))
-#             callback(x_init, *args)
+            callback(x_init, *args)
             print('End of Iteration {}:'.format(ii+1))
-#             callback(x, *args)
+            callback(x, *args)
         
         # TODO: checkpoint saving after each iteration
     

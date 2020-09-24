@@ -40,17 +40,7 @@ Additional documentation on specific parts of the code can be found in [document
     - find good default solver parameters
 - memory management for gpu
 - what needs jit, which devices
-- precompute SVD for fitting
-- force balance
-    - project back to get `R_tt`,`Z_tt`
-    - incompressibility constraint
-- symmetry, symmetric nodes, best way to enforce and reduce size
-    - masking
-- avoiding recompilation
-    - masking?
-    - comparing masked arrays for bdry
 - profiling to find speed bottlenecks
-    - evaluate bdry error in (v,z) coordinates?
 - Don't compute all field components if not necessary
 - cleanup / standardize calling signatures
     - wrapped definitions for obj fun
@@ -66,7 +56,11 @@ Additional documentation on specific parts of the code can be found in [document
 - `bdry_ratio` does not work with `compute_bc_err_RZ` function
 
 ### Features to Add
-
+- Stability:
+    - project back to get `R_tt`,`Z_tt`
+    - incompressibility constraint
+- symmetry, symmetric nodes, best way to enforce and reduce size
+    - masking
 - figure out asymptotics for contravariant basis at axis
 - zernike transform using FFT
 - QS function specifying M/N

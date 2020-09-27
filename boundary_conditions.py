@@ -7,7 +7,7 @@ from zernike import fourzern, double_fourier_basis, eval_double_fourier
 def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
     """Formats arrays for boundary conditions and converts between 
     real space and fourier representations
-    
+
     Args:
         M (int): maximum poloidal resolution
         N (int): maximum toroidal resolution
@@ -27,59 +27,63 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         bdryZ (ndarray): Z coeffs, where bdryZ[i] has m=bdry_poloidal[i], n=bdry_toroidal[i]
             OR R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], phi = bdry_toroidal[i]
     """
-    
+
     if in_mode == 'real' and out_mode == 'real':
         # just need to unpack the array
-        bdry_theta = bdry[:,0]
-        bdry_phi = bdry[:,1]
-        bdryR = bdry[:,2]
-        bdryZ = bdry[:,3]
+        bdry_theta = bdry[:, 0]
+        bdry_phi = bdry[:, 1]
+        bdryR = bdry[:, 2]
+        bdryZ = bdry[:, 3]
         return bdry_theta, bdry_phi, bdryR, bdryZ
-    
+
     if in_mode == 'spectral' and out_mode == 'spectral':
         # basically going from a sparse matrix representation to dense
-        bdryM = np.arange(-M,M+1)
-        bdryN = np.arange(-N,N+1)
+        bdryM = np.arange(-M, M+1)
+        bdryN = np.arange(-N, N+1)
         bdryM, bdryN = np.meshgrid(bdryM, bdryN, indexing='ij')
         bdryM = bdryM.flatten()
         bdryN = bdryN.flatten()
-        bdryR = np.zeros(len(bdryM),dtype=np.float64)
-        bdryZ = np.zeros(len(bdryM),dtype=np.float64)
-        
-        for m,n,bR,bZ in bdry:
-            bdryR = put(bdryR, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], bR)
-            bdryZ = put(bdryZ, np.where(np.logical_and(bdryM == int(m), bdryN == int(n)))[0], bZ)
+        bdryR = np.zeros(len(bdryM), dtype=np.float64)
+        bdryZ = np.zeros(len(bdryM), dtype=np.float64)
+
+        for m, n, bR, bZ in bdry:
+            bdryR = put(bdryR, np.where(np.logical_and(
+                bdryM == int(m), bdryN == int(n)))[0], bR)
+            bdryZ = put(bdryZ, np.where(np.logical_and(
+                bdryM == int(m), bdryN == int(n)))[0], bZ)
         return bdryM, bdryN, bdryR, bdryZ
-    
+
     if in_mode == 'spectral' and out_mode == 'real':
         # just evaulate fourier series at nodes
         ntheta = ntheta if ntheta else 4*M
         nphi = nphi if nphi else 4*N
-        bdry_theta = np.linspace(0,2*np.pi,ntheta)
-        bdry_phi = np.linspace(0,2*np.pi/NFP,nphi)
-        bdryR = eval_double_fourier(bdry[:,2],bdry[:,:2],NFP,bdry_theta,bdry_phi)
-        bdryZ = eval_double_fourier(bdry[:,3],bdry[:,:2],NFP,bdry_theta,bdry_phi)
-        return bdry_theta, bdry_phi, bdryR,bdryZ
-    
+        bdry_theta = np.linspace(0, 2*np.pi, ntheta)
+        bdry_phi = np.linspace(0, 2*np.pi/NFP, nphi)
+        bdryR = eval_double_fourier(
+            bdry[:, 2], bdry[:, :2], NFP, bdry_theta, bdry_phi)
+        bdryZ = eval_double_fourier(
+            bdry[:, 3], bdry[:, :2], NFP, bdry_theta, bdry_phi)
+        return bdry_theta, bdry_phi, bdryR, bdryZ
+
     if in_mode == 'real' and out_mode == 'spectral':
         # fit to fourier series
-        bdry_theta = bdry[:,0]
-        bdry_phi = bdry[:,1]
-        bdryR = bdry[:,2]
-        bdryZ = bdry[:,3]
-        bdryM = np.arange(-M,M+1)
-        bdryN = np.arange(-N,N+1)
+        bdry_theta = bdry[:, 0]
+        bdry_phi = bdry[:, 1]
+        bdryR = bdry[:, 2]
+        bdryZ = bdry[:, 3]
+        bdryM = np.arange(-M, M+1)
+        bdryN = np.arange(-N, N+1)
         bdryM, bdryN = np.meshgrid(bdryM, bdryN, indexing='ij')
         bdryM = bdryM.flatten()
         bdryN = bdryN.flatten()
-        interp = double_fourier_basis(bdry_theta,bdry_phi,bdryM,bdryN,NFP)
-        bR, bZ = np.linalg.lstsq(interp,np.array([bdryR,bdryZ]).T)[0].T
+        interp = double_fourier_basis(bdry_theta, bdry_phi, bdryM, bdryN, NFP)
+        bR, bZ = np.linalg.lstsq(interp, np.array([bdryR, bdryZ]).T)[0].T
         return bdryM, bdryN, bR, bZ
 
 
-def compute_bc_err_four_sfl(cR,cZ,cL,bdry_ratio,bdry_zernt,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP,sample=1.5):
+def compute_bc_err_four_sfl(cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
     """Compute boundary error in fourier coefficients using SFL coord nodes
-    
+
     Args:
         cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
         cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
@@ -94,42 +98,41 @@ def compute_bc_err_four_sfl(cR,cZ,cL,bdry_ratio,bdry_zernt,lambda_idx,bdryR,bdry
         bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
         NFP (int): number of field periods
         sample (float): sampling factor (eg, 1.0 would be no oversampling)
-        
+
     Returns:
         errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs
         errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary spectral coeffs
     """
-    
+
     # get grid for bdry eval
     bdry_rho = bdry_zernt.nodes[0]
     bdry_vartheta = bdry_zernt.nodes[1]
     bdry_zeta = bdry_zernt.nodes[2]
-    lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_vartheta,bdry_zeta)
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, bdry_vartheta, bdry_zeta)
     theta = bdry_vartheta - lamda
-    phi = bdry_zeta    
+    phi = bdry_zeta
 
     # find values of R,Z at pts specified
-    R = bdry_zernt.transform(cR,0,0,0).flatten()
-    Z = bdry_zernt.transform(cZ,0,0,0).flatten()
-    
+    R = bdry_zernt.transform(cR, 0, 0, 0).flatten()
+    Z = bdry_zernt.transform(cZ, 0, 0, 0).flatten()
+
     # interpolate R,Z to fourier basis in non sfl coords
-    four_bdry_interp = double_fourier_basis(theta,phi,bdryM,bdryN,NFP)
-    four_bdry_interp_pinv = jnp.linalg.pinv(four_bdry_interp,rcond=1e-6)
-    cRb,cZb = jnp.matmul(four_bdry_interp_pinv,jnp.array([R,Z]).T).T
-    
+    four_bdry_interp = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
+    four_bdry_interp_pinv = jnp.linalg.pinv(four_bdry_interp, rcond=1e-6)
+    cRb, cZb = jnp.matmul(four_bdry_interp_pinv, jnp.array([R, Z]).T).T
+
     # ratio of non-axisymmetric boundary modes to use
-    ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)
-    
+    ratio = jnp.clip(bdry_ratio+(bdryN == 0), 0, 1)
+
     # compute errors
     errR = cRb - bdryR*ratio
     errZ = cZb - bdryZ*ratio
-    return errR,errZ
+    return errR, errZ
 
-    
-    
-def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdryM,bdryN,NFP,sample=1.5):
+
+def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
     """Compute boundary error in fourier coefficients
-    
+
     Args:
         cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
         cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
@@ -145,47 +148,50 @@ def compute_bc_err_four(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry
         bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
         NFP (int): number of field periods
         sample (float): sampling factor (eg, 1.0 would be no oversampling)
-        
+
     Returns:
         errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs
         errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary spectral coeffs
     """
-    
+
     # get grid for bdry eval
     dimFourM = 2*np.ceil(sample*np.max(np.abs(bdryM)))+1
     dimFourN = 2*np.ceil(sample*np.max(np.abs(bdryN)))+1
     dv = 2*np.pi/dimFourM
     dz = 2*np.pi/(NFP*dimFourN)
-    bdry_theta = jnp.arange(0,2*jnp.pi,dv)
-    bdry_phi = jnp.arange(0,2*jnp.pi/NFP,dz)
-    bdry_theta, bdry_phi = jnp.meshgrid(bdry_theta,bdry_phi,indexing='ij')
+    bdry_theta = jnp.arange(0, 2*jnp.pi, dv)
+    bdry_phi = jnp.arange(0, 2*jnp.pi/NFP, dz)
+    bdry_theta, bdry_phi = jnp.meshgrid(bdry_theta, bdry_phi, indexing='ij')
     bdry_theta = bdry_theta.flatten()
     bdry_phi = bdry_phi.flatten()
-    
+
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_theta,bdry_phi)
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, bdry_theta, bdry_phi)
     vartheta = bdry_theta + lamda
     zeta = bdry_phi
-    zern_bdry_interp = jnp.hstack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx])
-    R = jnp.matmul(zern_bdry_interp,cR).flatten()
-    Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
-    
-    four_bdry_interp = double_fourier_basis(bdry_theta,bdry_phi,bdryM,bdryN,NFP)
-    cRb,cZb = jnp.linalg.lstsq(four_bdry_interp,jnp.array([R,Z]).T,rcond=1e-6)[0].T
-    
+    zern_bdry_interp = jnp.hstack([fourzern(
+        rho, vartheta, zeta, lmn[0], lmn[1], lmn[2], NFP, 0, 0, 0) for lmn in zern_idx])
+    R = jnp.matmul(zern_bdry_interp, cR).flatten()
+    Z = jnp.matmul(zern_bdry_interp, cZ).flatten()
+
+    four_bdry_interp = double_fourier_basis(
+        bdry_theta, bdry_phi, bdryM, bdryN, NFP)
+    cRb, cZb = jnp.linalg.lstsq(
+        four_bdry_interp, jnp.array([R, Z]).T, rcond=1e-6)[0].T
+
     # ratio of non-axisymmetric boundary modes to use
-    ratio = jnp.clip(bdry_ratio+(bdryN==0),0,1)
-    
+    ratio = jnp.clip(bdry_ratio+(bdryN == 0), 0, 1)
+
     # compute errors
     errR = cRb - bdryR*ratio
     errZ = cZb - bdryZ*ratio
-    return errR,errZ
+    return errR, errZ
 
 
-def compute_bc_err_RZ(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_theta,bdry_phi,NFP):
+def compute_bc_err_RZ(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ, bdry_theta, bdry_phi, NFP):
     """Compute boundary error at discrete points
-    
+
     Args:
         cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
         cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
@@ -200,66 +206,68 @@ def compute_bc_err_RZ(cR,cZ,cL,bdry_ratio,zern_idx,lambda_idx,bdryR,bdryZ,bdry_t
         bdry_theta (ndarray, shape(N_bdry_pts,)): real space poloidal coordinates where boundary is specified
         bdry_phi (ndarray, shape(N_bdry_pts,)): real space toroidal coordinates where boundary is specified
         NFP (int): number of field periods   
-        
+
     Returns:
         errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary position at specified points
         errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary position at specified points
     """
-    
+
     # find values of R,Z at pts specified
     rho = jnp.ones_like(bdry_theta)
-    lamda = eval_double_fourier(cL,lambda_idx,NFP,bdry_theta,bdry_phi)
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, bdry_theta, bdry_phi)
     vartheta = bdry_theta + lamda
     zeta = bdry_phi
-    zern_bdry_interp = jnp.stack([fourzern(rho,vartheta,zeta,lmn[0],lmn[1],lmn[2],NFP,0,0,0) for lmn in zern_idx])
-    R = jnp.matmul(zern_bdry_interp,cR).flatten()
-    Z = jnp.matmul(zern_bdry_interp,cZ).flatten()
-    
+    zern_bdry_interp = jnp.stack([fourzern(
+        rho, vartheta, zeta, lmn[0], lmn[1], lmn[2], NFP, 0, 0, 0) for lmn in zern_idx])
+    R = jnp.matmul(zern_bdry_interp, cR).flatten()
+    Z = jnp.matmul(zern_bdry_interp, cZ).flatten()
+
     # compute errors
     errR = R-bdryR
     errZ = Z-bdryZ
-    
-    return errR,errZ
+
+    return errR, errZ
 
 
-def compute_lambda_err(cL,idx,NFP):
+def compute_lambda_err(cL, idx, NFP):
     """Compute the error in sum(lambda_mn) to enforce 
     vartheta(0,0) = 0
-    
+
     Args:
         cL (ndarray, shape(2M+1)*(2N+1)): double Fourier coefficients of lambda
         idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
         NFP (int): number of field periods 
-        
+
     Returns:
         errL (float): sum of lambda_mn where m,n>0
     """
-    
-    mn_pos = jnp.where(jnp.logical_and(idx[:,0]>=0, idx[:,1]>=0))[0]
+
+    mn_pos = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0))[0]
     errL = jnp.sum(cL[mn_pos])
-            
+
     return errL
 
 
-def get_lambda_constraint_matrix(zern_idx,lambda_idx):
-    """Computes a linear constraint matrix to enforce vartheta(0,0) = 0
-    We require sum(lambda_mn) = 0, is Cx = 0
-    
+def get_lambda_constraint_matrix(zern_idx, lambda_idx):
+    """Computes a linear constraint matrix to enforce vartheta = 0 at theta=0.
+    We require sum(lambda_mn) = 0, expressed in matrix for as Cx = 0
+
     Args:
         zern_idx (ndarray, shape(Nc,3)): indices for R,Z spectral basis, 
             ie an array of [l,m,n] for each spectral coefficient
         lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, 
             ie an array of [m,n] for each spectral coefficient
-        
+
     Returns:
         C (ndarray, shape(2*N_coeffs + (2M+1)*(2N+1))): linear constraint matrix, 
             so Cx is the error in the lambda constraint
     """
-    
+
     # assumes x = [cR, cZ, cL]
     offset = 2*len(zern_idx)
-    mn_pos = np.where(np.logical_and(lambda_idx[:,0]>=0, lambda_idx[:,1]>=0))[0]
+    mn_pos = np.where(np.logical_and(
+        lambda_idx[:, 0] >= 0, lambda_idx[:, 1] >= 0))[0]
     C = np.zeros(offset + len(lambda_idx))
     C[offset+mn_pos] = 1
-    
+
     return C

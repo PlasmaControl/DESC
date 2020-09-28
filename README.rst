@@ -31,7 +31,7 @@ The equivalent DESC input files are contained in `benchmarks/DESC <https://githu
 
 Contribute
 ==========
-
+- Contributing guidelines: _`<https://github.com/ddudt/DESC/blob/master/CONTRIBUTING.md>`_
 - Issue Tracker: `<https://github.com/ddudt/DESC/issues>`_
 - Source Code: `<https://github.com/ddudt/DESC/>`_
 - Documentation: `<https://desc-docs.readthedocs.io/>`_

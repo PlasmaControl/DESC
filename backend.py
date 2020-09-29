@@ -15,7 +15,7 @@ try:
     y = jnp.exp(1)
     use_jax = True
     print('Using JAX, version={}, jaxlib version={}, dtype={}'.format(
-        jax.__version__,jaxlib.__version__, x.dtype))
+        jax.__version__, jaxlib.__version__, x.dtype))
 except:
     jnp = np
     use_jax = False
@@ -54,10 +54,12 @@ if use_jax:
             n! (float): factorial of n
 
         """
+        n = n.astype(float)
 
         def body_fun(i, n):
             return n*i
-        y = fori_loop(1., n+1, body_fun, jnp.ones_like(n, dtype=jnp.float64))
+        y = fori_loop(1., n+1, body_fun,
+                      jnp.ones_like(n, dtype=jnp.float64))
         return y*(n >= 0)
 
 else:
@@ -160,8 +162,10 @@ def sign(x):
     Returns 
         y (array-like): 1 where x>=0, -1 where x<0
     """
+    x = jnp.atleast_1d(x)
     y = jnp.sign(x)
-    y = put(y, jnp.where(y.flatten() == 0)[0], 1)
+    x0 = jnp.where(y.flatten() == 0)[0]
+    y = put(y, x0, 1)
     return y
 
 

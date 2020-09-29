@@ -1,22 +1,25 @@
 import numpy as np
 import functools
+import warnings
 
 try:
     #     raise
     import os
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     import jax
+    import jaxlib
     import jax.numpy as jnp
     from jax.config import config
     config.update("jax_enable_x64", True)
     x = jnp.linspace(0, 5)
     y = jnp.exp(1)
     use_jax = True
-    print('Using JAX', x.dtype)
+    print('Using JAX, version={}, jaxlib version={}, dtype={}'.format(
+        jax.__version__,jaxlib.__version__, x.dtype))
 except:
     jnp = np
     use_jax = False
-    print('JAX borked, using numpy')
+    warnings.warn('Failed to load JAX, using numpy instead')
 
 
 if use_jax:

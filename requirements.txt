@@ -5,3 +5,5 @@ jaxlib==0.1.52
 jax==0.1.73
 h5py
 netcdf4
+pytest >= 5.0.0
+pytest-cov >= 2.6.0

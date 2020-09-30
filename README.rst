@@ -1,7 +1,7 @@
 ###################################
 DESC Stellarator Equilibrium Solver
 ###################################
-|License|
+|License||Travis|
 
 This is the primary version of the DESC code in Python.
 
@@ -41,3 +41,7 @@ Contribute
 .. |License| image:: https://img.shields.io/github/license/ddudt/DESC
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License: MIT
+
+.. |Travis| image:: https://travis-ci.org/ddudt/DESC.svg?branch=master
+    :target: https://travis-ci.org/ddudt/DESC
+    :alt: Build

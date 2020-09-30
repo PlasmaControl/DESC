@@ -5,7 +5,7 @@ from zernike import symmetric_x, double_fourier_basis
 from backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
 
 
-def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes):
+def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor):
     """Gets the equilibrium objective function
 
     Args:
@@ -21,8 +21,6 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         lambda_idx (ndarray of int, shape(Nc,2)): mode numbers for Fourier basis
         bdry_pol (ndarray of int): poloidal mode numbers for boundary
         bdry_tor (ndarray of int): toroidal mode numbers for boundary
-        nodes (ndarray, shape(3,N)): node locations
-        volumes (ndarray, shape(3,N)): node volume elements
 
     Returns:
         equil_obj (function): equilibrium objective function
@@ -50,24 +48,24 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
 
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errRf, errZf = equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt, nodes, volumes)
+            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
         errRb, errZb = bdry_fun(cR, cZ, cL, bdry_ratio, bdry_zernt,
                                 lambda_idx, bdryR, bdryZ, bdry_pol, bdry_tor, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
         # normalize weighting by numper of nodes
-        residual = jnp.concatenate([errRf.flatten()/errRf.size*errr_ratio,
-                                    errZf.flatten()/errZf.size*errr_ratio,
-                                    errRb.flatten()/errRb.size,
-                                    errZb.flatten()/errZb.size,
-                                    errL0.flatten()/errL0.size])
+        residual = jnp.concatenate([errRf.flatten()/jnp.sqrt(errRf.size)*errr_ratio,
+                                    errZf.flatten()/jnp.sqrt(errZf.size)*errr_ratio,
+                                    errRb.flatten()/jnp.sqrt(errRb.size),
+                                    errZb.flatten()/jnp.sqrt(errZb.size),
+                                    errL0.flatten()/jnp.sqrt(errL0.size)])
         return residual
 
     def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
 
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errRf, errZf = equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt, nodes, volumes)
+            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
         errRb, errZb = bdry_fun(cR, cZ, cL, bdry_ratio, bdry_zernt,
                                 lambda_idx, bdryR, bdryZ, bdry_pol, bdry_tor, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
@@ -92,7 +90,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
     return equil_obj, callback
 
 
-def get_qisym_obj_fun(stell_sym, M, N, NFP, zernt, zern_idx, lambda_idx, modes_pol, modes_tor, nodes):
+def get_qisym_obj_fun(stell_sym, M, N, NFP, zernt, zern_idx, lambda_idx, modes_pol, modes_tor):
     """Gets the quasisymmetry objective function
 
     Args:
@@ -115,16 +113,16 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernt, zern_idx, lambda_idx, modes_p
 
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errQS = compute_qs_error_spectral(
-            cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, modes_tor, 1.0, nodes)
+            cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, modes_tor, 1.0)
 
         # normalize weighting by numper of nodes
-        residual = errQS.flatten()/errQS.size
+        residual = errQS.flatten()/jnp.sqrt(errQS.size)
         return residual
 
     return qisym_obj
 
 
-def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernt, nodes, volumes):
+def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernt):
     """Computes force balance error at each node
 
     Args:
@@ -136,8 +134,6 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio,
         pres_ratio (double): fraction in range [0,1] of the full pressure profile to use
         zeta_ratio (double): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
-        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
-        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume
 
     Returns:
         F_rho (ndarray, shape(N_nodes,)): radial force balance error at each node
@@ -145,8 +141,10 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio,
     """
 
     mu0 = 4*jnp.pi*1e-7
+    nodes = zernt.nodes
+    volumes = zernt.volumes
+    axn = zernt.axn
     r = nodes[0]
-    axn = jnp.where(r == 0)[0]
     r1 = jnp.min(r[r != 0])  # value of r one step out from axis
     r1_idx = jnp.where(r == r1)[0]
     pres_r = presfun(r, 1, cP) * pres_ratio
@@ -190,17 +188,16 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio,
     f_beta = F_beta*helical
 
     # weight by local volume
-    if volumes is not None:
-        vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
-        vol = put(vol, axn, jnp.mean(
-            jacobian['g'][r1_idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
-        f_rho = f_rho * vol
-        f_beta = f_beta*vol
+    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
+    vol = put(vol, axn, jnp.mean(
+        jacobian['g'][r1_idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
+    f_rho = f_rho * vol
+    f_beta = f_beta*vol
 
     return f_rho, f_beta
 
 
-def compute_force_error_RphiZ(cR, cZ, zernt, nodes, cP, cI, Psi_total, volumes):
+def compute_force_error_RphiZ(cR, cZ, zernt, cP, cI, Psi_total):
     """Computes force balance error at each node
 
     Args:
@@ -210,14 +207,15 @@ def compute_force_error_RphiZ(cR, cZ, zernt, nodes, cP, cI, Psi_total, volumes):
         cP (array-like): coefficients to pass to pressure function
         cI (array-like): coefficients to pass to rotational transform function
         Psi_lcfs (float): total toroidal flux within LCFS
-        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
 
     Returns:
         F_err (ndarray, shape(3,N_nodes,)): F_R, F_phi, F_Z at each node
     """
 
+    nodes = zernt.nodes
+    volumes = zernt.volumes
+    axn = zernt.axn
     r = nodes[0]
-    axn = jnp.where(r == 0)[0]
     # value of r one step out from axis
     r1 = jnp.min(r[r != 0])
     r1idx = jnp.where(r == r1)[0]
@@ -247,16 +245,15 @@ def compute_force_error_RphiZ(cR, cZ, zernt, nodes, cP, cI, Psi_total, volumes):
     F_err = f_rho * con_basis['grad_rho'] + f_beta * beta
 
     # weight by local volume
-    if volumes is not None:
-        vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
-        vol = put(vol, axn, jnp.mean(
-            jacobian['g'][r1idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
-        F_err = F_err*vol
+    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
+    vol = put(vol, axn, jnp.mean(
+        jacobian['g'][r1idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
+    F_err = F_err*vol
 
     return F_err
 
 
-def compute_force_error_RddotZddot(cR, cZ, zernt, nodes, cP, cI, Psi_total, volumes):
+def compute_force_error_RddotZddot(cR, cZ, zernt, cP, cI, Psi_total):
     """Computes force balance error at each node
 
     Args:
@@ -266,7 +263,6 @@ def compute_force_error_RddotZddot(cR, cZ, zernt, nodes, cP, cI, Psi_total, volu
         cP (array-like): coefficients to pass to pressure function
         cI (array-like): coefficients to pass to rotational transform function
         Psi_lcfs (float): total toroidal flux within LCFS
-        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume.
 
     Returns:
         cRddot (ndarray, shape(Ncoeffs,)): spectral coefficients for d^2R/dt^2
@@ -275,8 +271,8 @@ def compute_force_error_RddotZddot(cR, cZ, zernt, nodes, cP, cI, Psi_total, volu
 
     coord_der = compute_coordinate_derivatives(cR, cZ, zernt)
     F_err = compute_force_error_RphiZ(
-        cR, cZ, zernt, nodes, cP, cI, Psi_total, volumes)
-    num_nodes = len(nodes[0])
+        cR, cZ, zernt, cP, cI, Psi_total)
+    num_nodes = len(zernt.nodes[0])
 
     AR = jnp.stack([jnp.ones(num_nodes), -coord_der['R_z'],
                     jnp.zeros(num_nodes)], axis=1)
@@ -290,7 +286,7 @@ def compute_force_error_RddotZddot(cR, cZ, zernt, nodes, cP, cI, Psi_total, volu
     return cRddot, cZddot
 
 
-def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernt, nodes, volumes):
+def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernt):
     """Computes acceleration error in spectral space
 
     Args:
@@ -302,8 +298,6 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_rat
         pres_ratio (double): fraction in range [0,1] of the full pressure profile to use
         zeta_ratio (double): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
         zernt (ZernikeTransform): object with tranform method to convert from spectral basis to physical basis at nodes
-        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
-        volumes (ndarray, shape(3,N_nodes)): arc length (dr,dv,dz) along each coordinate at each node, for computing volume
 
     Returns:
         cR_zz_err (ndarray, shape(N_nodes,)): error in cR_zz
@@ -311,8 +305,9 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_rat
     """
 
     mu0 = 4*jnp.pi*1e-7
+    nodes = zernt.nodes
+    axn = zernt.axn
     r = nodes[0]
-    axn = jnp.where(r == 0)[0]
     presr = presfun(r, 1, cP) * pres_ratio
     iota = iotafun(r, 0, cI)
     iotar = iotafun(r, 1, cI)
@@ -338,7 +333,7 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_rat
     return cR_zz_err, cZ_zz_err
 
 
-def compute_qs_error_spectral(cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, modes_tor, zeta_ratio, nodes):
+def compute_qs_error_spectral(cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, modes_tor, zeta_ratio):
     """Computes quasisymmetry error in spectral space
 
     Args:
@@ -351,12 +346,12 @@ def compute_qs_error_spectral(cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, mode
         modes_pol (ndarray, shape(N_modes)): poloidal Fourier mode numbers
         modes_tor (ndarray, shape(N_modes)): toroidal Fourier mode numbers
         zeta_ratio (float): fraction in range [0,1] of the full toroidal (zeta) derivatives to use
-        nodes (ndarray, shape(3,N_nodes)): coordinates (r,v,z) of the collocation points
 
     Returns:
         cQS (ndarray, shape(N_modes,)): quasisymmetry error Fourier coefficients
     """
-
+    nodes = zernt.nodes
+    axn = zernt.axn
     r = nodes[0]
     iota = iotafun(r, 0, cI)
 

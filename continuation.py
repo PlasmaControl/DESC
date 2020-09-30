@@ -168,7 +168,7 @@ def solve_eq_continuation(inputs):
             derivatives = get_needed_derivatives('all')
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii])
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
-            zernt = ZernikeTransform(nodes, zern_idx, NFP, derivatives)
+            zernt = ZernikeTransform(nodes, zern_idx, NFP, derivatives, volumes)
             # bdry interpolator
             bdry_nodes, _ = get_nodes_surf(
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
@@ -210,7 +210,7 @@ def solve_eq_continuation(inputs):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes)
+                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                     pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
 
@@ -239,7 +239,7 @@ def solve_eq_continuation(inputs):
                     Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
                 bdry_nodes, _ = get_nodes_surf(
                     Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
-                zernt.expand_nodes(nodes)
+                zernt.expand_nodes(nodes,volumes)
                 bdry_zernt.expand_nodes(bdry_nodes)
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
@@ -249,7 +249,7 @@ def solve_eq_continuation(inputs):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes)
+                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 

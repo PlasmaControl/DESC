@@ -418,11 +418,13 @@ class ZernikeTransform():
             Each row of the array should contain 3 elements corresponding to derivatives in rho,theta,zeta
     """
 
-    def __init__(self, nodes, mode_idx, NFP, derivatives=[0, 0, 0]):
+    def __init__(self, nodes, mode_idx, NFP, derivatives=[0, 0, 0],volumes=None):
         # array of which l,m,n is at which column of the interpolation matrix
         self.mode_idx = mode_idx
         # array of which r,v,z is at which row of the interpolation matrix
         self.nodes = nodes
+        self.volumes = volumes if volumes is not None else np.ones_like(self.nodes)
+        self.axn = np.where(self.nodes[0]==0)[0]
         self.NFP = NFP
         self.derivatives = np.atleast_2d(derivatives)
         self.matrices = {i: {j: {k: {}
@@ -437,26 +439,31 @@ class ZernikeTransform():
             self.matrices[dr][dv][dz] = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                                              lmn[0], lmn[1], lmn[2], self.NFP, dr, dv, dz) for lmn in mode_idx])
 
-    def expand_nodes(self, new_nodes):
+    def expand_nodes(self, new_nodes, new_volumes=None):
         """Change the real space resolution by adding new nodes without full recompute
 
         Only computes basis at spatial nodes that aren't already in the basis
 
         Args:
-            new_nodes (ndarray, side(3,N)): new node locations. each column is the location of one node (rho,theta,zeta)
+            new_nodes (ndarray, size(3,N)): new node locations. each column is the location of one node (rho,theta,zeta)
+            new_volumes (ndarray, size(3,N)): new node volume. each column is the volume around one node (drho,dtheta,dzeta)
+            
         """
-
         new_nodes = jnp.atleast_2d(new_nodes).T
+        new_volumes = jnp.atleast_2d(new_volumes).T if new_volumes is not None else jnp.ones_like(new_nodes)
+        
         # first remove nodes that are no longer needed
         old_in_new = (self.nodes.T[:, None] == new_nodes).all(-1).any(-1)
         for d in self.derivatives:
             self.matrices[d[0]][d[1]][d[2]
                                       ] = self.matrices[d[0]][d[1]][d[2]][old_in_new]
         self.nodes = self.nodes[:, old_in_new]
-
+        self.volumes = self.volumes[:,old_in_new]
+        
         # then add new nodes
         new_not_in_old = ~(new_nodes[:, None] == self.nodes.T).all(-1).any(-1)
         nodes_to_add = new_nodes[new_not_in_old]
+        volumes_to_add = new_volumes[new_not_in_old]
         if len(nodes_to_add) > 0:
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = jnp.vstack([
@@ -466,6 +473,7 @@ class ZernikeTransform():
 
         # update indices
         self.nodes = np.hstack([self.nodes, nodes_to_add.T])
+        self.volumes = np.hstack([self.volumes, volumes_to_add.T])
         # permute indexes so they're in the same order as the input
         permute_idx = [self.nodes.T.tolist().index(i)
                        for i in new_nodes.tolist()]
@@ -473,6 +481,7 @@ class ZernikeTransform():
             self.matrices[d[0]][d[1]][d[2]
                                       ] = self.matrices[d[0]][d[1]][d[2]][permute_idx]
         self.nodes = self.nodes[:, permute_idx]
+        self.volumes = self.volumes[:,permute_idx]
 
     def expand_spectral_resolution(self, mode_idx_new):
         """Change the spectral resolution of the transform without full recompute

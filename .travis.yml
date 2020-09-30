@@ -12,8 +12,9 @@ install:
 script:
   - python -m pytest --cov=./
 
-# publish test results
+# code coverage
 after_script:
+  - codecov
 
 # send notifications of results
 notifications:

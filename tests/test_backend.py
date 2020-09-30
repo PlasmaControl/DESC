@@ -23,3 +23,4 @@ class TestBackend(unittest.TestCase):
         self.assertEqual(sign(4), 1)
         self.assertEqual(sign(0), 1)
         self.assertEqual(sign(-10.3), -1)
+        self.assertEqual(1,2)

@@ -1,7 +1,7 @@
 ###################################
 DESC Stellarator Equilibrium Solver
 ###################################
-|License||Travis|
+|License| |Travis|
 
 This is the primary version of the DESC code in Python.
 

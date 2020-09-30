@@ -187,7 +187,7 @@ def read_input(fname):
             bR = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = np.where([i in bdry_m for i in bdry_n])[0]
+            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(
@@ -200,7 +200,7 @@ def read_input(fname):
             bZ = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = np.where([i in bdry_m for i in bdry_n])[0]
+            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(

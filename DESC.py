@@ -1,11 +1,9 @@
 from continuation import solve_eq_continuation
 from plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
 from input_output import read_input, output_to_file, read_vmec_output
-import jax
 import argparse
 import pathlib
 import sys
-
 
 
 def parse_args(args):
@@ -13,12 +11,13 @@ def parse_args(args):
     Args:
         args (list): List of arguments to parse, ie sys.argv
     Returns:
-        parsed_args (argparse object): argparse object containing parsed
-        arguments.
+        parsed_args (argparse object): argparse object containing parsed arguments.
     """
 
     parser = argparse.ArgumentParser(prog='DESC',
-                                     description="""The DESC code computes stellarator and tokamak equilibria by solving the force balance equations. It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.""")
+        description="""The DESC code computes equilibria by solving the force balance equations. 
+        It can also be used for perturbation analysis and sensitivity studies 
+        to see how the equilibria change as input parameters are varied.""")
     parser.add_argument("input_file", help="path to input file")
     parser.add_argument("-o", "--output", help="output path and filename. If not specified, defaults to <input_name>.output")
     parser.add_argument("-p", "--plot", action='store_true',

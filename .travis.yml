@@ -22,5 +22,5 @@ notifications:
     on_failure: always
     on_success: change
     recipients: 
-      - ddudt@princeton.edu
+      - ddudt@pppl.gov
       - wconlin@princeton.edu

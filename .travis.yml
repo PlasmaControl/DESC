@@ -18,9 +18,9 @@ after_script:
 
 # send notifications of results
 notifications:
-  email:
-    recipients:
+  email: 
+    on_failure: always
+    on_success: change
+    recipients: 
       - ddudt@princeton.edu
       - wconlin@princeton.edu
-      on_failure: always
-      on_success: change

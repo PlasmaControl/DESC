@@ -67,7 +67,9 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1'):
 
     nodes = np.stack([r, t, z])
     volumes = np.stack([dr, dt, dz])
-    return nodes, volumes
+    sort_idx = np.lexsort((nodes[1],nodes[0],nodes[2]))
+
+    return nodes[:,sort_idx], volumes[:,sort_idx]
 
 
 def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
@@ -104,7 +106,9 @@ def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
 
     nodes = np.stack([r, t, z])
     volumes = np.stack([dr, dt, dz])
-    return nodes, volumes
+    sort_idx = np.lexsort((nodes[1],nodes[0],nodes[2]))
+
+    return nodes[:,sort_idx], volumes[:,sort_idx]
 
 
 def get_nodes_surf(M, N, NFP, surf=1.0):

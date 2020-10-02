@@ -15,7 +15,7 @@ def parse_args(args):
     """
 
     parser = argparse.ArgumentParser(prog='DESC',
-        description='The DESC code computes equilibria by solving the force balance equations. '
+        description='DESC computes equilibria by solving the force balance equations. '
                     +'It can also be used for perturbation analysis and sensitivity studies '
                     +'to see how the equilibria change as input parameters are varied.')
     parser.add_argument('input_file', help='Path to input file')

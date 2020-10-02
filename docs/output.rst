@@ -1,6 +1,6 @@
-==========
+=======
 Outputs
-==========
+=======
 
 This page explains the output file formats for equilibrium solutions
 computed by DESC.

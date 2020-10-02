@@ -1,7 +1,7 @@
 Installation
 ============
 
-To install DESC and its dependencies on the PPPL cluster, follow these instructions. 
+Follow these instructions to install DESC and its dependencies on PPPL's sunfire. 
 Other systems should follow a similar process but may differ. 
 
 .. code-block:: bash

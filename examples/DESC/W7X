@@ -8,8 +8,8 @@ Psi_lcfs	=  -2.13300000E+00
 # spectral resolution
 Mpol	=  12
 Ntor	=  12
-Mnodes	=  12
-Nnodes	=  12
+Mnodes	=  18
+Nnodes	=  18
 
 # continuation parameters
 bdry_ratio	= 1
@@ -22,7 +22,7 @@ pert_order	= 1
 ftol	= 1e-6
 xtol	= 1e-6
 gtol	= 1e-6
-nfev	= 100
+nfev	= 1000
 
 # solver methods
 errr_mode	= force

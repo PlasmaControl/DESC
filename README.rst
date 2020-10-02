@@ -34,8 +34,7 @@ The equilibrium solution is output in both an ASCII text file and a HDF5 binary 
 Repository Contents
 ===================
 
-- desc_ contains the source code including the main script ``DESC.py`` and supplemental files. 
-Refer to the API_ documentation for details on all of the available functions. 
+- desc_ contains the source code including the main script ``DESC.py`` and supplemental files. Refer to the API_ documentation for details on all of the available functions. 
 - docs_ contains the documentation files. 
 - examples contains example input files along with corresponding VMEC solutions. 
 - tests_ contains routines for automatic testing. 

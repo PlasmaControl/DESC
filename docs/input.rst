@@ -58,7 +58,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    m:   1	n:  -1	bZ =  -3.00000000E-01
    m:  -1	n:   1	bZ =  -3.00000000E-01
 
-Note that both `#` and `!` are recognized to denote comments at the end of a line. 
+Note that both ``#`` and ``!`` are recognized to denote comments at the end of a line. 
 Whitespace is always ignored, except for newline characters. 
 Multiple inputs can be given on the same line of the input file, but a single input cannot span multiple lines. 
 

@@ -48,20 +48,17 @@ if use_jax:
         """Factorial function for jax backend
 
         Args:
-            n (int): input values. if n<0, returns 0
+            n (int,array-like): input values. if n<0, returns 0
 
         Returns:
             n! (float): factorial of n
 
         """
-        n = n.astype(float)
-
-        def body_fun(i, n):
-            return n*i
-        y = fori_loop(1., n+1, body_fun,
-                      jnp.ones_like(n, dtype=jnp.float64))
-        return y*(n >= 0)
-
+        x = jnp.asarray(n+1)
+        y = jnp.exp(jax.scipy.special.gammaln(x))
+        y = jnp.where(x<1,0,y)
+        return y
+        
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial

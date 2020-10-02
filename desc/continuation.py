@@ -138,6 +138,9 @@ def solve_eq_continuation(inputs):
     bdry = inputs['bdry']
     verbose = inputs['verbose']
 
+    if not use_jax:
+        pert_order *= 0
+
     arr_len = M.size
     for ii in range(arr_len):
 
@@ -253,7 +256,7 @@ def solve_eq_continuation(inputs):
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 
-            if use_jax:
+            if pert_order[ii] > 0:
                 x = perturb(x, equil_obj, delta_bdry, delta_pres,
                             delta_zeta, delta_errr, args, verbose)
 

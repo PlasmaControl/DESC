@@ -51,14 +51,14 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
 def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, verbose):
     """perturbs an equilibrium"""
 
-    if verbose > 0:
+    if verbose > 1:
         print("Perturbing equilibrium")
     t00 = time.perf_counter()
     obj_jac = jacfwd(equil_obj, argnums=0)
     Jx = obj_jac(x, *args)
     RHS = equil_obj(x, *args)
     t1 = time.perf_counter()
-    if verbose > 0:
+    if verbose > 1:
         print("dF/dx computation time: {} s".format(t1-t00))
 
     if delta_bdry != 0:
@@ -67,7 +67,7 @@ def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, 
         Jb = bdry_jac(x, *args)
         RHS += Jb*delta_bdry
         t1 = time.perf_counter()
-        if verbose > 0:
+        if verbose > 1:
             print("dF/dbdry computation time: {} s".format(t1-t0))
     if delta_pres != 0:
         t0 = time.perf_counter()
@@ -75,7 +75,7 @@ def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, 
         Jp = pres_jac(x, *args)
         RHS += Jp*delta_pres
         t1 = time.perf_counter()
-        if verbose > 0:
+        if verbose > 1:
             print("dF/dpres computation time: {} s".format(t1-t0))
     if delta_zeta != 0:
         t0 = time.perf_counter()
@@ -83,7 +83,7 @@ def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, 
         Jz = zeta_jac(x, *args)
         RHS += Jz*delta_zeta
         t1 = time.perf_counter()
-        if verbose > 0:
+        if verbose > 1:
             print("dF/dzeta computation time: {} s".format(t1-t0))
     if delta_errr != 0:
         t0 = time.perf_counter()
@@ -91,12 +91,12 @@ def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, 
         Je = errr_jac(x, *args)
         RHS += Je*delta_errr
         t1 = time.perf_counter()
-        if verbose > 0:
+        if verbose > 1:
             print("dF/derrr computation time: {} s".format(t1-t0))
 
     dx = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
     t1 = time.perf_counter()
-    if verbose > 0:
+    if verbose > 1:
         print("Total perturbation time: {} s".format(t1-t00))
     return x + dx
 
@@ -116,27 +116,27 @@ def solve_eq_continuation(inputs):
     stell_sym = inputs['stell_sym']
     NFP = inputs['NFP']
     Psi_lcfs = inputs['Psi_lcfs']
-    M = inputs['Mpol']       # arr
-    N = inputs['Ntor']       # arr
-    Mnodes = inputs['Mnodes']     # arr
-    Nnodes = inputs['Nnodes']     # arr
-    bdry_ratio = inputs['bdry_ratio']  # arr
-    pres_ratio = inputs['pres_ratio']  # arr
-    zeta_ratio = inputs['zeta_ratio']  # arr
-    errr_ratio = inputs['errr_ratio']  # arr
-    ftol = inputs['ftol']       # arr
-    xtol = inputs['xtol']       # arr
-    gtol = inputs['gtol']       # arr
-    nfev = inputs['nfev']       # arr
-    verbose = inputs['verbose']
+    M = inputs['Mpol']                  # arr
+    N = inputs['Ntor']                  # arr
+    Mnodes = inputs['Mnodes']           # arr
+    Nnodes = inputs['Nnodes']           # arr
+    bdry_ratio = inputs['bdry_ratio']   # arr
+    pres_ratio = inputs['pres_ratio']   # arr
+    zeta_ratio = inputs['zeta_ratio']   # arr
+    errr_ratio = inputs['errr_ratio']   # arr
+    pert_order = inputs['pert_order']   # arr
+    ftol = inputs['ftol']               # arr
+    xtol = inputs['xtol']               # arr
+    gtol = inputs['gtol']               # arr
+    nfev = inputs['nfev']               # arr
     errr_mode = inputs['errr_mode']
     bdry_mode = inputs['bdry_mode']
     node_mode = inputs['node_mode']
-    out_fname = inputs['out_fname']
     cP = inputs['cP']
     cI = inputs['cI']
     axis = inputs['axis']
     bdry = inputs['bdry']
+    verbose = inputs['verbose']
 
     arr_len = M.size
     for ii in range(arr_len):
@@ -226,7 +226,7 @@ def solve_eq_continuation(inputs):
                     M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
 
                 x, zernt, bdry_zernt = expand_resolution(jnp.matmul(sym_mat, x), zernt, bdry_zernt,
-                                                         zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
+                    zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
                 if stell_sym:
                     sym_mat = symmetric_x(M[ii], N[ii])
                 else:
@@ -249,7 +249,7 @@ def solve_eq_continuation(inputs):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes)
+                NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 

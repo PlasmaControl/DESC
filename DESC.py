@@ -15,23 +15,19 @@ def parse_args(args):
     """
 
     parser = argparse.ArgumentParser(prog='DESC',
-        description="""The DESC code computes equilibria by solving the force balance equations. 
-        It can also be used for perturbation analysis and sensitivity studies 
-        to see how the equilibria change as input parameters are varied.""")
-    parser.add_argument("input_file", help="path to input file")
-    parser.add_argument("-o", "--output", help="output path and filename. If not specified, defaults to <input_name>.output")
-    parser.add_argument("-p", "--plot", action='store_true',
-                        help="""Plot results after solver finishes""")
-    parser.add_argument("--vmec", help='path to VMEC data for comparison plot')
-#     parser.add_argument("-t", "--num_threads", type=int,
-#                         help="""number of threads to use. If not specified,
-#                         defaults to what is in config.""", metavar='')
-
-#     group = parser.add_mutually_exclusive_group()
-#     group.add_argument("-q", "--quiet", action="store_true",
-#                        help="hide progress display window")
-#     group.add_argument("-d", "--display", action='store_true',
-#                        help="show progress display window")
+        description='The DESC code computes equilibria by solving the force balance equations. '
+                    +'It can also be used for perturbation analysis and sensitivity studies '
+                    +'to see how the equilibria change as input parameters are varied.')
+    parser.add_argument('input_file', help='Path to input file')
+    parser.add_argument('-o', '--output', 
+                        help='Path to output file. If not specified, defaults to <input_name>.output')
+    parser.add_argument('-p', '--plot', action='store_true',
+                        help='Plot results after solver finishes')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Do not display any progress information')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Display detailed progress information')
+    parser.add_argument('--vmec', help='Path to VMEC data for comparison plot')
     return parser.parse_args(args)
 
 
@@ -39,13 +35,21 @@ def main(args=sys.argv[1:]):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.
-    """    
+    """
     args = parse_args(args)
     
     in_fname = str(pathlib.Path(args.input_file).resolve())
+    out_fname = args.output if args.output else in_fname+'.output'
+    
     print('Reading input from {}'.format(in_fname))
     inputs = read_input(in_fname)
-    out_fname = args.output if args.output else inputs['out_fname']
+    
+    if args.quiet:
+        inputs['verbose'] = 0
+    elif args.verbose:
+        inputs['verbose'] = 2
+    else:
+        inputs['verbose'] = 1
     
     # solve equilibrium
     equil_init,equil = solve_eq_continuation(inputs)

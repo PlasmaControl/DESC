@@ -1,0 +1,26 @@
+language: python
+python:
+  - "3.6"
+  - "3.7"
+  - "3.8"
+
+# command to install dependencies
+install:
+  - pip install -r requirements.txt
+
+# command to run tests
+script:
+  - python -m pytest --cov=./
+
+# code coverage
+after_script:
+  - codecov
+
+# send notifications of results
+notifications:
+  email: 
+    on_failure: always
+    on_success: change
+    recipients: 
+      - ddudt@pppl.gov
+      - wconlin@princeton.edu

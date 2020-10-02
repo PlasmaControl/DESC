@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from nodes import get_nodes_grid
 from zernike import ZernikeTransform
-from backend import get_needed_derivatives, iotafun, presfun, unpack_x
+from backend import get_needed_derivatives, iotafun, presfun
 from input_output import vmec_interpolate
 from field_components import compute_coordinate_derivatives, compute_covariant_basis, compute_contravariant_basis, compute_jacobian
 from field_components import compute_B_field, compute_J_field, compute_F_magnitude
@@ -72,7 +72,7 @@ def plot_coeffs(cR, cZ, cL, zern_idx, lambda_idx, cR_init=None, cZ_init=None, cL
         cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         cL (ndarray, shape(2M+1)*(2N+1)): spectral coefficients of lambda
         zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
-        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient        
+        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
         cR_init (ndarray, shape(N_coeffs,)): initial spectral coefficients of R
         cZ_init (ndarray, shape(N_coeffs,)): initial spectral coefficients of Z
         cL_init (ndarray, shape(2M+1)*(2N+1)): initial spectral coefficients of lambda
@@ -175,7 +175,7 @@ def plot_coord_surfaces(cR, cZ, zern_idx, NFP, nr=10, nt=12, ax=None, bdryR=None
     return ax
 
 
-def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_params, **kwargs):
+def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, cP, cI, **kwargs):
     """Plot initial conditions, such as the initial guess for flux surfaces,
     node locations, and profiles.
 
@@ -184,8 +184,8 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_para
         cZ_init (ndarray, shape(N_coeffs,)): spectral coefficients of Z
         zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
         NFP (int): number of field periods
-        iotafun_params (array-like): paramters to pass to rotational transform function
-        presfun_params (array-like): parameters to pass to pressure function
+        cI (array-like): paramters to pass to rotational transform function
+        cP (array-like): parameters to pass to pressure function
 
     Returns:
         fig (matplotlib.figure): handle to figure used for plotting
@@ -216,11 +216,11 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, presfun_params, iotafun_para
 
     # profiles
     xx = np.linspace(0, 1, 100)
-    ax2.plot(xx, presfun(xx, 0, presfun_params), lw=1)
+    ax2.plot(xx, presfun(xx, 0, cP), lw=1)
     ax2.set_ylabel(r'$p$')
     ax2.set_xticklabels([])
     ax2.set_title('Profiles')
-    ax3.plot(xx, iotafun(xx, 0, iotafun_params), lw=1)
+    ax3.plot(xx, iotafun(xx, 0, cI), lw=1)
     ax3.set_ylabel(r'$\iota$')
     ax3.set_xlabel(r'$\rho$')
     plt.subplots_adjust(wspace=0.5, hspace=0.3)

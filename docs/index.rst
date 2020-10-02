@@ -1,23 +1,16 @@
 .. include:: ../README.rst
 
-
-
-Guide
-^^^^^
-
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   theory
    installation
+   usage
    input
    output
-   usage
    examples
    api
-
-
 
 Indices and tables
 ==================

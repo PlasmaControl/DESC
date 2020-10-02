@@ -8,7 +8,7 @@ from backend import sign
 
 
 def read_input(fname):
-    """Reads input from input file
+    """Reads input from DESC input file, converts from VMEC input if necessary
 
     Args:
         fname (string): filename of input file
@@ -29,28 +29,34 @@ def read_input(fname):
         'bdry_ratio': np.atleast_1d(1.0),
         'pres_ratio': np.atleast_1d(1.0),
         'zeta_ratio': np.atleast_1d(1.0),
-        'errr_ratio': np.atleast_1d(1.0),
-        'ftol': np.atleast_1d(1e-8),
-        'xtol': np.atleast_1d(1e-8),
-        'gtol': np.atleast_1d(1e-8),
+        'errr_ratio': np.atleast_1d(1e-2),
+        'pert_order': np.atleast_1d(1),
+        'ftol': np.atleast_1d(1e-6),
+        'xtol': np.atleast_1d(1e-6),
+        'gtol': np.atleast_1d(1e-6),
         'nfev': np.atleast_1d(None),
-        'verbose': 2,
         'errr_mode': 'force',
         'bdry_mode': 'spectral',
         'node_mode': 'cheb1',
-        'out_fname': fname.split('.')[0]+'.output',
         'cP': np.atleast_1d(0.0),
         'cI': np.atleast_1d(0.0),
         'axis': np.atleast_2d((0, 0.0, 0.0)),
         'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
     }
 
-    # file objects
-    file = open(fname, 'r')
-
+    file = open(fname,'r')
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
 
     for line in file:
+
+        # check if VMEC input file format
+        isVMEC = re.search('&INDATA', line)
+        if isVMEC:
+            print('Converting VMEC input to DESC input')
+            fname_desc = fname + '_desc'
+            vmec_to_desc_input(fname,fname_desc)
+            print('Generated DESC input file {}:'.format(fname_desc))
+            return read_input(fname_desc)
 
         # remove comments
         match = re.search('[!#]', line)
@@ -69,7 +75,7 @@ def read_input(fname):
         numbers = [float(x) for x in re.findall(num_form, command)]
         words = command[equals+1:].split()
 
-        # solver parameters
+        # global parameters
         match = re.search('stell_sym', argument, re.IGNORECASE)
         if match:
             inputs['stell_sym'] = int(numbers[0])
@@ -79,6 +85,8 @@ def read_input(fname):
         match = re.search('Psi_lcfs', argument, re.IGNORECASE)
         if match:
             inputs['Psi_lcfs'] = numbers[0]
+        
+        # spectral resolution
         match = re.search('Mpol', argument, re.IGNORECASE)
         if match:
             inputs['Mpol'] = np.array(numbers).astype(int)
@@ -91,6 +99,8 @@ def read_input(fname):
         match = re.search('Nnodes', argument, re.IGNORECASE)
         if match:
             inputs['Nnodes'] = np.array(numbers).astype(int)
+        
+        # continuation parameters
         match = re.search('bdry_ratio', argument, re.IGNORECASE)
         if match:
             inputs['bdry_ratio'] = np.array(numbers).astype(float)
@@ -103,6 +113,11 @@ def read_input(fname):
         match = re.search('errr_ratio', argument, re.IGNORECASE)
         if match:
             inputs['errr_ratio'] = np.array(numbers).astype(float)
+        match = re.search('pert_order', argument, re.IGNORECASE)
+        if match:
+            inputs['pert_order'] = np.array(numbers).astype(int)
+        
+        # solver tolerances
         match = re.search('ftol', argument, re.IGNORECASE)
         if match:
             inputs['ftol'] = np.array(numbers).astype(float)
@@ -116,9 +131,8 @@ def read_input(fname):
         if match:
             inputs['nfev'] = np.array(
                 [None if i == 0 else i for i in numbers]).astype(int)
-        match = re.search('verbose', argument, re.IGNORECASE)
-        if match:
-            inputs['verbose'] = int(numbers[0])
+        
+        # solver methods
         match = re.search('errr_mode', argument, re.IGNORECASE)
         if match:
             inputs['errr_mode'] = words[0]
@@ -128,9 +142,6 @@ def read_input(fname):
         match = re.search('node_mode', argument, re.IGNORECASE)
         if match:
             inputs['node_mode'] = words[0]
-        match = re.search('out_fname', argument, re.IGNORECASE)
-        if match:
-            inputs['out_fname'] = words[0]
 
         # coefficient indicies
         match = re.search('l\s*:\s*'+num_form, command, re.IGNORECASE)
@@ -187,7 +198,7 @@ def read_input(fname):
             bR = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = np.where([i in bdry_m for i in bdry_n])[0]
+            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(
@@ -200,7 +211,7 @@ def read_input(fname):
             bZ = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = np.where([i in bdry_m for i in bdry_n])[0]
+            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(
@@ -213,9 +224,10 @@ def read_input(fname):
     if np.any(inputs['Mpol'] == 0):
         raise Exception('Mpol is not assigned')
     if np.sum(inputs['bdry']) == 0:
-        raise Exception('fixed-boundary surface is not assigned')
-    arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes', 'bdry_ratio', 'pres_ratio',
-            'zeta_ratio', 'errr_ratio', 'ftol', 'xtol', 'gtol', 'nfev']
+        raise Exception('Fixed-boundary surface is not assigned')
+    arrs = ['Mpol','Ntor','Mnodes','Nnodes',
+            'bdry_ratio','pres_ratio','zeta_ratio','errr_ratio','pert_order',
+            'ftol','xtol','gtol','nfev']
     arr_len = 0
     for a in arrs:
         arr_len = max(arr_len, len(inputs[a]))
@@ -223,13 +235,13 @@ def read_input(fname):
         if inputs[a].size == 1:
             inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
         elif inputs[a].size != arr_len:
-            raise Exception('continuation array inputs are not proper lengths')
+            raise Exception('Continuation parameter arrays are not proper lengths')
 
     # unsupplied values
     if np.sum(inputs['Mnodes']) == 0:
-        inputs['Mnodes'] = inputs['Mpol']
+        inputs['Mnodes'] = np.rint(1.5*inputs['Mpol']).astype(int)
     if np.sum(inputs['Nnodes']) == 0:
-        inputs['Nnodes'] = inputs['Ntor']
+        inputs['Nnodes'] = np.rint(1.5*inputs['Ntor']).astype(int)
     if np.sum(inputs['axis']) == 0:
         axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
         inputs['axis'] = inputs['bdry'][axis_idx, 1:]
@@ -404,13 +416,13 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     now = datetime.now()
     date = now.strftime('%m/%d/%Y')
     time = now.strftime('%H:%M:%S')
-    desc_file.write('! This DESC input file was auto generated from the VMEC input file \n! ' +
-                    vmec_fname+' on '+date+' at '+time+'.\n\n')
-    desc_file.write('! solver parameters\n')
+    desc_file.write('# This DESC input file was auto generated from the VMEC input file\n# {}\n# on {} at {}.\n\n'
+                    .format(vmec_fname,date,time))
 
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
     Ntor = 99
 
+    pres_scale = 1.0
     cP = np.array([0.0])
     cI = np.array([0.0])
     axis = np.array([[0, 0, 0.0]])
@@ -420,58 +432,58 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
         comment = line.find('!')
         command = (line.strip()+' ')[0:comment]
 
-        # grid parameters
-        if re.search('LRFP\ *=\ *T', command, re.IGNORECASE):
-            warnings.warn('using poloidal flux instead of toroidal flux!')
-        match = re.search('LASYM\ *=\ *[TF]', command, re.IGNORECASE)
+        # global parameters
+        if re.search('LRFP\s*=\s*T', command, re.IGNORECASE):
+            warnings.warn('Using poloidal flux instead of toroidal flux!')
+        match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
         if match:
             if re.search('T', match.group(0), re.IGNORECASE):
                 desc_file.write('stell_sym \t=   0\n')
             else:
                 desc_file.write('stell_sym \t=   1\n')
-        match = re.search('NFP\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('NFP\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('NFP\t\t\t= {:3d}\n'.format(numbers[0]))
-        match = re.search('MPOL\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('PHIEDGE\s*=\s*'+num_form, command, re.IGNORECASE)
+        if match:
+            numbers = [float(x) for x in re.findall(num_form, match.group(0))]
+            desc_file.write('Psi_lcfs\t= {:16.8E}\n'.format(numbers[0]))
+        match = re.search('MPOL\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('Mpol\t\t= {:3d}\n'.format(numbers[0]))
-        match = re.search('NTOR\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('NTOR\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('Ntor\t\t= {:3d}\n'.format(numbers[0]))
             Ntor = numbers[0]
-        match = re.search('PHIEDGE\ *=\ *'+num_form, command, re.IGNORECASE)
-        if match:
-            numbers = [float(x) for x in re.findall(num_form, match.group(0))]
-            desc_file.write('Psi_lcfs\t= {:16.8E}\n'.format(numbers[0]))
 
-        # pressure profile parameters
-        match = re.search('bPMASS_TYPE\ *=\ *\w*', command, re.IGNORECASE)
+        # pressure profile
+        match = re.search('bPMASS_TYPE\s*=\s*\w*', command, re.IGNORECASE)
         if match:
             if not re.search(r'\bpower_series\b', match.group(0), re.IGNORECASE):
-                warnings.warn('pressure is not a power series!')
-        match = re.search('GAMMA\ *=\ *'+num_form, command, re.IGNORECASE)
+                warnings.warn('Pressure is not a power series!')
+        match = re.search('GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 0:
                 warnings.warn('GAMMA is not 0.0')
-        match = re.search('BLOAT\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 1:
                 warnings.warn('BLOAT is not 1.0')
-        match = re.search('SPRES_PED\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 1:
                 warnings.warn('SPRES_PED is not 1.0')
-        match = re.search('PRES_SCALE\ *=\ *'+num_form, command, re.IGNORECASE)
+        match = re.search('PRES_SCALE\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
-            desc_file.write('pres_scale\t= {:16.8E}\n'.format(numbers[0]))
-        match = re.search('AM\ *=(\ *'+num_form+')*', command, re.IGNORECASE)
+            pres_scale = numbers[0]
+        match = re.search('AM\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -480,17 +492,16 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     cP = np.pad(cP, (0, l+1-cP.size), mode='constant')
                 cP[l] = numbers[k]
 
-        # rotational transform paramters
-        match = re.search('NCURR\ *=(\ *'+num_form+')*',
-                          command, re.IGNORECASE)
+        # rotational transform
+        match = re.search('NCURR\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 0:
-                warnings.warn('not using rotational transform!')
+                warnings.warn('Not using rotational transform!')
         if re.search(r'\bPIOTA_TYPE\b', command, re.IGNORECASE):
             if not re.search(r'\bpower_series\b', command, re.IGNORECASE):
-                warnings.warn('iota is not a power series!')
-        match = re.search('AI\ *=(\ *'+num_form+')*', command, re.IGNORECASE)
+                warnings.warn('Iota is not a power series!')
+        match = re.search('AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -499,9 +510,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     cI = np.pad(cI, (0, l+1-cI.size), mode='constant')
                 cI[l] = numbers[k]
 
-        # magnetic axis paramters
-        match = re.search('RAXIS\ *=(\ *'+num_form+')*',
-                          command, re.IGNORECASE)
+        # magnetic axis
+        match = re.search('RAXIS\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -515,8 +525,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     axis = np.pad(axis, ((0, 1), (0, 0)), mode='constant')
                     axis[-1, :] = np.array([l, numbers[k], 0.0])
-        match = re.search('ZAXIS\ *=(\ *'+num_form+')*',
-                          command, re.IGNORECASE)
+        match = re.search('ZAXIS\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -531,10 +540,10 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     axis = np.pad(axis, ((0, 1), (0, 0)), mode='constant')
                     axis[-1, :] = np.array([l, 0.0, numbers[k]])
 
-        # boundary shape parameters
-        # RBS * sin(m*t - n*p) = RBS * sin(m*t)*cos(n*p) - RBS * cos(m*t)*sin(n*p)
-        match = re.search('RBS\(\ *'+num_form+'\ *,\ *'+num_form +
-                          '\ *\)\ *=\ *'+num_form, command, re.IGNORECASE)
+        # boundary shape
+        # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)
+        match = re.search('RBS\(\s*'+num_form+'\s*,\s*'+num_form +
+                          '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
@@ -562,9 +571,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([m, -n, -n_sgn*RBS, 0.0])
-        # RBC * cos(m*t - n*p) = RBC * cos(m*t)*cos(n*p) + RBC * sin(m*t)*sin(n*p)
-        match = re.search('RBC\(\ *'+num_form+'\ *,\ *'+num_form +
-                          '\ *\)\ *=\ *'+num_form, command, re.IGNORECASE)
+        # RBC*cos(m*t-n*p) = RBC*cos(m*t)*cos(n*p) + RBC*sin(m*t)*sin(n*p)
+        match = re.search('RBC\(\s*'+num_form+'\s*,\s*'+num_form +
+                          '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
@@ -591,9 +600,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([-m, -n, n_sgn*RBC, 0.0])
-        # ZBS * sin(m*t - n*p) = ZBS * sin(m*t)*cos(n*p) - ZBS * cos(m*t)*sin(n*p)
-        match = re.search('ZBS\(\ *'+num_form+'\ *,\ *'+num_form +
-                          '\ *\)\ *=\ *'+num_form, command, re.IGNORECASE)
+        # ZBS*sin(m*t-n*p) = ZBS*sin(m*t)*cos(n*p) - ZBS*cos(m*t)*sin(n*p)
+        match = re.search('ZBS\(\s*'+num_form+'\s*,\s*'+num_form +
+                          '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
@@ -621,9 +630,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([m, -n, 0.0, -n_sgn*ZBS])
-        # ZBC * cos(m*t - n*p) = ZBC * cos(m*t)*cos(n*p) + ZBC * sin(m*t)*sin(n*p)
-        match = re.search('ZBC\(\ *'+num_form+'\ *,\ *'+num_form +
-                          '\ *\)\ *=\ *'+num_form, command, re.IGNORECASE)
+        # ZBC*cos(m*t-n*p) = ZBC*cos(m*t)*cos(n*p) + ZBC*sin(m*t)*sin(n*p)
+        match = re.search('ZBC\(\s*'+num_form+'\s*,\s*'+num_form +
+                          '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
@@ -651,8 +660,16 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([-m, -n, 0.0, n_sgn*ZBC])
 
+        # catch multi-line inputs
+        match = re.search('=', command)
+        if not match:
+            numbers = [float(x) for x in re.findall(num_form, command)]
+            if len(numbers) > 0:
+                raise Exception('Cannot handle multi-line VMEC inputs!')
+
+    cP *= pres_scale
     desc_file.write('\n')
-    desc_file.write('! pressure and rotational transform profiles\n')
+    desc_file.write('# pressure and rotational transform profiles\n')
     for k in range(max(cP.size, cI.size)):
         if k >= cP.size:
             desc_file.write(
@@ -665,13 +682,13 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 'l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k, cP[k], cI[k]))
 
     desc_file.write('\n')
-    desc_file.write('! magnetic axis initial guess\n')
+    desc_file.write('# magnetic axis initial guess\n')
     for k in range(np.shape(axis)[0]):
         desc_file.write('n: {:3d}\taR = {:16.8E}\taZ = {:16.8E}\n'.format(
             int(axis[k, 0]), axis[k, 1], axis[k, 2]))
 
     desc_file.write('\n')
-    desc_file.write('! fixed-boundary surface\n')
+    desc_file.write('# fixed-boundary surface shape\n')
     for k in range(np.shape(bdry)[0]):
         desc_file.write('m: {:3d}\tn: {:3d}\tbR = {:16.8E}\tbZ = {:16.8E}\n'.format(
             int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]))
@@ -681,8 +698,6 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     # close files
     vmec_file.close()
     desc_file.close()
-
-    return None
 
 
 # TODO: add other fields including B, rmns, zmnc, lmnc, etc

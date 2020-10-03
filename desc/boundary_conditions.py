@@ -13,19 +13,23 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         N (int): maximum toroidal resolution
         NFP (int): number of field periods
         bdry (ndarray, shape(Nbdry,4)): array of fourier coeffs [m,n,Rcoeff, Zcoeff]
-            OR
-            array of real space coordinates, [theta,phi,R,Z]
+            or array of real space coordinates, [theta,phi,R,Z]
         in_mode (str): one of 'real', 'spectral'. Whether bdry is specified in real space or fourier.
         out_mode (str): one of 'real', 'spectral'. Whether output should be specified in real space or fourier.
         ntheta,nphi (int): number of grid points to use in poloidal and toroidal directions.
             only used if in_mode = 'spectral' and out_mode = 'real'. Defaults to 4*M and 4*N respectively
+
     Returns:
-        bdry_poloidal (ndarray): poloidal mode numbers OR poloidal angle variables
-        bdry_toroidal (ndarray): toroidal mode numbers OR toroidal angle variables
-        bdryR (ndarray): R coeffs, where bdryR[i] has m=bdry_poloidal[i], n=bdry_toroidal[i]
-            OR R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], phi = bdry_toroidal[i]
-        bdryZ (ndarray): Z coeffs, where bdryZ[i] has m=bdry_poloidal[i], n=bdry_toroidal[i]
-            OR R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], phi = bdry_toroidal[i]
+        (tuple): tuple containing:
+
+            - **bdry_poloidal** (*ndarray*): poloidal mode numbers OR poloidal angle variables.
+            - **bdry_toroidal** (*ndarray*): toroidal mode numbers OR toroidal angle variables.
+            - **bdryR** (*ndarray*): R coeffs, where bdryR[i] has m=bdry_poloidal[i], n=bdry_toroidal[i].
+              or R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], 
+              phi = bdry_toroidal[i].
+            - **bdryZ** (*ndarray*): Z coeffs, where bdryZ[i] has m=bdry_poloidal[i], n=bdry_toroidal[i].
+              or R values at bdry, where bdryR[i] is at theta = bdry_poloidal[i], 
+              phi = bdry_toroidal[i].
     """
 
     if in_mode == 'real' and out_mode == 'real':
@@ -100,8 +104,10 @@ def compute_bc_err_four_sfl(cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdry
         sample (float): sampling factor (eg, 1.0 would be no oversampling)
 
     Returns:
-        errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs
-        errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary spectral coeffs
+        (tuple): tuple containing:
+
+            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary spectral coeffs
+            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
     """
 
     # get grid for bdry eval
@@ -150,8 +156,10 @@ def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdr
         sample (float): sampling factor (eg, 1.0 would be no oversampling)
 
     Returns:
-        errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary spectral coeffs
-        errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary spectral coeffs
+        (tuple): tuple containing:
+
+            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary spectral coeffs
+            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
     """
 
     # get grid for bdry eval
@@ -208,8 +216,10 @@ def compute_bc_err_RZ(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ
         NFP (int): number of field periods   
 
     Returns:
-        errR ((ndarray, shape(N_bdry_pts,))): vector of R errors in boundary position at specified points
-        errZ ((ndarray, shape(N_bdry_pts,))): vector of Z errors in boundary position at specified points
+        (tuple): tuple containing:
+
+            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary position at specified points
+            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary position at specified points
     """
 
     # find values of R,Z at pts specified
@@ -239,7 +249,7 @@ def compute_lambda_err(cL, idx, NFP):
         NFP (int): number of field periods 
 
     Returns:
-        errL (float): sum of lambda_mn where m,n>0
+        (float): sum of lambda_mn where m,n>0
     """
 
     mn_pos = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0))[0]
@@ -259,8 +269,8 @@ def get_lambda_constraint_matrix(zern_idx, lambda_idx):
             ie an array of [m,n] for each spectral coefficient
 
     Returns:
-        C (ndarray, shape(2*N_coeffs + (2M+1)*(2N+1))): linear constraint matrix, 
-            so Cx is the error in the lambda constraint
+        (ndarray, shape(2*N_coeffs + (2M+1)*(2N+1))): linear constraint matrix, 
+          so ``np.matmul(C,x)`` is the error in the lambda constraint
     """
 
     # assumes x = [cR, cZ, cL]

@@ -309,7 +309,7 @@ def compute_B_field(cov_basis, jacobian, cI, Psi_total, nodes):
 
     Return:
         B_field (dict): dictionary of ndarray, shape(N_nodes,) of magnetic field 
-            and derivatives. Keys are of the form `B_x_y' or 'B^x_y', meaning the 
+            and derivatives. Keys are of the form 'B_x_y' or 'B^x_y', meaning the 
             covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
     """
 

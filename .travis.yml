@@ -10,7 +10,7 @@ install:
 
 # command to run tests
 script:
-  - python -m pytest --cov=./
+  - python -m pytest --cov=desc/
 
 # code coverage
 after_script:

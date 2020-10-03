@@ -56,9 +56,9 @@ if use_jax:
         """
         x = jnp.asarray(n+1)
         y = jnp.exp(jax.scipy.special.gammaln(x))
-        y = jnp.where(x<1,0,y)
+        y = jnp.where(x < 1, 0, y)
         return y
-        
+
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial
@@ -136,41 +136,43 @@ def conditional_decorator(dec, condition, *args, **kwargs):
     return decorator
 
 
-def issorted(x,axis=None,tol=1e-12):
+def issorted(x, axis=None, tol=1e-12):
     """Checks if an array is sorted, within a given tolerance
-    
+
     Checks whether x[i+1] - x[i] > tol
-    
+
     Args:
         x (array-like): input values
         axis (int): axis along which to check if the array is sorted.
             If None, the flattened array is used.
         tol (float): tolerance for determining order. Array is still considered sorted
             if the difference between adjacent values is greater than -tol
-            
+
     Returns:
         bool: whether the array is sorted
     """
     if axis is None:
         x = x.flatten()
         axis = 0
-    return np.all(np.diff(x,axis=axis)>=-tol)
+    return np.all(np.diff(x, axis=axis) >= -tol)
 
-def isalmostequal(x,axis=-1,tol=1e-12):
+
+def isalmostequal(x, axis=-1, tol=1e-12):
     """Checks if all values of an array are equal, to within a given tolerance
-    
+
     Args:
         x (array-like): input values
         axis (int): axis along which to make comparison. If None, the flattened array is used
         tol (float): tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis
-        
+
     Returns:
         bool: whether the array is equal
     """
     if axis is None:
         x = x.flatten()
-        axis=0
-    return np.all(x.std(axis=axis)*x.shape[axis]<tol)
+        axis = 0
+    return np.all(x.std(axis=axis)*x.shape[axis] < tol)
+
 
 def dot(a, b, axis):
     """Batched vector dot product
@@ -260,7 +262,7 @@ def get_needed_derivatives(mode):
     """Get array of derivatives needed for calculating objective function
 
     Args:
-        mode (str): one of 'force'`, 'accel', or 'all'
+        mode (str): one of 'force', 'accel', or 'all'
 
     Returns:
         derivs (array, shape (N,3)): combinations of derivatives of R,Z needed

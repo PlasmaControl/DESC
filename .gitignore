@@ -8,8 +8,8 @@ __pycache__/
 .coverage
 matlab/
 local/
-documentation/_build
-documentation/_static
+docs/_build
+docs/_static
 *.egg-info
 build/
 dist/

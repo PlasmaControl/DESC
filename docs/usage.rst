@@ -6,7 +6,7 @@ DESC is executed with the command line syntax
 
 .. code-block:: bash
 
-   python desc/DESC.py [-h] [-o <path/to/output_file>] [-p] [-q] [-v] [--vmec <path/to/VMEC_solution>] <path/to/input_file>
+   python -m desc [-h] [-o <path/to/output_file>] [-p] [-q] [-v] [--vmec <path/to/VMEC_solution>] <path/to/input_file>
 
 and the following arguments: 
 

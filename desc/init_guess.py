@@ -1,5 +1,5 @@
 import numpy as np
-from backend import put
+from desc.backend import put
 
 
 def get_initial_guess_scale_bdry(axis, bdry, zern_idx, NFP, mode='spectral', rcond=1e-6):

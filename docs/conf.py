@@ -16,7 +16,8 @@
 
 
 # -- Project information -----------------------------------------------------
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.append(os.path.abspath('../'))
 
@@ -167,7 +168,7 @@ html_show_copyright = True
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'gastopdoc'
+htmlhelp_basename = 'desc-docs'
 
 
 # -- Options for LaTeX output ---------------------------------------------

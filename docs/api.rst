@@ -5,69 +5,69 @@ API Documentation
 Backend
 *********
 
-.. automodule:: backend
+.. automodule:: desc.backend
     :members:
     :undoc-members:
     
 Boundary Conditions
 *********
 
-.. automodule:: boundary_conditions
+.. automodule:: desc.boundary_conditions
     :members:
     :undoc-members:
     
 Continuation
 *********
 
-.. automodule:: continuation
+.. automodule:: desc.continuation
     :members:
     :undoc-members:
     
 Field Components
 *********
 
-.. automodule:: field_components
+.. automodule:: desc.field_components
     :members:
     :undoc-members:
     
 Initial Guess
 *********
 
-.. automodule:: init_guess
+.. automodule:: desc.init_guess
     :members:
     :undoc-members:
     
 Input/Output
 *********
 
-.. automodule:: input_output
+.. automodule:: desc.input_output
     :members:
     :undoc-members:
     
 Nodes
 *********
 
-.. automodule:: nodes
+.. automodule:: desc.nodes
     :members:
     :undoc-members:
     
 Objective Functions
 *********
 
-.. automodule:: objective_funs
+.. automodule:: desc.objective_funs
     :members:
     :undoc-members:
     
 Plotting
 *********
 
-.. automodule:: plotting
+.. automodule:: desc.plotting
     :members:
     :undoc-members:
     
 Zernike
 *********
 
-.. automodule:: zernike
+.. automodule:: desc.zernike
     :members:
     :undoc-members:

@@ -2,12 +2,13 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from nodes import get_nodes_grid
-from zernike import ZernikeTransform
-from backend import get_needed_derivatives, iotafun, presfun
-from input_output import vmec_interpolate
-from field_components import compute_coordinate_derivatives, compute_covariant_basis, compute_contravariant_basis, compute_jacobian
-from field_components import compute_B_field, compute_J_field, compute_F_magnitude
+from desc.nodes import get_nodes_grid
+from desc.zernike import ZernikeTransform
+from desc.backend import get_needed_derivatives, iotafun, presfun
+from desc.input_output import vmec_interpolate
+from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
+from desc.field_components import compute_contravariant_basis, compute_jacobian
+from desc.field_components import compute_B_field, compute_J_field, compute_F_magnitude
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
                      (0.8359, 0.3682, 0.0000),  # vermillion

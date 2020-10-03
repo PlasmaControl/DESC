@@ -2,13 +2,14 @@ import numpy as np
 import scipy.optimize
 import time
 
-from backend import jnp, jit, use_jax
-from backend import get_needed_derivatives, unpack_x, jacfwd
-from zernike import ZernikeTransform, get_zern_basis_idx_dense, get_double_four_basis_idx_dense, symmetric_x
-from init_guess import get_initial_guess_scale_bdry
-from boundary_conditions import format_bdry
-from objective_funs import get_equil_obj_fun
-from nodes import get_nodes_pattern, get_nodes_surf
+from desc.backend import jnp, jit, use_jax
+from desc.backend import get_needed_derivatives, unpack_x, jacfwd
+from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
+from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
+from desc.init_guess import get_initial_guess_scale_bdry
+from desc.boundary_conditions import format_bdry
+from desc.objective_funs import get_equil_obj_fun
+from desc.nodes import get_nodes_pattern, get_nodes_surf
 
 
 def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
@@ -146,7 +147,7 @@ def solve_eq_continuation(inputs):
 
         if verbose > 0:
             print('================')
-            print('Iteration {}/{}'.format(ii+1, arr_len))
+            print('Step {}/{}'.format(ii+1, arr_len))
             print('================')
             print('Spectral resolution (M,N)=({},{})'.format(M[ii], N[ii]))
             print('Node resolution (M,N)=({},{})'.format(
@@ -164,8 +165,9 @@ def solve_eq_continuation(inputs):
         # initial solution
         if ii == 0:
             # interpolator
+            t0 = time.perf_counter()
             if verbose > 0:
-                print('Computing Fourier-Zernike basis')
+                print('Precomputing Fourier-Zernike basis')
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
             derivatives = get_needed_derivatives('all')
@@ -177,7 +179,9 @@ def solve_eq_continuation(inputs):
             bdry_nodes, _ = get_nodes_surf(
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
             bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [0, 0, 0])
-
+            t1 = time.perf_counter()
+            if verbose > 0:
+                print("Precomputation time = {} s".format(t1-t0))
             # format boundary shape
             bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                 M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
@@ -189,6 +193,7 @@ def solve_eq_continuation(inputs):
                 sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
 
             # initial guess
+            t0 = time.perf_counter()
             if verbose > 0:
                 print('Computing initial guess')
             cR_init, cZ_init = get_initial_guess_scale_bdry(
@@ -197,6 +202,9 @@ def solve_eq_continuation(inputs):
             x_init = jnp.concatenate([cR_init, cZ_init, cL_init])
             x_init = jnp.matmul(sym_mat.T, x_init)
             x = x_init
+            t1 = time.perf_counter()
+            if verbose > 0:
+                print("Initial guess time = {} s".format(t1-t0))
             equil_init = {
                 'cR': cR_init,
                 'cZ': cZ_init,
@@ -222,6 +230,10 @@ def solve_eq_continuation(inputs):
         else:
             # spectral resolution
             if M[ii] != M[ii-1] or N[ii] != N[ii-1]:
+                t0 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding spectral resolution from (M,N) = ({},{}) to ({},{})".format(
+                        M[ii-1], N[ii-1], M[ii], N[ii]))
                 zern_idx_old = zern_idx
                 lambda_idx_old = lambda_idx
                 zern_idx = get_zern_basis_idx_dense(M[ii], N[ii])
@@ -236,15 +248,25 @@ def solve_eq_continuation(inputs):
                 else:
                     sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
                 x = jnp.matmul(sym_mat.T, x)
+                t1 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding spectral resolution time = {} s".format(t1-t0))
 
             # collocation nodes
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
+                t0 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+                        Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 nodes, volumes = get_nodes_pattern(
                     Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
                 bdry_nodes, _ = get_nodes_surf(
                     Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
                 zernt.expand_nodes(nodes, volumes)
                 bdry_zernt.expand_nodes(bdry_nodes)
+                t1 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding node resolution time = {} s".format(t1-t0))
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
@@ -296,9 +318,9 @@ def solve_eq_continuation(inputs):
 
         if verbose:
             print('Avg time per step: {} s'.format((t1-t0)/out['nfev']))
-            print('Start of Iteration {}:'.format(ii+1))
+            print('Start of Step {}:'.format(ii+1))
             callback(x_init, *args)
-            print('End of Iteration {}:'.format(ii+1))
+            print('End of Step {}:'.format(ii+1))
             callback(x, *args)
 
         # TODO: checkpoint saving after each iteration

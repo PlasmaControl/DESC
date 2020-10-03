@@ -1,4 +1,4 @@
-from backend import jnp, put, cross, dot, presfun, iotafun
+from desc.backend import jnp, put, cross, dot, presfun, iotafun
 
 
 def compute_coordinate_derivatives(cR, cZ, zernt, zeta_ratio=1.0):

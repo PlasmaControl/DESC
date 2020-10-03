@@ -23,7 +23,7 @@ Quick Start
 For instructions on installing DESC and its dependencies, see Installation_. 
 DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files. 
 Refer to Inputs_ for documentation on how to format the input file. 
-The code is run using the syntax :bash:`python desc/DESC.py <path/to/input_file>` and the full list of command line options are given in Usage_. 
+The code is run using the syntax :bash:`python -m desc <path/to/input_file>` and the full list of command line options are given in Usage_. 
 The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
@@ -34,9 +34,9 @@ The equilibrium solution is output in both an ASCII text file and a HDF5 binary 
 Repository Contents
 ===================
 
-- desc_ contains the source code including the main script ``DESC.py`` and supplemental files. Refer to the API_ documentation for details on all of the available functions. 
+- desc_ contains the source code including the main script and supplemental files. Refer to the API_ documentation for details on all of the available functions. 
 - docs_ contains the documentation files. 
-- examples contains example input files along with corresponding VMEC solutions. 
+- examples_ contains example input files along with corresponding VMEC solutions. 
 - tests_ contains routines for automatic testing. 
 
 .. _desc: https://github.com/ddudt/DESC/tree/master/desc

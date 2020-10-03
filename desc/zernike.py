@@ -1,8 +1,8 @@
 import numpy as np
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
-from backend import issorted, isalmostequal
 import warnings
+from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
+from desc.backend import issorted, isalmostequal
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -425,33 +425,35 @@ class ZernikeTransform():
 
     """
 
-    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0],volumes=None, method='direct',pinv_rcond=1e-6):
+    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='direct', pinv_rcond=1e-6):
 
         # array of which l,m,n is at which column of the interpolation matrix
         self.zern_idx = zern_idx
         # array of which r,v,z is at which row of the interpolation matrix
         self.nodes = nodes
+        self.axn = np.where(nodes[0] == 0)[0]
         self.NFP = NFP
         self.derivatives = np.atleast_2d(derivatives)
         self.volumes = volumes if volumes is not None else np.ones_like(nodes)
         self.pinv_rcond = pinv_rcond
         self.matrices = {i: {j: {k: {}
-                                 for k in range(4)} for j in range(4)} for i in range(4)}      
+                                 for k in range(4)} for j in range(4)} for i in range(4)}
 
-        if method in ['direct','fft']:
-            self.method = method  
+        if method in ['direct', 'fft']:
+            self.method = method
         else:
-            raise ValueError("Unknown Zernike Transform method '{}'".format(method))
+            raise ValueError(
+                "Unknown Zernike Transform method '{}'".format(method))
         if self.method == 'fft':
-            self._check_inputs_fft(nodes,zern_idx)
+            self._check_inputs_fft(nodes, zern_idx)
         self._build()
 
     def _build(self):
         """helper function to build matrices"""
         A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                  lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
-        self.pinv = jnp.linalg.pinv(A,rcond=self.pinv_rcond)
-        
+        self.pinv = jnp.linalg.pinv(A, rcond=self.pinv_rcond)
+
         if self.method == 'direct':
             for d in self.derivatives:
                 dr = d[0]
@@ -465,43 +467,53 @@ class ZernikeTransform():
                 dv = d[1]
                 dz = 0
                 self.matrices[dr][dv][dz] = jnp.hstack([zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                                 lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
+                                                             lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
 
-    def _check_inputs_fft(self,nodes, zern_idx):
+    def _check_inputs_fft(self, nodes, zern_idx):
         """helper function to check that inputs are formatted correctly for fft method"""
-        zeta_vals, zeta_cts = np.unique(nodes[2],return_counts=True)
+        zeta_vals, zeta_cts = np.unique(nodes[2], return_counts=True)
         if not issorted(nodes[2]):
-            raise ValueError("fft method requires nodes to be sorted by toroidal angle in ascending order")
-        if not isalmostequal(zeta_cts): 
-            raise ValueError("fft method requires the same number of nodes on each zeta plane")
+            raise ValueError(
+                "fft method requires nodes to be sorted by toroidal angle in ascending order")
+        if not isalmostequal(zeta_cts):
+            raise ValueError(
+                "fft method requires the same number of nodes on each zeta plane")
         if not np.diff(zeta_vals).std() < 1e-14:
-            raise ValueError("fft method requires nodes to be equally spaced in zeta")
-        if not isalmostequal(nodes[:2].reshape((zeta_cts[0],2,-1),order='F')):
-            raise ValueError("fft method requires that node pattern is the same on each zeta plane")
+            raise ValueError(
+                "fft method requires nodes to be equally spaced in zeta")
+        if not isalmostequal(nodes[:2].reshape((zeta_cts[0], 2, -1), order='F')):
+            raise ValueError(
+                "fft method requires that node pattern is the same on each zeta plane")
         if not abs((zeta_vals[-1] + zeta_vals[1])*self.NFP - 2*np.pi) < 1e-14:
-            raise ValueError("fft method requires that nodes complete 1 full field period")
-        
-        id2 = np.lexsort((zern_idx[:,1],zern_idx[:,0],zern_idx[:,2]))
+            raise ValueError(
+                "fft method requires that nodes complete 1 full field period")
+
+        id2 = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
         if not issorted(id2):
-            raise ValueError("fft method requires zernike indices to be sorted by toroidal mode number")
-        n_vals, n_cts = np.unique(zern_idx[:,2],return_counts=True)
+            raise ValueError(
+                "fft method requires zernike indices to be sorted by toroidal mode number")
+        n_vals, n_cts = np.unique(zern_idx[:, 2], return_counts=True)
         if not isalmostequal(n_cts):
-            raise ValueError("fft method requires that there are the same number of poloidal modes for each toroidal mode")
+            raise ValueError(
+                "fft method requires that there are the same number of poloidal modes for each toroidal mode")
         if not np.diff(n_vals).std() < 1e-14:
-            raise ValueError("fft method requires the toroidal modes are equally spaced in n")
-        if not isalmostequal(zern_idx[:,0].reshape((n_cts[0],-1),order='F')) \
-            or not isalmostequal(zern_idx[:,1].reshape((n_cts[0],-1),order='F')):
-            raise ValueError("fft method requires that the poloidal modes are the same for each toroidal mode")
-        
+            raise ValueError(
+                "fft method requires the toroidal modes are equally spaced in n")
+        if not isalmostequal(zern_idx[:, 0].reshape((n_cts[0], -1), order='F')) \
+                or not isalmostequal(zern_idx[:, 1].reshape((n_cts[0], -1), order='F')):
+            raise ValueError(
+                "fft method requires that the poloidal modes are the same for each toroidal mode")
+
         if not len(zeta_vals) >= len(n_vals):
-            raise ValueError("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}".format(len(zeta_vals),len(n_vals)))
-        
-        self.numFour = len(n_vals) # number of toroidal modes
-        self.numFournodes = len(zeta_vals) # number of toroidal nodes
+            raise ValueError("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}".format(
+                len(zeta_vals), len(n_vals)))
+
+        self.numFour = len(n_vals)  # number of toroidal modes
+        self.numFournodes = len(zeta_vals)  # number of toroidal nodes
         self.zeta_pad = (self.numFournodes - self.numFour)//2
-        self.pol_zern_idx = zern_idx[:len(zern_idx)//self.numFour,:2]
-        self.pol_nodes = nodes[:2,:len(nodes[0])//self.numFournodes]
-        
+        self.pol_zern_idx = zern_idx[:len(zern_idx)//self.numFour, :2]
+        self.pol_nodes = nodes[:2, :len(nodes[0])//self.numFournodes]
+
     def expand_nodes(self, new_nodes):
         """Change the real space resolution by adding new nodes without full recompute
 
@@ -520,7 +532,8 @@ class ZernikeTransform():
             self.nodes = self.nodes[:, old_in_new]
 
             # then add new nodes
-            new_not_in_old = ~(new_nodes[:, None] == self.nodes.T).all(-1).any(-1)
+            new_not_in_old = ~(new_nodes[:, None]
+                               == self.nodes.T).all(-1).any(-1)
             nodes_to_add = new_nodes[new_not_in_old]
             if len(nodes_to_add) > 0:
                 for d in self.derivatives:
@@ -540,7 +553,7 @@ class ZernikeTransform():
             self.nodes = self.nodes[:, permute_idx]
 
         elif self.method == 'fft':
-            self._check_inputs_fft(new_nodes,self.zern_idx)
+            self._check_inputs_fft(new_nodes, self.zern_idx)
             self.nodes = new_nodes
             self._build()
 
@@ -556,7 +569,8 @@ class ZernikeTransform():
         if self.method == 'direct':
             zern_idx_new = jnp.atleast_2d(zern_idx_new)
             # first remove modes that are no longer needed
-            old_in_new = (self.zern_idx[:, None] == zern_idx_new).all(-1).any(-1)
+            old_in_new = (self.zern_idx[:, None] ==
+                          zern_idx_new).all(-1).any(-1)
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
                                                                 ][d[1]][d[2]][:, old_in_new]
@@ -584,10 +598,10 @@ class ZernikeTransform():
             self.zern_idx = self.zern_idx[permute_idx]
 
         elif self.method == 'fft':
-            self._check_inputs_fft(self.nodes,zern_idx_new)
+            self._check_inputs_fft(self.nodes, zern_idx_new)
             self.zern_idx = zern_idx_new
             self._build()
-            
+
     def expand_derivatives(self, new_derivatives):
         """Computes new derivative matrices
 
@@ -614,8 +628,8 @@ class ZernikeTransform():
                 dv = d[1]
                 dz = 0
                 self.matrices[dr][dv][dz] = jnp.hstack([zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                                 lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
-            
+                                                             lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
+
         self.derivatives = jnp.vstack([self.derivatives, derivs_to_add])
 
     def transform(self, c, dr, dv, dz):
@@ -632,29 +646,32 @@ class ZernikeTransform():
         """
         if self.method == 'direct':
             return self._matmul(self.matrices[dr][dv][dz], c)
-        
+
         elif self.method == 'fft':
-            c_pad = np.pad(c.reshape((-1,self.numFour),order='F'),((0,0),(self.zeta_pad,self.zeta_pad)))
-            dk = self.NFP*np.arange(-(self.numFournodes//2),(self.numFournodes//2)+1).reshape((1,-1))
-            c_pad = c_pad[:,::(-1)**dz]*dk**dz * (-1)**(dz>1)
+            c_pad = np.pad(c.reshape((-1, self.numFour), order='F'),
+                           ((0, 0), (self.zeta_pad, self.zeta_pad)))
+            dk = self.NFP*np.arange(-(self.numFournodes//2),
+                                    (self.numFournodes//2)+1).reshape((1, -1))
+            c_pad = c_pad[:, ::(-1)**dz]*dk**dz * (-1)**(dz > 1)
             cfft = self._four2phys(c_pad)
-            return self._matmul(self.matrices[dr][dv][0],cfft).flatten(order='F')
-        
+            return self._matmul(self.matrices[dr][dv][0], cfft).flatten(order='F')
+
     @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
-    def _four2phys(self,c):
+    def _four2phys(self, c):
         """helper function to do ffts"""
-        K,L = c.shape
+        K, L = c.shape
         N = (L-1)//2
         # pad with negative wavenumbers
-        a = c[:,N:]
-        b = c[:,:N][:,::-1]
-        a = jnp.hstack([a[:,0][:,jnp.newaxis],    a[:,1:]/2,   a[:,1:][:,::-1]/2])
-        b = jnp.hstack([jnp.zeros((K,1)),-b[:,0:]/2, b[:,::-1]/2])
+        a = c[:, N:]
+        b = c[:, :N][:, ::-1]
+        a = jnp.hstack([a[:, 0][:, jnp.newaxis],
+                        a[:, 1:]/2,   a[:, 1:][:, ::-1]/2])
+        b = jnp.hstack([jnp.zeros((K, 1)), -b[:, 0:]/2, b[:, ::-1]/2])
         # inverse Fourier transform
         a = a*L
         b = b*L
         c = a + 1j*b
-        x = jnp.real(jnp.fft.ifft(c,None,1))
+        x = jnp.real(jnp.fft.ifft(c, None, 1))
         return x
 
     @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
@@ -672,7 +689,8 @@ class ZernikeTransform():
         Returns:
             c (ndarray, shape(N_coeffs,)): spectral coefficients in Fourier-Zernike basis
         """
-        return jnp.matmul(self.pinv,x)
+        return jnp.matmul(self.pinv, x)
+
 
 def get_zern_basis_idx_dense(M, N, indexing='fringe'):
     """Gets mode numbers for dense spectral representation in zernike basis.
@@ -699,9 +717,11 @@ def get_zern_basis_idx_dense(M, N, indexing='fringe'):
         num_lm_modes = int(M*(M+1)/2)
 
     num_four = 2*N+1
-    zern_idx = np.array([(*op(i), n-N) for i in range(num_lm_modes) for n in range(num_four)])
-    sort_idx= np.lexsort((zern_idx[:,1],zern_idx[:,0],zern_idx[:,2]))
+    zern_idx = np.array([(*op(i), n-N)
+                         for i in range(num_lm_modes) for n in range(num_four)])
+    sort_idx = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
     return zern_idx[sort_idx]
+
 
 def get_double_four_basis_idx_dense(M, N):
     """Gets mode numbers for a dense spectral representation in double fourier basis.

@@ -1,8 +1,8 @@
 import unittest
 import numpy as np
-from zernike import get_zern_basis_idx_dense, ZernikeTransform
-from backend import get_needed_derivatives
-from nodes import get_nodes_pattern
+from desc.zernike import get_zern_basis_idx_dense, ZernikeTransform
+from desc.backend import get_needed_derivatives
+from desc.nodes import get_nodes_pattern
 
 
 class TestZernikeTransform(unittest.TestCase):

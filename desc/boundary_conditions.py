@@ -1,7 +1,7 @@
 import numpy as np
 import functools
-from backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put
-from zernike import fourzern, double_fourier_basis, eval_double_fourier
+from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put
+from desc.zernike import fourzern, double_fourier_basis, eval_double_fourier
 
 
 def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):

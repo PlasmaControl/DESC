@@ -1,8 +1,11 @@
 import numpy as np
-from field_components import compute_coordinate_derivatives, compute_covariant_basis, compute_contravariant_basis, compute_jacobian, compute_B_field, compute_J_field, compute_B_magnitude
-from boundary_conditions import compute_bc_err_RZ, compute_bc_err_four, compute_bc_err_four_sfl, compute_lambda_err
-from zernike import symmetric_x, double_fourier_basis
-from backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
+from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
+from desc.field_components import compute_contravariant_basis, compute_jacobian
+from desc.field_components import compute_B_field, compute_J_field, compute_B_magnitude
+from desc.boundary_conditions import compute_bc_err_RZ, compute_bc_err_four
+from desc.boundary_conditions import compute_bc_err_four_sfl, compute_lambda_err
+from desc.zernike import symmetric_x, double_fourier_basis
+from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
 
 
 def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor):

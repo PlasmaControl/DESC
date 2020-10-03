@@ -4,7 +4,6 @@ import h5py
 import numpy as np
 from datetime import datetime
 from netCDF4 import Dataset
-from backend import sign
 
 
 def read_input(fname):
@@ -44,7 +43,7 @@ def read_input(fname):
         'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
     }
 
-    file = open(fname,'r')
+    file = open(fname, 'r')
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
 
     for line in file:
@@ -54,7 +53,7 @@ def read_input(fname):
         if isVMEC:
             print('Converting VMEC input to DESC input')
             fname_desc = fname + '_desc'
-            vmec_to_desc_input(fname,fname_desc)
+            vmec_to_desc_input(fname, fname_desc)
             print('Generated DESC input file {}:'.format(fname_desc))
             return read_input(fname_desc)
 
@@ -85,7 +84,7 @@ def read_input(fname):
         match = re.search('Psi_lcfs', argument, re.IGNORECASE)
         if match:
             inputs['Psi_lcfs'] = numbers[0]
-        
+
         # spectral resolution
         match = re.search('Mpol', argument, re.IGNORECASE)
         if match:
@@ -99,7 +98,7 @@ def read_input(fname):
         match = re.search('Nnodes', argument, re.IGNORECASE)
         if match:
             inputs['Nnodes'] = np.array(numbers).astype(int)
-        
+
         # continuation parameters
         match = re.search('bdry_ratio', argument, re.IGNORECASE)
         if match:
@@ -116,7 +115,7 @@ def read_input(fname):
         match = re.search('pert_order', argument, re.IGNORECASE)
         if match:
             inputs['pert_order'] = np.array(numbers).astype(int)
-        
+
         # solver tolerances
         match = re.search('ftol', argument, re.IGNORECASE)
         if match:
@@ -131,7 +130,7 @@ def read_input(fname):
         if match:
             inputs['nfev'] = np.array(
                 [None if i == 0 else i for i in numbers]).astype(int)
-        
+
         # solver methods
         match = re.search('errr_mode', argument, re.IGNORECASE)
         if match:
@@ -198,7 +197,7 @@ def read_input(fname):
             bR = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
+            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(
@@ -211,7 +210,7 @@ def read_input(fname):
             bZ = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
             bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m,bdry_n)]
+            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
             if bdry_idx.size == 0:
                 bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                 inputs['bdry'] = np.pad(
@@ -225,9 +224,9 @@ def read_input(fname):
         raise Exception('Mpol is not assigned')
     if np.sum(inputs['bdry']) == 0:
         raise Exception('Fixed-boundary surface is not assigned')
-    arrs = ['Mpol','Ntor','Mnodes','Nnodes',
-            'bdry_ratio','pres_ratio','zeta_ratio','errr_ratio','pert_order',
-            'ftol','xtol','gtol','nfev']
+    arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes',
+            'bdry_ratio', 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
+            'ftol', 'xtol', 'gtol', 'nfev']
     arr_len = 0
     for a in arrs:
         arr_len = max(arr_len, len(inputs[a]))
@@ -235,7 +234,8 @@ def read_input(fname):
         if inputs[a].size == 1:
             inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
         elif inputs[a].size != arr_len:
-            raise Exception('Continuation parameter arrays are not proper lengths')
+            raise Exception(
+                'Continuation parameter arrays are not proper lengths')
 
     # unsupplied values
     if np.sum(inputs['Mnodes']) == 0:
@@ -417,7 +417,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     date = now.strftime('%m/%d/%Y')
     time = now.strftime('%H:%M:%S')
     desc_file.write('# This DESC input file was auto generated from the VMEC input file\n# {}\n# on {} at {}.\n\n'
-                    .format(vmec_fname,date,time))
+                    .format(vmec_fname, date, time))
 
     num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
     Ntor = 99
@@ -493,7 +493,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 cP[l] = numbers[k]
 
         # rotational transform
-        match = re.search('NCURR\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+        match = re.search('NCURR\s*=(\s*'+num_form+')*',
+                          command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 0:
@@ -511,7 +512,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 cI[l] = numbers[k]
 
         # magnetic axis
-        match = re.search('RAXIS\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+        match = re.search('RAXIS\s*=(\s*'+num_form+')*',
+                          command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -525,7 +527,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     axis = np.pad(axis, ((0, 1), (0, 0)), mode='constant')
                     axis[-1, :] = np.array([l, numbers[k], 0.0])
-        match = re.search('ZAXIS\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+        match = re.search('ZAXIS\s*=(\s*'+num_form+')*',
+                          command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -548,9 +551,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
             m = int(numbers[1])
-            n_sgn = sign(np.array([n]))[0]
+            n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
-            if sign(m) < 0:
+            if np.sign(m) < 0:
                 warnings.warn('m is negative!')
             RBS = numbers[2]
             if m != 0:
@@ -578,9 +581,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
             m = int(numbers[1])
-            n_sgn = sign(np.array([n]))[0]
+            n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
-            if sign(m) < 0:
+            if np.sign(m) < 0:
                 warnings.warn('m is negative!')
             RBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]
@@ -607,9 +610,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
             m = int(numbers[1])
-            n_sgn = sign(np.array([n]))[0]
+            n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
-            if sign(m) < 0:
+            if np.sign(m) < 0:
                 warnings.warn('m is negative!')
             ZBS = numbers[2]
             if m != 0:
@@ -637,9 +640,9 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             n = int(numbers[0])
             m = int(numbers[1])
-            n_sgn = sign(np.array([n]))[0]
+            n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
-            if sign(m) < 0:
+            if np.sign(m) < 0:
                 warnings.warn('m is negative!')
             ZBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]

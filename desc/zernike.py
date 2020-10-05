@@ -425,7 +425,7 @@ class ZernikeTransform():
 
     """
 
-    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='direct', pinv_rcond=1e-6):
+    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='fft', pinv_rcond=1e-6):
 
         # array of which l,m,n is at which column of the interpolation matrix
         self.zern_idx = zern_idx
@@ -448,11 +448,14 @@ class ZernikeTransform():
             self._check_inputs_fft(nodes, zern_idx)
         self._build()
 
-    def _build(self):
-        """helper function to build matrices"""
+    def _build_pinv(self):
         A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                  lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
         self.pinv = jnp.linalg.pinv(A, rcond=self.pinv_rcond)
+
+    def _build(self):
+        """helper function to build matrices"""
+        self._build_pinv()
 
         if self.method == 'direct':
             for d in self.derivatives:
@@ -478,15 +481,16 @@ class ZernikeTransform():
         if not isalmostequal(zeta_cts):
             raise ValueError(
                 "fft method requires the same number of nodes on each zeta plane")
-        if not np.diff(zeta_vals).std() < 1e-14:
-            raise ValueError(
-                "fft method requires nodes to be equally spaced in zeta")
-        if not isalmostequal(nodes[:2].reshape((zeta_cts[0], 2, -1), order='F')):
-            raise ValueError(
-                "fft method requires that node pattern is the same on each zeta plane")
-        if not abs((zeta_vals[-1] + zeta_vals[1])*self.NFP - 2*np.pi) < 1e-14:
-            raise ValueError(
-                "fft method requires that nodes complete 1 full field period")
+        if len(zeta_vals) > 1:
+            if not np.diff(zeta_vals).std() < 1e-14:
+                raise ValueError(
+                    "fft method requires nodes to be equally spaced in zeta")
+            if not isalmostequal(nodes[:2].reshape((zeta_cts[0], 2, -1), order='F')):
+                raise ValueError(
+                    "fft method requires that node pattern is the same on each zeta plane")
+            if not abs((zeta_vals[-1] + zeta_vals[1])*self.NFP - 2*np.pi) < 1e-14:
+                raise ValueError(
+                    "fft method requires that nodes complete 1 full field period")
 
         id2 = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
         if not issorted(id2):
@@ -496,13 +500,14 @@ class ZernikeTransform():
         if not isalmostequal(n_cts):
             raise ValueError(
                 "fft method requires that there are the same number of poloidal modes for each toroidal mode")
-        if not np.diff(n_vals).std() < 1e-14:
-            raise ValueError(
-                "fft method requires the toroidal modes are equally spaced in n")
-        if not isalmostequal(zern_idx[:, 0].reshape((n_cts[0], -1), order='F')) \
-                or not isalmostequal(zern_idx[:, 1].reshape((n_cts[0], -1), order='F')):
-            raise ValueError(
-                "fft method requires that the poloidal modes are the same for each toroidal mode")
+        if len(n_vals) > 1:
+            if not np.diff(n_vals).std() < 1e-14:
+                raise ValueError(
+                    "fft method requires the toroidal modes are equally spaced in n")
+            if not isalmostequal(zern_idx[:, 0].reshape((n_cts[0], -1), order='F')) \
+               or not isalmostequal(zern_idx[:, 1].reshape((n_cts[0], -1), order='F')):
+                raise ValueError(
+                    "fft method requires that the poloidal modes are the same for each toroidal mode")
 
         if not len(zeta_vals) >= len(n_vals):
             raise ValueError("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}".format(
@@ -514,14 +519,18 @@ class ZernikeTransform():
         self.pol_zern_idx = zern_idx[:len(zern_idx)//self.numFour, :2]
         self.pol_nodes = nodes[:2, :len(nodes[0])//self.numFournodes]
 
-    def expand_nodes(self, new_nodes):
+    def expand_nodes(self, new_nodes, new_volumes=None):
         """Change the real space resolution by adding new nodes without full recompute
 
         Only computes basis at spatial nodes that aren't already in the basis
 
         Args:
-            new_nodes (ndarray, side(3,N)): new node locations. each column is the location of one node (rho,theta,zeta)
+            new_nodes (ndarray, size(3,N)): new node locations. each column is the location of one node (rho,theta,zeta)
+            new_volumes (ndarray, size(3,N)): volume elements around each new node (dr,dtheta,dzeta)
         """
+        if new_volumes is None:
+            new_volumes = np.ones_like(new_nodes)
+
         if self.method == 'direct':
             new_nodes = jnp.atleast_2d(new_nodes).T
             # first remove nodes that are no longer needed
@@ -551,10 +560,15 @@ class ZernikeTransform():
                 self.matrices[d[0]][d[1]][d[2]
                                           ] = self.matrices[d[0]][d[1]][d[2]][permute_idx]
             self.nodes = self.nodes[:, permute_idx]
+            self.volumes = new_volumes[:, permute_idx]
+            self.axn = np.where(self.nodes[0] == 0)[0]
+            self._build_pinv()
 
         elif self.method == 'fft':
             self._check_inputs_fft(new_nodes, self.zern_idx)
             self.nodes = new_nodes
+            self.axn = np.where(self.nodes[0] == 0)[0]
+            self.volumes = new_volumes
             self._build()
 
     def expand_spectral_resolution(self, zern_idx_new):
@@ -596,6 +610,7 @@ class ZernikeTransform():
                 self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
                                                                 ][d[1]][d[2]][:, permute_idx]
             self.zern_idx = self.zern_idx[permute_idx]
+            self._build_pinv()
 
         elif self.method == 'fft':
             self._check_inputs_fft(self.nodes, zern_idx_new)
@@ -648,10 +663,10 @@ class ZernikeTransform():
             return self._matmul(self.matrices[dr][dv][dz], c)
 
         elif self.method == 'fft':
-            c_pad = np.pad(c.reshape((-1, self.numFour), order='F'),
-                           ((0, 0), (self.zeta_pad, self.zeta_pad)))
-            dk = self.NFP*np.arange(-(self.numFournodes//2),
-                                    (self.numFournodes//2)+1).reshape((1, -1))
+            c_pad = jnp.pad(c.reshape((-1, self.numFour), order='F'),
+                            ((0, 0), (self.zeta_pad, self.zeta_pad)))
+            dk = self.NFP*jnp.arange(-(self.numFournodes//2),
+                                     (self.numFournodes//2)+1).reshape((1, -1))
             c_pad = c_pad[:, ::(-1)**dz]*dk**dz * (-1)**(dz > 1)
             cfft = self._four2phys(c_pad)
             return self._matmul(self.matrices[dr][dv][0], cfft).flatten(order='F')

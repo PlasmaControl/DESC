@@ -178,7 +178,8 @@ def solve_eq_continuation(inputs):
             # bdry interpolator
             bdry_nodes, _ = get_nodes_surf(
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
-            bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [0, 0, 0])
+            bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
+                                          0, 0, 0], method='direct')
             t1 = time.perf_counter()
             if verbose > 0:
                 print("Precomputation time = {} s".format(t1-t0))
@@ -228,6 +229,22 @@ def solve_eq_continuation(inputs):
 
         # continuing from prev soln
         else:
+            # collocation nodes
+            if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
+                t0 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+                        Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
+                nodes, volumes = get_nodes_pattern(
+                    Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
+                bdry_nodes, _ = get_nodes_surf(
+                    Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
+                zernt.expand_nodes(nodes, volumes)
+                bdry_zernt.expand_nodes(bdry_nodes)
+                t1 = time.perf_counter()
+                if verbose > 0:
+                    print("Expanding node resolution time = {} s".format(t1-t0))
+
             # spectral resolution
             if M[ii] != M[ii-1] or N[ii] != N[ii-1]:
                 t0 = time.perf_counter()
@@ -252,21 +269,6 @@ def solve_eq_continuation(inputs):
                 if verbose > 0:
                     print("Expanding spectral resolution time = {} s".format(t1-t0))
 
-            # collocation nodes
-            if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
-                t0 = time.perf_counter()
-                if verbose > 0:
-                    print("Expanding node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
-                        Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
-                nodes, volumes = get_nodes_pattern(
-                    Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
-                bdry_nodes, _ = get_nodes_surf(
-                    Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
-                zernt.expand_nodes(nodes, volumes)
-                bdry_zernt.expand_nodes(bdry_nodes)
-                t1 = time.perf_counter()
-                if verbose > 0:
-                    print("Expanding node resolution time = {} s".format(t1-t0))
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
@@ -275,8 +277,7 @@ def solve_eq_continuation(inputs):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, nodes, volumes)
+                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 

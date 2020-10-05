@@ -425,7 +425,7 @@ class ZernikeTransform():
 
     """
 
-    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='fft', pinv_rcond=1e-6):
+    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='direct', pinv_rcond=1e-6):
 
         # array of which l,m,n is at which column of the interpolation matrix
         self.zern_idx = zern_idx

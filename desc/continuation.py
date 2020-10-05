@@ -192,7 +192,7 @@ def solve_eq_continuation(inputs):
             if stell_sym:
                 sym_mat = symmetric_x(zern_idx, lambda_idx)
             else:
-                sym_mat = np.eye(2*zern_idx.shape()[0] + lambda_idx.shape()[0])
+                sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
 
             # initial guess
             t0 = time.perf_counter()
@@ -261,10 +261,11 @@ def solve_eq_continuation(inputs):
 
                 x, zernt, bdry_zernt = expand_resolution(jnp.matmul(sym_mat, x), zernt, bdry_zernt,
                                                          zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
+                # stellarator symmetry
                 if stell_sym:
                     sym_mat = symmetric_x(zern_idx, lambda_idx)
                 else:
-                    sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
+                    sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
                 x = jnp.matmul(sym_mat.T, x)
                 t1 = time.perf_counter()
                 if verbose > 0:

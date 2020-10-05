@@ -30,10 +30,11 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         callback (function): function that prints equilibrium errors
     """
 
+    # stellarator symmetry
     if stell_sym:
-        sym_mat = symmetric_x(M, N)
+        sym_mat = symmetric_x(zern_idx, lambda_idx)
     else:
-        sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
+        sym_mat = np.eye(2*zern_idx.shape()[0] + lambda_idx.shape()[0])
 
     if errr_mode == 'force':
         equil_fun = compute_force_error_nodes
@@ -107,10 +108,11 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernt, zern_idx, lambda_idx, modes_p
         qsym_obj (function): quasisymmetry objective function
     """
 
+    # stellarator symmetry
     if stell_sym:
-        sym_mat = symmetric_x(M, N)
+        sym_mat = symmetric_x(zern_idx, lambda_idx)
     else:
-        sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
+        sym_mat = np.eye(2*zern_idx.shape()[0] + lambda_idx.shape()[0])
 
     def qisym_obj(x, cI, Psi_total):
 

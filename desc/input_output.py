@@ -36,6 +36,7 @@ def read_input(fname):
         'nfev': np.atleast_1d(None),
         'errr_mode': 'force',
         'bdry_mode': 'spectral',
+        'zern_mode': 'fringe',
         'node_mode': 'cheb1',
         'cP': np.atleast_1d(0.0),
         'cI': np.atleast_1d(0.0),
@@ -44,12 +45,12 @@ def read_input(fname):
     }
 
     file = open(fname, 'r')
-    num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
+    num_form = r'-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
 
     for line in file:
 
         # check if VMEC input file format
-        isVMEC = re.search('&INDATA', line)
+        isVMEC = re.search(r'&INDATA', line)
         if isVMEC:
             print('Converting VMEC input to DESC input')
             fname_desc = fname + '_desc'
@@ -58,12 +59,12 @@ def read_input(fname):
             return read_input(fname_desc)
 
         # remove comments
-        match = re.search('[!#]', line)
+        match = re.search(r'[!#]', line)
         if match:
             comment = match.start()
         else:
             comment = len(line)
-        match = re.search('=', line)
+        match = re.search(r'=', line)
         if match:
             equals = match.start()
         else:
@@ -75,93 +76,96 @@ def read_input(fname):
         words = command[equals+1:].split()
 
         # global parameters
-        match = re.search('stell_sym', argument, re.IGNORECASE)
+        match = re.search(r'stell_sym', argument, re.IGNORECASE)
         if match:
             inputs['stell_sym'] = int(numbers[0])
-        match = re.search('NFP', argument, re.IGNORECASE)
+        match = re.search(r'NFP', argument, re.IGNORECASE)
         if match:
             inputs['NFP'] = int(numbers[0])
-        match = re.search('Psi_lcfs', argument, re.IGNORECASE)
+        match = re.search(r'Psi_lcfs', argument, re.IGNORECASE)
         if match:
             inputs['Psi_lcfs'] = numbers[0]
 
         # spectral resolution
-        match = re.search('Mpol', argument, re.IGNORECASE)
+        match = re.search(r'Mpol', argument, re.IGNORECASE)
         if match:
             inputs['Mpol'] = np.array(numbers).astype(int)
-        match = re.search('Ntor', argument, re.IGNORECASE)
+        match = re.search(r'Ntor', argument, re.IGNORECASE)
         if match:
             inputs['Ntor'] = np.array(numbers).astype(int)
-        match = re.search('Mnodes', argument, re.IGNORECASE)
+        match = re.search(r'Mnodes', argument, re.IGNORECASE)
         if match:
             inputs['Mnodes'] = np.array(numbers).astype(int)
-        match = re.search('Nnodes', argument, re.IGNORECASE)
+        match = re.search(r'Nnodes', argument, re.IGNORECASE)
         if match:
             inputs['Nnodes'] = np.array(numbers).astype(int)
 
         # continuation parameters
-        match = re.search('bdry_ratio', argument, re.IGNORECASE)
+        match = re.search(r'bdry_ratio', argument, re.IGNORECASE)
         if match:
             inputs['bdry_ratio'] = np.array(numbers).astype(float)
-        match = re.search('pres_ratio', argument, re.IGNORECASE)
+        match = re.search(r'pres_ratio', argument, re.IGNORECASE)
         if match:
             inputs['pres_ratio'] = np.array(numbers).astype(float)
-        match = re.search('zeta_ratio', argument, re.IGNORECASE)
+        match = re.search(r'zeta_ratio', argument, re.IGNORECASE)
         if match:
             inputs['zeta_ratio'] = np.array(numbers).astype(float)
-        match = re.search('errr_ratio', argument, re.IGNORECASE)
+        match = re.search(r'errr_ratio', argument, re.IGNORECASE)
         if match:
             inputs['errr_ratio'] = np.array(numbers).astype(float)
-        match = re.search('pert_order', argument, re.IGNORECASE)
+        match = re.search(r'pert_order', argument, re.IGNORECASE)
         if match:
             inputs['pert_order'] = np.array(numbers).astype(int)
 
         # solver tolerances
-        match = re.search('ftol', argument, re.IGNORECASE)
+        match = re.search(r'ftol', argument, re.IGNORECASE)
         if match:
             inputs['ftol'] = np.array(numbers).astype(float)
-        match = re.search('xtol', argument, re.IGNORECASE)
+        match = re.search(r'xtol', argument, re.IGNORECASE)
         if match:
             inputs['xtol'] = np.array(numbers).astype(float)
-        match = re.search('gtol', argument, re.IGNORECASE)
+        match = re.search(r'gtol', argument, re.IGNORECASE)
         if match:
             inputs['gtol'] = np.array(numbers).astype(float)
-        match = re.search('nfev', argument, re.IGNORECASE)
+        match = re.search(r'nfev', argument, re.IGNORECASE)
         if match:
             inputs['nfev'] = np.array(
                 [None if i == 0 else i for i in numbers]).astype(int)
 
         # solver methods
-        match = re.search('errr_mode', argument, re.IGNORECASE)
+        match = re.search(r'errr_mode', argument, re.IGNORECASE)
         if match:
             inputs['errr_mode'] = words[0]
-        match = re.search('bdry_mode', argument, re.IGNORECASE)
+        match = re.search(r'bdry_mode', argument, re.IGNORECASE)
         if match:
             inputs['bdry_mode'] = words[0]
-        match = re.search('node_mode', argument, re.IGNORECASE)
+        match = re.search(r'zern_mode', argument, re.IGNORECASE)
+        if match:
+            inputs['zern_mode'] = words[0]
+        match = re.search(r'node_mode', argument, re.IGNORECASE)
         if match:
             inputs['node_mode'] = words[0]
 
         # coefficient indicies
-        match = re.search('l\s*:\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'l\s*:\s*'+num_form, command, re.IGNORECASE)
         if match:
             l = int(re.findall(num_form, match.group(0))[0])
-        match = re.search('m\s*:\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'm\s*:\s*'+num_form, command, re.IGNORECASE)
         if match:
             m = int(re.findall(num_form, match.group(0))[0])
-        match = re.search('n\s*:\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'n\s*:\s*'+num_form, command, re.IGNORECASE)
         if match:
             n = int(re.findall(num_form, match.group(0))[0])
 
         # profile coefficients
-        match = re.search('cP\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'cP\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             cP = float(re.findall(num_form, match.group(0))[0])
             if inputs['cP'].size < l+1:
                 inputs['cP'] = np.pad(
                     inputs['cP'], (0, l+1-inputs['cP'].size), mode='constant')
             inputs['cP'][l] = cP
-        match = re.search('cI\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'cI\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             cI = float(re.findall(num_form, match.group(0))[0])
             if inputs['cI'].size < l+1:
@@ -170,7 +174,7 @@ def read_input(fname):
             inputs['cI'][l] = cI
 
         # magnetic axis Fourier modes
-        match = re.search('aR\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'aR\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             aR = float(re.findall(num_form, match.group(0))[0])
             axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
@@ -180,7 +184,7 @@ def read_input(fname):
                     inputs['axis'], ((0, 1), (0, 0)), mode='constant')
                 inputs['axis'][axis_idx[0], 0] = n
             inputs['axis'][axis_idx[0], 1] = aR
-        match = re.search('aZ\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'aZ\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             aZ = float(re.findall(num_form, match.group(0))[0])
             axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
@@ -192,7 +196,7 @@ def read_input(fname):
             inputs['axis'][axis_idx[0], 2] = aZ
 
         # boundary Fourier modes
-        match = re.search('bR\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'bR\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             bR = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
@@ -205,7 +209,7 @@ def read_input(fname):
                 inputs['bdry'][bdry_idx[0], 0] = m
                 inputs['bdry'][bdry_idx[0], 1] = n
             inputs['bdry'][bdry_idx[0], 2] = bR
-        match = re.search('bZ\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'bZ\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             bZ = float(re.findall(num_form, match.group(0))[0])
             bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
@@ -419,7 +423,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     desc_file.write('# This DESC input file was auto generated from the VMEC input file\n# {}\n# on {} at {}.\n\n'
                     .format(vmec_fname, date, time))
 
-    num_form = '-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
+    num_form = r'-?\ *\d+\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
     Ntor = 99
 
     pres_scale = 1.0
@@ -433,57 +437,57 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
         command = (line.strip()+' ')[0:comment]
 
         # global parameters
-        if re.search('LRFP\s*=\s*T', command, re.IGNORECASE):
+        if re.search(r'LRFP\s*=\s*T', command, re.IGNORECASE):
             warnings.warn('Using poloidal flux instead of toroidal flux!')
         match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
         if match:
-            if re.search('T', match.group(0), re.IGNORECASE):
+            if re.search(r'T', match.group(0), re.IGNORECASE):
                 desc_file.write('stell_sym \t=   0\n')
             else:
                 desc_file.write('stell_sym \t=   1\n')
-        match = re.search('NFP\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'NFP\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('NFP\t\t\t= {:3d}\n'.format(numbers[0]))
-        match = re.search('PHIEDGE\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'PHIEDGE\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('Psi_lcfs\t= {:16.8E}\n'.format(numbers[0]))
-        match = re.search('MPOL\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'MPOL\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('Mpol\t\t= {:3d}\n'.format(numbers[0]))
-        match = re.search('NTOR\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'NTOR\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [int(x) for x in re.findall(num_form, match.group(0))]
             desc_file.write('Ntor\t\t= {:3d}\n'.format(numbers[0]))
             Ntor = numbers[0]
 
         # pressure profile
-        match = re.search('bPMASS_TYPE\s*=\s*\w*', command, re.IGNORECASE)
+        match = re.search(r'bPMASS_TYPE\s*=\s*\w*', command, re.IGNORECASE)
         if match:
             if not re.search(r'\bpower_series\b', match.group(0), re.IGNORECASE):
                 warnings.warn('Pressure is not a power series!')
-        match = re.search('GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 0:
                 warnings.warn('GAMMA is not 0.0')
-        match = re.search('BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 1:
                 warnings.warn('BLOAT is not 1.0')
-        match = re.search('SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 1:
                 warnings.warn('SPRES_PED is not 1.0')
-        match = re.search('PRES_SCALE\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'PRES_SCALE\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             pres_scale = numbers[0]
-        match = re.search('AM\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+        match = re.search(r'AM\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -493,7 +497,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 cP[l] = numbers[k]
 
         # rotational transform
-        match = re.search('NCURR\s*=(\s*'+num_form+')*',
+        match = re.search(r'NCURR\s*=(\s*'+num_form+')*',
                           command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -502,7 +506,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
         if re.search(r'\bPIOTA_TYPE\b', command, re.IGNORECASE):
             if not re.search(r'\bpower_series\b', command, re.IGNORECASE):
                 warnings.warn('Iota is not a power series!')
-        match = re.search('AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+        match = re.search(r'AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             for k in range(len(numbers)):
@@ -512,7 +516,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 cI[l] = numbers[k]
 
         # magnetic axis
-        match = re.search('RAXIS\s*=(\s*'+num_form+')*',
+        match = re.search(r'RAXIS\s*=(\s*'+num_form+')*',
                           command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -527,7 +531,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                 else:
                     axis = np.pad(axis, ((0, 1), (0, 0)), mode='constant')
                     axis[-1, :] = np.array([l, numbers[k], 0.0])
-        match = re.search('ZAXIS\s*=(\s*'+num_form+')*',
+        match = re.search(r'ZAXIS\s*=(\s*'+num_form+')*',
                           command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -545,7 +549,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
 
         # boundary shape
         # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)
-        match = re.search('RBS\(\s*'+num_form+'\s*,\s*'+num_form +
+        match = re.search(r'RBS\(\s*'+num_form+'\s*,\s*'+num_form +
                           '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -575,7 +579,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([m, -n, -n_sgn*RBS, 0.0])
         # RBC*cos(m*t-n*p) = RBC*cos(m*t)*cos(n*p) + RBC*sin(m*t)*sin(n*p)
-        match = re.search('RBC\(\s*'+num_form+'\s*,\s*'+num_form +
+        match = re.search(r'RBC\(\s*'+num_form+'\s*,\s*'+num_form +
                           '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -604,7 +608,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([-m, -n, n_sgn*RBC, 0.0])
         # ZBS*sin(m*t-n*p) = ZBS*sin(m*t)*cos(n*p) - ZBS*cos(m*t)*sin(n*p)
-        match = re.search('ZBS\(\s*'+num_form+'\s*,\s*'+num_form +
+        match = re.search(r'ZBS\(\s*'+num_form+'\s*,\s*'+num_form +
                           '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -634,7 +638,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode='constant')
                     bdry[-1, :] = np.array([m, -n, 0.0, -n_sgn*ZBS])
         # ZBC*cos(m*t-n*p) = ZBC*cos(m*t)*cos(n*p) + ZBC*sin(m*t)*sin(n*p)
-        match = re.search('ZBC\(\s*'+num_form+'\s*,\s*'+num_form +
+        match = re.search(r'ZBC\(\s*'+num_form+'\s*,\s*'+num_form +
                           '\s*\)\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
@@ -664,7 +668,7 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
                     bdry[-1, :] = np.array([-m, -n, 0.0, n_sgn*ZBC])
 
         # catch multi-line inputs
-        match = re.search('=', command)
+        match = re.search(r'=', command)
         if not match:
             numbers = [float(x) for x in re.findall(num_form, command)]
             if len(numbers) > 0:

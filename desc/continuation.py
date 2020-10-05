@@ -132,6 +132,7 @@ def solve_eq_continuation(inputs):
     nfev = inputs['nfev']               # arr
     errr_mode = inputs['errr_mode']
     bdry_mode = inputs['bdry_mode']
+    zern_mode = inputs['zern_mode']
     node_mode = inputs['node_mode']
     cP = inputs['cP']
     cI = inputs['cI']
@@ -171,7 +172,7 @@ def solve_eq_continuation(inputs):
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
             derivatives = get_needed_derivatives('all')
-            zern_idx = get_zern_basis_idx_dense(M[ii], N[ii])
+            zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernt = ZernikeTransform(
                 nodes, zern_idx, NFP, derivatives, volumes)
@@ -189,9 +190,9 @@ def solve_eq_continuation(inputs):
 
             # stellarator symmetry
             if stell_sym:
-                sym_mat = symmetric_x(M[ii], N[ii])
+                sym_mat = symmetric_x(zern_idx, lambda_idx)
             else:
-                sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
+                sym_mat = np.eye(2*zern_idx.shape()[0] + lambda_idx.shape()[0])
 
             # initial guess
             t0 = time.perf_counter()
@@ -253,7 +254,7 @@ def solve_eq_continuation(inputs):
                         M[ii-1], N[ii-1], M[ii], N[ii]))
                 zern_idx_old = zern_idx
                 lambda_idx_old = lambda_idx
-                zern_idx = get_zern_basis_idx_dense(M[ii], N[ii])
+                zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
                 lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
                 bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                     M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
@@ -261,7 +262,7 @@ def solve_eq_continuation(inputs):
                 x, zernt, bdry_zernt = expand_resolution(jnp.matmul(sym_mat, x), zernt, bdry_zernt,
                                                          zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
                 if stell_sym:
-                    sym_mat = symmetric_x(M[ii], N[ii])
+                    sym_mat = symmetric_x(zern_idx, lambda_idx)
                 else:
                     sym_mat = np.eye(2*len(zern_idx) + len(lambda_idx))
                 x = jnp.matmul(sym_mat.T, x)

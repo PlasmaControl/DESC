@@ -6,9 +6,9 @@ NFP			=   1
 Psi_lcfs	=   1.00000000E+00
 
 # spectral resolution
-Mpol		=  12
+Mpol		=  8, 10, 12
 Ntor		=   0
-Mnodes		=  18
+Mnodes		=  12, 15, 18
 Nnodes		=   0
 
 # continuation parameters

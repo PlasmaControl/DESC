@@ -447,7 +447,7 @@ class ZernikeTransform():
         if self.method == 'fft':
             self._check_inputs_fft(nodes, zern_idx)
         self._build()
-
+        
     def _build_pinv(self):
         A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                  lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
@@ -588,8 +588,7 @@ class ZernikeTransform():
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
                                                                 ][d[1]][d[2]][:, old_in_new]
-            self.zern_idx = self.zern_idx[old_in_new]
-
+            self.zern_idx = self.zern_idx[old_in_new,:]
             # then add new modes
             new_not_in_old = ~(zern_idx_new[:, None]
                                == self.zern_idx).all(-1).any(-1)

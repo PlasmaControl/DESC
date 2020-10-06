@@ -1,4 +1,5 @@
 import re
+import pathlib
 import warnings
 import h5py
 import numpy as np
@@ -398,8 +399,71 @@ def write_desc_h5(filename, equilibrium):
     equil['lambda_idx'].attrs.create('column_labels', ['m', 'n'])
     f.close()
 
+    
+class Checkpoint():
+    """Class for periodically saving equilibria during solution
+    
+    Args:
+        filename (str or path-like): file to write to. If it does not exist,
+            it will be created
+        write_ascii (bool): Whether to also write ascii files. By default,
+            only an hdf5 file is created and appended with each new solution.
+            If write_ascii is True, additional files will be written, each with 
+            the same base filename but appeneded with _0, _1,...
+    """
+    
+    def __init__(self, filename, write_ascii=False):
+    
+        self.filename = str(pathlib.Path(filename).resolve())
+        if self.filename.endswith('.h5'):
+            self.base_file = self.filename[:-3]
+        elif self.filename.endswith('.hdf5'):
+            self.base_file = self.filename[:-5]
+        else:
+            self.base_file = self.filename
+            self.filename += '.h5'
+    
+        self.f = h5py.File(self.filename, 'w')
+        _ = self.f.create_group('iterations')
+        _ = self.f.create_group('final').create_group('equilibrium')
+        self.write_ascii = write_ascii
+        
+    def write_iteration(self, equilibrium, iter_num, update_final=True):
+        """Write an equilibrium to the checkpoint file
+        
+        Args:
+            equilibrium (dict): equilibrium to write
+            iter_num (int): iteration number
+            update_final (bool): whether to update the 'final' equilibrium
+                with this entry
+        """
+        iter_num = str(iter_num)
+        if iter_num not in self.f['iterations']:
+            self.f['iterations'].create_group(iter_num)
+        if 'equilibrium' not in self.f['iterations'][iter_num]:
+            self.f['iterations'][iter_num].create_group('equilibrium')
+        for key, val in equilibrium.items():
+            self.f['iterations'][iter_num]['equilibrium'][key] = val
 
-# TODO: enable multi-line VMEC inputs
+
+        self.f['iterations'][iter_num]['equilibrium']['zern_idx'].attrs.create('column_labels', ['l', 'm', 'n'])
+        self.f['iterations'][iter_num]['equilibrium']['bdry_idx'].attrs.create('column_labels', ['m', 'n'])
+        self.f['iterations'][iter_num]['equilibrium']['lambda_idx'].attrs.create('column_labels', ['m', 'n'])
+        if update_final:
+            if 'final' in self.f:
+                del self.f['final']
+            self.f['final'] = self.f['iterations'][iter_num]
+            
+        if self.write_ascii:
+            fname = self.base_file + '_' + str(iter_num) + '.out'
+            output_to_file(fname, equilibrium)
+            
+    def close(self):
+        """Close the checkpointing file"""
+        
+        self.f.close()    
+
+
 def vmec_to_desc_input(vmec_fname, desc_fname):
     """Converts a VMEC input file to an equivalent DESC input file
 

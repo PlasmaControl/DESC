@@ -348,7 +348,7 @@ class FiniteDifferenceJacobian():
             f2 = self.fun(x2, *args)
             df = f2 - f1
             dfdx = df / dx
-            put(J_transposed, i*m+idx, dfdx)
+            J_transposed = put(J_transposed, i*m+idx, dfdx)
         if m == 1:
             J_transposed = jnp.ravel(J_transposed)
         return J_transposed.T

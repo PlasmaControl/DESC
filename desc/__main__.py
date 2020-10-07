@@ -59,6 +59,7 @@ def main(args=sys.argv[1:]):
 #     output_to_file(out_fname, equil)
 
     if args.plot:
+        equil_init = iterations[0]
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 

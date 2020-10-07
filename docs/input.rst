@@ -18,10 +18,10 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    Psi_lcfs  = 1.00000000E+00
    
    # spectral resolution
-   Mpol     =   6   8  10  10  11  11  12
-   Ntor     =   0,  1,  2,  2,  3,  3,  4
-   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
+   Mpol   =   6   8  10  10  11  11  12
+   Ntor   =   0,  1,  2,  2,  3,  3,  4
+   Mnodes =  [9, 12, 15, 15, 16, 17, 18]
+   Nnodes =  [0;  2;  3;  3;  4;  5;  6]
    
    # continuation parameters
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
@@ -39,6 +39,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    # solver methods
    errr_mode = force
    bdry_mode = spectral
+   zern_mode = fringe
    node_mode = cheb2
    
    # pressure and rotational transform profiles
@@ -84,10 +85,10 @@ Spectral Resolution
 
 .. code-block:: text
 
-   Mpol     =   6   8  10  10  11  11  12
-   Ntor     =   0,  1,  2,  2,  3,  3,  4
-   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
+   Mpol   =   6   8  10  10  11  11  12
+   Ntor   =   0,  1,  2,  2,  3,  3,  4
+   Mnodes =  [9, 12, 15, 15, 16, 17, 18]
+   Nnodes =  [0;  2;  3;  3;  4;  5;  6]
 
 - ``Mpol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
 - ``Ntor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
@@ -107,11 +108,11 @@ Continuation Parameters
 
 .. code-block:: text
 
-   bdry_ratio   = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
-   pres_ratio   = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
-   zeta_ratio   = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   errr_ratio   = 1e-3
-   pert_order   = 1
+   bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
+   pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
+   zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
+   errr_ratio = 1e-3
+   pert_order = 1
 
 - ``bdry_ratio`` (float): Multiplier on the 3D boundary modes. Default = 1.0. 
 - ``pres_ratio`` (float): Multiplier on the pressure profile. Default = 1.0. 
@@ -150,16 +151,21 @@ Solver Methods
 
 .. code-block:: text
 
-   errr_mode    = force
-   bdry_mode    = spectral
-   node_mode    = cheb2
+   errr_mode = force
+   bdry_mode = spectral
+   zern_mode = fringe
+   node_mode = cheb2
 
 - ``errr_mode`` (string): Form of equations to use for solving the equilibrium force balance. Options are ``'force'`` (Default) or ``'accel'``. 
 - ``bdry_mode`` (string): Form of equations to use for solving the boundary condition. Options are ``'spectral'`` (Default) or ``'real'``. 
+- ``zern_mode`` (string): Zernike polynomial ordering index. Options are ``fringe`` (Default) or ``ansi``. 
 - ``node_mode`` (string): Pattern of collocation nodes. Options are ``'cheb1'`` (Default), ``'cheb2'``, or ``'linear'`` (not recommended). 
 
 The ``errr_mode`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'accel'`` option uses units of m/radian^2. 
 The ``bdry_mode`` option ``'spectral'`` evaluates the error in the boundary condition in Fourier space, while the ``'real'`` option evaluates the error in real space. 
+
+The ``zern_mode`` option ``'ansi'`` uses the OSA/ANSI standard indicies, which has a radial resolution of :math:`M` (the highest radial polynomial term is :math:`\rho^{M}`). 
+The ``'fringe'`` option uses the Fringe/University of Arizona indicies, which has a radial resolution of :math:`2M` (the highest radial polynomial term is :math:`\rho^{2M}`). 
 
 All of the node patters use linear spacing in the poloidal and toroidal dimensions. 
 The ``'cheb1'`` option places the radial coordinates at the Chebyshev extreme points scaled to the domain [0,1]. 
@@ -222,7 +228,7 @@ An initial guess for the magnetic axis can be supplied in the form:
    \begin{aligned}
    R^{a}(\phi) &= \sum_{n=-N}^{N} R^{a}_{n} \mathcal{F}_{n}(\phi) \\
    Z^{a}(\phi) &= \sum_{n=-N}^{N} Z^{a}_{n} \mathcal{F}_{n}(\phi) \\
-   \mathcal{F}_{n}(\phi) = \begin{cases}
+   \mathcal{F}_{n}(\phi) &= \begin{cases}
    \cos(|n|N_{FP}\phi) &\text{for }n\ge0 \\
    \sin(|n|N_{FP}\phi) &\text{for }n<0. \\
    \end{cases}

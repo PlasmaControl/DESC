@@ -2,7 +2,7 @@ import numpy as np
 import functools
 import warnings
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
-from desc.backend import issorted, isalmostequal
+from desc.backend import issorted, isalmostequal, sign
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -447,7 +447,7 @@ class ZernikeTransform():
         if self.method == 'fft':
             self._check_inputs_fft(nodes, zern_idx)
         self._build()
-
+        
     def _build_pinv(self):
         A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                  lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
@@ -588,8 +588,7 @@ class ZernikeTransform():
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
                                                                 ][d[1]][d[2]][:, old_in_new]
-            self.zern_idx = self.zern_idx[old_in_new]
-
+            self.zern_idx = self.zern_idx[old_in_new,:]
             # then add new modes
             new_not_in_old = ~(zern_idx_new[:, None]
                                == self.zern_idx).all(-1).any(-1)
@@ -635,7 +634,7 @@ class ZernikeTransform():
                 dv = d[1]
                 dz = d[2]
                 self.matrices[dr][dv][dz] = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                                                 lmn[0], lmn[1], lmn[2], self.NFP, dr, dv, dz) for lmn in zern_idx])
+                                                                 lmn[0], lmn[1], lmn[2], self.NFP, dr, dv, dz) for lmn in self.zern_idx])
 
         elif self.method == 'fft':
             for d in derivs_to_add:
@@ -730,6 +729,9 @@ def get_zern_basis_idx_dense(M, N, indexing='fringe'):
     elif indexing == 'ansi':
         op = ansi_to_lm
         num_lm_modes = int(M*(M+1)/2)
+        if M >= 30:
+            warnings.warn(
+                "ANSI indexing is not recommended for M>=30 due to numerical roundoff at high radial resolution")
 
     num_four = 2*N+1
     zern_idx = np.array([(*op(i), n-N)
@@ -892,34 +894,29 @@ def axis_posn(cR, cZ, zern_idx, NFP):
     return R0, Z0
 
 
-def symmetric_x(M, N):
+def symmetric_x(zern_idx, lambda_idx):
     """Compute stellarator symmetry linear constraint matrix
 
     Args:
-        M (int): maximum poloidal mode number of solution
-        N (int): maximum toroidal mode number of solution
+        zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
+        lambda_idx (ndarray, shape(N_coeffs,2)): array of (m,n) indices for each spectral lambda coeff
 
     Returns:
         A (2D array): matrix such that x=A*y and y=A^T*x
                       where y are the stellarator symmetric components of x
     """
-    # TODO: make this work with either ANSI or fringe indexing
-    # would be better if instead of M,N, the arg was just the zern_idx
-    dimZern = (M+1)**2
-    m = np.zeros(dimZern)
-    for i in range(dimZern):
-        li, mi = fringe_to_lm(i)
-        m[i] = mi
+    
+    m_zern = zern_idx[:,1]
+    n_zern = zern_idx[:,2]
+    m_lambda = lambda_idx[:,0]
+    n_lambda = lambda_idx[:,1]
 
     # symmetric indices of R, Z, lambda
-    sym_R = np.concatenate([np.tile((m < 0)[np.newaxis].T, (1, N)), np.tile(
-        (m >= 0)[np.newaxis].T, (1, N+1))], axis=1).flatten()
-    sym_Z = np.concatenate([np.tile((m >= 0)[np.newaxis].T, (1, N)), np.tile(
-        (m < 0)[np.newaxis].T, (1, N+1))], axis=1).flatten()
-    sym_L = np.concatenate([np.tile(np.concatenate([np.zeros(M, dtype=bool), np.ones(M+1, dtype=bool)])[np.newaxis], (1, N)),
-                            np.tile(np.concatenate([np.ones(M, dtype=bool), np.zeros(M+1, dtype=bool)])[np.newaxis], (1, N+1))], axis=1).flatten()
+    sym_R = sign(m_zern)*sign(n_zern) > 0
+    sym_Z = sign(m_zern)*sign(n_zern) < 0
+    sym_L = sign(m_lambda)*sign(n_lambda) < 0
+    
     sym_x = np.concatenate([sym_R, sym_Z, sym_L])
-
     A = np.diag(sym_x, k=0).astype(int)
     return A[:, sym_x]
 

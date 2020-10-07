@@ -49,8 +49,13 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
     return x_new, zernt, bdry_zernt
 
 
-def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, verbose):
+def perturb(x, equil_obj, deltas, args, verbose):
     """perturbs an equilibrium"""
+
+    delta_bdry = deltas[0]
+    delta_pres = deltas[1]
+    delta_zeta = deltas[2]
+    delta_errr = deltas[3]
 
     if verbose > 1:
         print("Perturbing equilibrium")
@@ -289,6 +294,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
             delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
             delta_errr = errr_ratio[ii] - errr_ratio[ii-1]
+            deltas = np.array([delta_bdry, delta_pres, delta_zeta, delta_errr])
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
@@ -296,9 +302,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 
-            if pert_order[ii] > 0:
-                x = perturb(x, equil_obj, delta_bdry, delta_pres,
-                            delta_zeta, delta_errr, args, verbose)
+            if pert_order[ii] > 0 and np.any(deltas):
+                x = perturb(x, equil_obj, deltas, args, verbose)
 
         args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]

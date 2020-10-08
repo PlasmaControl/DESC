@@ -52,7 +52,7 @@ def main(args=sys.argv[1:]):
         inputs['verbose'] = 1
 
     # solve equilibrium
-    equil, iterations = solve_eq_continuation(inputs, checkpoint_filename=out_fname)
+    iterations = solve_eq_continuation(inputs, checkpoint_filename=out_fname)
 
     # output
 #     print('Writing output to {}'.format(out_fname))
@@ -60,6 +60,8 @@ def main(args=sys.argv[1:]):
 
     if args.plot:
         equil_init = iterations[0]
+        equil = iterations[len(iterations)-1]
+
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 

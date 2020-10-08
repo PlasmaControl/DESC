@@ -57,12 +57,11 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
                                 lambda_idx, bdryR, bdryZ, bdry_pol, bdry_tor, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
-        # normalize weighting by numper of nodes
-        residual = jnp.concatenate([errRf.flatten()/jnp.sqrt(errRf.size)*errr_ratio,
-                                    errZf.flatten()/jnp.sqrt(errZf.size)*errr_ratio,
-                                    errRb.flatten()/jnp.sqrt(errRb.size),
-                                    errZb.flatten()/jnp.sqrt(errZb.size),
-                                    errL0.flatten()/jnp.sqrt(errL0.size)])
+        residual = jnp.concatenate([errRf.flatten()*errr_ratio,
+                                    errZf.flatten()*errr_ratio,
+                                    errRb.flatten(),
+                                    errZb.flatten(),
+                                    errL0.flatten()])
         return residual
 
     def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
@@ -80,12 +79,11 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         errZb_rms = rms(errZb)
         errL0_rms = rms(errL0)
 
-        # normalize weighting by numper of nodes
-        residual = np.concatenate([errRf.flatten()*errr_ratio,
-                                   errZf.flatten()*errr_ratio,
-                                   errRb.flatten(),
-                                   errZb.flatten(),
-                                   errL0.flatten()])
+        residual = jnp.concatenate([errRf.flatten()*errr_ratio,
+                                    errZf.flatten()*errr_ratio,
+                                    errRb.flatten(),
+                                    errZb.flatten(),
+                                    errL0.flatten()])
         resid_rms = jnp.sum(residual**2)
 
         print('Weighted Loss: {:10.3e}  errRf: {:10.3e}  errZf: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(

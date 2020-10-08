@@ -315,13 +315,12 @@ class FiniteDifferenceJacobian():
 
     Returns:
        jac_fun (callable): object that computes the jacobian of fun.
-"""
+    """
 
-    def __init__(self, fun, rel_step=jnp.finfo(jnp.float64).eps**(1/3)):
+    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3)):
         self.fun = fun
         self.rel_step = rel_step
 
-    @conditional_decorator(functools.partial(jit, static_argnums=np.arange(0, 2)), use_jax)
     def __call__(self, x0, *args):
         """Evaluate the jacobian of fun at x0.
 
@@ -335,11 +334,11 @@ class FiniteDifferenceJacobian():
         f0 = self.fun(x0, *args)
         m = f0.size
         n = x0.size
-        J_transposed = jnp.empty((n, m))
-        idx = jnp.arange(m).astype(jnp.int64)
+        J_transposed = np.empty((n, m))
+        idx = np.arange(m).astype(jnp.int64)
         sign_x0 = (x0 >= 0).astype(float) * 2 - 1
-        h = self.rel_step * sign_x0 * jnp.maximum(1.0, jnp.abs(x0))
-        h_vecs = jnp.diag(h)
+        h = self.rel_step * sign_x0 * np.maximum(1.0, jnp.abs(x0))
+        h_vecs = np.diag(h)
         for i in range(h.size):
             x1 = x0 - h_vecs[i]
             x2 = x0 + h_vecs[i]
@@ -350,9 +349,93 @@ class FiniteDifferenceJacobian():
             dfdx = df / dx
             J_transposed = put(J_transposed, i*m+idx, dfdx)
         if m == 1:
-            J_transposed = jnp.ravel(J_transposed)
+            J_transposed = np.ravel(J_transposed)
         return J_transposed.T
 
+
+class SPSAJacobian():
+    """Class for computing jacobian simultaneous perturbation stochastic approximation
+    
+    Args:
+        fun (callable): function to be differentiated
+        rel_step (float): relative step size for finite difference
+        N (int): number of samples to take
+    """
+    
+    def __init__(self,fun, rel_step=1e-6, N=100):
+        
+        self.fun = fun
+        self.rel_step = rel_step
+        self.N = N
+        
+        
+    def __call__(self, x0, *args, **kwargs):
+        """Update and get the jacobian"""
+        
+        f0 = self.fun(x0,*args)
+        m = f0.size
+        n = x0.size
+
+        J = np.zeros((m,n))
+        sign_x0 = (x0 >= 0).astype(float) * 2 - 1
+        h = self.rel_step * sign_x0 * np.maximum(1.0, np.abs(x0))
+
+        for i in range(self.N):
+            dx = (np.random.binomial(1,.5,x0.shape)*2-1)*h
+            x1 = x0 + dx
+            x2 = x0 - dx
+            dx = (x1 - x2).flatten()[np.newaxis]
+            f1 = np.atleast_1d(self.fun(x1,*args))
+            f2 = np.atleast_1d(self.fun(x2,*args))
+            df = (f1-f2).flatten()[:,np.newaxis]
+            dfdx = df/dx
+            J += dfdx
+        return J/self.N
+        
+        
+    
+class BroydenJacobian():
+    """Class for computing jacobian using rank 1 updates
+    
+    Args:
+        fun (callable): function to be differentiated
+        x0 (array-like): starting point
+        f0 (array-like): function evaluated at starting point
+        J0 (array-like): estimate of jacobian at starting point
+            If not given, the identity matrix is used
+        minstep (float): minimum step size for updating the jacobian
+    """
+    
+    def __init__(self,fun, x0, f0, J0=None, minstep=1e-12):
+        
+        self.fun = fun
+        self.x0 = x0
+        self.f0 = f0
+        self.shape = (f0.size,x0.size)
+        self.J = J0 if J0 is not None else np.eye(*self.shape)
+        self.minstep = minstep
+        self.x1 = self.x0
+        self.f1 = self.f0
+        
+        
+    def __call__(self, x, *args, **kwargs):
+        """Update and get the jacobian"""
+        
+        self.x0 = self.x1
+        self.f0 = self.f1
+        self.x1 = x
+        dx = self.x1-self.x0
+        step = np.linalg.norm(dx)
+        if step < self.minstep:
+            return self.J
+        else:
+            self.f1 = self.fun(x,*args)
+            df = self.f1 - self.f0
+            update = (df - self.J.dot(dx))/step**2
+            update = update[:,np.newaxis]*dx[np.newaxis,:]
+            self.J += update
+            return self.J
+    
 
 def polyder_vec(p, m=1, pad=True):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree

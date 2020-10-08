@@ -54,22 +54,25 @@ def perturb(x, equil_obj, deltas, args, pert_order, verbose):
     """perturbs an equilibrium"""
 
     delta_strings = ['boundary', 'pressure', 'zeta', 'error']
+    dimF = len(equil_obj(x, *args))
+    dimX = len(x)
+    dimC = 1
 
     # x
     t00 = time.perf_counter()
     if pert_order >= 1:
         t0 = time.perf_counter()
         obj_jac_x = jacfwd(equil_obj, argnums=0)
-        Jx = obj_jac_x(x, *args)
+        Jx = obj_jac_x(x, *args).reshape((dimF, dimX))
         t1 = time.perf_counter()
         LHS = Jx
-        RHS = np.zeros_like(equil_obj(x, *args))
+        RHS = equil_obj(x, *args)
         if verbose > 1:
             print("dF/dx computation time: {} s".format(t1-t0))
     if pert_order >= 2:
         t0 = time.perf_counter()
         obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
-        Jxx = obj_jac_xx(x, *args)
+        Jxx = obj_jac_xx(x, *args).reshape((dimF, dimX, dimX))
         t1 = time.perf_counter()
         if verbose > 1:
             print("dF/dxx computation time: {} s".format(t1-t0))
@@ -82,30 +85,32 @@ def perturb(x, equil_obj, deltas, args, pert_order, verbose):
             if pert_order >= 1:
                 t0 = time.perf_counter()
                 obj_jac_c = jacfwd(equil_obj, argnums=6+i)
-                Jc = np.atleast_2d(obj_jac_c(x, *args)).T
+                Jc = obj_jac_c(x, *args).reshape((dimF, dimC))
                 t1 = time.perf_counter()
-                RHS += Jc @ np.atleast_1d(deltas[i])
+                RHS += np.tensordot(Jc, np.atleast_1d(deltas[i]), axes=1)
                 if verbose > 1:
                     print("dF/dc computation time: {} s".format(t1-t0))
             if pert_order >= 2:
                 t0 = time.perf_counter()
                 obj_jac_cc = jacfwd(jacfwd(equil_obj, argnums=6+i), argnums=6+i)
-                Jcc = np.atleast_2d(obj_jac_cc(x, *args)).T
+                Jcc = obj_jac_cc(x, *args).reshape((dimF, dimC, dimC))
                 t1 = time.perf_counter()
                 if verbose > 1:
                     print("dF/dcc computation time: {} s".format(t1-t0))
                 obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=6+i)
-                Jxc = np.atleast_3d(obj_jac_xc(x, *args))
+                Jxc = obj_jac_xc(x, *args).reshape((dimF, dimX, dimC))
                 t2 = time.perf_counter()
-                LHS += Jxc @ np.atleast_1d(deltas[i])
-                RHS += 0.5 * Jcc @ np.atleast_1d(deltas[i]**2)
+                LHS += np.tensordot(Jxc, np.atleast_1d(deltas[i]), axes=1)
+                RHS += 0.5 * np.tensordot(Jcc, np.tensordot(np.atleast_1d(deltas[i]), 
+                             np.atleast_1d(deltas[i]), axes=0), axes=2)
                 if verbose > 1:
                     print("dF/dxc computation time: {} s".format(t2-t1))
 
     # perturbation
     if pert_order >= 2:
         LHSi = np.linalg.pinv(LHS, rcond=1e-6)
-        RHS += 0.5 * np.tensordot(Jxx, LHSi @ np.atleast_2d(RHS).T @ np.atleast_2d(RHS) @ LHSi.T)
+        RHS += 0.5 * np.tensordot(Jxx, np.tensordot(np.tensordot(LHSi, RHS, axes=1), 
+                     np.tensordot(RHS.T, LHSi.T, axes=1), axes=0), axes=2)
     if pert_order > 0:
         dx = -np.linalg.lstsq(LHS, RHS, rcond=1e-6)[0]
     else:

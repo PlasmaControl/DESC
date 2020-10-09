@@ -52,14 +52,15 @@ def main(args=sys.argv[1:]):
         inputs['verbose'] = 1
 
     # solve equilibrium
-    equil, iterations = solve_eq_continuation(inputs, checkpoint_filename=out_fname)
+    equil, iterations = solve_eq_continuation(
+        inputs, checkpoint_filename=out_fname)
 
     # output
 #     print('Writing output to {}'.format(out_fname))
 #     output_to_file(out_fname, equil)
 
     if args.plot:
-        equil_init = iterations[0]
+        equil_init = iterations['init']
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 

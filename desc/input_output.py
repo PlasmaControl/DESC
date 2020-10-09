@@ -403,10 +403,10 @@ def write_desc_h5(filename, equilibrium):
     equil['lambda_idx'].attrs.create('column_labels', ['m', 'n'])
     f.close()
 
-    
+
 class Checkpoint():
     """Class for periodically saving equilibria during solution
-    
+
     Args:
         filename (str or path-like): file to write to. If it does not exist,
             it will be created
@@ -415,9 +415,9 @@ class Checkpoint():
             If write_ascii is True, additional files will be written, each with 
             the same base filename but appeneded with _0, _1,...
     """
-    
+
     def __init__(self, filename, write_ascii=False):
-    
+
         self.filename = str(pathlib.Path(filename).resolve())
         if self.filename.endswith('.h5'):
             self.base_file = self.filename[:-3]
@@ -426,46 +426,59 @@ class Checkpoint():
         else:
             self.base_file = self.filename
             self.filename += '.h5'
-    
+
         self.f = h5py.File(self.filename, 'w')
         _ = self.f.create_group('iterations')
         _ = self.f.create_group('final').create_group('equilibrium')
         self.write_ascii = write_ascii
-        
-    def write_iteration(self, equilibrium, iter_num, update_final=True):
+
+    def write_iteration(self, equilibrium, iter_num, inputs=None, update_final=True):
         """Write an equilibrium to the checkpoint file
-        
+
         Args:
             equilibrium (dict): equilibrium to write
             iter_num (int): iteration number
             update_final (bool): whether to update the 'final' equilibrium
                 with this entry
         """
-        iter_num = str(iter_num)
-        if iter_num not in self.f['iterations']:
-            self.f['iterations'].create_group(iter_num)
-        if 'equilibrium' not in self.f['iterations'][iter_num]:
-            self.f['iterations'][iter_num].create_group('equilibrium')
+        iter_str = str(iter_num)
+        if iter_str not in self.f['iterations']:
+            self.f['iterations'].create_group(iter_str)
+        if 'equilibrium' not in self.f['iterations'][iter_str]:
+            self.f['iterations'][iter_str].create_group('equilibrium')
         for key, val in equilibrium.items():
-            self.f['iterations'][iter_num]['equilibrium'][key] = val
+            self.f['iterations'][iter_str]['equilibrium'][key] = val
 
+        self.f['iterations'][iter_str]['equilibrium']['zern_idx'].attrs.create(
+            'column_labels', ['l', 'm', 'n'])
+        self.f['iterations'][iter_str]['equilibrium']['bdry_idx'].attrs.create(
+            'column_labels', ['m', 'n'])
+        self.f['iterations'][iter_str]['equilibrium']['lambda_idx'].attrs.create(
+            'column_labels', ['m', 'n'])
 
-        self.f['iterations'][iter_num]['equilibrium']['zern_idx'].attrs.create('column_labels', ['l', 'm', 'n'])
-        self.f['iterations'][iter_num]['equilibrium']['bdry_idx'].attrs.create('column_labels', ['m', 'n'])
-        self.f['iterations'][iter_num]['equilibrium']['lambda_idx'].attrs.create('column_labels', ['m', 'n'])
+        if self.write_ascii:
+            fname = self.base_file + '_' + str(iter_str) + '.out'
+            output_to_file(fname, equilibrium)
+
+        if inputs is not None:
+            arrays = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes', 'bdry_ratio', 'pres_ratio',
+                      'zeta_ratio', 'errr_ratio', 'pert_order', 'ftol', 'xtol', 'gtol', 'nfev']
+            if 'inputs' not in self.f['iterations'][iter_str]:
+                self.f['iterations'][iter_str].create_group('inputs')
+            for key, val in inputs.items():
+                if key in arrays and isinstance(iter_num, int):
+                    val = val[iter_num]
+                self.f['iterations'][iter_str]['inputs'][key] = val
+
         if update_final:
             if 'final' in self.f:
                 del self.f['final']
-            self.f['final'] = self.f['iterations'][iter_num]
-            
-        if self.write_ascii:
-            fname = self.base_file + '_' + str(iter_num) + '.out'
-            output_to_file(fname, equilibrium)
-            
+            self.f['final'] = self.f['iterations'][iter_str]
+
     def close(self):
         """Close the checkpointing file"""
-        
-        self.f.close()    
+
+        self.f.close()
 
 
 def vmec_to_desc_input(vmec_fname, desc_fname):
@@ -547,7 +560,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             if numbers[0] != 1:
                 warnings.warn('SPRES_PED is not 1.0')
-        match = re.search(r'PRES_SCALE\s*=\s*'+num_form, command, re.IGNORECASE)
+        match = re.search(r'PRES_SCALE\s*=\s*'+num_form,
+                          command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(num_form, match.group(0))]
             pres_scale = numbers[0]

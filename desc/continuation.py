@@ -12,6 +12,7 @@ from desc.objective_funs import get_equil_obj_fun
 from desc.nodes import get_nodes_pattern, get_nodes_surf
 from desc.input_output import Checkpoint
 
+
 def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
                       lambda_idx_old, lambda_idx_new):
     """Expands solution to a higher resolution by filling with zeros
@@ -110,7 +111,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     Args:
         inputs (dict): dictionary with input parameters defining problem setup and solver options
         checkpoint_filename (str or path-like): file to save checkpoint data
-        
+
     Returns:
         equil (dict): dictionary of solution values
         iterations (dict): dictionary of intermediate solutions
@@ -148,8 +149,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     else:
         checkpoint = False
     iterations = {}
-    
-    
+
     if not use_jax:
         pert_order *= 0
 
@@ -185,7 +185,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernt = ZernikeTransform(
-                nodes, zern_idx, NFP, derivatives, volumes,method='fft')
+                nodes, zern_idx, NFP, derivatives, volumes, method='fft')
             # bdry interpolator
             bdry_nodes, _ = get_nodes_surf(
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
@@ -221,9 +221,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                 'cR': cR_init,
                 'cZ': cZ_init,
                 'cL': cL_init,
-                'bdryR': bdry[:, 2],
-                'bdryZ': bdry[:, 3],
-                'cP': cP,
+                'bdryR': bdry[:, 2]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+                'bdryZ': bdry[:, 3]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+                'cP': cP*pres_ratio[ii],
                 'cI': cI,
                 'Psi_lcfs': Psi_lcfs,
                 'NFP': NFP,
@@ -231,10 +231,10 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                 'lambda_idx': lambda_idx,
                 'bdry_idx': bdry[:, :2]
             }
-            iterations[0] = equil_init
+            iterations['init'] = equil_init
             if checkpoint:
-                checkpoint_file.write_iteration(equil_init,0)
-                
+                checkpoint_file.write_iteration(equil_init, 'init', inputs)
+
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor)
@@ -338,32 +338,31 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             callback(x_init, *args)
             print('End of Step {}:'.format(ii+1))
             callback(x, *args)
-            
+
         cR, cZ, cL = unpack_x(np.matmul(sym_mat, x), len(zern_idx))
         equil = {
             'cR': cR,
             'cZ': cZ,
             'cL': cL,
-            'bdryR': bdry[:, 2],
-            'bdryZ': bdry[:, 3],
-            'cP': cP,
+            'bdryR': bdry[:, 2]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+            'bdryZ': bdry[:, 3]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+            'cP': cP*pres_ratio[ii],
             'cI': cI,
             'Psi_lcfs': Psi_lcfs,
             'NFP': NFP,
             'zern_idx': zern_idx,
             'lambda_idx': lambda_idx,
             'bdry_idx': bdry[:, :2]
-        }            
-        iterations[ii+1] = equil
+        }
+        iterations[ii] = equil
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
-            checkpoint_file.write_iteration(equil,ii+1)
-
+            checkpoint_file.write_iteration(equil, ii, inputs)
 
     if checkpoint:
         checkpoint_file.close()
-        
+
     print('====================')
     print('Done')
     print('====================')

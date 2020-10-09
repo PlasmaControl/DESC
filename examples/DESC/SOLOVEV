@@ -1,33 +1,34 @@
 # This is the DESC input file for a Solov'ev equilibrium
 
 # global parameters
-stell_sym 	=   1
-NFP			=   1
-Psi_lcfs	=   1.00000000E+00
+stell_sym =   1
+NFP       =   1
+Psi_lcfs  =   1.00000000E+00
 
 # spectral resolution
-Mpol	=   8		! maximum poloidal Fourier mode number
-Ntor	=   0		! maximum toroidal Fourier mode number
-Mnodes	=  12		! proportional to number of poloidal interpolation nodes
-Nnodes	=   0		! proportional to number of toroidal interpolation nodes
+Mpol   =   8
+Ntor   =   0
+Mnodes =  12
+Nnodes =   0
 
 # continuation parameters
-bdry_ratio	= 1		! fraction of the full 3D boundary modes to use
-pres_ratio	= 1		! fraction of the full pressure profile to use
-zeta_ratio	= 1		! fraction of the full toroidal derivatives to use
-errr_ratio	= 1e-2	! weight on the force balance eqs relative to the BC eqs
-pert_order	= 1		! approximation order to use for perturbations
+bdry_ratio = 1
+pres_ratio = 1
+zeta_ratio = 1
+errr_ratio = 1e-4
+pert_order = 1
 
 # solver tolerances
-ftol	= 1e-6		! solver stopping tolerance on relative norm of dF
-xtol	= 1e-6		! solver stopping tolerance on relative norm of dx
-gtol	= 1e-6		! solver stopping tolerance on norm of gradient
-nfev	= 100		! max number of function evaluations per iteration
+ftol = 1e-6
+xtol = 1e-6
+gtol = 1e-6
+nfev = 100
 
 # solver methods
-errr_mode	= force
-bdry_mode	= spectral
-node_mode	= cheb2
+errr_mode = force
+bdry_mode = spectral
+zern_mode = ansi
+node_mode = cheb2
 
 # pressure and rotational transform profiles
 l:   0	cP =   1.25000000E-01	cI =   1.00000000E+00

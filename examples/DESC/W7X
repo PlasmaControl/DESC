@@ -1,33 +1,34 @@
 # This DESC input file for W7-X in standard configuration
 
 # global parameters
-stell_sym	=   0
-NFP			=   5
-Psi_lcfs	=  -2.13300000E+00
+stell_sym =   0
+NFP       =   5
+Psi_lcfs  =  -2.13300000E+00
 
 # spectral resolution
-Mpol	=  12
-Ntor	=  12
-Mnodes	=  18
-Nnodes	=  18
+Mpol   =  12
+Ntor   =  12
+Mnodes =  18
+Nnodes =  18
 
 # continuation parameters
-bdry_ratio	= 1
-pres_ratio	= 1
-zeta_ratio	= 1
-errr_ratio	= 1
-pert_order	= 1
+bdry_ratio = 1
+pres_ratio = 1
+zeta_ratio = 1
+errr_ratio = 1e-4
+pert_order = 1
 
 # solver tolerances
-ftol	= 1e-6
-xtol	= 1e-6
-gtol	= 1e-6
-nfev	= 1000
+ftol = 1e-6
+xtol = 1e-6
+gtol = 1e-6
+nfev = 1000
 
 # solver methods
-errr_mode	= force
-bdry_mode	= spectral
-node_mode	= cheb2
+errr_mode = force
+bdry_mode = spectral
+zern_mode = ansi
+node_mode = cheb2
 
 # pressure and rotational transform profiles
 l:   0	cP =   0.00000000E+00	cI =   8.55700000E-01

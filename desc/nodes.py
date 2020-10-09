@@ -1,13 +1,16 @@
 import numpy as np
 
 
-def get_nodes_pattern(M, N, NFP, surfs='cheb1'):
+def get_nodes_pattern(M, N, NFP, surfs='cheb1', index='fringe', axis=True):
     """Compute interpolation nodes on a patterned grid
 
     Args:
         M (int): maximum poloidal mode number
         N (int): maximum toroidal mode number
         NFP (int): number of field periods
+        index (string): Zernike polynomial index ordering
+            ansi = OSA / ANSI indexing
+            fringe = Fringe / University of Arizona indexing
         surfs (string): pattern for radial surfaces
             cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
             cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
@@ -18,8 +21,15 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1'):
         volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
     """
 
-    dimZern = (M+1)**2
-    dimFourN = 2*N+1
+    dimFour = 2*N+1
+    if index == 'ansi':
+        dimZern = int((M+1)*(M+2)/2)
+        a = 1
+    elif index == 'fringe':
+        dimZern = int((M+1)**2)
+        a = 2
+    else:
+        raise ValueError("Invalid Zernike polynomial index ordering input.")
 
     pattern = {
         'cheb1': (np.cos(np.arange(M, -1, -1)*np.pi/M)+1)/2,
@@ -27,8 +37,10 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1'):
     }
     rho = pattern.get(surfs, np.linspace(0, 1, num=M+1))
     rho = np.sort(rho, axis=None)
-    if rho[0] < 1e-14:
+    if axis:
         rho[0] = 0
+    else:
+        rho[0] = rho[1]/4
 
     drho = np.zeros_like(rho)
     for i in range(rho.size):
@@ -46,23 +58,23 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1'):
 
     i = 0
     for m in range(M+1):
-        dtheta = 2*np.pi/(2*m+1)
+        dtheta = 2*np.pi/(a*m+1)
         theta = np.arange(0, 2*np.pi, dtheta)
-        for j in range(2*m+1):
+        for j in range(a*m+1):
             r[i] = rho[m]
             t[i] = theta[j]
             dr[i] = drho[m]
             dt[i] = dtheta
             i += 1
 
-    dz = 2*np.pi/(NFP*dimFourN)
+    dz = 2*np.pi/(NFP*dimFour)
     z = np.arange(0, 2*np.pi/NFP, dz)
 
-    r = np.tile(r, dimFourN)
-    t = np.tile(t, dimFourN)
+    r = np.tile(r, dimFour)
+    t = np.tile(t, dimFour)
     z = np.tile(z[np.newaxis], (dimZern, 1)).flatten(order='F')
-    dr = np.tile(dr, dimFourN)
-    dt = np.tile(dt, dimFourN)
+    dr = np.tile(dr, dimFour)
+    dt = np.tile(dt, dimFour)
     dz = np.ones_like(z)*dz
 
     nodes = np.stack([r, t, z])

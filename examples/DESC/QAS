@@ -1,33 +1,34 @@
 # This DESC input file for the Quasi-Axisymmetric Stellarator
 
 # global parameters
-stell_sym	=   0
-NFP			=   3
-Psi_lcfs	=   4.97070206E-01
+stell_sym =   0
+NFP       =   3
+Psi_lcfs  =   4.97070206E-01
 
 # spectral resolution
-Mpol	=  12
-Ntor	=   6
-Mnodes	=  18
-Nnodes	=   9
+Mpol   =  12
+Ntor   =   6
+Mnodes =  18
+Nnodes =   9
 
 # continuation parameters
-bdry_ratio	= 1
-pres_ratio	= 1
-zeta_ratio	= 1
-errr_ratio	= 1
-pert_order	= 1
+bdry_ratio = 1
+pres_ratio = 1
+zeta_ratio = 1
+errr_ratio = 1e-4
+pert_order = 1
 
 # solver tolerances
-ftol	= 1e-6
-xtol	= 1e-6
-gtol	= 1e-6
-nfev	= 100
+ftol = 1e-6
+xtol = 1e-6
+gtol = 1e-6
+nfev = 100
 
 # solver methods
-errr_mode	= force
-bdry_mode	= spectral
-node_mode	= cheb2
+errr_mode = force
+bdry_mode = spectral
+zern_mode = fringe
+node_mode = cheb1
 
 # pressure and rotational transform profiles
 l:   0	cP =   6.85517649E+04	cI =   3.47354557E-01

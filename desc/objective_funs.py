@@ -359,8 +359,8 @@ def compute_qs_error_spectral(cR, cZ, cI, Psi_total, NFP, zernt, modes_pol, mode
     Returns:
         cQS (ndarray, shape(N_modes,)): quasisymmetry error Fourier coefficients
     """
+
     nodes = zernt.nodes
-    axn = zernt.axn
     r = nodes[0]
     iota = iotafun(r, 0, cI)
 

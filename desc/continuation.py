@@ -201,7 +201,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             if verbose > 0:
                 print("Precomputing Fourier-Zernike basis")
             nodes, volumes = get_nodes_pattern(
-                Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
+                Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
             derivatives = get_needed_derivatives('all')
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
@@ -271,7 +271,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                     print("Expanding node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
                         Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 nodes, volumes = get_nodes_pattern(
-                    Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
+                    Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
                 bdry_nodes, _ = get_nodes_surf(
                     Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
                 zernt.expand_nodes(nodes, volumes)
@@ -330,13 +330,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             if verbose > 0:
                 print("Compiling objective function")
             equil_obj_jit = jit(equil_obj, static_argnums=())
+            jac_obj_jit = jit(jacfwd(equil_obj, argnums=0))
             t0 = time.perf_counter()
-            foo = equil_obj_jit(x, *args)
+            equil_obj_jit(x, *args)
+            jac_obj_jit(x, *args)
             t1 = time.perf_counter()
             if verbose > 0:
                 print("Objective function compiled, time= {} s".format(t1-t0))
         else:
             equil_obj_jit = equil_obj
+            jac_obj_jit = '2-point'
         if verbose > 0:
             print("Starting optimization")
 
@@ -345,7 +348,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
         out = scipy.optimize.least_squares(equil_obj_jit,
                                            x0=x_init,
                                            args=args,
-                                           jac='2-point',
+                                           jac=jac_obj_jit,
                                            method='trf',
                                            x_scale='jac',
                                            ftol=ftol[ii],

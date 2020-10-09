@@ -19,5 +19,6 @@ class TestContinuation(unittest.TestCase):
         y1 = perturb(x, test_fun, deltas, args, pert_order=1, verbose=0)
         y2 = perturb(x, test_fun, deltas, args, pert_order=2, verbose=0)
         z = jnp.array([0.0, 2/3.0])
+
         np.testing.assert_array_less(abs(z-y2), abs(z-y1))
         np.testing.assert_allclose(y2, z, atol=0.6)

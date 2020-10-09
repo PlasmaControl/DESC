@@ -40,7 +40,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    errr_mode = force
    bdry_mode = spectral
    zern_mode = fringe
-   node_mode = cheb2
+   node_mode = cheb1
    
    # pressure and rotational transform profiles
    l:   0   cP =   1.80000000E+04   cI =   1.00000000E+00
@@ -154,11 +154,11 @@ Solver Methods
    errr_mode = force
    bdry_mode = spectral
    zern_mode = fringe
-   node_mode = cheb2
+   node_mode = cheb1
 
 - ``errr_mode`` (string): Form of equations to use for solving the equilibrium force balance. Options are ``'force'`` (Default) or ``'accel'``. 
 - ``bdry_mode`` (string): Form of equations to use for solving the boundary condition. Options are ``'spectral'`` (Default) or ``'real'``. 
-- ``zern_mode`` (string): Zernike polynomial ordering index. Options are ``fringe`` (Default) or ``ansi``. 
+- ``zern_mode`` (string): Zernike polynomial index ordering. Options are ``ansi`` or ``fringe`` (Default). 
 - ``node_mode`` (string): Pattern of collocation nodes. Options are ``'cheb1'`` (Default), ``'cheb2'``, or ``'linear'`` (not recommended). 
 
 The ``errr_mode`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'accel'`` option uses units of m/radian^2. 

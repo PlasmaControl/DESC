@@ -274,15 +274,15 @@ def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma'
 
     # compute fields components
     coord_der = compute_coordinate_derivatives(cR, cZ, zernt)
-    cov_basis = compute_covariant_basis(coord_der)
-    jacobian = compute_jacobian(coord_der, cov_basis)
+    cov_basis = compute_covariant_basis(coord_der,zernt)
+    jacobian = compute_jacobian(coord_der, cov_basis,zernt)
     con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, nodes)
-    B_field = compute_B_field(cov_basis, jacobian, cI, Psi_lcfs, nodes)
+        coord_der, cov_basis, jacobian, zernt)
+    B_field = compute_B_field(cov_basis, jacobian, cI, Psi_lcfs, zernt)
     J_field = compute_J_field(coord_der, cov_basis,
-                              jacobian, B_field, cI, Psi_lcfs, nodes)
+                              jacobian, B_field, cI, Psi_lcfs, zernt)
     F_mag, p_mag = compute_F_magnitude(
-        coord_der, cov_basis, con_basis, jacobian, B_field, J_field, cP, cI, Psi_lcfs, nodes)
+        coord_der, cov_basis, con_basis, jacobian, B_field, J_field, cP, cI, Psi_lcfs, zernt)
 
     if domain == 'real':
         xlabel = r'R'

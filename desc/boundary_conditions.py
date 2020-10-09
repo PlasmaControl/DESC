@@ -252,8 +252,8 @@ def compute_lambda_err(cL, idx, NFP):
         (float): sum of lambda_mn where m,n>0
     """
 
-    mn_pos = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0))[0]
-    errL = jnp.sum(cL[mn_pos])
+    Lc = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0),cL,0)[0]
+    errL = jnp.sum(Lc)
 
     return errL
 

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.optimize
 import time
+from functools import reduce
 
 from desc.backend import jnp, jit, use_jax
 from desc.backend import get_needed_derivatives, unpack_x, jacfwd
@@ -50,53 +51,72 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
     return x_new, zernt, bdry_zernt
 
 
-def perturb(x, equil_obj, delta_bdry, delta_pres, delta_zeta, delta_errr, args, verbose):
+def perturb(x, equil_obj, deltas, args, pert_order, verbose):
     """perturbs an equilibrium"""
 
-    if verbose > 1:
-        print("Perturbing equilibrium")
+    delta_strings = ['boundary', 'pressure', 'zeta', 'error']
+    dimF = len(equil_obj(x, *args))
+    dimX = len(x)
+    dimC = 1
+
+    # x
     t00 = time.perf_counter()
-    obj_jac = jacfwd(equil_obj, argnums=0)
-    Jx = obj_jac(x, *args)
-    RHS = equil_obj(x, *args)
-    t1 = time.perf_counter()
-    if verbose > 1:
-        print("dF/dx computation time: {} s".format(t1-t00))
+    if pert_order >= 1:
+        t0 = time.perf_counter()
+        obj_jac_x = jacfwd(equil_obj, argnums=0)
+        Jx = obj_jac_x(x, *args).reshape((dimF, dimX))
+        t1 = time.perf_counter()
+        LHS = Jx
+        RHS = equil_obj(x, *args)
+        if verbose > 1:
+            print("dF/dx computation time: {} s".format(t1-t0))
+    if pert_order >= 2:
+        t0 = time.perf_counter()
+        obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
+        Jxx = obj_jac_xx(x, *args).reshape((dimF, dimX, dimX))
+        t1 = time.perf_counter()
+        if verbose > 1:
+            print("dF/dxx computation time: {} s".format(t1-t0))
 
-    if delta_bdry != 0:
-        t0 = time.perf_counter()
-        bdry_jac = jacfwd(equil_obj, argnums=6)
-        Jb = bdry_jac(x, *args)
-        RHS += Jb*delta_bdry
-        t1 = time.perf_counter()
-        if verbose > 1:
-            print("dF/dbdry computation time: {} s".format(t1-t0))
-    if delta_pres != 0:
-        t0 = time.perf_counter()
-        pres_jac = jacfwd(equil_obj, argnums=7)
-        Jp = pres_jac(x, *args)
-        RHS += Jp*delta_pres
-        t1 = time.perf_counter()
-        if verbose > 1:
-            print("dF/dpres computation time: {} s".format(t1-t0))
-    if delta_zeta != 0:
-        t0 = time.perf_counter()
-        zeta_jac = jacfwd(equil_obj, argnums=8)
-        Jz = zeta_jac(x, *args)
-        RHS += Jz*delta_zeta
-        t1 = time.perf_counter()
-        if verbose > 1:
-            print("dF/dzeta computation time: {} s".format(t1-t0))
-    if delta_errr != 0:
-        t0 = time.perf_counter()
-        errr_jac = jacfwd(equil_obj, argnums=9)
-        Je = errr_jac(x, *args)
-        RHS += Je*delta_errr
-        t1 = time.perf_counter()
-        if verbose > 1:
-            print("dF/derrr computation time: {} s".format(t1-t0))
+    # continuation parameters
+    for i in range(deltas.size):
+        if deltas[i] != 0:
+            if verbose > 1:
+                print("Perturbing {}".format(delta_strings[i]))
+            if pert_order >= 1:
+                t0 = time.perf_counter()
+                obj_jac_c = jacfwd(equil_obj, argnums=6+i)
+                Jc = obj_jac_c(x, *args).reshape((dimF, dimC))
+                t1 = time.perf_counter()
+                RHS += np.tensordot(Jc, np.atleast_1d(deltas[i]), axes=1)
+                if verbose > 1:
+                    print("dF/dc computation time: {} s".format(t1-t0))
+            if pert_order >= 2:
+                t0 = time.perf_counter()
+                obj_jac_cc = jacfwd(
+                    jacfwd(equil_obj, argnums=6+i), argnums=6+i)
+                Jcc = obj_jac_cc(x, *args).reshape((dimF, dimC, dimC))
+                t1 = time.perf_counter()
+                if verbose > 1:
+                    print("dF/dcc computation time: {} s".format(t1-t0))
+                obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=6+i)
+                Jxc = obj_jac_xc(x, *args).reshape((dimF, dimX, dimC))
+                t2 = time.perf_counter()
+                LHS += np.tensordot(Jxc, np.atleast_1d(deltas[i]), axes=1)
+                RHS += 0.5 * np.tensordot(Jcc, np.tensordot(np.atleast_1d(deltas[i]),
+                                                            np.atleast_1d(deltas[i]), axes=0), axes=2)
+                if verbose > 1:
+                    print("dF/dxc computation time: {} s".format(t2-t1))
 
-    dx = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
+    # perturbation
+    if pert_order >= 2:
+        LHSi = np.linalg.pinv(LHS, rcond=1e-6)
+        RHS += 0.5 * np.tensordot(Jxx, np.tensordot(np.tensordot(LHSi, RHS, axes=1),
+                                                    np.tensordot(RHS.T, LHSi.T, axes=1), axes=0), axes=2)
+    if pert_order > 0:
+        dx = -np.linalg.lstsq(LHS, RHS, rcond=1e-6)[0]
+    else:
+        dx = np.zeros_like(x)
     t1 = time.perf_counter()
     if verbose > 1:
         print("Total perturbation time: {} s".format(t1-t00))
@@ -157,28 +177,29 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     for ii in range(arr_len):
 
         if verbose > 0:
-            print('================')
-            print('Step {}/{}'.format(ii+1, arr_len))
-            print('================')
-            print('Spectral resolution (M,N)=({},{})'.format(M[ii], N[ii]))
-            print('Node resolution (M,N)=({},{})'.format(
+            print("================")
+            print("Step {}/{}".format(ii+1, arr_len))
+            print("================")
+            print("Spectral resolution (M,N)=({},{})".format(M[ii], N[ii]))
+            print("Node resolution (M,N)=({},{})".format(
                 Mnodes[ii], Nnodes[ii]))
-            print('Boundary ratio = {}'.format(bdry_ratio[ii]))
-            print('Pressure ratio = {}'.format(pres_ratio[ii]))
-            print('Zeta ratio = {}'.format(zeta_ratio[ii]))
-            print('Error ratio = {}'.format(errr_ratio[ii]))
-            print('Function tolerance = {}'.format(ftol[ii]))
-            print('Gradient tolerance = {}'.format(gtol[ii]))
-            print('State vector tolerance = {}'.format(xtol[ii]))
-            print('Max function evaluations = {}'.format(nfev[ii]))
-            print('================')
+            print("Boundary ratio = {}".format(bdry_ratio[ii]))
+            print("Pressure ratio = {}".format(pres_ratio[ii]))
+            print("Zeta ratio = {}".format(zeta_ratio[ii]))
+            print("Error ratio = {}".format(errr_ratio[ii]))
+            print("Perturbation Order = {}".format(pert_order[ii]))
+            print("Function tolerance = {}".format(ftol[ii]))
+            print("Gradient tolerance = {}".format(gtol[ii]))
+            print("State vector tolerance = {}".format(xtol[ii]))
+            print("Max function evaluations = {}".format(nfev[ii]))
+            print("================")
 
         # initial solution
         if ii == 0:
             # interpolator
             t0 = time.perf_counter()
             if verbose > 0:
-                print('Precomputing Fourier-Zernike basis')
+                print("Precomputing Fourier-Zernike basis")
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode)
             derivatives = get_needed_derivatives('all')
@@ -207,7 +228,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             # initial guess
             t0 = time.perf_counter()
             if verbose > 0:
-                print('Computing initial guess')
+                print("Computing initial guess")
             cR_init, cZ_init = get_initial_guess_scale_bdry(
                 axis, bdry, zern_idx, NFP, mode=bdry_mode, rcond=1e-6)
             cL_init = np.zeros(len(lambda_idx))
@@ -289,6 +310,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
             delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
             delta_errr = errr_ratio[ii] - errr_ratio[ii-1]
+            deltas = np.array([delta_bdry, delta_pres, delta_zeta, delta_errr])
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
@@ -296,25 +318,27 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 
-            if pert_order[ii] > 0:
-                x = perturb(x, equil_obj, delta_bdry, delta_pres,
-                            delta_zeta, delta_errr, args, verbose)
+            if np.any(deltas):
+                if verbose > 1:
+                    print("Perturbing equilibrium")
+                x = perturb(x, equil_obj, deltas, args,
+                            pert_order[ii], verbose)
 
         args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
         if use_jax:
             if verbose > 0:
-                print('Compiling objective function')
+                print("Compiling objective function")
             equil_obj_jit = jit(equil_obj, static_argnums=())
             t0 = time.perf_counter()
             foo = equil_obj_jit(x, *args)
             t1 = time.perf_counter()
             if verbose > 0:
-                print('Objective function compiled, time= {} s'.format(t1-t0))
+                print("Objective function compiled, time= {} s".format(t1-t0))
         else:
             equil_obj_jit = equil_obj
         if verbose > 0:
-            print('Starting optimization')
+            print("Starting optimization")
 
         x_init = x
         t0 = time.perf_counter()
@@ -333,10 +357,10 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
         x = out['x']
 
         if verbose:
-            print('Avg time per step: {} s'.format((t1-t0)/out['nfev']))
-            print('Start of Step {}:'.format(ii+1))
+            print("Avg time per step: {} s".format((t1-t0)/out['nfev']))
+            print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
-            print('End of Step {}:'.format(ii+1))
+            print("End of Step {}:".format(ii+1))
             callback(x, *args)
 
         cR, cZ, cL = unpack_x(np.matmul(sym_mat, x), len(zern_idx))
@@ -354,7 +378,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             'lambda_idx': lambda_idx,
             'bdry_idx': bdry[:, :2]
         }
+
         iterations[ii] = equil
+        iterations['final'] = equil
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
@@ -367,4 +393,4 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     print('Done')
     print('====================')
 
-    return equil, iterations
+    return iterations

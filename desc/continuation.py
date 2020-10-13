@@ -1,7 +1,6 @@
 import numpy as np
 import scipy.optimize
 import time
-from functools import reduce
 
 from desc.backend import jnp, jit, use_jax
 from desc.backend import get_needed_derivatives, unpack_x, jacfwd
@@ -230,7 +229,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             if verbose > 0:
                 print("Computing initial guess")
             cR_init, cZ_init = get_initial_guess_scale_bdry(
-                axis, bdry, zern_idx, NFP, mode=bdry_mode, rcond=1e-6)
+                axis, bdry, bdry_ratio[ii], zern_idx, NFP, mode=bdry_mode, rcond=1e-6)
             cL_init = np.zeros(len(lambda_idx))
             x_init = jnp.concatenate([cR_init, cZ_init, cL_init])
             x_init = jnp.matmul(sym_mat.T, x_init)

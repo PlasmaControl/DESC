@@ -13,3 +13,5 @@ docs/_static
 *.egg-info
 build/
 dist/
+*.h5
+*.out

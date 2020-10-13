@@ -118,9 +118,8 @@ def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
 
     nodes = np.stack([r, t, z])
     volumes = np.stack([dr, dt, dz])
-    sort_idx = np.lexsort((nodes[1], nodes[0], nodes[2]))
 
-    return nodes[:, sort_idx], volumes[:, sort_idx]
+    return nodes, volumes
 
 
 def get_nodes_surf(M, N, NFP, surf=1.0):

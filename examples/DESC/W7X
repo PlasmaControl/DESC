@@ -42,7 +42,7 @@ l:   6	cP =   0.00000000E+00	cI =  -1.26300000E-01
 # magnetic axis initial guess
 n:   0	aR =   5.56070000E+00	aZ =   0.00000000E+00
 n:   1	aR =   3.70760000E-01	aZ =   0.00000000E+00
-n:  -1	aR =   0.00000000E+00	aZ =  -3.08170000E-01
+! n:  -1	aR =   0.00000000E+00	aZ =  -3.08170000E-01
 
 # fixed-boundary surface shape
 m:   0	n:   0	bR =   5.52080588E+00	bZ =   0.00000000E+00

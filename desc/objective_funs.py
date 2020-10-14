@@ -2,13 +2,12 @@ import numpy as np
 from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
 from desc.field_components import compute_contravariant_basis, compute_jacobian
 from desc.field_components import compute_B_field, compute_J_field, compute_B_magnitude
-from desc.boundary_conditions import compute_bc_err_RZ, compute_bc_err_four
-from desc.boundary_conditions import compute_bc_err_four_sfl, compute_lambda_err
+from desc.boundary_conditions import compute_bc_err_RZ, compute_bc_err_four, compute_lambda_err
 from desc.zernike import symmetric_x, double_fourier_basis
 from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
 
 
-def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor):
+def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdryM, bdryN):
     """Gets the equilibrium objective function
 
     Args:
@@ -22,8 +21,8 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         bdry_zernt (ZernikeTransform): zernike transform object for boundary conditions
         zern_idx (ndarray of int, shape(Nc,3)): mode numbers for Zernike basis
         lambda_idx (ndarray of int, shape(Nc,2)): mode numbers for Fourier basis
-        bdry_pol (ndarray of int): poloidal mode numbers for boundary
-        bdry_tor (ndarray of int): toroidal mode numbers for boundary
+        bdryM (ndarray of int): poloidal mode numbers for boundary
+        bdryN (ndarray of int): toroidal mode numbers for boundary
 
     Returns:
         equil_obj (function): equilibrium objective function
@@ -46,15 +45,15 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
             "evaluating bdry error in real space coordinates is currently broken. Please yell at one of the developers and we will fix it")
         bdry_fun = compute_bc_err_RZ
     elif bdry_mode == 'spectral':
-        bdry_fun = compute_bc_err_four_sfl
+        bdry_fun = compute_bc_err_four
 
     def equil_obj(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
 
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errRf, errZf = equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
-        errRb, errZb = bdry_fun(cR, cZ, cL, bdry_ratio, bdry_zernt,
-                                lambda_idx, bdryR, bdryZ, bdry_pol, bdry_tor, NFP)
+        errRb, errZb = bdry_fun(
+            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
         residual = jnp.concatenate([errRf.flatten()*errr_ratio,
@@ -69,8 +68,8 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errRf, errZf = equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
-        errRb, errZb = bdry_fun(cR, cZ, cL, bdry_ratio, bdry_zernt,
-                                lambda_idx, bdryR, bdryZ, bdry_pol, bdry_tor, NFP)
+        errRb, errZb = bdry_fun(
+            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
         errRf_rms = rms(errRf)

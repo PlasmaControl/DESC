@@ -241,8 +241,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                 'cR': cR_init,
                 'cZ': cZ_init,
                 'cL': cL_init,
-                'bdryR': bdry[:, 2]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
-                'bdryZ': bdry[:, 3]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+                'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
+                'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
                 'cP': cP*pres_ratio[ii],
                 'cI': cI,
                 'Psi_lcfs': Psi_lcfs,
@@ -267,7 +267,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 t0 = time.perf_counter()
                 if verbose > 0:
-                    print("Expanding node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+                    print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
                         Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 nodes, volumes = get_nodes_pattern(
                     Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
@@ -277,13 +277,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                 bdry_zernt.expand_nodes(bdry_nodes)
                 t1 = time.perf_counter()
                 if verbose > 0:
-                    print("Expanding node resolution time = {} s".format(t1-t0))
+                    print("Changing node resolution time = {} s".format(t1-t0))
 
             # spectral resolution
             if M[ii] != M[ii-1] or N[ii] != N[ii-1]:
                 t0 = time.perf_counter()
                 if verbose > 0:
-                    print("Expanding spectral resolution from (M,N) = ({},{}) to ({},{})".format(
+                    print("Changing spectral resolution from (M,N) = ({},{}) to ({},{})".format(
                         M[ii-1], N[ii-1], M[ii], N[ii]))
                 zern_idx_old = zern_idx
                 lambda_idx_old = lambda_idx
@@ -302,7 +302,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
                 x = jnp.matmul(sym_mat.T, x)
                 t1 = time.perf_counter()
                 if verbose > 0:
-                    print("Expanding spectral resolution time = {} s".format(t1-t0))
+                    print("Changing spectral resolution time = {} s".format(t1-t0))
 
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
@@ -335,7 +335,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             jac_obj_jit(x, *args)
             t1 = time.perf_counter()
             if verbose > 0:
-                print("Objective function compiled, time= {} s".format(t1-t0))
+                print("Objective function compiled, time = {} s".format(t1-t0))
         else:
             equil_obj_jit = equil_obj
             jac_obj_jit = '2-point'
@@ -370,8 +370,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             'cR': cR,
             'cZ': cZ,
             'cL': cL,
-            'bdryR': bdry[:, 2]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
-            'bdryZ': bdry[:, 3]*np.clip(bdry_ratio[ii]+(bdry[:, 1] == 0), 0, 1),
+            'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
+            'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
             'cP': cP*pres_ratio[ii],
             'cI': cI,
             'Psi_lcfs': Psi_lcfs,

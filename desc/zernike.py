@@ -317,11 +317,11 @@ toroidal_derivatives = {0: four_toroidal,
                         3: four_toroidal_zzz}
 
 
-def zern(r, theta, l, m, dr, dtheta):
+def zern(rho, theta, l, m, dr, dtheta):
     """Zernike 2D basis function
 
     Args:
-        r (ndarray with shape(N,)): radial coordinates to evaluate basis
+        rho (ndarray with shape(N,)): radial coordinates to evaluate basis
         theta (array-like): azimuthal coordinates to evaluate basis
         l (int): radial mode number
         m (int): azimuthal mode number
@@ -331,7 +331,7 @@ def zern(r, theta, l, m, dr, dtheta):
     Returns:
         y (ndarray with shape(N,)): basis function evaluated at specified points
     """
-    radial = radial_derivatives[dr](r, l, m)[:, jnp.newaxis]
+    radial = radial_derivatives[dr](rho, l, m)[:, jnp.newaxis]
     azimuthal = poloidal_derivatives[dtheta](theta, m)
 
     return radial*azimuthal
@@ -350,6 +350,27 @@ def four(zeta, n, NFP, dz):
         y (ndarray with shape(N,)): basis function evaluated at specified points
     """
     return toroidal_derivatives[dz](zeta, n, NFP)
+
+
+def fourzern(rho, theta, zeta, l, m, n, NFP, dr, dv, dz):
+    """Combined 3D Fourier-Zernike basis function
+
+    Args:
+        rho (ndarray with shape(N,)): radial coordinates
+        theta (ndarray with shape(N,)): poloidal coordinates
+        zeta (ndarray with shape(N,)): toroidal coordinates
+        l (int): radial mode number
+        m (int): poloidal mode number
+        n (int): toroidal mode number
+        NFP (int): number of field periods
+        dr (int): order of radial derivative
+        dv (int): order of poloidal derivative
+        dz (int): order of toroidal derivative
+
+    Returns:
+        y (ndarray with shape(N,)): basis function evaluated at specified points
+    """
+    return zern(rho, theta, l, m, dr, dv)*four(zeta, n, NFP, dz)
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -384,27 +405,6 @@ def double_fourier_basis(theta, phi, m, n, NFP):
     n_term = n_pos*jnp.cos(n*NFP*phi) + n_neg*jnp.sin(n*NFP*phi)
 
     return m_term*n_term
-
-
-def fourzern(r, theta, zeta, l, m, n, NFP, dr, dv, dz):
-    """Combined 3D Fourier-Zernike basis function
-
-    Args:
-        r (ndarray with shape(N,)): radial coordinates
-        theta (ndarray with shape(N,)): poloidal coordinates
-        zeta (ndarray with shape(N,)): toroidal coordinates
-        l (int): radial mode number
-        m (int): poloidal mode number
-        n (int): toroidal mode number
-        NFP (int): number of field periods
-        dr (int): order of radial derivative
-        dv (int): order of poloidal derivative
-        dz (int): order of toroidal derivative
-
-    Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
-    """
-    return zern(r, theta, l, m, dr, dv)*four(zeta, n, NFP, dz)
 
 
 class ZernikeTransform():
@@ -663,7 +663,7 @@ class ZernikeTransform():
 
         elif self.method == 'fft':
             c_pad = jnp.pad(c.reshape((-1, self.numFour), order='F'),
-                            ((0, 0), (self.zeta_pad, self.zeta_pad)))
+                            ((0, 0), (self.zeta_pad, self.zeta_pad)), mode='constant')
             dk = self.NFP*jnp.arange(-(self.numFournodes//2),
                                      (self.numFournodes//2)+1).reshape((1, -1))
             c_pad = c_pad[:, ::(-1)**dz]*dk**dz * (-1)**(dz > 1)

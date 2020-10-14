@@ -1,7 +1,9 @@
 import numpy as np
 import functools
+import jax
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put
 from desc.zernike import fourzern, double_fourier_basis, eval_double_fourier
+from desc.nodes import get_nodes_surf
 
 
 def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
@@ -85,59 +87,9 @@ def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):
         return bdryM, bdryN, bR, bZ
 
 
-def compute_bc_err_four_sfl(cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
-    """Compute boundary error in fourier coefficients using SFL coord nodes
-
-    Args:
-        cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
-        cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
-        cL (ndarray, shape(2M+1)*(2N+1)): double Fourier coefficients of lambda
-        bdry_ratio (float): fraction in range [0,1] of the full non-axisymmetric boundary to use
-        bdry_zernt (ZernikeTransform): zernike transform object for evaluating spectral coefficients on bdry
-        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, 
-            ie an array of [m,n] for each spectral coefficient
-        bdryR (ndarray, shape(N_bdry_modes,)): R coefficients of boundary shape
-        bdryZ (ndarray, shape(N_bdry_modes,)): Z coefficients of boundary shape
-        bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
-        bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
-        NFP (int): number of field periods
-        sample (float): sampling factor (eg, 1.0 would be no oversampling)
-
-    Returns:
-        (tuple): tuple containing:
-
-            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary spectral coeffs
-            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
-    """
-
-    # get grid for bdry eval
-    bdry_rho = bdry_zernt.nodes[0]
-    bdry_vartheta = bdry_zernt.nodes[1]
-    bdry_zeta = bdry_zernt.nodes[2]
-    lamda = eval_double_fourier(cL, lambda_idx, NFP, bdry_vartheta, bdry_zeta)
-    theta = bdry_vartheta - lamda
-    phi = bdry_zeta
-
-    # find values of R,Z at pts specified
-    R = bdry_zernt.transform(cR, 0, 0, 0).flatten()
-    Z = bdry_zernt.transform(cZ, 0, 0, 0).flatten()
-
-    # interpolate R,Z to fourier basis in non sfl coords
-    four_bdry_interp = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
-    four_bdry_interp_pinv = jnp.linalg.pinv(four_bdry_interp, rcond=1e-6)
-    cRb, cZb = jnp.matmul(four_bdry_interp_pinv, jnp.array([R, Z]).T).T
-
-    # ratio of non-axisymmetric boundary modes to use
-    ratio = jnp.clip(bdry_ratio+(bdryN == 0), 0, 1)
-
-    # compute errors
-    errR = cRb - bdryR*ratio
-    errZ = cZb - bdryZ*ratio
-    return errR, errZ
-
-
-def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
-    """Compute boundary error in fourier coefficients
+# TODO: this method is not stable, but could yield speed improvements
+def compute_bc_err_four_sfl(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
+    """Compute boundary error in (vartheta,zeta) Fourier coefficients
 
     Args:
         cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
@@ -162,34 +114,147 @@ def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdr
             - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
     """
 
+    # sfl grid
+    M = np.ceil(sample*max(bdryM))
+    N = np.ceil(sample*max(bdryN))
+    nodes, vols = get_nodes_surf(M, N, NFP, surf=1.0)
+    vartheta = nodes[1,:]
+    zeta = nodes[2,:]
+
+    # grid in boundary coordinates
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, vartheta, zeta)
+    theta = vartheta - lamda
+    phi = zeta
+
+    # ratio of non-axisymmetric boundary modes to use
+    ratio = jnp.where(bdryN != 0, bdry_ratio, 1)
+
+    # interpolate boundary
+    bdry_idx = np.stack([bdryM, bdryN], axis=1)
+    R = eval_double_fourier(bdryR*ratio, bdry_idx, NFP, theta, phi)
+    Z = eval_double_fourier(bdryZ*ratio, bdry_idx, NFP, theta, phi)
+
+    # transform BC to sfl Fourier coefficients
+    four_bdry_interp = double_fourier_basis(vartheta, zeta, bdryM, bdryN, NFP)
+    four_bdry_interp_pinv = jnp.linalg.pinv(four_bdry_interp, rcond=1e-6)
+    bR, bZ = jnp.matmul(four_bdry_interp_pinv, jnp.array([R, Z]).T).T
+
+    # compute errors
+    errR = np.zeros_like(bdryM)
+    errZ = np.zeros_like(bdryN)
+    for i in range(len(bdryM)):
+        idx = np.where(np.logical_and(zern_idx[:,1] == bdryM[i], zern_idx[:,2] == bdryN[i]))[0]
+        errR = jax.ops.index_update(errR, jax.ops.index[i], bR[i] - np.sum(cR[idx]))
+        errZ = jax.ops.index_update(errZ, jax.ops.index[i], bZ[i] - np.sum(cR[idx]))
+
+    return errR, errZ
+
+
+# TODO: Note that this method cannot be improved with FFT due to non-uniform grid
+# TODO: The SVD Fourier transform could be unstable if lambda has a large amplitude
+# TODO: "sample" is unused -- it is embedded in the "zernt" nodes
+def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP):
+    """Compute boundary error in (theta,phi) Fourier coefficients from non-uniform interpolation grid
+
+    Args:
+        cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
+        cL (ndarray, shape(2M+1)*(2N+1)): double Fourier coefficients of lambda
+        bdry_ratio (float): fraction in range [0,1] of the full non-axisymmetric boundary to use
+        zernt (ZernikeTransform): zernike transform object for evaluating spectral coefficients on bdry
+        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, 
+            ie an array of [m,n] for each spectral coefficient
+        bdryR (ndarray, shape(N_bdry_modes,)): R coefficients of boundary shape
+        bdryZ (ndarray, shape(N_bdry_modes,)): Z coefficients of boundary shape
+        bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
+        bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
+        NFP (int): number of field periods
+        sample (float): sampling factor (eg, 1.0 would be no oversampling)
+
+    Returns:
+        (tuple): tuple containing:
+
+            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary spectral coeffs
+            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
+    """
+
+    # get grid for bdry eval
+    vartheta = zernt.nodes[1]
+    zeta = zernt.nodes[2]
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, vartheta, zeta)
+    theta = vartheta - lamda
+    phi = zeta
+
+    # find values of R,Z at pts specified
+    R = zernt.transform(cR, 0, 0, 0).flatten()
+    Z = zernt.transform(cZ, 0, 0, 0).flatten()
+
+    # interpolate R,Z to fourier basis in non sfl coords
+    four_basis = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
+    four_basis_pinv = jnp.linalg.pinv(four_basis, rcond=1e-6)
+    cRb, cZb = jnp.matmul(four_basis_pinv, jnp.array([R, Z]).T).T
+
+    # ratio of non-axisymmetric boundary modes to use
+    ratio = jnp.where(bdryN != 0, bdry_ratio, 1)
+
+    # compute errors
+    errR = cRb - bdryR*ratio
+    errZ = cZb - bdryZ*ratio
+    return errR, errZ
+
+
+# TODO: Note that this method is stable but requires expensive Zernike evaluations
+def compute_bc_err_four_slow(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sample=1.5):
+    """Compute boundary error in (theta,phi) Fourier coefficients from uniform interpolation grid
+
+    Args:
+        cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of R
+        cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients of Z
+        cL (ndarray, shape(2M+1)*(2N+1)): double Fourier coefficients of lambda
+        bdry_ratio (float): fraction in range [0,1] of the full non-axisymmetric boundary to use
+        zern_idx (ndarray, shape(Nc,3)): indices for R,Z spectral basis, ie an 
+            array of [l,m,n] for each spectral coefficient
+        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, 
+            ie an array of [m,n] for each spectral coefficient
+        bdryR (ndarray, shape(N_bdry_modes,)): R coefficients of boundary shape
+        bdryZ (ndarray, shape(N_bdry_modes,)): Z coefficients of boundary shape
+        bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
+        bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
+        NFP (int): number of field periods
+        sample (float): sampling factor (eg, 1.0 would be no oversampling)
+
+    Returns:
+        (tuple): tuple containing:
+            - **errR** (*ndarray, shape(N_bdry_pts,)*): vector of R errors in boundary spectral coeffs
+            - **errZ** (*ndarray, shape(N_bdry_pts,)*): vector of Z errors in boundary spectral coeffs
+    """
+
     # get grid for bdry eval
     dimFourM = 2*np.ceil(sample*np.max(np.abs(bdryM)))+1
     dimFourN = 2*np.ceil(sample*np.max(np.abs(bdryN)))+1
-    dv = 2*np.pi/dimFourM
-    dz = 2*np.pi/(NFP*dimFourN)
-    bdry_theta = jnp.arange(0, 2*jnp.pi, dv)
-    bdry_phi = jnp.arange(0, 2*jnp.pi/NFP, dz)
-    bdry_theta, bdry_phi = jnp.meshgrid(bdry_theta, bdry_phi, indexing='ij')
-    bdry_theta = bdry_theta.flatten()
-    bdry_phi = bdry_phi.flatten()
+    dt = 2*np.pi/dimFourM
+    dp = 2*np.pi/(NFP*dimFourN)
+    theta = np.arange(0, 2*jnp.pi, dt)
+    phi = np.arange(0, 2*jnp.pi/NFP, dp)
+    theta, phi = np.meshgrid(theta, phi, indexing='ij')
+    theta = theta.flatten()
+    phi = phi.flatten()
 
     # find values of R,Z at pts specified
-    rho = jnp.ones_like(bdry_theta)
-    lamda = eval_double_fourier(cL, lambda_idx, NFP, bdry_theta, bdry_phi)
-    vartheta = bdry_theta + lamda
-    zeta = bdry_phi
-    zern_bdry_interp = jnp.hstack([fourzern(
+    rho = np.ones_like(theta)
+    lamda = eval_double_fourier(cL, lambda_idx, NFP, theta, phi)
+    vartheta = theta + lamda
+    zeta = phi
+    zern_basis = jnp.hstack([fourzern(
         rho, vartheta, zeta, lmn[0], lmn[1], lmn[2], NFP, 0, 0, 0) for lmn in zern_idx])
-    R = jnp.matmul(zern_bdry_interp, cR).flatten()
-    Z = jnp.matmul(zern_bdry_interp, cZ).flatten()
+    R = jnp.matmul(zern_basis, cR).flatten()
+    Z = jnp.matmul(zern_basis, cZ).flatten()
 
-    four_bdry_interp = double_fourier_basis(
-        bdry_theta, bdry_phi, bdryM, bdryN, NFP)
-    cRb, cZb = jnp.linalg.lstsq(
-        four_bdry_interp, jnp.array([R, Z]).T, rcond=1e-6)[0].T
+    four_basis = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
+    cRb, cZb = jnp.linalg.lstsq(four_basis, jnp.array([R, Z]).T, rcond=1e-6)[0].T
 
     # ratio of non-axisymmetric boundary modes to use
-    ratio = jnp.clip(bdry_ratio+(bdryN == 0), 0, 1)
+    ratio = jnp.where(bdryN != 0, bdry_ratio, 1)
 
     # compute errors
     errR = cRb - bdryR*ratio

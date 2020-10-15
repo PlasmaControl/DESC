@@ -6,20 +6,20 @@ NFP       = 19
 Psi_lcfs  = 1.00000000E+00
 
 # spectral resolution
-Mpol   =  6,  6,  6,  6,  7,  8,  9, 10, 11, 12
-Ntor   =  0,  1,  1,  1,  2,  2,  2,  2,  2,  2
-Mnodes =  9,  9,  9,  9, 11, 12, 14, 15, 17, 18
-Nnodes =  0,  2,  2,  2,  3,  3,  3,  3,  3,  3
+Mpol   =  6,  7,  8,  9, 10, 11, 12
+Ntor   =  0,  1,  1,  2,  2,  2,  2
+Mnodes =  9, 11, 12, 14, 15, 17, 18
+Nnodes =  0,  2,  2,  3,  3,  3,  3
 
 # continuation parameters
-bdry_ratio = 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00
-pres_ratio = 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00
-zeta_ratio = 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00
+bdry_ratio = 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00, 
+pres_ratio = 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00, 
+zeta_ratio = 1
 errr_ratio = 1e-4
 pert_order = 1
 
 # solver tolerances
-ftol = 1e-6
+ftol = 1e-2, 1e-2, 1e-3, 1e-3, 1e-4, 1e-5, 1e-6
 xtol = 1e-6
 gtol = 1e-6
 nfev = 100

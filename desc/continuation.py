@@ -53,7 +53,7 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
 def perturb(x, equil_obj, deltas, args, pert_order, verbose):
     """perturbs an equilibrium"""
 
-    delta_strings = ['boundary', 'pressure', 'zeta', 'error']
+    delta_strings = ['boundary', 'pressure', 'zeta']
     dimF = len(equil_obj(x, *args))
     dimX = len(x)
     dimC = 1
@@ -135,6 +135,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
         equil (dict): dictionary of solution values
         iterations (dict): dictionary of intermediate solutions
     """
+    t_start = time.perf_counter()
 
     stell_sym = inputs['stell_sym']
     NFP = inputs['NFP']
@@ -308,8 +309,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
             delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
             delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
-            delta_errr = errr_ratio[ii] - errr_ratio[ii-1]
-            deltas = np.array([delta_bdry, delta_pres, delta_zeta, delta_errr])
+            deltas = np.array([delta_bdry, delta_pres, delta_zeta])
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
@@ -331,8 +331,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
             equil_obj_jit = jit(equil_obj, static_argnums=())
             jac_obj_jit = jit(jacfwd(equil_obj, argnums=0))
             t0 = time.perf_counter()
-            equil_obj_jit(x, *args)
-            jac_obj_jit(x, *args)
+            f0 = equil_obj_jit(x, *args)
+            J0 = jac_obj_jit(x, *args)
             t1 = time.perf_counter()
             if verbose > 0:
                 print("Objective function compiled, time = {} s".format(t1-t0))
@@ -359,6 +359,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
         x = out['x']
 
         if verbose:
+            print('Step {} time = {} s'.format(ii, t1-t0))
             print("Avg time per step: {} s".format((t1-t0)/out['nfev']))
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
@@ -391,8 +392,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     if checkpoint:
         checkpoint_file.close()
 
+    t_end = time.perf_counter()
     print('====================')
     print('Done')
+    if verbose > 0:
+        print('total time = {} s'.format(t_end-t_start))
     print('====================')
 
     return iterations

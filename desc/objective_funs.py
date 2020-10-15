@@ -56,11 +56,11 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
             cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
-        residual = jnp.concatenate([errRf.flatten()*errr_ratio,
-                                    errZf.flatten()*errr_ratio,
-                                    errRb.flatten(),
-                                    errZb.flatten(),
-                                    errL0.flatten()])
+        residual = jnp.concatenate([errRf.flatten(),
+                                    errZf.flatten(),
+                                    errRb.flatten()/errr_ratio,
+                                    errZb.flatten()/errr_ratio,
+                                    errL0.flatten()/errr_ratio])
         return residual
 
     def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
@@ -72,21 +72,24 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
             cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
-        errRf_rms = rms(errRf)
-        errZf_rms = rms(errZf)
-        errRb_rms = rms(errRb)
-        errZb_rms = rms(errZb)
-        errL0_rms = rms(errL0)
+        errRf_rms = jnp.sqrt(jnp.sum(errRf**2))
+        errZf_rms = jnp.sqrt(jnp.sum(errZf**2))
+        errRb_rms = jnp.sqrt(jnp.sum(errRb**2))
+        errZb_rms = jnp.sqrt(jnp.sum(errZb**2))
+        errL0_rms = jnp.sqrt(jnp.sum(errL0**2))
 
-        residual = jnp.concatenate([errRf.flatten()*errr_ratio,
-                                    errZf.flatten()*errr_ratio,
-                                    errRb.flatten(),
-                                    errZb.flatten(),
-                                    errL0.flatten()])
+        residual = jnp.concatenate([errRf.flatten(),
+                                    errZf.flatten(),
+                                    errRb.flatten()/errr_ratio,
+                                    errZb.flatten()/errr_ratio,
+                                    errL0.flatten()/errr_ratio])
         resid_rms = jnp.sum(residual**2)
-
-        print('Weighted Loss: {:10.3e}  errRf: {:10.3e}  errZf: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
-            resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+        if errr_mode == 'force':
+            print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
+                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+        elif errr_mode == 'accel':
+            print('Weighted Loss: {:10.3e}  errRf: {:10.3e}  errZf: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
+                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
 
     return equil_obj, callback
 

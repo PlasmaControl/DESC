@@ -6,28 +6,28 @@ NFP       =   1
 Psi_lcfs  =   1.00000000E+00
 
 # spectral resolution
-Mpol   =  8, 10, 12
+Mpol   =  6, 8, 10, 12
 Ntor   =   0
-Mnodes =  12, 15, 18
+Mnodes =  9, 12, 15, 18
 Nnodes =   0
 
 # continuation parameters
 bdry_ratio = 1
 pres_ratio = 1
 zeta_ratio = 1
-errr_ratio = 1e-4
+errr_ratio = 1e-6, 1e-5, 1e-4, 1e-4
 pert_order = 1
 
 # solver tolerances
-ftol = 1e-6
-xtol = 1e-6
+ftol = 1e-4, 1e-6, 1e-8, 1e-10
+xtol = 1e-6, 1e-6, 1e-8, 1e-8
 gtol = 1e-6
-nfev = 100
+nfev = 1000
 
 # solver methods
 errr_mode = force
 bdry_mode = spectral
-zern_mode = ansi
+zern_mode = fringe
 node_mode = cheb2
 
 # pressure and rotational transform profiles

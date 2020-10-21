@@ -24,6 +24,8 @@ sys.path.append(os.path.abspath('../'))
 project = 'DESC'
 copyright = '2020, Plasma Control Group at Princeton University'
 author = 'Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen'
+version = desc.__version__
+release = version
 
 
 # -- General configuration ---------------------------------------------------

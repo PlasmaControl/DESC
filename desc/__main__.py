@@ -2,10 +2,7 @@ import argparse
 import pathlib
 import sys
 import warnings
-from desc.continuation import solve_eq_continuation
-from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-from desc.input_output import read_input, output_to_file, read_vmec_output
-from desc.backend import use_jax
+import os
 
 
 def get_device(use_gpu=False, gpuID=None):
@@ -70,6 +67,8 @@ def parse_args(args):
     parser.add_argument('--gpuID', action='store', default=None,
                         help='device ID of GPU to use (usually 0,1,2 etc). Can be obtained by running '
                         + '`nvidia-smi`. Default is to select the GPU with most available memory.')
+    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
+                        + " and autodiff won't work but may be useful for debugging")
     return parser.parse_args(args)
 
 
@@ -79,6 +78,20 @@ def main(args=sys.argv[1:]):
     and prints and plots the resulting equilibrium.
     """
     args = parse_args(args)
+    if args.numpy:
+        os.environ['DESC_USE_NUMPY'] = 'True'
+    else:
+        os.environ['DESC_USE_NUMPY'] = ''
+
+    import desc
+
+    print(desc.BANNER)
+    print('DESC version={}'.format(desc.__version__))
+
+    from desc.continuation import solve_eq_continuation
+    from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
+    from desc.input_output import read_input, output_to_file, read_vmec_output
+    from desc.backend import use_jax
 
     if use_jax:
         device = get_device(args.gpu, args.gpuID)
@@ -91,6 +104,7 @@ def main(args=sys.argv[1:]):
 
     print('Reading input from {}'.format(in_fname))
     inputs = read_input(in_fname)
+    print('Output will be written to {}'.format(out_fname))
 
     if args.quiet:
         inputs['verbose'] = 0

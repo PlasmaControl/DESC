@@ -2,28 +2,34 @@ import numpy as np
 import functools
 import warnings
 
-try:
-    #     raise
-    import os
-    os.environ["JAX_PLATFORM_NAME"] = 'cpu'
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        import jax
-        import jaxlib
-        import jax.numpy as jnp
-        from jax.config import config
-        config.update("jax_enable_x64", True)
-        x = jnp.linspace(0, 5)
-        y = jnp.exp(x)
-    use_jax = True
-    print('Using JAX, version={}, jaxlib version={}, dtype={}'.format(
-        jax.__version__, jaxlib.__version__, x.dtype))
-except:
+import os
+os.environ["JAX_PLATFORM_NAME"] = 'cpu'
+
+if os.environ.get('DESC_USE_NUMPY'):
     jnp = np
     use_jax = False
-    warnings.warn(
-        'Failed to load JAX, using numpy version={}'.format(np.__version__))
-
+    print('Using numpy backend, version={}, dtype={}'.format(
+        np.__version__, np.linspace(0, 1).dtype))
+else:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import jax
+            import jaxlib
+            import jax.numpy as jnp
+            from jax.config import config
+            config.update("jax_enable_x64", True)
+            x = jnp.linspace(0, 5)
+            y = jnp.exp(x)
+        use_jax = True
+        print('Using JAX backend, jax version={}, jaxlib version={}, dtype={}'.format(
+            jax.__version__, jaxlib.__version__, x.dtype))
+    except:
+        jnp = np
+        use_jax = False
+        warnings.warn('Failed to load JAX')
+        print('Using numpy backend, version={}, dtype={}'.format(
+            np.__version__, np.linspace(0, 1).dtype))
 
 if use_jax:
     jit = jax.jit

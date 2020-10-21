@@ -363,7 +363,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         x = out['x']
 
         if verbose:
-            print('Step {} time = {} s'.format(ii, t1-t0))
+            print('Step {} time = {} s'.format(ii+1, t1-t0))
             print("Avg time per step: {} s".format((t1-t0)/out['nfev']))
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
@@ -401,6 +401,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     print('Done')
     if verbose > 0:
         print('total time = {} s'.format(t_end-t_start))
+    if checkpoint_filename is not None:
+        print('Output written to {}'.format(checkpoint_filename))
     print('====================')
 
     return iterations

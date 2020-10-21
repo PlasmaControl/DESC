@@ -35,6 +35,7 @@ def read_input(fname):
         'xtol': np.atleast_1d(1e-6),
         'gtol': np.atleast_1d(1e-6),
         'nfev': np.atleast_1d(None),
+        'optim_method': 'trf',
         'errr_mode': 'force',
         'bdry_mode': 'spectral',
         'zern_mode': 'fringe',
@@ -134,6 +135,9 @@ def read_input(fname):
                 [None if i == 0 else i for i in numbers]).astype(int)
 
         # solver methods
+        match = re.search(r'optim_method', argument, re.IGNORECASE)
+        if match:
+            inputs['optim_method'] = words[0]
         match = re.search(r'errr_mode', argument, re.IGNORECASE)
         if match:
             inputs['errr_mode'] = words[0]

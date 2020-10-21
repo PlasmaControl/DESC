@@ -25,6 +25,7 @@ gtol = 1e-6
 nfev = 1000
 
 # solver methods
+optim_method = trf
 errr_mode = force
 bdry_mode = spectral
 zern_mode = fringe

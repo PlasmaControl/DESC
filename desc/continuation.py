@@ -3,7 +3,7 @@ import scipy.optimize
 import time
 
 from desc.backend import jnp, jit, use_jax
-from desc.backend import get_needed_derivatives, unpack_x, jacfwd
+from desc.backend import get_needed_derivatives, unpack_x, jacfwd, grad
 from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
 from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
 from desc.init_guess import get_initial_guess_scale_bdry
@@ -153,6 +153,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     xtol = inputs['xtol']               # arr
     gtol = inputs['gtol']               # arr
     nfev = inputs['nfev']               # arr
+    optim_method = inputs['optim_method']
     errr_mode = inputs['errr_mode']
     bdry_mode = inputs['bdry_mode']
     zern_mode = inputs['zern_mode']
@@ -202,7 +203,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 print("Precomputing Fourier-Zernike basis")
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
-            derivatives = get_needed_derivatives('all')
+            derivatives = get_needed_derivatives('force', axis=False)
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernt = ZernikeTransform(
@@ -323,8 +324,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 x = perturb(x, equil_obj, deltas, args,
                             pert_order[ii], verbose)
 
-        args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
-                pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
+        args = (bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
+                pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
+
+        if optim_method in ['bfgs', 'l-bfgs-b']:
+            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
+                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, scalar=True)
+            jac = grad(equil_obj, argnums=0)
+        else:
+            jac = jacfwd(equil_obj, argnums=0)
+
         if use_jax:
             if verbose > 0:
                 print("Compiling objective function")
@@ -332,7 +341,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 import jax
                 device = jax.devices()[0]
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
-            jac_obj_jit = jit(jacfwd(equil_obj, argnums=0), device=device)
+            jac_obj_jit = jit(jac, device=device)
             t0 = time.perf_counter()
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)
@@ -347,17 +356,31 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         x_init = x
         t0 = time.perf_counter()
-        out = scipy.optimize.least_squares(equil_obj_jit,
-                                           x0=x_init,
-                                           args=args,
-                                           jac=jac_obj_jit,
-                                           method='trf',
-                                           x_scale='jac',
-                                           ftol=ftol[ii],
-                                           xtol=xtol[ii],
-                                           gtol=gtol[ii],
-                                           max_nfev=nfev[ii],
-                                           verbose=verbose)
+        if optim_method in ['bfgs', 'l-bfgs-b']:
+            out = scipy.optimize.minimize(equil_obj_jit,
+                                          x0=x_init,
+                                          args=args,
+                                          method=optim_method,
+                                          jac=jac_obj_jit,
+                                          tol=gtol[ii],
+                                          options={'maxiter': nfev[ii],
+                                                   'disp': verbose})
+
+        elif optim_method in ['trf', 'lm', 'dogleg']:
+            out = scipy.optimize.least_squares(equil_obj_jit,
+                                               x0=x_init,
+                                               args=args,
+                                               jac=jac_obj_jit,
+                                               method=optim_method,
+                                               x_scale='jac',
+                                               ftol=ftol[ii],
+                                               xtol=xtol[ii],
+                                               gtol=gtol[ii],
+                                               max_nfev=nfev[ii],
+                                               verbose=verbose)
+        else:
+            raise NotImplementedError
+
         t1 = time.perf_counter()
         x = out['x']
 

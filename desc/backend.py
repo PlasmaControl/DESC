@@ -5,21 +5,24 @@ import warnings
 try:
     #     raise
     import os
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    import jax
-    import jaxlib
-    import jax.numpy as jnp
-    from jax.config import config
-    config.update("jax_enable_x64", True)
-    x = jnp.linspace(0, 5)
-    y = jnp.exp(1)
+    os.environ["JAX_PLATFORM_NAME"] = 'cpu'
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        import jax
+        import jaxlib
+        import jax.numpy as jnp
+        from jax.config import config
+        config.update("jax_enable_x64", True)
+        x = jnp.linspace(0, 5)
+        y = jnp.exp(x)
     use_jax = True
     print('Using JAX, version={}, jaxlib version={}, dtype={}'.format(
         jax.__version__, jaxlib.__version__, x.dtype))
 except:
     jnp = np
     use_jax = False
-    warnings.warn('Failed to load JAX, using numpy instead')
+    warnings.warn(
+        'Failed to load JAX, using numpy version={}'.format(np.__version__))
 
 
 if use_jax:
@@ -111,6 +114,23 @@ else:
         for i in np.arange(lower, upper):
             val = body_fun(i, val)
         return val
+
+
+class _Indexable():
+    """Helper object for building indexes for indexed update functions.
+    This is a singleton object that overrides the :code:`__getitem__` method
+    to return the index it is passed.
+    >>> jax.ops.index[1:2, 3, None, ..., ::2]
+    (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
+    """
+    __slots__ = ()
+
+    def __getitem__(self, index):
+        return index
+
+
+#: Index object singleton
+opsindex = _Indexable()
 
 
 def conditional_decorator(dec, condition, *args, **kwargs):
@@ -440,32 +460,31 @@ class BroydenJacobian():
             return self.J
 
 
-def polyder_vec(p, m=1, pad=True):
+@conditional_decorator(functools.partial(jit), use_jax)
+def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
     Args:
         p (ndarray, shape(N,M)): polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
             each column is a power of x
         m (int >=0): order of derivative
-        pad (bool): whether to pad output with zeros to be the same shape as input
 
     Returns:
-        der (ndarray, shape(N,M) if pad, else shape(N,M-m)): polynomial coefficients for derivative in descending order
+        der (ndarray, shape(N,M)): polynomial coefficients for derivative in descending order
     """
-    m = int(m)
-    if m < 0:
-        raise ValueError("Order of derivative must be positive")
+    m = jnp.asarray(m, dtype=int)  # order of derivative
+    p = jnp.atleast_2d(p)
+    l = p.shape[0]               # number of polynomials
+    n = p.shape[1] - 1           # order of polynomials
 
-    p = np.atleast_2d(p)
-    n = p.shape[1] - 1  # order of polynomials
-    y = p[:, :-1] * np.arange(n, 0, -1)
-    if pad:
-        y = np.pad(y, ((0, 0), (1, 0)))
-    if m == 0:
-        val = p
-    else:
-        val = polyder_vec(y, m - 1, pad)
-    return val
+    D = jnp.arange(n, -1, -1)
+    D = factorial(D)/factorial(D-m)
+
+    p = jnp.roll(D*p, m, axis=1)
+    idx = jnp.arange(p.shape[1])
+    p = jnp.where(idx < m, 0, p)
+
+    return p
 
 
 @conditional_decorator(functools.partial(jit), use_jax)

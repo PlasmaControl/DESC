@@ -122,7 +122,7 @@ def perturb(x, equil_obj, deltas, args, pert_order, verbose):
     return x + dx
 
 
-def solve_eq_continuation(inputs, checkpoint_filename=None):
+def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     """Solves for an equilibrium by continuation method
 
     Steps up resolution, perturbs pressure, 3d bdry etc.
@@ -130,6 +130,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
     Args:
         inputs (dict): dictionary with input parameters defining problem setup and solver options
         checkpoint_filename (str or path-like): file to save checkpoint data
+        device (JAX device or None): device handle to JIT compile to
 
     Returns:
         equil (dict): dictionary of solution values
@@ -328,8 +329,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None):
         if use_jax:
             if verbose > 0:
                 print("Compiling objective function")
-            equil_obj_jit = jit(equil_obj, static_argnums=())
-            jac_obj_jit = jit(jacfwd(equil_obj, argnums=0))
+            if device is None:
+                import jax
+                device = jax.devices()[0]
+            equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
+            jac_obj_jit = jit(jacfwd(equil_obj, argnums=0), device=device)
             t0 = time.perf_counter()
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)

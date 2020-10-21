@@ -8,7 +8,7 @@ from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
 from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
-from desc.objective_funs import get_equil_obj_fun
+from desc.objective_funs import get_equil_obj_fun, is_nested
 from desc.nodes import get_nodes_pattern, get_nodes_surf
 from desc.input_output import Checkpoint
 
@@ -391,7 +391,12 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
-            checkpoint_file.write_iteration(equil, ii, inputs)
+            checkpoint_file.write_iteration(equil, ii+1, inputs)
+
+        if not is_nested(cR, cZ, zern_idx, NFP):
+            print('WARNING: Flux surfaces are no longer nested, exiting early.'
+                  + 'Consider increasing errr_ratio or taking smaller perturbation steps')
+            break
 
     if checkpoint:
         checkpoint_file.close()

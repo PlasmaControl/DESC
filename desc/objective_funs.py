@@ -1,9 +1,10 @@
 import numpy as np
+import matplotlib.pyplot
 from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
 from desc.field_components import compute_contravariant_basis, compute_jacobian
 from desc.field_components import compute_B_field, compute_J_field, compute_B_magnitude
 from desc.boundary_conditions import compute_bc_err_RZ, compute_bc_err_four, compute_lambda_err
-from desc.zernike import symmetric_x, double_fourier_basis
+from desc.zernike import symmetric_x, double_fourier_basis, fourzern
 from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, rms
 
 
@@ -127,6 +128,40 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernt, zern_idx, lambda_idx, modes_p
         return residual
 
     return qisym_obj
+
+
+def is_nested(cR, cZ, zern_idx, NFP, nsurfs=10, zeta=0, Nt=361):
+    """Checks that an equilibrium has properly nested flux surfaces
+    in a given toroidal plane
+
+    Args:
+        cR (ndarray, shape(N,)): R coefficients
+        cZ (ndarray, shape(N,)): Z coefficients
+        zern_idx (ndarray, shape(N,3)): zernike basis mode numbers
+        NFP (int): number of field periods
+        nsurfs (int): number of surfaces to check
+        zeta (float): toroidal plane to check
+        Nt (int): number of theta points to use for the test
+
+    Returns:
+        (bool): whether or not the surfaces are nested
+    """
+
+    surfs = np.linspace(0, 1, nsurfs)[::-1]
+    t = np.tile(np.linspace(0, 2*np.pi, Nt), [nsurfs, 1])
+    r = surfs[:, np.newaxis]*np.ones_like(t)
+    z = zeta*np.ones_like(t)
+
+    bdry_interp = np.hstack([fourzern(r.flatten(), t.flatten(), z.flatten(),
+                                      l, m, n, NFP, 0, 0, 0) for l, m, n in zern_idx])
+
+    Rs = np.matmul(bdry_interp, cR).reshape((nsurfs, -1))
+    Zs = np.matmul(bdry_interp, cZ).reshape((nsurfs, -1))
+
+    p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True)
+         for R, Z in zip(Rs, Zs)]
+    nested = np.all([p[i].contains_path(p[i+1]) for i in range(len(p)-1)])
+    return nested
 
 
 def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernt):

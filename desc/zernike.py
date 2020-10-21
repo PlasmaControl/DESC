@@ -447,7 +447,7 @@ class ZernikeTransform():
         if self.method == 'fft':
             self._check_inputs_fft(nodes, zern_idx)
         self._build()
-        
+
     def _build_pinv(self):
         A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
                                  lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
@@ -588,7 +588,7 @@ class ZernikeTransform():
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
                                                                 ][d[1]][d[2]][:, old_in_new]
-            self.zern_idx = self.zern_idx[old_in_new,:]
+            self.zern_idx = self.zern_idx[old_in_new, :]
             # then add new modes
             new_not_in_old = ~(zern_idx_new[:, None]
                                == self.zern_idx).all(-1).any(-1)
@@ -841,11 +841,11 @@ def eval_four_zern(c, idx, NFP, rho, theta, zeta, dr=0, dv=0, dz=0):
         f (ndarray): function evaluated at specified points
     """
     idx = jnp.atleast_2d(idx)
-    rho = jnp.asarray(rho)
-    theta = jnp.asarray(theta)
-    zeta = jnp.asarray(zeta)
-    Z = jnp.stack([fourzern(rho, theta, zeta, lmn[0], lmn[1],
-                            lmn[2], NFP, dr, dv, dz) for lmn in idx])
+    rho = jnp.atleast_1d(rho)
+    theta = jnp.atleast_1d(theta)
+    zeta = jnp.atleast_1d(zeta)
+    Z = jnp.hstack([fourzern(rho, theta, zeta, lmn[0], lmn[1],
+                             lmn[2], NFP, dr, dv, dz) for lmn in idx])
     Z = jnp.atleast_2d(Z)
     f = jnp.matmul(Z, c)
     return f
@@ -905,17 +905,17 @@ def symmetric_x(zern_idx, lambda_idx):
         A (2D array): matrix such that x=A*y and y=A^T*x
                       where y are the stellarator symmetric components of x
     """
-    
-    m_zern = zern_idx[:,1]
-    n_zern = zern_idx[:,2]
-    m_lambda = lambda_idx[:,0]
-    n_lambda = lambda_idx[:,1]
+
+    m_zern = zern_idx[:, 1]
+    n_zern = zern_idx[:, 2]
+    m_lambda = lambda_idx[:, 0]
+    n_lambda = lambda_idx[:, 1]
 
     # symmetric indices of R, Z, lambda
     sym_R = sign(m_zern)*sign(n_zern) > 0
     sym_Z = sign(m_zern)*sign(n_zern) < 0
     sym_L = sign(m_lambda)*sign(n_lambda) < 0
-    
+
     sym_x = np.concatenate([sym_R, sym_Z, sym_L])
     A = np.diag(sym_x, k=0).astype(int)
     return A[:, sym_x]

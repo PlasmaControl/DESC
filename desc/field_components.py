@@ -1,4 +1,4 @@
-from desc.backend import jnp, put, cross, dot, presfun, iotafun
+from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun
 
 
 def compute_coordinate_derivatives(cR, cZ, zernt, zeta_ratio=1.0, mode='equil'):
@@ -191,14 +191,8 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernt):
     # axis terms
     if len(zernt.axn):
         axn = zernt.axn
-        # indexing into a 2D array with a 1D array of columns where we want to put axis terms
-        idx0 = jnp.ones((3, axn.size))
-        idx1 = jnp.ones((3, axn.size))
-        # this gets the flattened indices we want to overwrite
-        idx0 = (idx0*jnp.array([[0, 1, 2]]).T).flatten().astype(jnp.int32)
-        idx1 = (idx1*axn).flatten().astype(jnp.int32)
-        con_basis['e^rho'] = put(con_basis['e^rho'], (idx0, idx1), (cross(
-            cov_basis['e_theta_r'][:, axn], cov_basis['e_zeta'][:, axn], 0)/jacobian['g_r'][axn]).flatten())
+        con_basis['e^rho'] = put(con_basis['e^rho'], opsindex[:, axn], (cross(
+            cov_basis['e_theta_r'][:, axn], cov_basis['e_zeta'][:, axn], 0)/jacobian['g_r'][axn]))
         # e^theta = infinite at the axis
 
     # metric coefficients
@@ -230,17 +224,21 @@ def compute_jacobian(coord_der, cov_basis, zernt, mode='equil'):
     """
     # notation: subscripts denote partial derivatives
     jacobian = {}
-    jacobian['g'] = dot(cov_basis['e_rho'], cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0)
+    jacobian['g'] = dot(cov_basis['e_rho'], cross(
+        cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0)
 
     jacobian['g_r'] = dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],   cov_basis['e_zeta_r'], 0), 0)
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
+                                          cov_basis['e_zeta_r'], 0), 0)
     jacobian['g_v'] = dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],   cov_basis['e_zeta_v'], 0), 0)
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
+                                          cov_basis['e_zeta_v'], 0), 0)
     jacobian['g_z'] = dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],   cov_basis['e_zeta_z'], 0), 0)
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
+        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
+                                          cov_basis['e_zeta_z'], 0), 0)
 
     # axis or QS terms
     if len(zernt.axn) or mode == 'qs':
@@ -335,24 +333,30 @@ def compute_B_field(cov_basis, jacobian, cI, Psi_total, zernt, mode='equil'):
     B_field['B^rho'] = jnp.zeros_like(r)
     B_field['B^zeta'] = B_field['psi_r'] / (2*jnp.pi*jacobian['g'])
     if len(axn):
-        B_field['B^zeta'] = put(B_field['B^zeta'], axn, B_field['psi_rr'][axn] / (2*jnp.pi*jacobian['g_r'][axn]))
+        B_field['B^zeta'] = put(
+            B_field['B^zeta'], axn, B_field['psi_rr'][axn] / (2*jnp.pi*jacobian['g_r'][axn]))
     B_field['B^theta'] = iota * B_field['B^zeta']
     B_field['B_con'] = B_field['B^rho']*cov_basis['e_rho'] + B_field['B^theta'] * \
         cov_basis['e_theta'] + B_field['B^zeta']*cov_basis['e_zeta']
 
     # covariant B components
     B_field['B_rho'] = B_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] + cov_basis['e_zeta'], cov_basis['e_rho'], 0)
+        dot(iota*cov_basis['e_theta'] +
+            cov_basis['e_zeta'], cov_basis['e_rho'], 0)
     B_field['B_theta'] = B_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] + cov_basis['e_zeta'], cov_basis['e_theta'], 0)
+        dot(iota*cov_basis['e_theta'] +
+            cov_basis['e_zeta'], cov_basis['e_theta'], 0)
     B_field['B_zeta'] = B_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] + cov_basis['e_zeta'], cov_basis['e_zeta'], 0)
+        dot(iota*cov_basis['e_theta'] +
+            cov_basis['e_zeta'], cov_basis['e_zeta'], 0)
 
     # B^{zeta} derivatives
     B_field['B^zeta_r'] = B_field['psi_rr'] / (2*jnp.pi*jacobian['g']) - \
         (B_field['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
-    B_field['B^zeta_v'] = - (B_field['psi_r']*jacobian['g_v']) / (2*jnp.pi*jacobian['g']**2)
-    B_field['B^zeta_z'] = - (B_field['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
+    B_field['B^zeta_v'] = - \
+        (B_field['psi_r']*jacobian['g_v']) / (2*jnp.pi*jacobian['g']**2)
+    B_field['B^zeta_z'] = - \
+        (B_field['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
 
     # axis terms
     if len(axn):
@@ -428,26 +432,30 @@ def compute_J_field(coord_der, cov_basis, jacobian, B_field, cI, Psi_total, zern
     # axis terms
     if len(axn):
         g_rrv = 2*coord_der['R_rv']*(coord_der['Z_r']*coord_der['R_rv'] - coord_der['R_r']*coord_der['Z_rv']) \
-              + 2*coord_der['R_r']*(coord_der['Z_r']*coord_der['R_rvv'] - coord_der['R_r']*coord_der['Z_rvv']) \
-              + coord_der['R']*(2*coord_der['Z_rr']*coord_der['R_rvv'] - 2*coord_der['R_rr']*coord_der['Z_rvv'] \
-              + coord_der['R_rv']*coord_der['Z_rrv'] - coord_der['Z_rv']*coord_der['R_rrv'] \
-              + coord_der['Z_r']*coord_der['R_rrvv'] - coord_der['R_r']*coord_der['Z_rrvv'])
+            + 2*coord_der['R_r']*(coord_der['Z_r']*coord_der['R_rvv'] - coord_der['R_r']*coord_der['Z_rvv']) \
+            + coord_der['R']*(2*coord_der['Z_rr']*coord_der['R_rvv'] - 2*coord_der['R_rr']*coord_der['Z_rvv']
+                              + coord_der['R_rv']*coord_der['Z_rrv'] -
+                              coord_der['Z_rv']*coord_der['R_rrv']
+                              + coord_der['Z_r']*coord_der['R_rrvv'] - coord_der['R_r']*coord_der['Z_rrvv'])
         Bsup_zeta_rv = B_field['psi_rr']*(2*jacobian['g_rr']*jacobian['g_rv'] -
-            jacobian['g_r']*g_rrv) / (4*jnp.pi*jacobian['g_r']**3)
+                                          jacobian['g_r']*g_rrv) / (4*jnp.pi*jacobian['g_r']**3)
         Bsub_zeta_rv = Bsup_zeta_rv*dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0) + B_field['B^zeta']*dot(
             iota*cov_basis['e_rho_vv'] + 2*cov_basis['e_zeta_rv'], cov_basis['e_zeta'], 0)
         Bsub_theta_rz = B_field['B^zeta_z']*dot(cov_basis['e_zeta'], cov_basis['e_rho_v'], 0) + B_field['B^zeta']*(
             dot(cov_basis['e_zeta_z'], cov_basis['e_rho_v'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_rho_vz'], 0))
 
     # contravariant J components
-    J_field['J^rho'] = (B_field['B_zeta_v'] - B_field['B_theta_z']) / (mu0*jacobian['g'])
-    J_field['J^theta'] = (B_field['B_rho_z'] - B_field['B_zeta_r']) / (mu0*jacobian['g'])
-    J_field['J^zeta'] = (B_field['B_theta_r'] - B_field['B_rho_v']) / (mu0*jacobian['g'])
+    J_field['J^rho'] = (B_field['B_zeta_v'] -
+                        B_field['B_theta_z']) / (mu0*jacobian['g'])
+    J_field['J^theta'] = (B_field['B_rho_z'] -
+                          B_field['B_zeta_r']) / (mu0*jacobian['g'])
+    J_field['J^zeta'] = (B_field['B_theta_r'] -
+                         B_field['B_rho_v']) / (mu0*jacobian['g'])
 
     # axis terms
     if len(axn):
-        J_field['J^rho'] = put(J_field['J^rho'], axn, 
-                           (Bsub_zeta_rv[axn] - Bsub_theta_rz[axn]) / (jacobian['g_r'][axn]))
+        J_field['J^rho'] = put(J_field['J^rho'], axn,
+                               (Bsub_zeta_rv[axn] - Bsub_theta_rz[axn]) / (jacobian['g_r'][axn]))
 
     J_field['J_con'] = J_field['J^rho']*cov_basis['e_rho'] + J_field['J^theta'] * \
         cov_basis['e_theta'] + J_field['J^zeta']*cov_basis['e_zeta']

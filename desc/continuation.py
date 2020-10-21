@@ -133,7 +133,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         device (JAX device or None): device handle to JIT compile to
 
     Returns:
-        equil (dict): dictionary of solution values
         iterations (dict): dictionary of intermediate solutions
     """
     t_start = time.perf_counter()
@@ -214,7 +213,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
                                           0, 0, 0], method='direct')
             t1 = time.perf_counter()
-            if verbose > 0:
+            if verbose > 1:
                 print("Precomputation time = {} s".format(t1-t0))
             # format boundary shape
             bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
@@ -237,7 +236,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             x_init = jnp.matmul(sym_mat.T, x_init)
             x = x_init
             t1 = time.perf_counter()
-            if verbose > 0:
+            if verbose > 1:
                 print("Initial guess time = {} s".format(t1-t0))
             equil_init = {
                 'cR': cR_init,
@@ -278,7 +277,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 zernt.expand_nodes(nodes, volumes)
                 bdry_zernt.expand_nodes(bdry_nodes)
                 t1 = time.perf_counter()
-                if verbose > 0:
+                if verbose > 1:
                     print("Changing node resolution time = {} s".format(t1-t0))
 
             # spectral resolution
@@ -303,7 +302,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
                 x = jnp.matmul(sym_mat.T, x)
                 t1 = time.perf_counter()
-                if verbose > 0:
+                if verbose > 1:
                     print("Changing spectral resolution time = {} s".format(t1-t0))
 
             # continuation parameters
@@ -338,7 +337,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)
             t1 = time.perf_counter()
-            if verbose > 0:
+            if verbose > 1:
                 print("Objective function compiled, time = {} s".format(t1-t0))
         else:
             equil_obj_jit = equil_obj
@@ -362,9 +361,10 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         t1 = time.perf_counter()
         x = out['x']
 
-        if verbose:
+        if verbose > 1:
             print('Step {} time = {} s'.format(ii+1, t1-t0))
             print("Avg time per step: {} s".format((t1-t0)/out['nfev']))
+        if verbose > 0:
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
@@ -404,7 +404,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     t_end = time.perf_counter()
     print('====================')
     print('Done')
-    if verbose > 0:
+    if verbose > 1:
         print('total time = {} s'.format(t_end-t_start))
     if checkpoint_filename is not None:
         print('Output written to {}'.format(checkpoint_filename))

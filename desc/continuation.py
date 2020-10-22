@@ -11,6 +11,7 @@ from desc.boundary_conditions import format_bdry
 from desc.objective_funs import get_equil_obj_fun, is_nested
 from desc.nodes import get_nodes_pattern, get_nodes_surf
 from desc.input_output import Checkpoint
+from desc.perturbations import perturb_continuation_params
 
 
 def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
@@ -48,78 +49,6 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
     bdry_zernt.expand_spectral_resolution(zern_idx_new)
 
     return x_new, zernt, bdry_zernt
-
-
-def perturb(x, equil_obj, deltas, args, pert_order, verbose):
-    """perturbs an equilibrium"""
-
-    delta_strings = ['boundary', 'pressure', 'zeta']
-    dimF = len(equil_obj(x, *args))
-    dimX = len(x)
-    dimC = 1
-
-    # x
-    t00 = time.perf_counter()
-    if pert_order >= 1:
-        t0 = time.perf_counter()
-        obj_jac_x = jacfwd(equil_obj, argnums=0)
-        Jx = obj_jac_x(x, *args).reshape((dimF, dimX))
-        t1 = time.perf_counter()
-        LHS = Jx
-        RHS = equil_obj(x, *args)
-        if verbose > 1:
-            print("dF/dx computation time: {} s".format(t1-t0))
-    if pert_order >= 2:
-        t0 = time.perf_counter()
-        obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
-        Jxx = obj_jac_xx(x, *args).reshape((dimF, dimX, dimX))
-        t1 = time.perf_counter()
-        if verbose > 1:
-            print("dF/dxx computation time: {} s".format(t1-t0))
-
-    # continuation parameters
-    for i in range(deltas.size):
-        if deltas[i] != 0:
-            if verbose > 1:
-                print("Perturbing {}".format(delta_strings[i]))
-            if pert_order >= 1:
-                t0 = time.perf_counter()
-                obj_jac_c = jacfwd(equil_obj, argnums=6+i)
-                Jc = obj_jac_c(x, *args).reshape((dimF, dimC))
-                t1 = time.perf_counter()
-                RHS += np.tensordot(Jc, np.atleast_1d(deltas[i]), axes=1)
-                if verbose > 1:
-                    print("dF/dc computation time: {} s".format(t1-t0))
-            if pert_order >= 2:
-                t0 = time.perf_counter()
-                obj_jac_cc = jacfwd(
-                    jacfwd(equil_obj, argnums=6+i), argnums=6+i)
-                Jcc = obj_jac_cc(x, *args).reshape((dimF, dimC, dimC))
-                t1 = time.perf_counter()
-                if verbose > 1:
-                    print("dF/dcc computation time: {} s".format(t1-t0))
-                obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=6+i)
-                Jxc = obj_jac_xc(x, *args).reshape((dimF, dimX, dimC))
-                t2 = time.perf_counter()
-                LHS += np.tensordot(Jxc, np.atleast_1d(deltas[i]), axes=1)
-                RHS += 0.5 * np.tensordot(Jcc, np.tensordot(np.atleast_1d(deltas[i]),
-                                                            np.atleast_1d(deltas[i]), axes=0), axes=2)
-                if verbose > 1:
-                    print("dF/dxc computation time: {} s".format(t2-t1))
-
-    # perturbation
-    if pert_order >= 2:
-        LHSi = np.linalg.pinv(LHS, rcond=1e-6)
-        RHS += 0.5 * np.tensordot(Jxx, np.tensordot(np.tensordot(LHSi, RHS, axes=1),
-                                                    np.tensordot(RHS.T, LHSi.T, axes=1), axes=0), axes=2)
-    if pert_order > 0:
-        dx = -np.linalg.lstsq(LHS, RHS, rcond=1e-6)[0]
-    else:
-        dx = np.zeros_like(x)
-    t1 = time.perf_counter()
-    if verbose > 1:
-        print("Total perturbation time: {} s".format(t1-t00))
-    return x + dx
 
 
 def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):

@@ -3,6 +3,7 @@ scipy >= 1.3.0
 matplotlib >= 3.0.0
 jaxlib==0.1.55
 jax==0.1.77
+numba
 nvidia-ml-py3
 h5py
 netcdf4

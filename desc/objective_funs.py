@@ -152,8 +152,9 @@ def is_nested(cR, cZ, zern_idx, NFP, nsurfs=10, zeta=0, Nt=361):
     r = surfs[:, np.newaxis]*np.ones_like(t)
     z = zeta*np.ones_like(t)
 
-    bdry_interp = np.hstack([fourzern(r.flatten(), t.flatten(), z.flatten(),
-                                      l, m, n, NFP, 0, 0, 0) for l, m, n in zern_idx])
+    bdry_interp = fourzern(r.flatten(), t.flatten(), z.flatten(),
+                           zern_idx[:, 0], zern_idx[:, 1], zern_idx[:, 2],
+                           NFP, 0, 0, 0)
 
     Rs = np.matmul(bdry_interp, cR).reshape((nsurfs, -1))
     Zs = np.matmul(bdry_interp, cZ).reshape((nsurfs, -1))

@@ -327,7 +327,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         args = (bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
 
-        if optim_method in ['bfgs', 'l-bfgs-b']:
+        if optim_method in ['bfgs']:
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernt, bdry_zernt, zern_idx, lambda_idx, bdry_pol, bdry_tor, scalar=True)
             jac = grad(equil_obj, argnums=0)
@@ -356,7 +356,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         x_init = x
         t0 = time.perf_counter()
-        if optim_method in ['bfgs', 'l-bfgs-b']:
+        if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
                                           x0=x_init,
                                           args=args,

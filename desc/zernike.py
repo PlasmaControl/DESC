@@ -1,8 +1,10 @@
 import numpy as np
 import functools
 import warnings
+import numba
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
 from desc.backend import issorted, isalmostequal, sign
+from desc.backend import polyder_vec, polyval_vec
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -29,7 +31,7 @@ def zern_radial(x, l, m):
     kmax = ((l-m)/2.0)+1.0
     y = fori_loop(0.0, kmax, body_fun, y)
 
-    return y*lm_even
+    return (y*lm_even)[:, jnp.newaxis]
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -56,7 +58,7 @@ def zern_radial_r(x, l, m):
     kmax = ((l-m)/2.0)+1.0
     y = fori_loop(0.0, kmax, body_fun, y)
 
-    return y*lm_even
+    return (y*lm_even)[:, jnp.newaxis]
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -83,7 +85,7 @@ def zern_radial_rr(x, l, m):
     kmax = ((l-m)/2.0)+1.0
     y = fori_loop(0.0, kmax, body_fun, y)
 
-    return y*lm_even
+    return (y*lm_even)[:, jnp.newaxis]
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -110,7 +112,7 @@ def zern_radial_rrr(x, l, m):
     kmax = ((l-m)/2.0)+1.0
     y = fori_loop(0.0, kmax, body_fun, y)
 
-    return y*lm_even
+    return (y*lm_even)[:, jnp.newaxis]
 
 
 @conditional_decorator(functools.partial(jit), use_jax)
@@ -321,17 +323,19 @@ def zern(rho, theta, l, m, dr, dtheta):
     """Zernike 2D basis function
 
     Args:
-        rho (ndarray with shape(N,)): radial coordinates to evaluate basis
-        theta (array-like): azimuthal coordinates to evaluate basis
-        l (int): radial mode number
-        m (int): azimuthal mode number
+        rho (ndarray, shape(N,)): radial coordinates to evaluate basis
+        theta (ndarray, shape(N,)): azimuthal coordinates to evaluate basis
+        l (ndarray of int, shape(K,)): radial mode number
+        m (ndarray of int, shape(K,)): azimuthal mode number
         dr (int): order of radial derivative
         dtheta (int): order of azimuthal derivative
 
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,K)): basis function evaluated at specified points
     """
-    radial = radial_derivatives[dr](rho, l, m)[:, jnp.newaxis]
+
+    coeffs = polyder_vec(get_jacobi_coeffs(l, m), dr)
+    radial = polyval_vec(coeffs, rho).T
     azimuthal = poloidal_derivatives[dtheta](theta, m)
 
     return radial*azimuthal
@@ -342,12 +346,12 @@ def four(zeta, n, NFP, dz):
 
     Args:
         zeta (ndarray with shape(N,)): coordinates to evaluate basis
-        n (ndarray of int, shape(M,)): toroidal mode number
+        n (ndarray of int, shape(K,)): toroidal mode number
         NFP (int): number of field periods
         dz (int): order of toroidal derivative
 
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,K)): basis function evaluated at specified points
     """
     return toroidal_derivatives[dz](zeta, n, NFP)
 
@@ -359,16 +363,16 @@ def fourzern(rho, theta, zeta, l, m, n, NFP, dr, dv, dz):
         rho (ndarray with shape(N,)): radial coordinates
         theta (ndarray with shape(N,)): poloidal coordinates
         zeta (ndarray with shape(N,)): toroidal coordinates
-        l (int): radial mode number
-        m (int): poloidal mode number
-        n (int): toroidal mode number
+        l (ndarray of int, shape(K,)): radial mode number
+        m (ndarray of int, shape(K,)): poloidal mode number
+        n (ndarray of int, shape(K,)): toroidal mode number
         NFP (int): number of field periods
         dr (int): order of radial derivative
         dv (int): order of poloidal derivative
         dz (int): order of toroidal derivative
 
     Returns:
-        y (ndarray with shape(N,)): basis function evaluated at specified points
+        y (ndarray with shape(N,K)): basis function evaluated at specified points
     """
     return zern(rho, theta, l, m, dr, dv)*four(zeta, n, NFP, dz)
 
@@ -449,8 +453,8 @@ class ZernikeTransform():
         self._build()
 
     def _build_pinv(self):
-        A = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                 lmn[0], lmn[1], lmn[2], self.NFP, 0, 0, 0) for lmn in self.zern_idx])
+        A = fourzern(self.nodes[0], self.nodes[1], self.nodes[2], self.zern_idx[:, 0],
+                     self.zern_idx[:, 1], self.zern_idx[:, 2], self.NFP, 0, 0, 0)
         self.pinv = jnp.linalg.pinv(A, rcond=self.pinv_rcond)
 
     def _build(self):
@@ -462,15 +466,17 @@ class ZernikeTransform():
                 dr = d[0]
                 dv = d[1]
                 dz = d[2]
-                self.matrices[dr][dv][dz] = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                                                 lmn[0], lmn[1], lmn[2], self.NFP, dr, dv, dz) for lmn in self.zern_idx])
+                self.matrices[dr][dv][dz] = fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
+                                                     self.zern_idx[:, 0], self.zern_idx[:,
+                                                                                        1], self.zern_idx[:, 2],
+                                                     self.NFP, dr, dv, dz)
         elif self.method == 'fft':
             for d in self.derivatives:
                 dr = d[0]
                 dv = d[1]
                 dz = 0
-                self.matrices[dr][dv][dz] = jnp.hstack([zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                             lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
+                self.matrices[dr][dv][dz] = zern(self.pol_nodes[0], self.pol_nodes[1],
+                                                 self.pol_zern_idx[:, 0], self.pol_zern_idx[:, 1], dr, dv)
 
     def _check_inputs_fft(self, nodes, zern_idx):
         """helper function to check that inputs are formatted correctly for fft method"""
@@ -548,8 +554,8 @@ class ZernikeTransform():
                 for d in self.derivatives:
                     self.matrices[d[0]][d[1]][d[2]] = jnp.vstack([
                         self.matrices[d[0]][d[1]][d[2]],  # old
-                        jnp.hstack([fourzern(nodes_to_add[:, 0], nodes_to_add[:, 1], nodes_to_add[:, 2],  # new
-                                             lmn[0], lmn[1], lmn[2], self.NFP, d[0], d[1], d[2]) for lmn in self.zern_idx])])
+                        fourzern(nodes_to_add[:, 0], nodes_to_add[:, 1], nodes_to_add[:, 2],  # new
+                                 self.zern_idx[:, 0], self.zern_idx[:, 1], self.zern_idx[:, 2], self.NFP, d[0], d[1], d[2])])
 
             # update indices
             self.nodes = np.hstack([self.nodes, nodes_to_add.T])
@@ -597,8 +603,8 @@ class ZernikeTransform():
                 for d in self.derivatives:
                     self.matrices[d[0]][d[1]][d[2]] = jnp.hstack([
                         self.matrices[d[0]][d[1]][d[2]],  # old
-                        jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],  # new
-                                             lmn[0], lmn[1], lmn[2], self.NFP, d[0], d[1], d[2]) for lmn in modes_to_add])])
+                        fourzern(self.nodes[0], self.nodes[1], self.nodes[2],  # new
+                                 modes_to_add[:, 0], modes_to_add[:, 1], modes_to_add[:, 2], self.NFP, d[0], d[1], d[2])])
 
             # update indices
             self.zern_idx = np.vstack([self.zern_idx, modes_to_add])
@@ -633,16 +639,18 @@ class ZernikeTransform():
                 dr = d[0]
                 dv = d[1]
                 dz = d[2]
-                self.matrices[dr][dv][dz] = jnp.hstack([fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                                                 lmn[0], lmn[1], lmn[2], self.NFP, dr, dv, dz) for lmn in self.zern_idx])
+                self.matrices[dr][dv][dz] = fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
+                                                     self.zern_idx[:, 0], self.zern_idx[:,
+                                                                                        1], self.zern_idx[:, 2],
+                                                     self.NFP, dr, dv, dz)
 
         elif self.method == 'fft':
             for d in derivs_to_add:
                 dr = d[0]
                 dv = d[1]
                 dz = 0
-                self.matrices[dr][dv][dz] = jnp.hstack([zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                             lm[0], lm[1], dr, dv) for lm in self.pol_zern_idx])
+                self.matrices[dr][dv][dz] = zern(self.pol_nodes[0], self.pol_nodes[1],
+                                                 self.pol_zern_idx[:, 0], self.pol_zern_idx[:, 1], dr, dv)
 
         self.derivatives = jnp.vstack([self.derivatives, derivs_to_add])
 
@@ -844,8 +852,8 @@ def eval_four_zern(c, idx, NFP, rho, theta, zeta, dr=0, dv=0, dz=0):
     rho = jnp.atleast_1d(rho)
     theta = jnp.atleast_1d(theta)
     zeta = jnp.atleast_1d(zeta)
-    Z = jnp.hstack([fourzern(rho, theta, zeta, lmn[0], lmn[1],
-                             lmn[2], NFP, dr, dv, dz) for lmn in idx])
+    Z = fourzern(rho, theta, zeta, idx[:, 0],
+                 idx[:, 1], idx[:, 2], NFP, dr, dv, dz)
     Z = jnp.atleast_2d(Z)
     f = jnp.matmul(Z, c)
     return f
@@ -921,6 +929,7 @@ def symmetric_x(zern_idx, lambda_idx):
     return A[:, sym_x]
 
 
+@numba.jit(forceobj=True)
 def get_jacobi_coeffs(l, m):
     """Computes coefficients for Jacobi polynomials used in Zernike basis
 
@@ -932,16 +941,18 @@ def get_jacobi_coeffs(l, m):
         jacobi_coeffs (ndarray, shape(N,max(l)+1)): matrix of polynomial coefficients in
             order of descending powers. Each row contains the coeffs for a given l,m.
     """
-
-    l = np.atleast_1d(l)
-    m = np.atleast_1d(abs(m))
+    factorial = np.math.factorial
+    l = np.atleast_1d(l).astype(int)
+    m = np.atleast_1d(np.abs(m)).astype(int)
     lmax = np.max(l)
     npoly = len(l)
     coeffs = np.zeros((npoly, lmax+1))
-    for ii, (ll, mm) in enumerate(zip(l, m)):
-        if (ll-mm) % 2 != 0:
-            continue
+    lm_even = ((l-m) % 2 == 0)[:, np.newaxis]
+    for ii in range(npoly):
+        ll = l[ii]
+        mm = m[ii]
         for s in range(mm, ll+1, 2):
             coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
                 factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
+    coeffs = np.where(lm_even, coeffs, 0)
     return np.fliplr(coeffs)

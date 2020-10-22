@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def get_nodes_pattern(M, N, NFP, surfs='cheb1', index='fringe', axis=True):
+def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=True):
     """Compute interpolation nodes on a patterned grid
 
     Args:
@@ -15,6 +15,9 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1', index='fringe', axis=True):
             cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
             cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
             any other value defaults to linear spacing in r
+        sym (bool): False for nodes to fill the full domain,
+                    True for nodes in the stellarator symmetry (half) domain
+        axis (bool): True to include a node at the origin (magnetic axis)
 
     Returns:
         nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
@@ -79,8 +82,59 @@ def get_nodes_pattern(M, N, NFP, surfs='cheb1', index='fringe', axis=True):
 
     nodes = np.stack([r, t, z])
     volumes = np.stack([dr, dt, dz])
-    sort_idx = np.lexsort((nodes[1], nodes[0], nodes[2]))
 
+    if sym:
+        non_sym_idx = np.where(np.logical_or(z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
+        nodes = np.delete(nodes, non_sym_idx, axis=1)
+        volumes = np.delete(volumes, non_sym_idx, axis=1)
+
+    sort_idx = np.lexsort((nodes[1], nodes[0], nodes[2]))
+    return nodes[:, sort_idx], volumes[:, sort_idx]
+
+
+def get_nodes_surf(M, N, NFP, surf=1.0, sym=False):
+    """Compute interpolation nodes on a single surface
+
+    Args:
+        M (int): maximum poloidal mode number
+        N (int): maximum toroidal mode number
+        NFP (int): number of field periods
+        surf (float): radial coordinate of flux surface
+        sym (bool): False for nodes to fill the full domain,
+                    True for nodes in the stellarator symmetry (half) domain
+
+    Returns:
+        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
+        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    """
+
+    dimFourM = 2*M+1
+    dimFourN = 2*N+1
+
+    dt = 2*np.pi/dimFourM
+    t = np.arange(0, 2*np.pi, dt)
+
+    dz = 2*np.pi/(NFP*dimFourN)
+    z = np.arange(0, 2*np.pi/NFP, dz)
+
+    t, z = np.meshgrid(t, z, indexing='ij')
+    t = t.flatten()
+    z = z.flatten()
+    r = np.ones_like(t)*surf
+
+    dr = np.ones_like(r)
+    dt = np.ones_like(t)*dt
+    dz = np.ones_like(z)*dz
+
+    nodes = np.stack([r, t, z])
+    volumes = np.stack([dr, dt, dz])
+
+    if sym:
+        non_sym_idx = np.where(np.logical_or(z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
+        nodes = np.delete(nodes, non_sym_idx, axis=1)
+        volumes = np.delete(volumes, non_sym_idx, axis=1)
+
+    sort_idx = np.lexsort((nodes[1], nodes[0], nodes[2]))
     return nodes[:, sort_idx], volumes[:, sort_idx]
 
 
@@ -120,45 +174,6 @@ def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
     volumes = np.stack([dr, dt, dz])
 
     return nodes, volumes
-
-
-def get_nodes_surf(M, N, NFP, surf=1.0):
-    """Compute interpolation nodes on a single surface
-
-    Args:
-        M (int): maximum poloidal mode number
-        N (int): maximum toroidal mode number
-        NFP (int): number of field periods
-        surf (float): radial coordinate of flux surface
-
-    Returns:
-        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
-        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
-    """
-
-    dimFourM = 2*M+1
-    dimFourN = 2*N+1
-
-    dt = 2*np.pi/dimFourM
-    t = np.arange(0, 2*np.pi, dt)
-
-    dz = 2*np.pi/(NFP*dimFourN)
-    z = np.arange(0, 2*np.pi/NFP, dz)
-
-    t, z = np.meshgrid(t, z, indexing='ij')
-    t = t.flatten()
-    z = z.flatten()
-    r = np.ones_like(t)*surf
-
-    dr = np.ones_like(r)
-    dt = np.ones_like(t)*dt
-    dz = np.ones_like(z)*dz
-
-    nodes = np.stack([r, t, z])
-    volumes = np.stack([dr, dt, dz])
-    sort_idx = np.lexsort((nodes[1], nodes[0], nodes[2]))
-
-    return nodes[:, sort_idx], volumes[:, sort_idx]
 
 
 # these functions are currently unused

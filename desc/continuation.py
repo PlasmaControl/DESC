@@ -202,15 +202,15 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if verbose > 0:
                 print("Precomputing Fourier-Zernike basis")
             nodes, volumes = get_nodes_pattern(
-                Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
-            derivatives = get_needed_derivatives('force', axis=False)
+                Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
+            derivatives = get_needed_derivatives('all')
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernt = ZernikeTransform(
                 nodes, zern_idx, NFP, derivatives, volumes, method='fft')
             # bdry interpolator
             bdry_nodes, _ = get_nodes_surf(
-                Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
+                Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
             bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
                                           0, 0, 0], method='direct')
             t1 = time.perf_counter()
@@ -272,9 +272,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
                         Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 nodes, volumes = get_nodes_pattern(
-                    Mnodes[ii], Nnodes[ii], NFP, surfs=node_mode, index=zern_mode, axis=False)
+                    Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
                 bdry_nodes, _ = get_nodes_surf(
-                    Mnodes[ii], Nnodes[ii], NFP, surf=1.0)
+                    Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
                 zernt.expand_nodes(nodes, volumes)
                 bdry_zernt.expand_nodes(bdry_nodes)
                 t1 = time.perf_counter()
@@ -321,8 +321,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
-                x = perturb(x, equil_obj, deltas, args,
-                            pert_order[ii], verbose)
+                x = perturb_continuation_params(x, equil_obj, deltas, args,
+                                                pert_order[ii], verbose)
 
         args = (bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])

@@ -7,9 +7,9 @@ Psi_lcfs  =   1.00000000E+00
 
 # spectral resolution
 Mpol   =  6, 8, 10, 12
-Ntor   =   0
+Ntor   =  0
 Mnodes =  9, 12, 15, 18
-Nnodes =   0
+Nnodes =  0
 
 # continuation parameters
 bdry_ratio = 1
@@ -25,7 +25,6 @@ gtol = 1e-6
 nfev = 5000
 
 # solver methods
-optim_method = bfgs
 errr_mode = force
 bdry_mode = spectral
 zern_mode = fringe

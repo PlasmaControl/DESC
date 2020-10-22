@@ -54,14 +54,17 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         errRf, errZf = equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
         errRb, errZb = bdry_fun(
-            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
-        errL0 = compute_lambda_err(cL, lambda_idx, NFP)
+            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, stell_sym)
 
         residual = jnp.concatenate([errRf.flatten(),
                                     errZf.flatten(),
                                     errRb.flatten()/errr_ratio,
-                                    errZb.flatten()/errr_ratio,
-                                    errL0.flatten()/errr_ratio])
+                                    errZb.flatten()/errr_ratio])
+
+        if not stell_sym:
+            errL0 = compute_lambda_err(cL, lambda_idx, NFP)
+            residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
+
         if scalar:
             residual = jnp.mean(residual**2)
         return residual
@@ -72,7 +75,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
         errRf, errZf = equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernt)
         errRb, errZb = bdry_fun(
-            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP)
+            cR, cZ, cL, bdry_ratio, bdry_zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, stell_sym)
         errL0 = compute_lambda_err(cL, lambda_idx, NFP)
 
         errRf_rms = jnp.sqrt(jnp.sum(errRf**2))

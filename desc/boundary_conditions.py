@@ -1,7 +1,6 @@
 import numpy as np
-import functools
-import jax
-from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, put
+# import jax
+from desc.backend import jnp, put, sign
 from desc.zernike import fourzern, double_fourier_basis, eval_double_fourier
 from desc.nodes import get_nodes_surf
 
@@ -152,8 +151,7 @@ def compute_bc_err_four_sfl(cR, cZ, cL, bdry_ratio, zern_idx, lambda_idx, bdryR,
 
 # TODO: Note that this method cannot be improved with FFT due to non-uniform grid
 # TODO: The SVD Fourier transform could be unstable if lambda has a large amplitude
-# TODO: "sample" is unused -- it is embedded in the "zernt" nodes
-def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP):
+def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zernt, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, sym=False):
     """Compute boundary error in (theta,phi) Fourier coefficients from non-uniform interpolation grid
 
     Args:
@@ -169,7 +167,6 @@ def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zernt, lambda_idx, bdryR, bdryZ,
         bdryM (ndarray, shape(N_bdry_modes,)): poloidal mode numbers
         bdryN (ndarray, shape(N_bdry_modes,)): toroidal mode numbers
         NFP (int): number of field periods
-        sample (float): sampling factor (eg, 1.0 would be no oversampling)
 
     Returns:
         (tuple): tuple containing:
@@ -190,16 +187,28 @@ def compute_bc_err_four(cR, cZ, cL, bdry_ratio, zernt, lambda_idx, bdryR, bdryZ,
     Z = zernt.transform(cZ, 0, 0, 0).flatten()
 
     # interpolate R,Z to fourier basis in non sfl coords
-    four_basis = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
-    four_basis_pinv = jnp.linalg.pinv(four_basis, rcond=1e-6)
-    cRb, cZb = jnp.matmul(four_basis_pinv, jnp.array([R, Z]).T).T
+    if sym:
+        cos_idx = jnp.where(sign(bdryM) == sign(bdryN))
+        sin_idx = jnp.where(sign(bdryM) != sign(bdryN))
+        four_basis_R = double_fourier_basis(theta, phi, bdryM[cos_idx], bdryN[cos_idx], NFP)
+        four_basis_Z = double_fourier_basis(theta, phi, bdryM[sin_idx], bdryN[sin_idx], NFP)
+        four_basis_R_pinv = jnp.linalg.pinv(four_basis_R, rcond=1e-6)
+        four_basis_Z_pinv = jnp.linalg.pinv(four_basis_Z, rcond=1e-6)
+        cRb = jnp.matmul(four_basis_R_pinv, R)
+        cZb = jnp.matmul(four_basis_Z_pinv, Z)
+    else:
+        cos_idx = jnp.ones_like(bdryM)
+        sin_idx = jnp.ones_like(bdryN)
+        four_basis = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
+        four_basis_pinv = jnp.linalg.pinv(four_basis, rcond=1e-6)
+        cRb, cZb = jnp.matmul(four_basis_pinv, jnp.array([R, Z]).T).T
 
     # ratio of non-axisymmetric boundary modes to use
     ratio = jnp.where(bdryN != 0, bdry_ratio, 1)
 
     # compute errors
-    errR = cRb - bdryR*ratio
-    errZ = cZb - bdryZ*ratio
+    errR = cRb - (bdryR*ratio)[cos_idx]
+    errZ = cZb - (bdryZ*ratio)[sin_idx]
     return errR, errZ
 
 

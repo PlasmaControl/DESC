@@ -48,7 +48,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
     elif bdry_mode == 'spectral':
         bdry_fun = compute_bc_err_four
 
-    def equil_obj(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio):
+    def equil_obj(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
 
         cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
         errRf, errZf = equil_fun(

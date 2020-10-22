@@ -25,7 +25,7 @@ class TestPerturbations(unittest.TestCase):
             deltas = np.array([dc[i], 0, 0, 0])
             y1 = perturb_continuation_params(x, test_fun, deltas, args, pert_order=1, verbose=0)
             y2 = perturb_continuation_params(x, test_fun, deltas, args, pert_order=2, verbose=0)
-            z = np.array([c0 - (a0-c0) / (2*c0 - a0 - c0) * dc])  # correct answer
+            z = np.array([c0 - (a0-c0) / (2*c0 - a0 - c0) * dc[i]])  # correct answer
             err[0,i] = np.abs(y1-z)[0]  # 1st order error
             err[1,i] = np.abs(y2-z)[0]  # 2nd order error
 

@@ -91,9 +91,7 @@ else:
             arr (array-like). Input array with vals inserted at inds.
         """
 
-        if isinstance(inds, tuple):
-            inds = np.ravel_multi_index(inds, arr.shape)
-        np.put(arr, inds, vals)
+        arr[inds] = vals
         return arr
 
     def fori_loop(lower, upper, body_fun, init_val):
@@ -349,7 +347,7 @@ class FiniteDifferenceJacobian():
        jac_fun (callable): object that computes the jacobian of fun.
     """
 
-    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3)):
+    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
         self.fun = fun
         self.rel_step = rel_step
 
@@ -394,7 +392,7 @@ class SPSAJacobian():
         N (int): number of samples to take
     """
 
-    def __init__(self, fun, rel_step=1e-6, N=100):
+    def __init__(self, fun, rel_step=1e-6, N=100, **kwargs):
 
         self.fun = fun
         self.rel_step = rel_step
@@ -436,7 +434,7 @@ class BroydenJacobian():
         minstep (float): minimum step size for updating the jacobian
     """
 
-    def __init__(self, fun, x0, f0, J0=None, minstep=1e-12):
+    def __init__(self, fun, x0, f0, J0=None, minstep=1e-12, **kwargs):
 
         self.fun = fun
         self.x0 = x0
@@ -527,7 +525,6 @@ def polyval_vec(p, x):
     return y
 
 
-# TODO: this stuff doesn't work without JAX
 if use_jax:
     jacfwd = jax.jacfwd
     jacrev = jax.jacrev

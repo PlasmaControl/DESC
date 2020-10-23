@@ -262,6 +262,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernt, bdry_zernt, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor, scalar=True)
+            jac = grad(equil_obj, argnums=0)
+        else:
+            jac = jacfwd(equil_obj, argnums=0)
 
         if use_jax:
             if verbose > 0:
@@ -269,7 +272,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if device is None:
                 import jax
                 device = jax.devices()[0]
-            jac = jacfwd(equil_obj, argnums=0)
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
             jac_obj_jit = jit(jac, device=device)
             t0 = time.perf_counter()

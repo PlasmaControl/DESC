@@ -481,43 +481,70 @@ class ZernikeTransform():
     def _check_inputs_fft(self, nodes, zern_idx):
         """helper function to check that inputs are formatted correctly for fft method"""
         zeta_vals, zeta_cts = np.unique(nodes[2], return_counts=True)
+
         if not issorted(nodes[2]):
-            raise ValueError(
-                "fft method requires nodes to be sorted by toroidal angle in ascending order")
+            warnings.warn(
+                "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct method")
+            self.method = 'direct'
+            return
+
         if not isalmostequal(zeta_cts):
-            raise ValueError(
-                "fft method requires the same number of nodes on each zeta plane")
+            warnings.warn(
+                "fft method requires the same number of nodes on each zeta plane, falling back to direct method")
+            self.method = 'direct'
+            return
+
         if len(zeta_vals) > 1:
             if not np.diff(zeta_vals).std() < 1e-14:
-                raise ValueError(
-                    "fft method requires nodes to be equally spaced in zeta")
+                warnings.warn(
+                    "fft method requires nodes to be equally spaced in zeta, falling back to direct method")
+                self.method = 'direct'
+                return
+
             if not isalmostequal(nodes[:2].reshape((zeta_cts[0], 2, -1), order='F')):
-                raise ValueError(
-                    "fft method requires that node pattern is the same on each zeta plane")
+                warnings.warn(
+                    "fft method requires that node pattern is the same on each zeta plane, falling back to direct method")
+                self.method = 'direct'
+                return
             if not abs((zeta_vals[-1] + zeta_vals[1])*self.NFP - 2*np.pi) < 1e-14:
-                raise ValueError(
-                    "fft method requires that nodes complete 1 full field period")
+                warnings.warn(
+                    "fft method requires that nodes complete 1 full field period, falling back to direct method")
+                self.method = 'direct'
+                return
 
         id2 = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
         if not issorted(id2):
-            raise ValueError(
-                "fft method requires zernike indices to be sorted by toroidal mode number")
+            warnings.warn(
+                "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct method")
+            self.method = 'direct'
+            return
+
         n_vals, n_cts = np.unique(zern_idx[:, 2], return_counts=True)
         if not isalmostequal(n_cts):
-            raise ValueError(
-                "fft method requires that there are the same number of poloidal modes for each toroidal mode")
+            warnings.warn(
+                "fft method requires that there are the same number of poloidal modes for each toroidal mode, falling back to direct method")
+            self.method = 'direct'
+            return
+
         if len(n_vals) > 1:
             if not np.diff(n_vals).std() < 1e-14:
-                raise ValueError(
-                    "fft method requires the toroidal modes are equally spaced in n")
+                warnings.warn(
+                    "fft method requires the toroidal modes are equally spaced in n, falling back to direct method")
+                self.method = 'direct'
+                return
+
             if not isalmostequal(zern_idx[:, 0].reshape((n_cts[0], -1), order='F')) \
                or not isalmostequal(zern_idx[:, 1].reshape((n_cts[0], -1), order='F')):
-                raise ValueError(
-                    "fft method requires that the poloidal modes are the same for each toroidal mode")
+                warnings.warn(
+                    "fft method requires that the poloidal modes are the same for each toroidal mode, falling back to direct method")
+                self.method = 'direct'
+                return
 
         if not len(zeta_vals) >= len(n_vals):
-            raise ValueError("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}".format(
+            warnings.warn("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}, falling back to direct method".format(
                 len(zeta_vals), len(n_vals)))
+            self.method = 'direct'
+            return
 
         self.numFour = len(n_vals)  # number of toroidal modes
         self.numFournodes = len(zeta_vals)  # number of toroidal nodes

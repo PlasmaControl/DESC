@@ -66,7 +66,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
         if scalar:
-            residual = jnp.mean(residual**2)
+            residual = 1/2*jnp.sum(residual**2)
         return residual
 
     def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
@@ -89,7 +89,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernt, bdry_ze
                                     errRb.flatten()/errr_ratio,
                                     errZb.flatten()/errr_ratio,
                                     errL0.flatten()/errr_ratio])
-        resid_rms = jnp.sum(residual**2)
+        resid_rms = 1/2*jnp.sum(residual**2)
         if errr_mode == 'force':
             print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
                 resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))

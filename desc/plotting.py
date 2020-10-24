@@ -510,7 +510,7 @@ def plot_logo(savepath=None, **kwargs):
         transparent = True
 
     path = os.path.dirname(os.path.abspath(__file__))
-    equil = read_desc(path + '/../examples/DESC/outputs/DSHAPE_m12x18_n0x0')
+    equil = read_desc(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
 
     fig = plt.figure(figsize=(fig_width, fig_width/2))
     ax = fig.add_axes([0.1, 0.1, .8, .8])
@@ -553,8 +553,8 @@ def plot_logo(savepath=None, **kwargs):
     NFP = equil['NFP']
     R0, Z0 = axis_posn(cR, cZ, zern_idx, NFP)
 
-    nr = 5
-    nt = 8
+    nr = kwargs.get('nr', 5)
+    nt = kwargs.get('nt', 8)
     Nr = 100
     Nt = 361
     rstep = Nr//nr

@@ -14,23 +14,23 @@ from desc.input_output import Checkpoint
 from desc.perturbations import perturb_continuation_params
 
 
-def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
+def expand_resolution(x, zernike_transform, bdry_zernike_transform, zern_idx_old, zern_idx_new,
                       lambda_idx_old, lambda_idx_new):
     """Expands solution to a higher resolution by filling with zeros
     Also modifies zernike transform object to work at higher resolution
 
     Args:
         x (ndarray): solution at initial resolution
-        zernt (ZernikeTransform): zernike transform object corresponding to initial x
-        bdry_zernt (ZernikeTransform): zernike transform object corresponding to initial x at bdry
+        zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x
+        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x at bdry
         zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
         zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
         lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
         lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
     Returns:
         x_new (ndarray): solution expanded to new resolution
-        zernt (ZernikeTransform): zernike transform object corresponding to expanded x
-        bdry_zernt (ZernikeTransform): zernike transform object corresponding to expanded x at bdry
+        zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x
+        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x at bdry
     """
 
     cR, cZ, cL = unpack_x(x, len(zern_idx_old))
@@ -45,10 +45,10 @@ def expand_resolution(x, zernt, bdry_zernt, zern_idx_old, zern_idx_new,
     cL_new[old_in_new] = cL
     x_new = np.concatenate([cR_new, cZ_new, cL_new])
 
-    zernt.expand_spectral_resolution(zern_idx_new)
-    bdry_zernt.expand_spectral_resolution(zern_idx_new)
+    zernike_transform.expand_spectral_resolution(zern_idx_new)
+    bdry_zernike_transform.expand_spectral_resolution(zern_idx_new)
 
-    return x_new, zernt, bdry_zernt
+    return x_new, zernike_transform, bdry_zernike_transform
 
 
 def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
@@ -135,13 +135,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             derivatives = get_needed_derivatives('all')
             zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
-            zernt = ZernikeTransform(
+            zernike_transform = ZernikeTransform(
                 nodes, zern_idx, NFP, derivatives, volumes, method='fft')
             # bdry interpolator
             bdry_nodes, _ = get_nodes_surf(
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
-            bdry_zernt = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
-                                          0, 0, 0], method='direct')
+            bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
+                0, 0, 0], method='direct')
             t1 = time.perf_counter()
             if verbose > 1:
                 print("Precomputation time = {} s".format(t1-t0))
@@ -188,7 +188,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                     pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
@@ -205,8 +205,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
                 bdry_nodes, _ = get_nodes_surf(
                     Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
-                zernt.expand_nodes(nodes, volumes)
-                bdry_zernt.expand_nodes(bdry_nodes)
+                zernike_transform.expand_nodes(nodes, volumes)
+                bdry_zernike_transform.expand_nodes(bdry_nodes)
                 t1 = time.perf_counter()
                 if verbose > 1:
                     print("Changing node resolution time = {} s".format(t1-t0))
@@ -224,8 +224,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                     M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
 
-                x, zernt, bdry_zernt = expand_resolution(jnp.matmul(sym_mat, x), zernt, bdry_zernt,
-                                                         zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
+                x, zernike_transform, bdry_zernike_transform = expand_resolution(jnp.matmul(sym_mat, x), zernike_transform, bdry_zernike_transform,
+                                                                                 zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
                 # stellarator symmetry
                 if stell_sym:
                     sym_mat = symmetric_x(zern_idx, lambda_idx)
@@ -244,7 +244,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
             # equilibrium objective function
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor)
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
@@ -260,7 +260,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         if optim_method in ['bfgs']:
             equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernt, bdry_zernt, zern_idx, lambda_idx,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor, scalar=True)
             jac = grad(equil_obj, argnums=0)
         else:

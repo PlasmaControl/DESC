@@ -22,9 +22,10 @@ pert_order = 1
 ftol = 1e-2, 1e-2, 1e-3, 1e-3, 1e-4, 1e-5, 1e-6
 xtol = 1e-6
 gtol = 1e-6
-nfev = 100
+nfev = 1000
 
 # solver methods
+optim_method = trf
 errr_mode = force
 bdry_mode = spectral
 zern_mode = fringe

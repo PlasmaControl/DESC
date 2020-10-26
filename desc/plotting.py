@@ -1,14 +1,16 @@
+import os
 from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from desc.nodes import get_nodes_grid
-from desc.zernike import ZernikeTransform
+from desc.zernike import ZernikeTransform, axis_posn
 from desc.backend import get_needed_derivatives, iotafun, presfun
-from desc.input_output import vmec_interpolate
+from desc.input_output import vmec_interpolate, read_desc
 from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
 from desc.field_components import compute_contravariant_basis, compute_jacobian
-from desc.field_components import compute_B_field, compute_J_field, compute_F_magnitude
+from desc.field_components import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
+
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
                      (0.8359, 0.3682, 0.0000),  # vermillion
@@ -149,10 +151,10 @@ def plot_coord_surfaces(cR, cZ, zern_idx, NFP, nr=10, nt=12, ax=None, bdryR=None
     r = r.flatten()
     t = t.flatten()
     z = zeta*np.ones_like(r)
-    zernt = ZernikeTransform([r, t, z], zern_idx, NFP)
+    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
 
-    R = zernt.transform(cR, 0, 0, 0).reshape((Nr, Nt))
-    Z = zernt.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
+    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
+    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -270,25 +272,26 @@ def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma'
 
     nodes, vols = get_nodes_grid(NFP, nr=Nr, nt=Nv, nz=Nz)
     derivatives = get_needed_derivatives('all')
-    zernt = ZernikeTransform(nodes, zern_idx, NFP, derivatives)
+    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP, derivatives)
 
     # compute fields components
-    coord_der = compute_coordinate_derivatives(cR, cZ, zernt)
-    cov_basis = compute_covariant_basis(coord_der,zernt)
-    jacobian = compute_jacobian(coord_der, cov_basis,zernt)
+    coord_der = compute_coordinate_derivatives(cR, cZ, zernike_transform)
+    cov_basis = compute_covariant_basis(coord_der, zernike_transform)
+    jacobian = compute_jacobian(coord_der, cov_basis, zernike_transform)
     con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, zernt)
-    B_field = compute_B_field(cov_basis, jacobian, cI, Psi_lcfs, zernt)
-    J_field = compute_J_field(coord_der, cov_basis,
-                              jacobian, B_field, cI, Psi_lcfs, zernt)
-    F_mag, p_mag = compute_F_magnitude(
-        coord_der, cov_basis, con_basis, jacobian, B_field, J_field, cP, cI, Psi_lcfs, zernt)
+        coord_der, cov_basis, jacobian, zernike_transform)
+    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
+                                            Psi_lcfs, zernike_transform)
+    plasma_current = compute_plasma_current(coord_der, cov_basis,
+                                            jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
+    force_magnitude, p_mag = compute_force_magnitude(
+        coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform)
 
     if domain == 'real':
         xlabel = r'R'
         ylabel = r'Z'
-        R = zernt.transform(cR, 0, 0, 0).reshape((Nr, Nv, Nz))
-        Z = zernt.transform(cZ, 0, 0, 0).reshape((Nr, Nv, Nz))
+        R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nv, Nz))
+        Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nv, Nz))
     elif domain == 'sfl':
         xlabel = r'$\vartheta$'
         ylabel = r'$\rho$'
@@ -299,14 +302,14 @@ def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma'
 
     if normalize == 'local':
         label = r'||F||/$\nabla$p'
-        norm_errF = F_mag / p_mag
+        norm_errF = force_magnitude / p_mag
     elif normalize == 'global':
         label = r'||F||/$\nabla$p($\rho$=0.5)'
         halfn = np.where(nodes[0] == 0.5)[0][0]
-        norm_errF = F_mag / p_mag[halfn]
+        norm_errF = force_magnitude / p_mag[halfn]
     else:
         label = r'||F||'
-        norm_errF = F_mag
+        norm_errF = force_magnitude
 
     if log:
         label = r'$\mathregular{log}_{10}$('+label+')'
@@ -370,23 +373,23 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
 
     # constant rho surfaces
     nodes_r, vols = get_nodes_grid(NFP, nr=Nr, nt=NNv, nz=Nz)
-    zernt0_r = ZernikeTransform(nodes_r, zern_idx0, NFP)
-    zernt1_r = ZernikeTransform(nodes_r, zern_idx1, NFP)
+    zernike_transform0_r = ZernikeTransform(nodes_r, zern_idx0, NFP)
+    zernike_transform1_r = ZernikeTransform(nodes_r, zern_idx1, NFP)
 
     # constant theta surfaces
     nodes_v, vols = get_nodes_grid(NFP, nr=NNr, nt=Nv, nz=Nz)
-    zernt0_v = ZernikeTransform(nodes_v, zern_idx0, NFP)
-    zernt1_v = ZernikeTransform(nodes_v, zern_idx1, NFP)
+    zernike_transform0_v = ZernikeTransform(nodes_v, zern_idx0, NFP)
+    zernike_transform1_v = ZernikeTransform(nodes_v, zern_idx1, NFP)
 
-    R0r = zernt0_r.transform(cR0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z0r = zernt0_r.transform(cZ0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    R1r = zernt1_r.transform(cR1, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z1r = zernt1_r.transform(cZ1, 0, 0, 0).reshape((Nr, NNv, Nz))
+    R0r = zernike_transform0_r.transform(cR0, 0, 0, 0).reshape((Nr, NNv, Nz))
+    Z0r = zernike_transform0_r.transform(cZ0, 0, 0, 0).reshape((Nr, NNv, Nz))
+    R1r = zernike_transform1_r.transform(cR1, 0, 0, 0).reshape((Nr, NNv, Nz))
+    Z1r = zernike_transform1_r.transform(cZ1, 0, 0, 0).reshape((Nr, NNv, Nz))
 
-    R0v = zernt0_v.transform(cR0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z0v = zernt0_v.transform(cZ0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    R1v = zernt1_v.transform(cR1, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z1v = zernt1_v.transform(cZ1, 0, 0, 0).reshape((NNr, Nv, Nz))
+    R0v = zernike_transform0_v.transform(cR0, 0, 0, 0).reshape((NNr, Nv, Nz))
+    Z0v = zernike_transform0_v.transform(cZ0, 0, 0, 0).reshape((NNr, Nv, Nz))
+    R1v = zernike_transform1_v.transform(cR1, 0, 0, 0).reshape((NNr, Nv, Nz))
+    Z1v = zernike_transform1_v.transform(cZ1, 0, 0, 0).reshape((NNr, Nv, Nz))
 
     plt.figure()
     for k in range(Nz):
@@ -448,10 +451,10 @@ def plot_vmec_comparison(vmec_data, equil):
     vv = vv.flatten()
     zz = zz.flatten()
     nodes = [rr, vv, zz]
-    zernt = ZernikeTransform(nodes, zern_idx, NFP)
+    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP)
 
-    R_desc = zernt.transform(cR, 0, 0, 0).reshape((r.size, Nv, Nz))
-    Z_desc = zernt.transform(cZ, 0, 0, 0).reshape((r.size, Nv, Nz))
+    R_desc = zernike_transform.transform(cR, 0, 0, 0).reshape((r.size, Nv, Nz))
+    Z_desc = zernike_transform.transform(cZ, 0, 0, 0).reshape((r.size, Nv, Nz))
 
     R_vmec, Z_vmec = vmec_interpolate(
         vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'], v, z)
@@ -471,3 +474,142 @@ def plot_vmec_comparison(vmec_data, equil):
             s_desc[0].set_label('DESC')
             ax.legend(fontsize='xx-small')
     plt.show()
+
+
+def plot_logo(savepath=None, **kwargs):
+    """Plots the DESC logo
+
+    Args:
+        savepath (str or path-like, optional): path to save the figure to. 
+            File format is inferred from the filename
+        kwargs: options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta', 
+            'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
+
+    Returns:
+        fig (matplotlib.figure): handle to the figure used for plotting
+        ax (matplotlib.axes): handle to the axis used for plotting
+    """
+
+    Dcolor = kwargs.get('Dcolor', 'xkcd:neon purple')
+    Dcolor_rho = kwargs.get('Dcolor_rho', 'xkcd:neon pink')
+    Dcolor_theta = kwargs.get('Dcolor_theta', 'xkcd:neon pink')
+    Ecolor = kwargs.get('Ecolor', 'deepskyblue')
+    Scolor = kwargs.get('Scolor', 'deepskyblue')
+    Ccolor = kwargs.get('Ccolor', 'deepskyblue')
+    BGcolor = kwargs.get('BGcolor', 'white')
+    fig_width = kwargs.get('fig_width', 3)
+    contour_lw_ratio = kwargs.get('contour_lw_ratio', 0.3)
+    lw = fig_width**.5
+
+    transparent = False
+    if BGcolor == 'dark':
+        BGcolor = 'xkcd:charcoal grey'
+    elif BGcolor == 'light':
+        BGcolor = 'white'
+    elif BGcolor == 'clear':
+        BGcolor = 'white'
+        transparent = True
+
+    path = os.path.dirname(os.path.abspath(__file__))
+    equil = read_desc(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
+
+    fig = plt.figure(figsize=(fig_width, fig_width/2))
+    ax = fig.add_axes([0.1, 0.1, .8, .8])
+    ax.axis('equal')
+    ax.axis('off')
+    ax.set_facecolor(BGcolor)
+    fig.set_facecolor(BGcolor)
+    if transparent:
+        fig.patch.set_alpha(0)
+        ax.patch.set_alpha(0)
+
+    bottom = 0
+    top = 10
+    Dleft = 0
+    Dw = 8
+    Dh = top-bottom + 2
+    DX = Dleft + Dw/2
+    DY = (top-bottom)/2
+    Dright = Dleft + Dw
+
+    Eleft = Dright + 0.5
+    Eright = Eleft + 4
+
+    Soffset = 1
+    Sleft = Eright + 0.5
+    Sw = 5
+    Sright = Sleft + Sw
+
+    Ctheta = np.linspace(np.pi/4, 2*np.pi-np.pi/4, 1000)
+    Cleft = Sright + 0.75
+    Cw = 4
+    Ch = 11
+    Cx0 = Cleft + Cw/2
+    Cy0 = (top-bottom)/2
+
+    # D
+    cR = equil['cR']
+    cZ = equil['cZ']
+    zern_idx = equil['zern_idx']
+    NFP = equil['NFP']
+    R0, Z0 = axis_posn(cR, cZ, zern_idx, NFP)
+
+    nr = kwargs.get('nr', 5)
+    nt = kwargs.get('nt', 8)
+    Nr = 100
+    Nt = 361
+    rstep = Nr//nr
+    tstep = Nt//nt
+    zeta = 0
+    r = np.linspace(0, 1, Nr)
+    t = np.linspace(0, 2*np.pi, Nt)
+    r, t = np.meshgrid(r, t, indexing='ij')
+    r = r.flatten()
+    t = t.flatten()
+    z = zeta*np.ones_like(r)
+    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
+    bdry_nodes = np.array(
+        [np.ones(Nt), np.linspace(0, 2*np.pi, Nt), np.ones(Nt)])
+    bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP)
+
+    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
+    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
+    bdryR = bdry_zernike_transform.transform(cR, 0, 0, 0)
+    bdryZ = bdry_zernike_transform.transform(cZ, 0, 0, 0)
+
+    R = (R-R0)/(R.max()-R.min())*Dw + DX
+    Z = (Z-Z0)/(Z.max()-Z.min())*Dh + DY
+    bdryR = (bdryR-R0)/(bdryR.max()-bdryR.min())*Dw + DX
+    bdryZ = (bdryZ-Z0)/(bdryZ.max()-bdryZ.min())*Dh + DY
+
+    # plot r contours
+    ax.plot(R.T[:, ::rstep], Z.T[:, ::rstep],
+            color=Dcolor_rho, lw=lw*contour_lw_ratio, ls='-')
+    # plot theta contours
+    ax.plot(R[:, ::tstep], Z[:, ::tstep],
+            color=Dcolor_theta, lw=lw*contour_lw_ratio, ls='-')
+    ax.plot(bdryR, bdryZ, color=Dcolor, lw=lw)
+
+    # E
+    ax.plot([Eleft, Eleft+1], [bottom, top],
+            lw=lw, color=Ecolor, linestyle='-')
+    ax.plot([Eleft, Eright], [bottom, bottom],
+            lw=lw, color=Ecolor, linestyle='-')
+    ax.plot([Eleft+1/2, Eright], [bottom+(top+bottom)/2, bottom +
+                                  (top+bottom)/2], lw=lw, color=Ecolor, linestyle='-')
+    ax.plot([Eleft+1, Eright], [top, top], lw=lw, color=Ecolor, linestyle='-')
+
+    # S
+    Sy = np.linspace(bottom, top+Soffset, 1000)
+    Sx = Sw*np.cos(Sy*3/2*np.pi/(Sy.max()-Sy.min())-np.pi)**2 + Sleft
+    ax.plot(Sx, Sy[::-1]-Soffset/2, lw=lw, color=Scolor, linestyle='-')
+
+    # C
+    Cx = Cw/2*np.cos(Ctheta)+Cx0
+    Cy = Ch/2*np.sin(Ctheta)+Cy0
+    ax.plot(Cx, Cy, lw=lw, color=Ccolor, linestyle='-')
+
+    if savepath is not None:
+        fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor='none')
+
+    return fig, ax

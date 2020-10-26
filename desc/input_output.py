@@ -35,6 +35,7 @@ def read_input(fname):
         'xtol': np.atleast_1d(1e-6),
         'gtol': np.atleast_1d(1e-6),
         'nfev': np.atleast_1d(None),
+        'optim_method': 'trf',
         'errr_mode': 'force',
         'bdry_mode': 'spectral',
         'zern_mode': 'fringe',
@@ -134,6 +135,9 @@ def read_input(fname):
                 [None if i == 0 else i for i in numbers]).astype(int)
 
         # solver methods
+        match = re.search(r'optim_method', argument, re.IGNORECASE)
+        if match:
+            inputs['optim_method'] = words[0]
         match = re.search(r'errr_mode', argument, re.IGNORECASE)
         if match:
             inputs['errr_mode'] = words[0]
@@ -353,42 +357,42 @@ def read_desc(filename):
 
     Nbdry = int(lines[0].strip('\n').split()[-1])
     equil['bdry_idx'] = np.zeros((Nbdry, 2), dtype=int)
-    equil['r_bdry_coef'] = np.zeros(Nbdry)
-    equil['z_bdry_coef'] = np.zeros(Nbdry)
+    equil['bdryR'] = np.zeros(Nbdry)
+    equil['bdryZ'] = np.zeros(Nbdry)
     for i in range(Nbdry):
         equil['bdry_idx'][i, 0] = int(lines[i+1].strip('\n').split()[1])
         equil['bdry_idx'][i, 1] = int(lines[i+1].strip('\n').split()[3])
-        equil['r_bdry_coef'][i] = float(lines[i+1].strip('\n').split()[6])
-        equil['z_bdry_coef'][i] = float(lines[i+1].strip('\n').split()[9])
+        equil['bdryR'][i] = float(lines[i+1].strip('\n').split()[6])
+        equil['bdryZ'][i] = float(lines[i+1].strip('\n').split()[9])
     lines = lines[Nbdry+1:]
 
     Nprof = int(lines[0].strip('\n').split()[-1])
-    equil['pres_coef'] = np.zeros(Nprof)
-    equil['iota_coef'] = np.zeros(Nprof)
+    equil['cP'] = np.zeros(Nprof)
+    equil['cI'] = np.zeros(Nprof)
     for i in range(Nprof):
-        equil['pres_coef'][i] = float(lines[i+1].strip('\n').split()[4])
-        equil['iota_coef'][i] = float(lines[i+1].strip('\n').split()[7])
+        equil['cP'][i] = float(lines[i+1].strip('\n').split()[4])
+        equil['cI'][i] = float(lines[i+1].strip('\n').split()[7])
     lines = lines[Nprof+1:]
 
     NRZ = int(lines[0].strip('\n').split()[-1])
     equil['zern_idx'] = np.zeros((NRZ, 3), dtype=int)
-    equil['r_coef'] = np.zeros(NRZ)
-    equil['z_coef'] = np.zeros(NRZ)
+    equil['cR'] = np.zeros(NRZ)
+    equil['cZ'] = np.zeros(NRZ)
     for i in range(NRZ):
         equil['zern_idx'][i, 0] = int(lines[i+1].strip('\n').split()[1])
         equil['zern_idx'][i, 1] = int(lines[i+1].strip('\n').split()[3])
         equil['zern_idx'][i, 2] = int(lines[i+1].strip('\n').split()[5])
-        equil['r_coef'][i] = float(lines[i+1].strip('\n').split()[8])
-        equil['z_coef'][i] = float(lines[i+1].strip('\n').split()[11])
+        equil['cR'][i] = float(lines[i+1].strip('\n').split()[8])
+        equil['cZ'][i] = float(lines[i+1].strip('\n').split()[11])
     lines = lines[NRZ+1:]
 
     NL = int(lines[0].strip('\n').split()[-1])
     equil['lambda_idx'] = np.zeros((NL, 2), dtype=int)
-    equil['lambda_coef'] = np.zeros(NL)
+    equil['cL'] = np.zeros(NL)
     for i in range(NL):
         equil['lambda_idx'][i, 0] = int(lines[i+1].strip('\n').split()[1])
         equil['lambda_idx'][i, 1] = int(lines[i+1].strip('\n').split()[3])
-        equil['lambda_coef'][i] = float(lines[i+1].strip('\n').split()[6])
+        equil['cL'][i] = float(lines[i+1].strip('\n').split()[6])
     lines = lines[NL+1:]
 
     return equil
@@ -476,7 +480,7 @@ class Checkpoint():
                 self.f['iterations'][iter_str].create_group('inputs')
             for key, val in inputs.items():
                 if key in arrays and isinstance(iter_num, int):
-                    val = val[iter_num]
+                    val = val[iter_num-1]
                 self.f['iterations'][iter_str]['inputs'][key] = val
 
         if update_final:

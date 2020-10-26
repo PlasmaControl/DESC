@@ -1,9 +1,42 @@
 import argparse
 import pathlib
 import sys
-from desc.continuation import solve_eq_continuation
-from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-from desc.input_output import read_input, output_to_file, read_vmec_output
+import warnings
+import os
+
+
+def get_device(use_gpu=False, gpuID=None):
+    """Checks available GPUs and selects the one with the most available memory"""
+
+    import jax
+    import nvidia_smi
+
+    if not use_gpu:
+        return jax.devices('cpu')[0]
+
+    try:
+        gpus = jax.devices('gpu')
+        # did the user request a specific GPU?
+        if gpuID is not None and gpuID < len(gpus):
+            return gpus[gpuID]
+        # find all available options and see which has the most space
+        else:
+            nvidia_smi.nvmlInit()
+            maxmem = 0
+            gpu = gpus[0]
+            for i in range(len(gpus)):
+                handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
+                info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+                if info.free > maxmem:
+                    maxmem = info.free
+                    gpu = gpus[i]
+
+            nvidia_smi.nvmlShutdown()
+            return gpu
+
+    except:
+        warnings.warn('No GPU found, falling back to CPU')
+        return jax.devices('cpu')[0]
 
 
 def parse_args(args):
@@ -28,6 +61,14 @@ def parse_args(args):
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display detailed progress information')
     parser.add_argument('--vmec', help='Path to VMEC data for comparison plot')
+    parser.add_argument('--gpu', '-g', action='store_true',
+                        help='Use GPU if available. Note that not all of the computation will be done '
+                        + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
+    parser.add_argument('--gpuID', action='store', default=None,
+                        help='device ID of GPU to use (usually 0,1,2 etc). Can be obtained by running '
+                        + '`nvidia-smi`. Default is to select the GPU with most available memory.')
+    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
+                        + " and autodiff won't work but may be useful for debugging")
     return parser.parse_args(args)
 
 
@@ -37,12 +78,33 @@ def main(args=sys.argv[1:]):
     and prints and plots the resulting equilibrium.
     """
     args = parse_args(args)
+    if args.numpy:
+        os.environ['DESC_USE_NUMPY'] = 'True'
+    else:
+        os.environ['DESC_USE_NUMPY'] = ''
+
+    import desc
+
+    print(desc.BANNER)
+    print('DESC version={}'.format(desc.__version__))
+
+    from desc.continuation import solve_eq_continuation
+    from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
+    from desc.input_output import read_input, output_to_file, read_vmec_output
+    from desc.backend import use_jax
+
+    if use_jax:
+        device = get_device(args.gpu, args.gpuID)
+        print("Using device: " + str(device))
+    else:
+        device = None
 
     in_fname = str(pathlib.Path(args.input_file).resolve())
     out_fname = args.output if args.output else in_fname+'.output'
 
     print('Reading input from {}'.format(in_fname))
     inputs = read_input(in_fname)
+    print('Output will be written to {}'.format(out_fname))
 
     if args.quiet:
         inputs['verbose'] = 0
@@ -52,7 +114,8 @@ def main(args=sys.argv[1:]):
         inputs['verbose'] = 1
 
     # solve equilibrium
-    iterations = solve_eq_continuation(inputs, checkpoint_filename=out_fname)
+    iterations = solve_eq_continuation(
+        inputs, checkpoint_filename=out_fname, device=device)
 
     # output
 #     print('Writing output to {}'.format(out_fname))

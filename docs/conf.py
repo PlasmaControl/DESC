@@ -16,14 +16,20 @@
 
 
 # -- Project information -----------------------------------------------------
+
 import sys
 import os
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.append(os.path.abspath('../'))
 
+if True:
+    import desc
+
 project = 'DESC'
 copyright = '2020, Plasma Control Group at Princeton University'
 author = 'Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen'
+version = desc.__version__
+release = version
 
 
 # -- General configuration ---------------------------------------------------
@@ -95,12 +101,13 @@ html_theme = 'sphinx_rtd_theme'
 html_theme_options = {
     #    'canonical_url': '',
     #    'analytics_id': 'UA-XXXXXXX-1',  #  Provided by Google in your dashboard
-    'logo_only': False,
+    'logo_only': True,
     'display_version': True,
     'prev_next_buttons_location': 'both',
     'style_external_links': False,
+    'style_nav_header_background': '#3c4142',
     # Toc options
-    'collapse_navigation': True,
+    'collapse_navigation': False,
     'sticky_navigation': True,
     'navigation_depth': 4,
     'includehidden': True,
@@ -114,7 +121,7 @@ html_static_path = ['_static']
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-# html_logo = "demo/static/logo-wordmark-light.svg"
+html_logo = "images/logo_small_clear.png"
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32

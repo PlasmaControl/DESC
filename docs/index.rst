@@ -1,5 +1,8 @@
+.. image:: images/logo_med_clear.png
+	   
 .. include:: ../README.rst
-
+  :start-after: inclusion-marker-do-not-remove
+		
 .. toctree::
    :maxdepth: 2
    :caption: Contents:

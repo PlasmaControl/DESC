@@ -1,4 +1,4 @@
-# This is the DESC input file for a D-shaped tokamak
+# This is the DESC input file for a DESC Logo-shaped tokamak
 
 # global parameters
 stell_sym =   1
@@ -6,9 +6,9 @@ NFP       =   1
 Psi_lcfs  =   1.00000000E+00
 
 # spectral resolution
-Mpol   =  6, 8, 10, 12
+Mpol   =  6, 8, 10, 12, 16, 20
 Ntor   =  0
-Mnodes =  9, 12, 15, 18
+Mnodes =  9, 12, 15, 18, 24, 30
 Nnodes =  0
 
 # continuation parameters
@@ -19,7 +19,7 @@ errr_ratio = 1e-5
 pert_order = 1
 
 # solver tolerances
-ftol = 1e-4
+ftol = 1e-5
 xtol = 1e-6
 gtol = 1e-6
 nfev = 5000
@@ -41,7 +41,8 @@ n:   0	aZ =   0.00000000E+00
 
 # fixed-boundary surface shape
 m:   0	n:   0	bR =   3.51000000E+00
-m:   1	n:   0	bR =   1.00000000E+00
-m:   2	n:   0	bR =   1.06000000E-01
+m:   1	n:   0	bR =   1.10000000E+00
+m:   2	n:   0	bR =   5.06000000E-01
+m:   3  n:   0  bR =  -1.00000000E-01
 m:  -1	n:   0	bZ =   1.47000000E+00
 m:  -2	n:   0	bZ =  -1.60000000E-01

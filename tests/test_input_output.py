@@ -10,5 +10,5 @@ class TestIO(unittest.TestCase):
         dirname = os.path.dirname(__file__)
         filename = os.path.join(dirname, 'MIN_INPUT')
         inputs = read_input(filename)
-        
-        self.assertEqual(len(inputs), 24)
+
+        self.assertEqual(len(inputs), 25)

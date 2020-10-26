@@ -2,30 +2,39 @@ import numpy as np
 import functools
 import warnings
 
-try:
-    #     raise
-    import os
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    import jax
-    import jaxlib
-    import jax.numpy as jnp
-    from jax.config import config
-    config.update("jax_enable_x64", True)
-    x = jnp.linspace(0, 5)
-    y = jnp.exp(1)
-    use_jax = True
-    print('Using JAX, version={}, jaxlib version={}, dtype={}'.format(
-        jax.__version__, jaxlib.__version__, x.dtype))
-except:
+import os
+os.environ["JAX_PLATFORM_NAME"] = 'cpu'
+
+if os.environ.get('DESC_USE_NUMPY'):
     jnp = np
     use_jax = False
-    warnings.warn('Failed to load JAX, using numpy instead')
-
+    print('Using numpy backend, version={}, dtype={}'.format(
+        np.__version__, np.linspace(0, 1).dtype))
+else:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import jax
+            import jaxlib
+            import jax.numpy as jnp
+            from jax.config import config
+            config.update("jax_enable_x64", True)
+            x = jnp.linspace(0, 5)
+            y = jnp.exp(x)
+        use_jax = True
+        print('Using JAX backend, jax version={}, jaxlib version={}, dtype={}'.format(
+            jax.__version__, jaxlib.__version__, x.dtype))
+    except:
+        jnp = np
+        use_jax = False
+        warnings.warn('Failed to load JAX')
+        print('Using numpy backend, version={}, dtype={}'.format(
+            np.__version__, np.linspace(0, 1).dtype))
 
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
-    @jit
+
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
 
@@ -66,7 +75,6 @@ else:
     # we divide by zero in a few places but then overwrite with the
     # correct asmptotic values, so lets suppress annoying warnings about that
     np.seterr(divide='ignore', invalid='ignore')
-    arange = np.arange
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
@@ -83,9 +91,7 @@ else:
             arr (array-like). Input array with vals inserted at inds.
         """
 
-        if isinstance(inds, tuple):
-            inds = np.ravel_multi_index(inds, arr.shape)
-        np.put(arr, inds, vals)
+        arr[inds] = vals
         return arr
 
     def fori_loop(lower, upper, body_fun, init_val):
@@ -112,6 +118,25 @@ else:
         for i in np.arange(lower, upper):
             val = body_fun(i, val)
         return val
+
+
+class _Indexable():
+    """Helper object for building indexes for indexed update functions.
+    This is a singleton object that overrides the :code:`__getitem__` method
+    to return the index it is passed.
+    >>> opsindex[1:2, 3, None, ..., ::2]
+    (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
+
+    copied from jax.ops.index to work with either backend
+    """
+    __slots__ = ()
+
+    def __getitem__(self, index):
+        return index
+
+
+#: Index object singleton
+opsindex = _Indexable()
 
 
 def conditional_decorator(dec, condition, *args, **kwargs):
@@ -258,30 +283,37 @@ def presfun(rho, nu, params):
     return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
 
 
-def get_needed_derivatives(mode):
+def get_needed_derivatives(mode, axis=True):
     """Get array of derivatives needed for calculating objective function
 
     Args:
-        mode (str): one of 'force', 'accel', or 'all'
+        mode (str): one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``
+        axis (bool): whether to include terms needed for axis expansion
 
     Returns:
         derivs (array, shape (N,3)): combinations of derivatives of R,Z needed
             to compute objective function. Each row is one set, columns represent
             the order of derivative for [rho, theta, zeta].
     """
-
-    if mode == 'force' or mode == 'accel':
-        return np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                         [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                         [0, 1, 1], [0, 0, 2], [2, 1, 0], [1, 2, 0],
-                         [1, 1, 1], [2, 2, 0]])
-    elif mode == 'all':
-        return np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                         [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                         [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
-                         [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
-                         [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
-                         [2, 2, 0]])
+    equil_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+                             [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
+                             [0, 1, 1], [0, 0, 2]])
+    axis_derivs = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+    qs_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+                          [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
+                          [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
+                          [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
+                          [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
+                          [2, 2, 0]])
+    if mode is None:
+        return np.array([[0, 0, 0]])
+    elif mode.lower() in ['force', 'accel']:
+        if axis:
+            return np.vstack([equil_derivs, axis_derivs])
+        else:
+            return equil_derivs
+    elif mode.lower() in ['all', 'qs']:
+        return qs_derivs
     else:
         raise NotImplementedError
 
@@ -317,7 +349,7 @@ class FiniteDifferenceJacobian():
        jac_fun (callable): object that computes the jacobian of fun.
     """
 
-    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3)):
+    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
         self.fun = fun
         self.rel_step = rel_step
 
@@ -355,48 +387,46 @@ class FiniteDifferenceJacobian():
 
 class SPSAJacobian():
     """Class for computing jacobian simultaneous perturbation stochastic approximation
-    
+
     Args:
         fun (callable): function to be differentiated
         rel_step (float): relative step size for finite difference
         N (int): number of samples to take
     """
-    
-    def __init__(self,fun, rel_step=1e-6, N=100):
-        
+
+    def __init__(self, fun, rel_step=1e-6, N=100, **kwargs):
+
         self.fun = fun
         self.rel_step = rel_step
         self.N = N
-        
-        
+
     def __call__(self, x0, *args, **kwargs):
         """Update and get the jacobian"""
-        
-        f0 = self.fun(x0,*args)
+
+        f0 = self.fun(x0, *args)
         m = f0.size
         n = x0.size
 
-        J = np.zeros((m,n))
+        J = np.zeros((m, n))
         sign_x0 = (x0 >= 0).astype(float) * 2 - 1
         h = self.rel_step * sign_x0 * np.maximum(1.0, np.abs(x0))
 
         for i in range(self.N):
-            dx = (np.random.binomial(1,.5,x0.shape)*2-1)*h
+            dx = (np.random.binomial(1, .5, x0.shape)*2-1)*h
             x1 = x0 + dx
             x2 = x0 - dx
             dx = (x1 - x2).flatten()[np.newaxis]
-            f1 = np.atleast_1d(self.fun(x1,*args))
-            f2 = np.atleast_1d(self.fun(x2,*args))
-            df = (f1-f2).flatten()[:,np.newaxis]
+            f1 = np.atleast_1d(self.fun(x1, *args))
+            f2 = np.atleast_1d(self.fun(x2, *args))
+            df = (f1-f2).flatten()[:, np.newaxis]
             dfdx = df/dx
             J += dfdx
         return J/self.N
-        
-        
-    
+
+
 class BroydenJacobian():
     """Class for computing jacobian using rank 1 updates
-    
+
     Args:
         fun (callable): function to be differentiated
         x0 (array-like): starting point
@@ -405,22 +435,21 @@ class BroydenJacobian():
             If not given, the identity matrix is used
         minstep (float): minimum step size for updating the jacobian
     """
-    
-    def __init__(self,fun, x0, f0, J0=None, minstep=1e-12):
-        
+
+    def __init__(self, fun, x0, f0, J0=None, minstep=1e-12, **kwargs):
+
         self.fun = fun
         self.x0 = x0
         self.f0 = f0
-        self.shape = (f0.size,x0.size)
+        self.shape = (f0.size, x0.size)
         self.J = J0 if J0 is not None else np.eye(*self.shape)
         self.minstep = minstep
         self.x1 = self.x0
         self.f1 = self.f0
-        
-        
+
     def __call__(self, x, *args, **kwargs):
         """Update and get the jacobian"""
-        
+
         self.x0 = self.x1
         self.f0 = self.f1
         self.x1 = x
@@ -429,42 +458,42 @@ class BroydenJacobian():
         if step < self.minstep:
             return self.J
         else:
-            self.f1 = self.fun(x,*args)
+            self.f1 = self.fun(x, *args)
             df = self.f1 - self.f0
             update = (df - self.J.dot(dx))/step**2
-            update = update[:,np.newaxis]*dx[np.newaxis,:]
+            update = update[:, np.newaxis]*dx[np.newaxis, :]
             self.J += update
             return self.J
-    
 
-def polyder_vec(p, m=1, pad=True):
+
+@conditional_decorator(functools.partial(jit), use_jax)
+def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
     Args:
         p (ndarray, shape(N,M)): polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
             each column is a power of x
         m (int >=0): order of derivative
-        pad (bool): whether to pad output with zeros to be the same shape as input
 
     Returns:
-        der (ndarray, shape(N,M) if pad, else shape(N,M-m)): polynomial coefficients for derivative in descending order
+        der (ndarray, shape(N,M)): polynomial coefficients for derivative in descending order
     """
-    m = int(m)
-    if m < 0:
-        raise ValueError("Order of derivative must be positive")
+    m = jnp.asarray(m, dtype=int)  # order of derivative
+    p = jnp.atleast_2d(p)
+    l = p.shape[0]               # number of polynomials
+    n = p.shape[1] - 1           # order of polynomials
 
-    p = np.atleast_2d(p)
-    n = p.shape[1] - 1  # order of polynomials
-    y = p[:, :-1] * np.arange(n, 0, -1)
-    if pad:
-        y = np.pad(y, ((0, 0), (1, 0)))
-    if m == 0:
-        val = p
-    else:
-        val = polyder_vec(y, m - 1, pad)
-    return val
+    D = jnp.arange(n, -1, -1)
+    D = factorial(D)/factorial(D-m)
+
+    p = jnp.roll(D*p, m, axis=1)
+    idx = jnp.arange(p.shape[1])
+    p = jnp.where(idx < m, 0, p)
+
+    return p
 
 
+@conditional_decorator(functools.partial(jit), use_jax)
 def polyval_vec(p, x):
     """Evaluate a polynomial at specific values, 
     vectorized for evaluating multiple polynomials of the same degree.
@@ -484,21 +513,25 @@ def polyval_vec(p, x):
         for polynomials of high degree the values may be inaccurate due to
         rounding errors. Use carefully.
     """
-    p = np.atleast_2d(p)
+    p = jnp.atleast_2d(p)
     npoly = p.shape[0]
     order = p.shape[1]
-    x = np.asarray(x).flatten()
+    x = jnp.asarray(x).flatten()
     nx = len(x)
-    y = np.zeros((npoly, nx))
-    for i in range(order):
-        y = y * x + p[:, i][:, np.newaxis]
+    y = jnp.zeros((npoly, nx))
+
+    def body_fun(k, y):
+        return y * x + p[:, k][:, jnp.newaxis]
+    y = fori_loop(0, order, body_fun, y)
+
     return y
 
 
-# TODO: this stuff doesn't work without JAX
 if use_jax:
     jacfwd = jax.jacfwd
     jacrev = jax.jacrev
+    grad = jax.grad
 else:
     jacfwd = FiniteDifferenceJacobian
     jacrev = FiniteDifferenceJacobian
+    grad = FiniteDifferenceJacobian

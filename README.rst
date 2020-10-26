@@ -1,6 +1,10 @@
-###################################
-DESC Stellarator Equilibrium Solver
-###################################
+.. image:: docs/images/logo_med_clear.png
+
+.. inclusion-marker-do-not-remove
+	   
+##############################
+Stellarator Equilibrium Solver
+##############################
 |License| |Docs| |Travis| |Codecov|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
@@ -67,3 +71,8 @@ Contribute
 .. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ddudt/DESC
     :alt: Coverage
+
+
+
+
+

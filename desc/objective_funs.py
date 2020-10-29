@@ -66,7 +66,7 @@ def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernike_transf
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
         if scalar:
-            residual = 1/2*jnp.sum(residual**2)
+            residual = jnp.log1p(jnp.sum(residual**2))
         return residual
 
     def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
@@ -335,7 +335,7 @@ def compute_force_error_RddotZddot(cR, cZ, zernike_transform, cP, cI, Psi_total)
     A = jnp.stack([AR, AZ], axis=1)
     Rddot, Zddot = jnp.squeeze(jnp.matmul(A, F_err.T[:, :, jnp.newaxis])).T
 
-    cRddot, cZddot = zernike_transform.fit(jnp.array([Rddot, Zddot]).T, 1e-6).T
+    cRddot, cZddot = zernike_transform.fit(jnp.array([Rddot, Zddot]).T).T
 
     return cRddot, cZddot
 
@@ -385,8 +385,8 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_rat
     R_zz_err = coord_der['R_zz'] - R_zz
     Z_zz_err = coord_der['Z_zz'] - Z_zz
 
-    cR_zz_err = zernike_transform.fit(R_zz_err, 1e-6)
-    cZ_zz_err = zernike_transform.fit(Z_zz_err, 1e-6)
+    cR_zz_err = zernike_transform.fit(R_zz_err)
+    cZ_zz_err = zernike_transform.fit(Z_zz_err)
 
     return cR_zz_err, cZ_zz_err
 

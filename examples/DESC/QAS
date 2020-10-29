@@ -12,8 +12,8 @@ Mnodes =  6,9,9,12,15,15,18
 Nnodes =  0,0,3, 6, 9, 9, 9
 
 # continuation parameters
-bdry_ratio = 0,.25,.5,.75,1,1,1
-pres_ratio = 0,0,0,0,.33,.66,1
+bdry_ratio = 1
+pres_ratio = 1
 zeta_ratio = 1
 errr_ratio = 1e-4
 pert_order = 1
@@ -22,7 +22,7 @@ pert_order = 1
 ftol = 1e-6
 xtol = 1e-6
 gtol = 1e-2
-nfev = 100
+nfev = 1000
 
 # solver methods
 optim_method = bfgs
@@ -52,7 +52,7 @@ l:  14	cP =  -8.17049854E+05	cI =   0.00000000E+00
 n:   0	aR =   1.49569454E+00	aZ =   0.00000000E+00
 n:   1	aR =   1.05806401E-01	aZ =   0.00000000E+00
 n:   2	aR =   7.21255455E-03	aZ =   0.00000000E+00
-n:   3	aR =  -3.87402652E-04	aZ =   0.00000000E+00
+n:   3	aR =  -3.87402652E-04	aZ =   0.00000000E+00he
 n:   4	aR =  -2.02425865E-04	aZ =   0.00000000E+00
 n:   5	aR =  -1.62602354E-04	aZ =   0.00000000E+00
 n:   6	aR =  -8.89569831E-06	aZ =   0.00000000E+00

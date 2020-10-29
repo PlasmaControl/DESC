@@ -267,6 +267,79 @@ def read_input(fname):
     return inputs
 
 
+def write_desc_input(filename, inputs):
+    """Generates a DESC input file from a dictionary of parameters
+
+    Args:
+        filename (str or path-like): name of the file to create
+        inputs(dict): dictionary of input parameters
+
+    """
+
+    f = open(filename, 'w+')
+
+    f.write('# global parameters \n')
+    f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
+    f.write('NFP = {} \n'.format(inputs['NFP']))
+    f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
+
+    f.write('\n# spectral resolution \n')
+    f.write('Mpol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
+    f.write('Ntor = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
+    f.write('Mnodes = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
+    f.write('Nnodes = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
+
+    f.write('\n# continuation parameters \n')
+    f.write('bdry_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['bdry_ratio'])])))
+    f.write('pres_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
+    f.write('zeta_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
+    f.write('errr_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
+    f.write('pert_order = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
+
+    f.write('\n# solver tolerances \n')
+    f.write('ftol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['ftol'])])))
+    f.write('xtol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['xtol'])])))
+    f.write('gtol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['gtol'])])))
+    f.write('nfev = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['nfev'])])))
+
+    f.write('\n# solver methods \n')
+    f.write('optim_method = {} \n'.format(inputs['optim_method']))
+    f.write('errr_mode = {} \n'.format(inputs['errr_mode']))
+    f.write('bdry_mode = {} \n'.format(inputs['bdry_mode']))
+    f.write('zern_mode = {} \n'.format(inputs['zern_mode']))
+    f.write('node_mode = {} \n'.format(inputs['node_mode']))
+
+    f.write('\n# pressure and rotational transform profiles \n')
+    for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
+        f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
+            int(i), cP, cI))
+
+    f.write('\n# magnetic axis initial guess \n')
+    for (n, cR, cZ) in inputs['axis']:
+        f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
+            int(n), cR, cZ))
+
+    f.write('\n# fixed-boundary surface shape \n')
+    for (m, n, cR, cZ) in inputs['bdry']:
+        f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
+            int(m), int(n), cR, cZ))
+
+    f.close()
+
+
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
 

@@ -1,4 +1,4 @@
-.. image:: images/logo_med_clear.png
+.. image:: _static/images/logo_med_clear.png
 	   
 .. include:: ../README.rst
   :start-after: inclusion-marker-do-not-remove

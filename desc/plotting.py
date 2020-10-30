@@ -489,15 +489,16 @@ def plot_logo(savepath=None, **kwargs):
         fig (matplotlib.figure): handle to the figure used for plotting
         ax (matplotlib.axes): handle to the axis used for plotting
     """
-
+    onlyD = kwargs.get('onlyD', False)
     Dcolor = kwargs.get('Dcolor', 'xkcd:neon purple')
     Dcolor_rho = kwargs.get('Dcolor_rho', 'xkcd:neon pink')
     Dcolor_theta = kwargs.get('Dcolor_theta', 'xkcd:neon pink')
     Ecolor = kwargs.get('Ecolor', 'deepskyblue')
     Scolor = kwargs.get('Scolor', 'deepskyblue')
     Ccolor = kwargs.get('Ccolor', 'deepskyblue')
-    BGcolor = kwargs.get('BGcolor', 'white')
+    BGcolor = kwargs.get('BGcolor', 'clear')
     fig_width = kwargs.get('fig_width', 3)
+    fig_height = fig_width/2
     contour_lw_ratio = kwargs.get('contour_lw_ratio', 0.3)
     lw = fig_width**.5
 
@@ -513,7 +514,9 @@ def plot_logo(savepath=None, **kwargs):
     path = os.path.dirname(os.path.abspath(__file__))
     equil = read_desc(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
 
-    fig = plt.figure(figsize=(fig_width, fig_width/2))
+    if onlyD:
+        fig_width = fig_width/2
+    fig = plt.figure(figsize=(fig_width, fig_height))
     ax = fig.add_axes([0.1, 0.1, .8, .8])
     ax.axis('equal')
     ax.axis('off')
@@ -589,6 +592,13 @@ def plot_logo(savepath=None, **kwargs):
     ax.plot(R[:, ::tstep], Z[:, ::tstep],
             color=Dcolor_theta, lw=lw*contour_lw_ratio, ls='-')
     ax.plot(bdryR, bdryZ, color=Dcolor, lw=lw)
+
+    if onlyD:
+        if savepath is not None:
+            fig.savefig(savepath, facecolor=fig.get_facecolor(),
+                        edgecolor='none')
+
+        return fig, ax
 
     # E
     ax.plot([Eleft, Eleft+1], [bottom, top],

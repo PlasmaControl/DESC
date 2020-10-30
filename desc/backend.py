@@ -466,6 +466,79 @@ class BroydenJacobian():
             return self.J
 
 
+class BlockJacobian():
+    """Computes a jacobian matrix in smaller blocks.
+
+    Takes a large jacobian and splits it into smaller blocks
+    (row-wise) for easier computation, possibly allowing each
+    block to be computed independently on different devices in
+    parallel. Also helps to reduce memory load, allowing
+    computation of larger jacobians on limited memory GPUs
+
+    Args:
+        fun (callable): function to take jacobian of
+        N (int): dimension of fun(x)
+        M (int): dimension of x
+        block_size (int): size (number of rows) of each block.
+            the last block may be smaller depending on N and
+        num_blocks (int): number of blocks (only used if block size
+            is not given).
+        devices (jax.device, list, tuple): list of jax devices to use.
+            Blocks will be split evenly across them.
+        jit (bool): whether to apply JIT compilation. Generally
+            only worth if it if jacobian will be called many times
+    """
+
+    def __init__(self, fun, N, M, block_size=None, num_blocks=None,
+                 devices=None, usejit=False):
+
+        self.fun = fun
+        self.N = N
+        self.M = M
+
+        # could probably add some fancier logic here to look at M as well when deciding how
+        # to split blocks? Though we can't really split the jacobian columnwise without a lot
+        # of surgery on the objective function
+        if block_size is not None and num_blocks is not None:
+            raise ValueError(
+                "can specify either block_size or num_blocks, not both")
+        elif block_size is None and num_blocks is None:
+            self.block_size = N
+            self.num_blocks = 1
+        elif block_size is not None:
+            self.block_size = block_size
+            self.num_blocks = np.ceil(N/block_size).astype(int)
+        else:
+            self.num_blocks = num_blocks
+            self.block_size = np.ceil(N/num_blocks).astype(int)
+
+        if type(devices) in [list, tuple]:
+            self.devices = devices
+        else:
+            self.devices = [devices]
+
+        self.usejit = usejit
+        self.f_blocks = []
+        self.jac_blocks = []
+
+        for i in range(self.num_blocks):
+            # need the i=i in the lambda signature, otherwise i is scoped to
+            # the loop and get overwritten, making each function compute the same subset
+            self.f_blocks.append(
+                lambda x, *args, i=i: self.fun(x, *args)[i*self.block_size:(i+1)*self.block_size])
+            # need to use jacrev here to actually get memory savings
+            # (plus, these blocks should be wide and short)
+            if self.usejit:
+                self.jac_blocks.append(
+                    jit(jacrev(self.f_blocks[i]), device=self.devices[i % len(self.devices)]))
+            else:
+                self.jac_blocks.append(jacrev(self.f_blocks[i]))
+
+    def __call__(self, x, *args):
+
+        return np.vstack([jac(x, *args) for jac in self.jac_blocks])
+
+
 @conditional_decorator(functools.partial(jit), use_jax)
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree

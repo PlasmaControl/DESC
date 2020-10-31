@@ -15,23 +15,26 @@ class TestPerturbations(unittest.TestCase):
 
         a0 = 1.0
         c0 = 2.0
-        x = jnp.array([c0]) # initial solution
+        x = jnp.array([c0])  # initial solution
         args = [a0, 0, 0, 0, 0, c0, 0, 0, 0]
         dc = np.array([0.1, 0.25, 0.5, 1.0])
 
         n = len(dc)
-        err = np.zeros((2,n))
+        err = np.zeros((2, n))
         for i in range(n):
             deltas = np.array([dc[i], 0, 0, 0])
-            y1 = perturb_continuation_params(x, test_fun, deltas, args, pert_order=1, verbose=0)
-            y2 = perturb_continuation_params(x, test_fun, deltas, args, pert_order=2, verbose=0)
-            z = np.array([c0 - (a0-c0) / (2*c0 - a0 - c0) * dc[i]])  # correct answer
-            err[0,i] = np.abs(y1-z)[0]  # 1st order error
-            err[1,i] = np.abs(y2-z)[0]  # 2nd order error
+            y1, timer = perturb_continuation_params(
+                x, test_fun, deltas, args, pert_order=1, verbose=0)
+            y2, timer = perturb_continuation_params(
+                x, test_fun, deltas, args, pert_order=2, verbose=0)
+            # correct answer
+            z = np.array([c0 - (a0-c0) / (2*c0 - a0 - c0) * dc[i]])
+            err[0, i] = np.abs(y1-z)[0]  # 1st order error
+            err[1, i] = np.abs(y2-z)[0]  # 2nd order error
 
-        self.assertEqual(np.max(err[0,:]), 0)
-        np.testing.assert_array_almost_equal(np.argsort(err[1,:]), np.linspace(0,n-1,n))
-
+        self.assertEqual(np.max(err[0, :]), 0)
+        np.testing.assert_array_almost_equal(
+            np.argsort(err[1, :]), np.linspace(0, n-1, n))
 
     def test_perturb_continuation_params_2D(self):
         """2D test function to check convergence rates"""
@@ -60,12 +63,16 @@ class TestPerturbations(unittest.TestCase):
                        [2.48979, 2.73301]])
 
         n = deltas.shape[0]
-        err = np.zeros((2,n))
+        err = np.zeros((2, n))
         for i in range(n):
-            y1 = perturb_continuation_params(x, test_fun, deltas[i,:], args, pert_order=1, verbose=0)
-            y2 = perturb_continuation_params(x, test_fun, deltas[i,:], args, pert_order=2, verbose=0)
-            err[0,i] = np.linalg.norm(y1-z[i,:])  # 1st order error
-            err[1,i] = np.linalg.norm(y2-z[i,:])  # 2nd order error
+            y1, timer = perturb_continuation_params(
+                x, test_fun, deltas[i, :], args, pert_order=1, verbose=0)
+            y2, timer = perturb_continuation_params(
+                x, test_fun, deltas[i, :], args, pert_order=2, verbose=0)
+            err[0, i] = np.linalg.norm(y1-z[i, :])  # 1st order error
+            err[1, i] = np.linalg.norm(y2-z[i, :])  # 2nd order error
 
-        np.testing.assert_array_almost_equal(np.argsort(err[0,:]), np.linspace(0,n-1,n))
-        np.testing.assert_array_almost_equal(np.argsort(err[1,:]), np.linspace(0,n-1,n))
+        np.testing.assert_array_almost_equal(
+            np.argsort(err[0, :]), np.linspace(0, n-1, n))
+        np.testing.assert_array_almost_equal(
+            np.argsort(err[1, :]), np.linspace(0, n-1, n))

@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 from datetime import datetime
 from netCDF4 import Dataset
+from desc.backend import TextColors
 
 
 def read_input(fname):
@@ -239,9 +240,11 @@ def read_input(fname):
 
     # error handling
     if np.any(inputs['Mpol'] == 0):
-        raise Exception('Mpol is not assigned')
+        raise IOError(TextColors.FAIL +
+                      'Mpol is not assigned' + TextColors.ENDC)
     if np.sum(inputs['bdry']) == 0:
-        raise Exception('Fixed-boundary surface is not assigned')
+        raise IOError(
+            TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
     arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes',
             'bdry_ratio', 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
             'ftol', 'xtol', 'gtol', 'nfev']
@@ -252,8 +255,8 @@ def read_input(fname):
         if inputs[a].size == 1:
             inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
         elif inputs[a].size != arr_len:
-            raise Exception(
-                'Continuation parameter arrays are not proper lengths')
+            raise IOError(TextColors.FAIL +
+                          'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
 
     # unsupplied values
     if np.sum(inputs['Mnodes']) == 0:
@@ -600,7 +603,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
 
         # global parameters
         if re.search(r'LRFP\s*=\s*T', command, re.IGNORECASE):
-            warnings.warn('Using poloidal flux instead of toroidal flux!')
+            warnings.warn(
+                TextColors.WARNING + 'Using poloidal flux instead of toroidal flux!' + TextColors.ENDC)
         match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
         if match:
             if re.search(r'T', match.group(0), re.IGNORECASE):
@@ -633,25 +637,29 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
         match = re.search(r'bPMASS_TYPE\s*=\s*\w*', command, re.IGNORECASE)
         if match:
             if not re.search(r'\bpower_series\b', match.group(0), re.IGNORECASE):
-                warnings.warn('Pressure is not a power series!')
+                warnings.warn(
+                    TextColors.WARNING + 'Pressure is not a power series!' + TextColors.ENDC)
         match = re.search(r'GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 0:
-                warnings.warn('GAMMA is not 0.0')
+                warnings.warn(TextColors.WARNING +
+                              'GAMMA is not 0.0' + TextColors.ENDC)
         match = re.search(r'BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 1:
-                warnings.warn('BLOAT is not 1.0')
+                warnings.warn(TextColors.WARNING +
+                              'BLOAT is not 1.0' + TextColors.ENDC)
         match = re.search(r'SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 1:
-                warnings.warn('SPRES_PED is not 1.0')
+                warnings.warn(TextColors.WARNING +
+                              'SPRES_PED is not 1.0' + TextColors.ENDC)
         match = re.search(r'PRES_SCALE\s*=\s*'+num_form,
                           command, re.IGNORECASE)
         if match:
@@ -675,10 +683,12 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 0:
-                warnings.warn('Not using rotational transform!')
+                warnings.warn(
+                    TextColors.WARNING + 'Not using rotational transform!' + TextColors.ENDC)
         if re.search(r'\bPIOTA_TYPE\b', command, re.IGNORECASE):
             if not re.search(r'\bpower_series\b', command, re.IGNORECASE):
-                warnings.warn('Iota is not a power series!')
+                warnings.warn(TextColors.WARNING +
+                              'Iota is not a power series!' + TextColors.ENDC)
         match = re.search(r'AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
@@ -735,7 +745,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             RBS = numbers[2]
             if m != 0:
                 m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -766,7 +777,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             RBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]
             n_idx = np.where(bdry[:, 1] == n)[0]
@@ -796,7 +808,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             ZBS = numbers[2]
             if m != 0:
                 m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -827,7 +840,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             ZBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]
             n_idx = np.where(bdry[:, 1] == n)[0]
@@ -853,7 +867,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(
                 num_form, command) if re.search(r'\d', x)]
             if len(numbers) > 0:
-                raise Exception('Cannot handle multi-line VMEC inputs!')
+                raise IOError(
+                    TextColors.FAIL + 'Cannot handle multi-line VMEC inputs!' + TextColors.ENDC)
 
     cP *= pres_scale
     desc_file.write('\n')

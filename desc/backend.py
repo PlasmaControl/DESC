@@ -1,15 +1,26 @@
 import numpy as np
 import functools
 import warnings
-
+import desc
 import os
 os.environ["JAX_PLATFORM_NAME"] = 'cpu'
+
+
+class TextColors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    TIMER = '\033[32m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+
 
 if os.environ.get('DESC_USE_NUMPY'):
     jnp = np
     use_jax = False
-    print('Using numpy backend, version={}, dtype={}'.format(
-        np.__version__, np.linspace(0, 1).dtype))
+    print('DESC version {}, using numpy backend, version={}, dtype={}'.format(desc.__version__,
+                                                                              np.__version__, np.linspace(0, 1).dtype))
 else:
     try:
         with warnings.catch_warnings():
@@ -22,12 +33,13 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print('Using JAX backend, jax version={}, jaxlib version={}, dtype={}'.format(
-            jax.__version__, jaxlib.__version__, x.dtype))
+        print('DESC version {}, using JAX backend, jax version={}, jaxlib version={}, dtype={}'.format(
+            desc.__version__, jax.__version__, jaxlib.__version__, x.dtype))
     except:
         jnp = np
         use_jax = False
-        warnings.warn('Failed to load JAX')
+        warnings.warn(TextColors.WARNING +
+                      'Failed to load JAX' + TextColors.ENDC)
         print('Using numpy backend, version={}, dtype={}'.format(
             np.__version__, np.linspace(0, 1).dtype))
 
@@ -120,9 +132,141 @@ else:
         return val
 
 
+class Timer():
+    """Simple object for organizing timing info
+
+    Create a Timer object, which can then keep track of 
+    multiple concurrent performance timers, each associated with
+    a given name. 
+
+    Individual timers can be started and stopped with 
+    >>>timer.start(name)
+    >>>timer.stop(name)
+
+    The elapsed time can be printed with 
+    >>>timer.disp(name)
+
+    Raw values of elapsed time (in seconds) can be retrieved 
+    with
+    >>>timer[name]
+    """
+
+    def __init__(self, ns=True):
+        import time
+        self._times = {}
+        self._timers = {}
+        self._ns = ns
+        if self._ns:
+            try:
+                self.op = time.perf_counter_ns
+            except AttributeError:
+                self.op = time.perf_counter
+                self._ns = False
+                warnings.warn(TextColors.WARNING +
+                              'nanosecond timing not available on this system, reverting to microsecond timing' + TextColors.ENDC)
+        else:
+            self.op = time.perf_counter
+
+    def start(self, name):
+        """Starts a timer
+
+        Args:
+            name (str): name to associate with timer
+        """
+
+        self._timers[name] = [self.op()]
+
+    def stop(self, name):
+        """Stops a running timer:
+
+        Args:
+            name (str): name of timer to stop
+
+        Raises:
+            ValueError: if timer 'name' has not been started
+        """
+
+        try:
+            self._timers[name].append(self.op())
+        except KeyError:
+            raise ValueError(
+                TextColors.FAIL + "timer '{}' has not been started".format(name) + TextColors.ENDC) from None
+        self._times[name] = np.diff(self._timers[name])[0]
+        if self._ns:
+            self._times[name] = self._times[name]/1e9
+        del self._timers[name]
+
+    @staticmethod
+    def pretty_print(name, time):
+        """Pretty prints time interval
+
+        Does not modify or use any internal timer data,
+        this is just a helper for pretty printing arbitrary time data
+
+        Args:
+            name (str): text to print before time
+            time (float): time (in seconds) to print
+        """
+        us = time*1e6
+        ms = us / 1000
+        sec = ms / 1000
+        mins = sec / 60
+        hrs = mins / 60
+
+        if us < 100:
+            out = '{:.3f}'.format(us)[:4] + ' us'
+        elif us < 1000:
+            out = '{:.3f}'.format(us)[:3] + ' us'
+        elif ms < 100:
+            out = '{:.3f}'.format(ms)[:4] + ' ms'
+        elif ms < 1000:
+            out = '{:.3f}'.format(ms)[:3] + ' ms'
+        elif sec < 60:
+            out = '{:.3f}'.format(sec)[:4] + ' sec'
+        elif mins < 60:
+            out = '{:.3f}'.format(mins)[:4] + ' min'
+        else:
+            out = '{:.3f}'.format(hrs)[:4] + ' hrs'
+
+        print(TextColors.TIMER + 'Timer: {} = {}'.format(name, out) + TextColors.ENDC)
+
+    def disp(self, name):
+        """Pretty prints elapsed time
+
+        If the timer has been stopped, it reports the time delta between
+        start and stop. If it has not been stopped, it reports the current
+        elapsed time and keeps the timing running.
+
+        Args:
+            name (str): name of the timer to display
+
+        Raises:
+            ValueError: if timer 'name' has not been started
+        """
+
+        try:     # has the timer been stopped?
+            time = self._times[name]
+        except KeyError:  # might still be running, let's check
+            try:
+                start = self._timers[name][0]
+                now = self.op()   # don't stop it, just report current elapsed time
+                time = float(now-start)/1e9 if self._ns else (now-start)
+            except KeyError:
+                raise ValueError(
+                    TextColors.FAIL + "timer '{}' has not been started".format(name) + TextColors.ENDC) from None
+
+        self.pretty_print(name, time)
+
+    def __getitem__(self, key):
+        return self._times[key]
+
+    def __setitem__(self, key, val):
+        self._times[key] = val
+
+
 class _Indexable():
     """Helper object for building indexes for indexed update functions.
-    This is a singleton object that overrides the :code:`__getitem__` method
+    This is a singleton object that overrides the ``__getitem__`` method
     to return the index it is passed.
     >>> opsindex[1:2, 3, None, ..., ::2]
     (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
@@ -135,7 +279,15 @@ class _Indexable():
         return index
 
 
-#: Index object singleton
+"""
+Helper object for building indexes for indexed update functions.
+This is a singleton object that overrides the ``__getitem__`` method
+to return the index it is passed.
+>>> opsindex[1:2, 3, None, ..., ::2]
+(slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
+
+copied from jax.ops.index to work with either backend
+"""
 opsindex = _Indexable()
 
 
@@ -315,7 +467,8 @@ def get_needed_derivatives(mode, axis=True):
     elif mode.lower() in ['all', 'qs']:
         return qs_derivs
     else:
-        raise NotImplementedError
+        raise NotImplementedError(
+            TextColors.FAIL + "derivs must be one of 'force', 'accel', 'all', 'qs'" + TextColors.ENDC)
 
 
 def unpack_x(x, nRZ):
@@ -500,8 +653,8 @@ class BlockJacobian():
         # to split blocks? Though we can't really split the jacobian columnwise without a lot
         # of surgery on the objective function
         if block_size is not None and num_blocks is not None:
-            raise ValueError(
-                "can specify either block_size or num_blocks, not both")
+            raise ValueError(TextColors.FAIL +
+                             "can specify either block_size or num_blocks, not both" + TextColors.ENDC)
         elif block_size is None and num_blocks is None:
             self.block_size = N
             self.num_blocks = 1

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from desc.nodes import get_nodes_grid
 from desc.zernike import ZernikeTransform, axis_posn
-from desc.backend import get_needed_derivatives, iotafun, presfun
+from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
 from desc.input_output import vmec_interpolate, read_desc
 from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
 from desc.field_components import compute_contravariant_basis, compute_jacobian
@@ -298,7 +298,8 @@ def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma'
         R = nodes[1].reshape((Nr, Nv, Nz))
         Z = nodes[0].reshape((Nr, Nv, Nz))
     else:
-        raise ValueError("domain must be either 'real' or 'sfl'")
+        raise ValueError(
+            TextColors.FAIL + "domain must be either 'real' or 'sfl'" + TextColors.ENDC)
 
     if normalize == 'local':
         label = r'||F||/$\nabla$p'
@@ -356,7 +357,8 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
     if NFP0 == NFP1:
         NFP = NFP0
     else:
-        raise Exception("NFP must be the same for both solutions")
+        raise ValueError(
+            TextColors.FAIL + "NFP must be the same for both solutions" + TextColors.ENDC)
 
     if max(np.max(zern_idx0[:, 2]), np.max(zern_idx1[:, 2])) == 0:
         Nz = 1

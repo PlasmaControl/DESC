@@ -1,4 +1,5 @@
 import numpy as np
+from desc.backend import TextColors
 
 
 def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=True):
@@ -32,7 +33,8 @@ def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=
         dimZern = int((M+1)**2)
         a = 2
     else:
-        raise ValueError("Invalid Zernike polynomial index ordering input.")
+        raise ValueError(
+            TextColors.FAIL + "Invalid Zernike polynomial index ordering input." + TextColors.ENDC)
 
     pattern = {
         'cheb1': (np.cos(np.arange(M, -1, -1)*np.pi/M)+1)/2,
@@ -84,7 +86,8 @@ def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=
     volumes = np.stack([dr, dt, dz])
 
     if sym:
-        non_sym_idx = np.where(np.logical_or(z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
+        non_sym_idx = np.where(np.logical_or(
+            z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
         nodes = np.delete(nodes, non_sym_idx, axis=1)
         volumes = np.delete(volumes, non_sym_idx, axis=1)
 
@@ -130,7 +133,8 @@ def get_nodes_surf(M, N, NFP, surf=1.0, sym=False):
     volumes = np.stack([dr, dt, dz])
 
     if sym:
-        non_sym_idx = np.where(np.logical_or(z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
+        non_sym_idx = np.where(np.logical_or(
+            z > np.pi/NFP, np.logical_and(z == 0, t > np.pi)))
         nodes = np.delete(nodes, non_sym_idx, axis=1)
         volumes = np.delete(volumes, non_sym_idx, axis=1)
 

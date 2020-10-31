@@ -3,7 +3,7 @@ import functools
 import warnings
 import numba
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
-from desc.backend import issorted, isalmostequal, sign
+from desc.backend import issorted, isalmostequal, sign, TextColors
 from desc.backend import polyder_vec, polyval_vec
 
 
@@ -446,8 +446,8 @@ class ZernikeTransform():
         if method in ['direct', 'fft']:
             self.method = method
         else:
-            raise ValueError(
-                "Unknown Zernike Transform method '{}'".format(method))
+            raise ValueError(TextColors.FAIL +
+                             "Unknown Zernike Transform method '{}'".format(method) + TextColors.ENDC)
         if self.method == 'fft':
             self._check_inputs_fft(nodes, zern_idx)
         self._build()
@@ -483,66 +483,66 @@ class ZernikeTransform():
         zeta_vals, zeta_cts = np.unique(nodes[2], return_counts=True)
 
         if not issorted(nodes[2]):
-            warnings.warn(
-                "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct method")
+            warnings.warn(TextColors.WARNING +
+                          "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct method" + TextColors.ENDC)
             self.method = 'direct'
             return
 
         if not isalmostequal(zeta_cts):
-            warnings.warn(
-                "fft method requires the same number of nodes on each zeta plane, falling back to direct method")
+            warnings.warn(TextColors.WARNING +
+                          "fft method requires the same number of nodes on each zeta plane, falling back to direct method" + TextColors.ENDC)
             self.method = 'direct'
             return
 
         if len(zeta_vals) > 1:
             if not np.diff(zeta_vals).std() < 1e-14:
-                warnings.warn(
-                    "fft method requires nodes to be equally spaced in zeta, falling back to direct method")
+                warnings.warn(TextColors.WARNING +
+                              "fft method requires nodes to be equally spaced in zeta, falling back to direct method" + TextColors.ENDC)
                 self.method = 'direct'
                 return
 
             if not isalmostequal(nodes[:2].reshape((zeta_cts[0], 2, -1), order='F')):
-                warnings.warn(
-                    "fft method requires that node pattern is the same on each zeta plane, falling back to direct method")
+                warnings.warn(TextColors.WARNING +
+                              "fft method requires that node pattern is the same on each zeta plane, falling back to direct method" + TextColors.ENDC)
                 self.method = 'direct'
                 return
             if not abs((zeta_vals[-1] + zeta_vals[1])*self.NFP - 2*np.pi) < 1e-14:
-                warnings.warn(
-                    "fft method requires that nodes complete 1 full field period, falling back to direct method")
+                warnings.warn(TextColors.WARNING +
+                              "fft method requires that nodes complete 1 full field period, falling back to direct method" + TextColors.ENDC)
                 self.method = 'direct'
                 return
 
         id2 = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
         if not issorted(id2):
-            warnings.warn(
-                "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct method")
+            warnings.warn(TextColors.WARNING +
+                          "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct method" + TextColors.ENDC)
             self.method = 'direct'
             return
 
         n_vals, n_cts = np.unique(zern_idx[:, 2], return_counts=True)
         if not isalmostequal(n_cts):
-            warnings.warn(
-                "fft method requires that there are the same number of poloidal modes for each toroidal mode, falling back to direct method")
+            warnings.warn(TextColors.WARNING +
+                          "fft method requires that there are the same number of poloidal modes for each toroidal mode, falling back to direct method" + TextColors.ENDC)
             self.method = 'direct'
             return
 
         if len(n_vals) > 1:
             if not np.diff(n_vals).std() < 1e-14:
-                warnings.warn(
-                    "fft method requires the toroidal modes are equally spaced in n, falling back to direct method")
+                warnings.warn(TextColors.WARNING +
+                              "fft method requires the toroidal modes are equally spaced in n, falling back to direct method" + TextColors.ENDC)
                 self.method = 'direct'
                 return
 
             if not isalmostequal(zern_idx[:, 0].reshape((n_cts[0], -1), order='F')) \
                or not isalmostequal(zern_idx[:, 1].reshape((n_cts[0], -1), order='F')):
-                warnings.warn(
-                    "fft method requires that the poloidal modes are the same for each toroidal mode, falling back to direct method")
+                warnings.warn(TextColors.WARNING +
+                              "fft method requires that the poloidal modes are the same for each toroidal mode, falling back to direct method" + TextColors.ENDC)
                 self.method = 'direct'
                 return
 
         if not len(zeta_vals) >= len(n_vals):
-            warnings.warn("fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}, falling back to direct method".format(
-                len(zeta_vals), len(n_vals)))
+            warnings.warn(TextColors.WARNING + "fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}, falling back to direct method".format(
+                len(zeta_vals), len(n_vals)) + TextColors.ENDC)
             self.method = 'direct'
             return
 
@@ -759,14 +759,14 @@ def get_zern_basis_idx_dense(M, N, indexing='fringe'):
         op = fringe_to_lm
         num_lm_modes = (M+1)**2
         if M >= 16:
-            warnings.warn(
-                "Fringe indexing is not recommended for M>=16 due to numerical roundoff at high radial resolution")
+            warnings.warn(TextColors.WARNING +
+                          "Fringe indexing is not recommended for M>=16 due to numerical roundoff at high radial resolution" + TextColors.ENDC)
     elif indexing == 'ansi':
         op = ansi_to_lm
         num_lm_modes = int(M*(M+1)/2)
         if M >= 30:
-            warnings.warn(
-                "ANSI indexing is not recommended for M>=30 due to numerical roundoff at high radial resolution")
+            warnings.warn(TextColors.WARNING +
+                          "ANSI indexing is not recommended for M>=30 due to numerical roundoff at high radial resolution" + TextColors.ENDC)
 
     num_four = 2*N+1
     zern_idx = np.array([(*op(i), n-N)

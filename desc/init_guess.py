@@ -1,5 +1,5 @@
 import numpy as np
-from desc.backend import put
+from desc.backend import put, TextColors
 
 
 def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='spectral', rcond=1e-6):
@@ -56,6 +56,7 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='sp
                     m), zern_idx[:, 1] == m, zern_idx[:, 2] == n)))[0], bZ)
 
     else:
-        raise ValueError("Can't compute the initial guess in real space")
+        raise ValueError(
+            TextColors.FAIL + "Can't compute the initial guess in real space" + TextColors.ENDC)
 
     return cR, cZ

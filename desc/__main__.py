@@ -35,7 +35,9 @@ def get_device(use_gpu=False, gpuID=None):
             return gpu
 
     except:
-        warnings.warn('No GPU found, falling back to CPU')
+        from desc.backend import TextColors
+        warnings.warn(TextColors.WARNING +
+                      'No GPU found, falling back to CPU' + TextColors.ENDC)
         return jax.devices('cpu')[0]
 
 
@@ -86,7 +88,6 @@ def main(args=sys.argv[1:]):
     import desc
 
     print(desc.BANNER)
-    print('DESC version={}'.format(desc.__version__))
 
     from desc.continuation import solve_eq_continuation
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
@@ -114,7 +115,7 @@ def main(args=sys.argv[1:]):
         inputs['verbose'] = 1
 
     # solve equilibrium
-    iterations = solve_eq_continuation(
+    iterations, timer = solve_eq_continuation(
         inputs, checkpoint_filename=out_fname, device=device)
 
     # output

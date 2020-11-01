@@ -1,4 +1,4 @@
-.. image:: docs/images/logo_med_clear.png
+.. image:: docs/_static/images/logo_med_clear.png
 
 .. inclusion-marker-do-not-remove
 	   

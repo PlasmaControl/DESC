@@ -56,15 +56,15 @@ Contribute
 - Source Code: `<https://github.com/ddudt/DESC/>`_
 - Documentation: `<https://desc-docs.readthedocs.io/>`_
 
-.. |License| image:: https://img.shields.io/github/license/ddudt/DESC
+.. |License| image:: https://img.shields.io/github/license/ddudt/desc?color=blue&logo=open-source-initiative&logoColor=white
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License
 
-.. |Docs| image:: https://readthedocs.org/projects/desc-docs/badge/?version=latest
+.. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Travis| image:: https://travis-ci.org/ddudt/DESC.svg?branch=master
+.. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
     :target: https://travis-ci.org/ddudt/DESC
     :alt: Build
 

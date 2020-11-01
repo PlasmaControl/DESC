@@ -13,12 +13,14 @@ Table Of Contents
 * `I don’t want to read this whole thing, I just have a question!!! <#i-dont-want-to-read-this-whole-thing-i-just-have-a-question>`__
 
 * `How Can I Contribute? <#how-can-i-contribute>`__
+
   - `Reporting Bugs <#reporting-bugs>`__
   - `Suggesting Enhancements <#suggesting-enhancements>`__
   - `Your First Code Contribution <#your-first-code-contribution>`__
   - `Pull Requests <#pull-requests>`__
 
 * `Styleguides <#styleguides>`__
+  
   - `Git Commit Messages <#git-commit-messages>`__
   - `Python <#python-styleguide>`__
   - `Documentation Styleguide <#documentation-styleguide>`__

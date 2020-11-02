@@ -133,6 +133,39 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_
     return qisym_obj
 
 
+def curve_self_intersects(x, y):
+    """Checks if a curve intersects itself
+
+    Args:
+        x,y (ndarray): x and y coordinates of points along the curve
+
+    Returns:
+        (bool): whether the curve intersects itself
+    """
+
+    pts = np.array([x, y])
+    pts1 = pts[:, 0:-1]
+    pts2 = pts[:, 1:]
+
+    # [start/stop, x/y, segment]
+    segments = np.array([pts1, pts2])
+    s1, s2 = np.meshgrid(np.arange(len(x)-1), np.arange(len(y)-1))
+    idx = np.array([s1.flatten(), s2.flatten()])
+    a, b = segments[:, :, idx[0, :]]
+    c, d = segments[:, :, idx[1, :]]
+
+    def signed_2d_area(a, b, c): return (
+        a[0] - c[0])*(b[1] - c[1]) - (a[1] - c[1])*(b[0] - c[0])
+
+    # signs of areas correspond to which side of ab points c and d are
+    a1 = signed_2d_area(a, b, d)  # Compute winding of abd (+ or -)
+    a2 = signed_2d_area(a, b, c)  # To intersect, must have sign opposite of a1
+    a3 = signed_2d_area(c, d, a)  # Compute winding of cda (+ or -)
+    a4 = a3 + a2 - a1  # Since area is constant a1 - a2 = a3 - a4, or a4 = a3 + a2 - a1
+
+    return np.any(np.where(np.logical_and(a1*a2 < 0, a3*a4 < 0), True, False))
+
+
 def is_nested(cR, cZ, zern_idx, NFP, nsurfs=10, zeta=0, Nt=361):
     """Checks that an equilibrium has properly nested flux surfaces
     in a given toroidal plane
@@ -165,7 +198,8 @@ def is_nested(cR, cZ, zern_idx, NFP, nsurfs=10, zeta=0, Nt=361):
     p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True)
          for R, Z in zip(Rs, Zs)]
     nested = np.all([p[i].contains_path(p[i+1]) for i in range(len(p)-1)])
-    return nested
+    intersects = np.any([curve_self_intersects(R, Z) for R, Z in zip(Rs, Zs)])
+    return nested and not intersects
 
 
 def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio, zernike_transform):

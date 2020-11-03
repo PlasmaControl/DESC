@@ -1,5 +1,4 @@
 import numpy as np
-# import jax
 from desc.backend import jnp, put, sign
 from desc.zernike import fourzern, double_fourier_basis, eval_double_fourier
 from desc.nodes import get_nodes_surf
@@ -191,19 +190,20 @@ def compute_bdry_err_four(cR, cZ, cL, bdry_ratio, zernike_transform, lambda_idx,
 
     # interpolate R,Z to fourier basis in non sfl coords
     if sym:
-        cos_idx = jnp.where(sign(bdryM) == sign(bdryN))
-        sin_idx = jnp.where(sign(bdryM) != sign(bdryN))
-        four_basis_R = double_fourier_basis(
-            theta, phi, bdryM[cos_idx], bdryN[cos_idx], NFP)
-        four_basis_Z = double_fourier_basis(
-            theta, phi, bdryM[sin_idx], bdryN[sin_idx], NFP)
+        cos_idx = jnp.where(sign(bdryM) == sign(bdryN), True, False)
+        sin_idx = jnp.where(sign(bdryM) != sign(bdryN), True, False)
+        four_basis_R = jnp.where(cos_idx, double_fourier_basis(
+            theta, phi, bdryM, bdryN, NFP), 0)
+        four_basis_Z = jnp.where(sin_idx, double_fourier_basis(
+            theta, phi, bdryM, bdryN, NFP), 0)
         four_basis_R_pinv = jnp.linalg.pinv(four_basis_R, rcond=1e-6)
         four_basis_Z_pinv = jnp.linalg.pinv(four_basis_Z, rcond=1e-6)
         cRb = jnp.matmul(four_basis_R_pinv, R)
         cZb = jnp.matmul(four_basis_Z_pinv, Z)
     else:
-        cos_idx = jnp.ones_like(bdryM)
-        sin_idx = jnp.ones_like(bdryN)
+        cos_idx = jnp.ones_like(bdryM).astype(bool)
+        sin_idx = jnp.ones_like(bdryN).astype(bool)
+
         four_basis = double_fourier_basis(theta, phi, bdryM, bdryN, NFP)
         four_basis_pinv = jnp.linalg.pinv(four_basis, rcond=1e-6)
         cRb, cZb = jnp.matmul(four_basis_pinv, jnp.array([R, Z]).T).T
@@ -212,8 +212,8 @@ def compute_bdry_err_four(cR, cZ, cL, bdry_ratio, zernike_transform, lambda_idx,
     ratio = jnp.where(bdryN != 0, bdry_ratio, 1)
 
     # compute errors
-    errR = cRb - (bdryR*ratio)[cos_idx]
-    errZ = cZb - (bdryZ*ratio)[sin_idx]
+    errR = jnp.where(cos_idx, cRb - (bdryR*ratio), 0)
+    errZ = jnp.where(sin_idx, cZb - (bdryZ*ratio), 0)
     return errR, errZ
 
 
@@ -332,7 +332,7 @@ def compute_lambda_err(cL, idx, NFP):
         (float): sum of lambda_mn where m,n>0
     """
 
-    Lc = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0), cL, 0)[0]
+    Lc = jnp.where(jnp.logical_and(idx[:, 0] >= 0, idx[:, 1] >= 0), cL, 0)
     errL = jnp.sum(Lc)
 
     return errL

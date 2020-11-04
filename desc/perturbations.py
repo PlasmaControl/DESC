@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from desc.backend import jacfwd, Timer
 
@@ -28,7 +29,7 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
         if verbose > 1:
             timer.disp('df/dx computation')
 
-        # partial derivatives wrt continuation parameters
+        # partial derivatives wrt c
         for i in range(deltas.size):
             if deltas[i] != 0:
                 if verbose > 1:
@@ -56,7 +57,7 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
         if verbose > 1:
             timer.disp("df/dxx computation")
 
-        # partial derivatives wrt continuation parameters
+        # partial derivatives wrt c
         for i in range(deltas.size):
             if deltas[i] != 0:
                 if verbose > 1:
@@ -93,16 +94,91 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
     return x + dx, timer
 
 
-# TODO: finish this function
-def perturb_coefficients(x, equil_obj, delta_bdryR, delta_bdryZ, delta_cP, delta_cI, delta_Psi_lcfs, args, pert_order=1, verbose=False):
-    """perturbs an equilibrium wrt the input coefficients"""
+def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=False):
+    """computes Jacobian and Hessian arrays"""
 
-    delta_strings = ['R boundary', 'Z boundary', 'pressure',
-                     'rotational transform', 'max toroidal flux']
-    f = equil_obj(x, *args)
+    Jx = None
+    Jc = None
+
+    arg_idx = list(arg_dict.keys())
+
+    f = equil_obj(*args)
     dimF = len(f)
-    dimX = len(x)
-    dimC = np.array([delta_bdryR.size, delta_bdryZ.size,
-                     delta_cP.size, delta_cI.size, delta_Psi_lcfs.size])
+    dimX = len(args[0])
 
-    return Null
+    t00 = time.perf_counter()
+
+    # 1st order
+    if pert_order >= 1:
+
+        # partial derivatives wrt x
+        t0 = time.perf_counter()
+        obj_jac_x = jacfwd(equil_obj, argnums=0)
+        Jx = obj_jac_x(*args).reshape((dimF, dimX))
+        t1 = time.perf_counter()
+        if verbose > 1:
+            print("df/dx computation time: {} s".format(t1-t0))
+
+        # partial derivatives wrt c
+        flag = True
+        for i in arg_idx:
+            dimC = args[i].size
+            t0 = time.perf_counter()
+            obj_jac_c = jacfwd(equil_obj, argnums=i)
+            Jc_i = obj_jac_c(*args).reshape((dimF, dimC))
+            Jc_i = Jc_i[:,arg_dict[i]]
+            t1 = time.perf_counter()
+            if verbose > 1:
+                print("df/dc computation time: {} s".format(t1-t0))
+            if flag:
+                Jc = Jc_i
+                flag = False
+            else:
+                Jc = np.concatenate((Jc, Jc_i), axis=1)
+
+    # 2nd order
+    if pert_order >= 2:
+
+        # partial derivatives wrt x
+        t0 = time.perf_counter()
+        obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
+        Jxx = obj_jac_xx(*args).reshape((dimF, dimX, dimX))
+        t1 = time.perf_counter()
+        if verbose > 1:
+            print("df/dxx computation time: {} s".format(t1-t0))
+
+        # partial derivatives wrt c
+        flag = True
+        for i in arg_idx:
+            dimC = args[i].size
+            t0 = time.perf_counter()
+            obj_jac_cc = jacfwd(jacfwd(equil_obj, argnums=i), argnums=i)
+            Jcc_i = obj_jac_cc(*args).reshape((dimF, dimC, dimC))
+            Jcc_i = Jcc_i[:,arg_dict[i],arg_dict[i]]
+            t1 = time.perf_counter()
+            if verbose > 1:
+                print("df/dcc computation time: {} s".format(t1-t0))
+            obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=i)
+            Jxc_i = obj_jac_xc(*args).reshape((dimF, dimX, dimC))
+            Jxc_i = Jxc_i[:,:,arg_dict[i]]
+            t2 = time.perf_counter()
+            if verbose > 1:
+                print("df/dxc computation time: {} s".format(t2-t1))
+            if flag:
+                Jcc = Jcc_i
+                Jxc = Jxc_i
+                flag = False
+            else:
+                Jcc = np.concatenate((Jcc, Jcc_i), axis=2)
+                Jxc = np.concatenate((Jxc, Jxc_i), axis=2)
+
+    t1 = time.perf_counter()
+    if verbose > 1:
+        print("Total perturbation time: {} s".format(t1-t00))
+
+    if pert_order == 1:
+        return Jx, Jc
+    elif pert_order == 2:
+        return Jx, Jc, Jxx, Jcc, Jxc
+    else:
+        return None

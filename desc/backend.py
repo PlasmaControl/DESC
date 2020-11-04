@@ -493,6 +493,7 @@ class FiniteDifferenceJacobian():
 
     Args:
         fun (callable): function to wrap
+        argnums (int): index of arguments to differentiate with respect to
         rel_step (float): relative step size for finite differences. 
             step_size = rel_step * x0 * max(1,abs(x0))
 
@@ -500,25 +501,25 @@ class FiniteDifferenceJacobian():
        jac_fun (callable): object that computes the jacobian of fun.
     """
 
-    def __init__(self, fun, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
+    def __init__(self, fun, argnums=0, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
         self.fun = fun
+        self.argnums=argnums
         self.rel_step = rel_step
 
-    def __call__(self, x0, *args):
+    def __call__(self, *args):
         """Evaluate the jacobian of fun at x0.
 
         Args:
-            x0 (array-like): point to evaluate jacobian
-            args: additional arguments passed to fun.
+            args (): point to evaluate jacobian
 
         Returns:
             dF/dx (array-like): Jacobian of fun at x0.
         """
-        f0 = self.fun(x0, *args)
+        f0 = self.fun(*args)
+        x0 = args[self.argnums]
         m = f0.size
         n = x0.size
-        J_transposed = np.empty((n, m))
-        idx = np.arange(m).astype(jnp.int64)
+        J_transposed = np.zeros((n, m))
         sign_x0 = (x0 >= 0).astype(float) * 2 - 1
         h = self.rel_step * sign_x0 * np.maximum(1.0, jnp.abs(x0))
         h_vecs = np.diag(h)
@@ -526,11 +527,13 @@ class FiniteDifferenceJacobian():
             x1 = x0 - h_vecs[i]
             x2 = x0 + h_vecs[i]
             dx = x2[i] - x1[i]
-            f1 = self.fun(x1, *args)
-            f2 = self.fun(x2, *args)
+            args1 = args[0:self.argnums] + (x1,) + args[self.argnums+1:]
+            args2 = args[0:self.argnums] + (x2,) + args[self.argnums+1:]
+            f1 = self.fun(*args1)
+            f2 = self.fun(*args2)
             df = f2 - f1
             dfdx = df / dx
-            J_transposed = put(J_transposed, i*m+idx, dfdx)
+            J_transposed = put(J_transposed, i, dfdx)
         if m == 1:
             J_transposed = np.ravel(J_transposed)
         return J_transposed.T

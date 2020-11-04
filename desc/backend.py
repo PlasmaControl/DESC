@@ -40,7 +40,7 @@ else:
         use_jax = False
         warnings.warn(TextColors.WARNING +
                       'Failed to load JAX' + TextColors.ENDC)
-        print('Using numpy backend, version={}, dtype={}'.format(
+        print('DESC version {}, using numpy backend, version={}, dtype={}'.format(desc.__version__,
             np.__version__, np.linspace(0, 1).dtype))
 
 if use_jax:
@@ -375,9 +375,7 @@ def sign(x):
         y (array-like): 1 where x>=0, -1 where x<0
     """
     x = jnp.atleast_1d(x)
-    y = jnp.sign(x)
-    x0 = jnp.where(y.flatten() == 0)[0]
-    y = put(y, x0, 1)
+    y = jnp.where(x == 0,1,jnp.sign(x))
     return y
 
 

@@ -274,9 +274,10 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_total, pres_ratio, zeta_ratio,
     vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
     if len(axn):
         r1 = jnp.min(r[r != 0])  # value of r one step out from axis
-        r1_idx = jnp.where(r == r1)[0]
-        vol = put(vol, axn, jnp.mean(
-            jacobian['g'][r1_idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
+        r1_g = jnp.where(r == r1,jacobian['g'],0)
+        cnt = jnp.count_nonzero(r1_g)
+        # volume of axis is zero, but we want to account for nonzero volume in cell around axis
+        vol = put(vol, axn, jnp.sum(r1_g/2*volumes[0,:]*volumes[1,:]*volumes[2,:])/cnt)
     f_rho = f_rho * vol
     f_beta = f_beta*vol
 

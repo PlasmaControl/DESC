@@ -117,7 +117,7 @@ def zern(rho, theta, l, m, dr, dtheta):
         y (ndarray with shape(N,K)): basis function evaluated at specified points
     """
 
-    radial = zern_radial(rho, tuple(l), tuple(m), dr)
+    radial = zern_radial(rho, tuple(l,), tuple(m,), dr)
     azimuthal = zern_azimuthal(theta, m, dtheta)
     return radial*azimuthal
 
@@ -357,7 +357,7 @@ class ZernikeTransform():
                            for i in new_nodes.tolist()]
             for d in self.derivatives:
                 self.matrices[d[0]][d[1]][d[2]
-                                          ] = self.matrices[d[0]][d[1]][d[2]][permute_idx,:]
+                                          ] = self.matrices[d[0]][d[1]][d[2]][permute_idx, :]
             self.nodes = self.nodes[:, permute_idx]
             self.volumes = new_volumes[:, permute_idx]
             self.axn = np.where(self.nodes[0] == 0)[0]

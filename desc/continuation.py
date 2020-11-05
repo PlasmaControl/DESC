@@ -71,6 +71,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     Psi_lcfs = inputs['Psi_lcfs']
     M = inputs['Mpol']                  # arr
     N = inputs['Ntor']                  # arr
+    delta_lm = inputs['delta_lm']       # arr
     Mnodes = inputs['Mnodes']           # arr
     Nnodes = inputs['Nnodes']           # arr
     bdry_ratio = inputs['bdry_ratio']   # arr
@@ -110,7 +111,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("================")
             print("Step {}/{}".format(ii+1, arr_len))
             print("================")
-            print("Spectral resolution (M,N)=({},{})".format(M[ii], N[ii]))
+            print("Spectral resolution (M,N,delta_lm)=({},{},{})".format(
+                M[ii], N[ii], delta_lm[ii]))
             print("Node resolution (M,N)=({},{})".format(
                 Mnodes[ii], Nnodes[ii]))
             print("Boundary ratio = {}".format(bdry_ratio[ii]))
@@ -134,7 +136,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
             derivatives = get_needed_derivatives('all')
-            zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
+            zern_idx = get_zern_basis_idx_dense(
+                M[ii], N[ii], delta_lm[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernike_transform = ZernikeTransform(
                 nodes, zern_idx, NFP, derivatives, volumes, method='fft')
@@ -216,15 +219,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                         "Iteration {} changing node resolution".format(ii+1))
 
             # spectral resolution
-            if M[ii] != M[ii-1] or N[ii] != N[ii-1]:
+            if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
                 timer.start(
                     "Iteration {} changing spectral resolution".format(ii+1))
                 if verbose > 0:
-                    print("Changing spectral resolution from (M,N) = ({},{}) to ({},{})".format(
-                        M[ii-1], N[ii-1], M[ii], N[ii]))
+                    print("Changing spectral resolution from (M,N,delta_lm) = ({},{},{}) to ({},{},{})".format(
+                        M[ii-1], N[ii-1], delta_lm[ii-1], M[ii], N[ii], delta_lm[ii]))
                 zern_idx_old = zern_idx
                 lambda_idx_old = lambda_idx
-                zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
+                zern_idx = get_zern_basis_idx_dense(
+                    M[ii], N[ii], delta_lm[ii], zern_mode)
                 lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
                 bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                     M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)

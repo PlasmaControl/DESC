@@ -41,7 +41,7 @@ else:
         warnings.warn(TextColors.WARNING +
                       'Failed to load JAX' + TextColors.ENDC)
         print('DESC version {}, using numpy backend, version={}, dtype={}'.format(desc.__version__,
-            np.__version__, np.linspace(0, 1).dtype))
+                                                                                  np.__version__, np.linspace(0, 1).dtype))
 
 if use_jax:
     jit = jax.jit
@@ -291,6 +291,21 @@ copied from jax.ops.index to work with either backend
 opsindex = _Indexable()
 
 
+def flatten_list(x):
+    """Flattens a nested list
+
+    Args:
+        x (list): nested list of lists to flatten
+
+    Returns:
+        x (list): flattened input
+    """
+    if isinstance(x, list):
+        return [a for i in x for a in flatten_list(i)]
+    else:
+        return [x]
+
+
 def conditional_decorator(dec, condition, *args, **kwargs):
     """Apply arbitrary decorator to a function if condition is met
 
@@ -375,7 +390,7 @@ def sign(x):
         y (array-like): 1 where x>=0, -1 where x<0
     """
     x = jnp.atleast_1d(x)
-    y = jnp.where(x == 0,1,jnp.sign(x))
+    y = jnp.where(x == 0, 1, jnp.sign(x))
     return y
 
 
@@ -503,7 +518,7 @@ class FiniteDifferenceJacobian():
 
     def __init__(self, fun, argnums=0, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
         self.fun = fun
-        self.argnums=argnums
+        self.argnums = argnums
         self.rel_step = rel_step
 
     def __call__(self, *args):

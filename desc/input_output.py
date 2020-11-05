@@ -25,6 +25,7 @@ def read_input(fname):
         'Psi_lcfs': 1.0,
         'Mpol': np.atleast_1d(0),
         'Ntor': np.atleast_1d(0),
+        'delta_lm': np.atleast_1d(None),
         'Mnodes': np.atleast_1d(0),
         'Nnodes': np.atleast_1d(0),
         'bdry_ratio': np.atleast_1d(1.0),
@@ -96,6 +97,9 @@ def read_input(fname):
         match = re.search(r'Ntor', argument, re.IGNORECASE)
         if match:
             inputs['Ntor'] = np.array(numbers).astype(int)
+        match = re.search(r'delta_lm', argument, re.IGNORECASE)
+        if match:
+            inputs['delta_lm'] = np.array(numbers).astype(int)
         match = re.search(r'Mnodes', argument, re.IGNORECASE)
         if match:
             inputs['Mnodes'] = np.array(numbers).astype(int)
@@ -245,8 +249,8 @@ def read_input(fname):
     if np.sum(inputs['bdry']) == 0:
         raise IOError(
             TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
-    arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes',
-            'bdry_ratio', 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
+    arrs = ['Mpol', 'Ntor', 'delta_lm', 'Mnodes', 'Nnodes', 'bdry_ratio',
+            'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
             'ftol', 'xtol', 'gtol', 'nfev']
     arr_len = 0
     for a in arrs:
@@ -266,6 +270,12 @@ def read_input(fname):
     if np.sum(inputs['axis']) == 0:
         axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
         inputs['axis'] = inputs['bdry'][axis_idx, 1:]
+    if None in inputs['delta_lm']:
+        default_deltas = {'fringe': 2*inputs['Mpol'],
+                          'ansi': inputs['Mpol'],
+                          'chevron': inputs['Mpol'],
+                          'house': 2*inputs['Mpol']}
+        inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
 
     return inputs
 

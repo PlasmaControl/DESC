@@ -26,10 +26,10 @@ def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=
     """
 
     dimFour = 2*N+1
-    if index == 'ansi':
+    if index in ['ansi', 'chevron']:
         dimZern = int((M+1)*(M+2)/2)
         a = 1
-    elif index == 'fringe':
+    elif index in ['fringe', 'house']:
         dimZern = int((M+1)**2)
         a = 2
     else:

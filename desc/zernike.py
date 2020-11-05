@@ -4,7 +4,7 @@ import warnings
 import numba
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
 from desc.backend import issorted, isalmostequal, sign, TextColors
-from desc.backend import polyder_vec, polyval_vec
+from desc.backend import polyder_vec, polyval_vec, flatten_list
 
 # use numba here because the array size depends on the input values, which
 # jax can't handle
@@ -507,36 +507,78 @@ class ZernikeTransform():
         return jnp.matmul(self.pinv, x)
 
 
-def get_zern_basis_idx_dense(M, N, indexing='fringe'):
+def get_zern_basis_idx_dense(M, N, delta_lm=-1, indexing='fringe'):
     """Gets mode numbers for dense spectral representation in zernike basis.
 
     Args: 
         M (int): maximum poloidal resolution
         N (int): maximum toroidal resolution
-        indexing (str): one of 'fringe' or 'ansi'. Fringe indexing has the 
-            maximum radial resolution = 2M, while ANIS indexing has max radial 
-            resolution = M. Fringe is a good up to M~16, while ANSI can avoid 
-            numerical issues up to M~30
+        delta_lm (int): maximum difference between poloidal and radial 
+            resolution (l-m). If < 0, defaults to ``M`` for 'ansi' or 
+            'chevron' indexing, ``2*M`` for 'fringe' or 'house'.
+        indexing (str): One of ('frige','ansi','house','chevron')zernike indexing 
+            method. For delta_lm=0, all methods are equivalent and give a "chevron" 
+            shaped basis (only the outer edge of the zernike pyramid of width M.
+            For delta_lm>0, the indexing scheme defines how the pyramid is filled in. 
+            'fringe': Fringe indexing fills in the pyramid with chevrons of 
+                decreasing size, ending in a diamond shape. The maximum delta_lm
+                is 2*M, for which the traditional "Fringe/ U of Arizona" indexing 
+                is recovered. Gives a single mode at maximum m and a single mode 
+                at maximum l and m=0. 
+                Total number of modes = (M+1)*(M+2)/2 - (M-delta_lm//2+1)*(M-delta_lm//2)/2 
+            'ansi'. ANSI indexing fills in the pyramid with triangles of 
+                decreasing size, ending in a triagle shape. The maximum delta_lm 
+                is M, at which point the traditional ANSI indexing is recovered.
+                Gives a single mode at maximum m, and multiple modes at maximum l,
+                from m=0 to m=l.
+                Total number of modes = (M-(delta_lm//2)+1)*((delta_lm//2)+1)
+            'house': Fills in the pyramid row by row, with a maximum horizontal 
+                width of M and a maximum radial resolution of delta_lm. For 
+                delta_lm = M, it is equivalent to ANSI, while for delta_lm > M 
+                it takes on a "house" like shape. Gives multiple modes at maximum 
+                m and maximum l.
+            'chevron': Beginning from the initial chevron of width M, increasing 
+                delta_lm adds additional chevrons of the same width. Similar to 
+                "house" but with fewer modes with high l but low m.
+                Total number of modes = (M+1)*(2*(delta//2)+1)
 
     Returns: 
         zern_idx (ndarray of int, shape(Nmodes,3)): array of mode numbers [l,m,n]
     """
-    if indexing == 'fringe':
-        op = fringe_to_lm
-        num_lm_modes = (M+1)**2
-        if M >= 16:
-            warnings.warn(TextColors.WARNING +
-                          "Fringe indexing is not recommended for M>=16 due to numerical roundoff at high radial resolution" + TextColors.ENDC)
-    elif indexing == 'ansi':
-        op = ansi_to_lm
-        num_lm_modes = int(M*(M+1)/2)
-        if M >= 30:
-            warnings.warn(TextColors.WARNING +
-                          "ANSI indexing is not recommended for M>=30 due to numerical roundoff at high radial resolution" + TextColors.ENDC)
+    default_deltas = {'fringe': 2*M,
+                      'ansi': M,
+                      'chevron': M,
+                      'house': 2*M}
 
-    num_four = 2*N+1
-    zern_idx = np.array([(*op(i), n-N)
-                         for i in range(num_lm_modes) for n in range(num_four)])
+    delta_lm = delta_lm if delta_lm >= 0 else default_deltas[indexing]
+
+    if indexing == 'fringe':
+        pol_posm = [[(m+d//2, m-d//2) for m in range(0, M+1) if m-d//2 >= 0]
+                    for d in range(0, delta_lm+1, 2)]
+
+    elif indexing == 'ansi':
+        pol_posm = [[(m+d, m) for m in range(0, M+1) if m+d < M+1]
+                    for d in range(0, delta_lm+1, 2)]
+
+    elif indexing == 'chevron':
+        pol_posm = [(m+d, m) for m in range(0, M+1)
+                    for d in range(0, delta_lm+1, 2)]
+
+    elif indexing == 'house':
+        pol_posm = [[(l, m) for m in range(0, M+1) if l >= m and (l-m) % 2 == 0]
+                    for l in range(0, delta_lm+1)] + [(m, m) for m in range(M+1)]
+        pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
+
+    pol = [[(l, m), (l, -m)] if m != 0 else [(l, m)]
+           for l, m in flatten_list(pol_posm)]
+    pol = np.array(flatten_list(pol))
+    num_pol = len(pol)
+
+    pol = np.tile(pol, (2*N+1, 1))
+    tor = np.atleast_2d(
+        np.tile(np.arange(-N, N+1), (num_pol, 1)).flatten(order='f')).T
+    zern_idx = np.hstack([pol, tor])
+
     sort_idx = np.lexsort((zern_idx[:, 1], zern_idx[:, 0], zern_idx[:, 2]))
     return zern_idx[sort_idx]
 

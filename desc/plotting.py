@@ -4,7 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from desc.nodes import get_nodes_grid
-from desc.zernike import ZernikeTransform, axis_posn
+from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
 from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
 from desc.input_output import vmec_interpolate, read_desc
 from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
@@ -623,5 +623,54 @@ def plot_logo(savepath=None, **kwargs):
 
     if savepath is not None:
         fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor='none')
+
+    return fig, ax
+
+
+def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
+    """Plots spectral basis of zernike basis functions
+
+    Args:
+        M (int): maximum poloidal resolution
+        delta_lm (int): maximum difference between radial mode l and poloidal mode m
+        indexing (str): one of 'fringe', 'ansi', 'house', 'chevron'
+
+    Returns:
+        fig (matplotlib figure): handle to figure
+        ax (dict of matplotlib axes): nested dictionary, ax[l][m] is the handle to the 
+            axis for radial mode l, poloidal mode m
+    """
+
+    cmap = kwargs.get('cmap', 'coolwarm')
+    scale = kwargs.get('scale', 1)
+    npts = kwargs.get('npts', 100)
+    levels = kwargs.get('levels', np.linspace(-1, 1, npts))
+
+    ls, ms, ns = get_zern_basis_idx_dense(M, 0, delta_lm, indexing).T
+    lmax = np.max(ls)
+    mmax = np.max(ms)
+
+    r = np.linspace(0, 1, npts)
+    v = np.linspace(0, 2*jnp.pi, npts)
+    rr, vv = np.meshgrid(r, v, indexing='ij')
+
+    fig = plt.figure(figsize=(scale*mmax, scale*lmax/2))
+
+    ax = {i: {} for i in range(lmax+1)}
+    gs = matplotlib.gridspec.GridSpec(lmax+1, 2*(mmax+1))
+
+    Zs = zern(rr.flatten(), vv.flatten(), ls, ms, 0, 0)
+
+    for i, (l, m) in enumerate(zip(ls, ms)):
+        Z = Zs[:, i].reshape((npts, npts))
+        ax[l][m] = plt.subplot(gs[l, m+mmax:m+mmax+2], projection='polar')
+        ax[l][m].set_title('$\mathcal{Z}_{' + str(l) + '}^{' + str(m) + '}$')
+        ax[l][m].axis('off')
+        im = ax[l][m].contourf(v, r, Z, levels=levels, cmap=cmap)
+
+    cb_ax = fig.add_axes([0.83, 0.1, 0.02, 0.8])
+    plt.subplots_adjust(right=.8)
+    cbar = fig.colorbar(im, cax=cb_ax)
+    cbar.set_ticks(np.linspace(-1, 1, 9))
 
     return fig, ax

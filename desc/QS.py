@@ -18,10 +18,11 @@ from desc.continuation import expand_resolution
 
 
 def vec2mat(c, pol, tor, M, N):
-    CC = np.zeros((2*N+1,2*M+1))
+    CC = np.zeros((2*N+1, 2*M+1))
     for i in range(c.size):
-        CC[tor[i]+N,pol[i]+M] = c[i]
+        CC[tor[i]+N, pol[i]+M] = c[i]
     return CC
+
 
 equil_fname = 'examples/DESC/ITER_fake202.output_1.out'
 bdry3_fname = 'examples/DESC/ITER_fake202_pert.output_1.out'
@@ -64,7 +65,8 @@ Mnodes = 15
 Nnodes = 15
 
 # original resolution
-bdry = np.concatenate([bdry_idx, np.atleast_2d(bdryR).T, np.atleast_2d(bdryZ).T], axis=1)
+bdry = np.concatenate([bdry_idx, np.atleast_2d(
+    bdryR).T, np.atleast_2d(bdryZ).T], axis=1)
 equil_nodes, equil_volumes = get_nodes_pattern(
     M0nodes, N0nodes, NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
 bdry_nodes, _ = get_nodes_surf(
@@ -72,7 +74,8 @@ bdry_nodes, _ = get_nodes_surf(
 derivatives = get_needed_derivatives('all')
 equil_zernike_transform = ZernikeTransform(
     equil_nodes, zern_idx, NFP, derivatives, equil_volumes, method='fft')
-bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP, [0, 0, 0], method='direct')
+bdry_zernike_transform = ZernikeTransform(
+    bdry_nodes, zern_idx, NFP, [0, 0, 0], method='direct')
 x0 = np.concatenate([cR, cZ, cL])
 
 # expanded resolution
@@ -84,12 +87,12 @@ equil_zernike_transform.expand_nodes(equil_nodes, equil_volumes)
 bdry_zernike_transform.expand_nodes(bdry_nodes)
 zern_idx_old = zern_idx
 lambda_idx_old = lambda_idx
-zern_idx = get_zern_basis_idx_dense(M, N, zern_mode)
+zern_idx = get_zern_basis_idx_dense(M, N, None, zern_mode)
 lambda_idx = get_double_four_basis_idx_dense(M, N)
 bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
     M, N, NFP, bdry, bdry_mode, bdry_mode)
 x0, equil_zernike_transform, bdry_zernike_transform = expand_resolution(x0, equil_zernike_transform, bdry_zernike_transform,
-                                                                 zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
+                                                                        zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
 if stell_sym:
     sym_mat = symmetric_x(zern_idx, lambda_idx)
 else:
@@ -100,48 +103,54 @@ x0 = np.matmul(sym_mat.T, x0)
 equil_obj, _ = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N,
                                  NFP, equil_zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                  bdry_pol, bdry_tor)
-equil_args = [x0, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio]
+equil_args = [x0, bdryR, bdryZ, cP, cI, Psi_lcfs,
+              bdry_ratio, pres_ratio, zeta_ratio, errr_ratio]
 
 # quasisymmetry objective function
 qisym_nodes, qisym_volumes = get_nodes_surf(
     Mnodes, Nnodes, NFP, surf=1.0, sym=stell_sym)
 qisym_zernike_transform = ZernikeTransform(
     qisym_nodes, zern_idx, NFP, derivatives, qisym_volumes, method='fft')
-qisym_obj = get_qisym_obj_fun(stell_sym, M, N, NFP, qisym_zernike_transform, zern_idx, lambda_idx, bdry_pol, bdry_tor)
+qisym_obj = get_qisym_obj_fun(
+    stell_sym, M, N, NFP, qisym_zernike_transform, zern_idx, lambda_idx, bdry_pol, bdry_tor)
 qisym_args = [x0, cI, Psi_lcfs]
 
 # boundary modes to perturb
-bdryR_modes = np.where(np.logical_and(bdry_tor != 0, sign(bdry_pol) == sign(bdry_tor)))[0]
-bdryZ_modes = np.where(np.logical_and(bdry_tor != 0, sign(bdry_pol) != sign(bdry_tor)))[0]
+bdryR_modes = np.where(np.logical_and(
+    bdry_tor != 0, sign(bdry_pol) == sign(bdry_tor)))[0]
+bdryZ_modes = np.where(np.logical_and(
+    bdry_tor != 0, sign(bdry_pol) != sign(bdry_tor)))[0]
 equil_arg_dict = {1: bdryR_modes, 2: bdryZ_modes}
 qisym_arg_dict = {}
 
 # jacobian matrices
-dFdx, dFdc = get_system_derivatives(equil_obj, equil_args, equil_arg_dict, pert_order=1, verbose=2)
-dGdx, dGdc = get_system_derivatives(qisym_obj, qisym_args, qisym_arg_dict, pert_order=1, verbose=2)
+dFdx, dFdc = get_system_derivatives(
+    equil_obj, equil_args, equil_arg_dict, pert_order=1, verbose=2)
+dGdx, dGdc = get_system_derivatives(
+    qisym_obj, qisym_args, qisym_arg_dict, pert_order=1, verbose=2)
 
 # singular value decomposition
 QSmat = dGdx @ np.linalg.pinv(dFdx) @ dFdc
 u, s, vh = np.linalg.svd(QSmat, full_matrices=False)
 
 # Plunk's result
-bdry_Plunk = np.concatenate([bdry3['bdry_idx'], np.atleast_2d(bdry3['bdryR']).T, 
+bdry_Plunk = np.concatenate([bdry3['bdry_idx'], np.atleast_2d(bdry3['bdryR']).T,
                              np.atleast_2d(bdry3['bdryZ']).T], axis=1)
 _, _, bdryR_Plunk, bdryZ_Plunk = format_bdry(
     M, N, NFP, bdry_Plunk, bdry_mode, bdry_mode)
 dR = (bdryR_Plunk - bdryR)[bdryR_modes]
 dZ = (bdryZ_Plunk - bdryZ)[bdryZ_modes]
 dc_Plunk = np.concatenate([dR, dZ])
-dc_Plunk = dc_Plunk / np.linalg.norm(dc_Plunk) # normalize
+dc_Plunk = dc_Plunk / np.linalg.norm(dc_Plunk)  # normalize
 
 dc_dots = np.zeros((vh.shape[0],))
 for i in range(vh.shape[0]):
-    dc_dots[i] = np.abs(np.dot(dc_Plunk,vh[i,:]))
+    dc_dots[i] = np.abs(np.dot(dc_Plunk, vh[i, :]))
 idx = np.argmax(dc_dots)
 
 # our result
-dc = vh[idx,:] # right-singular vector
-dc = dc / np.linalg.norm(dc) # normalize
+dc = vh[idx, :]  # right-singular vector
+dc = dc / np.linalg.norm(dc)  # normalize
 dx = -np.linalg.pinv(dFdx) @ dFdc @ dc
 
 epsilon = np.array([1e-4, 1e-3, 1e-2, 1e-1, 1e0])
@@ -149,11 +158,11 @@ QSerrs = np.zeros_like(epsilon)
 for i in range(epsilon.size):
     QSerrs[i] = np.sum(qisym_obj(x0+dx*epsilon[i], cI, Psi_lcfs)**2) * 1e3
 
-DC = vec2mat(dc, np.concatenate([bdry_pol[bdryR_modes], bdry_pol[bdryZ_modes]]), 
+DC = vec2mat(dc, np.concatenate([bdry_pol[bdryR_modes], bdry_pol[bdryZ_modes]]),
              np.concatenate([bdry_tor[bdryR_modes], bdry_tor[bdryZ_modes]]), M, N)
 
-DC_Plunk = vec2mat(dc_Plunk, np.concatenate([bdry_pol[bdryR_modes], bdry_pol[bdryZ_modes]]), 
-             np.concatenate([bdry_tor[bdryR_modes], bdry_tor[bdryZ_modes]]), M, N)
+DC_Plunk = vec2mat(dc_Plunk, np.concatenate([bdry_pol[bdryR_modes], bdry_pol[bdryZ_modes]]),
+                   np.concatenate([bdry_tor[bdryR_modes], bdry_tor[bdryZ_modes]]), M, N)
 
 plt.plot(epsilon, QSerrs, 'ro')
 plt.plot(epsilon, epsilon**2, 'k-')

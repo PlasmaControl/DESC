@@ -4,7 +4,7 @@ import warnings
 import h5py
 import numpy as np
 from datetime import datetime
-from netCDF4 import Dataset
+
 from desc.backend import TextColors
 
 
@@ -911,61 +911,3 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     # close files
     vmec_file.close()
     desc_file.close()
-
-
-# TODO: add other fields including B, rmns, zmnc, lmnc, etc
-def read_vmec_output(fname):
-    """Reads VMEC data from wout nc file
-
-    Args:
-        fname (string): filename of VMEC output file
-
-    Returns:
-        vmec_data (dictionary): the VMEC data fields
-    """
-
-    file = Dataset(fname, mode='r')
-
-    vmec_data = {
-        'xm': file.variables['xm'][:],
-        'xn': file.variables['xn'][:],
-        'rmnc': file.variables['rmnc'][:],
-        'zmns': file.variables['zmns'][:],
-        'lmns': file.variables['lmns'][:]
-    }
-
-    return vmec_data
-
-
-def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi):
-    """Interpolates VMEC data on a flux surface
-
-    Args:
-        Cmn (ndarray, shape(MN,)): cos(mt-np) Fourier coefficients
-        Smn (ndarray, shape(MN,)): sin(mt-np) Fourier coefficients
-        xm (ndarray, shape(M,)): poloidal mode numbers
-        xn (ndarray, shape(N,)): toroidal mode numbers
-        theta (ndarray): poloidal angles
-        phi (ndarray): toroidal angles
-
-    Returns:
-        R, Z (tuple of ndarray): VMEC data interpolated at the angles (theta,phi)
-    """
-
-    R_arr = []
-    Z_arr = []
-    dim = Cmn.shape
-
-    for j in range(dim[1]):
-
-        m = xm[j]
-        n = xn[j]
-
-        R = [[[Cmn[s, j]*np.cos(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        Z = [[[Smn[s, j]*np.sin(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        R_arr.append(R)
-        Z_arr.append(Z)
-
-    return np.sum(R_arr, axis=0), np.sum(Z_arr, axis=0)

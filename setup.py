@@ -1,21 +1,8 @@
 from setuptools import setup, find_packages
 import os
+import versioneer
 
 here = os.path.abspath(os.path.dirname(__file__))
-
-
-def read(rel_path):
-    with open(os.path.join(here, rel_path), 'r') as fp:
-        return fp.read()
-
-
-def get_version(rel_path):
-    for line in read(rel_path).splitlines():
-        if line.startswith('__version__'):
-            delim = '"' if '"' in line else "'"
-            return line.split(delim)[1]
-    else:
-        raise RuntimeError("Unable to find version string.")
 
 
 with open(os.path.join(here, 'README.rst'), encoding='utf-8') as f:
@@ -31,7 +18,8 @@ with open(os.path.join(here, 'tests/requirements.txt'), encoding='utf-8') as f:
     test_requirements = f.read().splitlines()
 
 setup(name='desc',
-      version=get_version('desc/__init__.py'),
+      version=versioneer.get_version(),
+      cmdclass=versioneer.get_cmdclass(),
       description='Computes, analyzes and optimizes 3D MHD equilibria for stellarators and tokamaks',
       long_description=long_description,
       long_description_content_type='text/x-rst',

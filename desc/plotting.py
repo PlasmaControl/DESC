@@ -651,7 +651,7 @@ def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
     mmax = np.max(ms)
 
     r = np.linspace(0, 1, npts)
-    v = np.linspace(0, 2*jnp.pi, npts)
+    v = np.linspace(0, 2*np.pi, npts)
     rr, vv = np.meshgrid(r, v, indexing='ij')
 
     fig = plt.figure(figsize=(scale*mmax, scale*lmax/2))

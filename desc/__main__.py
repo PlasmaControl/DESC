@@ -91,8 +91,9 @@ def main(args=sys.argv[1:]):
 
     from desc.continuation import solve_eq_continuation
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-    from desc.input_output import read_input, output_to_file, read_vmec_output
+    from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
+    from desc.vmec import read_vmec_output, vmec_error
 
     if use_jax:
         device = get_device(args.gpu, args.gpuID)
@@ -103,9 +104,9 @@ def main(args=sys.argv[1:]):
     in_fname = str(pathlib.Path(args.input_file).resolve())
     out_fname = args.output if args.output else in_fname+'.output'
 
-    print('Reading input from {}'.format(in_fname))
+    print("Reading input from {}".format(in_fname))
     inputs = read_input(in_fname)
-    print('Output will be written to {}'.format(out_fname))
+    print("Output will be written to {}".format(out_fname))
 
     if args.quiet:
         inputs['verbose'] = 0
@@ -134,6 +135,8 @@ def main(args=sys.argv[1:]):
         if args.vmec:
             vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
+            err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
+            print("Error relative to VMEC solution: {} mm".format(err*1e3))
 
         # plot force balance error
         plot_fb_err(equil, domain='real', normalize='global',

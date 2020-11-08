@@ -16,7 +16,7 @@ Please cite our work if you use DESC!
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. 
 .. _paper: https://github.com/ddudt/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
-.. _Theory: https://desc-docs.readthedocs.io/en/latest/theory.html
+.. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start
 ===========
@@ -25,14 +25,14 @@ Quick Start
    :language: bash
 
 For instructions on installing DESC and its dependencies, see Installation_. 
-DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files. 
-Refer to Inputs_ for documentation on how to format the input file. 
-The code is run using the syntax :bash:`python -m desc <path/to/input_file>` and the full list of command line options are given in Usage_. 
+The code is run using the syntax :bash:`python -m desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. 
+DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
+Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
+.. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
 .. _Inputs: https://desc-docs.readthedocs.io/en/latest/input.html
-.. _Usage: https://desc-docs.readthedocs.io/en/latest/usage.html
 .. _Outputs: https://desc-docs.readthedocs.io/en/latest/output.html
 
 Repository Contents

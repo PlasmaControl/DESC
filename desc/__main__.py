@@ -6,7 +6,20 @@ import os
 
 
 def get_device(gpuID=False):
-    """Checks available GPUs and selects the one with the most available memory"""
+    """Checks available GPUs and selects the one with the most available memory
+
+    Parameters
+    ----------
+    gpuID: bool or int
+        whether to use GPU, or the device ID of a specific GPU to use. If False,
+        use only CPU. If True, attempts to find the GPU with most available memory.
+
+    Returns
+    -------
+    device : jax.device
+        handle to gpu or cpu device selected
+
+    """
 
     import jax
 
@@ -47,11 +60,15 @@ def get_device(gpuID=False):
 
 def get_parser():
     """Gets parser for command line arguments.
-    Args:
-       None
 
-    Returns:
-        parser (argparse object): argument parser
+    Parameters
+    ----------
+
+    Returns
+    -------
+    parser : argparse object
+        argument parser
+
     """
 
     parser = argparse.ArgumentParser(prog='DESC',

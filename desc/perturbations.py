@@ -5,7 +5,33 @@ from desc.backend import jacfwd, Timer
 
 
 def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbose=False, timer=None):
-    """perturbs an equilibrium wrt the continuation parameters"""
+    """perturbs an equilibrium wrt the continuation parameters
+
+    Parameters
+    ----------
+    x : ndarray
+        state vector
+    equil_obj : function
+        equilibrium objective function
+    deltas : ndarray
+        changes in the continuation parameters
+    args : tuple
+        additional arguments passed to equil_obj
+    pert_order : int
+         order of perturbation (1=linear, 2=quadratic) (Default value = 1)
+    verbose : int or bool
+         level of output to display (Default value = False)
+    timer : Timer
+         Timer object (Default value = None)
+
+    Returns
+    -------
+    x : ndarray
+        perturbed state vector
+    timer : Timer
+        Timer object with timing data
+
+    """
 
     delta_strings = ['boundary', 'pressure', 'zeta'] if len(deltas) == 3 else [
         None]*len(deltas)
@@ -95,7 +121,39 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
 
 
 def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=False):
-    """computes Jacobian and Hessian arrays"""
+    """computes Jacobian and Hessian arrays
+
+    Parameters
+    ----------
+    equil_obj : function
+        objective function to calculate jacobian and hessian of
+    args : tuple
+        additional arguments passed to equil_obj
+    arg_dict : dict
+        dictionary of variable names and arguments to calculate derivatives with
+        respect to.
+    pert_order : int
+         order of perturbation (1=linear, jacobian. 2=quadratic, hessian) (Default value = 1)
+    verbose : int or bool
+         level of text output (Default value = False)
+
+    Returns
+    -------
+    Jx : ndarray
+        jacobian wrt to state vector
+    Jc : ndarray
+        jacobian wrt to other parameters specified in arg_dict
+    Jxx : ndarray
+        hessian wrt to state vector.
+        Only calculated if pert_order > 1
+    Jcc : ndarray
+        hessian wrt to other parameters specified in arg_dict.
+        Only calculated if pert_order > 1
+    Jxc : ndarray
+        hessian wrt to state vector and other parameters.
+        Only calculated if pert_order > 1
+
+    """
 
     Jx = None
     Jc = None
@@ -126,7 +184,7 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
             t0 = time.perf_counter()
             obj_jac_c = jacfwd(equil_obj, argnums=i)
             Jc_i = obj_jac_c(*args).reshape((dimF, dimC))
-            Jc_i = Jc_i[:,arg_dict[i]]
+            Jc_i = Jc_i[:, arg_dict[i]]
             t1 = time.perf_counter()
             if verbose > 1:
                 print("df/dc computation time: {} s".format(t1-t0))
@@ -154,13 +212,13 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
             t0 = time.perf_counter()
             obj_jac_cc = jacfwd(jacfwd(equil_obj, argnums=i), argnums=i)
             Jcc_i = obj_jac_cc(*args).reshape((dimF, dimC, dimC))
-            Jcc_i = Jcc_i[:,arg_dict[i],arg_dict[i]]
+            Jcc_i = Jcc_i[:, arg_dict[i], arg_dict[i]]
             t1 = time.perf_counter()
             if verbose > 1:
                 print("df/dcc computation time: {} s".format(t1-t0))
             obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=i)
             Jxc_i = obj_jac_xc(*args).reshape((dimF, dimX, dimC))
-            Jxc_i = Jxc_i[:,:,arg_dict[i]]
+            Jxc_i = Jxc_i[:, :, arg_dict[i]]
             t2 = time.perf_counter()
             if verbose > 1:
                 print("df/dxc computation time: {} s".format(t2-t1))

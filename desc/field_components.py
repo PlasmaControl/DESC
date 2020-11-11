@@ -4,18 +4,27 @@ from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun
 def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mode='equil'):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
 
-    Args:
-        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
-        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
-        zeta_ratio (float): scale factor for zeta derivatives. Setting to zero
-            effectively solves for individual tokamak solutions at each toroidal plane,
-            setting to 1 solves for a stellarator.
-        mode (str): one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization
+    Parameters
+    ----------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
+    zeta_ratio : float
+        scale factor for zeta derivatives. Setting to zero
+        effectively solves for individual tokamak solutions at each toroidal plane,
+        setting to 1 solves for a stellarator. (Default value = 1.0)
+    mode : str
+        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
-    Returns:
-        coord_der (dict): dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations
-            keys are of the form 'X_y' meaning the derivative of X wrt to y
+    Returns
+    -------
+    coord_der : dict
+        dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations
+        keys are of the form 'X_y' meaning the derivative of X wrt to y
+
     """
     # notation: X_y means derivative of X wrt y
     coord_der = {}
@@ -87,16 +96,23 @@ def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mo
 def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
     """Computes covariant basis vectors at grid points
 
-    Args:
-        coord_der (dict): dictionary of ndarray containing the coordinate 
-            derivatives at each node, such as computed by ``compute_coordinate_derivatives``
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
-        mode (str): one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization
+    Parameters
+    ----------
+    coord_der : dict
+        dictionary of ndarray containing the coordinate
+        derivatives at each node, such as computed by ``compute_coordinate_derivatives``
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
+    mode : str
+        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
-    Returns:
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node. Keys are of the form 'e_x_y', 
-            meaning the unit vector in the x direction, differentiated wrt to y.
+    Returns
+    -------
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis
+        vectors and derivatives at each node. Keys are of the form 'e_x_y',
+        meaning the unit vector in the x direction, differentiated wrt to y.
+
     """
     # notation: subscript word is direction of unit vector, subscript letters denote partial derivatives
     # eg, e_rho_v is the v derivative of the covariant basis vector in the rho direction
@@ -176,17 +192,25 @@ def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
 def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transform):
     """Computes contravariant basis vectors and jacobian elements
 
-    Args:
-        coord_der (dict): dictionary of ndarray containing coordinate derivatives 
-            evaluated at node locations, such as computed by ``compute_coordinate_derivatives``
-        cov_basis (dict): dictionary of ndarray containing covariant basis vectors 
-            and derivatives at each node, such as computed by ``compute_covariant_basis``
-        jacobian (dict): dictionary of ndarray containing coordinate jacobian 
-            and partial derivatives, such as computed by ``compute_jacobian``
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
+    Parameters
+    ----------
+    coord_der : dict
+        dictionary of ndarray containing coordinate derivatives
+        evaluated at node locations, such as computed by ``compute_coordinate_derivatives``
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis vectors
+        and derivatives at each node, such as computed by ``compute_covariant_basis``
+    jacobian : dict
+        dictionary of ndarray containing coordinate jacobian
+        and partial derivatives, such as computed by ``compute_jacobian``
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
 
-    Returns:
-        con_basis (dict): dictionary of ndarray containing contravariant basis vectors and jacobian elements
+    Returns
+    -------
+    con_basis : dict
+        dictionary of ndarray containing contravariant basis vectors and jacobian elements
+
     """
 
     # subscripts (superscripts) denote covariant (contravariant) basis vectors
@@ -221,18 +245,26 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transfor
 def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
     """Computes coordinate jacobian and derivatives
 
-    Args:
-        coord_der (dict): dictionary of ndarray containing of coordinate 
-            derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
-        mode (str): one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization
+    Parameters
+    ----------
+    coord_der : dict
+        dictionary of ndarray containing of coordinate
+        derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis
+        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
+    mode : str
+        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
-    Returns:
-        jacobian (dict): dictionary of ndarray, shape(N_nodes,) of coordinate 
-            jacobian and partial derivatives. Keys are of the form `g_x` meaning 
-            the x derivative of the coordinate jacobian g
+    Returns
+    -------
+    jacobian : dict
+        dictionary of ndarray, shape(N_nodes,) of coordinate
+        jacobian and partial derivatives. Keys are of the form `g_x` meaning
+        the x derivative of the coordinate jacobian g
+
     """
     # notation: subscripts denote partial derivatives
     jacobian = {}
@@ -310,22 +342,33 @@ def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
     return jacobian
 
 
-def compute_magnetic_field(cov_basis, jacobian, cI, Psi_total, zernike_transform, mode='equil'):
+def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform, mode='equil'):
     """Computes magnetic field components at node locations
 
-    Args:
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-        jacobian (dict): dictionary of ndarray containing coordinate jacobian 
-            and partial derivatives, such as computed by ``compute_jacobian``.
-        cI (array-like): coefficients to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
-        mode (str): one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization
-    Return:
-        magnetic_field (dict): dictionary of ndarray, shape(N_nodes,) of magnetic field 
-            and derivatives. Keys are of the form 'B_x_y' or 'B^x_y', meaning the 
-            covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
+    Parameters
+    ----------
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis 
+        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+    jacobian : dict
+        dictionary of ndarray containing coordinate jacobian 
+        and partial derivatives, such as computed by ``compute_jacobian``.
+    cI : ndarray
+        coefficients to pass to rotational transform function
+    Psi_lcfs : float
+        total toroidal flux (in Webers) within LCFS
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
+    mode : str 
+        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
+
+    Returns
+    -------
+    magnetic_field: dict
+        dictionary of ndarray, shape(N_nodes,) of magnetic field
+        and derivatives. Keys are of the form 'B_x_y' or 'B^x_y', meaning the
+        covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
+
     """
 
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
@@ -337,9 +380,9 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_total, zernike_transform
     iota_r = iotafun(r, 1, cI)
 
     # toroidal flux
-    magnetic_field['psi'] = Psi_total*r**2
-    magnetic_field['psi_r'] = 2*Psi_total*r
-    magnetic_field['psi_rr'] = 2*Psi_total*jnp.ones_like(r)
+    magnetic_field['psi'] = Psi_lcfs*r**2
+    magnetic_field['psi_r'] = 2*Psi_lcfs*r
+    magnetic_field['psi_rr'] = 2*Psi_lcfs*jnp.ones_like(r)
 
     # contravariant B components
     magnetic_field['B^rho'] = jnp.zeros_like(r)
@@ -414,26 +457,37 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_total, zernike_transform
     return magnetic_field
 
 
-def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, Psi_total, zernike_transform):
+def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform):
     """Computes current density field at node locations
 
-    Args:
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-        jacobian (dict): dictionary of ndarray containing coordinate jacobian 
-            and partial derivatives, such as computed by ``compute_jacobian``.
-        coord_der (dict): dictionary of ndarray containing of coordinate 
-            derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
-        magnetic_field (dict): dictionary of ndarray containing magnetic field and derivatives, 
-            such as computed by ``compute_magnetic_field``.
-        cI (array-like): coefficients to pass to rotational transform function.
-        Psi_total (float): total toroidal flux within LCFS.
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
+    Parameters
+    ----------
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis 
+        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+    jacobian : dict
+        dictionary of ndarray containing coordinate jacobian 
+        and partial derivatives, such as computed by ``compute_jacobian``.
+    coord_der : dict
+        dictionary of ndarray containing of coordinate 
+        derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
+    magnetic_field : dict
+        dictionary of ndarray containing magnetic field and derivatives, 
+        such as computed by ``compute_magnetic_field``.
+    cI : ndarray
+        coefficients to pass to rotational transform function.
+    Psi_lcfs : float
+        total toroidal flux (in Webers) within LCFS.
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
 
-    Return:
-        plasma_current (dict): dictionary of ndarray, shape(N_nodes,) of current field.
-            Keys are of the form 'J^x_y' meaning the contravariant (J^x) 
-            component of the current, with the derivative wrt to y.
+    Returns
+    -------
+    plasma_current : dict
+        dictionary of ndarray, shape(N_nodes,) of current field.
+        Keys are of the form 'J^x_y' meaning the contravariant (J^x)
+        component of the current, with the derivative wrt to y.
+
     """
 
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
@@ -481,16 +535,24 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
 def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_transform):
     """Computes magnetic field magnitude at node locations
 
-    Args:
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-        magnetic_field (dict): dictionary of ndarray containing magnetic field and derivatives, 
-            such as computed by ``compute_magnetic_field``.
-        cI (array-like): coefficients to pass to rotational transform function
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
+    Parameters
+    ----------
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis
+        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+    magnetic_field : dict
+        dictionary of ndarray containing magnetic field and derivatives,
+        such as computed by ``compute_magnetic_field``.
+    cI : ndarray
+        coefficients to pass to rotational transform function
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
 
-    Returns:
-        B_mag (dict): dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
+    Returns
+    -------
+    B_mag : dict
+        dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
+
     """
 
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
@@ -500,7 +562,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
     iota = iotafun(r, 0, cI)
 
     B_mag['|B|'] = jnp.abs(magnetic_field['B^zeta'])*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0) +
-                                                               2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))
+                                                              2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))
 
     B_mag['|B|_v'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0)) \
@@ -537,30 +599,45 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
     return B_mag
 
 
-def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_total, zernike_transform):
+def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
     """Computes force error magnitude at node locations
 
-    Args:
-        coord_der (dict): dictionary of ndarray containing of coordinate 
-            derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
-        cov_basis (dict): dictionary of ndarray containing covariant basis 
-            vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-        con_basis (dict): dictionary of ndarray containing contravariant basis 
-            vectors and metric elements at each node, such as computed by ``compute_contravariant_basis``.
-        jacobian (dict): dictionary of ndarray containing coordinate jacobian 
-            and partial derivatives, such as computed by ``compute_jacobian``.
-        magnetic_field (dict): dictionary of ndarray containing magnetic field and derivatives, 
-            such as computed by ``compute_magnetic_field``.
-        plasma_current (dict): dictionary of ndarray containing current and derivatives, 
-            such as computed by ``compute_plasma_current``.
-        cP (array-like): parameters to pass to pressure function
-        cI (array-like): parameters to pass to rotational transform function
-        Psi_total (float): total toroidal flux within LCFS
-        zernike_transform (ZernikeTransform): object with transform method to go from spectral to physical space with derivatives
+    Parameters
+    ----------
+    coord_der : dict
+        dictionary of ndarray containing of coordinate
+        derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
+    cov_basis : dict
+        dictionary of ndarray containing covariant basis
+        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+    con_basis : dict
+        dictionary of ndarray containing contravariant basis
+        vectors and metric elements at each node, such as computed by ``compute_contravariant_basis``.
+    jacobian : dict
+        dictionary of ndarray containing coordinate jacobian
+        and partial derivatives, such as computed by ``compute_jacobian``.
+    magnetic_field : dict
+        dictionary of ndarray containing magnetic field and derivatives, 
+        such as computed by ``compute_magnetic_field``.
+    plasma_current : dict
+        dictionary of ndarray containing current and derivatives, 
+        such as computed by ``compute_plasma_current``.
+    cP : ndarray
+        parameters to pass to pressure function
+    cI : ndarray
+        parameters to pass to rotational transform function
+    Psi_lcfs : float
+        total toroidal flux (in Webers) within LCFS
+    zernike_transform : ZernikeTransform
+        object with transform method to go from spectral to physical space with derivatives
 
-    Return:
-        force_magnitude (ndarray, shape(N_nodes,)): force error magnitudes at each node.
-        p_mag (ndarray, shape(N_nodes,)): magnitude of pressure gradient at each node.
+    Returns
+    -------
+    force_magnitude : ndarray, shape(N_nodes,)
+        force error magnitudes at each node.
+    p_mag : ndarray, shape(N_nodes,)
+        magnitude of pressure gradient at each node.
+
     """
 
     mu0 = 4*jnp.pi*1e-7

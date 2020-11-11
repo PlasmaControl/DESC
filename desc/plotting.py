@@ -53,9 +53,16 @@ rcParams['axes.prop_cycle'] = color_cycle
 def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     """prints coeffs to the terminal
 
-    Args:
-        cR,cZ,cL (array-like): spectral coefficients for R, Z, and lambda
-        zern_idx, lambda_idx (array-like): mode numbers for zernike and fourier spectral basis.
+    Parameters
+    ----------
+    cR,cZ,cL :
+        spectral coefficients for R, Z, and lambda
+    zern_idx, lambda_idx :
+        mode numbers for zernike and fourier spectral basis.       
+
+    Returns
+    -------
+
     """
 
     print('Fourier-Zernike coefficients:')
@@ -71,19 +78,34 @@ def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
 def plot_coeffs(cR, cZ, cL, zern_idx, lambda_idx, cR_init=None, cZ_init=None, cL_init=None, **kwargs):
     """Scatter plots of zernike and lambda coefficients, before and after solving
 
-    Args:
-        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
-        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        cL (ndarray, shape(2M+1)*(2N+1)): spectral coefficients of lambda
-        zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
-        lambda_idx (ndarray, shape(Nlambda,2)): indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
-        cR_init (ndarray, shape(N_coeffs,)): initial spectral coefficients of R
-        cZ_init (ndarray, shape(N_coeffs,)): initial spectral coefficients of Z
-        cL_init (ndarray, shape(2M+1)*(2N+1)): initial spectral coefficients of lambda
+    Parameters
+    ----------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    cL : ndarray
+        spectral coefficients of lambda
+    zern_idx : ndarray
+        array of (l,m,n) indices for each spectral R,Z coeff
+    lambda_idx : ndarray
+        indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
+    cR_init : ndarray
+        initial spectral coefficients of R (Default value = None)
+    cZ_init : ndarray
+        initial spectral coefficients of Z (Default value = None)
+    cL_init : ndarray
+        initial spectral coefficients of lambda (Default value = None)
+    **kwargs :
+        additional plot formatting parameters
 
-    Returns:
-        fig (matplotlib.figure): handle to the figure
-        ax (ndarray of matplotlib.axes): handle to axes
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to the figure
+    ax : ndarray of matplotlib.axes
+        handle to axes
+
     """
     nRZ = len(cR)
     nL = len(cL)
@@ -128,17 +150,34 @@ def plot_coeffs(cR, cZ, cL, zern_idx, lambda_idx, cR_init=None, cZ_init=None, cL
 def plot_coord_surfaces(cR, cZ, zern_idx, NFP, nr=10, nt=12, ax=None, bdryR=None, bdryZ=None, **kwargs):
     """Plots solutions (currently only zeta=0 plane)
 
-    Args:
-        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
-        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        zern_idx (ndarray, shape(Nc,3)): indices for R,Z spectral basis, ie an array of [l,m,n] for each spectral coefficient
-        NFP (int): number of field periods
-        nr (int): number of flux surfaces to show
-        nt (int): number of theta lines to show
-        ax (matplotlib.axes): axes to plot on. If None, a new figure is created.
+    Parameters
+    ----------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    zern_idx : ndarray
+        indices for R,Z spectral basis, ie an array of [l,m,n] for each spectral coefficient
+    NFP : int
+        number of field periods
+    nr : int
+        number of flux surfaces to show (Default value = 10)
+    nt : int
+        number of theta lines to show (Default value = 12)
+    ax : matplotlib.axes
+        axes to plot on. If None, a new figure is created. (Default value = None)
+    bdryR :
+         R values of last closed flux surface (Default value = None)
+    bdryZ :
+         Z values of last closed flux surface (Default value = None)
+    **kwargs :
+        additional plot formatting parameters
 
-    Returns:
-        ax (matplotlib.axes): handle to axes used for the plot
+    Returns
+    -------
+    ax : matplotlib.axes
+        handle to axes used for the plot
+
     """
 
     Nr = 100
@@ -183,17 +222,33 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, cP, cI, **kwargs):
     """Plot initial conditions, such as the initial guess for flux surfaces,
     node locations, and profiles.
 
-    Args:
-        cR_init (ndarray, shape(N_coeffs,)): spectral coefficients of R
-        cZ_init (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        zern_idx (ndarray, shape(N_coeffs,3)): array of (l,m,n) indices for each spectral R,Z coeff
-        NFP (int): number of field periods
-        cI (array-like): paramters to pass to rotational transform function
-        cP (array-like): parameters to pass to pressure function
+    Parameters
+    ----------
+    cR_init : ndarray
+        spectral coefficients of R
+    cZ_init : ndarray
+        spectral coefficients of Z
+    zern_idx : ndarray
+        array of (l,m,n) indices for each spectral R,Z coeff
+    NFP : int
+        number of field periods
+    nodes : ndarray
+        locations of nodes in SFL coordinates
+    cI : array-like
+        paramters to pass to rotational transform function
+    cP : array-like
+        parameters to pass to pressure function
+    **kwargs :
+        additional plot formatting parameters
 
-    Returns:
-        fig (matplotlib.figure): handle to figure used for plotting
-        ax (ndarray of matplotlib.axes): handles to axes used for plotting
+
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to figure used for plotting
+    ax : ndarray of matplotlib.axes
+        handles to axes used for plotting
+
     """
 
     fig = plt.figure(figsize=kwargs.get('figsize', (9, 3)))
@@ -236,20 +291,29 @@ def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, cP, cI, **kwargs):
 def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma', **kwargs):
     """Plots force balance error
 
-    Args:
-        equil (dict): dictionary of equilibrium solution quantities
-        domain (str): one of 'real', 'sfl'. What basis to use for plotting, 
-            real (R,Z) coordinates or straight field line (rho,vartheta)
-        normalize (str, bool): Whether and how to normalize values
-            None, False - no normalization, values plotted are force error in Newtons/m^3
-            'local' - normalize by local pressure gradient
-            'global' - normalize by pressure gradient at rho=0.5
-            True - same as 'global'
-        log (bool): plot logarithm of error or absolute value
-        cmap (str,matplotlib.colors.Colormap): colormap to use
+    Parameters
+    ----------
+    equil : dict
+        dictionary of equilibrium solution quantities
+    domain : str
+        one of 'real', 'sfl'. What basis to use for plotting,
+        real (R,Z) coordinates or straight field line (rho,vartheta) (Default value = 'real')
+    normalize : str
+        Whether and how to normalize values
+        None, False - no normalization, values plotted are force error in Newtons/m^3
+        'local' - normalize by local pressure gradient
+        'global' - normalize by pressure gradient at rho=0.5
+        True - same as 'global' (Default value = 'local')
+    log : bool
+        plot logarithm of error or absolute value (Default value = True)
+    cmap : str
+        colormap to use (Default value = 'plasma')
+    **kwargs :
+        additional plot formatting parameters
 
-    Returns:
-        Nothing, makes plot
+    Returns
+    -------
+
     """
 
     cR = equil['cR']
@@ -337,12 +401,18 @@ def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma'
 def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
     """Plots force balance error
 
-    Args:
-        equil0, equil1 (dict): dictionary of two equilibrium solution quantities
-        label0, label1 (str): labels for each equilibria
+    Parameters
+    ----------
+    equil0, equil1 : dict
+        dictionary of two equilibrium solution quantities
+    label0, label1 : str
+        labels for each equilibria
+    **kwargs :
+        additional plot formatting parameters
 
-    Returns:
-        Nothing, makes plot
+    Returns
+    -------
+
     """
 
     cR0 = equil0['cR']
@@ -419,11 +489,15 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
 def plot_vmec_comparison(vmec_data, equil):
     """Plots comparison of VMEC and DESC solutions
 
-    Args:
-        vmec_data (dict): dictionary of vmec solution quantities.
-        equil (dict): dictionary of equilibrium solution quantities.
+    Parameters
+    ----------
+    vmec_data : dict
+        dictionary of VMEC solution quantities.
+    equil : dict
+        dictionary of DESC equilibrium solution quantities.
 
-    Returns:
+    Returns
+    -------
 
     """
 
@@ -482,15 +556,24 @@ def plot_vmec_comparison(vmec_data, equil):
 def plot_logo(savepath=None, **kwargs):
     """Plots the DESC logo
 
-    Args:
-        savepath (str or path-like, optional): path to save the figure to. 
-            File format is inferred from the filename
-        kwargs: options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta', 
-            'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
+    Parameters
+    ----------
+    savepath : str or path-like
+        path to save the figure to.
+        File format is inferred from the filename (Default value = None)
+    **kwargs :
+        additional plot formatting parameters.
+        options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta',
+        'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
 
-    Returns:
-        fig (matplotlib.figure): handle to the figure used for plotting
-        ax (matplotlib.axes): handle to the axis used for plotting
+
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to the figure used for plotting
+    ax : matplotlib.axes
+        handle to the axis used for plotting
+
     """
     onlyD = kwargs.get('onlyD', False)
     Dcolor = kwargs.get('Dcolor', 'xkcd:neon purple')
@@ -631,15 +714,26 @@ def plot_logo(savepath=None, **kwargs):
 def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
     """Plots spectral basis of zernike basis functions
 
-    Args:
-        M (int): maximum poloidal resolution
-        delta_lm (int): maximum difference between radial mode l and poloidal mode m
-        indexing (str): one of 'fringe', 'ansi', 'house', 'chevron'
+    Parameters
+    ----------
+    M : int
+        maximum poloidal resolution
+    delta_lm : int
+        maximum difference between radial mode l and poloidal mode m
+    indexing : str
+        zernike indexing method. One of 'fringe', 'ansi', 'house', 'chevron'
+    **kwargs :
+        additional plot formatting arguments
 
-    Returns:
-        fig (matplotlib figure): handle to figure
-        ax (dict of matplotlib axes): nested dictionary, ax[l][m] is the handle to the 
-            axis for radial mode l, poloidal mode m
+
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to figure
+    ax : dict of matplotlib.axes
+        nested dictionary, ax[l][m] is the handle to the
+        axis for radial mode l, poloidal mode m
+
     """
 
     cmap = kwargs.get('cmap', 'coolwarm')

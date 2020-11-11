@@ -5,24 +5,36 @@ from desc.backend import TextColors
 def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=True):
     """Compute interpolation nodes on a patterned grid
 
-    Args:
-        M (int): maximum poloidal mode number
-        N (int): maximum toroidal mode number
-        NFP (int): number of field periods
-        index (string): Zernike polynomial index ordering
-            ansi = OSA / ANSI indexing
-            fringe = Fringe / University of Arizona indexing
-        surfs (string): pattern for radial surfaces
-            cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-            cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-            any other value defaults to linear spacing in r
-        sym (bool): False for nodes to fill the full domain,
-                    True for nodes in the stellarator symmetry (half) domain
-        axis (bool): True to include a node at the origin (magnetic axis)
+    Parameters
+    ----------
+    M : int
+        maximum poloidal mode number
+    N : int
+        maximum toroidal mode number
+    NFP : int
+        number of field periods
+    index : str
+        Zernike polynomial index ordering
+        ansi = OSA / ANSI indexing
+        fringe = Fringe / University of Arizona indexing (Default value = 'fringe')
+    surfs : string
+        pattern for radial surfaces
+        cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+        cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+        any other value defaults to linear spacing in r (Default value = 'cheb1')
+    sym : bool
+        False for nodes to fill the full domain,
+        True for nodes in the stellarator symmetry (half) domain (Default value = False)
+    axis : bool
+        True to include a node at the origin (magnetic axis) (Default value = True)
 
-    Returns:
-        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
-        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    Returns
+    -------
+    nodes : ndarray, size(3,Nnodes)
+        node coordinates, in (rho,theta,zeta).
+    volumes : ndarray, size(3,Nnodes)
+        node spacing (drho,dtheta,dzeta) at each node coordinate.
+
     """
 
     dimFour = 2*N+1
@@ -97,17 +109,27 @@ def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=
 def get_nodes_surf(M, N, NFP, surf=1.0, sym=False):
     """Compute interpolation nodes on a single surface
 
-    Args:
-        M (int): maximum poloidal mode number
-        N (int): maximum toroidal mode number
-        NFP (int): number of field periods
-        surf (float): radial coordinate of flux surface
-        sym (bool): False for nodes to fill the full domain,
-                    True for nodes in the stellarator symmetry (half) domain
+    Parameters
+    ----------
+    M : int
+        maximum poloidal mode number
+    N : int
+        maximum toroidal mode number
+    NFP : int
+        number of field periods
+    surf : float
+        radial coordinate of flux surface (Default value = 1.0)
+    sym : bool
+        False for nodes to fill the full domain,
+        True for nodes in the stellarator symmetry (half) domain (Default value = False)
 
-    Returns:
-        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
-        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    Returns
+    -------
+    nodes : ndarray, size(3,Nnodes)
+        node coordinates, in (rho,theta,zeta).
+    volumes : ndarray, size(3,Nnodes)
+        node spacing (drho,dtheta,dzeta) at each node coordinate.
+
     """
 
     dimFourM = 2*M+1
@@ -140,18 +162,27 @@ def get_nodes_surf(M, N, NFP, surf=1.0, sym=False):
     return nodes[:, sort_idx], volumes[:, sort_idx]
 
 
-def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
+def get_nodes_grid(NFP, nr, nt, nz):
     """Compute interpolation nodes on a uniform grid
 
-    Args:
-        NFP (int): number of field periods
-        nr (int): number of radial grid points
-        nt (int): number of poloidal grid points
-        nz (int): number of toroidal grid points
+    Parameters
+    ----------
+    NFP : int
+        number of field periods
+    nr : int
+        number of radial grid points
+    nt : int
+        number of poloidal grid points
+    nz : int
+        number of toroidal grid points
 
-    Returns:
-        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
-        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    Returns
+    -------
+    nodes : ndarray, size(3,Nnodes)
+        node coordinates, in (rho,theta,zeta).
+    volumes : ndarray, size(3,Nnodes)
+        node spacing (drho,dtheta,dzeta) at each node coordinate.
+
     """
 
     r = np.linspace(0, 1, nr)
@@ -184,12 +215,18 @@ def get_nodes_grid(NFP, nr=None, nt=None, nz=None):
 def dec_to_cf(x, dmax=6):
     """Compute continued fraction form of a number.
 
-    Args:
-        x (float): floating point form of number
-        dmax (int): maximum iterations (ie, number of coefficients of continued fraction).
+    Parameters
+    ----------
+    x : float
+        floating point form of number
+    dmax : int
+        maximum iterations (ie, number of coefficients of continued fraction). (Default value = 6)
 
-    Returns:
-        cf (ndarray of int): coefficients of continued fraction form of x.
+    Returns
+    -------
+    cf : ndarray of int
+        coefficients of continued fraction form of x.
+
     """
     cf = []
     q = np.floor(x)
@@ -207,11 +244,16 @@ def dec_to_cf(x, dmax=6):
 def cf_to_dec(cf):
     """Compute decimal form of a continued fraction.
 
-    Args:
-        cf (array-like): coefficients of continued fraction.
+    Parameters
+    ----------
+    cf : array-like
+        coefficients of continued fraction.
 
-    Returns:
-        x (float): floating point representation of cf
+    Returns
+    -------
+    x : float
+        floating point representation of cf
+
     """
     if len(cf) == 1:
         return cf[0]
@@ -222,11 +264,15 @@ def cf_to_dec(cf):
 def most_rational(a, b):
     """Compute the most rational number in the range [a,b]
 
-    Args:
-        a,b (float): lower and upper bounds
+    Parameters
+    ----------
+    a,b : float
+        lower and upper bounds
 
-    Returns:
-        x (float): most rational number between [a,b]
+    Returns
+    -------
+    x : float
+        most rational number between [a,b]
 
     """
 

@@ -18,18 +18,32 @@ def expand_resolution(x, zernike_transform, bdry_zernike_transform, zern_idx_old
     """Expands solution to a higher resolution by filling with zeros
     Also modifies zernike transform object to work at higher resolution
 
-    Args:
-        x (ndarray): solution at initial resolution
-        zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x
-        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x at bdry
-        zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
-        zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
-        lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
-        lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
-    Returns:
-        x_new (ndarray): solution expanded to new resolution
-        zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x
-        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x at bdry
+    Parameters
+    ----------
+    x : ndarray
+        solution at initial resolution
+    zernike_transform : ZernikeTransform
+        zernike transform object corresponding to initial x
+    bdry_zernike_transform : ZernikeTransform
+        zernike transform object corresponding to initial x at bdry
+    zern_idx_old : ndarray of int, shape(nRZ_old,3)
+        mode indices corresponding to initial R,Z
+    zern_idx_new : ndarray of int, shape(nRZ_new,3)
+        mode indices corresponding to new R,Z
+    lambda_idx_old : ndarray of int, shape(nL_old,2)
+        mode indices corresponding to initial lambda
+    lambda_idx_new : ndarray of int, shape(nL_new,2)
+        mode indices corresponding to new lambda
+
+    Returns
+    -------
+    x_new : ndarray
+        solution expanded to new resolution
+    zernike_transform : ZernikeTransform
+        zernike transform object corresponding to expanded x
+    bdry_zernike_transform : ZernikeTransform
+        zernike transform object corresponding to expanded x at bdry
+
     """
 
     cR, cZ, cL = unpack_x(x, len(zern_idx_old))
@@ -55,13 +69,22 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
     Steps up resolution, perturbs pressure, 3d bdry etc.
 
-    Args:
-        inputs (dict): dictionary with input parameters defining problem setup and solver options
-        checkpoint_filename (str or path-like): file to save checkpoint data
-        device (JAX device or None): device handle to JIT compile to
+    Parameters
+    ----------
+    inputs : dict
+        dictionary with input parameters defining problem setup and solver options
+    checkpoint_filename : str or path-like
+        file to save checkpoint data (Default value = None)
+    device : jax.device or None
+        device handle to JIT compile to (Default value = None)
 
-    Returns:
-        iterations (dict): dictionary of intermediate solutions
+    Returns
+    -------
+    iterations : dict
+        dictionary of intermediate solutions
+    timer : Timer
+        Timer object containing timing data for individual iterations
+
     """
     timer = Timer()
     timer.start("Total time")

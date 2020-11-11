@@ -11,11 +11,16 @@ from desc.backend import TextColors
 def read_input(fname):
     """Reads input from DESC input file, converts from VMEC input if necessary
 
-    Args:
-        fname (string): filename of input file
+    Parameters
+    ----------
+    fname : string
+        filename of input file
 
-    Returns:
-        inputs (dictionary): all the input parameters and options
+    Returns
+    -------
+    inputs : dict
+        all the input parameters and options
+
     """
 
     # default values
@@ -283,9 +288,15 @@ def read_input(fname):
 def write_desc_input(filename, inputs):
     """Generates a DESC input file from a dictionary of parameters
 
-    Args:
-        filename (str or path-like): name of the file to create
-        inputs(dict): dictionary of input parameters
+    Parameters
+    ----------
+    filename : str or path-like
+        name of the file to create
+    inputs : dict
+        dictionary of input parameters
+
+    Returns
+    -------
 
     """
 
@@ -356,9 +367,16 @@ def write_desc_input(filename, inputs):
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
 
-    Args:
-        fname (string): filename of output file.
-        equil (dict): dictionary of equilibrium parameters.
+    Parameters
+    ----------
+    fname : str or path-like
+        filename of output file.
+    equil : dict
+        dictionary of equilibrium parameters.
+
+    Returns
+    -------
+
     """
 
     cR = equil['cR']
@@ -427,11 +445,16 @@ def output_to_file(fname, equil):
 def read_desc(filename):
     """reads a previously generated DESC ascii output file
 
-    Args:
-        filename (str or path-like): path to file to read
+    Parameters
+    ----------
+    filename : str or path-like
+        path to file to read
 
-    Returns:
-        equil (dict): dictionary of equilibrium parameters.
+    Returns
+    -------
+    equil : dict
+        dictionary of equilibrium parameters.
+
     """
 
     equil = {}
@@ -487,10 +510,17 @@ def read_desc(filename):
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file
 
-    Args:
-        filename (str or path-like): file to write to. If it doesn't exist,
-            it is created.
-        equilibrium (dict): dictionary of equilibrium parameters.
+    Parameters
+    ----------
+    filename : str or path-like
+        file to write to. If it doesn't exist,
+        it is created.
+    equilibrium : dict
+        dictionary of equilibrium parameters.
+
+    Returns
+    -------
+
     """
 
     f = h5py.File(filename, 'w')
@@ -506,13 +536,21 @@ def write_desc_h5(filename, equilibrium):
 class Checkpoint():
     """Class for periodically saving equilibria during solution
 
-    Args:
-        filename (str or path-like): file to write to. If it does not exist,
-            it will be created
-        write_ascii (bool): Whether to also write ascii files. By default,
-            only an hdf5 file is created and appended with each new solution.
-            If write_ascii is True, additional files will be written, each with 
-            the same base filename but appeneded with _0, _1,...
+    Parameters
+    ----------
+    filename : str or path-like
+        file to write to. If it does not exist,
+        it will be created
+    write_ascii : bool
+        Whether to also write ascii files. By default,
+        only an hdf5 file is created and appended with each new solution.
+        If write_ascii is True, additional files will be written, each with
+        the same base filename but appeneded with _0, _1,...
+
+    Returns
+    -------
+    checkpointer: Checkpoint
+        object with methods to periodically save solutions
     """
 
     def __init__(self, filename, write_ascii=False):
@@ -534,11 +572,21 @@ class Checkpoint():
     def write_iteration(self, equilibrium, iter_num, inputs=None, update_final=True):
         """Write an equilibrium to the checkpoint file
 
-        Args:
-            equilibrium (dict): equilibrium to write
-            iter_num (int): iteration number
-            update_final (bool): whether to update the 'final' equilibrium
-                with this entry
+        Parameters
+        ----------
+        equilibrium : dict
+            equilibrium to write
+        iter_num : int
+            iteration number
+        inputs : dict, optional
+             dictionary of input parameters to the solver (Default value = None)
+        update_final : bool
+            whether to update the 'final' equilibrium
+            with this entry (Default value = True)
+
+        Returns
+        -------
+
         """
         iter_str = str(iter_num)
         if iter_str not in self.f['iterations']:
@@ -582,9 +630,16 @@ class Checkpoint():
 def vmec_to_desc_input(vmec_fname, desc_fname):
     """Converts a VMEC input file to an equivalent DESC input file
 
-    Args:
-        vmec_fname (string): filename of VMEC input file
-        desc_fname (string): filename of DESC input file. If it already exists it is overwritten.
+    Parameters
+    ----------
+    vmec_fname : str or path-like
+        filename of VMEC input file
+    desc_fname : str or path-like
+        filename of DESC input file. If it already exists it is overwritten.
+
+    Returns
+    -------
+
     """
 
     # file objects

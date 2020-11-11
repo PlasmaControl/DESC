@@ -52,14 +52,20 @@ if use_jax:
 
         basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff.
 
+        Parameters
+        ----------
+        arr : array-like
+            Array to populate
+        inds : array-like of int
+            Indices to populate
+        vals : array-like
+            Values to insert
 
-        Args:
-            arr (array-like): Array to populate
-            inds (array-like of int): Indices to populate
-            vals (array-like): Values to insert
+        Returns
+        -------
+        arr : array-like
+            Input array with vals inserted at inds.
 
-        Returns:
-            arr (array-like). Input array with vals inserted at inds.
         """
 
         return jax.ops.index_update(arr, inds, vals)
@@ -68,11 +74,15 @@ if use_jax:
     def factorial(n):
         """Factorial function for jax backend
 
-        Args:
-            n (int,array-like): input values. if n<0, returns 0
+        Parameters
+        ----------
+        n : array-like of int
+            input values. if n<0, returns 0
 
-        Returns:
-            n! (float): factorial of n
+        Returns
+        -------
+        n! : array-like of float
+            factorial of n
 
         """
         x = jnp.asarray(n+1)
@@ -93,14 +103,20 @@ else:
 
         basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff.
 
+        Parameters
+        ----------
+        arr : array-like
+            Array to populate
+        inds : array-like of int
+            Indices to populate
+        vals : array-like
+            Values to insert
 
-        Args:
-            arr (array-like): Array to populate
-            inds (array-like of int): Indices to populate
-            vals (array-like): Values to insert
+        Returns
+        -------
+        arr : array-like
+            Input array with vals inserted at inds.
 
-        Returns:
-            arr (array-like). Input array with vals inserted at inds.
         """
 
         arr[inds] = vals
@@ -109,7 +125,7 @@ else:
     def fori_loop(lower, upper, body_fun, init_val):
         """Loop from lower to upper, applying body_fun to init_val
 
-        This version is for the numpy backend, for jax backend see jax.fori_loop
+        This version is for the numpy backend, for jax backend see jax.lax.fori_loop
         The semantics of ``fori_loop`` are given by this Python implementation::
 
             def fori_loop(lower, upper, body_fun, init_val):
@@ -117,14 +133,23 @@ else:
                 for i in range(lower, upper):
                     val = body_fun(i, val)
                 return val
-        Args:
-            lower: an integer representing the loop index lower bound (inclusive)
-            upper: an integer representing the loop index upper bound (exclusive)
-            body_fun: function of type ``(int, a) -> a``.
-            init_val: initial loop carry value of type ``a``.
 
-        Returns:
+        Parameters
+        ----------
+        lower : int
+            an integer representing the loop index lower bound (inclusive)
+        upper : int
+            an integer representing the loop index upper bound (exclusive)
+        body_fun : callable
+            function of type ``(int, a) -> a``.
+        init_val : array-like or container
+            initial loop carry value of type ``a``
+
+        Returns
+        -------
+        final_val: array-like or container
             Loop value from the final iteration, of type ``a``.
+
         """
         val = init_val
         for i in np.arange(lower, upper):
@@ -135,20 +160,24 @@ else:
 class Timer():
     """Simple object for organizing timing info
 
-    Create a Timer object, which can then keep track of 
+    Create a Timer object, which can then keep track of
     multiple concurrent performance timers, each associated with
-    a given name. 
+    a given name.
 
-    Individual timers can be started and stopped with 
-    >>>timer.start(name)
-    >>>timer.stop(name)
+    Individual timers can be started and stopped with
+    ``timer.start(name)`` and ``timer.stop(name)``
 
-    The elapsed time can be printed with 
-    >>>timer.disp(name)
+    The elapsed time can be printed with ``timer.disp(name)``
 
-    Raw values of elapsed time (in seconds) can be retrieved 
-    with
-    >>>timer[name]
+    Raw values of elapsed time (in seconds) can be retrieved
+    with ``timer[name]``
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
 
     def __init__(self, ns=True):
@@ -170,8 +199,14 @@ class Timer():
     def start(self, name):
         """Starts a timer
 
-        Args:
-            name (str): name to associate with timer
+        Parameters
+        ----------
+        name : str
+            name to associate with timer
+
+        Returns
+        -------
+
         """
 
         self._timers[name] = [self.op()]
@@ -179,11 +214,19 @@ class Timer():
     def stop(self, name):
         """Stops a running timer:
 
-        Args:
-            name (str): name of timer to stop
+        Parameters
+        ----------
+        name : str
+            name of timer to stop
 
-        Raises:
-            ValueError: if timer 'name' has not been started
+        Returns
+        -------
+
+        Raises
+        ------
+        ValueError
+            if timer 'name' has not been started
+
         """
 
         try:
@@ -203,9 +246,16 @@ class Timer():
         Does not modify or use any internal timer data,
         this is just a helper for pretty printing arbitrary time data
 
-        Args:
-            name (str): text to print before time
-            time (float): time (in seconds) to print
+        Parameters
+        ----------
+        name : str
+            text to print before time
+        time : float
+            time (in seconds) to print
+
+        Returns
+        -------
+
         """
         us = time*1e6
         ms = us / 1000
@@ -237,11 +287,19 @@ class Timer():
         start and stop. If it has not been stopped, it reports the current
         elapsed time and keeps the timing running.
 
-        Args:
-            name (str): name of the timer to display
+        Parameters
+        ----------
+        name : str
+            name of the timer to display
 
-        Raises:
-            ValueError: if timer 'name' has not been started
+        Returns
+        -------
+
+        Raises
+        ------
+        ValueError
+            if timer 'name' has not been started
+
         """
 
         try:     # has the timer been stopped?
@@ -272,6 +330,13 @@ class _Indexable():
     (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
 
     copied from jax.ops.index to work with either backend
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
     """
     __slots__ = ()
 
@@ -294,11 +359,16 @@ opsindex = _Indexable()
 def flatten_list(x):
     """Flattens a nested list
 
-    Args:
-        x (list): nested list of lists to flatten
+    Parameters
+    ----------
+    x : list
+        nested list of lists to flatten
 
-    Returns:
-        x (list): flattened input
+    Returns
+    -------
+    x : list
+        flattened input
+
     """
     if isinstance(x, list):
         return [a for i in x for a in flatten_list(i)]
@@ -309,15 +379,23 @@ def flatten_list(x):
 def conditional_decorator(dec, condition, *args, **kwargs):
     """Apply arbitrary decorator to a function if condition is met
 
-    Args:
-        dec (decorator): Decorator to apply
-        condition (bool): condition that must be met for decorator to be applied
-        args: Arguments to pass to decorator
-        kwargs: Keyword arguments to pass to decorator
+    Parameters
+    ----------
+    dec : decorator
+        Decorator to apply
+    condition : bool
+        condition that must be met for decorator to be applied
+    args : tuple, optional
+        Arguments to pass to decorator
+    kwargs : dict, optional
+        Keyword arguments to pass to decorator
 
-    Returns:
-       cond_dec (decorator): Decorator that acts like ``dec`` if ``condition``, 
-       otherwise does nothing.
+
+    Returns
+    -------
+    cond_dec : decorator
+        Decorator that acts like ``dec`` if ``condition``,
+
     """
     @functools.wraps(dec)
     def decorator(func):
@@ -333,15 +411,22 @@ def issorted(x, axis=None, tol=1e-12):
 
     Checks whether x[i+1] - x[i] > tol
 
-    Args:
-        x (array-like): input values
-        axis (int): axis along which to check if the array is sorted.
-            If None, the flattened array is used.
-        tol (float): tolerance for determining order. Array is still considered sorted
-            if the difference between adjacent values is greater than -tol
+    Parameters
+    ----------
+    x : array-like
+        input values
+    axis : int
+        axis along which to check if the array is sorted.
+        If None, the flattened array is used. (Default value = None)
+    tol : float
+        tolerance for determining order. Array is still considered sorted
+        if the difference between adjacent values is greater than -tol (Default value = 1e-12)
 
-    Returns:
-        bool: whether the array is sorted
+    Returns
+    -------
+    issorted : bool
+        whether the array is sorted along specified axis
+
     """
     if axis is None:
         x = x.flatten()
@@ -352,13 +437,20 @@ def issorted(x, axis=None, tol=1e-12):
 def isalmostequal(x, axis=-1, tol=1e-12):
     """Checks if all values of an array are equal, to within a given tolerance
 
-    Args:
-        x (array-like): input values
-        axis (int): axis along which to make comparison. If None, the flattened array is used
-        tol (float): tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis
+    Parameters
+    ----------
+    x : array-like
+        input values
+    axis : int
+        axis along which to make comparison. If None, the flattened array is used (Default value = -1)
+    tol : float
+        tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis (Default value = 1e-12)
 
-    Returns:
-        bool: whether the array is equal
+    Returns
+    -------
+    isalmostequal : bool
+        whether the array is equal along specified axis
+
     """
     if axis is None:
         x = x.flatten()
@@ -369,13 +461,20 @@ def isalmostequal(x, axis=-1, tol=1e-12):
 def dot(a, b, axis):
     """Batched vector dot product
 
-    Args:
-        a (array-like): first array of vectors
-        b (array-like): second array of vectors        
-        axis (int): axis along which vectors are stored
+    Parameters
+    ----------
+    a : array-like
+        first array of vectors
+    b : array-like
+        second array of vectors
+    axis : int
+        axis along which vectors are stored
 
-    Returns:
-        y (array-like): y = sum(a*b, axis=axis)
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
     """
     return jnp.sum(a*b, axis=axis, keepdims=False)
 
@@ -383,11 +482,16 @@ def dot(a, b, axis):
 def sign(x):
     """Sign function, but returns 1 for x==0
 
-    Args:
-        x (array-like): array of input values
+    Parameters
+    ----------
+    x : array-like
+        array of input values
 
-    Returns 
-        y (array-like): 1 where x>=0, -1 where x<0
+    Returns
+    -------
+    y : array-like
+        1 where x>=0, -1 where x<0
+
     """
     x = jnp.atleast_1d(x)
     y = jnp.where(x == 0, 1, jnp.sign(x))
@@ -397,13 +501,20 @@ def sign(x):
 def cross(a, b, axis):
     """Batched vector cross product
 
-    Args:
-        a (array-like): first array of vectors
-        b (array-like): second array of vectors        
-        axis (int): axis along which vectors are stored
+    Parameters
+    ----------
+    a : array-like
+        first array of vectors
+    b : array-like
+        second array of vectors
+    axis : int
+        axis along which vectors are stored
 
-    Returns:
-        y (array-like): y = a x b
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
     """
     return jnp.cross(a, b, axis=axis)
 
@@ -411,11 +522,16 @@ def cross(a, b, axis):
 def rms(x):
     """Compute rms value of an array
 
-    Args:
-        x (array-like): input array
+    Parameters
+    ----------
+    x : array-like
+        input array
 
-    Returns:
-        y (float): rms value of x, eg sqrt(sum(x**2))
+    Returns
+    -------
+    y : float
+        rms value of x, eg sqrt(sum(x**2))
+
     """
     return jnp.sqrt(jnp.mean(x**2))
 
@@ -423,13 +539,20 @@ def rms(x):
 def iotafun(rho, nu, params):
     """Rotational transform
 
-    Args:
-        rho (array-like): coordinates at which to evaluate
-        nu (int): order of derivative (for compatibility with scipy spline routines)
-        params (array-like): parameters to use for calculating profile
+    Parameters
+    ----------
+    rho : array-like
+        coordinates at which to evaluate
+    nu : int
+        order of derivative (for compatibility with scipy spline routines)
+    params : array-like
+        polynomial coefficients to use for calculating profile
 
-    Returns:
-        iota (array-like): iota profile (or derivative) evaluated at rho
+    Returns
+    -------
+    iota : array-like
+        iota profile (or derivative) evaluated at rho
+
     """
     return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
 
@@ -437,13 +560,20 @@ def iotafun(rho, nu, params):
 def presfun(rho, nu, params):
     """Plasma pressure
 
-    Args:
-        rho (array-like): coordinates at which to evaluate
-        nu (int): order of derivative (for compatibility with scipy spline routines)
-        params (array-like): parameters to use for calculating profile
+    Parameters
+    ----------
+    rho : array-like
+        coordinates at which to evaluate
+    nu : int
+        order of derivative (for compatibility with scipy spline routines)
+    params : array-like
+        polynomial coefficients to use for calculating profile
 
-    Returns:
-        pres (array-like): pressure profile (or derivative) evaluated at rho
+    Returns
+    -------
+    pres : array-like
+        pressure profile (or derivative) evaluated at rho
+
     """
     return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
 
@@ -451,14 +581,21 @@ def presfun(rho, nu, params):
 def get_needed_derivatives(mode, axis=True):
     """Get array of derivatives needed for calculating objective function
 
-    Args:
-        mode (str): one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``
-        axis (bool): whether to include terms needed for axis expansion
+    Parameters
+    ----------
+    mode : str
+        one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``.
+        What groups of derivatives are needed, based on the objective type.
+    axis : bool
+        whether to include terms needed for axis expansion (Default value = True)
 
-    Returns:
-        derivs (array, shape (N,3)): combinations of derivatives of R,Z needed
-            to compute objective function. Each row is one set, columns represent
-            the order of derivative for [rho, theta, zeta].
+    Returns
+    -------
+    derivs : ndarray
+        combinations of derivatives of R,Z needed
+        to compute objective function. Each row is one set, columns represent
+        the order of derivative for [rho, theta, zeta].
+
     """
     equil_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
                              [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
@@ -487,14 +624,22 @@ def get_needed_derivatives(mode, axis=True):
 def unpack_x(x, nRZ):
     """Unpacks the optimization state vector x into cR,cZ,cL components
 
-    Args:
-        x (ndarray): vector to unpack
-        nRZ (int): number of R,Z coeffs        
+    Parameters
+    ----------
+    x : ndarray
+        vector to unpack
+    nRZ : int
+        number of R,Z coeffs
 
-    Returns:
-        cR (ndarray, shape(N_coeffs,)): spectral coefficients of R
-        cZ (ndarray, shape(N_coeffs,)): spectral coefficients of Z
-        cL (ndarray, shape(2M+1)*(2N+1)): spectral coefficients of lambda           
+    Returns
+    -------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    cL : ndarray
+        spectral coefficients of lambda
+
     """
 
     cR = x[:nRZ]
@@ -506,14 +651,22 @@ def unpack_x(x, nRZ):
 class FiniteDifferenceJacobian():
     """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
 
-    Args:
-        fun (callable): function to wrap
-        argnums (int): index of arguments to differentiate with respect to
-        rel_step (float): relative step size for finite differences. 
-            step_size = rel_step * x0 * max(1,abs(x0))
+    Parameters
+    ----------
+    fun : callable
+        function to wrap
+    argnums : int
+        index of arguments to differentiate with respect to (Default value = 0)
+    rel_step : float
+        relative step size for finite differences.
+        step_size = rel_step * x0 * max(1,abs(x0))
+        (Default value = np.finfo.eps**1/3)
 
-    Returns:
-       jac_fun (callable): object that computes the jacobian of fun.
+    Returns
+    -------
+    jac_fun : callable
+        object that computes the jacobian of fun.
+
     """
 
     def __init__(self, fun, argnums=0, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
@@ -524,11 +677,16 @@ class FiniteDifferenceJacobian():
     def __call__(self, *args):
         """Evaluate the jacobian of fun at x0.
 
-        Args:
-            args (): point to evaluate jacobian
+        Parameters
+        ----------
+        args : tuple
+            point to evaluate jacobian
 
-        Returns:
-            dF/dx (array-like): Jacobian of fun at x0.
+        Returns
+        -------
+        dF/dx : ndarray
+            Jacobian of fun at x0.
+
         """
         f0 = self.fun(*args)
         x0 = args[self.argnums]
@@ -557,10 +715,20 @@ class FiniteDifferenceJacobian():
 class SPSAJacobian():
     """Class for computing jacobian simultaneous perturbation stochastic approximation
 
-    Args:
-        fun (callable): function to be differentiated
-        rel_step (float): relative step size for finite difference
-        N (int): number of samples to take
+    Parameters
+    ----------
+    fun : callable
+        function to be differentiated
+    rel_step : float
+        relative step size for finite difference (Default value = 1e-6)
+    N : int
+        number of samples to take (Default value = 100)
+
+    Returns
+    -------
+    jac_fun : callable
+        object that computes the jacobian of fun.
+
     """
 
     def __init__(self, fun, rel_step=1e-6, N=100, **kwargs):
@@ -596,13 +764,25 @@ class SPSAJacobian():
 class BroydenJacobian():
     """Class for computing jacobian using rank 1 updates
 
-    Args:
-        fun (callable): function to be differentiated
-        x0 (array-like): starting point
-        f0 (array-like): function evaluated at starting point
-        J0 (array-like): estimate of jacobian at starting point
-            If not given, the identity matrix is used
-        minstep (float): minimum step size for updating the jacobian
+    Parameters
+    ----------
+    fun : callable
+        function to be differentiated
+    x0 : array-like
+        starting point
+    f0 : array-like
+        function evaluated at starting point
+    J0 : array-like
+        estimate of jacobian at starting point
+        If not given, the identity matrix is used
+    minstep : float
+        minimum step size for updating the jacobian (Default value = 1e-12)
+
+    Returns
+    -------
+    jac_fun : callable
+        object that computes the jacobian of fun.
+
     """
 
     def __init__(self, fun, x0, f0, J0=None, minstep=1e-12, **kwargs):
@@ -644,18 +824,32 @@ class BlockJacobian():
     parallel. Also helps to reduce memory load, allowing
     computation of larger jacobians on limited memory GPUs
 
-    Args:
-        fun (callable): function to take jacobian of
-        N (int): dimension of fun(x)
-        M (int): dimension of x
-        block_size (int): size (number of rows) of each block.
-            the last block may be smaller depending on N and
-        num_blocks (int): number of blocks (only used if block size
-            is not given).
-        devices (jax.device, list, tuple): list of jax devices to use.
-            Blocks will be split evenly across them.
-        jit (bool): whether to apply JIT compilation. Generally
-            only worth if it if jacobian will be called many times
+    Parameters
+    ----------
+    fun : callable
+        function to take jacobian of
+    N : int
+        dimension of fun(x)
+    M : int
+        dimension of x
+    block_size : int
+        size (number of rows) of each block.
+        the last block may be smaller depending on N and block_size
+    num_blocks : int
+        number of blocks (only used if block size
+        is not given).
+    devices : list or tuple of jax.device
+        list of jax devices to use.
+        Blocks will be split evenly across them.
+    usejit : bool
+        whether to apply JIT compilation. Generally
+        only worth it if jacobian will be called many times
+
+    Returns
+    -------
+    jac_fun : callable
+        object that computes the jacobian of fun.
+
     """
 
     def __init__(self, fun, N, M, block_size=None, num_blocks=None,
@@ -712,13 +906,19 @@ class BlockJacobian():
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
-    Args:
-        p (ndarray, shape(N,M)): polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
-            each column is a power of x
-        m (int >=0): order of derivative
+    Parameters
+    ----------
+    p : ndarray, shape(N,M)
+        polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
+        each column is a power of x
+    m : int >=0
+        order of derivative
 
-    Returns:
-        der (ndarray, shape(N,M)): polynomial coefficients for derivative in descending order
+    Returns
+    -------
+    der : ndarray, shape(N,M)
+        polynomial coefficients for derivative in descending order
+
     """
     m = jnp.asarray(m, dtype=int)  # order of derivative
     p = jnp.atleast_2d(p)
@@ -737,23 +937,29 @@ def polyder_vec(p, m):
 
 @conditional_decorator(functools.partial(jit), use_jax)
 def polyval_vec(p, x):
-    """Evaluate a polynomial at specific values, 
+    """Evaluate a polynomial at specific values,
     vectorized for evaluating multiple polynomials of the same degree.
 
-    Parameters:
-        p (ndarray, shape(N,M)): Array of coefficient for N polynomials of order M. 
-            Each row is one polynomial, given in descending powers of x. 
-        x (array-like, len(K,)): A number, or 1d array of numbers at
-            which to evaluate p. If greater than 1d it is flattened.
+    Parameters
+    ----------
+    p : ndarray, shape(N,M)
+        Array of coefficient for N polynomials of order M. 
+        Each row is one polynomial, given in descending powers of x. 
+    x : ndarray, shape(K,)
+        A number, or 1d array of numbers at
+        which to evaluate p. If greater than 1d it is flattened.
 
-    Returns:
-        y (ndarray, shape(N,K)): polynomials evaluated at x.
-            Each row corresponds to a polynomial, each column to a value of x
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        polynomials evaluated at x.
+        Each row corresponds to a polynomial, each column to a value of x
 
     Notes:
         Horner's scheme is used to evaluate the polynomial. Even so,
         for polynomials of high degree the values may be inaccurate due to
         rounding errors. Use carefully.
+
     """
     p = jnp.atleast_2d(p)
     npoly = p.shape[0]
@@ -764,6 +970,7 @@ def polyval_vec(p, x):
 
     def body_fun(k, y):
         return y * x + p[:, k][:, jnp.newaxis]
+
     y = fori_loop(0, order, body_fun, y)
 
     return y

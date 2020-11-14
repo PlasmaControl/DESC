@@ -9,7 +9,6 @@ __pycache__/
 matlab/
 local/
 docs/_build
-docs/_static
 *.egg-info
 build/
 dist/

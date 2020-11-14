@@ -1,8 +1,7 @@
 import numpy as np
 import scipy.optimize
-import time
-
-from desc.backend import jnp, jit, use_jax
+import warnings
+from desc.backend import jnp, jit, use_jax, Timer, TextColors
 from desc.backend import get_needed_derivatives, unpack_x, jacfwd, grad
 from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
 from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
@@ -19,18 +18,32 @@ def expand_resolution(x, zernike_transform, bdry_zernike_transform, zern_idx_old
     """Expands solution to a higher resolution by filling with zeros
     Also modifies zernike transform object to work at higher resolution
 
-    Args:
-        x (ndarray): solution at initial resolution
-        zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x
-        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to initial x at bdry
-        zern_idx_old (ndarray of int, size(nRZ_old,3)): mode indices corresponding to initial R,Z
-        zern_idx_new (ndarray of int, size(nRZ_new,3)): mode indices corresponding to new R,Z
-        lambda_idx_old (ndarray of int, size(nL_old,2)): mode indices corresponding to initial lambda
-        lambda_idx_new (ndarray of int, size(nL_new,2)): mode indices corresponding to new lambda
-    Returns:
-        x_new (ndarray): solution expanded to new resolution
-        zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x
-        bdry_zernike_transform (ZernikeTransform): zernike transform object corresponding to expanded x at bdry
+    Parameters
+    ----------
+    x : ndarray
+        solution at initial resolution
+    zernike_transform : ZernikeTransform
+        zernike transform object corresponding to initial x
+    bdry_zernike_transform : ZernikeTransform
+        zernike transform object corresponding to initial x at bdry
+    zern_idx_old : ndarray of int, shape(nRZ_old,3)
+        mode indices corresponding to initial R,Z
+    zern_idx_new : ndarray of int, shape(nRZ_new,3)
+        mode indices corresponding to new R,Z
+    lambda_idx_old : ndarray of int, shape(nL_old,2)
+        mode indices corresponding to initial lambda
+    lambda_idx_new : ndarray of int, shape(nL_new,2)
+        mode indices corresponding to new lambda
+
+    Returns
+    -------
+    x_new : ndarray
+        solution expanded to new resolution
+    zernike_transform : ZernikeTransform
+        zernike transform object corresponding to expanded x
+    bdry_zernike_transform : ZernikeTransform
+        zernike transform object corresponding to expanded x at bdry
+
     """
 
     cR, cZ, cL = unpack_x(x, len(zern_idx_old))
@@ -56,21 +69,32 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
     Steps up resolution, perturbs pressure, 3d bdry etc.
 
-    Args:
-        inputs (dict): dictionary with input parameters defining problem setup and solver options
-        checkpoint_filename (str or path-like): file to save checkpoint data
-        device (JAX device or None): device handle to JIT compile to
+    Parameters
+    ----------
+    inputs : dict
+        dictionary with input parameters defining problem setup and solver options
+    checkpoint_filename : str or path-like
+        file to save checkpoint data (Default value = None)
+    device : jax.device or None
+        device handle to JIT compile to (Default value = None)
 
-    Returns:
-        iterations (dict): dictionary of intermediate solutions
+    Returns
+    -------
+    iterations : dict
+        dictionary of intermediate solutions
+    timer : Timer
+        Timer object containing timing data for individual iterations
+
     """
-    t_start = time.perf_counter()
+    timer = Timer()
+    timer.start("Total time")
 
     stell_sym = inputs['stell_sym']
     NFP = inputs['NFP']
     Psi_lcfs = inputs['Psi_lcfs']
     M = inputs['Mpol']                  # arr
     N = inputs['Ntor']                  # arr
+    delta_lm = inputs['delta_lm']       # arr
     Mnodes = inputs['Mnodes']           # arr
     Nnodes = inputs['Nnodes']           # arr
     bdry_ratio = inputs['bdry_ratio']   # arr
@@ -110,7 +134,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("================")
             print("Step {}/{}".format(ii+1, arr_len))
             print("================")
-            print("Spectral resolution (M,N)=({},{})".format(M[ii], N[ii]))
+            print("Spectral resolution (M,N,delta_lm)=({},{},{})".format(
+                M[ii], N[ii], delta_lm[ii]))
             print("Node resolution (M,N)=({},{})".format(
                 Mnodes[ii], Nnodes[ii]))
             print("Boundary ratio = {}".format(bdry_ratio[ii]))
@@ -127,13 +152,15 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         # initial solution
         if ii == 0:
             # interpolator
-            t0 = time.perf_counter()
+            timer.start("Iteration {} total".format(ii+1))
+            timer.start("Fourier-Zernike precomputation")
             if verbose > 0:
                 print("Precomputing Fourier-Zernike basis")
             nodes, volumes = get_nodes_pattern(
                 Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
             derivatives = get_needed_derivatives('all')
-            zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
+            zern_idx = get_zern_basis_idx_dense(
+                M[ii], N[ii], delta_lm[ii], zern_mode)
             lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
             zernike_transform = ZernikeTransform(
                 nodes, zern_idx, NFP, derivatives, volumes, method='fft')
@@ -142,9 +169,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
             bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
                 0, 0, 0], method='direct')
-            t1 = time.perf_counter()
+            timer.stop("Fourier-Zernike precomputation")
             if verbose > 1:
-                print("Precomputation time = {} s".format(t1-t0))
+                timer.disp("Fourier-Zernike precomputation")
             # format boundary shape
             bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                 M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
@@ -156,7 +183,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
 
             # initial guess
-            t0 = time.perf_counter()
+            timer.start("Initial guess computation")
             if verbose > 0:
                 print("Computing initial guess")
             cR_init, cZ_init = get_initial_guess_scale_bdry(
@@ -165,9 +192,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             x_init = jnp.concatenate([cR_init, cZ_init, cL_init])
             x_init = jnp.matmul(sym_mat.T, x_init)
             x = x_init
-            t1 = time.perf_counter()
+            timer.stop("Initial guess computation")
             if verbose > 1:
-                print("Initial guess time = {} s".format(t1-t0))
+                timer.disp("Initial guess computation")
             equil_init = {
                 'cR': cR_init,
                 'cZ': cZ_init,
@@ -197,7 +224,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         else:
             # collocation nodes
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
-                t0 = time.perf_counter()
+                timer.start(
+                    "Iteration {} changing node resolution".format(ii+1))
                 if verbose > 0:
                     print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
                         Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
@@ -207,19 +235,23 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
                 zernike_transform.expand_nodes(nodes, volumes)
                 bdry_zernike_transform.expand_nodes(bdry_nodes)
-                t1 = time.perf_counter()
+                timer.stop(
+                    "Iteration {} changing node resolution".format(ii+1))
                 if verbose > 1:
-                    print("Changing node resolution time = {} s".format(t1-t0))
+                    timer.disp(
+                        "Iteration {} changing node resolution".format(ii+1))
 
             # spectral resolution
-            if M[ii] != M[ii-1] or N[ii] != N[ii-1]:
-                t0 = time.perf_counter()
+            if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
+                timer.start(
+                    "Iteration {} changing spectral resolution".format(ii+1))
                 if verbose > 0:
-                    print("Changing spectral resolution from (M,N) = ({},{}) to ({},{})".format(
-                        M[ii-1], N[ii-1], M[ii], N[ii]))
+                    print("Changing spectral resolution from (M,N,delta_lm) = ({},{},{}) to ({},{},{})".format(
+                        M[ii-1], N[ii-1], delta_lm[ii-1], M[ii], N[ii], delta_lm[ii]))
                 zern_idx_old = zern_idx
                 lambda_idx_old = lambda_idx
-                zern_idx = get_zern_basis_idx_dense(M[ii], N[ii], zern_mode)
+                zern_idx = get_zern_basis_idx_dense(
+                    M[ii], N[ii], delta_lm[ii], zern_mode)
                 lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
                 bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
                     M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
@@ -232,9 +264,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 else:
                     sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
                 x = jnp.matmul(sym_mat.T, x)
-                t1 = time.perf_counter()
+                timer.stop(
+                    "Iteration {} changing spectral resolution".format(ii+1))
                 if verbose > 1:
-                    print("Changing spectral resolution time = {} s".format(t1-t0))
+                    timer.disp(
+                        "Iteration {} changing spectral resolution".format(ii+1))
 
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
@@ -252,8 +286,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
-                x = perturb_continuation_params(x, equil_obj, deltas, args,
-                                                pert_order[ii], verbose)
+                x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
+                                                       pert_order[ii], verbose, timer)
 
         args = (bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
@@ -274,12 +308,12 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 device = jax.devices()[0]
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
             jac_obj_jit = jit(jac, device=device)
-            t0 = time.perf_counter()
+            timer.start("Iteration {} compilation".format(ii+1))
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)
-            t1 = time.perf_counter()
+            timer.stop("Iteration {} compilation".format(ii+1))
             if verbose > 1:
-                print("Objective function compiled, time = {} s".format(t1-t0))
+                timer.disp("Iteration {} compilation".format(ii+1))
         else:
             equil_obj_jit = equil_obj
             jac_obj_jit = '2-point'
@@ -287,7 +321,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("Starting optimization")
 
         x_init = x
-        t0 = time.perf_counter()
+        timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
                                           x0=x_init,
@@ -311,14 +345,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                                                max_nfev=nfev[ii],
                                                verbose=verbose)
         else:
-            raise NotImplementedError
+            raise NotImplementedError(
+                TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogleg'" + TextColors.ENDC)
 
-        t1 = time.perf_counter()
+        timer.stop("Iteration {} solution".format(ii+1))
         x = out['x']
 
         if verbose > 1:
-            print('Step {} time = {} s'.format(ii+1, t1-t0))
-            print("Avg time per step: {} s".format((t1-t0)/out['nfev']))
+            timer.disp("Iteration {} solution".format(ii+1))
+            timer.pretty_print("Iteration {} avg time per step".format(ii+1),
+                               timer["Iteration {} solution".format(ii+1)]/out['nfev'])
         if verbose > 0:
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
@@ -349,20 +385,20 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             checkpoint_file.write_iteration(equil, ii+1, inputs)
 
         if not is_nested(cR, cZ, zern_idx, NFP):
-            print('WARNING: Flux surfaces are no longer nested, exiting early.'
-                  + 'Consider increasing errr_ratio or taking smaller perturbation steps')
+            warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
+                          + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
             break
 
     if checkpoint:
         checkpoint_file.close()
 
-    t_end = time.perf_counter()
+    timer.stop("Total time")
     print('====================')
     print('Done')
     if verbose > 1:
-        print('total time = {} s'.format(t_end-t_start))
+        timer.disp("Total time")
     if checkpoint_filename is not None:
         print('Output written to {}'.format(checkpoint_filename))
     print('====================')
 
-    return iterations
+    return iterations, timer

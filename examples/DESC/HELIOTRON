@@ -12,8 +12,8 @@ Mnodes =  9, 11, 12, 14, 15, 17, 18
 Nnodes =  0,  2,  2,  3,  3,  3,  3
 
 # continuation parameters
-bdry_ratio = 0.00, 0.33, 0.67, 1.00, 1.00, 1.00, 1.00, 
-pres_ratio = 0.00, 0.00, 0.00, 0.00, 0.33, 0.67, 1.00, 
+bdry_ratio = 1
+pres_ratio = 1
 zeta_ratio = 1
 errr_ratio = 1e-4
 pert_order = 1
@@ -21,11 +21,11 @@ pert_order = 1
 # solver tolerances
 ftol = 1e-2, 1e-2, 1e-3, 1e-3, 1e-4, 1e-5, 1e-6
 xtol = 1e-6
-gtol = 1e-6
+gtol = 1e2
 nfev = 1000
 
 # solver methods
-optim_method = trf
+optim_method = bfgs
 errr_mode = force
 bdry_mode = spectral
 zern_mode = fringe

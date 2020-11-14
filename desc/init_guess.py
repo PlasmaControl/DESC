@@ -1,23 +1,36 @@
 import numpy as np
-from desc.backend import put
+from desc.backend import put, TextColors
 
 
 def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='spectral', rcond=1e-6):
     """Generate initial guess by scaling boundary shape
 
-    Args:
-        axis (ndarray, shape(Naxis,3)): array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
-        bdry (ndarray, shape(Nbdry,4)): array of boundary Fourier coeffs [m,n,Rcoeff, Zcoeff]
-            OR
-            array of real space coordinates, [theta,phi,R,Z]
-        bdry_ratio (float): fraction in range [0,1] of the full non-axisymmetric boundary to use
-        zern_idx (ndarray, shape(Nc,3)): indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
-        NFP (int): number of field periods
-        mode (str): one of 'real', 'spectral' - which format is being used for bdryR,bdryZ,poloidal,toroidal
-        rcond (float): relative limit on singular values for least squares fit to Zernike basis
-    Returns:
-        cR (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients for R, following indexing given in zern_idx
-        cZ (ndarray, shape(N_coeffs,)): Fourier-Zernike coefficients for Z, following indexing given in zern_idx
+    Parameters
+    ----------
+    axis : ndarray, shape(Naxis,3)
+        array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
+    bdry : ndarray, shape(Nbdry,4)
+        array of boundary Fourier coeffs [m,n,Rcoeff, Zcoeff]
+        OR
+        array of real space coordinates, [theta,phi,R,Z]
+    bdry_ratio : float
+        fraction in range [0,1] of the full non-axisymmetric boundary to use
+    zern_idx : ndarray, shape(N_coeffs,3)
+        indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
+    NFP : int
+        number of field periods
+    mode : str
+        one of 'real', 'spectral' - which format is being used for bdryR,bdryZ,poloidal,toroidal (Default value = 'spectral')
+    rcond : float
+         relative limit on singular values for least squares fit to Zernike basis (Default value = 1e-6)
+
+    Returns
+    -------
+    cR : ndarray, shape(N_coeffs,)
+        Fourier-Zernike coefficients for R, following indexing given in zern_idx
+    cZ : ndarray, shape(N_coeffs,)
+        Fourier-Zernike coefficients for Z, following indexing given in zern_idx
+
     """
 
     if mode == 'spectral':
@@ -56,6 +69,7 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='sp
                     m), zern_idx[:, 1] == m, zern_idx[:, 2] == n)))[0], bZ)
 
     else:
-        raise ValueError("Can't compute the initial guess in real space")
+        raise ValueError(
+            TextColors.FAIL + "Can't compute the initial guess in real space" + TextColors.ENDC)
 
     return cR, cZ

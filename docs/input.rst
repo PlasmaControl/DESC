@@ -1,6 +1,8 @@
-======
-Inputs
-======
+.. _input_file:
+
+==========
+Input File
+==========
 
 The following is an example DESC input file, which containts all of the available input arguments. 
 More input examples are included in the repository. 
@@ -18,10 +20,11 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    Psi_lcfs  = 1.00000000E+00
    
    # spectral resolution
-   Mpol   =   6   8  10  10  11  11  12
-   Ntor   =   0,  1,  2,  2,  3,  3,  4
-   Mnodes =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes =  [0;  2;  3;  3;  4;  5;  6]
+   Mpol     =   6   8  10  10  11  11  12
+   delta_lm =   0   4   8  12  16  20  24
+   Ntor     =   0,  1,  2,  2,  3,  3,  4
+   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
+   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
    
    # continuation parameters
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
@@ -85,12 +88,14 @@ Spectral Resolution
 
 .. code-block:: text
 
-   Mpol   =   6   8  10  10  11  11  12
-   Ntor   =   0,  1,  2,  2,  3,  3,  4
-   Mnodes =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes =  [0;  2;  3;  3;  4;  5;  6]
+   Mpol     =   6   8  10  10  11  11  12
+   delta_lm =   0   4   8  12  16  20  24
+   Ntor     =   0,  1,  2,  2,  3,  3,  4
+   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
+   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
 
 - ``Mpol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
+- ``delta_;m`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2*M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
 - ``Ntor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
 - ``Mnodes`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
 - ``Nnodes`` (int): Relative toroidal density of collocation nodes. Default = ``round(1.5*Ntor)``. 
@@ -158,7 +163,7 @@ Solver Methods
 
 - ``errr_mode`` (string): Form of equations to use for solving the equilibrium force balance. Options are ``'force'`` (Default) or ``'accel'``. 
 - ``bdry_mode`` (string): Form of equations to use for solving the boundary condition. Options are ``'spectral'`` (Default) or ``'real'``. 
-- ``zern_mode`` (string): Zernike polynomial index ordering. Options are ``ansi`` or ``fringe`` (Default). 
+- ``zern_mode`` (string): Zernike polynomial index ordering. Options are ``ansi``, ``chevron``, ``house``,  or ``fringe`` (Default). For more information see :ref:`theory_zernike_indexing`. 
 - ``node_mode`` (string): Pattern of collocation nodes. Options are ``'cheb1'`` (Default), ``'cheb2'``, or ``'linear'`` (not recommended). 
 
 The ``errr_mode`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'accel'`` option uses units of m/radian^2. 

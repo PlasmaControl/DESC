@@ -4,17 +4,23 @@ import warnings
 import h5py
 import numpy as np
 from datetime import datetime
-from netCDF4 import Dataset
+
+from desc.backend import TextColors
 
 
 def read_input(fname):
     """Reads input from DESC input file, converts from VMEC input if necessary
 
-    Args:
-        fname (string): filename of input file
+    Parameters
+    ----------
+    fname : string
+        filename of input file
 
-    Returns:
-        inputs (dictionary): all the input parameters and options
+    Returns
+    -------
+    inputs : dict
+        all the input parameters and options
+
     """
 
     # default values
@@ -24,6 +30,7 @@ def read_input(fname):
         'Psi_lcfs': 1.0,
         'Mpol': np.atleast_1d(0),
         'Ntor': np.atleast_1d(0),
+        'delta_lm': np.atleast_1d(None),
         'Mnodes': np.atleast_1d(0),
         'Nnodes': np.atleast_1d(0),
         'bdry_ratio': np.atleast_1d(1.0),
@@ -95,6 +102,9 @@ def read_input(fname):
         match = re.search(r'Ntor', argument, re.IGNORECASE)
         if match:
             inputs['Ntor'] = np.array(numbers).astype(int)
+        match = re.search(r'delta_lm', argument, re.IGNORECASE)
+        if match:
+            inputs['delta_lm'] = np.array(numbers).astype(int)
         match = re.search(r'Mnodes', argument, re.IGNORECASE)
         if match:
             inputs['Mnodes'] = np.array(numbers).astype(int)
@@ -239,11 +249,13 @@ def read_input(fname):
 
     # error handling
     if np.any(inputs['Mpol'] == 0):
-        raise Exception('Mpol is not assigned')
+        raise IOError(TextColors.FAIL +
+                      'Mpol is not assigned' + TextColors.ENDC)
     if np.sum(inputs['bdry']) == 0:
-        raise Exception('Fixed-boundary surface is not assigned')
-    arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes',
-            'bdry_ratio', 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
+        raise IOError(
+            TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
+    arrs = ['Mpol', 'Ntor', 'delta_lm', 'Mnodes', 'Nnodes', 'bdry_ratio',
+            'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
             'ftol', 'xtol', 'gtol', 'nfev']
     arr_len = 0
     for a in arrs:
@@ -252,8 +264,8 @@ def read_input(fname):
         if inputs[a].size == 1:
             inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
         elif inputs[a].size != arr_len:
-            raise Exception(
-                'Continuation parameter arrays are not proper lengths')
+            raise IOError(TextColors.FAIL +
+                          'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
 
     # unsupplied values
     if np.sum(inputs['Mnodes']) == 0:
@@ -263,16 +275,108 @@ def read_input(fname):
     if np.sum(inputs['axis']) == 0:
         axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
         inputs['axis'] = inputs['bdry'][axis_idx, 1:]
+    if None in inputs['delta_lm']:
+        default_deltas = {'fringe': 2*inputs['Mpol'],
+                          'ansi': inputs['Mpol'],
+                          'chevron': inputs['Mpol'],
+                          'house': 2*inputs['Mpol']}
+        inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
 
     return inputs
+
+
+def write_desc_input(filename, inputs):
+    """Generates a DESC input file from a dictionary of parameters
+
+    Parameters
+    ----------
+    filename : str or path-like
+        name of the file to create
+    inputs : dict
+        dictionary of input parameters
+
+    Returns
+    -------
+
+    """
+
+    f = open(filename, 'w+')
+
+    f.write('# global parameters \n')
+    f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
+    f.write('NFP = {} \n'.format(inputs['NFP']))
+    f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
+
+    f.write('\n# spectral resolution \n')
+    f.write('Mpol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
+    f.write('Ntor = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
+    f.write('Mnodes = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
+    f.write('Nnodes = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
+
+    f.write('\n# continuation parameters \n')
+    f.write('bdry_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['bdry_ratio'])])))
+    f.write('pres_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
+    f.write('zeta_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
+    f.write('errr_ratio = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
+    f.write('pert_order = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
+
+    f.write('\n# solver tolerances \n')
+    f.write('ftol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['ftol'])])))
+    f.write('xtol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['xtol'])])))
+    f.write('gtol = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['gtol'])])))
+    f.write('nfev = {} \n'.format(
+        ', '.join([str(i) for i in np.atleast_1d(inputs['nfev'])])))
+
+    f.write('\n# solver methods \n')
+    f.write('optim_method = {} \n'.format(inputs['optim_method']))
+    f.write('errr_mode = {} \n'.format(inputs['errr_mode']))
+    f.write('bdry_mode = {} \n'.format(inputs['bdry_mode']))
+    f.write('zern_mode = {} \n'.format(inputs['zern_mode']))
+    f.write('node_mode = {} \n'.format(inputs['node_mode']))
+
+    f.write('\n# pressure and rotational transform profiles \n')
+    for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
+        f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
+            int(i), cP, cI))
+
+    f.write('\n# magnetic axis initial guess \n')
+    for (n, cR, cZ) in inputs['axis']:
+        f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
+            int(n), cR, cZ))
+
+    f.write('\n# fixed-boundary surface shape \n')
+    for (m, n, cR, cZ) in inputs['bdry']:
+        f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
+            int(m), int(n), cR, cZ))
+
+    f.close()
 
 
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
 
-    Args:
-        fname (string): filename of output file.
-        equil (dict): dictionary of equilibrium parameters.
+    Parameters
+    ----------
+    fname : str or path-like
+        filename of output file.
+    equil : dict
+        dictionary of equilibrium parameters.
+
+    Returns
+    -------
+
     """
 
     cR = equil['cR']
@@ -341,11 +445,16 @@ def output_to_file(fname, equil):
 def read_desc(filename):
     """reads a previously generated DESC ascii output file
 
-    Args:
-        filename (str or path-like): path to file to read
+    Parameters
+    ----------
+    filename : str or path-like
+        path to file to read
 
-    Returns:
-        equil (dict): dictionary of equilibrium parameters.
+    Returns
+    -------
+    equil : dict
+        dictionary of equilibrium parameters.
+
     """
 
     equil = {}
@@ -401,10 +510,17 @@ def read_desc(filename):
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file
 
-    Args:
-        filename (str or path-like): file to write to. If it doesn't exist,
-            it is created.
-        equilibrium (dict): dictionary of equilibrium parameters.
+    Parameters
+    ----------
+    filename : str or path-like
+        file to write to. If it doesn't exist,
+        it is created.
+    equilibrium : dict
+        dictionary of equilibrium parameters.
+
+    Returns
+    -------
+
     """
 
     f = h5py.File(filename, 'w')
@@ -420,13 +536,21 @@ def write_desc_h5(filename, equilibrium):
 class Checkpoint():
     """Class for periodically saving equilibria during solution
 
-    Args:
-        filename (str or path-like): file to write to. If it does not exist,
-            it will be created
-        write_ascii (bool): Whether to also write ascii files. By default,
-            only an hdf5 file is created and appended with each new solution.
-            If write_ascii is True, additional files will be written, each with 
-            the same base filename but appeneded with _0, _1,...
+    Parameters
+    ----------
+    filename : str or path-like
+        file to write to. If it does not exist,
+        it will be created
+    write_ascii : bool
+        Whether to also write ascii files. By default,
+        only an hdf5 file is created and appended with each new solution.
+        If write_ascii is True, additional files will be written, each with
+        the same base filename but appeneded with _0, _1,...
+
+    Returns
+    -------
+    checkpointer: Checkpoint
+        object with methods to periodically save solutions
     """
 
     def __init__(self, filename, write_ascii=False):
@@ -448,11 +572,21 @@ class Checkpoint():
     def write_iteration(self, equilibrium, iter_num, inputs=None, update_final=True):
         """Write an equilibrium to the checkpoint file
 
-        Args:
-            equilibrium (dict): equilibrium to write
-            iter_num (int): iteration number
-            update_final (bool): whether to update the 'final' equilibrium
-                with this entry
+        Parameters
+        ----------
+        equilibrium : dict
+            equilibrium to write
+        iter_num : int
+            iteration number
+        inputs : dict, optional
+             dictionary of input parameters to the solver (Default value = None)
+        update_final : bool
+            whether to update the 'final' equilibrium
+            with this entry (Default value = True)
+
+        Returns
+        -------
+
         """
         iter_str = str(iter_num)
         if iter_str not in self.f['iterations']:
@@ -496,9 +630,16 @@ class Checkpoint():
 def vmec_to_desc_input(vmec_fname, desc_fname):
     """Converts a VMEC input file to an equivalent DESC input file
 
-    Args:
-        vmec_fname (string): filename of VMEC input file
-        desc_fname (string): filename of DESC input file. If it already exists it is overwritten.
+    Parameters
+    ----------
+    vmec_fname : str or path-like
+        filename of VMEC input file
+    desc_fname : str or path-like
+        filename of DESC input file. If it already exists it is overwritten.
+
+    Returns
+    -------
+
     """
 
     # file objects
@@ -527,7 +668,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
 
         # global parameters
         if re.search(r'LRFP\s*=\s*T', command, re.IGNORECASE):
-            warnings.warn('Using poloidal flux instead of toroidal flux!')
+            warnings.warn(
+                TextColors.WARNING + 'Using poloidal flux instead of toroidal flux!' + TextColors.ENDC)
         match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
         if match:
             if re.search(r'T', match.group(0), re.IGNORECASE):
@@ -560,25 +702,29 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
         match = re.search(r'bPMASS_TYPE\s*=\s*\w*', command, re.IGNORECASE)
         if match:
             if not re.search(r'\bpower_series\b', match.group(0), re.IGNORECASE):
-                warnings.warn('Pressure is not a power series!')
+                warnings.warn(
+                    TextColors.WARNING + 'Pressure is not a power series!' + TextColors.ENDC)
         match = re.search(r'GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 0:
-                warnings.warn('GAMMA is not 0.0')
+                warnings.warn(TextColors.WARNING +
+                              'GAMMA is not 0.0' + TextColors.ENDC)
         match = re.search(r'BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 1:
-                warnings.warn('BLOAT is not 1.0')
+                warnings.warn(TextColors.WARNING +
+                              'BLOAT is not 1.0' + TextColors.ENDC)
         match = re.search(r'SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 1:
-                warnings.warn('SPRES_PED is not 1.0')
+                warnings.warn(TextColors.WARNING +
+                              'SPRES_PED is not 1.0' + TextColors.ENDC)
         match = re.search(r'PRES_SCALE\s*=\s*'+num_form,
                           command, re.IGNORECASE)
         if match:
@@ -602,10 +748,12 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(
                 num_form, match.group(0)) if re.search(r'\d', x)]
             if numbers[0] != 0:
-                warnings.warn('Not using rotational transform!')
+                warnings.warn(
+                    TextColors.WARNING + 'Not using rotational transform!' + TextColors.ENDC)
         if re.search(r'\bPIOTA_TYPE\b', command, re.IGNORECASE):
             if not re.search(r'\bpower_series\b', command, re.IGNORECASE):
-                warnings.warn('Iota is not a power series!')
+                warnings.warn(TextColors.WARNING +
+                              'Iota is not a power series!' + TextColors.ENDC)
         match = re.search(r'AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
         if match:
             numbers = [float(x) for x in re.findall(
@@ -662,7 +810,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             RBS = numbers[2]
             if m != 0:
                 m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -693,7 +842,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             RBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]
             n_idx = np.where(bdry[:, 1] == n)[0]
@@ -723,7 +873,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             ZBS = numbers[2]
             if m != 0:
                 m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -754,7 +905,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             n_sgn = np.sign(np.array([n]))[0]
             n *= n_sgn
             if np.sign(m) < 0:
-                warnings.warn('m is negative!')
+                warnings.warn(TextColors.WARNING +
+                              'm is negative!' + TextColors.ENDC)
             ZBC = numbers[2]
             m_idx = np.where(bdry[:, 0] == m)[0]
             n_idx = np.where(bdry[:, 1] == n)[0]
@@ -780,7 +932,8 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
             numbers = [float(x) for x in re.findall(
                 num_form, command) if re.search(r'\d', x)]
             if len(numbers) > 0:
-                raise Exception('Cannot handle multi-line VMEC inputs!')
+                raise IOError(
+                    TextColors.FAIL + 'Cannot handle multi-line VMEC inputs!' + TextColors.ENDC)
 
     cP *= pres_scale
     desc_file.write('\n')
@@ -813,61 +966,3 @@ def vmec_to_desc_input(vmec_fname, desc_fname):
     # close files
     vmec_file.close()
     desc_file.close()
-
-
-# TODO: add other fields including B, rmns, zmnc, lmnc, etc
-def read_vmec_output(fname):
-    """Reads VMEC data from wout nc file
-
-    Args:
-        fname (string): filename of VMEC output file
-
-    Returns:
-        vmec_data (dictionary): the VMEC data fields
-    """
-
-    file = Dataset(fname, mode='r')
-
-    vmec_data = {
-        'xm': file.variables['xm'][:],
-        'xn': file.variables['xn'][:],
-        'rmnc': file.variables['rmnc'][:],
-        'zmns': file.variables['zmns'][:],
-        'lmns': file.variables['lmns'][:]
-    }
-
-    return vmec_data
-
-
-def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi):
-    """Interpolates VMEC data on a flux surface
-
-    Args:
-        Cmn (ndarray, shape(MN,)): cos(mt-np) Fourier coefficients
-        Smn (ndarray, shape(MN,)): sin(mt-np) Fourier coefficients
-        xm (ndarray, shape(M,)): poloidal mode numbers
-        xn (ndarray, shape(N,)): toroidal mode numbers
-        theta (ndarray): poloidal angles
-        phi (ndarray): toroidal angles
-
-    Returns:
-        R, Z (tuple of ndarray): VMEC data interpolated at the angles (theta,phi)
-    """
-
-    R_arr = []
-    Z_arr = []
-    dim = Cmn.shape
-
-    for j in range(dim[1]):
-
-        m = xm[j]
-        n = xn[j]
-
-        R = [[[Cmn[s, j]*np.cos(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        Z = [[[Smn[s, j]*np.sin(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        R_arr.append(R)
-        Z_arr.append(Z)
-
-    return np.sum(R_arr, axis=0), np.sum(Z_arr, axis=0)

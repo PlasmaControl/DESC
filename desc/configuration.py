@@ -1,4 +1,227 @@
-from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun
+import numpy as np
+
+from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
+from desc.init_guess import get_initial_guess_scale_bdry
+from desc.zernike import symmetric_x
+from desc.boundary_conditions import format_bdry
+
+
+class Configuration():
+
+    # TODO: replace zern_idx & lambda_idx with Transform objects
+    def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
+        """Initializes a configuration
+
+        Parameters
+        ----------
+        bdry : ndarray of float, shape(Nbdry,4)
+            array of boundary Fourier coeffs [m,n,Rcoeff, Zcoeff]
+            OR
+            array of real space coordinates, [theta,phi,R,Z]
+        cP : ndarray
+            spectral coefficients of the pressure profile (Pascals)
+        cI : ndarray
+            spectral coefficients of the rotational transform profile
+        Psi : float
+            toroidal flux within the last closed flux surface (Webers)
+        NFP : int
+            number of toroidal field periods
+        zern_idx : ndarray of int, shape(N_coeffs,3)
+            indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
+        lambda_idx : ndarray of int, shape(Nmodes,2)
+            poloidal and toroidal mode numbers [m,n]
+        sym : bool
+            True for stellarator symmetry, False otherwise
+        x : ndarray
+            state vector of independent variables: [cR, cZ, cL]. If not supplied, 
+            the flux surfaces are scaled from the boundary and magnetic axis
+        axis : ndarray, shape(Naxis,3)
+            array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
+        """
+
+        self.__bdry = bdry
+        self.__cP = cP
+        self.__cI = cI
+        self.__Psi = Psi
+        self.__NFP = NFP
+        self.__zern_idx = zern_idx
+        self.__lambda_idx = lambda_idx
+        self.__sym = sym
+
+        self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
+            np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
+
+        # embed this if-else into the symmetric_x function
+        if sym:
+            # TODO: move symmetric_x inside configuration.py
+            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
+        else:
+            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
+
+        if x is None:
+            # TODO: change input reader to make the default axis=None
+            if axis is None:
+                axis = bdry[np.where(bdry[:, 0] == 0)[0], 1:]
+            self.__cR, self.__cZ = get_initial_guess_scale_bdry(
+                axis, bdry, 1.0, zern_idx, NFP, mode='spectral', rcond=1e-6)
+            self.__cL = np.zeros(len(lambda_idx))
+            self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
+            self.__x = np.matmul(sym_mat.T, self.__x)
+        else:
+            self.__x = x
+            try:
+                # TODO: move unpack_x inside configuration.py
+                self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(zern_idx))
+            except:
+                raise ValueError(TextColors.FAIL + 
+                    "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
+
+    @property
+    def bdry(self):
+        return self.__bdry
+
+    @bdry.setter
+    def bdry(self, bdry):
+        self.__bdry = bdry
+        self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
+            np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
+
+    @property
+    def cP(self):
+        return self.__cP
+
+    @cP.setter
+    def cP(self, cP):
+        self.__cP = cP
+
+    @property
+    def cI(self):
+        return self.__cI
+
+    @cI.setter
+    def cI(self, cI):
+        self.__cI = cI
+
+    @property
+    def Psi(self):
+        return self.__Psi
+
+    @Psi.setter
+    def Psi(self, Psi):
+        self.__Psi = Psi
+
+    @property
+    def NFP(self):
+        return self.__NFP
+
+    @NFP.setter
+    def NFP(self, NFP):
+        self.__NFP = NFP
+
+    @property
+    def sym(self):
+        return self.__sym
+
+    @sym.setter
+    def sym(self, sym):
+        self.__sym = sym
+        if sym:
+            # TODO: move symmetric_x inside configuration.py
+            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
+        else:
+            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
+        self.__x = np.matmul(sym_mat.T, self.__x)
+
+    def attributes(self):
+        return (self.x, self.bdryR, self.bdryZ, self.cP, self.cI, self.Psi)
+
+    def compute_coordinate_derivatives(self):
+        pass
+        # return compute_coordinate_derivatives(self.cR, self.cZ, zernike_transform, zeta_ratio=1.0, mode='equil')
+
+    def compute_covariant_basis(self):
+        pass
+        # return compute_covariant_basis(coord_der, zernike_transform, mode='equil')
+
+    def compute_contravariant_basis(self):
+        pass
+        # return compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transform)
+
+    def compute_jacobian(self):
+        pass
+        # return compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil')
+
+    def compute_magnetic_field(self):
+        pass
+        # return compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform, mode='equil')
+
+    def compute_plasma_current(self):
+        pass
+        # return compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
+
+    def compute_magnetic_field_magnitude(self):
+        pass
+        # return def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_transform)
+
+    def compute_force_magnitude(self):
+        pass
+        # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
+
+
+class Equilibrium(Configuration):
+
+    def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
+        Configuration.__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        self.__objective = objective
+        self.__optimizer = optimizer
+        self.solved = False
+
+    def optimize(self):
+        pass
+
+    @property
+    def objective(self):
+        return self.__objective
+
+    @objective.setter
+    def objective(self, objective):
+        self.__objective = objective
+        self.solved = False
+
+    @property
+    def optimizer(self):
+        return self.__optimizer
+
+    @optimizer.setter
+    def optimizer(self, optimizer):
+        self.__optimizer = optimizer
+        self.solved = False
+
+
+# TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
+class EquiliriaFamily():
+
+    def __init__(self, equilibria, solver=None) -> None:
+        self.__equilibria = equilibria
+        self.__solver = solver
+
+    @property
+    def equilibria(self):
+        return self.__equilibria
+
+    @equilibria.setter
+    def equilibria(self, equilibria):
+        self.__equilibria = equilibria
+
+    @property
+    def solver(self):
+        return self.__solver
+
+    @solver.setter
+    def solver(self, solver):
+        self.__solver = solver
+
+# TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
 
 def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mode='equil'):

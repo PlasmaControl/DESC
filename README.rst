@@ -65,12 +65,12 @@ Contribute
     :target: https://desc-apc524.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
-    :target: https://travis-ci.org/ddudt/DESC
+.. |Travis| image:: https://img.shields.io/travis/dpanici/DESC?logo=travis   
+    :target: https://travis-ci.org/dpanici/DESC
     :alt: Build
 
-.. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg
-    :target: https://codecov.io/gh/ddudt/DESC
+.. |Codecov| image:: https://codecov.io/gh/dpanici/DESC/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/dpanici/DESC
     :alt: Coverage
 
 

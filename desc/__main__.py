@@ -4,6 +4,8 @@ import sys
 import warnings
 import os
 
+from desc.input_reader import InputReader
+
 
 def get_device(gpuID=False):
     """Checks available GPUs and selects the one with the most available memory
@@ -58,8 +60,9 @@ def get_device(gpuID=False):
         return jax.devices('cpu')[0]
 
 
-def get_parser():
-    """Gets parser for command line arguments.
+"""def get_parser():
+    '''
+    Gets parser for command line arguments.
 
     Parameters
     ----------
@@ -69,7 +72,7 @@ def get_parser():
     parser : argparse object
         argument parser
 
-    """
+    '''
 
     parser = argparse.ArgumentParser(prog='DESC',
                                      description='DESC computes equilibria by solving the force balance equations. '
@@ -96,30 +99,33 @@ def get_parser():
                         + " and autodiff won't work but may be useful for debugging")
     parser.add_argument('--version', action='store_true',
                         help='Display version number and exit')
-    return parser
+    return parser"""
 
 
-def main(args=sys.argv[1:]):
+def main(cl_args=None):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.
     """
-    parser = get_parser()
-    args = parser.parse_args(args)
+    #parser = get_parser()
+    #args = parser.parse_args(args)
 
-    if args.version:
+    # parse command line arguments and data from input file
+    ir = InputReader()
+
+    if ir.args.version:
         import desc
         print(desc.__version__)
         return
 
-    if len(args.input_file) == 0:
-        print('Input file path must be specified')
-        return
+    #if len(args.input_file) == 0:
+    #    print('Input file path must be specified')
+    #    return
 
-    if args.numpy:
-        os.environ['DESC_USE_NUMPY'] = 'True'
-    else:
-        os.environ['DESC_USE_NUMPY'] = ''
+    #if args.numpy:
+    #    os.environ['DESC_USE_NUMPY'] = 'True'
+    #else:
+    #    os.environ['DESC_USE_NUMPY'] = ''
 
     import desc
 
@@ -132,24 +138,24 @@ def main(args=sys.argv[1:]):
     from desc.vmec import read_vmec_output, vmec_error
 
     if use_jax:
-        device = get_device(args.gpu)
+        device = get_device(ir.args.gpu)
         print("Using device: " + str(device))
     else:
         device = None
 
-    in_fname = str(pathlib.Path(args.input_file[0]).resolve())
-    out_fname = args.output if args.output else in_fname+'.output'
+    #in_fname = str(pathlib.Path(args.input_file[0]).resolve())
+    #out_fname = args.output if args.output else in_fname+'.output'
 
-    print("Reading input from {}".format(in_fname))
-    inputs = read_input(in_fname)
-    print("Output will be written to {}".format(out_fname))
+    #print("Reading input from {}".format(in_fname))
+    #inputs = read_input(in_fname)
+    #print("Output will be written to {}".format(out_fname))
 
-    if args.quiet:
-        inputs['verbose'] = 0
-    elif args.verbose:
-        inputs['verbose'] = 2
-    else:
-        inputs['verbose'] = 1
+    #if args.quiet:
+    #    inputs['verbose'] = 0
+    #elif args.verbose:
+    #    inputs['verbose'] = 2
+    #else:
+    #    inputs['verbose'] = 1
 
     # solve equilibrium
     iterations, timer = solve_eq_continuation(

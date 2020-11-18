@@ -24,4 +24,5 @@ notifications:
     on_success: change
     recipients: 
       - ddudt@pppl.gov
-      - wconlin@princeton.edu
+      - dpanici@princeton.edu
+      - eyerger@princeton.edu

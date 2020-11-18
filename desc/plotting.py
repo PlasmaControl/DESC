@@ -8,9 +8,9 @@ from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, 
 from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
 from desc.input_output import read_desc
 from desc.vmec import vmec_interpolate
-from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
-from desc.field_components import compute_contravariant_basis, compute_jacobian
-from desc.field_components import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
+from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
+from desc.configuration import compute_contravariant_basis, compute_jacobian
+from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
 
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue

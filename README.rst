@@ -16,7 +16,7 @@ Please cite our work if you use DESC!
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. 
 .. _paper: https://github.com/ddudt/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
-.. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
+.. _Theory: https://desc-apc524.readthedocs.io/en/latest/theory_general.html
 
 Quick Start
 ===========
@@ -30,10 +30,10 @@ DESC requires an input file to specify the equilibrium and solver options, and c
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
 
-.. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
-.. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
-.. _Inputs: https://desc-docs.readthedocs.io/en/latest/input.html
-.. _Outputs: https://desc-docs.readthedocs.io/en/latest/output.html
+.. _Installation: https://desc-apc524.readthedocs.io/en/latest/installation.html
+.. _Command Line Interface: https://desc-apc524.readthedocs.io/en/latest/command_line.html
+.. _Inputs: https://desc-apc524.readthedocs.io/en/latest/input.html
+.. _Outputs: https://desc-apc524.readthedocs.io/en/latest/output.html
 
 Repository Contents
 ===================
@@ -43,26 +43,26 @@ Repository Contents
 - examples_ contains example input files along with corresponding VMEC solutions. 
 - tests_ contains routines for automatic testing. 
 
-.. _desc: https://github.com/ddudt/DESC/tree/master/desc
-.. _docs: https://github.com/ddudt/DESC/tree/master/docs
-.. _examples: https://github.com/ddudt/DESC/tree/master/examples
-.. _tests: https://github.com/ddudt/DESC/tree/master/tests
-.. _API: https://desc-docs.readthedocs.io/en/latest/api.html
+.. _desc: https://github.com/dpanici/DESC/tree/master/desc
+.. _docs: https://github.com/dpanici/DESC/tree/master/docs
+.. _examples: https://github.com/dpanici/DESC/tree/master/examples
+.. _tests: https://github.com/dpanici/DESC/tree/master/tests
+.. _API: https://desc-apc524.readthedocs.io/en/latest/api.html
 
 Contribute
 ==========
  
-- `Contributing guidelines <https://github.com/ddudt/DESC/blob/master/CONTRIBUTING.rst>`_
-- `Issue Tracker <https://github.com/ddudt/DESC/issues>`_
-- `Source Code <https://github.com/ddudt/DESC/>`_
-- `Documentation <https://desc-docs.readthedocs.io/>`_
+- `Contributing guidelines <https://github.com/dpanici/DESC/blob/master/CONTRIBUTING.rst>`_
+- `Issue Tracker <https://github.com/dpanici/DESC/issues>`_
+- `Source Code <https://github.com/dpanici/DESC/>`_
+- `Documentation <https://desc-apc524.readthedocs.io/>`_
 
 .. |License| image:: https://img.shields.io/github/license/ddudt/desc?color=blue&logo=open-source-initiative&logoColor=white
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License
 
-.. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
-    :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
+.. |Docs| image:: https://img.shields.io/readthedocs/desc-apc524?logo=Read-the-Docs
+    :target: https://desc-apc524.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
 .. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   

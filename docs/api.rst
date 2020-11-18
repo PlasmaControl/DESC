@@ -23,10 +23,10 @@ Continuation
     :members:
     :undoc-members:
     
-Field Components
+Configuration
 ****************
 
-.. automodule:: desc.field_components
+.. automodule:: desc.configuration
     :members:
     :undoc-members:
     

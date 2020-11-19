@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from desc.nodes import get_nodes_pattern
+from desc.grid import get_nodes_pattern
 
 
 class TestNodes(unittest.TestCase):

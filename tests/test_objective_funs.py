@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from desc.objective_funs import is_nested, curve_self_intersects
-from desc.zernike import get_zern_basis_idx_dense
+from desc.transform import get_zern_basis_idx_dense
 
 
 class TestIsNested(unittest.TestCase):

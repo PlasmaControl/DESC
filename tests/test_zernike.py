@@ -1,9 +1,9 @@
 import unittest
 import numpy as np
-from desc.zernike import get_zern_basis_idx_dense, ZernikeTransform
-from desc.zernike import zern, zern_radial, zern_azimuthal, four_toroidal
+from desc.transform import get_zern_basis_idx_dense, ZernikeTransform
+from desc.transform import zern, zern_radial, zern_azimuthal, four_toroidal
 from desc.backend import get_needed_derivatives
-from desc.nodes import get_nodes_pattern
+from desc.grid import get_nodes_pattern
 
 
 class TestZernikeTransform(unittest.TestCase):

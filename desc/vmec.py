@@ -3,7 +3,7 @@ from scipy.optimize import fsolve
 from netCDF4 import Dataset
 
 from desc.backend import sign
-from desc.zernike import ZernikeTransform
+from desc.zernike import ZernikeTransform, double_fourier_basis
 
 
 # TODO: add other fields including B, rmns, zmnc, lmnc, etc
@@ -44,6 +44,106 @@ def read_vmec_output(fname):
     return vmec_data
 
 
+def convert_vmec_to_desc(vmec_data, zern_idx, lambda_idx, Npol=None, Ntor=None):
+    """Computes error in SFL coordinates compared to VMEC solution
+
+    Parameters
+    ----------
+
+    vmec_data : dict
+        dictionary of VMEC equilibrium parameters
+    zern_idx : ndarray, shape(N_coeffs,3)
+        indices for R,Z spectral basis,
+        ie an array of [l,m,n] for each spectral coefficient
+    lambda_idx : ndarray, shape(2M+1)*(2N+1)
+        indices for lambda spectral basis,
+        ie an array of [m,n] for each spectral coefficient
+    Npol : int
+        number of poloidal angles to sample per surface (Default value = M)
+    Ntor : int
+        number of toroidal angles to sample per surface (Default value = N)
+
+    Returns
+    -------
+    equil : dict
+        dictionary of DESC equilibrium parameters
+
+    """
+
+    if Npol is None:
+        Npol = 2*np.max(zern_idx[:,1]) + 1
+    if Ntor is None:
+        Ntor = 2*np.max(zern_idx[:,2]) + 1
+
+    ns = np.size(vmec_data['psi'])
+    vartheta = np.linspace(0, 2*np.pi, Npol, endpoint=False)
+    zeta = np.linspace(0, 2*np.pi/vmec_data['NFP'], Ntor, endpoint=False)
+    phi = zeta
+
+    r = np.tile(np.sqrt(vmec_data['psi'])[..., np.newaxis, np.newaxis], (1, Npol, Ntor))
+    v = np.tile(vartheta[np.newaxis, ..., np.newaxis], (ns, 1, Ntor))
+    z = np.tile(zeta[np.newaxis, np.newaxis, ...], (ns, Npol, 1))
+
+    nodes = np.stack([r.flatten(), v.flatten(), z.flatten()])
+    zernike_transform = ZernikeTransform(
+        nodes, zern_idx, vmec_data['NFP'], method='fft')
+    four_bdry_interp = double_fourier_basis(v[0,:,:].flatten(), z[0,:,:].flatten(), lambda_idx[:,0], lambda_idx[:,1], vmec_data['NFP'])
+    four_bdry_interp_pinv = np.linalg.pinv(four_bdry_interp, rcond=1e-6)
+
+    print('Interpolating VMEC solution to sfl coordinates')
+    R = np.zeros((ns, Npol, Ntor))
+    Z = np.zeros((ns, Npol, Ntor))
+    L = np.zeros((Npol, Ntor))
+    for k in range(Ntor):           # toroidal angle
+        for i in range(ns):         # flux surface
+            theta = np.zeros((Npol,))
+            for j in range(Npol):   # poloidal angle
+                f0 = sfl_err(np.array([0]), vartheta[j], zeta[k], vmec_data, i)
+                f2pi = sfl_err(np.array([2*np.pi]),
+                               vartheta[j], zeta[k], vmec_data, i)
+                flag = (sign(f0) + sign(f2pi)) / 2
+                args = (vartheta[j], zeta[k], vmec_data, i, flag)
+                t = fsolve(sfl_err, vartheta[j], args=args)
+                if flag != 0:
+                    t = np.remainder(t+np.pi, 2*np.pi)
+                theta[j] = t   # theta angle that corresponds to vartheta[j]
+            R[i, :, k] = vmec_transf(
+                vmec_data['rmnc'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='cos').flatten()
+            Z[i, :, k] = vmec_transf(
+                vmec_data['zmns'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='sin').flatten()
+            if i == ns-1:
+                L[:, k] = vmec_transf(
+                    vmec_data['lmns'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='sin').flatten()
+            if not vmec_data['sym']:
+                R[i, :, k] += vmec_transf(vmec_data['rmns'][i, :], vmec_data['xm'],
+                                          vmec_data['xn'], theta, phi[k], trig='sin').flatten()
+                Z[i, :, k] += vmec_transf(vmec_data['zmnc'][i, :], vmec_data['xm'],
+                                          vmec_data['xn'], theta, phi[k], trig='cos').flatten()
+                if i == ns-1:
+                    L[:, k] += vmec_transf(vmec_data['lmnc'][i, :], vmec_data['xm'],
+                                           vmec_data['xn'], theta, phi[k], trig='cos').flatten()
+        print('{}%'.format((k+1)/Ntor*100))
+
+    cR = zernike_transform.fit(R.flatten())
+    cZ = zernike_transform.fit(Z.flatten())
+    cL = np.matmul(four_bdry_interp_pinv, L)
+    equil = {
+        'cR': cR,
+        'cZ': cZ,
+        'cL': cL,
+        'bdryR': None,
+        'bdryZ': None,
+        'cP': None,
+        'cI': None,
+        'Psi_lcfs': vmec_data['psi'],
+        'NFP': vmec_data['NFP'],
+        'zern_idx': zern_idx,
+        'lambda_idx': lambda_idx,
+        'bdry_idx': None
+    }
+    return equil
+
+
 def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
     """Computes error in SFL coordinates compared to VMEC solution
 
@@ -54,9 +154,9 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
     vmec_data : dict
         dictionary of VMEC equilibrium parameters
     Npol : int
-        number of poloidal angles to sample (Default value = 8)
+        number of poloidal angles to sample per surface (Default value = 8)
     Ntor : int
-        number of toroidal angles to sample (Default value = 8)
+        number of toroidal angles to sample per surface (Default value = 8)
 
     Returns
     -------

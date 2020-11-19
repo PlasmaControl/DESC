@@ -4,7 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from desc.nodes import get_nodes_grid
-from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
+from desc.transform import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
 from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
 from desc.input_output import read_desc
 from desc.vmec import vmec_interpolate

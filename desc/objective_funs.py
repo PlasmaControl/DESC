@@ -4,7 +4,7 @@ from desc.configuration import compute_coordinate_derivatives, compute_covariant
 from desc.configuration import compute_contravariant_basis, compute_jacobian
 from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_magnetic_field_magnitude
 from desc.boundary_conditions import compute_bdry_err_RZ, compute_bdry_err_four, compute_lambda_err
-from desc.zernike import symmetric_x, double_fourier_basis, fourzern
+from desc.transform import symmetric_x, double_fourier_basis, fourzern
 from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, TextColors
 
 

@@ -2,7 +2,7 @@ import numpy as np
 
 from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
 from desc.init_guess import get_initial_guess_scale_bdry
-from desc.zernike import symmetric_x
+from desc.transform import symmetric_x
 from desc.boundary_conditions import format_bdry
 
 
@@ -10,7 +10,7 @@ class Configuration():
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
-        """Initializes a configuration
+        """Initializes a Configuration
 
         Parameters
         ----------
@@ -37,6 +37,11 @@ class Configuration():
             the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
             array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
+
+        Returns
+        -------
+        None
+
         """
 
         self.__bdry = bdry

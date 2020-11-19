@@ -1,6 +1,6 @@
 import numpy as np
 from desc.backend import jnp, put, sign
-from desc.zernike import fourzern, double_fourier_basis, eval_double_fourier
+from desc.transform import fourzern, double_fourier_basis, eval_double_fourier
 from desc.nodes import get_nodes_surf
 
 

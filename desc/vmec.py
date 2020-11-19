@@ -3,7 +3,7 @@ from scipy.optimize import fsolve
 from netCDF4 import Dataset
 
 from desc.backend import sign
-from desc.zernike import ZernikeTransform
+from desc.transform import ZernikeTransform
 
 
 # TODO: add other fields including B, rmns, zmnc, lmnc, etc

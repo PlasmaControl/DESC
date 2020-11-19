@@ -2,6 +2,43 @@ import numpy as np
 from desc.backend import TextColors
 
 
+class CollocationGrid():
+    """
+    """
+
+    def __init__(L:int, M:int, N:int, NFP:int, sym:bool=False, axis:bool=True,
+                 surf=1.0) -> None:
+        """Initializes a CollocationGrid
+
+        Parameters
+        ----------
+        L : int
+            radial grid resolution
+        M : int
+            poloidal grid resolution
+        N : int
+            toroidal grid resolution
+        NFP : int
+            number of toroidal field periods
+        sym : bool
+            True for stellarator symmetry, False otherwise
+        axis : bool
+            True to include a node at the magnetic axis, False otherwise
+        surf : float or string
+            radial coordinate of the flux surface, if a float
+            OR
+            pattern for radial coordinates, if a string
+                cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+                cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+                any other string defaults to linear spacing
+
+        Returns
+        -------
+        None
+
+        """
+
+
 def get_nodes_pattern(M, N, NFP, index='fringe', surfs='cheb1', sym=False, axis=True):
     """Compute interpolation nodes on a patterned grid
 

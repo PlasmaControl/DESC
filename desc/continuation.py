@@ -3,8 +3,8 @@ import scipy.optimize
 import warnings
 from desc.backend import jnp, jit, use_jax, Timer, TextColors
 from desc.backend import get_needed_derivatives, unpack_x, jacfwd, grad
-from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
-from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
+from desc.transform import ZernikeTransform, get_zern_basis_idx_dense
+from desc.transform import get_double_four_basis_idx_dense, symmetric_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 from desc.objective_funs import get_equil_obj_fun, is_nested

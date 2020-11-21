@@ -1,8 +1,8 @@
 import numpy as np
 from scipy.optimize import fsolve
-from netCDF4 import Dataset
+from netCDF4 import Dataset, stringtochar
 
-from desc.backend import sign
+from desc.backend import sign, presfun, iotafun
 from desc.zernike import ZernikeTransform, double_fourier_basis
 
 
@@ -42,6 +42,186 @@ def read_vmec_output(fname):
         vmec_data['sym'] = True
 
     return vmec_data
+
+
+def output_to_netcdf(equil, fname, surfs=128):
+    """Generates a netCDF4 file in the VMEC format
+
+    Parameters
+    ----------
+    equil : dict
+        dictionary of DESC equilibrium parameters
+    fname : str or path-like
+        filename of the output file
+
+    Returns
+    -------
+    None
+
+    """
+
+    cR = equil['cR']
+    cZ = equil['cZ']
+    cL = equil['cL']
+    cP = equil['cP']
+    cI = equil['cI']
+    Psi_lcfs = equil['Psi_lcfs']
+    NFP = equil['NFP']
+    zern_idx = equil['zern_idx']
+    lambda_idx = equil['lambda_idx']
+
+    M = np.max(zern_idx[:,1])
+    N = np.max(zern_idx[:,2])
+
+    s_full = np.linspace(0, 1, surfs)
+    s_half = s_full[0:-1] + 0.5/(surfs-1)
+    r_full = np.sqrt(s_full)
+    r_half = np.sqrt(s_half)
+
+    """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
+        see lines 300+ for full list of included variables
+    """
+
+    file = Dataset(fname, mode='w')
+
+    # dimensions
+    file.createDimension('radius', surfs)   # number of flux surfaces
+    file.createDimension('mn_mode', (2*N+1)*M+N+1)  # number of Fourier modes
+    file.createDimension('mn_mode_nyq', None)  # used for Nyquist quantities
+    file.createDimension('n_tor', 1)    # number of axis guess Fourier modes
+    file.createDimension('preset', 21)  # max dimension of profile inputs
+    file.createDimension('ndfmax', 101) # used for am_aux & ai_aux
+    file.createDimension('time', 100)   # used for fsqrt & wdot
+    file.createDimension('dim_00001', 1)
+    file.createDimension('dim_00020', 20)
+    file.createDimension('dim_00100', 100)
+    file.createDimension('dim_00200', 200)
+
+    # variables
+
+    lasym = file.createVariable('lasym', np.int32, ('dim_00001',))
+    lasym.long_name = 'asymmetry logical (0 = stellarator symmetry)'
+    lasym[:] = 0
+
+    lfreeb = file.createVariable('lfreeb', np.int32, ('dim_00001',))
+    lfreeb.long_name = 'free boundary logical (0 = fixed boundary)'
+    lfreeb[:] = 0
+
+    ns = file.createVariable('ns', np.int32, ('dim_00001',))
+    ns.long_name = 'number of flux surfaces'
+    ns[:] = surfs
+
+    mpol = file.createVariable('mpol', np.int32, ('dim_00001',))
+    mpol.long_name = 'number of poloidal Fourier modes'
+    mpol[:] = M+1
+
+    ntor = file.createVariable('ntor', np.int32, ('dim_00001',))
+    ntor.long_name = 'number of positive toroidal Fourier modes'
+    ntor[:] = N
+
+    nfp = file.createVariable('nfp', np.int32, ('dim_00001',))
+    nfp.long_name = 'number of field periods'
+    nfp[:] = NFP
+
+    signgs = file.createVariable('signgs', np.float64, ('dim_00001',))
+    signgs.long_name = 'sign of coordinate system jacobian'
+    signgs[:] = 1   # TODO: don't hard-code this
+
+    mnmax = file.createVariable('mnmax', np.int32, ('dim_00001',))
+    mnmax.long_name = 'total number of Fourier modes'
+    mnmax[:] = file.dimensions['mn_mode'].size
+
+    xm = file.createVariable('xm', np.float64, ('mn_mode',))
+    xm.long_name = 'poloidal mode numbers'
+    xm[:] = np.tile(np.linspace(0, M, M+1), (2*N+1, 1)).T.flatten()[-file.dimensions['mn_mode'].size:]
+
+    xn = file.createVariable('xn', np.float64, ('mn_mode',))
+    xn.long_name = 'toroidal mode numbers'
+    xn[:] = np.tile(np.linspace(-N, N, 2*N+1)*NFP, M+1)[-file.dimensions['mn_mode'].size:]
+
+    gamma = file.createVariable('gamma', np.float64, ('dim_00001',))
+    gamma.long_name = 'compressibility index (0 = pressure prescribed)'
+    gamma[:] = 0
+
+    am = file.createVariable('am', np.float64, ('preset',))
+    am.long_name = 'pressure coefficients'
+    am.units = 'Pa'
+    am[:] = np.zeros((file.dimensions['preset'].size,))
+    am[0:cP.size] = cP
+
+    ai = file.createVariable('ai', np.float64, ('preset',))
+    ai.long_name = 'rotational transform coefficients'
+    ai[:] = np.zeros((file.dimensions['preset'].size,))
+    ai[0:cI.size] = cI
+
+    ac = file.createVariable('ac', np.float64, ('preset',))
+    ac.long_name = 'normalized toroidal current density coefficients'
+    ac[:] = np.zeros((file.dimensions['preset'].size,))
+
+    power_series = stringtochar(np.array(['power_series         '],
+                     'S'+str(file.dimensions['preset'].size)))
+
+    pmass_type = file.createVariable('pmass_type', 'S1', ('preset',))
+    pmass_type.long_name = 'parameterization of pressure function'
+    pmass_type[:] = power_series
+
+    piota_type = file.createVariable('piota_type', 'S1', ('preset',))
+    piota_type.long_name = 'parameterization of rotational transform function'
+    piota_type[:] = power_series
+
+    pcurr_type = file.createVariable('pcurr_type', 'S1', ('preset',))
+    pcurr_type.long_name = 'parameterization of current density function'
+    pcurr_type[:] = power_series
+
+    presf = file.createVariable('presf', np.float64, ('radius',))
+    presf.long_name = 'pressure on full mesh'
+    presf.units = 'Pa'
+    presf[:] = presfun(r_full, 0, cP)
+
+    pres = file.createVariable('pres', np.float64, ('radius',))
+    pres.long_name = 'pressure on half mesh'
+    pres.units = 'Pa'
+    pres[0] = 0
+    pres[1:] = presfun(r_half, 0, cP)
+
+    mass = file.createVariable('mass', np.float64, ('radius',))
+    mass.long_name = 'mass on half mesh'
+    mass.units = 'Pa'
+    mass[:] = pres[:]
+
+    iotaf = file.createVariable('iotaf', np.float64, ('radius',))
+    iotaf.long_name = 'rotational transform on full mesh'
+    iotaf[:] = iotafun(r_full, 0, cI)
+
+    iotas = file.createVariable('iotas', np.float64, ('radius',))
+    iotas.long_name = 'rotational transform on half mesh'
+    iotas[0] = 0
+    iotas[1:] = presfun(r_half, 0, cI)
+
+    phi = file.createVariable('phi', np.float64, ('radius',))
+    phi.long_name = 'toroidal flux'
+    phi.units = 'Wb'
+    phi[:] = np.linspace(0, Psi_lcfs, surfs)
+
+    phipf = file.createVariable('phipf', np.float64, ('radius',))
+    phipf.long_name = 'd(phi)/ds: toroidal flux derivative'
+    phipf[:] = Psi_lcfs*np.ones((surfs,))
+
+    phips = file.createVariable('phips', np.float64, ('radius',))
+    phips.long_name = 'd(phi)/ds * sign(g)/2pi: toroidal flux derivative on half mesh'
+    phips[0] = 0
+    phips[1:] = phipf[1:]*signgs[:]/(2*np.pi)
+
+    chi = file.createVariable('chi', np.float64, ('radius',))
+    chi.long_name = 'poloidal flux'
+    chi.units = 'Wb'
+    chi[:] = phi[:]*signgs[:]
+
+    chipf = file.createVariable('chipf', np.float64, ('radius',))
+    chipf.long_name = 'd(chi)/ds: poloidal flux derivative'
+    chipf[:] = phipf[:]*iotaf[:]
+
+    file.close
 
 
 def convert_vmec_to_desc(vmec_data, zern_idx, lambda_idx, Npol=None, Ntor=None):

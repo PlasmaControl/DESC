@@ -129,7 +129,7 @@ def main(args=sys.argv[1:]):
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
     from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
-    from desc.vmec import read_vmec_output, vmec_error, convert_vmec_to_desc
+    from desc.vmec import read_vmec_output, vmec_error, convert_vmec_to_desc, output_to_netcdf
 
     if use_jax:
         device = get_device(args.gpu)
@@ -162,6 +162,7 @@ def main(args=sys.argv[1:]):
         print('Plotting flux surfaces, this may take a few moments...')
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
+        output_to_netcdf(equil, out_fname+'.nc')
 
         # plot comparison to VMEC
         if args.vmec:

@@ -1,7 +1,7 @@
 import numpy as np
 from desc.backend import jnp, put, sign
 from desc.transform import fourzern, double_fourier_basis, eval_double_fourier
-from desc.nodes import get_nodes_surf
+# from desc.grid import get_nodes_surf
 
 
 def format_bdry(M, N, NFP, bdry, in_mode, out_mode, ntheta=None, nphi=None):

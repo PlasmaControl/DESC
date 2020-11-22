@@ -7,6 +7,10 @@ from desc.boundary_conditions import format_bdry
 
 
 class Configuration():
+    """Configuration constains information about a plasma state, including the 
+       shapes of flux surfaces and profile inputs. It can compute additional 
+       information, such as the magnetic field and plasma currents. 
+    """
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
@@ -174,9 +178,12 @@ class Configuration():
 
 
 class Equilibrium(Configuration):
+    """Equilibrium is a decorator design pattern on top of Configuration. 
+       It adds information about how the equilibrium configuration was solved. 
+    """
 
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
-        Configuration.__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        super().__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
         self.__objective = objective
         self.__optimizer = optimizer
         self.solved = False
@@ -203,8 +210,11 @@ class Equilibrium(Configuration):
         self.solved = False
 
 
-# TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
-class EquiliriaFamily():
+# TODO: Does this inherit from Equilibrium?
+class EquiliriaFamily(Equilibrium):
+    """EquilibriaFamily stores a list of Equilibria. Its default behavior acts 
+       like the last Equilibrium in the list. 
+    """
 
     def __init__(self, equilibria, solver=None) -> None:
         self.__equilibria = equilibria

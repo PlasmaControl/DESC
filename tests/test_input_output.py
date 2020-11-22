@@ -43,31 +43,31 @@ class TestInputReader(unittest.TestCase):
         #self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
         self.assertFalse(ir.args.gpuID, 'gpu argument was given')
         self.assertFalse(ir.args.numpy, 'numpy is not default False')
-        self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment
-            variable incorrect with default argument')
+        self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment '
+            'variable incorrect with default argument')
         self.assertFalse(ir.args.version, 'version is not default False')
-        self.assertEqual(len(ir.inputs), 26, 'number of inputs does not match
-            number expected in MIN_INPUT')
+        self.assertEqual(len(ir.inputs), 26, 'number of inputs does not match '
+            'number expected in MIN_INPUT')
         # test equality of arguments
 
     def test_np_environ(self):
         argv = self.argv2.append('--numpy')
         ir = InputReader(cl_args=argv)
-        self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy
-            environment variable incorrect on use')
+        self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy '
+            'environment variable incorrect on use')
 
     def test_quiet_verbose(self):
         ir = InputReader(self.argv2)
-        self.assertEqual(ir.inputs['verbose'], 1, "value of inputs['verbose']
-            incorrect on no arguments")
+        self.assertEqual(ir.inputs['verbose'], 1, "value of inputs['verbose'] "
+            "incorrect on no arguments")
         argv = self.argv2.append('-v')
         ir = InputReader(argv)
-        self.assertEqual(ir.inputs['verbose'], 2, "value of inputs['verbose']
-            incorrect on verbose argument")
+        self.assertEqual(ir.inputs['verbose'], 2, "value of inputs['verbose'] "
+            "incorrect on verbose argument")
         argv.append('-q')
         ir = InputReader(argv)
-        self.assertEqual(ir.inputs['verbose'], 0, "value of inputs['verbose']
-            incorrect on quiet argument")
+        self.assertEqual(ir.inputs['verbose'], 0, "value of inputs['verbose'] "
+            "incorrect on quiet argument")
 
     def test_vmec_to_desc_input(self):
         pass

@@ -35,7 +35,7 @@ class InputReader:
     Methods
     _______
     parse_args
-    parse_inputs
+    pars_inputs
 
     """
     def __init__(self, cl_args=None):
@@ -55,16 +55,21 @@ class InputReader:
             #print('Input file path must be specified')
             #return None
 
-        if args.numpy:
-            os.environ['DESC_USE_NUMPY'] = 'True'
+        self.input_path = pathlib.Path(args.input_file[0]).resolve()
+        if self.input_path.is_file():
+            self.input_path = str(self.input_path)
         else:
-            os.environ['DESC_USE_NUMPY'] = ''
+            raise FileNotFoundError('Input file does not exist.')
 
-        self.input_path = str(pathlib.Path(args.input_file[0]).resolve())
         if args.output:
             self.output_path = args.output
         else:
             self.output_path = self.input_path+'.output'
+
+         if args.numpy:
+            os.environ['DESC_USE_NUMPY'] = 'True'
+        else:
+            os.environ['DESC_USE_NUMPY'] = ''
 
         return args
 
@@ -154,13 +159,12 @@ class InputReader:
             'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
         }
 
-            if self.args.quiet:
-                inputs['verbose'] = 0
-            elif self.args.verbose:
-                inputs['verbose'] = 2
-            else:
-                inputs['verbose'] = 1
-
+        if self.args.quiet:
+            inputs['verbose'] = 0
+        elif self.args.verbose:
+            inputs['verbose'] = 2
+        else:
+            inputs['verbose'] = 1
 
 
         file = open(self.input_path, 'r')

@@ -60,72 +60,18 @@ def get_device(gpuID=False):
         return jax.devices('cpu')[0]
 
 
-"""def get_parser():
-    '''
-    Gets parser for command line arguments.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-    parser : argparse object
-        argument parser
-
-    '''
-
-    parser = argparse.ArgumentParser(prog='DESC',
-                                     description='DESC computes equilibria by solving the force balance equations. '
-                                     + 'It can also be used for perturbation analysis and sensitivity studies '
-                                     + 'to see how the equilibria change as input parameters are varied.')
-    parser.add_argument('input_file', nargs='*',
-                        help='Path to input file')
-    parser.add_argument('-o', '--output', metavar='output_file',
-                        help='Path to output file. If not specified, defaults to <input_name>.output')
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help='Plot results after solver finishes')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Do not display any progress information')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Display detailed progress information')
-    parser.add_argument('--vmec', metavar='vmec_path',
-                        help='Path to VMEC data for comparison plot')
-    parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
-                        help='Use GPU if available, and an optional device ID to use a specific GPU.'
-                        + ' If no ID is given, default is to select the GPU with most available memory.'
-                        + ' Note that not all of the computation will be done '
-                        + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
-    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
-                        + " and autodiff won't work but may be useful for debugging")
-    parser.add_argument('--version', action='store_true',
-                        help='Display version number and exit')
-    return parser"""
-
-
 def main(cl_args=None):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.
     """
-    #parser = get_parser()
-    #args = parser.parse_args(args)
 
-    # parse command line arguments and data from input file
-    ir = InputReader()
+    ir = InputReader(cl_args=cl_args)
 
     if ir.args.version:
         import desc
         print(desc.__version__)
         return
-
-    #if len(args.input_file) == 0:
-    #    print('Input file path must be specified')
-    #    return
-
-    #if args.numpy:
-    #    os.environ['DESC_USE_NUMPY'] = 'True'
-    #else:
-    #    os.environ['DESC_USE_NUMPY'] = ''
 
     import desc
 
@@ -142,20 +88,6 @@ def main(cl_args=None):
         print("Using device: " + str(device))
     else:
         device = None
-
-    #in_fname = str(pathlib.Path(args.input_file[0]).resolve())
-    #out_fname = args.output if args.output else in_fname+'.output'
-
-    #print("Reading input from {}".format(in_fname))
-    #inputs = read_input(in_fname)
-    #print("Output will be written to {}".format(out_fname))
-
-    #if args.quiet:
-    #    inputs['verbose'] = 0
-    #elif args.verbose:
-    #    inputs['verbose'] = 2
-    #else:
-    #    inputs['verbose'] = 1
 
     # solve equilibrium
     iterations, timer = solve_eq_continuation(

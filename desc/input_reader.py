@@ -49,6 +49,11 @@ class InputReader:
 
     def parse_args(self, cl_args=None):
         self.parser = self._get_parser_()
+
+        if cl_args is None:
+            cl_args = sys.argv[1:]
+        else:
+            pass
         args = self.parser.parse_args(cl_args)
 
         if len(args.input_file) == 0:
@@ -56,18 +61,19 @@ class InputReader:
             #print('Input file path must be specified')
             #return None
 
-        self.input_path = pathlib.Path(args.input_file[0]).resolve()
+        self.input_path = pathlib.Path(args.input_file[0]).resolve()#''.join(args.input_file)).resolve()
         if self.input_path.is_file():
             self.input_path = str(self.input_path)
         else:
-            raise FileNotFoundError('Input file does not exist.')
+            raise FileNotFoundError("Input file '{}' does not exist.".format(
+                str(self.input_path)))
 
         if args.output:
             self.output_path = args.output
         else:
             self.output_path = self.input_path+'.output'
 
-         if args.numpy:
+        if args.numpy:
             os.environ['DESC_USE_NUMPY'] = 'True'
         else:
             os.environ['DESC_USE_NUMPY'] = ''

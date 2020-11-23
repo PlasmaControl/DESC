@@ -1,19 +1,21 @@
 import numpy as np
 from desc.backend import TextColors
-from abc import ABC
+from abc import ABC, abstractmethod
 
 
 class Grid(ABC):
-    """Grid is an abstract class that defines an API for collocation grids. 
+    """Grid is an abstract class that defines an API for collocation grids.
     """
 
+    @abstractmethod
     def __init__(self) -> None:
         pass
 
-    @abstract
+    @abstractmethod
     def create_nodes(self):
         pass
 
+    @abstractmethod
     def change_resolution(self) -> None:
         pass
 
@@ -25,7 +27,6 @@ class Grid(ABC):
             None
 
         """
-
         sort_idx = np.lexsort((self.__nodes[1], self.__nodes[0], self.__nodes[2]))
         self.__nodes = self.__nodes[:, sort_idx]
         self.__volumes = self.__volumes[:, sort_idx]
@@ -117,9 +118,9 @@ class LinearGrid(Grid):
 
         Returns
         -------
-        nodes : ndarray, size(3,Nnodes)
+        nodes : ndarray of float, size(3,Nnodes)
             node coordinates, in (rho,theta,zeta)
-        volumes : ndarray, size(3,Nnodes)
+        volumes : ndarray of float, size(3,Nnodes)
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
@@ -177,7 +178,10 @@ class LinearGrid(Grid):
         None
 
         """
-        if L != self.__L and M != self.__M and N != self.__N:
+        if L != self.__L or M != self.__M or N != self.__N:
+            self.__L = L
+            self.__M = M
+            self.__N = N
             self.__nodes, self.__volumes = self.create_nodes(L=L, M=M, N=N,
                                  NFP=self.__NFP, sym=self.__sym, 
                                  endpoint=self.__endpoint, surfs=self.__surfs)
@@ -259,9 +263,9 @@ class ConcentricGrid(Grid):
 
         Returns
         -------
-        nodes : ndarray, size(3,Nnodes)
+        nodes : ndarray of float, size(3,Nnodes)
             node coordinates, in (rho,theta,zeta)
-        volumes : ndarray, size(3,Nnodes)
+        volumes : ndarray of float, size(3,Nnodes)
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
@@ -347,7 +351,9 @@ class ConcentricGrid(Grid):
         None
 
         """
-        if M != self.__M and N != self.__N:
+        if M != self.__M or N != self.__N:
+            self.__M = M
+            self.__N = N
             self.__nodes, self.volumes = self.create_nodes(M=M, N=N,
                          NFP=self.__NFP, sym=self.__sym, surfs=self.__surfs)
             self.sort_nodes()

@@ -536,6 +536,8 @@ def rms(x):
     return jnp.sqrt(jnp.mean(x**2))
 
 
+# TODO: replace iotafun & presfun with PowerSeries
+
 def iotafun(rho, nu, params):
     """Rotational transform
 

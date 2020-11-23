@@ -621,33 +621,6 @@ def get_needed_derivatives(mode, axis=True):
             TextColors.FAIL + "derivs must be one of 'force', 'accel', 'all', 'qs'" + TextColors.ENDC)
 
 
-def unpack_x(x, nRZ):
-    """Unpacks the optimization state vector x into cR,cZ,cL components
-
-    Parameters
-    ----------
-    x : ndarray
-        vector to unpack
-    nRZ : int
-        number of R,Z coeffs
-
-    Returns
-    -------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
-        spectral coefficients of lambda
-
-    """
-
-    cR = x[:nRZ]
-    cZ = x[nRZ:2*nRZ]
-    cL = x[2*nRZ:]
-    return cR, cZ, cL
-
-
 class FiniteDifferenceJacobian():
     """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
 

@@ -1,9 +1,82 @@
 import numpy as np
 
-from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
+from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, sign
 from desc.init_guess import get_initial_guess_scale_bdry
-from desc.transform import symmetric_x
 from desc.boundary_conditions import format_bdry
+
+
+# TODO: can probably remove this function if we enforce symmetry in Basis
+def state_symmetry(x, zern_idx, lambda_idx, sym:bool, sym2full:bool=True):
+        """Compute stellarator symmetry linear constraint matrix
+
+        Parameters
+        ----------
+        x : ndarray of float
+            state vector of independent variables: [cR, cZ, cL]
+        zern_idx : ndarray, shape(Nz_coeffs,3)
+            array of (l,m,n) indices for each spectral R,Z coeff
+        lambda_idx : ndarray, shape(Nl_coeffs,2)
+            array of (m,n) indices for each spectral lambda coeff
+        sym : bool
+            True for stellarator symmetry, False otherwise
+        sym2full : bool
+            direction of conversion. If True, converts symmetric state to full
+            (non-symmetric) vector. If False, converts full state to symmetric
+            vector. (Default = True)
+
+        Returns
+        -------
+        x : ndarray of float
+            state vector of independent variables: [cR, cZ, cL]
+
+        """
+        if sym:
+            m_zern = zern_idx[:, 1]
+            n_zern = zern_idx[:, 2]
+            m_lambda = lambda_idx[:, 0]
+            n_lambda = lambda_idx[:, 1]
+
+            # symmetric indices of R, Z, lambda
+            idx_R = sign(m_zern)*sign(n_zern) > 0
+            idx_Z = sign(m_zern)*sign(n_zern) < 0
+            idx_L = sign(m_lambda)*sign(n_lambda) < 0
+
+            idx_x = np.concatenate([idx_R, idx_Z, idx_L])
+            A = np.diag(idx_x, k=0).astype(int)[:, idx_x]
+        else:
+            A = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
+
+        if sym2full:
+            return np.matmul(A, x)
+        else:
+            return np.matmul(A.T, x)
+
+
+def unpack_state(x, nRZ):
+    """Unpacks the optimization state vector x into cR, cZ, cL components
+
+    Parameters
+    ----------
+    x : ndarray
+        vector to unpack
+    nRZ : int
+        number of R,Z coeffs
+
+    Returns
+    -------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    cL : ndarray
+        spectral coefficients of lambda
+
+    """
+
+    cR = x[:nRZ]
+    cZ = x[nRZ:2*nRZ]
+    cL = x[2*nRZ:]
+    return cR, cZ, cL
 
 
 class Configuration():
@@ -12,7 +85,7 @@ class Configuration():
        information, such as the magnetic field and plasma currents. 
     """
 
-    # TODO: replace zern_idx & lambda_idx with Transform objects
+    # TODO: replace zern_idx & lambda_idx with Basis objects
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
         """Initializes a Configuration
 
@@ -36,7 +109,7 @@ class Configuration():
             poloidal and toroidal mode numbers [m,n]
         sym : bool
             True for stellarator symmetry, False otherwise
-        x : ndarray
+        x : ndarray of float
             state vector of independent variables: [cR, cZ, cL]. If not supplied, 
             the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
@@ -47,7 +120,6 @@ class Configuration():
         None
 
         """
-
         self.__bdry = bdry
         self.__cP = cP
         self.__cI = cI
@@ -60,13 +132,6 @@ class Configuration():
         self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
             np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
 
-        # embed this if-else into the symmetric_x function
-        if sym:
-            # TODO: move symmetric_x inside configuration.py
-            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
-        else:
-            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
-
         if x is None:
             # TODO: change input reader to make the default axis=None
             if axis is None:
@@ -75,12 +140,13 @@ class Configuration():
                 axis, bdry, 1.0, zern_idx, NFP, mode='spectral', rcond=1e-6)
             self.__cL = np.zeros(len(lambda_idx))
             self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
-            self.__x = np.matmul(sym_mat.T, self.__x)
+            self.__x = state_symmetry(self.__x, self.__zern_idx, self.__lambda_idx, self.__sym, sym2full=False)
         else:
             self.__x = x
             try:
-                # TODO: move unpack_x inside configuration.py
-                self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(zern_idx))
+                self.__cR, self.__cZ, self.__cL = unpack_state(
+                    state_symmetry(x, zern_idx, lambda_idx, sym=self.__sym,
+                                   sym2full=True), len(zern_idx))
             except:
                 raise ValueError(TextColors.FAIL + 
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
@@ -134,12 +200,7 @@ class Configuration():
     @sym.setter
     def sym(self, sym):
         self.__sym = sym
-        if sym:
-            # TODO: move symmetric_x inside configuration.py
-            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
-        else:
-            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
-        self.__x = np.matmul(sym_mat.T, self.__x)
+        self.__x = state_symmetry(self.__x, self.__zern_idx, self.__lambda_idx, self.__sym, sym2full=False)
 
     def attributes(self):
         return (self.x, self.bdryR, self.bdryZ, self.cP, self.cI, self.Psi)
@@ -450,7 +511,6 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transfor
         dictionary of ndarray containing contravariant basis vectors and jacobian elements
 
     """
-
     # subscripts (superscripts) denote covariant (contravariant) basis vectors
     con_basis = {}
 
@@ -608,7 +668,6 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     magnetic_field = {}
@@ -727,7 +786,6 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
         component of the current, with the derivative wrt to y.
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     plasma_current = {}
@@ -792,7 +850,6 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
         dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     B_mag = {}
@@ -877,7 +934,6 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         magnitude of pressure gradient at each node.
 
     """
-
     mu0 = 4*jnp.pi*1e-7
     r = zernike_transform.nodes[0]
     axn = zernike_transform.axn

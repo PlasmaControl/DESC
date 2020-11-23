@@ -2,244 +2,12 @@ import numpy as np
 import functools
 import warnings
 import numba
-from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, factorial
+from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop
 from desc.backend import issorted, isalmostequal, sign, TextColors
 from desc.backend import polyder_vec, polyval_vec, flatten_list
 
-# use numba here because the array size depends on the input values, which
-# jax can't handle
-@numba.jit(forceobj=True)
-def get_jacobi_coeffs(l, m):
-    """Computes coefficients for Jacobi polynomials used in Zernike basis
 
-    Parameters
-    ----------
-    l : ndarray of int
-        radial mode numbers
-    m : ndarray of int
-        azimuthal mode numbers
-
-    Returns
-    -------
-    jacobi_coeffs : ndarray
-        matrix of polynomial coefficients in order of descending powers. 
-        Each row contains the coeffs for a given l,m.
-
-    """
-    factorial = np.math.factorial
-    l = np.atleast_1d(l).astype(int)
-    m = np.atleast_1d(np.abs(m)).astype(int)
-    lmax = np.max(l)
-    npoly = len(l)
-    coeffs = np.zeros((npoly, lmax+1))
-    lm_even = ((l-m) % 2 == 0)[:, np.newaxis]
-    for ii in range(npoly):
-        ll = l[ii]
-        mm = m[ii]
-        for s in range(mm, ll+1, 2):
-            coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
-                factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
-    coeffs = np.where(lm_even, coeffs, 0)
-    return np.fliplr(coeffs)
-
-
-@conditional_decorator(functools.partial(jit, static_argnums=(1, 2)), use_jax)
-def zern_radial(rho, l, m, dr):
-    """Zernike radial basis function
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        points to evaluate basis
-    l : ndarray of int, shape(K,)
-        radial mode number(s)
-    m : ndarray of int, shape(K,)
-        azimuthal mode number(s)
-    dr : int
-        order of derivative
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function evaluated at specified points
-
-    """
-    coeffs = polyder_vec(get_jacobi_coeffs(l, m), dr)
-    y = polyval_vec(coeffs, rho).T
-    return y
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def zern_azimuthal(theta, m, dtheta=0):
-    """Zernike azimuthal basis function
-
-    Parameters
-    ----------
-    theta : ndarray, shape(N,)
-        points to evaluate basis
-    m : ndarray of int, shape(K,)
-        azimuthal mode number(s)
-    dtheta : int
-        order of derivative (Default value = 0)
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis functions evaluated at specified points
-
-    """
-    m = jnp.atleast_1d(m)[jnp.newaxis]
-    theta = jnp.atleast_1d(theta)[:, jnp.newaxis]
-    m_pos = (m >= 0)
-    m_neg = (m < 0)
-    m = jnp.abs(m)
-    der = (1j*m)**dtheta
-    exp = der*jnp.exp(1j*m*theta)
-    y = jnp.real(m_pos*exp) + jnp.imag(m_neg*exp)
-    return y
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def four_toroidal(zeta, n, NFP, dzeta=0):
-    """Toroidal Fourier basis function
-
-    Parameters
-    ----------
-    zeta : ndarray, shape(N,)
-        coordinates to evaluate basis
-    n : ndarray of int, shape(K,)
-        toroidal mode number(s)
-    NFP : int
-        number of field periods
-    dzeta : int
-        order of derivative (Default value = 0)
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function evaluated at specified points
-
-    """
-    zeta = jnp.atleast_1d(zeta)[:, jnp.newaxis]
-    n = jnp.atleast_1d(n)[jnp.newaxis]
-    n_pos = n >= 0
-    n_neg = n < 0
-    n = jnp.abs(n)
-    der = (1j*n*NFP)**dzeta
-    exp = der*jnp.exp(1j*n*NFP*zeta)
-    y = n_pos*jnp.real(exp) + n_neg*jnp.imag(exp)
-    return y
-
-
-def zern(rho, theta, l, m, dr, dtheta):
-    """Zernike 2D basis function
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        radial coordinates to evaluate basis
-    theta : ndarray, shape(N,)
-        azimuthal coordinates to evaluate basis
-    l : ndarray of int, shape(K,)
-        radial mode number
-    m : ndarray of int, shape(K,)
-        azimuthal mode number
-    dr : int
-        order of radial derivative
-    dtheta : int
-        order of azimuthal derivative
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function evaluated at specified points
-
-    """
-
-    radial = zern_radial(rho, tuple(l,), tuple(m,), dr)
-    azimuthal = zern_azimuthal(theta, m, dtheta)
-    return radial*azimuthal
-
-
-def fourzern(rho, theta, zeta, l, m, n, NFP, dr, dv, dz):
-    """Combined 3D Fourier-Zernike basis function
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        radial coordinates
-    theta : ndarray, shape(N,)
-        poloidal coordinates
-    zeta : ndarray, shape(N,)
-        toroidal coordinates
-    l : ndarray of int, shape(K,)
-        radial mode number
-    m : ndarray of int, shape(K,)
-        poloidal mode number
-    n : ndarray of int, shape(K,)
-        toroidal mode number
-    NFP : int
-        number of field periods
-    dr : int
-        order of radial derivative
-    dv : int
-        order of poloidal derivative
-    dz : int
-        order of toroidal derivative
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function evaluated at specified points
-
-    """
-    return zern(rho, theta, l, m, dr, dv)*four_toroidal(zeta, n, NFP, dz)
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def double_fourier_basis(theta, phi, m, n, NFP):
-    """Double Fourier series for boundary/lambda
-
-    Parameters
-    ----------
-    theta : ndarray, shape(N,)
-        poloidal angle to evaluate basis
-    phi : ndarray, shape(N,)
-        toroidal angle to evaluate basis
-    m : ndarray of int, shape(K,)
-        poloidal mode number
-    n : ndarray of int, shape(K,)
-        toroidal mode number
-    NFP : int
-        number of field periods
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function evaluated at specified points
-
-    """
-    theta = jnp.atleast_1d(theta)
-    phi = jnp.atleast_1d(phi)
-    m = jnp.atleast_1d(m)
-    n = jnp.atleast_1d(n)
-    theta = theta[:, jnp.newaxis]
-    phi = phi[:, jnp.newaxis]
-    m = m[jnp.newaxis]
-    n = n[jnp.newaxis]
-    m_pos = m >= 0
-    m_neg = m < 0
-    n_pos = n >= 0
-    n_neg = n < 0
-    m = jnp.abs(m)
-    n = jnp.abs(n)
-    m_term = m_pos*jnp.cos(m*theta) + m_neg*jnp.sin(m*theta)
-    n_term = n_pos*jnp.cos(n*NFP*phi) + n_neg*jnp.sin(n*NFP*phi)
-
-    return m_term*n_term
-
-
-class ZernikeTransform():
+class Transform():
     """Zernike Transform (really a Fourier-Zernike, but whatever)
 
     Parameters
@@ -727,96 +495,7 @@ def get_double_four_basis_idx_dense(M, N):
     return np.array([[m-M, n-N] for m in range(dimFourM) for n in range(dimFourN)])
 
 
-def zernike_norm(l, m):
-    """Norm of a Zernike polynomial with l, m indexing.
-    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
 
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    norm : float
-        norm of Zernike polynomial over unit disk.
-
-    """
-    return jnp.sqrt((2 * (l + 1)) / (jnp.pi*(1 + jnp.kronecker(m, 0))))
-
-
-def lm_to_fringe(l, m):
-    """Convert Zernike (l,m) double index to single Fringe index.
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    idx : int
-        Fringe index for l,m
-
-    """
-    M = (l + np.abs(m)) / 2
-    return int(M**2 + M + m)
-
-
-def fringe_to_lm(idx):
-    """Convert single Zernike Fringe index to (l,m) double index.
-
-    Parameters
-    ----------
-    idx : int
-        Fringe index
-
-    Returns
-    -------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    """
-    M = (np.ceil(np.sqrt(idx+1)) - 1)
-    m = idx - M**2 - M
-    l = 2*M - np.abs(m)
-    return int(l), int(m)
-
-
-def lm_to_ansi(l, m):
-    """Convert Zernike (l,m) two term index to ANSI single term index.
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    idx : int
-        ANSI index for l,m
-
-    """
-    return int((l * (l + 2) + m) / 2)
-
-
-def ansi_to_lm(idx):
-    """Convert Zernike ANSI single term to (l,m) two-term index.
-
-    Parameters
-    ----------
-    idx : int
-        ANSI index
-
-    Returns
-    -------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    """
-    l = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
-    m = 2 * idx - l * (l + 2)
-    return l, m
 
 
 def eval_four_zern(c, idx, NFP, rho, theta, zeta, dr=0, dv=0, dz=0):
@@ -920,34 +599,96 @@ def axis_posn(cR, cZ, zern_idx, NFP, zeta=0.0):
     return R0, Z0
 
 
-def symmetric_x(zern_idx, lambda_idx):
-    """Compute stellarator symmetry linear constraint matrix
+
+# these functions are currently unused ---------------------------------------
+
+def zernike_norm(l, m):
+    """Norm of a Zernike polynomial with l, m indexing.
+    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
 
     Parameters
     ----------
-    zern_idx : ndarray, shape(Nz_coeffs,3)
-        array of (l,m,n) indices for each spectral R,Z coeff
-    lambda_idx : ndarray, shape(Nl_coeffs,2)
-        array of (m,n) indices for each spectral lambda coeff
+    l,m : int
+        radial and azimuthal mode numbers.
 
     Returns
     -------
-    A : ndarray
-        matrix such that x=A*y and y=A^T*x
-        where y are the stellarator symmetric components of x
+    norm : float
+        norm of Zernike polynomial over unit disk.
 
     """
+    return jnp.sqrt((2 * (l + 1)) / (jnp.pi*(1 + jnp.kronecker(m, 0))))
 
-    m_zern = zern_idx[:, 1]
-    n_zern = zern_idx[:, 2]
-    m_lambda = lambda_idx[:, 0]
-    n_lambda = lambda_idx[:, 1]
 
-    # symmetric indices of R, Z, lambda
-    sym_R = sign(m_zern)*sign(n_zern) > 0
-    sym_Z = sign(m_zern)*sign(n_zern) < 0
-    sym_L = sign(m_lambda)*sign(n_lambda) < 0
+def lm_to_fringe(l, m):
+    """Convert Zernike (l,m) double index to single Fringe index.
 
-    sym_x = np.concatenate([sym_R, sym_Z, sym_L])
-    A = np.diag(sym_x, k=0).astype(int)
-    return A[:, sym_x]
+    Parameters
+    ----------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    Returns
+    -------
+    idx : int
+        Fringe index for l,m
+
+    """
+    M = (l + np.abs(m)) / 2
+    return int(M**2 + M + m)
+
+
+def fringe_to_lm(idx):
+    """Convert single Zernike Fringe index to (l,m) double index.
+
+    Parameters
+    ----------
+    idx : int
+        Fringe index
+
+    Returns
+    -------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    """
+    M = (np.ceil(np.sqrt(idx+1)) - 1)
+    m = idx - M**2 - M
+    l = 2*M - np.abs(m)
+    return int(l), int(m)
+
+
+def lm_to_ansi(l, m):
+    """Convert Zernike (l,m) two term index to ANSI single term index.
+
+    Parameters
+    ----------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    Returns
+    -------
+    idx : int
+        ANSI index for l,m
+
+    """
+    return int((l * (l + 2) + m) / 2)
+
+
+def ansi_to_lm(idx):
+    """Convert Zernike ANSI single term to (l,m) two-term index.
+
+    Parameters
+    ----------
+    idx : int
+        ANSI index
+
+    Returns
+    -------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    """
+    l = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
+    m = 2 * idx - l * (l + 2)
+    return l, m

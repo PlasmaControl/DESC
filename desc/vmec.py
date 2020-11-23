@@ -21,7 +21,6 @@ def read_vmec_output(fname):
         the VMEC data fields
 
     """
-
     file = Dataset(fname, mode='r')
 
     vmec_data = {
@@ -59,7 +58,6 @@ def output_to_netcdf(equil, fname, surfs=128):
     None
 
     """
-
     cR = equil['cR']
     cZ = equil['cZ']
     cL = equil['cL']
@@ -249,7 +247,6 @@ def convert_vmec_to_desc(vmec_data, zern_idx, lambda_idx, Npol=None, Ntor=None):
         dictionary of DESC equilibrium parameters
 
     """
-
     if Npol is None:
         Npol = 2*np.max(zern_idx[:,1]) + 1
     if Ntor is None:
@@ -306,7 +303,7 @@ def convert_vmec_to_desc(vmec_data, zern_idx, lambda_idx, Npol=None, Ntor=None):
 
     cR = zernike_transform.fit(R.flatten())
     cZ = zernike_transform.fit(Z.flatten())
-    cL = np.matmul(four_bdry_interp_pinv, L)
+    cL = np.matmul(four_bdry_interp_pinv, L.flatten())
     equil = {
         'cR': cR,
         'cZ': cZ,
@@ -344,7 +341,6 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
         average Euclidean distance between VMEC and DESC sample points
 
     """
-
     ns = np.size(vmec_data['psi'])
     vartheta = np.linspace(0, 2*np.pi, Npol, endpoint=False)
     zeta = np.linspace(0, 2*np.pi/vmec_data['NFP'], Ntor, endpoint=False)
@@ -416,7 +412,6 @@ def sfl_err(theta, vartheta, zeta, vmec_data, s, flag=0):
         vartheta - theta - lambda
 
     """
-
     theta = theta[0] + np.pi*flag
     phi = zeta
     l = vmec_transf(vmec_data['lmns'][s, :], vmec_data['xm'],
@@ -432,8 +427,8 @@ def vmec_transf(xmna, xm, xn, theta, phi, trig='sin'):
 
     Parameters
     ----------
-    xmns : 2d float array
-        xmnc[:,i] are the sin coefficients at flux surface i
+    xmna : 2d float array
+        xmna[:,i] are the Fourier coefficients at flux surface i
     xm : 1d int array
         poloidal mode numbers
     xn : 1d int array
@@ -444,16 +439,16 @@ def vmec_transf(xmna, xm, xn, theta, phi, trig='sin'):
         toroidal angles
     trig : string
         type of transform, options are 'sin' or 'cos' (Default value = 'sin')
-    xmna :
-
 
     Returns
     -------
     f : ndarray
-        f[i,j,k] is the transformed data at flux surface i, theta[j], phi[k]
+        transformed data
+        f[i,j,k] = xmna[i,:]*sin(xm*theta - xn*phi), if trig = 'sin'
+        OR
+        f[i,j,k] = xmna[i,:]*cos(xm*theta - xn*phi), if trig = 'cos'
 
     """
-
     ns = np.shape(np.atleast_2d(xmna))[0]
     lt = np.size(theta)
     lp = np.size(phi)
@@ -471,10 +466,10 @@ def vmec_transf(xmna, xm, xn, theta, phi, trig='sin'):
         xmn = np.tile(np.atleast_2d(np.atleast_2d(xmna)[k, :]).T, (1, lt))
         if trig == 'sin':
             f[k, :, :] = np.tensordot(
-                (xmn*sinmt).T, cosnp, axes=1) + np.tensordot((xmn*cosmt).T, sinnp, axes=1)
+                (xmn*sinmt).T, cosnp, axes=1) - np.tensordot((xmn*cosmt).T, sinnp, axes=1)
         elif trig == 'cos':
             f[k, :, :] = np.tensordot(
-                (xmn*cosmt).T, cosnp, axes=1) - np.tensordot((xmn*sinmt).T, sinnp, axes=1)
+                (xmn*cosmt).T, cosnp, axes=1) + np.tensordot((xmn*sinmt).T, sinnp, axes=1)
     return f
 
 
@@ -508,7 +503,6 @@ def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, sym=True):
         X (ndarray): non-symmetric VMEC data interpolated at the angles (theta,phi)
 
     """
-
     C_arr = []
     S_arr = []
     dim = Cmn.shape

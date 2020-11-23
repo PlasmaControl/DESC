@@ -149,6 +149,40 @@ def read_desc(filename):
 
     return equil
 
+def write_hdf5(obj, save_loc, file_mode='w'):
+    """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
+
+    Parameters
+    __________
+    obj: object to save
+        must have _save_attrs_ list attribute. Otherwise AttributeError raised.
+    save_loc : str or path-like; hdf5 file or group
+        file or group to write to. If str or path-like, file is created. If
+        hdf5 file or group instance, datasets are created there.
+    file_mode='w': str
+        hdf5 file mode. Default is 'w'.
+    """
+    # check save_loc is an accepted type
+    save_loc_type = type(save_loc)
+    if save_loc_type is h5py._hl.group.Group or save_loc_type is h5py._hl.files.File:
+        file_group = save_loc
+        close = False
+    elif save_loc_type is str:
+        file_group = h5py.File(save_loc, file_mode)
+        close = True
+    else:
+        raise SyntaxError('save_loc of type {} is not a filename or hdf5 '
+            'file or group.'.format(save_loc_type))
+
+    # save to file or group
+    for attr in obj._save_attrs_:
+        file_group.create_dataset(attr, data=getattr(obj, attr))
+
+    # close file if created
+    if close:
+        file_group.close()
+
+    return None
 
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file

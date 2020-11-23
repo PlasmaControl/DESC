@@ -50,8 +50,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment '
             'variable incorrect with default argument')
         self.assertFalse(ir.args.version, 'version is not default False')
-        print(ir.inputs)
-        self.assertEqual(len(ir.inputs), 26, 'number of inputs does not match '
+        self.assertEqual(len(ir.inputs), 27, 'number of inputs does not match '
             'number expected in MIN_INPUT')
         # test equality of arguments
 

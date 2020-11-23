@@ -1,14 +1,16 @@
 import numpy as np
 from desc.backend import TextColors
+from abc import ABC
 
 
-class Grid():
+class Grid(ABC):
     """Grid is an abstract class that defines an API for collocation grids. 
     """
 
     def __init__(self) -> None:
         pass
 
+    @abstract
     def create_nodes(self):
         pass
 
@@ -77,7 +79,6 @@ class LinearGrid(Grid):
         None
 
         """
-
         self.__L = L
         self.__M = M
         self.__N = N
@@ -122,7 +123,6 @@ class LinearGrid(Grid):
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
-
         # rho
         nr = L
         if surfs.size == nr:
@@ -177,7 +177,6 @@ class LinearGrid(Grid):
         None
 
         """
-
         if L != self.__L and M != self.__M and N != self.__N:
             self.__nodes, self.__volumes = self.create_nodes(L=L, M=M, N=N,
                                  NFP=self.__NFP, sym=self.__sym, 
@@ -220,7 +219,6 @@ class ConcentricGrid(Grid):
         None
 
         """
-
         self.__M = M
         self.__N = N
         self.__NFP = NFP
@@ -267,7 +265,6 @@ class ConcentricGrid(Grid):
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
-
         dim_fourier = 2*N+1
         if index in ['ansi', 'chevron']:
             dim_zernike = int((M+1)*(M+2)/2)
@@ -350,7 +347,6 @@ class ConcentricGrid(Grid):
         None
 
         """
-
         if M != self.__M and N != self.__N:
             self.__nodes, self.volumes = self.create_nodes(M=M, N=N,
                          NFP=self.__NFP, sym=self.__sym, surfs=self.__surfs)
@@ -424,7 +420,6 @@ def most_rational(a, b):
         most rational number between [a,b]
 
     """
-
     # handle empty range
     if a == b:
         return a

@@ -35,7 +35,8 @@ class InputReader:
     Methods
     _______
     parse_args
-    pars_inputs
+    parse_inputs
+    write_desc_input
 
     """
     def __init__(self, cl_args=None):
@@ -48,6 +49,11 @@ class InputReader:
 
     def parse_args(self, cl_args=None):
         self.parser = self._get_parser_()
+
+        if cl_args is None:
+            cl_args = sys.argv[1:]
+        else:
+            pass
         args = self.parser.parse_args(cl_args)
 
         if len(args.input_file) == 0:
@@ -55,18 +61,19 @@ class InputReader:
             #print('Input file path must be specified')
             #return None
 
-        self.input_path = pathlib.Path(args.input_file[0]).resolve()
+        self.input_path = pathlib.Path(args.input_file[0]).resolve()#''.join(args.input_file)).resolve()
         if self.input_path.is_file():
             self.input_path = str(self.input_path)
         else:
-            raise FileNotFoundError('Input file does not exist.')
+            raise FileNotFoundError("Input file '{}' does not exist.".format(
+                str(self.input_path)))
 
         if args.output:
             self.output_path = args.output
         else:
             self.output_path = self.input_path+'.output'
 
-         if args.numpy:
+        if args.numpy:
             os.environ['DESC_USE_NUMPY'] = 'True'
         else:
             os.environ['DESC_USE_NUMPY'] = ''
@@ -426,6 +433,90 @@ class InputReader:
             inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
 
         return inputs
+
+    def write_desc_input(self, filename, inputs=None):
+        """Generates a DESC input file from a dictionary of parameters
+
+        Parameters
+        ----------
+        filename : str or path-like
+            name of the file to create
+        inputs : dict
+            dictionary of input parameters
+
+        Returns
+        -------
+
+        """
+
+        # default to use self.inputs
+        if inputs is None:
+            inputs = self.inputs
+        else:
+            pass
+
+        f = open(filename, 'w+')
+
+        f.write('# global parameters \n')
+        f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
+        f.write('NFP = {} \n'.format(inputs['NFP']))
+        f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
+
+        f.write('\n# spectral resolution \n')
+        f.write('Mpol = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
+        f.write('Ntor = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
+        f.write('Mnodes = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
+        f.write('Nnodes = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
+
+        f.write('\n# continuation parameters \n')
+        f.write('bdry_ratio = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['bdry_ratio'])])))
+        f.write('pres_ratio = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
+        f.write('zeta_ratio = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
+        f.write('errr_ratio = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
+        f.write('pert_order = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
+
+        f.write('\n# solver tolerances \n')
+        f.write('ftol = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['ftol'])])))
+        f.write('xtol = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['xtol'])])))
+        f.write('gtol = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['gtol'])])))
+        f.write('nfev = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['nfev'])])))
+
+        f.write('\n# solver methods \n')
+        f.write('optim_method = {} \n'.format(inputs['optim_method']))
+        f.write('errr_mode = {} \n'.format(inputs['errr_mode']))
+        f.write('bdry_mode = {} \n'.format(inputs['bdry_mode']))
+        f.write('zern_mode = {} \n'.format(inputs['zern_mode']))
+        f.write('node_mode = {} \n'.format(inputs['node_mode']))
+
+        f.write('\n# pressure and rotational transform profiles \n')
+        for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
+            f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
+                int(i), cP, cI))
+
+        f.write('\n# magnetic axis initial guess \n')
+        for (n, cR, cZ) in inputs['axis']:
+            f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
+                int(n), cR, cZ))
+
+        f.write('\n# fixed-boundary surface shape \n')
+        for (m, n, cR, cZ) in inputs['bdry']:
+            f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
+                int(m), int(n), cR, cZ))
+
+        f.close()
 
     def _vmec_to_desc_input_(self, vmec_fname, desc_fname):
         """Converts a VMEC input file to an equivalent DESC input file

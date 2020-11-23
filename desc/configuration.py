@@ -33,7 +33,7 @@ class Configuration():
         sym : bool
             True for stellarator symmetry, False otherwise
         x : ndarray
-            state vector of independent variables: [cR, cZ, cL]. If not supplied, 
+            state vector of independent variables: [cR, cZ, cL]. If not supplied,
             the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
             array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
@@ -73,8 +73,11 @@ class Configuration():
                 # TODO: move unpack_x inside configuration.py
                 self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(zern_idx))
             except:
-                raise ValueError(TextColors.FAIL + 
+                raise ValueError(TextColors.FAIL +
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
+
+        self._save_attrs_ = ['bdry', 'cP', 'cI', 'Psi', 'NFP', 'zern_idx',
+            'lambda_idx', 'sym', 'x', 'axis'] #'cR', 'cZ', 'cL', 'n', 'Rcoeff', 'Zcoeff'
 
     @property
     def bdry(self):
@@ -166,6 +169,9 @@ class Configuration():
     def compute_force_magnitude(self):
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
+
+    def save(self, save_to, format='hdf5'):
+        pass
 
 
 class Equilibrium(Configuration):
@@ -571,10 +577,10 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     cI : ndarray
         coefficients to pass to rotational transform function
@@ -582,7 +588,7 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         total toroidal flux (in Webers) within LCFS
     zernike_transform : ZernikeTransform
         object with transform method to go from spectral to physical space with derivatives
-    mode : str 
+    mode : str
         one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
     Returns
@@ -686,16 +692,16 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     coord_der : dict
-        dictionary of ndarray containing of coordinate 
+        dictionary of ndarray containing of coordinate
         derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     cI : ndarray
         coefficients to pass to rotational transform function.
@@ -840,10 +846,10 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     plasma_current : dict
-        dictionary of ndarray containing current and derivatives, 
+        dictionary of ndarray containing current and derivatives,
         such as computed by ``compute_plasma_current``.
     cP : ndarray
         parameters to pass to pressure function

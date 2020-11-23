@@ -149,7 +149,7 @@ def read_desc(filename):
 
     return equil
 
-def write_hdf5(obj, save_loc, file_mode='w'):
+def write_hdf5(obj, save_to, file_mode='w'):
     """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
 
     Parameters
@@ -163,16 +163,16 @@ def write_hdf5(obj, save_loc, file_mode='w'):
         hdf5 file mode. Default is 'w'.
     """
     # check save_loc is an accepted type
-    save_loc_type = type(save_loc)
-    if save_loc_type is h5py._hl.group.Group or save_loc_type is h5py._hl.files.File:
-        file_group = save_loc
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        file_group = save_to
         close = False
-    elif save_loc_type is str:
-        file_group = h5py.File(save_loc, file_mode)
+    elif save_to_type is str:
+        file_group = h5py.File(save_to, file_mode)
         close = True
     else:
         raise SyntaxError('save_loc of type {} is not a filename or hdf5 '
-            'file or group.'.format(save_loc_type))
+            'file or group.'.format(save_to_type))
 
     # save to file or group
     for attr in obj._save_attrs_:

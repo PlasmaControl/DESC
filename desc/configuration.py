@@ -1,9 +1,11 @@
 import numpy as np
+from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.zernike import symmetric_x
 from desc.boundary_conditions import format_bdry
+from desc import eqilibrium_io as eq_io
 
 
 class Configuration():
@@ -170,14 +172,16 @@ class Configuration():
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
 
-    def save(self, save_to, format='hdf5'):
-        pass
+    def save(self, save_to, fmt='hdf5', file_mode='w'):
+        eq_io.save(self, save_to, fmt=fmt, file_mode=file_mode)
+        return None
 
 
 class Equilibrium(Configuration):
 
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
-        Configuration.__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        self.initial = Configuration(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        self._save_attrs_ = self.initial._save_attrs_ + ['objective', 'optimizer', 'solved']
         self.__objective = objective
         self.__optimizer = optimizer
         self.solved = False
@@ -203,21 +207,61 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
+    def save(self, save_to, fmt='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, fmt=fmt, file_mode=file_mode)
+        writer.write_obj(self)
+        writer.write_obj(self.initial, where=writer.sub('initial'))
+        writer.close()
+        return None
 
 # TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
-class EquiliriaFamily():
+class EquiliriaFamily(MutableSequence):
 
-    def __init__(self, equilibria, solver=None) -> None:
-        self.__equilibria = equilibria
-        self.__solver = solver
+    def __init__(self, inputs=None, load_file=None, fmt='hdf5'):#equilibria, solver=None) -> None:
+        self.file_fmt = fmt
+        if inputs is None:
+            self.load(load_file)
+        else:
+            self.inputs = inputs
+            # truncate file if already exists, write inputs
+            writer = eq_io.writer_factory(self.inputs['output_path'],
+                    fmt=self.file_fmt, file_mode='w')
+            writer.write_dict(self.inputs, where=writer.sub('inputs'))
+            writer.close()
+            #initialize Equilibrium from inputs
+            eq0 = Equilibrium(inputs['bdry'], inputs['cP'], inputs['cI'],
+                    inputs['Psi'], inputs['NFP'], inputs['zern_idx'],
+                    inputs['lambda_idx'])
+            self.__equilibria = [eq0]
 
-    @property
-    def equilibria(self):
-        return self.__equilibria
+        #self.__equilibria = equilibria
+        #self.__solver = solver
+        #self.output_path = inputs['output_path'] #need some way to integrate this
+        #check if file exists - option to overwrite
 
-    @equilibria.setter
-    def equilibria(self, equilibria):
-        self.__equilibria = equilibria
+    # dunder methods required by MutableSequence
+    def __getitem__(self, i):
+        return self.__eqilibria[i]
+
+    def __setitem__(self, i, new_item):
+        # add type checking
+        self.__equilibria[i] = new_item
+
+    def __delitem__(self, i):
+        del self.__equilibrium[i]
+
+    def insert(self, i, new_item):
+        self.__equilibrium.insert(i, new_item)
+
+    def __len__(self):
+        return len(self.__equilibria)
+    #@property
+    #def equilibria(self):
+    #    return self.__equilibria
+
+    #@equilibria.setter
+    #def equilibria(self, equilibria):
+    #    self.__equilibria = equilibria
 
     @property
     def solver(self):
@@ -227,6 +271,25 @@ class EquiliriaFamily():
     def solver(self, solver):
         self.__solver = solver
 
+    def save(self, idx=None, fmt=None):
+        if fmt is None:
+            fmt = self.file_fmt
+        else:
+            pass
+        writer = eq_io.writer_factory(self.inputs['output_path'], fmt=fmt,
+                file_mode='a')
+
+        if type(idx) is not int:
+            # implement fancier indexing later
+            raise NotImplementedError('idx must be a single integer index')
+
+        writer.write_obj(self[idx], where=writer.sub(str(idx)))
+        writer.close()
+        return None
+
+    def load(self, filename):
+        #self.__equilibria = []
+        #for
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
 

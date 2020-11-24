@@ -5,6 +5,7 @@ import sys
 import itertools
 import copy
 import datetime
+from desc.input_output import read_input
 
 
 def make_bash_scripts(number, output_dir, ncpu, ngpu, req_mem, times, mode='traverse'):
@@ -39,7 +40,7 @@ def make_bash_scripts(number, output_dir, ncpu, ngpu, req_mem, times, mode='trav
             f.write('module load anaconda \n')
             f.write('conda activate jax \n')
             if mode == 'traverse':
-                f.write('cd $root_dir')
+                f.write('cd $root_dir \n')
                 f.write('python hyperparam_scan.py ' + str(i) + '\n')
             f.write('exit')
 
@@ -119,19 +120,39 @@ def main(scenario_index=-2):
     for scenario in scenarios:
         scenario['Mnodes'] = (1.5*scenario['Mpol']).astype(int)
         scenario['Nnodes'] = (1.5*scenario['Ntor']).astype(int)
-        scenario['pres_ratio'] = 0
+        scenario['pres_ratio'] = np.array([0])
         scenario['verbose'] = 2
 
+    arrs = ['Mpol', 'Ntor', 'Mnodes', 'Nnodes',
+            'bdry_ratio', 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
+            'ftol', 'xtol', 'gtol', 'nfev']
     # populate non-scanned hyperparams and equilibrium specs
     for scenario in scenarios:
         for key, val in base_inputs.items():
             if key not in scenario:
-                scenario[key] = val
+                if key in arrs:
+                    scenario[key] = np.atleast_1d(val[0])
+                else:
+                    scenario[key] = val
 
+
+    for scenario in scenarios:
+        arr_len = 0
+        for a in arrs:
+            arr_len = max(arr_len, len(scenario[a]))
+        for a in arrs:
+            if scenario[a].size == 1:
+                scenario[a] = np.broadcast_to(scenario[a], arr_len, subok=True).copy()
+            elif scenario[a].size != arr_len:
+                raise Exception(
+                    'Continuation parameter arrays are not proper lengths, got {}.size=={}, expected {}'.format(a,scenario[a].size,arr_len))
+
+
+                
     num_scenarios = len(scenarios)
-    num_cores = 8
+    num_cores = 16
     ngpu = 0
-    req_mem = 32
+    req_mem = 48
     runtimes = 120*np.ones(num_scenarios)
 
     ###############

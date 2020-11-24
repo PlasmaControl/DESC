@@ -1,14 +1,16 @@
 import unittest
 import numpy as np
+
+"""
 from desc.objective_funs import is_nested, curve_self_intersects
-from desc.transform import get_zern_basis_idx_dense
+from desc.basis import FourierZernikeBasis
 
 
 class TestIsNested(unittest.TestCase):
-    """tests for  functions"""
+    ""tests for  functions""
 
     def test_is_nested(self):
-        zidx = get_zern_basis_idx_dense(2, 0)
+        zidx = FourierZernikeBasis.get_modes(M=2, N=0)
         cR1 = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
         cZ1 = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
         cR2 = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
@@ -36,3 +38,4 @@ class TestIsNested(unittest.TestCase):
         x = np.sin(a*t+d)
         y = np.sin(b*t)
         self.assertTrue(curve_self_intersects(x, y))
+"""

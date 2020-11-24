@@ -4,7 +4,25 @@ from abc import ABC, abstractmethod
 
 
 class Grid(ABC):
-    """Grid is an abstract class that defines an API for collocation grids.
+    """Grid is an abstract base class for collocation grids
+
+    Attributes
+    ----------
+    L : int
+        radial grid resolution (L radial nodes)
+    M : int
+        poloidal grid resolution (2*M+1 poloidal nodes)
+    N : int
+        toroidal grid resolution (2*N+1 toroidal nodes)
+    NFP : int
+        number of field periods
+    sym : bool
+        True for stellarator symmetry, False otherwise (Default = False)
+    nodes : ndarray of float, size(3,Nnodes)
+        node coordinates, in (rho,theta,zeta)
+    volumes : ndarray of float, size(3,Nnodes)
+        node spacing (drho,dtheta,dzeta) at each node coordinate
+
     """
 
     @abstractmethod
@@ -30,6 +48,26 @@ class Grid(ABC):
         sort_idx = np.lexsort((self.__nodes[1], self.__nodes[0], self.__nodes[2]))
         self.__nodes = self.__nodes[:, sort_idx]
         self.__volumes = self.__volumes[:, sort_idx]
+
+    @property
+    def L(self):
+        return self.__L
+
+    @property
+    def M(self):
+        return self.__M
+
+    @property
+    def N(self):
+        return self.__N
+
+    @property
+    def NFP(self):
+        return self.__NFP
+
+    @property
+    def sym(self):
+        return self.__sym
 
     @property
     def nodes(self):
@@ -111,7 +149,7 @@ class LinearGrid(Grid):
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False)
         endpoint : bool
-            if True, theta=0 and zeta=0 are duplicated after a full period. 
+            if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
         surfs : ndarray of float
             radial coordinates
@@ -223,6 +261,7 @@ class ConcentricGrid(Grid):
         None
 
         """
+        self.__L = M+1
         self.__M = M
         self.__N = N
         self.__NFP = NFP

@@ -3,13 +3,28 @@ import functools
 import warnings
 import numba
 from abc import ABC, abstractmethod
+
 from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop
-from desc.backend import issorted, isalmostequal, sign, TextColors
 from desc.backend import polyder_vec, polyval_vec, flatten_list
 
 
 class Basis(ABC):
-    """
+    """Basis is an abstract base class for spectral basis sets
+
+    Attributes
+    ----------
+    L : int
+        maximum radial resolution
+    M : int
+        maximum poloidal resolution
+    N : int
+        maximum toroidal resolution
+    NFP : int
+        number of field periods
+    modes : ndarray of int, shape(Nmodes,3)
+        array of mode numbers [l,m,n]
+        each row is one basis function with modes (l,m,n)
+
     """
 
     @abstractmethod
@@ -17,11 +32,11 @@ class Basis(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self):
+    def get_modes(self):
         pass
 
     @abstractmethod
-    def get_modes(self):
+    def evaluate(self):
         pass
 
     @abstractmethod
@@ -40,10 +55,26 @@ class Basis(ABC):
         self.__modes = self.__modes[sort_idx]
 
     @property
+    def L(self):
+        return self.__L
+
+    @property
+    def M(self):
+        return self.__M
+
+    @property
+    def N(self):
+        return self.__N
+
+    @property
+    def NFP(self):
+        return self.__NFP
+
+    @property
     def modes(self):
         return self.__modes
 
-    @nodes.setter
+    @modes.setter
     def modes(self, modes):
         self.__modes = modes
 
@@ -53,7 +84,7 @@ class PowerSeries(Basis):
        Power series in the radial coordinate.
     """
 
-    def __init__(self, L:int) -> None:
+    def __init__(self, L:int=0) -> None:
         """Initializes a PowerSeries
 
         Returns
@@ -62,9 +93,29 @@ class PowerSeries(Basis):
 
         """
         self.__L = L
+        self.__M = 0
+        self.__N = 0
+        self.__NFP = 1
 
         self.__modes = self.get_modes(L=self.__L)
         self.sort_nodes()
+
+    def get_modes(self, L:int=0):
+        """Gets mode numbers for power series
+
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+
+        Returns
+        -------
+        modes : ndarray of int, shape(Nmodes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
+
+        """
+        return np.array([[l, 0, 0] for l in range(L+1)])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -83,23 +134,6 @@ class PowerSeries(Basis):
 
         """
         return powers(nodes[0, :], self.__modes[:, 0], dr=derivatives[0])
-
-    def get_modes(self, L:int):
-        """Gets mode numbers for power series
-
-        Parameters
-        ----------
-        L : int
-            maximum radial resolution
-
-        Returns
-        -------
-        modes : ndarray of int, shape(Nmodes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
-
-        """
-        return np.array([[l, 0, 0] for l in range(L+1)])
 
     def change_resolution(self, L:int) -> None:
         """
@@ -125,7 +159,7 @@ class DoubleFourierSeries(Basis):
        Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M:int, N:int, NFP:int=1) -> None:
+    def __init__(self, M:int=0, N:int=0, NFP:int=1) -> None:
         """Initializes a DoubleFourierSeries
 
         Returns
@@ -133,12 +167,34 @@ class DoubleFourierSeries(Basis):
         None
 
         """
+        self.__L = 0
         self.__M = M
         self.__N = N
         self.__NFP = NFP
 
         self.__modes = self.get_modes(M=self.__M, N=self.__N)
         self.sort_nodes()
+
+    def get_modes(self, M:int=0, N:int=0) -> None:
+        """Gets mode numbers for double fourier series
+
+        Parameters
+        ----------
+        M : int
+            maximum poloidal resolution
+        N : int
+            maximum toroidal resolution
+
+        Returns
+        -------
+        modes : ndarray of int, shape(Nmodes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
+
+        """
+        dim_pol = 2*M+1
+        dim_tor = 2*N+1
+        return np.array([[0, m-M, n-N] for m in range(dim_pol) for n in range(dim_tor)])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -159,27 +215,6 @@ class DoubleFourierSeries(Basis):
         poloidal = fourier(nodes[1, :], self.__modes[:, 1], dt=derivatives[1])
         toroidal = fourier(nodes[2, :], self.__modes[:, 2], NFP=self.__NFP, dt=derivatives[2])
         return poloidal*toroidal
-
-    def get_modes(self, M:int, N:int) -> None:
-        """Gets mode numbers for double fourier series
-
-        Parameters
-        ----------
-        M : int
-            maximum poloidal resolution
-        N : int
-            maximum toroidal resolution
-
-        Returns
-        -------
-        modes : ndarray of int, shape(Nmodes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
-
-        """
-        dim_pol = 2*M+1
-        dim_tor = 2*N+1
-        return np.array([[0, m-M, n-N] for m in range(dim_pol) for n in range(dim_tor)])
 
     def change_resolution(self, M:int, N:int) -> None:
         """
@@ -209,64 +244,137 @@ class FourierZernikeBasis(Basis):
        series in the toroidal coordinate.
     """
 
-    def __init__(self, M:int, N:int, NFP:int=1, delta_lm:int=-1,
-                 indexing:str='fourier') -> None:
+    def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
+                 indexing:str='ansi') -> None:
         """Initializes a FourierZernikeBasis
 
         Parameters
         ----------
+        L : int
+            maximum radial resolution
         M : int
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        delta_lm : int
-            maximum difference between poloidal and radial resolution (l-m).
-            If < 0, defaults to ``M`` for 'ansi' or 'chevron' indexing, and
-            ``2*M`` for 'fringe' or 'house'. Unused for 'fourier' indexing.
         indexing : str
             Indexing method, one of the following options: 
             ('ansi','frige','chevron','house').
-            For delta_lm=0, all methods are equivalent and 
-            give a "chevron" shaped basis (only the outer edge of the zernike pyramid 
-            of width M).
-            For delta_lm>0, the indexing scheme defines how the pyramid is filled in:
+            For L=0, all methods are equivalent and give a "chevron" shaped
+            basis (only the outer edge of the zernike pyramid of width M).
+            For L>0, the indexing scheme defines order of the basis functions:
             ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. The maximum delta_lm
-            is M, at which point the traditional ANSI indexing is recovered.
-            Gives a single mode at maximum m, and multiple modes at maximum l,
-            from m=0 to m=l.
-            Total number of modes = (M-(delta_lm//2)+1)*((delta_lm//2)+1)
+            decreasing size, ending in a triagle shape. The maximum L is M,
+            at which point the traditional ANSI indexing is recovered.
+            Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
+            Total number of modes = (M-(L//2)+1)*((L//2)+1)
             ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
-            decreasing size, ending in a diamond shape. The maximum delta_lm
-            is 2*M, for which the traditional "Fringe/ U of Arizona" indexing
-            is recovered. Gives a single mode at maximum m and a single mode
-            at maximum l and m=0.
-            Total number of modes = (M+1)*(M+2)/2 - (M-delta_lm//2+1)*(M-delta_lm//2)/2
-            ``'chevron'``: Beginning from the initial chevron of width M, increasing
-            delta_lm adds additional chevrons of the same width. Similar to
-            "house" but with fewer modes with high l but low m.
-            Total number of modes = (M+1)*(2*(delta//2)+1)
-            ``'house'``: Fills in the pyramid row by row, with a maximum horizontal
-            width of M and a maximum radial resolution of delta_lm. For
-            delta_lm = M, it is equivalent to ANSI, while for delta_lm > M
-            it takes on a "house" like shape. Gives multiple modes at maximum
-            m and maximum l.
-            (Default value = 'fourier')
+            decreasing size, ending in a diamond shape. The maximum L is 2*M,
+            for which the traditional fringe/U of Arizona indexing is recovered.
+            Gives a single mode at m=M and a single mode at l=L and m=0.
+            Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
+            ``'chevron'``: Beginning from the initial chevron of width M,
+            increasing L adds additional chevrons of the same width.
+            Similar to "house" but with fewer modes with high l and low m.
+            Total number of modes = (M+1)*(2*(L//2)+1)
+            ``'house'``: Fills in the pyramid row by row, with a maximum
+            horizontal width of M and a maximum radial resolution of L.
+            For L=M, it is equivalent to ANSI, while for L>M it takes on a
+            "house" like shape. Gives multiple modes at m=M and l=L.
+            (Default value = 'ansi')
 
         Returns
         -------
-        None
+        modes : ndarray of int, shape(Nmodes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
 
         """
+        self.__L = L
         self.__M = M
         self.__N = N
         self.__NFP = NFP
-        self.__delta_lm = delta_lm
         self.__indexing = indexing
 
-        self.__modes = self.get_modes(M=self.__M, N=self.__N, 
-                          delta_lm=self.__delta_lm, indexing=self.__indexing)
+        self.__modes = self.get_modes(L=self.__L, M=self.__M, N=self.__N,
+                                      indexing=self.__indexing)
         self.sort_nodes()
+
+    def get_modes(self, L:int=-1, M:int=0, N:int=0, indexing:str='ansi'):
+        """Gets mode numbers for Fourier-Zernike basis functions
+
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+        M : int
+            maximum poloidal resolution
+        N : int
+            maximum toroidal resolution
+        indexing : str
+            Indexing method, one of the following options: 
+            ('ansi','frige','chevron','house').
+            For L=0, all methods are equivalent and give a "chevron" shaped
+            basis (only the outer edge of the zernike pyramid of width M).
+            For L>0, the indexing scheme defines order of the basis functions:
+            ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
+            decreasing size, ending in a triagle shape. The maximum L is M,
+            at which point the traditional ANSI indexing is recovered.
+            Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
+            Total number of modes = (M-(L//2)+1)*((L//2)+1)
+            ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
+            decreasing size, ending in a diamond shape. The maximum L is 2*M,
+            for which the traditional fringe/U of Arizona indexing is recovered.
+            Gives a single mode at m=M and a single mode at l=L and m=0.
+            Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
+            ``'chevron'``: Beginning from the initial chevron of width M,
+            increasing L adds additional chevrons of the same width.
+            Similar to "house" but with fewer modes with high l and low m.
+            Total number of modes = (M+1)*(2*(L//2)+1)
+            ``'house'``: Fills in the pyramid row by row, with a maximum
+            horizontal width of M and a maximum radial resolution of L.
+            For L=M, it is equivalent to ANSI, while for L>M it takes on a
+            "house" like shape. Gives multiple modes at m=M and l=L.
+            (Default value = 'ansi')
+
+        Returns
+        -------
+        modes : ndarray of int, shape(Nmodes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
+
+        """
+        default_L = {'ansi': M,
+                     'fringe': 2*M,
+                     'chevron': M,
+                     'house': 2*M}
+        L = L if L >= 0 else default_L[indexing]
+
+        if indexing == 'ansi':
+            pol_posm = [[(m+d, m) for m in range(0, M+1) if m+d < M+1]
+                        for d in range(0, L+1, 2)]
+
+        elif indexing == 'fringe':
+            pol_posm = [[(m+d//2, m-d//2) for m in range(0, M+1) if m-d//2 >= 0]
+                        for d in range(0, L+1, 2)]
+
+        elif indexing == 'chevron':
+            pol_posm = [(m+d, m) for m in range(0, M+1)
+                        for d in range(0, L+1, 2)]
+
+        elif indexing == 'house':
+            pol_posm = [[(l, m) for m in range(0, M+1) if l >= m and (l-m) % 2 == 0]
+                        for l in range(0, L+1)] + [(m, m) for m in range(M+1)]
+            pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
+
+        pol = [[(l, m), (l, -m)] if m != 0 else [(l, m)]
+               for l, m in flatten_list(pol_posm)]
+        pol = np.array(flatten_list(pol))
+        num_pol = len(pol)
+
+        pol = np.tile(pol, (2*N+1, 1))
+        tor = np.atleast_2d(
+            np.tile(np.arange(-N, N+1), (num_pol, 1)).flatten(order='f')).T
+        return np.hstack([pol, tor])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -288,89 +396,6 @@ class FourierZernikeBasis(Basis):
         poloidal = fourier(nodes[1, :], self.__modes[:, 1], dt=derivatives[1])
         toroidal = fourier(nodes[2, :], self.__modes[:, 2], NFP=self.__NFP, dt=derivatives[2])
         return radial*poloidal*toroidal
-
-    def get_modes(self, M:int, N:int, delta_lm:int=-1, indexing:str='ansi'):
-        """Gets mode numbers for Fourier-Zernike basis functions
-
-        Parameters
-        ----------
-        M : int
-            maximum poloidal resolution
-        N : int
-            maximum toroidal resolution
-        delta_lm : int
-            maximum difference between poloidal and radial resolution (l-m).
-            If < 0, defaults to ``M`` for 'ansi' or 'chevron' indexing, and
-            ``2*M`` for 'fringe' or 'house'. Unused for 'fourier' indexing.
-        indexing : str
-            Indexing method, one of the following options: 
-            ('ansi','frige','chevron','house').
-            For delta_lm=0, all methods are equivalent and 
-            give a "chevron" shaped basis (only the outer edge of the zernike pyramid 
-            of width M).
-            For delta_lm>0, the indexing scheme defines how the pyramid is filled in:
-            ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. The maximum delta_lm
-            is M, at which point the traditional ANSI indexing is recovered.
-            Gives a single mode at maximum m, and multiple modes at maximum l,
-            from m=0 to m=l.
-            Total number of modes = (M-(delta_lm//2)+1)*((delta_lm//2)+1)
-            ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
-            decreasing size, ending in a diamond shape. The maximum delta_lm
-            is 2*M, for which the traditional "Fringe/ U of Arizona" indexing
-            is recovered. Gives a single mode at maximum m and a single mode
-            at maximum l and m=0.
-            Total number of modes = (M+1)*(M+2)/2 - (M-delta_lm//2+1)*(M-delta_lm//2)/2
-            ``'chevron'``: Beginning from the initial chevron of width M, increasing
-            delta_lm adds additional chevrons of the same width. Similar to
-            "house" but with fewer modes with high l but low m.
-            Total number of modes = (M+1)*(2*(delta//2)+1)
-            ``'house'``: Fills in the pyramid row by row, with a maximum horizontal
-            width of M and a maximum radial resolution of delta_lm. For
-            delta_lm = M, it is equivalent to ANSI, while for delta_lm > M
-            it takes on a "house" like shape. Gives multiple modes at maximum
-            m and maximum l.
-            (Default value = 'fourier')
-
-        Returns
-        -------
-        modes : ndarray of int, shape(Nmodes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
-
-        """
-        default_deltas = {'ansi': M,
-                          'fringe': 2*M,
-                          'chevron': M,
-                          'house': 2*M}
-        delta_lm = delta_lm if delta_lm >= 0 else default_deltas[indexing]
-
-        if indexing == 'ansi':
-            pol_posm = [[(m+d, m) for m in range(0, M+1) if m+d < M+1]
-                        for d in range(0, delta_lm+1, 2)]
-
-        elif indexing == 'fringe':
-            pol_posm = [[(m+d//2, m-d//2) for m in range(0, M+1) if m-d//2 >= 0]
-                        for d in range(0, delta_lm+1, 2)]
-
-        elif indexing == 'chevron':
-            pol_posm = [(m+d, m) for m in range(0, M+1)
-                        for d in range(0, delta_lm+1, 2)]
-
-        elif indexing == 'house':
-            pol_posm = [[(l, m) for m in range(0, M+1) if l >= m and (l-m) % 2 == 0]
-                        for l in range(0, delta_lm+1)] + [(m, m) for m in range(M+1)]
-            pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
-
-        pol = [[(l, m), (l, -m)] if m != 0 else [(l, m)]
-               for l, m in flatten_list(pol_posm)]
-        pol = np.array(flatten_list(pol))
-        num_pol = len(pol)
-
-        pol = np.tile(pol, (2*N+1, 1))
-        tor = np.atleast_2d(
-            np.tile(np.arange(-N, N+1), (num_pol, 1)).flatten(order='f')).T
-        return np.hstack([pol, tor])
 
     def change_resolution(self, M:int, N:int, delta_lm:int) -> None:
         """

@@ -486,7 +486,7 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
     plt.show()
 
 
-def plot_vmec_comparison(vmec_data, equil):
+def plot_vmec_comparison(vmec_data, equil, vmec_label='VMEC', equil_label='DESC'):
     """Plots comparison of VMEC and DESC solutions
 
     Parameters
@@ -547,8 +547,8 @@ def plot_vmec_comparison(vmec_data, equil):
         ax.set_xlabel('R')
         ax.set_ylabel('Z')
         if k == 0:
-            s_vmec[0].set_label('VMEC')
-            s_desc[0].set_label('DESC')
+            s_vmec[0].set_label(vmec_label)
+            s_desc[0].set_label(equil_label)
             ax.legend(fontsize='xx-small')
     plt.show()
 

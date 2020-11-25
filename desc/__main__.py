@@ -79,7 +79,7 @@ def main(cl_args=None):
 
     from desc.continuation import solve_eq_continuation
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-    from desc.input_output import read_input, output_to_file
+    #from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
     from desc.vmec import read_vmec_output, vmec_error
 
@@ -88,10 +88,10 @@ def main(cl_args=None):
         print("Using device: " + str(device))
     else:
         device = None
-
+    print('inputs =',ir.inputs)
     # solve equilibrium
     iterations, timer = solve_eq_continuation(
-        inputs, checkpoint_filename=out_fname, device=device)
+        ir.inputs, checkpoint_filename=ir.output_path, device=device)
 
     if args.plot:
 

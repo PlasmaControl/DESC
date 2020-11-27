@@ -1,7 +1,10 @@
 import unittest
 import os
 import pathlib
+import h5py
 from desc.input_reader import InputReader
+from desc.equilibrium_io import hdf5Writer, hdf5Reader
+from desc.configuration import Configuration, Equilibrium
 #from desc.input_output import read_input
 
 
@@ -76,3 +79,148 @@ class TestInputReader(unittest.TestCase):
     def test_vmec_to_desc_input(self):
         pass
 
+class MockObject:
+    def __init__(self):
+        self._save_attrs_ = ['1', '2', '3']
+
+class Testhdf5Writer(unittest.TestCase):
+
+    def setUp(self):
+        self.filename = 'writer_test_file'
+        self.file_mode = 'w'
+
+    def test_given_filename(self):
+        writer = hdf5Writer(self.filename, self.file_mode)
+        self.assertFalse(writer.check_hdf5_type(writer.save_to))
+        self.assertTrue(writer.check_hdf5_type(writer.base))
+        self.assertTrue(writer._close_base_)
+        writer.close()
+        self.assertFalse(writer._close_base_)
+
+    def test_given_file(self):
+        f = h5py.File(self.filename, self.file_mode)
+        writer = hdf5Writer(f, self.file_mode)
+        self.assertTrue(writer.check_hdf5_type(writer.save_to))
+        self.assertTrue(writer.check_hdf5_type(writer.base))
+        self.assertFalse(writer._close_base_)
+        with self.assertWarns(RuntimeWarning):
+            writer.close()
+        self.assertFalse(writer._close_base_)
+        f.close()
+
+    def test_close_on_delete(self):
+        writer = hdf5Writer(self.filename, self.file_mode)
+        with self.assertRaises(OSError):
+            newwriter = hdf5Writer(self.filename, self.file_mode)
+        del writer
+        newwriter = hdf5Writer(self.filename, self.file_mode)
+        del newwriter
+
+    def test_write_dict(self):
+        thedict = {'1':1, '2':2, '3':3}
+        writer = hdf5Writer(self.filename, self.file_mode)
+        writer.write_dict(thedict)
+        writer.write_dict(thedict, where=writer.sub('subgroup'))
+        with self.assertRaises(SyntaxError):
+            writer.write_dict(thedict, where='not a writable type')
+        writer.close()
+        f = h5py.File(self.filename, 'r')
+        g = f['subgroup']
+        for key in thedict.keys():
+            self.assertTrue(key in f.keys())
+            self.assertTrue(key in g.keys())
+        f.close()
+
+    def test_write_obj(self):
+        mo = MockObject()
+        writer = hdf5Writer(self.filename, self.file_mode)
+        with self.assertWarns(RuntimeWarning):
+            writer.write_obj(mo)
+        for name in mo._save_attrs_:
+            setattr(mo, name, name)
+        writer.write_obj(mo)
+        groupname = 'initial'
+        writer.write_obj(mo, where=writer.sub(groupname))
+        writer.close()
+        f = h5py.File(self.filename, 'r')
+        for key in mo._save_attrs_:
+            self.assertTrue(key in f.keys())
+        self.assertTrue(groupname in f.keys())
+        initial = f[groupname]
+        for key in mo._save_attrs_:
+            self.assertTrue(key in initial.keys())
+        f.close()
+
+class Testhdf5Reader(unittest.TestCase):
+
+    def setUp(self):
+        self.filename = 'reader_test_file'
+        self.file_mode = 'r'
+        self.thedict = {'1':1, '2':2, '3':3}
+        f = h5py.File(self.filename, 'w')
+        self.subgroup = 'subgroup'
+        g = f.create_group(self.subgroup)
+        for key in self.thedict.keys():
+            f.create_dataset(key, data=self.thedict[key])
+            g.create_dataset(key, data=self.thedict[key])
+        f.close()
+
+    def test_given_filename(self):
+        reader = hdf5Reader(self.filename)
+        self.assertFalse(reader.check_hdf5_type(reader.load_from))
+        self.assertTrue(reader.check_hdf5_type(reader.base))
+        self.assertTrue(reader._close_base_)
+        reader.close()
+        self.assertFalse(reader._close_base_)
+
+    def test_given_file(self):
+        f = h5py.File(self.filename, self.file_mode)
+        reader = hdf5Reader(f)
+        self.assertTrue(reader.check_hdf5_type(reader.load_from))
+        self.assertTrue(reader.check_hdf5_type(reader.base))
+        self.assertFalse(reader._close_base_)
+        with self.assertWarns(RuntimeWarning):
+            reader.close()
+        self.assertFalse(reader._close_base_)
+        f.close()
+
+    #def test_close_on_delete(self):
+    #    reader = hdf5Reader(self.filename)
+    #    with self.assertRaises(OSError):
+    #        newreader = hdf5Reader(self.filename)
+    #    del reader
+    #    newreader = hdf5Reader(self.filename)
+    #    del newreader
+
+    def test_read_dict(self):
+        reader = hdf5Reader(self.filename)
+        newdict = {}
+        newsubdict = {}
+        otherdict = {}
+        reader.read_dict(newdict)
+        reader.read_dict(newsubdict, where=reader.sub(self.subgroup))
+        with self.assertRaises(SyntaxError):
+            reader.read_dict(otherdict, where='not a readable type')
+        reader.close()
+        self.assertTrue(self.thedict == newdict)
+        self.assertTrue(self.thedict == newsubdict)
+
+    def test_read_obj(self):
+        mo = MockObject()
+        reader = hdf5Reader(self.filename)
+        reader.read_obj(mo)
+        mo._save_attrs_  += '4'
+        with self.assertWarns(RuntimeWarning):
+            reader.read_obj(mo)
+        del mo._save_attrs_[-1]
+        submo = MockObject()
+        reader.read_obj(submo, where=reader.sub(self.subgroup))
+        for key in mo._save_attrs_:
+            self.assertTrue(hasattr(mo, key))
+            self.assertTrue(hasattr(submo, key))
+
+    def test_load_configuration(self):
+        pass
+
+    def test_load_equilibrium(self):
+        pass

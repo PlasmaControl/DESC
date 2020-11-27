@@ -5,7 +5,7 @@ from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextC
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.zernike import symmetric_x
 from desc.boundary_conditions import format_bdry
-from desc import eqilibrium_io as eq_io
+from desc import equilibrium_io as eq_io
 
 
 class Configuration():
@@ -172,8 +172,11 @@ class Configuration():
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
 
-    def save(self, save_to, fmt='hdf5', file_mode='w'):
-        eq_io.save(self, save_to, fmt=fmt, file_mode=file_mode)
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.close()
         return None
 
 
@@ -207,25 +210,27 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
-    def save(self, save_to, fmt='hdf5', file_mode='w'):
-        writer = eq_io.writer_factory(save_to, fmt=fmt, file_mode=file_mode)
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
         writer.write_obj(self)
         writer.write_obj(self.initial, where=writer.sub('initial'))
         writer.close()
         return None
 
-# TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
+    # TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
 class EquiliriaFamily(MutableSequence):
 
-    def __init__(self, inputs=None, load_file=None, fmt='hdf5'):#equilibria, solver=None) -> None:
-        self.file_fmt = fmt
+    def __init__(self, inputs=None, load_file=None, file_format='hdf5'):#equilibria, solver=None) -> None:
+        self.file_format = file_format
+        self.file_mode = 'a'
         if inputs is None:
             self.load(load_file)
         else:
             self.inputs = inputs
             # truncate file if already exists, write inputs
             writer = eq_io.writer_factory(self.inputs['output_path'],
-                    fmt=self.file_fmt, file_mode='w')
+                    file_format=self.file_format, file_mode='w')
             writer.write_dict(self.inputs, where=writer.sub('inputs'))
             writer.close()
             #initialize Equilibrium from inputs
@@ -255,6 +260,7 @@ class EquiliriaFamily(MutableSequence):
 
     def __len__(self):
         return len(self.__equilibria)
+
     #@property
     #def equilibria(self):
     #    return self.__equilibria
@@ -271,23 +277,33 @@ class EquiliriaFamily(MutableSequence):
     def solver(self, solver):
         self.__solver = solver
 
-    def save(self, idx=None, fmt=None):
+    def save(self, idx=None, file_format=None):
         if fmt is None:
-            fmt = self.file_fmt
+            file_format = self.file_format
         else:
             pass
-        writer = eq_io.writer_factory(self.inputs['output_path'], fmt=fmt,
-                file_mode='a')
+        writer = eq_io.writer_factory(self.inputs['output_path'],
+                file_format=file_format, file_mode=self.file_mode)
 
         if type(idx) is not int:
             # implement fancier indexing later
             raise NotImplementedError('idx must be a single integer index')
 
-        writer.write_obj(self[idx], where=writer.sub(str(idx)))
+        #writer.write_obj(self[idx], where=writer.sub(str(idx)))
+        self[idx].save(writer.sub(str(idx)), file_format=file_format,
+                file_mode=self.file_mode)
         writer.close()
         return None
 
     def load(self, filename):
+        reader = eq_io.reader_factory(filename, file_format)
+        self.inputs = {}
+        reader.read_dict(self.inputs, where=reader.sub('inputs'))
+        self.__equilibria = []
+        neqilibria = reader.count()
+        for i in range(nequilibria):
+            self.append(reader.load_equilibrium(where=reader.sub(str(i))))
+        return None
         #self.__equilibria = []
         #for
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]

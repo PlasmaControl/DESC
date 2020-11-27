@@ -1,9 +1,11 @@
 import numpy as np
+from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.zernike import symmetric_x
 from desc.boundary_conditions import format_bdry
+from desc import equilibrium_io as eq_io
 
 
 class Configuration():
@@ -33,7 +35,7 @@ class Configuration():
         sym : bool
             True for stellarator symmetry, False otherwise
         x : ndarray
-            state vector of independent variables: [cR, cZ, cL]. If not supplied, 
+            state vector of independent variables: [cR, cZ, cL]. If not supplied,
             the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
             array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
@@ -73,8 +75,11 @@ class Configuration():
                 # TODO: move unpack_x inside configuration.py
                 self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(zern_idx))
             except:
-                raise ValueError(TextColors.FAIL + 
+                raise ValueError(TextColors.FAIL +
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
+
+        self._save_attrs_ = ['bdry', 'cP', 'cI', 'Psi', 'NFP', 'zern_idx',
+            'lambda_idx', 'sym', 'x', 'axis'] #'cR', 'cZ', 'cL', 'n', 'Rcoeff', 'Zcoeff'
 
     @property
     def bdry(self):
@@ -167,11 +172,19 @@ class Configuration():
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
 
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.close()
+        return None
+
 
 class Equilibrium(Configuration):
 
     def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
-        Configuration.__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        self.initial = Configuration(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        self._save_attrs_ = self.initial._save_attrs_ + ['objective', 'optimizer', 'solved']
         self.__objective = objective
         self.__optimizer = optimizer
         self.solved = False
@@ -197,21 +210,64 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.write_obj(self.initial, where=writer.sub('initial'))
+        writer.close()
+        return None
 
-# TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
-class EquiliriaFamily():
+    # TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
+class EquiliriaFamily(MutableSequence):
 
-    def __init__(self, equilibria, solver=None) -> None:
-        self.__equilibria = equilibria
-        self.__solver = solver
+    def __init__(self, inputs=None, load_file=None, file_format='hdf5'):#equilibria, solver=None) -> None:
+        self.file_format = file_format
+        self.file_mode = 'a'
+        if inputs is None:
+            self.load(load_file)
+        else:
+            self.inputs = inputs
+            # truncate file if already exists, write inputs
+            writer = eq_io.writer_factory(self.inputs['output_path'],
+                    file_format=self.file_format, file_mode='w')
+            writer.write_dict(self.inputs, where=writer.sub('inputs'))
+            writer.close()
+            #initialize Equilibrium from inputs
+            eq0 = Equilibrium(inputs['bdry'], inputs['cP'], inputs['cI'],
+                    inputs['Psi'], inputs['NFP'], inputs['zern_idx'],
+                    inputs['lambda_idx'])
+            self.__equilibria = [eq0]
 
-    @property
-    def equilibria(self):
-        return self.__equilibria
+        #self.__equilibria = equilibria
+        #self.__solver = solver
+        #self.output_path = inputs['output_path'] #need some way to integrate this
+        #check if file exists - option to overwrite
 
-    @equilibria.setter
-    def equilibria(self, equilibria):
-        self.__equilibria = equilibria
+    # dunder methods required by MutableSequence
+    def __getitem__(self, i):
+        return self.__eqilibria[i]
+
+    def __setitem__(self, i, new_item):
+        # add type checking
+        self.__equilibria[i] = new_item
+
+    def __delitem__(self, i):
+        del self.__equilibrium[i]
+
+    def insert(self, i, new_item):
+        self.__equilibrium.insert(i, new_item)
+
+    def __len__(self):
+        return len(self.__equilibria)
+
+    #@property
+    #def equilibria(self):
+    #    return self.__equilibria
+
+    #@equilibria.setter
+    #def equilibria(self, equilibria):
+    #    self.__equilibria = equilibria
 
     @property
     def solver(self):
@@ -221,6 +277,35 @@ class EquiliriaFamily():
     def solver(self, solver):
         self.__solver = solver
 
+    def save(self, idx=None, file_format=None):
+        if fmt is None:
+            file_format = self.file_format
+        else:
+            pass
+        writer = eq_io.writer_factory(self.inputs['output_path'],
+                file_format=file_format, file_mode=self.file_mode)
+
+        if type(idx) is not int:
+            # implement fancier indexing later
+            raise NotImplementedError('idx must be a single integer index')
+
+        #writer.write_obj(self[idx], where=writer.sub(str(idx)))
+        self[idx].save(writer.sub(str(idx)), file_format=file_format,
+                file_mode=self.file_mode)
+        writer.close()
+        return None
+
+    def load(self, filename):
+        reader = eq_io.reader_factory(filename, file_format)
+        self.inputs = {}
+        reader.read_dict(self.inputs, where=reader.sub('inputs'))
+        self.__equilibria = []
+        neqilibria = reader.count()
+        for i in range(nequilibria):
+            self.append(reader.load_equilibrium(where=reader.sub(str(i))))
+        return None
+        #self.__equilibria = []
+        #for
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
 
@@ -571,10 +656,10 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     cI : ndarray
         coefficients to pass to rotational transform function
@@ -582,7 +667,7 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         total toroidal flux (in Webers) within LCFS
     zernike_transform : ZernikeTransform
         object with transform method to go from spectral to physical space with derivatives
-    mode : str 
+    mode : str
         one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
     Returns
@@ -686,16 +771,16 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     coord_der : dict
-        dictionary of ndarray containing of coordinate 
+        dictionary of ndarray containing of coordinate
         derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     cI : ndarray
         coefficients to pass to rotational transform function.
@@ -840,10 +925,10 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     plasma_current : dict
-        dictionary of ndarray containing current and derivatives, 
+        dictionary of ndarray containing current and derivatives,
         such as computed by ``compute_plasma_current``.
     cP : ndarray
         parameters to pass to pressure function

@@ -91,7 +91,7 @@ def main(cl_args=None):
 
     # solve equilibrium
     iterations, timer = solve_eq_continuation(
-        inputs, checkpoint_filename=out_fname, device=device)
+        ir.inputs, checkpoint_filename=out_fname, device=device)
 
     if args.plot:
 

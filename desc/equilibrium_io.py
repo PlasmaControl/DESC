@@ -4,8 +4,11 @@ import warnings
 import h5py
 import numpy as np
 from datetime import datetime
+import warnings
+from abc import ABC
 
 from desc.backend import TextColors
+from desc.configuration import Configuration, Equilibrium
 
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
@@ -149,6 +152,239 @@ def read_desc(filename):
 
     return equil
 
+def reader_factory(load_from, file_format):
+    if file_format == 'hdf5':
+        reader = hdf5Reader(load_from)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return reader
+
+class hdf5Reader:
+    def __init__(self, load_from):
+        self.load_from = load_from
+        self.resolve_base()
+
+    def __del__(self):
+        self.close()
+
+    def check_hdf5_type(self, obj):
+        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+            return True
+        else:
+            return False
+
+    def resolve_base(self):
+        if self.check_hdf5_type(self.load_from):
+            self.base = self.load_from
+            self._close_base_ = False
+        elif type(self.load_from) is str:
+            self.base = h5py.File(self.load_from, 'r')
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+                'file or group.'.format(type(self.load_from)))
+
+    def read_obj(self, obj, where=None):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a readable type. Must be "
+                    "hdf5 file or group".format(where))
+        for attr in obj._save_attrs_:
+            try:
+                setattr(obj, attr, loc[attr][()])
+            except KeyError:
+                warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+                        RuntimeWarning)
+        return None
+
+    def read_dict(self, thedict, where=None):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a writable type. Must be "
+                    "hdf5 file or group".format(where))
+        for key in loc.keys():
+            try:
+                thedict.update({key : loc[key][()]})
+            except AttributeError:
+                # don't load subgroups
+                pass
+            #    warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+            #            RuntimeWarning)
+        return None
+
+    def load_configuration(self, where=None):
+        kwargs = {}
+        self.read_dict(kwargs, where=where)
+        return Configuration(**kwargs)
+
+    def load_equilibrium(self, where=None):
+        kwargs = {}
+        self.read_dict(self, where=None)
+        eq = Equilibrium(**kwargs)
+
+        # overwrite the configuration in constructor
+        configuration_kwargs = {}
+        eq.initial = self.load_configuration(configuration_kwargs,
+                where=self.sub('initial'))
+        return eq
+
+    def sub(self, name):
+        try:
+            return self.base.create_group(name)
+        except ValueError:
+            return self.base[name]
+
+    def close(self):
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        else:
+            warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        return None
+
+def writer_factory(save_to, file_format, file_mode='w'):
+    if file_format == 'hdf5':
+        writer = hdf5Writer(save_to, file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return writer
+
+class hdf5Writer:
+    def __init__(self, save_to, file_mode):
+        self.save_to = save_to
+        self.save_to_type = type(save_to)
+        self.file_mode = file_mode
+        self.resolve_base()
+
+    def __del__(self):
+        self.close()
+
+    def check_hdf5_type(self, obj):
+        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+            return True
+        else:
+            return False
+
+    def resolve_base(self):
+        if self.check_hdf5_type(self.save_to):
+            self.base = self.save_to
+            self._close_base_ = False
+        elif self.save_to_type is str:
+            self.base = h5py.File(self.save_to, self.file_mode)
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+                'file or group.'.format(self.save_to_type))
+
+    def write_obj(self, obj, where=None):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a writable type. Must be "
+                    "hdf5 file or group".format(where))
+        for attr in obj._save_attrs_:
+            try:
+                loc.create_dataset(attr, data=getattr(obj, attr))
+            except AttributeError:
+                warnings.warn("Save attribute '{}' was not saved as it does "
+                        "not exist.".format(attr), RuntimeWarning)
+        return None
+
+    def write_dict(self, thedict, where=None):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a writable type. Must be "
+                    "hdf5 file or group".format(where))
+        for key in thedict.keys():
+            loc.create_dataset(key, data=thedict[key])
+        return None
+
+    def sub(self, name):
+        return self.base.create_group(name)
+
+    def close(self):
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        else:
+            warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        return None
+
+def subgroup(name, save_to, fmt):
+    if fmt == 'hdf5':
+        group = subgroup_hdf5(name, save_to)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
+    return group
+
+def base_hdf5(save_to):
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        group = save_to.create_group(name)
+    else:
+        raise SyntaxError('save_to must be an hdf5 file or group.')
+    return group
+
+def subgroup_hdf5(name, save_to):
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        group = save_to.create_group(name)
+    else:
+        raise SyntaxError('save_to must be an hdf5 file or group.')
+    return group
+
+def save(obj, save_to, fmt='hdf5', file_mode='w'):
+    if fmt == 'hdf5':
+        write_hdf5(obj, save_to, file_mode=file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
+    return None
+
+def write_hdf5(obj, save_to, file_mode='w'):
+    """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
+
+    Parameters
+    __________
+    obj: object to save
+        must have _save_attrs_ list attribute. Otherwise AttributeError raised.
+    save_loc : str or path-like; hdf5 file or group
+        file or group to write to. If str or path-like, file is created. If
+        hdf5 file or group instance, datasets are created there.
+    file_mode='w': str
+        hdf5 file mode. Default is 'w'.
+    """
+    # check save_loc is an accepted type
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        file_group = save_to
+        close = False
+    elif save_to_type is str:
+        file_group = h5py.File(save_to, file_mode)
+        close = True
+    else:
+        raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+            'file or group.'.format(save_to_type))
+
+    # save to file or group
+    for attr in obj._save_attrs_:
+        file_group.create_dataset(attr, data=getattr(obj, attr))
+
+    # close file if created
+    if close:
+        file_group.close()
+
+    return None
 
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file

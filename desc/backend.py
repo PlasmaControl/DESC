@@ -580,48 +580,6 @@ def presfun(rho, nu, params):
     return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
 
 
-def get_needed_derivatives(mode, axis=True):
-    """Get array of derivatives needed for calculating objective function
-
-    Parameters
-    ----------
-    mode : str
-        one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``.
-        What groups of derivatives are needed, based on the objective type.
-    axis : bool
-        whether to include terms needed for axis expansion (Default value = True)
-
-    Returns
-    -------
-    derivs : ndarray
-        combinations of derivatives of R,Z needed
-        to compute objective function. Each row is one set, columns represent
-        the order of derivative for [rho, theta, zeta].
-
-    """
-    equil_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                             [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                             [0, 1, 1], [0, 0, 2]])
-    axis_derivs = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-    qs_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                          [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                          [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
-                          [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
-                          [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
-                          [2, 2, 0]])
-    if mode is None:
-        return np.array([[0, 0, 0]])
-    elif mode.lower() in ['force', 'accel']:
-        if axis:
-            return np.vstack([equil_derivs, axis_derivs])
-        else:
-            return equil_derivs
-    elif mode.lower() in ['all', 'qs']:
-        return qs_derivs
-    else:
-        raise NotImplementedError(
-            TextColors.FAIL + "derivs must be one of 'force', 'accel', 'all', 'qs'" + TextColors.ENDC)
-
 
 class FiniteDifferenceJacobian():
     """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
@@ -944,10 +902,9 @@ def polyval_vec(p, x):
     y = jnp.zeros((npoly, nx))
 
     def body_fun(k, y):
-        return y * x + p[:, k][:, jnp.newaxis]
+        return y*x + p[:, k][:, jnp.newaxis]
 
     y = fori_loop(0, order, body_fun, y)
-
     return y
 
 

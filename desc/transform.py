@@ -1,7 +1,10 @@
 import numpy as np
 import functools
+from itertools import permutations, combinations_with_replacement
 
 from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors
+from desc.grid import Grid
+from desc.basis import Basis
 
 
 class Transform():
@@ -9,61 +12,177 @@ class Transform():
 
     Attributes
     ----------
-    
+    grid : Grid
+        DESCRIPTION
+    basis : Basis
+        DESCRIPTION
+    rcond : float
+        relative cutoff for singular values in least squares fit
+    derivatives : ndarray
+        combinations of derivatives needed
+        Each row is one set, columns represent the order of derivatives
+        for [rho, theta, zeta]
+    matrices : ndarray
+        DESCRIPTION
+    pinv : ndarray
+        DESCRIPTION
 
     """
 
-    def __init__(self, nodes, zern_idx, NFP, derivatives=[0, 0, 0], volumes=None, method='direct', pinv_rcond=1e-6):
+    def __init__(self, grid:Grid, basis:Basis, order=0, rcond=1e-6) -> None:
+        """Initializes a Transform
 
-        # array of which l,m,n is at which column of the interpolation matrix
-        self.zern_idx = zern_idx
-        # array of which r,v,z is at which row of the interpolation matrix
-        self.nodes = nodes
-        self.axn = np.where(nodes[0] == 0)[0]
-        self.NFP = NFP
-        self.derivatives = np.atleast_2d(derivatives)
-        self.volumes = volumes if volumes is not None else np.ones_like(nodes)
-        self.pinv_rcond = pinv_rcond
-        self.matrices = {i: {j: {k: {}
-                                 for k in range(4)} for j in range(4)} for i in range(4)}
+        Parameters
+        ----------
+        grid : Grid
+            DESCRIPTION
+        basis : Basis
+            DESCRIPTION
+        order : int or string
+            order of derivatives needed, if an int (Default = 0)
+            OR
+            type of calculation being performed, if a string
+            ``'force'``: all of the derivatives needed to calculate an
+            equilibrium from the force balance equations
+            ``'qs'``: all of the derivatives needed to calculate quasi-
+            symmetry from the triple-product equation
+       rcond : float
+            relative cutoff for singular values in least squares fit
 
-        if method in ['direct', 'fft']:
-            self.method = method
+        Returns
+        -------
+        None
+
+        """
+        self.__grid = grid
+        self.__basis = basis
+        self.__rcond = rcond
+        self.__matrices = {i: {j: {k: {}
+                     for k in range(4)} for j in range(4)} for i in range(4)}
+
+        self.__derivatives = self.get_derivatives(order)
+        self.sort_derivatives()
+        self.build()
+
+    def build(self):
+        """"""
+        for d in self.__derivatives:
+            dr = d[0]
+            dv = d[1]
+            dz = d[2]
+            self.__matrices[dr][dv][dz] = self.__basis.evaluate(
+                                        self.__grid.nodes, self.__derivatives)
+
+        # TODO: this assumes the derivatives are sorted (which they should be)
+        if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
+            A = self.__matrices[0][0][0]
         else:
-            raise ValueError(TextColors.FAIL +
-                             "Unknown Zernike Transform method '{}'".format(method) + TextColors.ENDC)
-        if self.method == 'fft':
-            self._check_inputs_fft(nodes, zern_idx)
-        self._build()
+            A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
+        self.__pinv = np.linalg.pinv(A, rcond=self.__rcond)
 
-    def _build_pinv(self):
-        """ """
-        A = fourzern(self.nodes[0], self.nodes[1], self.nodes[2], self.zern_idx[:, 0],
-                     self.zern_idx[:, 1], self.zern_idx[:, 2], self.NFP, 0, 0, 0)
-        self.pinv = jnp.linalg.pinv(A, rcond=self.pinv_rcond)
+    def transform(self, c, dr, dv, dz):
+        """Transform from spectral domain to physical
 
-    def _build(self):
-        """helper function to build matrices"""
-        self._build_pinv()
+        Parameters
+        ----------
+        c : ndarray, shape(N_coeffs,)
+            spectral coefficients, indexed as (lm,n) flattened in row major order
+        dr : int
+            order of radial derivative
+        dv : int
+            order of poloidal derivative
+        dz : int
+            order of toroidal derivative
 
-        if self.method == 'direct':
-            for d in self.derivatives:
-                dr = d[0]
-                dv = d[1]
-                dz = d[2]
-                self.matrices[dr][dv][dz] = fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                                     self.zern_idx[:, 0], self.zern_idx[:,
-                                                                                        1], self.zern_idx[:, 2],
-                                                     self.NFP, dr, dv, dz)
-        elif self.method == 'fft':
-            for d in self.derivatives:
-                dr = d[0]
-                dv = d[1]
-                dz = 0
-                self.matrices[dr][dv][dz] = zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                 self.pol_zern_idx[:, 0], self.pol_zern_idx[:, 1], dr, dv)
+        Returns
+        -------
+        x : ndarray, shape(N_nodes,)
+            array of values of function at node locations
 
+        """
+        return jnp.matmul(self.__matrices[dr][dv][dz], c)
 
+    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
+    def fit(self, x):
+        """Transform from physical domain to spectral using least squares fit
+
+        Parameters
+        ----------
+        x : ndarray, shape(N_nodes,)
+            values in real space at coordinates specified by self.grid
+
+        Returns
+        -------
+        c : ndarray, shape(N_coeffs,)
+            spectral coefficients in self.basis
+
+        """
+        return jnp.matmul(self.__pinv, x)
+
+    def get_derivatives(self, order):
+        """Get array of derivatives needed for calculating objective function
+
+        Parameters
+        ----------
+        order : int or string
+            order of derivatives needed, if an int (Default = 0)
+            OR
+            type of calculation being performed, if a string
+            ``'force'``: all of the derivatives needed to calculate an
+            equilibrium from the force balance equations
+            ``'qs'``: all of the derivatives needed to calculate quasi-
+            symmetry from the triple-product equation
+
+        Returns
+        -------
+        derivatives : ndarray
+            combinations of derivatives needed
+            Each row is one set, columns represent the order of derivatives
+            for [rho, theta, zeta]
+
+        """
+        if isinstance(order, int) and order >= 0:
+            derivatives = np.array([[]])
+            combos = combinations_with_replacement(range(order+1), 3)
+            for combo in list(combos):
+                perms = set(permutations(combo))
+                for perm in list(perms):
+                    if derivatives.shape[1] == 3:
+                        derivatives = np.vstack([derivatives, np.array(perm)])
+                    else:
+                        derivatives = np.array([perm])
+        elif order.lower() == 'force':
+            derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+                                    [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
+                                    [0, 1, 1], [0, 0, 2]])
+            # TODO: this assumes the Grid is sorted (which it should be)
+            if np.all(self.__grid.nodes[:, 0] == np.array([0, 0, 0])):
+                axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+                derivatives = np.vstack([derivatives, axis])
+        elif order.lower() == 'qs':
+            derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
+                                    [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
+                                    [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
+                                    [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
+                                    [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
+                                    [2, 2, 0]])
+        else:
+            raise NotImplementedError(TextColors.FAIL + 
+                  "order options are 'force', 'qs', or a non-negative int"
+                  + TextColors.ENDC)
+        return derivatives
+
+    def sort_derivatives(self) -> None:
+        """Sorts derivatives
+
+        Returns
+        -------
+        None
+
+        """
+        sort_idx = np.lexsort((self.__derivatives[:, 0],
+                       self.__derivatives[:, 1], self.__derivatives[:, 2]))
+        self.__derivatives = self.__derivatives[sort_idx]
 
     def change_resolution(self, zern_idx_new):
         """Change the spectral resolution of the transform without full recompute
@@ -152,9 +271,7 @@ class Transform():
 
         self.derivatives = jnp.vstack([self.derivatives, derivs_to_add])
 
-
-
-    def expand_nodes(self, new_nodes, new_volumes=None):
+    def change_nodes(self, new_nodes, new_volumes=None):
         """Change the real space resolution by adding new nodes without full recompute
 
         Only computes basis at spatial nodes that aren't already in the basis
@@ -213,253 +330,33 @@ class Transform():
             self.volumes = new_volumes
             self._build()
 
-    def expand_spectral_resolution(self, zern_idx_new):
-        """Change the spectral resolution of the transform without full recompute
+    @property
+    def grid(self):
+        return self.__grid
 
-        Only computes modes that aren't already in the basis
+    @grid.setter
+    def grid(self, grid:Grid):
+        self.__grid = grid
 
-        Parameters
-        ----------
-        zern_idx_new : ndarray of int, shape(Nc,3)
-            new mode numbers for spectral basis.
-            each row is one basis function with modes (l,m,n)
+    @property
+    def basis(self):
+        return self.__basis
 
-        Returns
-        -------
+    @basis.setter
+    def basis(self, basis:Basis):
+        self.__basis = basis
 
-        """
-        if self.method == 'direct':
-            zern_idx_new = jnp.atleast_2d(zern_idx_new)
-            # first remove modes that are no longer needed
-            old_in_new = (self.zern_idx[:, None] ==
-                          zern_idx_new).all(-1).any(-1)
-            for d in self.derivatives:
-                self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
-                                                                ][d[1]][d[2]][:, old_in_new]
-            self.zern_idx = self.zern_idx[old_in_new, :]
-            # then add new modes
-            new_not_in_old = ~(zern_idx_new[:, None]
-                               == self.zern_idx).all(-1).any(-1)
-            modes_to_add = zern_idx_new[new_not_in_old]
-            if len(modes_to_add) > 0:
-                for d in self.derivatives:
-                    self.matrices[d[0]][d[1]][d[2]] = jnp.hstack([
-                        self.matrices[d[0]][d[1]][d[2]],  # old
-                        fourzern(self.nodes[0], self.nodes[1], self.nodes[2],  # new
-                                 modes_to_add[:, 0], modes_to_add[:, 1], modes_to_add[:, 2], self.NFP, d[0], d[1], d[2])])
+    @property
+    def derivatives(self):
+        return self.__derivatives
 
-            # update indices
-            self.zern_idx = np.vstack([self.zern_idx, modes_to_add])
-            # permute indexes so they're in the same order as the input
-            permute_idx = [self.zern_idx.tolist().index(i)
-                           for i in zern_idx_new.tolist()]
-            for d in self.derivatives:
-                self.matrices[d[0]][d[1]][d[2]] = self.matrices[d[0]
-                                                                ][d[1]][d[2]][:, permute_idx]
-            self.zern_idx = self.zern_idx[permute_idx]
-            self._build_pinv()
+    @derivatives.setter
+    def derivatives(self, derivatives):
+        self.__derivatives = derivatives
 
-        elif self.method == 'fft':
-            self._check_inputs_fft(self.nodes, zern_idx_new)
-            self.zern_idx = zern_idx_new
-            self._build()
-
-    def expand_derivatives(self, new_derivatives):
-        """Computes new derivative matrices
-
-        Parameters
-        ----------
-        new_derivatives : ndarray of int, , shape(Nd,3)
-            orders of derivatives
-            to compute in rho,theta,zeta. Each row of the array should
-            contain 3 elements corresponding to derivatives in rho,theta,zeta
-
-        Returns
-        -------
-
-        """
-
-        new_not_in_old = (
-            new_derivatives[:, None] == self.derivatives).all(-1).any(-1)
-        derivs_to_add = new_derivatives[~new_not_in_old]
-        if self.method == 'direct':
-            for d in derivs_to_add:
-                dr = d[0]
-                dv = d[1]
-                dz = d[2]
-                self.matrices[dr][dv][dz] = fourzern(self.nodes[0], self.nodes[1], self.nodes[2],
-                                                     self.zern_idx[:, 0], self.zern_idx[:,
-                                                                                        1], self.zern_idx[:, 2],
-                                                     self.NFP, dr, dv, dz)
-
-        elif self.method == 'fft':
-            for d in derivs_to_add:
-                dr = d[0]
-                dv = d[1]
-                dz = 0
-                self.matrices[dr][dv][dz] = zern(self.pol_nodes[0], self.pol_nodes[1],
-                                                 self.pol_zern_idx[:, 0], self.pol_zern_idx[:, 1], dr, dv)
-
-        self.derivatives = jnp.vstack([self.derivatives, derivs_to_add])
-
-    def transform(self, c, dr, dv, dz):
-        """Transform from spectral domain to physical
-
-        Parameters
-        ----------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients, indexed as (lm,n) flattened in row major order
-        dr : int
-            order of radial derivative
-        dv : int
-            order of poloidal derivative
-        dz : int
-            order of toroidal derivative
-
-        Returns
-        -------
-        x : ndarray, shape(N_nodes,)
-            array of values of function at node locations
-
-        """
-        if self.method == 'direct':
-            return self._matmul(self.matrices[dr][dv][dz], c)
-
-        elif self.method == 'fft':
-            c_pad = jnp.pad(c.reshape((-1, self.numFour), order='F'),
-                            ((0, 0), (self.zeta_pad, self.zeta_pad)), mode='constant')
-            dk = self.NFP*jnp.arange(-(self.numFournodes//2),
-                                     (self.numFournodes//2)+1).reshape((1, -1))
-            c_pad = c_pad[:, ::(-1)**dz]*dk**dz * (-1)**(dz > 1)
-            cfft = self._four2phys(c_pad)
-            return self._matmul(self.matrices[dr][dv][0], cfft).flatten(order='F')
-
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
-    def _matmul(self, A, x):
-        """helper function for matrix multiplication that we can jit more easily
-
-        """
-        return jnp.matmul(A, x)
-
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
-    def fit(self, x):
-        """Transform from physical domain to spectral using least squares fit
-
-        Parameters
-        ----------
-        x : ndarray, shape(N_nodes,)
-            values in real space at coordinates specified by self.nodes
-
-        Returns
-        -------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients in Fourier-Zernike basis
-
-        """
-        return jnp.matmul(self.pinv, x)
-
-
-
-def eval_four_zern(c, idx, NFP, rho, theta, zeta, dr=0, dv=0, dz=0):
-    """Evaluates Fourier-Zernike basis function at a point
-
-    Parameters
-    ----------
-    c : ndarray, shape(N_coeffs,)
-        spectral cofficients
-    idx : ndarray, shape(N_coeffs,3)
-        indices for spectral basis,
-        ie an array of [l,m,n] for each spectral coefficient
-    NFP : int
-        number of field periods
-    rho : float, array-like
-        radial coordinates to evaluate
-    theta : float, array-like
-        poloidal coordinates to evaluate
-    zeta : float, array-like
-        toroidal coordinates to evaluate
-    dr,dv,dz : int
-        order of derivatives to take in rho,theta,zeta. (Default value = 0)
-
-    Returns
-    -------
-    f : ndarray
-        function evaluated at specified points
-
-    """
-    idx = jnp.atleast_2d(idx)
-    rho = jnp.atleast_1d(rho)
-    theta = jnp.atleast_1d(theta)
-    zeta = jnp.atleast_1d(zeta)
-    Z = fourzern(rho, theta, zeta, idx[:, 0],
-                 idx[:, 1], idx[:, 2], NFP, dr, dv, dz)
-    Z = jnp.atleast_2d(Z)
-    f = jnp.matmul(Z, c)
-    return f
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def eval_double_fourier(c, idx, NFP, theta, phi):
-    """Evaluates double fourier series F = sum(F_mn(theta,phi))
-
-    Where F_mn(theta,phi) = c_mn*cos(m*theta)*sin(n*phi)
-
-    Parameters
-    ----------
-    c : ndarray, shape(N_coeffs,)
-        spectral coefficients for double fourier series
-    idx : ndarray of int, shape(N_coeffs,2)
-        mode numbers for spectral basis.
-        idx[i,0] = m, idx[i,1] = n
-    NFP : int
-        number of field periods
-    theta : ndarray, shape(n,)
-        theta values where to evaluate
-    phi : ndarray, shape(n,)
-        phi values where to evaluate
-
-    Returns
-    -------
-    F : ndarray, shape(n,)
-        F(theta,phi) evaluated at specified points
-
-    """
-
-    c = c.flatten()
-    interp = double_fourier_basis(theta, phi, idx[:, 0], idx[:, 1], NFP)
-    f = jnp.matmul(interp, c)
-    return f
-
-
-def axis_posn(cR, cZ, zern_idx, NFP, zeta=0.0):
-    """Finds position of the magnetic axis (R0,Z0)
-
-    Parameters
-    ----------
-    cR : ndarray, shape(N_coeffs,)
-        spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
-        spectral coefficients of Z
-    zern_idx : ndarray, shape(N_coeffs,3)
-        array of (l,m,n) indices for each spectral R,Z coeff
-    NFP : int
-        number of field periods
-    zeta : ndarray
-        planes to evaluate magnetic axis at (Default value = 0.0)
-
-    Returns
-    -------
-    R0 : ndarray
-        R coordinate of the magnetic axis in the zeta planes specified
-    Z0 : ndarray
-        Z coordinate of the magnetic axis in the zeta planes specified
-
-    """
-    R0 = eval_four_zern(cR, zern_idx, NFP, 0., 0., zeta, dr=0, dv=0, dz=0)
-    Z0 = eval_four_zern(cZ, zern_idx, NFP, 0., 0., zeta, dr=0, dv=0, dz=0)
-
-    return R0, Z0
-
+    @property
+    def matrices(self):
+        return self.__matrices
 
 
 # these functions are currently unused ---------------------------------------

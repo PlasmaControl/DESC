@@ -3,6 +3,8 @@ from desc.backend import TextColors
 from abc import ABC, abstractmethod
 
 
+# TODO: change nodes & volumes to be shape (N,3)
+
 class Grid(ABC):
     """Grid is an abstract base class for collocation grids
 
@@ -45,7 +47,8 @@ class Grid(ABC):
             None
 
         """
-        sort_idx = np.lexsort((self.__nodes[1], self.__nodes[0], self.__nodes[2]))
+        sort_idx = np.lexsort((self.__nodes[1], self.__nodes[0],
+                               self.__nodes[2]))
         self.__nodes = self.__nodes[:, sort_idx]
         self.__volumes = self.__volumes[:, sort_idx]
 
@@ -118,17 +121,17 @@ class LinearGrid(Grid):
         None
 
         """
-        self.__L = L
-        self.__M = M
-        self.__N = N
-        self.__NFP = NFP
-        self.__sym = sym
+        self._Grid__L = L
+        self._Grid__M = M
+        self._Grid__N = N
+        self._Grid__NFP = NFP
+        self._Grid__sym = sym
         self.__endpoint = endpoint
         self.__surfs = surfs
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=self.__L,
-                                     M=self.__M, N=self.__N, NFP=self.__NFP,
-                                     sym=self.__sym, surfs=self.__surfs)
+        self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=self._Grid__L,
+                                     M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
+                                     sym=self._Grid__sym, surfs=self.__surfs)
         self.sort_nodes()
 
     def create_nodes(self, L:int=1, M:int=0, N:int=0, NFP:int=1,
@@ -216,12 +219,12 @@ class LinearGrid(Grid):
         None
 
         """
-        if L != self.__L or M != self.__M or N != self.__N:
-            self.__L = L
-            self.__M = M
-            self.__N = N
-            self.__nodes, self.__volumes = self.create_nodes(L=L, M=M, N=N,
-                                 NFP=self.__NFP, sym=self.__sym, 
+        if L != self._Grid__L or M != self._Grid__M or N != self._Grid__N:
+            self._Grid__L = L
+            self._Grid__M = M
+            self._Grid__N = N
+            self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=L, M=M, N=N,
+                                 NFP=self._Grid__NFP, sym=self._Grid__sym, 
                                  endpoint=self.__endpoint, surfs=self.__surfs)
             self.sort_nodes()
 
@@ -261,17 +264,17 @@ class ConcentricGrid(Grid):
         None
 
         """
-        self.__L = M+1
-        self.__M = M
-        self.__N = N
-        self.__NFP = NFP
-        self.__sym = sym
+        self._Grid__L = M+1
+        self._Grid__M = M
+        self._Grid__N = N
+        self._Grid__NFP = NFP
+        self._Grid__sym = sym
         self.__axis = axis
         self.__index = index
         self.__surfs = surfs
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(M=self.__M,
-                         N=self.__N, NFP=self.__NFP, sym=self.__sym,
+        self._Grid__nodes, self._Grid__volumes = self.create_nodes(M=self._Grid__M,
+                         N=self._Grid__N, NFP=self._Grid__NFP, sym=self._Grid__sym,
                          axis=self.__axis, index=self.__index, surfs=self.__surfs)
         self.sort_nodes()
 
@@ -390,11 +393,12 @@ class ConcentricGrid(Grid):
         None
 
         """
-        if M != self.__M or N != self.__N:
-            self.__M = M
-            self.__N = N
-            self.__nodes, self.volumes = self.create_nodes(M=M, N=N,
-                         NFP=self.__NFP, sym=self.__sym, surfs=self.__surfs)
+        if M != self._Grid__M or N != self._Grid__N:
+            self._Grid__L = M+1
+            self._Grid__M = M
+            self._Grid__N = N
+            self._Grid__nodes, self._Grid__volumes = self.create_nodes(M=M, N=N,
+                         NFP=self._Grid__NFP, sym=self._Grid__sym, surfs=self.__surfs)
             self.sort_nodes()
 
 

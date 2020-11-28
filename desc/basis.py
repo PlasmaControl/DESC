@@ -4,8 +4,7 @@ import warnings
 import numba
 from abc import ABC, abstractmethod
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop
-from desc.backend import polyder_vec, polyval_vec, flatten_list
+from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, flatten_list, factorial
 
 
 class Basis(ABC):
@@ -426,6 +425,77 @@ class FourierZernikeBasis(Basis):
             self.sort_nodes()
 
 
+@conditional_decorator(functools.partial(jit), use_jax)
+def polyder_vec(p, m):
+    """Vectorized version of polyder for differentiating multiple polynomials of the same degree
+
+    Parameters
+    ----------
+    p : ndarray, shape(N,M)
+        polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
+        each column is a power of x
+    m : int >=0
+        order of derivative
+
+    Returns
+    -------
+    der : ndarray, shape(N,M)
+        polynomial coefficients for derivative in descending order
+
+    """
+    m = jnp.asarray(m, dtype=int)  # order of derivative
+    p = jnp.atleast_2d(p)
+    n = p.shape[1] - 1             # order of polynomials
+
+    D = jnp.arange(n, -1, -1)
+    D = factorial(D) / factorial(D-m)
+
+    p = jnp.roll(D*p, m, axis=1)
+    idx = jnp.arange(p.shape[1])
+    p = jnp.where(idx < m, 0, p)
+
+    return p
+
+
+@conditional_decorator(functools.partial(jit), use_jax)
+def polyval_vec(p, x):
+    """Evaluate a polynomial at specific values,
+    vectorized for evaluating multiple polynomials of the same degree.
+
+    Parameters
+    ----------
+    p : ndarray, shape(N,M)
+        Array of coefficient for N polynomials of order M. 
+        Each row is one polynomial, given in descending powers of x. 
+    x : ndarray, shape(K,)
+        A number, or 1d array of numbers at
+        which to evaluate p. If greater than 1d it is flattened.
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        polynomials evaluated at x.
+        Each row corresponds to a polynomial, each column to a value of x
+
+    Notes:
+        Horner's scheme is used to evaluate the polynomial. Even so,
+        for polynomials of high degree the values may be inaccurate due to
+        rounding errors. Use carefully.
+
+    """
+    p = jnp.atleast_2d(p)
+    npoly = p.shape[0]  # number of polynomials
+    order = p.shape[1]  # order of polynomials
+    x = jnp.asarray(x).flatten()
+    nx = len(x)         # number of coordinates
+    y = jnp.zeros((npoly, nx))
+
+    def body_fun(k, y):
+        return y*x + p[:, k][:, jnp.newaxis]
+
+    return fori_loop(0, order, body_fun, y)
+
+
 def powers(rho, l, dr=0):
     """Power series
 
@@ -441,15 +511,16 @@ def powers(rho, l, dr=0):
     Returns
     -------
     y : ndarray, shape(N,K)
-        basis function evaluated at specified points
+        basis function(s) evaluated at specified points
 
     """
     l = np.atleast_1d(l).astype(int)
-    npoly = len(l)
-    lmax = np.max(l)
-    coeffs = polyder_vec(np.ones((npoly, lmax+1)), dr)
-    y = polyval_vec(coeffs, rho).T
-    return y
+    npoly = len(l)      # number of polynomials
+    order = np.max(l)   # order of polynomials
+    coeffs = np.zeros((npoly, order+1))
+    coeffs[range(npoly), l] = 1
+    coeffs = polyder_vec(np.fliplr(coeffs), dr)
+    return polyval_vec(coeffs, rho).T
 
 
 # use numba because array size depends on inputs, which jax cannot handle
@@ -472,7 +543,7 @@ def jacobi(rho, l, m, dr=0):
     Returns
     -------
     y : ndarray, shape(N,K)
-        basis function evaluated at specified points
+        basis function(s) evaluated at specified points
 
     """
     factorial = np.math.factorial
@@ -512,7 +583,7 @@ def fourier(theta, m, NFP=1, dt=0):
     Returns
     -------
     y : ndarray, shape(N,K)
-        basis functions evaluated at specified points
+        basis function(s) evaluated at specified points
 
     """
     theta = jnp.atleast_1d(theta)[:, jnp.newaxis]

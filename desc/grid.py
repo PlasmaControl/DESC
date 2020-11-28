@@ -319,8 +319,8 @@ class ConcentricGrid(Grid):
             dim_zernike = int((M+1)**2)
             a = 2
         else:
-            raise ValueError(
-                TextColors.FAIL + "Invalid index input." + TextColors.ENDC)
+            raise ValueError(TextColors.FAIL +
+                             "Invalid index input." + TextColors.ENDC)
 
         pattern = {
             'cheb1': (np.cos(np.arange(M, -1, -1)*np.pi/M)+1)/2,

@@ -65,13 +65,11 @@ class Transform():
         self.build()
 
     def build(self):
-        """"""
+        """Builds the transform matrices for each derivative order
+        """
         for d in self.__derivatives:
-            dr = d[0]
-            dv = d[1]
-            dz = d[2]
-            self.__matrices[dr][dv][dz] = self.__basis.evaluate(
-                                        self.__grid.nodes, self.__derivatives)
+            self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
+                                                        self.__grid.nodes, d)
 
         # TODO: this assumes the derivatives are sorted (which they should be)
         if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
@@ -80,7 +78,7 @@ class Transform():
             A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
         self.__pinv = np.linalg.pinv(A, rcond=self.__rcond)
 
-    def transform(self, c, dr, dv, dz):
+    def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical
 
         Parameters
@@ -89,7 +87,7 @@ class Transform():
             spectral coefficients, indexed as (lm,n) flattened in row major order
         dr : int
             order of radial derivative
-        dv : int
+        dt : int
             order of poloidal derivative
         dz : int
             order of toroidal derivative
@@ -100,7 +98,17 @@ class Transform():
             array of values of function at node locations
 
         """
-        return jnp.matmul(self.__matrices[dr][dv][dz], c)
+        A = self.__matrices[dr][dt][dz]
+        if type(A) is dict:
+            raise ValueError(TextColors.FAIL +
+                 "Derivative orders are out of initialized bounds" +
+                             TextColors.ENDC)
+        if A.shape[1] != c.size:
+            raise ValueError(TextColors.FAIL +
+                 "Coefficients dimension is incompatible with transform basis" +
+                             TextColors.ENDC)
+
+        return jnp.matmul(A, c)
 
     @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
     def fit(self, x):

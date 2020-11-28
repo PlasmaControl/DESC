@@ -75,7 +75,7 @@ class Basis(ABC):
         return self.__modes
 
     @modes.setter
-    def modes(self, modes):
+    def modes(self, modes) -> None:
         self.__modes = modes
 
 

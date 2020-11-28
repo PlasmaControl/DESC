@@ -3,8 +3,6 @@ from desc.backend import TextColors
 from abc import ABC, abstractmethod
 
 
-# TODO: change nodes & volumes to be shape (N,3)
-
 class Grid(ABC):
     """Grid is an abstract base class for collocation grids
 
@@ -77,7 +75,7 @@ class Grid(ABC):
         return self.__nodes
 
     @nodes.setter
-    def nodes(self, nodes):
+    def nodes(self, nodes) -> None:
         self.__nodes = nodes
 
     @property
@@ -85,7 +83,7 @@ class Grid(ABC):
         return self.__volumes
 
     @volumes.setter
-    def volumes(self, volumes):
+    def volumes(self, volumes) -> None:
         self.__volumes = volumes
 
 

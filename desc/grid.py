@@ -47,10 +47,10 @@ class Grid(ABC):
             None
 
         """
-        sort_idx = np.lexsort((self.__nodes[1], self.__nodes[0],
-                               self.__nodes[2]))
-        self.__nodes = self.__nodes[:, sort_idx]
-        self.__volumes = self.__volumes[:, sort_idx]
+        sort_idx = np.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
+                               self.__nodes[:, 2]))
+        self.__nodes = self.__nodes[sort_idx]
+        self.__volumes = self.__volumes[sort_idx]
 
     @property
     def L(self):
@@ -192,13 +192,13 @@ class LinearGrid(Grid):
         dt = dt*np.ones_like(t)
         dz = dz*np.ones_like(z)
 
-        nodes = np.stack([r, t, z])
-        volumes = np.stack([dr, dt, dz])
+        nodes = np.stack([r, t, z]).T
+        volumes = np.stack([dr, dt, dz]).T
 
         if sym:
             non_sym_idx = np.where(t > np.pi)
-            nodes = np.delete(nodes, non_sym_idx, axis=1)
-            volumes = np.delete(volumes, non_sym_idx, axis=1)
+            nodes = np.delete(nodes, non_sym_idx, axis=0)
+            volumes = np.delete(volumes, non_sym_idx, axis=0)
 
         return nodes, volumes
 
@@ -368,13 +368,13 @@ class ConcentricGrid(Grid):
         dt = np.tile(dt, dim_fourier)
         dz = np.ones_like(z)*dz
 
-        nodes = np.stack([r, t, z])
-        volumes = np.stack([dr, dt, dz])
+        nodes = np.stack([r, t, z]).T
+        volumes = np.stack([dr, dt, dz]).T
 
         if sym:
             non_sym_idx = np.where(t > np.pi)
-            nodes = np.delete(nodes, non_sym_idx, axis=1)
-            volumes = np.delete(volumes, non_sym_idx, axis=1)
+            nodes = np.delete(nodes, non_sym_idx, axis=0)
+            volumes = np.delete(volumes, non_sym_idx, axis=0)
 
         return nodes, volumes
 

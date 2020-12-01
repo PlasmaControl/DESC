@@ -7,7 +7,7 @@ from desc.transform import ZernikeTransform, get_zern_basis_idx_dense
 from desc.transform import get_double_four_basis_idx_dense, symmetric_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
-from desc.objective_funs import get_equil_obj_fun, is_nested
+from desc.objective_funs import  is_nested, obj_fun_factory
 from desc.nodes import get_nodes_pattern, get_nodes_surf
 from desc.input_output import Checkpoint
 from desc.perturbations import perturb_continuation_params
@@ -214,9 +214,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 checkpoint_file.write_iteration(equil_init, 'init', inputs)
 
             # equilibrium objective function
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
+            obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor)
+            equil_obj = obj_fun.compute
+            callback = obj_fun.callback
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
                     pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
 
@@ -277,9 +279,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             deltas = np.array([delta_bdry, delta_pres, delta_zeta])
 
             # equilibrium objective function
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
+            obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
                                                     bdry_pol, bdry_tor)
+            equil_obj = obj_fun.compute
+            callback = obj_fun.callback
             args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 
@@ -293,9 +297,14 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
 
         if optim_method in ['bfgs']:
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
+            # equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
+            #                                         NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
+            #                                         bdry_pol, bdry_tor, scalar=True)
+            obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
                                                     NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
-                                                    bdry_pol, bdry_tor, scalar=True)
+                                                    bdry_pol, bdry_tor,scalar=True)
+            equil_obj = obj_fun.compute
+            callback = obj_fun.callback
             jac = grad(equil_obj, argnums=0)
         else:
             jac = jacfwd(equil_obj, argnums=0)

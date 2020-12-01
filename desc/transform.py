@@ -317,6 +317,10 @@ class Transform():
             self.build_pinv()
 
     @property
+    def derivs(self):
+        return self.__derivs
+
+    @property
     def derivatives(self):
         return self.__derivatives
 

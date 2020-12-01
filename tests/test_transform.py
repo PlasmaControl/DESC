@@ -13,7 +13,7 @@ class TestTransform(unittest.TestCase):
         """Tests equals operator overload method
         """
         grid_1 = LinearGrid(L=11, endpoint=True)
-        grid_2 = LinearGrid(M=4, N=4)
+        grid_2 = LinearGrid(M=5, N=5)
         grid_3 = ConcentricGrid(M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
@@ -68,7 +68,7 @@ class TestTransform(unittest.TestCase):
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface
         """
-        grid = LinearGrid(M=4, N=4)
+        grid = LinearGrid(M=5, N=5)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
 

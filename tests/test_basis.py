@@ -108,7 +108,7 @@ class TestBasis(unittest.TestCase):
     def test_double_fourier(self):
         """Tests DoubleFourierSeries evaluation
         """
-        grid = LinearGrid(M=4, N=4)
+        grid = LinearGrid(M=5, N=5)
         t = grid.nodes[:, 1]    # theta coordinates
         z = grid.nodes[:, 2]    # zeta coordinates
 

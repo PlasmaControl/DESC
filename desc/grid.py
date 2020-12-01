@@ -1,20 +1,20 @@
 import numpy as np
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 from desc.backend import TextColors, equals
 
 
-class Grid(ABC):
-    """Grid is an abstract base class for collocation grids
+class Grid():
+    """Grid is a base class for collocation grids
 
     Attributes
     ----------
     L : int
-        radial grid resolution (L radial nodes)
+        radial grid resolution
     M : int
-        poloidal grid resolution (2*M+1 poloidal nodes)
+        poloidal grid resolution
     N : int
-        toroidal grid resolution (2*N+1 toroidal nodes)
+        toroidal grid resolution
     NFP : int
         number of field periods
     sym : bool
@@ -26,9 +26,28 @@ class Grid(ABC):
 
     """
 
-    @abstractmethod
-    def __init__(self) -> None:
-        pass
+    def __init__(self, nodes) -> None:
+        """Initializes a custom grid without a pre-defined pattern
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(3,Nnodes)
+            node coordinates, in (rho,theta,zeta)
+
+        Returns
+        -------
+        None
+
+        """
+        self.__L = None
+        self.__M = None
+        self.__N = None
+        self.__NFP = None
+        self.__sym = False
+
+        self.__nodes, self.__volumes = self.create_nodes(nodes)
+        self.sort_nodes()
+        self.find_axis()
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -49,9 +68,21 @@ class Grid(ABC):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    @abstractmethod
-    def create_nodes(self):
-        pass
+    def create_nodes(self, nodes):
+        """Allows for custom node creation
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(3,Nnodes)
+            node coordinates, in (rho,theta,zeta)
+
+        Returns
+        -------
+        nodes : ndarray of float, size(3,Nnodes)
+            node coordinates, in (rho,theta,zeta)
+
+        """
+        return np.atleast_2d(nodes).reshape((-1, 3))
 
     @abstractmethod
     def change_resolution(self) -> None:
@@ -69,6 +100,16 @@ class Grid(ABC):
                                self.__nodes[:, 2]))
         self.__nodes = self.__nodes[sort_idx]
         self.__volumes = self.__volumes[sort_idx]
+
+    def find_axis(self) -> None:
+        """Finds indices of axis nodes
+
+        Returns
+        -------
+        None
+
+        """
+        self.__axis = np.where(self.__nodes[:, 0] == 0)[0]
 
     @property
     def L(self):
@@ -106,6 +147,10 @@ class Grid(ABC):
     def volumes(self, volumes) -> None:
         self.__volumes = volumes
 
+    @property
+    def axis(self):
+        return self.__axis
+
 
 class LinearGrid(Grid):
     """LinearGrid is a collocation grid in which the nodes are linearly 
@@ -121,9 +166,9 @@ class LinearGrid(Grid):
         L : int
             radial grid resolution (L radial nodes, Defualt = 1)
         M : int
-            poloidal grid resolution (2*M+1 poloidal nodes, Default = 0)
+            poloidal grid resolution (M poloidal nodes, Default = 0)
         N : int
-            toroidal grid resolution (2*N+1 toroidal nodes, Default = 0)
+            toroidal grid resolution (N toroidal nodes, Default = 0)
         NFP : int
             number of field periods (Default = 1)
         sym : bool
@@ -147,10 +192,12 @@ class LinearGrid(Grid):
         self.__endpoint = endpoint
         self.__surfs = surfs
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=self._Grid__L,
-                                     M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
-                                     sym=self._Grid__sym, surfs=self.__surfs)
+        self._Grid__nodes, self._Grid__volumes = self.create_nodes(
+                            L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
+                            NFP=self._Grid__NFP, sym=self._Grid__sym,
+                            endpoint=self.__endpoint, surfs=self.__surfs)
         self.sort_nodes()
+        self.find_axis()
 
     def create_nodes(self, L:int=1, M:int=0, N:int=0, NFP:int=1,
                      sym:bool=False, endpoint:bool=False,
@@ -162,9 +209,9 @@ class LinearGrid(Grid):
         L : int
             radial grid resolution (L radial nodes, Defualt = 1)
         M : int
-            poloidal grid resolution (2*M+1 poloidal nodes, Default = 0)
+            poloidal grid resolution (M poloidal nodes, Default = 0)
         N : int
-            toroidal grid resolution (2*N+1 toroidal nodes, Default = 0)
+            toroidal grid resolution (N toroidal nodes, Default = 0)
         NFP : int
             number of field periods (Default = 1)
         sym : bool
@@ -184,22 +231,19 @@ class LinearGrid(Grid):
 
         """
         # rho
-        nr = L
-        if surfs.size == nr:
+        if surfs.size == L:
             r = surfs
         else:
-            r = np.linspace(0, 1, nr)
-        dr = 1/nr
+            r = np.linspace(0, 1, L)
+        dr = 1/L
 
         # theta/vartheta
-        nt = 2*M+1
-        t = np.linspace(0, 2*np.pi, nt, endpoint=endpoint)
-        dt = 2*np.pi/nt
+        t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
+        dt = 2*np.pi/M
 
         # zeta/phi
-        nz = 2*N+1
-        z = np.linspace(0, 2*np.pi/NFP, nz, endpoint=endpoint)
-        dz = 2*np.pi/NFP/nz
+        z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
+        dz = 2*np.pi/NFP/N
 
         r, t, z = np.meshgrid(r, t, z, indexing='ij')
         r = r.flatten()
@@ -291,10 +335,12 @@ class ConcentricGrid(Grid):
         self.__index = index
         self.__surfs = surfs
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(M=self._Grid__M,
-                         N=self._Grid__N, NFP=self._Grid__NFP, sym=self._Grid__sym,
-                         axis=self.__axis, index=self.__index, surfs=self.__surfs)
+        self._Grid__nodes, self._Grid__volumes = self.create_nodes(
+                        M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
+                        sym=self._Grid__sym, axis=self.__axis,
+                        index=self.__index, surfs=self.__surfs)
         self.sort_nodes()
+        self.find_axis()
 
     def create_nodes(self, M:int, N:int, NFP:int=1, sym:bool=False,
                        axis:bool=True, index='ansi', surfs='cheb1'):

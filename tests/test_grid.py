@@ -9,8 +9,8 @@ class TestGrid(unittest.TestCase):
     def test_linear_grid(self):
 
         L = 3
-        M = 1
-        N = 1
+        M = 3
+        N = 3
         NFP = 1
 
         grid = LinearGrid(L, M, N, NFP, sym=False, endpoint=False)

@@ -24,3 +24,4 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if 'DSHAPE' in getattr(item, 'fixturenames', ()):
             item.add_marker('slow')
+

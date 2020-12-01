@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from desc.objective_funs import is_nested, curve_self_intersects
+from desc.objective_funs import is_nested, curve_self_intersects, ObjectiveFunctionFactory, compute_force_error_nodes, compute_accel_error_spectral, ForceErrorNodes, AccelErrorSpectral
 from desc.zernike import get_zern_basis_idx_dense
 
 
@@ -36,3 +36,44 @@ class TestIsNested(unittest.TestCase):
         x = np.sin(a*t+d)
         y = np.sin(b*t)
         self.assertTrue(curve_self_intersects(x, y))
+
+class TestObjectiveFunctionFactory(unittest.TestCase):
+    """Test basic functionality of ObjectiveFunctionFactory"""
+    def test_obj_fxn_types(self):
+        """test the correct objective function is returned for 'force', 'accel', and unimplemented"""
+        obj_fun_factory = ObjectiveFunctionFactory()
+        stell_sym = True
+        M = 1
+        N = 1
+        NFP = 1
+        zernike_transform = None
+        bdry_zernike_transform = None
+        zern_idx = np.eye(3)
+        lambda_idx = np.eye(3)
+        bdry_pol = np.array([1,1,1])
+        bdry_tor = bdry_pol
+        bdry_mode = 'spectral'
+        errr_mode = 'force'
+        obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
+                                                    bdry_pol, bdry_tor)
+        self.assertIsInstance(obj_fun, ForceErrorNodes)
+        errr_mode = 'accel'
+        obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
+                                                    bdry_pol, bdry_tor)
+        self.assertIsInstance(obj_fun, AccelErrorSpectral)     
+        
+        #test that 
+        with self.assertRaises(ValueError):
+            errr_mode = 'not implemented' #an unimplemented errr_mode
+            obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
+                                                    bdry_pol, bdry_tor)
+        with self.assertRaises(ValueError):
+            bdry_mode = 'not implemented' #an unimplemented bdry_mode
+            errr_mode = 'force'
+            obj_fun = obj_fun_factory.get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N,
+                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
+                                                    bdry_pol, bdry_tor)
+        

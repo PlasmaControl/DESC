@@ -1,6 +1,7 @@
 import numpy as np
-from desc.backend import TextColors
 from abc import ABC, abstractmethod
+
+from desc.backend import TextColors, equals
 
 
 class Grid(ABC):
@@ -28,6 +29,25 @@ class Grid(ABC):
     @abstractmethod
     def __init__(self) -> None:
         pass
+
+    def __eq__(self, other) -> bool:
+        """Overloads the == operator
+
+        Parameters
+        ----------
+        other : Grid
+            another Grid object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is a Grid with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        return equals(self.__dict__, other.__dict__)
 
     @abstractmethod
     def create_nodes(self):

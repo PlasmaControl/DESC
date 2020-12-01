@@ -2,7 +2,7 @@ import numpy as np
 import functools
 from itertools import permutations, combinations_with_replacement
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors
+from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors, equals
 from desc.grid import Grid
 from desc.basis import Basis
 
@@ -29,7 +29,7 @@ class Transform():
 
     """
 
-    def __init__(self, grid:Grid, basis:Basis, order=0, rcond=1e-6) -> None:
+    def __init__(self, grid:Grid, basis:Basis, derivs=0, rcond=1e-6) -> None:
         """Initializes a Transform
 
         Parameters
@@ -38,7 +38,7 @@ class Transform():
             DESCRIPTION
         basis : Basis
             DESCRIPTION
-        order : int or string
+        derivs : int or string
             order of derivatives needed, if an int (Default = 0)
             OR
             type of calculation being performed, if a string
@@ -56,15 +56,34 @@ class Transform():
         """
         self.__grid = grid
         self.__basis = basis
-        self.__order = order
+        self.__derivs = derivs
         self.__rcond = rcond
         self.__matrices = {i: {j: {k: {}
                      for k in range(4)} for j in range(4)} for i in range(4)}
 
-        self.__derivatives = self.get_derivatives(self.__order)
+        self.__derivatives = self.get_derivatives(self.__derivs)
         self.sort_derivatives()
         self.build()
         self.build_pinv()
+
+    def __eq__(self, other) -> bool:
+        """Overloads the == operator
+
+        Parameters
+        ----------
+        other : Transform
+            another Transform object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is a Transform with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        return equals(self.__dict__, other.__dict__)
 
     def build(self) -> None:
         """Builds the transform matrices for each derivative order
@@ -76,7 +95,7 @@ class Transform():
     def build_pinv(self) -> None:
         """Builds the transform matrices for each derivative order
         """
-        # TODO: this assumes the derivatives are sorted (which they should be)
+        # FIXME: this assumes the derivatives are sorted (which they should be)
         if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
             A = self.__matrices[0][0][0]
         else:
@@ -132,12 +151,12 @@ class Transform():
         """
         return jnp.matmul(self.__pinv, x)
 
-    def get_derivatives(self, order):
+    def get_derivatives(self, derivs):
         """Get array of derivatives needed for calculating objective function
 
         Parameters
         ----------
-        order : int or string
+        derivs : int or string
             order of derivatives needed, if an int (Default = 0)
             OR
             type of calculation being performed, if a string
@@ -154,9 +173,9 @@ class Transform():
             for [rho, theta, zeta]
 
         """
-        if isinstance(order, int) and order >= 0:
+        if isinstance(derivs, int) and derivs >= 0:
             derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(order+1), 3)
+            combos = combinations_with_replacement(range(derivs+1), 3)
             for combo in list(combos):
                 perms = set(permutations(combo))
                 for perm in list(perms):
@@ -164,15 +183,15 @@ class Transform():
                         derivatives = np.vstack([derivatives, np.array(perm)])
                     else:
                         derivatives = np.array([perm])
-        elif order.lower() == 'force':
+        elif derivs.lower() == 'force':
             derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
                                     [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
                                     [0, 1, 1], [0, 0, 2]])
-            # TODO: this assumes the Grid is sorted (which it should be)
+            # FIXME: this assumes the Grid is sorted (which it should be)
             if np.all(self.__grid.nodes[:, 0] == np.array([0, 0, 0])):
                 axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
                 derivatives = np.vstack([derivatives, axis])
-        elif order.lower() == 'qs':
+        elif derivs.lower() == 'qs':
             derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
                                     [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
                                     [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
@@ -215,10 +234,37 @@ class Transform():
         None
 
         """
-        # TODO: avoid recomputing existing nodes
-        self.__grid = grid
-        self.build()
-        self.build_pinv()
+        if self.__grid != grid:
+            old_nodes = self.__grid.nodes
+            new_nodes = grid.nodes
+            num_nodes = new_nodes.shape[0]
+            num_modes = self.__basis.modes.shape[0]
+            matrices = {i: {j: {k: {}
+                     for k in range(4)} for j in range(4)} for i in range(4)}
+            for d in self.__derivatives:
+                matrices[d[0]][d[1]][d[2]] = np.zeros((num_nodes, num_modes))
+
+            for i in range(num_nodes):
+                # idx = where( old_nodes = new_nodes[i] )
+                idx = np.where(np.all(np.array([
+                    np.array(old_nodes[:, 0] == new_nodes[i, 0]),
+                    np.array(old_nodes[:, 1] == new_nodes[i, 1]),
+                    np.array(old_nodes[:, 2] == new_nodes[i, 2])]), axis=0))[0]
+
+                if idx.size > 0:    # copy existing node
+                    for d in self.__derivatives:
+                        row = self.__matrices[d[0]][d[1]][d[2]][idx[0], :]
+                else:               # evaluate new node
+                    for d in self.__derivatives:
+                        row = self.__basis.evaluate(
+                                            np.atleast_2d(new_nodes[i, :]), d)
+
+                for d in self.__derivatives:
+                    matrices[d[0]][d[1]][d[2]][i, :] = row
+
+            self.__matrices = matrices
+            self.__grid = grid
+            self.build_pinv()
 
     @property
     def basis(self):
@@ -238,22 +284,49 @@ class Transform():
         None
 
         """
-        # TODO: avoid recomputing existing modes
-        self.__basis = basis
-        self.build()
-        self.build_pinv()
+        if self.__basis != basis:
+            old_modes = self.__basis.modes
+            new_modes = basis.modes
+            num_nodes = self.__grid.nodes.shape[0]
+            num_modes = new_modes.shape[0]
+            matrices = {i: {j: {k: {}
+                     for k in range(4)} for j in range(4)} for i in range(4)}
+            for d in self.__derivatives:
+                matrices[d[0]][d[1]][d[2]] = np.zeros((num_nodes, num_modes))
+            self.__basis = basis
+
+            for i in range(num_modes):
+                # idx = where( old_modes = new_modes[i] )
+                idx = np.where(np.all(np.array([
+                    np.array(old_modes[:, 0] == new_modes[i, 0]),
+                    np.array(old_modes[:, 1] == new_modes[i, 1]),
+                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
+
+                if idx.size > 0:    # copy existing mode
+                    for d in self.__derivatives:
+                        col = self.__matrices[d[0]][d[1]][d[2]][:, idx[0]]
+                else:               # evaluate new mode
+                    for d in self.__derivatives:
+                        # TODO: eliminate redundant computations here
+                        col = self.__basis.evaluate(self.__grid.nodes, d)[:, i]
+
+                for d in self.__derivatives:
+                    matrices[d[0]][d[1]][d[2]][:, i] = col
+
+            self.__matrices = matrices
+            self.build_pinv()
 
     @property
-    def order(self):
-        return self.__order
+    def derivatives(self):
+        return self.__derivatives
 
-    @order.setter
-    def order(self, order) -> None:
+    @derivatives.setter
+    def derivatives(self, derivs) -> None:
         """Changes the order and updates the matrices accordingly
 
         Parameters
         ----------
-        order : int or string
+        derivs : int or string
             order of derivatives needed, if an int (Default = 0)
             OR
             type of calculation being performed, if a string
@@ -267,11 +340,11 @@ class Transform():
         None
 
         """
-        if order != self.__order:
-            self.__order = order
+        if derivs != self.__derivs:
+            self.__derivs = derivs
 
             old_derivatives = self.__derivatives
-            self.__derivatives = self.get_derivatives(self.__order)
+            self.__derivatives = self.get_derivatives(self.__derivs)
             self.sort_derivatives()
             new_derivatives = self.__derivatives
 
@@ -282,10 +355,6 @@ class Transform():
             for d in derivs_to_add:
                 self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
                                                         self.__grid.nodes, d)
-
-    @property
-    def derivatives(self):
-        return self.__derivatives
 
     @property
     def matrices(self):

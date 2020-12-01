@@ -843,3 +843,27 @@ else:
     jacfwd = FiniteDifferenceJacobian
     jacrev = FiniteDifferenceJacobian
     grad = FiniteDifferenceJacobian
+
+
+def equals(a, b) -> bool:
+    """Compares dictionaries that have numpy array values
+
+    Parameters
+    ----------
+    a : dict
+        reference dictionary
+    b : dict
+        comparison dictionary
+
+    Returns
+    -------
+    bool
+        a == b
+
+    """
+    if a.keys() != b.keys():
+        return False
+    return all(equals(a[key], b[key]) if isinstance(a[key], dict)
+               else np.allclose(a[key], b[key]) if isinstance(a[key], np.ndarray)
+               else (a[key] == b[key])
+               for key in a)

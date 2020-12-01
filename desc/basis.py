@@ -4,7 +4,7 @@ import warnings
 import numba
 from abc import ABC, abstractmethod
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, flatten_list, factorial
+from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, flatten_list, factorial, equals
 
 
 class Basis(ABC):
@@ -29,6 +29,25 @@ class Basis(ABC):
     @abstractmethod
     def __init__(self) -> None:
         pass
+
+    def __eq__(self, other) -> bool:
+        """Overloads the == operator
+
+        Parameters
+        ----------
+        other : Basis
+            another Basis object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is a Basis with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        return equals(self.__dict__, other.__dict__)
 
     @abstractmethod
     def get_modes(self):
@@ -133,7 +152,7 @@ class PowerSeries(Basis):
             basis functions evaluated at nodes
 
         """
-        return powers(nodes[0, :], self._Basis__modes[:, 0], dr=derivatives[0])
+        return powers(nodes[:, 0], self._Basis__modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L:int) -> None:
         """
@@ -212,8 +231,8 @@ class DoubleFourierSeries(Basis):
             basis functions evaluated at nodes
 
         """
-        poloidal = fourier(nodes[1, :], self._Basis__modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[2, :], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
+        poloidal = fourier(nodes[:, 1], self._Basis__modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
         return poloidal*toroidal
 
     def change_resolution(self, M:int, N:int) -> None:
@@ -392,9 +411,9 @@ class FourierZernikeBasis(Basis):
             basis functions evaluated at nodes
 
         """
-        radial = jacobi(nodes[0, :], self._Basis__modes[:, 0], self._Basis__modes[:, 1], dr=derivatives[0])
-        poloidal = fourier(nodes[1, :], self._Basis__modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[2, :], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
+        radial = jacobi(nodes[:, 0], self._Basis__modes[:, 0], self._Basis__modes[:, 1], dr=derivatives[0])
+        poloidal = fourier(nodes[:, 1], self._Basis__modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
         return radial*poloidal*toroidal
 
     def change_resolution(self, M:int, N:int, delta_lm:int) -> None:

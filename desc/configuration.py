@@ -271,7 +271,7 @@ class Equilibrium(Configuration):
         self.solved = False
 
 
-# TODO: Does this inherit from Equilibrium?
+# XXX: Does this inherit from Equilibrium?
 class EquiliriaFamily(Equilibrium):
     """EquilibriaFamily stores a list of Equilibria. Its default behavior acts 
        like the last Equilibrium in the list. 

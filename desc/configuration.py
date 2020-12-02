@@ -321,7 +321,6 @@ class EquilibriaFamily(MutableSequence):
             file_format = self._file_format_
         reader = eq_io.reader_factory(self.load_from, file_format=file_format)
         idx = 0
-        self.__equilibria__ = []
         while str(idx) in reader.groups():
             self.append(Equilibrium(load_from=reader.sub(str(idx))))
             idx += 1

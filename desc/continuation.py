@@ -9,7 +9,7 @@ from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 from desc.objective_funs import get_equil_obj_fun, is_nested
 from desc.nodes import get_nodes_pattern, get_nodes_surf
-from desc.input_output import Checkpoint
+from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
 
 

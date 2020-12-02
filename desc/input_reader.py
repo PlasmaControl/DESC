@@ -396,6 +396,9 @@ class InputReader:
                     bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
                     inputs['bdry'] = np.pad(
                         inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['bdry'][bdry_idx[0], 0] = m
+                    inputs['bdry'][bdry_idx[0], 1] = n
+                inputs['bdry'][bdry_idx[0], 3] = bZ
 
         # error handling
         if np.any(inputs['Mpol'] == 0):

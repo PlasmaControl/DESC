@@ -79,7 +79,6 @@ def main(cl_args=None):
 
     from desc.continuation import solve_eq_continuation
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-    from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
     from desc.vmec import read_vmec_output, vmec_error
 
@@ -91,9 +90,9 @@ def main(cl_args=None):
 
     # solve equilibrium
     iterations, timer = solve_eq_continuation(
-        ir.inputs, checkpoint_filename=out_fname, device=device)
+        ir.inputs, checkpoint_filename=ir.output_path, device=device)
 
-    if args.plot:
+    if ir.args.plot:
 
         equil_init = iterations['init']
         equil = iterations['final']
@@ -102,9 +101,9 @@ def main(cl_args=None):
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 
         # plot comparison to VMEC
-        if args.vmec:
+        if ir.args.vmec:
             print('Plotting comparison to VMEC, this may take a few moments...')
-            vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
+            vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
             err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
             print("Error relative to VMEC solution: {} mm".format(err*1e3))

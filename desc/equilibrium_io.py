@@ -8,7 +8,6 @@ import warnings
 from abc import ABC
 
 from desc.backend import TextColors
-from desc.configuration import Configuration, Equilibrium
 
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
@@ -184,7 +183,7 @@ class hdf5Reader:
             raise SyntaxError('save_to of type {} is not a filename or hdf5 '
                 'file or group.'.format(type(self.load_from)))
 
-    def read_obj(self, obj, where=None):
+    def resolve_where(self, where):
         if where is None:
             loc = self.base
         elif self.check_hdf5_type(where):
@@ -192,6 +191,10 @@ class hdf5Reader:
         else:
             raise SyntaxError("where '{}' is not a readable type. Must be "
                     "hdf5 file or group".format(where))
+        return loc
+
+    def read_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
                 setattr(obj, attr, loc[attr][()])
@@ -201,13 +204,7 @@ class hdf5Reader:
         return None
 
     def read_dict(self, thedict, where=None):
-        if where is None:
-            loc = self.base
-        elif self.check_hdf5_type(where):
-            loc = where
-        else:
-            raise SyntaxError("where '{}' is not a writable type. Must be "
-                    "hdf5 file or group".format(where))
+        loc = self.resolve_where(where)
         for key in loc.keys():
             try:
                 thedict.update({key : loc[key][()]})
@@ -218,21 +215,21 @@ class hdf5Reader:
             #            RuntimeWarning)
         return None
 
-    def load_configuration(self, where=None):
-        kwargs = {}
-        self.read_dict(kwargs, where=where)
-        return Configuration(**kwargs)
+    #def load_configuration(self, where=None):
+    #    kwargs = {}
+    #    self.read_dict(kwargs, where=where)
+    #    return Configuration(**kwargs)
 
-    def load_equilibrium(self, where=None):
-        kwargs = {}
-        self.read_dict(self, where=None)
-        eq = Equilibrium(**kwargs)
+    #def load_equilibrium(self, where=None):
+    #    kwargs = {}
+    #    self.read_dict(self, where=None)
+    #    eq = Equilibrium(**kwargs)
 
         # overwrite the configuration in constructor
-        configuration_kwargs = {}
-        eq.initial = self.load_configuration(configuration_kwargs,
-                where=self.sub('initial'))
-        return eq
+    #    configuration_kwargs = {}
+    #    eq.initial = self.load_configuration(configuration_kwargs,
+    #            where=self.sub('initial'))
+    #    return eq
 
     def sub(self, name):
         try:
@@ -240,12 +237,16 @@ class hdf5Reader:
         except ValueError:
             return self.base[name]
 
+    def groups(self, where):
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
     def close(self):
         if self._close_base_:
             self.base.close()
             self._close_base_ = False
-        else:
-            warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        #else:
+        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
         return None
 
 def writer_factory(save_to, file_format, file_mode='w'):
@@ -282,7 +283,7 @@ class hdf5Writer:
             raise SyntaxError('save_to of type {} is not a filename or hdf5 '
                 'file or group.'.format(self.save_to_type))
 
-    def write_obj(self, obj, where=None):
+    def resolve_where(self, where):
         if where is None:
             loc = self.base
         elif self.check_hdf5_type(where):
@@ -290,6 +291,10 @@ class hdf5Writer:
         else:
             raise SyntaxError("where '{}' is not a writable type. Must be "
                     "hdf5 file or group".format(where))
+        return loc
+
+    def write_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
                 loc.create_dataset(attr, data=getattr(obj, attr))
@@ -299,13 +304,7 @@ class hdf5Writer:
         return None
 
     def write_dict(self, thedict, where=None):
-        if where is None:
-            loc = self.base
-        elif self.check_hdf5_type(where):
-            loc = where
-        else:
-            raise SyntaxError("where '{}' is not a writable type. Must be "
-                    "hdf5 file or group".format(where))
+        loc = self.resolve_where(where)
         for key in thedict.keys():
             loc.create_dataset(key, data=thedict[key])
         return None
@@ -313,12 +312,18 @@ class hdf5Writer:
     def sub(self, name):
         return self.base.create_group(name)
 
+    def groups(self, where):
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+
+
     def close(self):
         if self._close_base_:
             self.base.close()
             self._close_base_ = False
-        else:
-            warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        #else:
+        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
         return None
 
 def subgroup(name, save_to, fmt):

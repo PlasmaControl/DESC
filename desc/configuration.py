@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, sign
+from desc.backend import jnp, put, opsindex, cross, dot, TextColors, sign
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 
@@ -43,6 +43,49 @@ def symmetry_matrix(RZ_modes, lambda_modes, sym:bool):
             sym_mat = np.eye(2*RZ_modes.shape[0] + lambda_modes.shape[0])
 
         return sym_mat
+
+
+# TODO: can probably replace this function when Configuration interacts with Solver
+def change_resolution(x_old, stell_sym, RZ_basis_old, RZ_basis_new, L_basis_old, L_basis_new):
+    """
+
+    Parameters
+    ----------
+    x_old : ndarray
+        DESCRIPTION.
+    RZ_basis_old : FourierZernikeBasis
+        DESCRIPTION.
+    RZ_basis_new : FourierZernikeBasis
+        DESCRIPTION.
+    L_basis_old : DoubleFourierSeries
+        DESCRIPTION.
+    L_basis_new : DoubleFourierSeries
+        DESCRIPTION.
+
+    Returns
+    -------
+    x_new : ndarray
+        
+
+    """
+    sym_mat_old = symmetry_matrix(RZ_basis_old.modes, L_basis_old.modes, sym=stell_sym)
+    cR_old, cZ_old, cL_old = unpack_state(np.matmul(sym_mat_old, x_old), RZ_basis_old.num_modes)
+
+    cR_new = np.zeros((RZ_basis_new.num_modes,))
+    cZ_new = np.zeros((RZ_basis_new.num_modes,))
+    cL_new = np.zeros((L_basis_new.num_modes,))
+
+    idx = np.where((RZ_basis_old.modes == RZ_basis_new.modes).all(axis=-1))[0]
+    cR_new[idx] = cR_old
+    cZ_new[idx] = cZ_old
+
+    idx = np.where((L_basis_old.modes == L_basis_new.modes).all(axis=-1))[0]
+    cL_new[idx] = cL_old
+
+    sym_mat_new = symmetry_matrix(RZ_basis_new.modes, L_basis_new.modes, sym=stell_sym)
+    x_new = np.concatenate([cR_new, cZ_new, cL_new])
+    x_new = jnp.matmul(sym_mat_new.T, x_new)
+    return x_new
 
 
 def unpack_state(x, nRZ):
@@ -291,9 +334,10 @@ class EquiliriaFamily(Equilibrium):
     def solver(self, solver):
         self.__solver = solver
 
+
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
-
+# TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
 def compute_coordinate_derivatives(cR, cZ, RZ_transform, zeta_ratio=1.0):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
 

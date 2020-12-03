@@ -82,7 +82,9 @@ class Grid():
             node coordinates, in (rho,theta,zeta)
 
         """
-        return np.atleast_2d(nodes).reshape((-1, 3))
+        nodes = np.atleast_2d(nodes).reshape((-1, 3))
+        volumes = np.zeros_like(nodes)
+        return nodes, volumes
 
     @abstractmethod
     def change_resolution(self) -> None:
@@ -148,6 +150,10 @@ class Grid():
         self.__volumes = volumes
 
     @property
+    def num_nodes(self):
+        return self.__nodes.shape[0]
+
+    @property
     def axis(self):
         return self.__axis
 
@@ -157,7 +163,7 @@ class LinearGrid(Grid):
        spaced in each coordinate. 
     """
 
-    def __init__(self, L:int=1, M:int=0, N:int=0, NFP:int=1, sym:bool=False,
+    def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
                  endpoint:bool=False, surfs=np.array([1.0])) -> None:
         """Initializes a LinearGrid
 
@@ -166,9 +172,9 @@ class LinearGrid(Grid):
         L : int
             radial grid resolution (L radial nodes, Defualt = 1)
         M : int
-            poloidal grid resolution (M poloidal nodes, Default = 0)
+            poloidal grid resolution (M poloidal nodes, Default = 1)
         N : int
-            toroidal grid resolution (N toroidal nodes, Default = 0)
+            toroidal grid resolution (N toroidal nodes, Default = 1)
         NFP : int
             number of field periods (Default = 1)
         sym : bool
@@ -199,7 +205,7 @@ class LinearGrid(Grid):
         self.sort_nodes()
         self.find_axis()
 
-    def create_nodes(self, L:int=1, M:int=0, N:int=0, NFP:int=1,
+    def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
                      sym:bool=False, endpoint:bool=False,
                      surfs=np.array([1.0])):
         """
@@ -209,9 +215,9 @@ class LinearGrid(Grid):
         L : int
             radial grid resolution (L radial nodes, Defualt = 1)
         M : int
-            poloidal grid resolution (M poloidal nodes, Default = 0)
+            poloidal grid resolution (M poloidal nodes, Default = 1)
         N : int
-            toroidal grid resolution (N toroidal nodes, Default = 0)
+            toroidal grid resolution (N toroidal nodes, Default = 1)
         NFP : int
             number of field periods (Default = 1)
         sym : bool

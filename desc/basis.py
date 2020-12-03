@@ -1,6 +1,5 @@
 import numpy as np
 import functools
-import warnings
 import numba
 from abc import ABC, abstractmethod
 
@@ -96,6 +95,10 @@ class Basis(ABC):
     @modes.setter
     def modes(self, modes) -> None:
         self.__modes = modes
+
+    @property
+    def num_modes(self):
+        return self.__modes.shape[0]
 
 
 class PowerSeries(Basis):
@@ -264,7 +267,7 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
-                 indexing:str='ansi') -> None:
+                 index:str='ansi') -> None:
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -275,7 +278,7 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        indexing : str
+        index : str
             Indexing method, one of the following options: 
             ('ansi','frige','chevron','house').
             For L=0, all methods are equivalent and give a "chevron" shaped
@@ -312,13 +315,13 @@ class FourierZernikeBasis(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
-        self.__indexing = indexing
+        self.__index = index
 
         self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M, N=self._Basis__N,
-                                      indexing=self.__indexing)
+                                      index=self.__index)
         self.sort_modes()
 
-    def get_modes(self, L:int=-1, M:int=0, N:int=0, indexing:str='ansi'):
+    def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -329,7 +332,7 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        indexing : str
+        index : str
             Indexing method, one of the following options: 
             ('ansi','frige','chevron','house').
             For L=0, all methods are equivalent and give a "chevron" shaped
@@ -366,21 +369,21 @@ class FourierZernikeBasis(Basis):
                      'fringe': 2*M,
                      'chevron': M,
                      'house': 2*M}
-        L = L if L >= 0 else default_L[indexing]
+        L = L if L >= 0 else default_L[index]
 
-        if indexing == 'ansi':
+        if index == 'ansi':
             pol_posm = [[(m+d, m) for m in range(0, M+1) if m+d < M+1]
                         for d in range(0, L+1, 2)]
 
-        elif indexing == 'fringe':
+        elif index == 'fringe':
             pol_posm = [[(m+d//2, m-d//2) for m in range(0, M+1) if m-d//2 >= 0]
                         for d in range(0, L+1, 2)]
 
-        elif indexing == 'chevron':
+        elif index == 'chevron':
             pol_posm = [(m+d, m) for m in range(0, M+1)
                         for d in range(0, L+1, 2)]
 
-        elif indexing == 'house':
+        elif index == 'house':
             pol_posm = [[(l, m) for m in range(0, M+1) if l >= m and (l-m) % 2 == 0]
                         for l in range(0, L+1)] + [(m, m) for m in range(M+1)]
             pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))

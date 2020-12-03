@@ -237,8 +237,8 @@ class Transform():
         if self.__grid != grid:
             old_nodes = self.__grid.nodes
             new_nodes = grid.nodes
-            num_nodes = new_nodes.shape[0]
-            num_modes = self.__basis.modes.shape[0]
+            num_nodes = grid.num_nodes
+            num_modes = self.num_modes
             matrices = {i: {j: {k: {}
                      for k in range(4)} for j in range(4)} for i in range(4)}
             for d in self.__derivatives:
@@ -287,8 +287,8 @@ class Transform():
         if self.__basis != basis:
             old_modes = self.__basis.modes
             new_modes = basis.modes
-            num_nodes = self.__grid.nodes.shape[0]
-            num_modes = new_modes.shape[0]
+            num_nodes = self.num_nodes
+            num_modes = basis.num_modes
             matrices = {i: {j: {k: {}
                      for k in range(4)} for j in range(4)} for i in range(4)}
             for d in self.__derivatives:
@@ -363,6 +363,14 @@ class Transform():
     @property
     def matrices(self):
         return self.__matrices
+
+    @property
+    def num_nodes(self):
+        return self.__grid.num_nodes
+
+    @property
+    def num_modes(self):
+        return self.__basis.num_modes
 
 
 # these functions are currently unused ---------------------------------------

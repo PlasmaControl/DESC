@@ -3,7 +3,9 @@ from scipy.optimize import fsolve
 from netCDF4 import Dataset
 
 from desc.backend import sign
-from desc.transform import ZernikeTransform
+from desc.grid import Grid
+from desc.basis import FourierZernikeBasis
+from desc.transform import Transform
 
 
 # TODO: add other fields including B, rmns, zmnc, lmnc, etc
@@ -75,12 +77,13 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
     v = np.tile(vartheta[np.newaxis, ..., np.newaxis], (ns, 1, Ntor))
     z = np.tile(zeta[np.newaxis, np.newaxis, ...], (ns, Npol, 1))
     nodes = np.stack([r.flatten(), v.flatten(), z.flatten()])
-    zernike_transform = ZernikeTransform(
-        nodes, equil['zern_idx'], equil['NFP'], method='fft')
-    R_desc = zernike_transform.transform(
-        equil['cR'], 0, 0, 0).reshape((ns, Npol, Ntor))
-    Z_desc = zernike_transform.transform(
-        equil['cZ'], 0, 0, 0).reshape((ns, Npol, Ntor))
+
+    grid = Grid(nodes)
+    basis = FourierZernikeBasis(M=equil['M'], N=equil['N'], NFP=equil['NFP'])
+    transf = Transform(grid, basis)
+
+    R_desc = transf.transform(equil['cR']).reshape((ns, Npol, Ntor))
+    Z_desc = transf.transform(equil['cZ']).reshape((ns, Npol, Ntor))
 
     print('Interpolating VMEC solution to sfl coordinates')
     R_vmec = np.zeros((ns, Npol, Ntor))

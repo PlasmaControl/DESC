@@ -2,15 +2,17 @@ import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot
 
-from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, TextColors
-from desc.configuration import symmetry_matrix
+from desc.backend import jnp, put, cross, dot, TextColors
+from desc.configuration import symmetry_matrix, unpack_state
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
 from desc.configuration import compute_contravariant_basis, compute_jacobian
 from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_magnetic_field_magnitude
-from desc.boundary_conditions import compute_bdry_err_RZ, compute_bdry_err_four, compute_lambda_err
+from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
+
+# TODO: lots of documentation needs to be updated!
 
 class ObjectiveFunction(ABC):
     """
@@ -57,49 +59,95 @@ class ObjectiveFunction(ABC):
 
     """
 
-    def __init__(self, stell_sym, errr_mode, bdry_mode, bdry_fun, RZ_transform, L_transform, bdryM, bdryN, scalar):
+    def __init__(self, RZ_transform:Transform=None,
+                 RZb_transform:Transform=None, L_transform:Transform=None,
+                 pres_transform:Transform=None, iota_transform:Transform=None,
+                 stell_sym:bool=True, scalar:bool=False) -> None:
+        """Initializes an ObjectiveFunction
+
+        Parameters
+        ----------
+        RZ_transform : Transform, optional
+            transforms R and Z coefficients to real space in the volume
+        RZb_transform : Transform, optional
+            transforms R and Z coefficients to real space on the surface
+        L_transform : Transform, optional
+            transforms lambda coefficients to real space
+        pres_transform : Transform, optional
+            transforms pressure coefficients to real space
+        iota_transform : Transform, optional
+            transforms rotational transform coefficients to real space
+        stell_sym : bool, optional
+            True for stellarator symmetry (Default), False otherwise
+        scalar : bool, optional
+            True for scalar objectives, False otherwise (Default)
+
+        Returns
+        -------
+        None
+
+        """
         self.stell_sym = stell_sym
-        # stellarator symmetry
-        if stell_sym:
-            self.sym_mat = symmetric_x(zern_idx, lambda_idx)
-        else:
-            self.sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
-        self.errr_mode = errr_mode
-        self.bdry_mode = bdry_mode
-        self.bdry_fun = bdry_fun
-        self.M = M
-        self.N = N
-        self.NFP = NFP
-        self.zernike_transform = zernike_transform
-        self.bdry_zernike_transform = bdry_zernike_transform
-        self.zern_idx = zern_idx
-        self.lambda_idx = lambda_idx
-        self.bdryM = bdryM
-        self.bdryN = bdryN
+        self.sym_mat = symmetry_matrix(RZ_transform.basis.modes, L_transform.basis.modes, self.stell_sym)
+        self.RZ_transform = RZ_transform
+        self.RZb_transform = RZb_transform
+        self.L_transform = L_transform
+        self.pres_transform = pres_transform
+        self.iota_transform = iota_transform
         self.scalar = scalar
-        
+
     @abstractmethod
-    def compute(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
     @abstractmethod
-    def callback(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
-    
+
+
 class ForceErrorNodes(ObjectiveFunction):
     """ObjectiveFunction object subclass that minimizes equilibrium force balance error"""
-    def __init__(self,stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar):
-        """ Extends the initializer of the parent ObjectiveFunction by specifying that node force balance will be used to compute error"""
 
-        super().__init__(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
+    def __init__(self, RZ_transform:Transform, RZb_transform:Transform,
+                 L_transform:Transform, pres_transform:Transform,
+                 iota_transform:Transform, stell_sym:bool=True,
+                 scalar:bool=False) -> None:
+        """Initializes a ForceErrorNodes
+
+        Parameters
+        ----------
+        RZ_transform : Transform
+            transforms R and Z coefficients to real space in the volume
+        RZb_transform : Transform
+            transforms R and Z coefficients to real space on the surface
+        L_transform : Transform
+            transforms lambda coefficients to real space
+        pres_transform : Transform
+            transforms pressure coefficients to real space
+        iota_transform : Transform
+            transforms rotational transform coefficients to real space
+        stell_sym : bool, optional
+            True for stellarator symmetry (Default), False otherwise
+        scalar : bool, optional
+            True for scalar objectives, False otherwise (Default)
+
+        Returns
+        -------
+        None
+
+        """
+
+        super().__init__(RZ_transform, RZb_transform, L_transform, pres_transform, iota_transform, stell_sym, scalar)
         self.equil_fun = compute_force_error_nodes # uses force balance error as objective function
-        
-    def compute(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        self.bdry_fun = compute_bdry_err
+
+    def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
-        cR, cZ, cL = unpack_x(jnp.matmul(self.sym_mat, x), len(self.zern_idx))
+        cR, cZ, cL = unpack_state(
+                    jnp.matmul(self.sym_mat, x), self.RZ_transform.num_modes)
         errRf, errZf = self.equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, self.zernike_transform)
+            cR, cZ, cP, cI, Psi_lcfs, self.RZ_transform, self.pres_transform, self.iota_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
-            cR, cZ, cL, bdry_ratio, self.bdry_zernike_transform, self.lambda_idx, bdryR, bdryZ, self.bdryM, self.bdryN, self.NFP, self.stell_sym)
+            cR, cZ, cL, cRb, cZb, self.RZb_transform, self.L_transform, bdry_ratio)
 
         residual = jnp.concatenate([errRf.flatten(),
                                     errZf.flatten(),
@@ -113,15 +161,16 @@ class ForceErrorNodes(ObjectiveFunction):
         if self.scalar:
             residual = jnp.log1p(jnp.sum(residual**2))
         return residual
-    
-    def callback(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
+
+    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
         """ Print residuals. Overrides callback method of the parent ObjectiveFunction"""
-        cR, cZ, cL = unpack_x(jnp.matmul(self.sym_mat, x), len(self.zern_idx))
+        cR, cZ, cL = unpack_state(
+                    jnp.matmul(self.sym_mat, x), self.RZ_transform.num_modes)
         errRf, errZf = self.equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, self.zernike_transform)
+            cR, cZ, cP, cI, Psi_lcfs, self.RZ_transform, self.pres_transform, self.iota_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
-            cR, cZ, cL, bdry_ratio, self.bdry_zernike_transform, self.lambda_idx, bdryR, bdryZ, self.bdryM, self.bdryN, self.NFP, self.stell_sym)
-        errL0 = compute_lambda_err(cL, self.lambda_idx, self.NFP)
+            cR, cZ, cL, cRb, cZb, self.RZb_transform, self.L_transform, bdry_ratio)
+        errL0 = compute_lambda_err(cL, self.L_transform.basis)
 
         errRf_rms = jnp.sqrt(jnp.sum(errRf**2))
         errZf_rms = jnp.sqrt(jnp.sum(errZf**2))
@@ -137,22 +186,52 @@ class ForceErrorNodes(ObjectiveFunction):
         resid_rms = 1/2*jnp.sum(residual**2)
         print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
                 resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+
 
 class AccelErrorSpectral(ObjectiveFunction):
     """ObjectiveFunction object subclass that minimizes equilibrium spectral-space acceleration error"""
-    def __init__(self,stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar):
-        """ Extends the initializer of the parent ObjectiveFunction by specifying that spectral-space acceleration error will be used to compute error"""
 
-        super().__init__(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
-        self.equil_fun = compute_accel_error_spectral # uses acceleration error in spectral space as objective function
-        
-    def compute(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
-        """ Compute acceleration error in spectral space. Overrides the compute method of the parent ObjectiveFunction"""
-        cR, cZ, cL = unpack_x(jnp.matmul(self.sym_mat, x), len(self.zern_idx))
+    def __init__(self, RZ_transform:Transform, RZb_transform:Transform,
+                 L_transform:Transform, pres_transform:Transform,
+                 iota_transform:Transform, stell_sym:bool=True,
+                 scalar:bool=False) -> None:
+        """Initializes a AccelErrorNodes
+
+        Parameters
+        ----------
+        RZ_transform : Transform
+            transforms R and Z coefficients to real space in the volume
+        RZb_transform : Transform
+            transforms R and Z coefficients to real space on the surface
+        L_transform : Transform
+            transforms lambda coefficients to real space
+        pres_transform : Transform
+            transforms pressure coefficients to real space
+        iota_transform : Transform
+            transforms rotational transform coefficients to real space
+        stell_sym : bool, optional
+            True for stellarator symmetry (Default), False otherwise
+        scalar : bool, optional
+            True for scalar objectives, False otherwise (Default)
+
+        Returns
+        -------
+        None
+
+        """
+
+        super().__init__(RZ_transform, RZb_transform, L_transform, pres_transform, iota_transform, stell_sym, scalar)
+        self.equil_fun = compute_accel_error_spectral
+        self.bdry_fun = compute_bdry_err
+
+    def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
+        cR, cZ, cL = unpack_state(
+                    jnp.matmul(self.sym_mat, x), self.RZ_transform.num_modes)
         errRf, errZf = self.equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, self.zernike_transform)
+            cR, cZ, cP, cI, Psi_lcfs, self.RZ_transform, self.pres_transform, self.iota_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
-            cR, cZ, cL, bdry_ratio, self.bdry_zernike_transform, self.lambda_idx, bdryR, bdryZ, self.bdryM, self.bdryN, self.NFP, self.stell_sym)
+            cR, cZ, cL, cRb, cZb, self.RZb_transform, self.L_transform, bdry_ratio)
 
         residual = jnp.concatenate([errRf.flatten(),
                                     errZf.flatten(),
@@ -167,14 +246,15 @@ class AccelErrorSpectral(ObjectiveFunction):
             residual = jnp.log1p(jnp.sum(residual**2))
         return residual
     
-    def callback(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
+    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
         """ Print residuals. Overrides callback method of the parent ObjectiveFunction"""
-        cR, cZ, cL = unpack_x(jnp.matmul(self.sym_mat, x), len(self.zern_idx))
+        cR, cZ, cL = unpack_state(
+                    jnp.matmul(self.sym_mat, x), self.RZ_transform.num_modes)
         errRf, errZf = self.equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, self.zernike_transform)
+            cR, cZ, cP, cI, Psi_lcfs, self.RZ_transform, self.pres_transform, self.iota_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
-            cR, cZ, cL, bdry_ratio, self.bdry_zernike_transform, self.lambda_idx, bdryR, bdryZ, self.bdryM, self.bdryN, self.NFP, self.stell_sym)
-        errL0 = compute_lambda_err(cL, self.lambda_idx, self.NFP)
+            cR, cZ, cL, cRb, cZb, self.RZb_transform, self.L_transform, bdry_ratio)
+        errL0 = compute_lambda_err(cL, self.L_transform.basis)
 
         errRf_rms = jnp.sqrt(jnp.sum(errRf**2))
         errZf_rms = jnp.sqrt(jnp.sum(errZf**2))
@@ -190,7 +270,6 @@ class AccelErrorSpectral(ObjectiveFunction):
         resid_rms = 1/2*jnp.sum(residual**2)
         print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
                 resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
-
 
 
 class ObjectiveFunctionFactory():
@@ -204,70 +283,58 @@ class ObjectiveFunctionFactory():
     get_obj_fxn(attributes)
         takes Equilibrium.attributes and uses it to compute and return the value of the objective function
     """
-    
-    def get_equil_obj_fun(self, stell_sym, errr_mode, bdry_mode, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar=False) -> ObjectiveFunction:
+
+    def get_equil_obj_fun(errr_mode, RZ_transform:Transform=None,
+                 RZb_transform:Transform=None, L_transform:Transform=None,
+                 pres_transform:Transform=None, iota_transform:Transform=None,
+                 stell_sym:bool=True, scalar:bool=False) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
-    
+
         Parameters
         ----------
-        stell_sym : bool
-            True if stellarator symmetry is enforced
-        errr_mode : string
-            'force' or 'accel'. Method to use for calculating equilibrium error.
-        bdry_mode : string
-            'real' or 'spectral'. Method to use for calculating boundary error.
-        M : int
-            maximum poloidal resolution
-        N : int
-            maximum toroidal resolution
-        NFP : int
-            number of field periods
-        zernike_transform : ZernikeTransform
-            object with transform method to go from spectral to physical space with derivatives
-        bdry_zernike_transform : ZernikeTransform
-            zernike transform object for boundary conditions
-        zern_idx : ndarray of int, shape(N_coeffs,3)
-            mode numbers for Zernike basis
-        lambda_idx : ndarray of int, shape(N_lambda,2)
-            mode numbers for Fourier basis
-        bdryM : ndarray of int
-            poloidal mode numbers for boundary
-        bdryN : ndarray of int
-            toroidal mode numbers for boundary
-        scalar : bool
-             whether to have objective compute scalar or vector error (Default value = False)
-    
+        errr_mode : str
+            error mode of the objective function
+            one of 'force', 'accel'
+        RZ_transform : Transform, optional
+            transforms R and Z coefficients to real space in the volume
+        RZb_transform : Transform, optional
+            transforms R and Z coefficients to real space on the surface
+        L_transform : Transform, optional
+            transforms lambda coefficients to real space
+        pres_transform : Transform, optional
+            transforms pressure coefficients to real space
+        iota_transform : Transform, optional
+            transforms rotational transform coefficients to real space
+        stell_sym : bool, optional
+            True for stellarator symmetry (Default), False otherwise
+        scalar : bool, optional
+            True for scalar objectives, False otherwise (Default)
+
         Returns
         -------
         obj_fxn : ObjectiveFunction
             equilibrium objective function object, containing the compute and callback method for the objective function
 
-    
         """
-
-        if bdry_mode == 'real':
-            raise ValueError(TextColors.FAIL + "evaluating bdry error in real space coordinates is currently broken." +
-                             " Please yell at one of the developers and we will fix it" + TextColors.ENDC)
-            bdry_fun = compute_bdry_err_RZ
-        elif bdry_mode == 'spectral':
-            bdry_fun = compute_bdry_err_four
-        else:
-            raise ValueError(TextColors.FAIL + "Requested boundary error mode is not implemented." +
-                             " Available boundary error mode is 'spectral'" + TextColors.ENDC)
         if errr_mode == 'force':
-            obj_fun = ForceErrorNodes(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
+            obj_fun = ForceErrorNodes(
+                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
+                L_transform=L_transform, pres_transform=pres_transform,
+                iota_transform=iota_transform, stell_sym=stell_sym,
+                scalar=scalar)
         elif errr_mode == 'accel':
-            obj_fun = AccelErrorSpectral(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
+            obj_fun = AccelErrorSpectral(
+                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
+                L_transform=L_transform, pres_transform=pres_transform,
+                iota_transform=iota_transform, stell_sym=stell_sym,
+                scalar=scalar)
         else:
             raise ValueError(TextColors.FAIL + "Requested Objective Function is not implemented." +
                              " Available objective functions are 'force' and 'accel'" + TextColors.ENDC)
         return obj_fun
 
-#Create factory object, to be imported by main code
-obj_fun_factory = ObjectiveFunctionFactory()
 
-
-
+# TODO: need to turn this into another ObjectiveFun subclass
 def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_idx, modes_pol, modes_tor):
     """Gets the quasisymmetry objective function
 
@@ -304,7 +371,7 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_
 
     def qisym_obj(x, cI, Psi_lcfs):
 
-        cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
+        cR, cZ, cL = unpack_state(jnp.matmul(sym_mat, x), RZ_transform.num_modes)
         errQS = compute_qs_error_spectral(
             cR, cZ, cI, Psi_lcfs, NFP, zernike_transform, modes_pol, modes_tor, 1.0)
 
@@ -359,10 +426,10 @@ def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
 
     Parameters
     ----------
-    cR : ndarray
-        R coefficients
-    cZ : ndarray
-        Z coefficients
+    cR : ndarray, shape(RZ_transform.num_modes,)
+        spectral coefficients of R
+    cZ : ndarray, shape(RZ_transform.num_modes,)
+        spectral coefficients of Z
     basis : FourierZernikeBasis
         spectral basis for R and Z
     L : int
@@ -379,7 +446,7 @@ def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
 
     """
 
-    grid = LinearGrid(L=L, M=M, N=0, NFP=basis.NFP)
+    grid = LinearGrid(L=L, M=M, N=1, NFP=basis.NFP)
     transf = Transform(grid, basis)
 
     Rs = transf.transform(cR).reshape((L, -1)).T
@@ -474,16 +541,15 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
     f_beta = F_beta*helical
 
     # weight by local volume
-    volumes = RZ_transform.volumes
-    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
+    volumes = RZ_transform.grid.volumes
+    vol = jacobian['g']*volumes[:, 0]*volumes[:, 1]*volumes[:, 2]
     if len(axn):
         r = RZ_transform.grid.nodes[:, 0]
         r1 = jnp.min(r[r != 0])  # value of r one step out from axis
         r1_g = jnp.where(r == r1, jacobian['g'], 0)
         cnt = jnp.count_nonzero(r1_g)
         # volume of axis is zero, but we want to account for nonzero volume in cell around axis
-        vol = put(vol, axn, jnp.sum(
-            r1_g/2*volumes[0, :]*volumes[1, :]*volumes[2, :])/cnt)
+        vol = put(vol, axn, jnp.sum(r1_g/2*volumes[axn, 0]*volumes[axn, 1]*volumes[axn, 2])/cnt)
     f_rho = f_rho * vol
     f_beta = f_beta*vol
 
@@ -549,14 +615,14 @@ def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
     F_err = f_rho * con_basis['grad_rho'] + f_beta * beta
 
     # weight by local volume
-    volumes = RZ_transform.volumes
-    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
+    volumes = RZ_transform.grid.volumes
+    vol = jacobian['g']*volumes[:, 0]*volumes[:, 1]*volumes[:, 2]
     if len(axn):
         r = RZ_transform.grid.nodes[:, 0]
         r1 = jnp.min(r[r != 0])  # value of r one step out from axis
         r1idx = jnp.where(r == r1)[0]
         vol = put(vol, axn, jnp.mean(
-            jacobian['g'][r1idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
+            jacobian['g'][r1idx])/2*volumes[axn, 0]*volumes[axn, 1]*volumes[axn, 2])
     F_err = F_err*vol
 
     return F_err
@@ -568,9 +634,9 @@ def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_
 
     Parameters
     ----------
-    cR : ndarray, shape(N_coeffs,)
+    cR : ndarray, shape(RZ_transform.num_modes,)
         spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
+    cZ : ndarray, shape(RZ_transform.num_modes,)
         spectral coefficients of Z
     cP : ndarray, shape(N_coeffs,)
         spectral coefficients of pressure
@@ -601,7 +667,7 @@ def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_
     coord_der = compute_coordinate_derivatives(cR, cZ, RZ_transform)
     F_err = compute_force_error_RphiZ(
         cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform)
-    num_nodes = len(RZ_transform.nodes.shape[0])
+    num_nodes = RZ_transform.num_nodes
 
     AR = jnp.stack([jnp.ones(num_nodes), -coord_der['R_z'],
                     jnp.zeros(num_nodes)], axis=1)

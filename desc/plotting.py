@@ -3,9 +3,9 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from desc.nodes import get_nodes_grid
-from desc.transform import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
-from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
+# from desc.nodes import get_nodes_grid
+# from desc.transform import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
+# from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
 from desc.input_output import read_desc
 from desc.vmec import vmec_interpolate
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis

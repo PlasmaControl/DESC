@@ -536,51 +536,6 @@ def rms(x):
     return jnp.sqrt(jnp.mean(x**2))
 
 
-# TODO: replace iotafun & presfun with PowerSeries
-
-def iotafun(rho, nu, params):
-    """Rotational transform
-
-    Parameters
-    ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
-
-    Returns
-    -------
-    iota : array-like
-        iota profile (or derivative) evaluated at rho
-
-    """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
-
-
-def presfun(rho, nu, params):
-    """Plasma pressure
-
-    Parameters
-    ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
-
-    Returns
-    -------
-    pres : array-like
-        pressure profile (or derivative) evaluated at rho
-
-    """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
-
-
-
 class FiniteDifferenceJacobian():
     """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
 

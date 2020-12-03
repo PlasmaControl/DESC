@@ -408,8 +408,8 @@ def curve_self_intersects(x, y):
     a, b = segments[:, :, idx[0, :]]
     c, d = segments[:, :, idx[1, :]]
 
-    def signed_2d_area(a, b, c): return (
-        a[0] - c[0])*(b[1] - c[1]) - (a[1] - c[1])*(b[0] - c[0])
+    def signed_2d_area(a, b, c):
+        return (a[0] - c[0])*(b[1] - c[1]) - (a[1] - c[1])*(b[0] - c[0])
 
     # signs of areas correspond to which side of ab points c and d are
     a1 = signed_2d_area(a, b, d)  # Compute winding of abd (+ or -)
@@ -446,14 +446,14 @@ def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
 
     """
 
-    grid = LinearGrid(L=L, M=M, N=1, NFP=basis.NFP)
+    grid = LinearGrid(L=L, M=M, N=1, NFP=basis.NFP, endpoint=True)
     transf = Transform(grid, basis)
 
-    Rs = transf.transform(cR).reshape((L, -1)).T
-    Zs = transf.transform(cZ).reshape((L, -1)).T
+    Rs = transf.transform(cR).reshape((L, -1), order='F')
+    Zs = transf.transform(cZ).reshape((L, -1), order='F')
 
     p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True) for R, Z in zip(Rs, Zs)]
-    nested = np.all([p[i].contains_path(p[i+1]) for i in range(len(p)-1)])
+    nested = np.all([p[i+1].contains_path(p[i]) for i in range(len(p)-1)])
     intersects = np.any([curve_self_intersects(R, Z) for R, Z in zip(Rs, Zs)])
     return nested and not intersects
 
@@ -546,10 +546,10 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
     if len(axn):
         r = RZ_transform.grid.nodes[:, 0]
         r1 = jnp.min(r[r != 0])  # value of r one step out from axis
-        r1_g = jnp.where(r == r1, jacobian['g'], 0)
-        cnt = jnp.count_nonzero(r1_g)
+        r1idx = jnp.where(r == r1)[0]
         # volume of axis is zero, but we want to account for nonzero volume in cell around axis
-        vol = put(vol, axn, jnp.sum(r1_g/2*volumes[axn, 0]*volumes[axn, 1]*volumes[axn, 2])/cnt)
+        vol = put(vol, axn, jnp.mean(
+            jacobian['g'][r1idx])/2*volumes[axn, 0]*volumes[axn, 1]*volumes[axn, 2])
     f_rho = f_rho * vol
     f_beta = f_beta*vol
 
@@ -621,6 +621,7 @@ def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
         r = RZ_transform.grid.nodes[:, 0]
         r1 = jnp.min(r[r != 0])  # value of r one step out from axis
         r1idx = jnp.where(r == r1)[0]
+        # volume of axis is zero, but we want to account for nonzero volume in cell around axis
         vol = put(vol, axn, jnp.mean(
             jacobian['g'][r1idx])/2*volumes[axn, 0]*volumes[axn, 1]*volumes[axn, 2])
     F_err = F_err*vol

@@ -68,6 +68,9 @@ def change_resolution(x_old, stell_sym, RZ_basis_old, RZ_basis_new, L_basis_old,
         
 
     """
+    old_modes = RZ_basis_old.modes
+    new_modes = RZ_basis_new.modes
+
     sym_mat_old = symmetry_matrix(RZ_basis_old.modes, L_basis_old.modes, sym=stell_sym)
     cR_old, cZ_old, cL_old = unpack_state(np.matmul(sym_mat_old, x_old), RZ_basis_old.num_modes)
 
@@ -75,12 +78,22 @@ def change_resolution(x_old, stell_sym, RZ_basis_old, RZ_basis_new, L_basis_old,
     cZ_new = np.zeros((RZ_basis_new.num_modes,))
     cL_new = np.zeros((L_basis_new.num_modes,))
 
-    idx = np.where((RZ_basis_old.modes == RZ_basis_new.modes).all(axis=-1))[0]
-    cR_new[idx] = cR_old
-    cZ_new[idx] = cZ_old
+    for i in range(RZ_basis_new.num_modes):
+        idx = np.where(np.all(np.array([
+                    np.array(old_modes[:, 0] == new_modes[i, 0]),
+                    np.array(old_modes[:, 1] == new_modes[i, 1]),
+                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
+        if len(idx):
+            cR_new[i] = cR_old[idx[0]]
+            cZ_new[i] = cZ_old[idx[0]]
 
-    idx = np.where((L_basis_old.modes == L_basis_new.modes).all(axis=-1))[0]
-    cL_new[idx] = cL_old
+    for i in range(L_basis_new.num_modes):
+        idx = np.where(np.all(np.array([
+                    np.array(old_modes[:, 0] == new_modes[i, 0]),
+                    np.array(old_modes[:, 1] == new_modes[i, 1]),
+                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
+        if len(idx):
+            cL_new[i] = cL_old[idx[0]]
 
     sym_mat_new = symmetry_matrix(RZ_basis_new.modes, L_basis_new.modes, sym=stell_sym)
     x_new = np.concatenate([cR_new, cZ_new, cL_new])

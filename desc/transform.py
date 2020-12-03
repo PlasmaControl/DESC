@@ -235,35 +235,8 @@ class Transform():
 
         """
         if self.__grid != grid:
-            old_nodes = self.__grid.nodes
-            new_nodes = grid.nodes
-            num_nodes = grid.num_nodes
-            num_modes = self.num_modes
-            matrices = {i: {j: {k: {}
-                     for k in range(4)} for j in range(4)} for i in range(4)}
-            for d in self.__derivatives:
-                matrices[d[0]][d[1]][d[2]] = np.zeros((num_nodes, num_modes))
-
-            for i in range(num_nodes):
-                # idx = where( old_nodes = new_nodes[i] )
-                idx = np.where(np.all(np.array([
-                    np.array(old_nodes[:, 0] == new_nodes[i, 0]),
-                    np.array(old_nodes[:, 1] == new_nodes[i, 1]),
-                    np.array(old_nodes[:, 2] == new_nodes[i, 2])]), axis=0))[0]
-
-                if idx.size > 0:    # copy existing node
-                    for d in self.__derivatives:
-                        row = self.__matrices[d[0]][d[1]][d[2]][idx[0], :]
-                else:               # evaluate new node
-                    for d in self.__derivatives:
-                        row = self.__basis.evaluate(
-                                            np.atleast_2d(new_nodes[i, :]), d)
-
-                for d in self.__derivatives:
-                    matrices[d[0]][d[1]][d[2]][i, :] = row
-
-            self.__matrices = matrices
             self.__grid = grid
+            self.build()
             self.build_pinv()
 
     @property
@@ -285,35 +258,8 @@ class Transform():
 
         """
         if self.__basis != basis:
-            old_modes = self.__basis.modes
-            new_modes = basis.modes
-            num_nodes = self.num_nodes
-            num_modes = basis.num_modes
-            matrices = {i: {j: {k: {}
-                     for k in range(4)} for j in range(4)} for i in range(4)}
-            for d in self.__derivatives:
-                matrices[d[0]][d[1]][d[2]] = np.zeros((num_nodes, num_modes))
             self.__basis = basis
-
-            for i in range(num_modes):
-                # idx = where( old_modes = new_modes[i] )
-                idx = np.where(np.all(np.array([
-                    np.array(old_modes[:, 0] == new_modes[i, 0]),
-                    np.array(old_modes[:, 1] == new_modes[i, 1]),
-                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
-
-                if idx.size > 0:    # copy existing mode
-                    for d in self.__derivatives:
-                        col = self.__matrices[d[0]][d[1]][d[2]][:, idx[0]]
-                else:               # evaluate new mode
-                    for d in self.__derivatives:
-                        # TODO: eliminate redundant computations here
-                        col = self.__basis.evaluate(self.__grid.nodes, d)[:, i]
-
-                for d in self.__derivatives:
-                    matrices[d[0]][d[1]][d[2]][:, i] = col
-
-            self.__matrices = matrices
+            self.build()
             self.build_pinv()
 
     @property

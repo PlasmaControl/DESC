@@ -109,7 +109,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 print("Precomputing Transforms")
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                      axis=True, index=zern_mode, surfs=node_mode)
-            L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+            # FIXME: hard-coded non-symmetric L_grid until symmetry is implemented in Basis
+            L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=False)
             RZ_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
                                            NFP=NFP, index=zern_mode)
             L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP)
@@ -130,8 +131,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             timer.start("Initial guess computation")
             if verbose > 0:
                 print("Computing initial guess")
-            cR, cZ = get_initial_guess_scale_bdry(
-                axis, bdry, bdry_ratio[ii], RZ_basis.modes, NFP, mode=bdry_mode, rcond=1e-6)
+            cR, cZ = get_initial_guess_scale_bdry(axis, bdry, bdry_ratio[ii], RZ_basis)
             cL = np.zeros((L_basis.num_modes,))
             x = jnp.concatenate([cR, cZ, cL])
             sym_mat = symmetry_matrix(RZ_basis.modes, L_basis.modes, sym=stell_sym)
@@ -178,7 +178,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                         Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                          axis=True, index=zern_mode, surfs=node_mode)
-                L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+                # FIXME: hard-coded non-symmetric L_grid until symmetry is implemented in Basis
+                L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=False)
                 RZ_transform.grid = RZ_grid
                 RZb_transform.grid = L_grid
                 L_transform.grid = L_grid

@@ -6,10 +6,10 @@ NFP       = 1
 Psi_lcfs  = 1.0
 
 # spectral resolution
-Mpol   = 6  8
-Ntor   = 0  1
-Mnodes = 9 12
-Nnodes = 0  2
+Mpol   = 8   8
+Ntor   = 0   1
+Mnodes = 12 12
+Nnodes = 0   2
 
 # continuation parameters
 bdry_ratio = 1

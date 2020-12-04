@@ -653,4 +653,3 @@ def fourier(theta, m, NFP=1, dt=0):
     der = (1j*m_abs*NFP)**dt
     exp = der*jnp.exp(1j*m_abs*NFP*theta)
     return m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
-

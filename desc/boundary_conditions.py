@@ -94,7 +94,7 @@ def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_rati
     phi = zeta
 
     # build fitting matrix
-    nodes = np.array([rho, theta, phi]).T
+    nodes = jnp.array([rho, theta, phi]).T
     A = L_transform.basis.evaluate(nodes)
     pinv = jnp.linalg.pinv(A, rcond=1e-6)
 

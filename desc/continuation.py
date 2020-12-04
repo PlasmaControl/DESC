@@ -149,8 +149,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'cI': cI,
                 'Psi_lcfs': Psi_lcfs,
                 'NFP': NFP,
-                'zern_idx': RZ_basis.modes,
-                'lambda_idx': L_basis.modes,
+                'RZ_basis': RZ_basis,
+                'L_basis': L_basis,
                 'bdry_idx': bdry[:, :2]
             }
             iterations['init'] = equil_init
@@ -207,6 +207,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 RZb_transform.basis = RZ_basis
                 L_transform.basis = L_basis
 
+                # re-format boundary shape
+                cRb, cZb = format_bdry(bdry, L_basis, bdry_mode)
+                sym_mat = symmetry_matrix(RZ_basis.modes, L_basis.modes, sym=stell_sym)
                 x = change_resolution(x, stell_sym, RZ_basis_old, RZ_basis, L_basis_old, L_basis)
                 timer.stop(
                     "Iteration {} changing spectral resolution".format(ii+1))
@@ -230,27 +233,28 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             args = [cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
                     pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
 
+            # perturbations
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
                 x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
                                                        pert_order[ii], verbose, timer)
 
-        args = (cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii],
-                pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
-
-        if optim_method in ['bfgs']:
-            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
+        # equilibrium objective function
+        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
                 RZ_transform=RZ_transform, RZb_transform=RZb_transform,
                 L_transform=L_transform, pres_transform=pres_transform,
                 iota_transform=iota_transform, stell_sym=stell_sym, scalar=False)
-            equil_obj = obj_fun.compute
-            callback = obj_fun.callback
-            jac = grad(equil_obj, argnums=0)
-        else:
-            jac = jacfwd(equil_obj, argnums=0)
+        equil_obj = obj_fun.compute
+        callback = obj_fun.callback
+        args = (cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii],
+                pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
 
         if use_jax:
+            if optim_method in ['bfgs']:
+                jac = grad(equil_obj, argnums=0)
+            else:
+                jac = jacfwd(equil_obj, argnums=0)
             if verbose > 0:
                 print("Compiling objective function")
             if device is None:
@@ -322,8 +326,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             'cI': cI,
             'Psi_lcfs': Psi_lcfs,
             'NFP': NFP,
-            'zern_idx': RZ_basis.modes,
-            'lambda_idx': L_basis.modes,
+            'RZ_basis': RZ_basis,
+            'L_basis': L_basis,
             'bdry_idx': bdry[:, :2]
         }
 

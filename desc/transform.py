@@ -216,6 +216,32 @@ class Transform():
                        self.__derivatives[:, 1], self.__derivatives[:, 2]))
         self.__derivatives = self.__derivatives[sort_idx]
 
+    def change_resolution(self, grid:Grid=None, basis:Basis=None) -> None:
+        """Re-builds the matrices with a new grid and basis
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            DESCRIPTION
+        basis : Basis, optional
+            DESCRIPTION
+
+        Returns
+        -------
+        None
+
+        """
+        if grid is None:
+            grid = self.__grid
+        if basis is None:
+            basis = self.__basis
+
+        if self.__grid != grid or self.__basis != basis:
+            self.__grid = grid
+            self.__basis = basis
+            self.build()
+            self.build_pinv()
+
     @property
     def grid(self):
         return self.__grid

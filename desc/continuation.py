@@ -171,51 +171,43 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         else:
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
-                timer.start(
-                    "Iteration {} changing node resolution".format(ii+1))
-                if verbose > 0:
-                    print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
-                        Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                          axis=True, index=zern_mode, surfs=node_mode)
                 # FIXME: hard-coded non-symmetric L_grid until symmetry is implemented in Basis
                 L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=False)
-                RZ_transform.grid = RZ_grid
-                RZb_transform.grid = L_grid
-                L_transform.grid = L_grid
-                pres_transform.grid = RZ_grid
-                iota_transform.grid = RZ_grid
-                timer.stop(
-                    "Iteration {} changing node resolution".format(ii+1))
-                if verbose > 1:
-                    timer.disp(
-                        "Iteration {} changing node resolution".format(ii+1))
 
             # change bases
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
-                timer.start(
-                    "Iteration {} changing spectral resolution".format(ii+1))
-                if verbose > 0:
-                    print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
-                        delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
                 RZ_basis_old = RZ_basis
                 L_basis_old = L_basis
                 RZ_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
                                                NFP=NFP, index=zern_mode)
                 L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP)
-                RZ_transform.basis = RZ_basis
-                RZb_transform.basis = RZ_basis
-                L_transform.basis = L_basis
 
                 # re-format boundary shape
                 cRb, cZb = format_bdry(bdry, L_basis, bdry_mode)
+                # update state vector
                 sym_mat = symmetry_matrix(RZ_basis.modes, L_basis.modes, sym=stell_sym)
                 x = change_resolution(x, stell_sym, RZ_basis_old, RZ_basis, L_basis_old, L_basis)
-                timer.stop(
-                    "Iteration {} changing spectral resolution".format(ii+1))
-                if verbose > 1:
-                    timer.disp(
-                        "Iteration {} changing spectral resolution".format(ii+1))
+
+            # change transform matrices
+            timer.start(
+                "Iteration {} changing resolution".format(ii+1))
+            if verbose > 0:
+                print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+                    Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
+                print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
+                        delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+            RZ_transform.change_resolution(grid=RZ_grid, basis=RZ_basis)
+            RZb_transform.change_resolution(grid=L_grid, basis=RZ_basis)
+            L_transform.change_resolution(grid=L_grid, basis=L_basis)
+            pres_transform.change_resolution(grid=RZ_grid)
+            iota_transform.change_resolution(grid=RZ_grid)
+            timer.stop(
+                "Iteration {} changing resolution".format(ii+1))
+            if verbose > 1:
+                timer.disp(
+                    "Iteration {} changing resolution".format(ii+1))
 
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]

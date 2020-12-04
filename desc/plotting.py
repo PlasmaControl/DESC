@@ -506,11 +506,11 @@ def plot_vmec_comparison(vmec_data, equil):
     cR = equil['cR']
     cZ = equil['cZ']
     NFP = equil['NFP']
-    zern_idx = equil['zern_idx']
+    basis = equil['RZ_basis']
 
     Nr = 8
-    Nv = 360
-    if np.max(zern_idx[:, 2]) == 0:
+    Nt = 360
+    if np.max(basis.modes[:, 2]) == 0:
         Nz = 1
         rows = 1
     else:
@@ -522,21 +522,18 @@ def plot_vmec_comparison(vmec_data, equil):
     idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
     if s_idx != 0:
         idxes = np.pad(idxes, (1, 0), mode='constant')
-    r = np.sqrt(idxes/Nr_vmec)
-    v = np.linspace(0, 2*np.pi, Nv)
-    z = np.linspace(0, 2*np.pi/NFP, Nz)
-    rr, vv, zz = np.meshgrid(r, v, z, indexing='ij')
-    rr = rr.flatten()
-    vv = vv.flatten()
-    zz = zz.flatten()
-    nodes = [rr, vv, zz]
-    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP)
+        Nr += 1
+    surfs=np.sqrt(idxes/Nr_vmec)
 
-    R_desc = zernike_transform.transform(cR, 0, 0, 0).reshape((r.size, Nv, Nz))
-    Z_desc = zernike_transform.transform(cZ, 0, 0, 0).reshape((r.size, Nv, Nz))
+    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, surfs=surfs, endpoint=True)
+    transf = Transform(grid, basis)
+
+    R_desc = transf.transform(cR).reshape((Nr, Nt, Nz), order='F')
+    Z_desc = transf.transform(cZ).reshape((Nr, Nt, Nz), order='F')
 
     R_vmec, Z_vmec = vmec_interpolate(
-        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'], v, z)
+        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'],
+        np.unique(grid.nodes[:, 1]), np.unique(grid.nodes[:, 2]))
 
     plt.figure()
     for k in range(Nz):

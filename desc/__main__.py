@@ -164,12 +164,12 @@ def main(args=sys.argv[1:]):
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 
         # plot comparison to VMEC
-      #  if args.vmec:
-      #      print('Plotting comparison to VMEC, this may take a few moments...')
-      #      vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
-      #      plot_vmec_comparison(vmec_data, equil)
-      #      err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
-      #      print("Error relative to VMEC solution: {} mm".format(err*1e3))
+        if args.vmec:
+            print('Plotting comparison to VMEC, this may take a few moments...')
+            vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
+            plot_vmec_comparison(vmec_data, equil)
+   #         err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
+   #         print("Error relative to VMEC solution: {} mm".format(err*1e3))
 
         # plot force balance error
       #  print('Plotting force balance error, this may take a few moments...')

@@ -518,6 +518,30 @@ def polyval_vec(p, x):
     return fori_loop(0, order, body_fun, y)
 
 
+@numba.jit(forceobj=True)
+def power_coeffs(l):
+    """Power series
+
+    Parameters
+    ----------
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+
+    Returns
+    -------
+    coeffsy : ndarray, shape(l+1,)
+        
+
+    """
+    l = np.atleast_1d(l).astype(int)
+    npoly = len(l)      # number of polynomials
+    order = np.max(l)   # order of polynomials
+    coeffs = np.zeros((npoly, order+1))
+    coeffs[range(npoly), l] = 1
+    return coeffs
+
+
+@conditional_decorator(functools.partial(jit, static_argnums=(1)), use_jax)
 def powers(rho, l, dr=0):
     """Power series
 
@@ -536,17 +560,44 @@ def powers(rho, l, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    l = jnp.atleast_1d(l).astype(int)
-    npoly = len(l)      # number of polynomials
-    order = jnp.max(l)   # order of polynomials
-    coeffs = jnp.zeros((npoly, order+1))
-    coeffs[range(npoly), l] = 1
+    coeffs = power_coeffs(l)
     coeffs = polyder_vec(jnp.fliplr(coeffs), dr)
     return polyval_vec(coeffs, rho).T
 
 
-# use numba because array size depends on inputs, which jax cannot handle
 @numba.jit(forceobj=True)
+def jacobi_coeffs(l, m):
+    """Jacobi polynomials
+
+    Parameters
+    ----------
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    m : ndarray of int, shape(K,)
+        azimuthal mode number(s)
+
+    Returns
+    -------
+    coeffs : ndarray
+        
+
+    """
+    factorial = np.math.factorial
+    l = np.atleast_1d(l).astype(int)
+    m = np.atleast_1d(np.abs(m)).astype(int)
+    npoly = len(l)
+    lmax = np.max(l)
+    coeffs = np.zeros((npoly, lmax+1))
+    lm_even = ((l-m) % 2 == 0)[:, np.newaxis]
+    for ii in range(npoly):
+        ll = l[ii]
+        mm = m[ii]
+        for s in range(mm, ll+1, 2):
+            coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
+                factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
+    return np.fliplr(np.where(lm_even, coeffs, 0))
+
+
 @conditional_decorator(functools.partial(jit, static_argnums=(1, 2)), use_jax)
 def jacobi(rho, l, m, dr=0):
     """Jacobi polynomials
@@ -568,26 +619,11 @@ def jacobi(rho, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    factorial = np.math.factorial
-    l = jnp.atleast_1d(l).astype(int)
-    m = jnp.atleast_1d(np.abs(m)).astype(int)
-    npoly = len(l)
-    lmax = jnp.max(l)
-    coeffs = jnp.zeros((npoly, lmax+1))
-    lm_even = ((l-m) % 2 == 0)[:, jnp.newaxis]
-    for ii in range(npoly):
-        ll = l[ii]
-        mm = m[ii]
-        for s in range(mm, ll+1, 2):
-            coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
-                factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
-    coeffs = jnp.fliplr(np.where(lm_even, coeffs, 0))
-    coeffs = polyder_vec(coeffs, dr)
-    y = polyval_vec(coeffs, rho).T
-    return y
+    coeffs = jacobi_coeffs(l, m)
+    return polyval_vec(coeffs, rho).T
 
 
-@conditional_decorator(functools.partial(jit, static_argnums=(1, 2)), use_jax)
+@conditional_decorator(functools.partial(jit), use_jax)
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series
 
@@ -615,5 +651,5 @@ def fourier(theta, m, NFP=1, dt=0):
     m_abs = jnp.abs(m)
     der = (1j*m_abs*NFP)**dt
     exp = der*jnp.exp(1j*m_abs*NFP*theta)
-    y = m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
-    return y
+    return m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
+

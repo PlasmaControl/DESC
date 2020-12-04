@@ -536,12 +536,12 @@ def powers(rho, l, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    l = np.atleast_1d(l).astype(int)
+    l = jnp.atleast_1d(l).astype(int)
     npoly = len(l)      # number of polynomials
-    order = np.max(l)   # order of polynomials
-    coeffs = np.zeros((npoly, order+1))
+    order = jnp.max(l)   # order of polynomials
+    coeffs = jnp.zeros((npoly, order+1))
     coeffs[range(npoly), l] = 1
-    coeffs = polyder_vec(np.fliplr(coeffs), dr)
+    coeffs = polyder_vec(jnp.fliplr(coeffs), dr)
     return polyval_vec(coeffs, rho).T
 
 
@@ -569,19 +569,19 @@ def jacobi(rho, l, m, dr=0):
 
     """
     factorial = np.math.factorial
-    l = np.atleast_1d(l).astype(int)
-    m = np.atleast_1d(np.abs(m)).astype(int)
+    l = jnp.atleast_1d(l).astype(int)
+    m = jnp.atleast_1d(np.abs(m)).astype(int)
     npoly = len(l)
-    lmax = np.max(l)
-    coeffs = np.zeros((npoly, lmax+1))
-    lm_even = ((l-m) % 2 == 0)[:, np.newaxis]
+    lmax = jnp.max(l)
+    coeffs = jnp.zeros((npoly, lmax+1))
+    lm_even = ((l-m) % 2 == 0)[:, jnp.newaxis]
     for ii in range(npoly):
         ll = l[ii]
         mm = m[ii]
         for s in range(mm, ll+1, 2):
             coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
                 factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
-    coeffs = np.fliplr(np.where(lm_even, coeffs, 0))
+    coeffs = jnp.fliplr(np.where(lm_even, coeffs, 0))
     coeffs = polyder_vec(coeffs, dr)
     y = polyval_vec(coeffs, rho).T
     return y

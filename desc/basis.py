@@ -620,6 +620,7 @@ def jacobi(rho, l, m, dr=0):
 
     """
     coeffs = jacobi_coeffs(l, m)
+    coeffs = polyder_vec(coeffs, dr)
     return polyval_vec(coeffs, rho).T
 
 

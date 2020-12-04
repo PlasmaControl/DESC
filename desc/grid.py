@@ -1,7 +1,7 @@
 import numpy as np
 from abc import abstractmethod
 
-from desc.backend import jnp, TextColors, equals
+from desc.backend import TextColors, equals
 
 
 class Grid():
@@ -82,8 +82,8 @@ class Grid():
             node coordinates, in (rho,theta,zeta)
 
         """
-        nodes = jnp.atleast_2d(nodes).reshape((-1, 3))
-        volumes = jnp.zeros_like(nodes)
+        nodes = np.atleast_2d(nodes).reshape((-1, 3))
+        volumes = np.zeros_like(nodes)
         return nodes, volumes
 
     @abstractmethod
@@ -98,8 +98,8 @@ class Grid():
             None
 
         """
-        sort_idx = jnp.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
-                                self.__nodes[:, 2]))
+        sort_idx = np.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
+                               self.__nodes[:, 2]))
         self.__nodes = self.__nodes[sort_idx]
         self.__volumes = self.__volumes[sort_idx]
 
@@ -111,7 +111,7 @@ class Grid():
         None
 
         """
-        self.__axis = jnp.where(self.__nodes[:, 0] == 0)[0]
+        self.__axis = np.where(self.__nodes[:, 0] == 0)[0]
 
     @property
     def L(self):

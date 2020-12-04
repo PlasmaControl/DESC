@@ -42,14 +42,14 @@ def format_bdry(bdry, basis:DoubleFourierSeries, mode:str='spectral'):
         cZb = transf.fit(bdry[:, 3])
 
     else:
-        bdryR = np.zeros((basis.num_modes,))
-        bdryZ = np.zeros((basis.num_modes,))
+        cRb = np.zeros((basis.num_modes,))
+        cZb = np.zeros((basis.num_modes,))
 
         for m, n, bR, bZ in bdry:
             idx = np.where(np.logical_and(basis.modes[:, 1] == int(m),
                                           basis.modes[:, 2] == int(n)))[0]
-            cRb = put(bdryR, idx, bR)
-            cZb = put(bdryZ, idx, bZ)
+            cRb = put(cRb, idx, bR)
+            cZb = put(cZb, idx, bZ)
 
     return cRb, cZb
 
@@ -93,7 +93,7 @@ def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_rati
     theta = vartheta - lamda
     phi = zeta
 
-    # build fitting matrix
+    # cannot use Transform object with JAX
     nodes = jnp.array([rho, theta, phi]).T
     A = L_transform.basis.evaluate(nodes)
     pinv = jnp.linalg.pinv(A, rcond=1e-6)

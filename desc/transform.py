@@ -100,7 +100,7 @@ class Transform():
             A = self.__matrices[0][0][0]
         else:
             A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
-        self.__pinv = np.linalg.pinv(A, rcond=self.__rcond)
+        self.__pinv = jnp.linalg.pinv(A, rcond=self.__rcond)
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical

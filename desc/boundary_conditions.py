@@ -93,16 +93,16 @@ def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_rati
     theta = vartheta - lamda
     phi = zeta
 
-    # boundary transform
+    # build fitting matrix
     nodes = np.array([rho, theta, phi]).T
-    grid = Grid(nodes)
-    bdry_transform = Transform(grid, L_transform.basis)
+    A = L_transform.basis.evaluate(nodes)
+    pinv = jnp.linalg.pinv(A, rcond=1e-6)
 
     # LCFS transform and fit
     R = RZb_transform.transform(cR)
     Z = RZb_transform.transform(cZ)
-    cR_lcfs = bdry_transform.fit(R)
-    cZ_lcfs = bdry_transform.fit(Z)
+    cR_lcfs = jnp.matmul(pinv, R)
+    cZ_lcfs = jnp.matmul(pinv, Z)
 
     # ratio of non-axisymmetric boundary modes to use
     ratio = jnp.where(L_transform.basis.modes[:, 2] != 0, bdry_ratio, 1)

@@ -447,7 +447,7 @@ class FourierZernikeBasis(Basis):
             self.sort_nodes()
 
 
-@conditional_decorator(functools.partial(jit), use_jax)
+@functools.partial(jit)
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
@@ -479,7 +479,7 @@ def polyder_vec(p, m):
     return p
 
 
-@conditional_decorator(functools.partial(jit), use_jax)
+@functools.partial(jit)
 def polyval_vec(p, x):
     """Evaluate a polynomial at specific values,
     vectorized for evaluating multiple polynomials of the same degree.
@@ -541,7 +541,7 @@ def power_coeffs(l):
     return coeffs
 
 
-@conditional_decorator(functools.partial(jit, static_argnums=(1)), use_jax)
+@functools.partial(jit, static_argnums=(1))
 def powers(rho, l, dr=0):
     """Power series
 
@@ -598,7 +598,7 @@ def jacobi_coeffs(l, m):
     return np.fliplr(np.where(lm_even, coeffs, 0))
 
 
-@conditional_decorator(functools.partial(jit, static_argnums=(1, 2)), use_jax)
+@functools.partial(jit, static_argnums=(1, 2))
 def jacobi(rho, l, m, dr=0):
     """Jacobi polynomials
 
@@ -624,7 +624,7 @@ def jacobi(rho, l, m, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-@conditional_decorator(functools.partial(jit), use_jax)
+@functools.partial(jit, static_argnums=(1))
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series
 

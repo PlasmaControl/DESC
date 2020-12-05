@@ -1,15 +1,17 @@
 import numpy as np
+from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.zernike import symmetric_x
 from desc.boundary_conditions import format_bdry
+from desc import equilibrium_io as eq_io
 
 
 class Configuration():
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
-    def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
+    def __init__(self, inputs=None, load_from=None, file_format='hdf5'): #bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
         """Initializes a configuration
 
         Parameters
@@ -33,53 +35,83 @@ class Configuration():
         sym : bool
             True for stellarator symmetry, False otherwise
         x : ndarray
-            state vector of independent variables: [cR, cZ, cL]. If not supplied, 
+            state vector of independent variables: [cR, cZ, cL]. If not supplied,
             the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
             array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
         """
 
-        self.__bdry = bdry
-        self.__cP = cP
-        self.__cI = cI
-        self.__Psi = Psi
-        self.__NFP = NFP
-        self.__zern_idx = zern_idx
-        self.__lambda_idx = lambda_idx
-        self.__sym = sym
+        self._save_attrs_ = ['__bdry', '__cP', '__cI', '__Psi', '__NFP',
+                '__zern_idx','__lambda_idx', '__sym', 'x', 'axis', '__cR',
+                '__cZ', '__cL']
+
+        self.inputs = inputs
+        self.load_from = load_from
+        if inputs is not None:
+            self._init_from_inputs_()
+        elif load_from is not None:
+            if file_format is None:
+                raise RuntimeError('file_format argument must be included when loading from file.')
+            self._file_format_ = file_format
+            self._init_from_file_()
+        else:
+            raise RuntimeError('inputs or load_from must be specified.')
+
+    def _init_from_inputs_(self, inputs=None):
+        if inputs is None:
+            inputs = self.inputs
+        self.__bdry = inputs['bdry']
+        self.__cP = inputs['cP']
+        self.__cI = inputs['cI']
+        self.__Psi = inputs['Psi']
+        self.__NFP = inputs['NFP']
+        self.__zern_idx = inputs['zern_idx']
+        self.__lambda_idx = inputs['lambda_idx']
+        self.__sym = inputs['sym']
 
         self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
             np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
 
-        # embed this if-else into the symmetric_x function
+            # embed this if-else into the symmetric_x function
         if sym:
             # TODO: move symmetric_x inside configuration.py
             sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
         else:
             sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
 
-        if x is None:
+        if inputs['x'] is None:
             # TODO: change input reader to make the default axis=None
-            if axis is None:
-                axis = bdry[np.where(bdry[:, 0] == 0)[0], 1:]
+            if inputs['axis'] is None:
+                axis = bdry[np.where(inputs['bdry'][:, 0] == 0)[0], 1:]
             self.__cR, self.__cZ = get_initial_guess_scale_bdry(
-                axis, bdry, 1.0, zern_idx, NFP, mode='spectral', rcond=1e-6)
-            self.__cL = np.zeros(len(lambda_idx))
+                axis, inputs['bdry'], 1.0, inputs['zern_idx'], inputs['NFP'], mode='spectral', rcond=1e-6)
+            self.__cL = np.zeros(len(inputs['lambda_idx']))
             self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
-            self.__x = np.matmul(sym_mat.T, self.__x)
+            self.__x = np.matmul(sym_mat.T, inputs['x'])#self.__x)
         else:
-            self.__x = x
+            self.__x = inputs['x']
             try:
                 # TODO: move unpack_x inside configuration.py
-                self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(zern_idx))
+                self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(inputs['zern_idx']))
             except:
-                raise ValueError(TextColors.FAIL + 
+                raise ValueError(TextColors.FAIL +
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
+        return None
+
+    def _init_from_file_(self, load_from=None, file_format=None):
+        if load_from is None:
+            load_from = self.load_from
+        if file_format is None:
+            file_format = self._file_format_
+        reader = eq_io.reader_factory(load_from, file_format)
+        reader.read_obj(self)
+        return None
 
     @property
     def bdry(self):
         return self.__bdry
 
+    # I have not included __bdry{M,N,R,Z} in _save_attrs_ since the setter sets them via __bdry.
     @bdry.setter
     def bdry(self, bdry):
         self.__bdry = bdry
@@ -167,14 +199,57 @@ class Configuration():
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
 
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.close()
+        return None
+
 
 class Equilibrium(Configuration):
 
-    def __init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
-        Configuration.__init__(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
-        self.__objective = objective
-        self.__optimizer = optimizer
+    def __init__(self, inputs=None, load_from=None, file_format='hdf5'):#bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
+        self.__addl_save_attrs__ = ['objective', 'optimizer', 'solved']
+        self.inputs = inputs
+        self.load_from = load_from
+        if inputs is not None:
+            self._init_from_inputs_()
+        elif load_from is not None:
+            if file_format is None:
+                raise RuntimeError('file_format argument must be included when loading from file.')
+            self._file_format_ = file_format
+            self._init_from_file_()
+        else:
+            raise RuntimeError('inputs or load_from must be specified.')
+
+
+        #self.initial = Configuration(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
+        #self._save_attrs_ = self.initial._save_attrs_ + ['objective', 'optimizer', 'solved']
+        #self.__objective = objective
+        #self.__optimizer = optimizer
+        #self.solved = False
+
+    def _init_from_inputs_(self, inputs=None):
+        if inputs is None:
+            inputs = self.inputs
+        self.initial = Configuration(inputs=inputs)
+        self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
+        self.__objective = inputs['objective']
+        self.__optimizer = inputs['optimizer']
         self.solved = False
+        return None
+
+    def _init_from_file_(self, load_from=None, file_format=None):
+        if load_from is None:
+            load_from = self.load_from
+        if file_format is None:
+            file_format = self._file_format_
+        reader = eq_io.reader_factory(load_from, file_format)
+        self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
+        self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
+        reader.read_obj(self)
+        return None
 
     def optimize(self):
         pass
@@ -197,21 +272,84 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        writer = eq_io.writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.write_obj(self.initial, where=writer.sub('initial'))
+        writer.close()
+        return None
 
-# TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
-class EquiliriaFamily():
+    # TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
+class EquilibriaFamily(MutableSequence):
 
-    def __init__(self, equilibria, solver=None) -> None:
-        self.__equilibria = equilibria
-        self.__solver = solver
+    def __init__(self, inputs=None, load_from=None, file_format='hdf5'):#equilibria, solver=None) -> None:
+        self.__equilibria = []
+        self.inputs = inputs
+        self.load_from = load_from
+        self._file_format_ = file_format
+        self._file_mode_ = 'a'
+        if inputs is not None:
+            self._init_from_inputs_()
+        elif load_from is not None:
+            if file_format is None:
+                raise RuntimeError('file_format argument must be included when loading from file.')
+            self._file_format_ = file_format
+            self._init_from_file_()
+        else:
+            raise RuntimeError('inputs or load_from must be specified.')
 
-    @property
-    def equilibria(self):
-        return self.__equilibria
+        #self.__equilibria = equilibria
+        #self.__solver = solver
+        #self.output_path = inputs['output_path'] #need some way to integrate this
+        #check if file exists - option to overwrite
 
-    @equilibria.setter
-    def equilibria(self, equilibria):
-        self.__equilibria = equilibria
+    def _init_from_inputs_(self, inputs=None):
+        if inputs is None:
+            inputs = self.inputs
+        writer = eq_io.writer_factory(self.inputs['output_path'],
+                file_format=self._file_format_, file_mode='w')
+        writer.write_dict(self.inputs, where=writer.sub('inputs'))
+        writer.close()
+        self.append(Equilibrium(inputs=self.inputs))
+        return None
+
+    def _init_from_file_(self, load_from=None, file_format=None):
+        if load_from is None:
+            load_from = self.load_from
+        if file_format is None:
+            file_format = self._file_format_
+        reader = eq_io.reader_factory(self.load_from, file_format=file_format)
+        idx = 0
+        while str(idx) in reader.groups():
+            self.append(Equilibrium(load_from=reader.sub(str(idx))))
+            idx += 1
+        return None
+
+    # dunder methods required by MutableSequence
+    def __getitem__(self, i):
+        return self.__eqilibria[i]
+
+    def __setitem__(self, i, new_item):
+        # add type checking
+        self.__equilibria[i] = new_item
+
+    def __delitem__(self, i):
+        del self.__equilibrium[i]
+
+    def insert(self, i, new_item):
+        self.__equilibrium.insert(i, new_item)
+
+    def __len__(self):
+        return len(self.__equilibria)
+
+    #@property
+    #def equilibria(self):
+    #    return self.__equilibria
+
+    #@equilibria.setter
+    #def equilibria(self, equilibria):
+    #    self.__equilibria = equilibria
 
     @property
     def solver(self):
@@ -221,6 +359,34 @@ class EquiliriaFamily():
     def solver(self, solver):
         self.__solver = solver
 
+    def save(self, idx, save_to=None, file_format=None):
+        if type(idx) is not int:
+            # implement fancier indexing later
+            raise NotImplementedError('idx must be a single integer index')
+
+        if save_to is None:
+            save_to = self.inputs['output_path']
+        if file_format is None:
+            file_format = self._file_format_
+
+        writer = eq_io.writer_factory(self.inputs['output_path'],
+                file_format=file_format, file_mode=self.file_mode)
+        self[idx].save(writer.sub(str(idx)), file_format=file_format,
+                file_mode=self._file_mode_)
+        writer.close()
+        return None
+
+    #def load(self, filename):
+    #    reader = eq_io.reader_factory(filename, file_format)
+    #    self.inputs = {}
+    #    reader.read_dict(self.inputs, where=reader.sub('inputs'))
+    #    self.__equilibria = []
+    #    neqilibria = reader.count()
+    #    for i in range(nequilibria):
+    #        self.append(reader.load_equilibrium(where=reader.sub(str(i))))
+    #    return None
+        #self.__equilibria = []
+        #for
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
 
@@ -571,10 +737,10 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     cI : ndarray
         coefficients to pass to rotational transform function
@@ -582,7 +748,7 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         total toroidal flux (in Webers) within LCFS
     zernike_transform : ZernikeTransform
         object with transform method to go from spectral to physical space with derivatives
-    mode : str 
+    mode : str
         one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
     Returns
@@ -686,16 +852,16 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis 
+        dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian 
+        dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     coord_der : dict
-        dictionary of ndarray containing of coordinate 
+        dictionary of ndarray containing of coordinate
         derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     cI : ndarray
         coefficients to pass to rotational transform function.
@@ -840,10 +1006,10 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``.
     magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives, 
+        dictionary of ndarray containing magnetic field and derivatives,
         such as computed by ``compute_magnetic_field``.
     plasma_current : dict
-        dictionary of ndarray containing current and derivatives, 
+        dictionary of ndarray containing current and derivatives,
         such as computed by ``compute_plasma_current``.
     cP : ndarray
         parameters to pass to pressure function

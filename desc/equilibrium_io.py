@@ -4,365 +4,10 @@ import warnings
 import h5py
 import numpy as np
 from datetime import datetime
+import warnings
+from abc import ABC
 
 from desc.backend import TextColors
-
-
-def read_input(fname):
-    """Reads input from DESC input file, converts from VMEC input if necessary
-
-    Parameters
-    ----------
-    fname : string
-        filename of input file
-
-    Returns
-    -------
-    inputs : dict
-        all the input parameters and options
-
-    """
-
-    # default values
-    inputs = {
-        'stell_sym': False,
-        'NFP': 1,
-        'Psi_lcfs': 1.0,
-        'Mpol': np.atleast_1d(0),
-        'Ntor': np.atleast_1d(0),
-        'delta_lm': np.atleast_1d(None),
-        'Mnodes': np.atleast_1d(0),
-        'Nnodes': np.atleast_1d(0),
-        'bdry_ratio': np.atleast_1d(1.0),
-        'pres_ratio': np.atleast_1d(1.0),
-        'zeta_ratio': np.atleast_1d(1.0),
-        'errr_ratio': np.atleast_1d(1e-2),
-        'pert_order': np.atleast_1d(1),
-        'ftol': np.atleast_1d(1e-6),
-        'xtol': np.atleast_1d(1e-6),
-        'gtol': np.atleast_1d(1e-6),
-        'nfev': np.atleast_1d(None),
-        'optim_method': 'trf',
-        'errr_mode': 'force',
-        'bdry_mode': 'spectral',
-        'zern_mode': 'fringe',
-        'node_mode': 'cheb1',
-        'cP': np.atleast_1d(0.0),
-        'cI': np.atleast_1d(0.0),
-        'axis': np.atleast_2d((0, 0.0, 0.0)),
-        'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
-    }
-
-    file = open(fname, 'r')
-    num_form = r'[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
-
-    for line in file:
-
-        # check if VMEC input file format
-        isVMEC = re.search(r'&INDATA', line)
-        if isVMEC:
-            print('Converting VMEC input to DESC input')
-            fname_desc = fname + '_desc'
-            vmec_to_desc_input(fname, fname_desc)
-            print('Generated DESC input file {}:'.format(fname_desc))
-            return read_input(fname_desc)
-
-        # extract numbers & words
-        match = re.search(r'[!#]', line)
-        if match:
-            comment = match.start()
-        else:
-            comment = len(line)
-        match = re.search(r'=', line)
-        if match:
-            equals = match.start()
-        else:
-            equals = len(line)
-        command = (line.strip()+' ')[0:comment]
-        argument = (command.strip()+' ')[0:equals]
-        numbers = [float(x) for x in re.findall(
-            num_form, command) if re.search(r'\d', x)]
-        words = command[equals+1:].split()
-
-        # global parameters
-        match = re.search(r'stell_sym', argument, re.IGNORECASE)
-        if match:
-            inputs['stell_sym'] = int(numbers[0])
-        match = re.search(r'NFP', argument, re.IGNORECASE)
-        if match:
-            inputs['NFP'] = int(numbers[0])
-        match = re.search(r'Psi_lcfs', argument, re.IGNORECASE)
-        if match:
-            inputs['Psi_lcfs'] = numbers[0]
-
-        # spectral resolution
-        match = re.search(r'Mpol', argument, re.IGNORECASE)
-        if match:
-            inputs['Mpol'] = np.array(numbers).astype(int)
-        match = re.search(r'Ntor', argument, re.IGNORECASE)
-        if match:
-            inputs['Ntor'] = np.array(numbers).astype(int)
-        match = re.search(r'delta_lm', argument, re.IGNORECASE)
-        if match:
-            inputs['delta_lm'] = np.array(numbers).astype(int)
-        match = re.search(r'Mnodes', argument, re.IGNORECASE)
-        if match:
-            inputs['Mnodes'] = np.array(numbers).astype(int)
-        match = re.search(r'Nnodes', argument, re.IGNORECASE)
-        if match:
-            inputs['Nnodes'] = np.array(numbers).astype(int)
-
-        # continuation parameters
-        match = re.search(r'bdry_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['bdry_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'pres_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['pres_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'zeta_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['zeta_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'errr_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['errr_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'pert_order', argument, re.IGNORECASE)
-        if match:
-            inputs['pert_order'] = np.array(numbers).astype(int)
-
-        # solver tolerances
-        match = re.search(r'ftol', argument, re.IGNORECASE)
-        if match:
-            inputs['ftol'] = np.array(numbers).astype(float)
-        match = re.search(r'xtol', argument, re.IGNORECASE)
-        if match:
-            inputs['xtol'] = np.array(numbers).astype(float)
-        match = re.search(r'gtol', argument, re.IGNORECASE)
-        if match:
-            inputs['gtol'] = np.array(numbers).astype(float)
-        match = re.search(r'nfev', argument, re.IGNORECASE)
-        if match:
-            inputs['nfev'] = np.array(
-                [None if i == 0 else i for i in numbers]).astype(int)
-
-        # solver methods
-        match = re.search(r'optim_method', argument, re.IGNORECASE)
-        if match:
-            inputs['optim_method'] = words[0]
-        match = re.search(r'errr_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['errr_mode'] = words[0]
-        match = re.search(r'bdry_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['bdry_mode'] = words[0]
-        match = re.search(r'zern_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['zern_mode'] = words[0]
-        match = re.search(r'node_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['node_mode'] = words[0]
-
-        # coefficient indicies
-        match = re.search(r'l\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            l = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-        match = re.search(r'm\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            m = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-        match = re.search(r'n\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            n = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-
-        # profile coefficients
-        match = re.search(r'cP\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            cP = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            if inputs['cP'].size < l+1:
-                inputs['cP'] = np.pad(
-                    inputs['cP'], (0, l+1-inputs['cP'].size), mode='constant')
-            inputs['cP'][l] = cP
-        match = re.search(r'cI\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            cI = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            if inputs['cI'].size < l+1:
-                inputs['cI'] = np.pad(
-                    inputs['cI'], (0, l+1-inputs['cI'].size), mode='constant')
-            inputs['cI'][l] = cI
-
-        # magnetic axis Fourier modes
-        match = re.search(r'aR\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            aR = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-            if axis_idx.size == 0:
-                axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                inputs['axis'] = np.pad(
-                    inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                inputs['axis'][axis_idx[0], 0] = n
-            inputs['axis'][axis_idx[0], 1] = aR
-        match = re.search(r'aZ\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            aZ = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-            if axis_idx.size == 0:
-                axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                inputs['axis'] = np.pad(
-                    inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                inputs['axis'][axis_idx[0], 0] = n
-            inputs['axis'][axis_idx[0], 2] = aZ
-
-        # boundary Fourier modes
-        match = re.search(r'bR\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            bR = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-            bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
-            if bdry_idx.size == 0:
-                bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                inputs['bdry'] = np.pad(
-                    inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                inputs['bdry'][bdry_idx[0], 0] = m
-                inputs['bdry'][bdry_idx[0], 1] = n
-            inputs['bdry'][bdry_idx[0], 2] = bR
-        match = re.search(r'bZ\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            bZ = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-            bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
-            if bdry_idx.size == 0:
-                bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                inputs['bdry'] = np.pad(
-                    inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                inputs['bdry'][bdry_idx[0], 0] = m
-                inputs['bdry'][bdry_idx[0], 1] = n
-            inputs['bdry'][bdry_idx[0], 3] = bZ
-
-    # error handling
-    if np.any(inputs['Mpol'] == 0):
-        raise IOError(TextColors.FAIL +
-                      'Mpol is not assigned' + TextColors.ENDC)
-    if np.sum(inputs['bdry']) == 0:
-        raise IOError(
-            TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
-    arrs = ['Mpol', 'Ntor', 'delta_lm', 'Mnodes', 'Nnodes', 'bdry_ratio',
-            'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
-            'ftol', 'xtol', 'gtol', 'nfev']
-    arr_len = 0
-    for a in arrs:
-        arr_len = max(arr_len, len(inputs[a]))
-    for a in arrs:
-        if inputs[a].size == 1:
-            inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
-        elif inputs[a].size != arr_len:
-            raise IOError(TextColors.FAIL +
-                          'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
-
-    # unsupplied values
-    if np.sum(inputs['Mnodes']) == 0:
-        inputs['Mnodes'] = np.rint(1.5*inputs['Mpol']).astype(int)
-    if np.sum(inputs['Nnodes']) == 0:
-        inputs['Nnodes'] = np.rint(1.5*inputs['Ntor']).astype(int)
-    if np.sum(inputs['axis']) == 0:
-        axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
-        inputs['axis'] = inputs['bdry'][axis_idx, 1:]
-    if None in inputs['delta_lm']:
-        default_deltas = {'fringe': 2*inputs['Mpol'],
-                          'ansi': inputs['Mpol'],
-                          'chevron': inputs['Mpol'],
-                          'house': 2*inputs['Mpol']}
-        inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
-
-    return inputs
-
-
-def write_desc_input(filename, inputs):
-    """Generates a DESC input file from a dictionary of parameters
-
-    Parameters
-    ----------
-    filename : str or path-like
-        name of the file to create
-    inputs : dict
-        dictionary of input parameters
-
-    Returns
-    -------
-
-    """
-
-    f = open(filename, 'w+')
-
-    f.write('# global parameters \n')
-    f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
-    f.write('NFP = {} \n'.format(inputs['NFP']))
-    f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
-
-    f.write('\n# spectral resolution \n')
-    f.write('Mpol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
-    f.write('Ntor = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
-    f.write('Mnodes = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
-    f.write('Nnodes = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
-
-    f.write('\n# continuation parameters \n')
-    f.write('bdry_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['bdry_ratio'])])))
-    f.write('pres_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
-    f.write('zeta_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
-    f.write('errr_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
-    f.write('pert_order = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
-
-    f.write('\n# solver tolerances \n')
-    f.write('ftol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['ftol'])])))
-    f.write('xtol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['xtol'])])))
-    f.write('gtol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['gtol'])])))
-    f.write('nfev = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['nfev'])])))
-
-    f.write('\n# solver methods \n')
-    f.write('optim_method = {} \n'.format(inputs['optim_method']))
-    f.write('errr_mode = {} \n'.format(inputs['errr_mode']))
-    f.write('bdry_mode = {} \n'.format(inputs['bdry_mode']))
-    f.write('zern_mode = {} \n'.format(inputs['zern_mode']))
-    f.write('node_mode = {} \n'.format(inputs['node_mode']))
-
-    f.write('\n# pressure and rotational transform profiles \n')
-    for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
-        f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
-            int(i), cP, cI))
-
-    f.write('\n# magnetic axis initial guess \n')
-    for (n, cR, cZ) in inputs['axis']:
-        f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
-            int(n), cR, cZ))
-
-    f.write('\n# fixed-boundary surface shape \n')
-    for (m, n, cR, cZ) in inputs['bdry']:
-        f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
-            int(m), int(n), cR, cZ))
-
-    f.close()
-
 
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
@@ -506,6 +151,245 @@ def read_desc(filename):
 
     return equil
 
+def reader_factory(load_from, file_format):
+    if file_format == 'hdf5':
+        reader = hdf5Reader(load_from)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return reader
+
+class hdf5Reader:
+    def __init__(self, load_from):
+        self.load_from = load_from
+        self.resolve_base()
+
+    def __del__(self):
+        self.close()
+
+    def check_hdf5_type(self, obj):
+        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+            return True
+        else:
+            return False
+
+    def resolve_base(self):
+        if self.check_hdf5_type(self.load_from):
+            self.base = self.load_from
+            self._close_base_ = False
+        elif type(self.load_from) is str:
+            self.base = h5py.File(self.load_from, 'r')
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+                'file or group.'.format(type(self.load_from)))
+
+    def resolve_where(self, where):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a readable type. Must be "
+                    "hdf5 file or group".format(where))
+        return loc
+
+    def read_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
+        for attr in obj._save_attrs_:
+            try:
+                setattr(obj, attr, loc[attr][()])
+            except KeyError:
+                warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+                        RuntimeWarning)
+        return None
+
+    def read_dict(self, thedict, where=None):
+        loc = self.resolve_where(where)
+        for key in loc.keys():
+            try:
+                thedict.update({key : loc[key][()]})
+            except AttributeError:
+                # don't load subgroups
+                pass
+            #    warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+            #            RuntimeWarning)
+        return None
+
+    #def load_configuration(self, where=None):
+    #    kwargs = {}
+    #    self.read_dict(kwargs, where=where)
+    #    return Configuration(**kwargs)
+
+    #def load_equilibrium(self, where=None):
+    #    kwargs = {}
+    #    self.read_dict(self, where=None)
+    #    eq = Equilibrium(**kwargs)
+
+        # overwrite the configuration in constructor
+    #    configuration_kwargs = {}
+    #    eq.initial = self.load_configuration(configuration_kwargs,
+    #            where=self.sub('initial'))
+    #    return eq
+
+    def sub(self, name):
+        try:
+            return self.base.create_group(name)
+        except ValueError:
+            return self.base[name]
+
+    def groups(self, where):
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+    def close(self):
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        #else:
+        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        return None
+
+def writer_factory(save_to, file_format, file_mode='w'):
+    if file_format == 'hdf5':
+        writer = hdf5Writer(save_to, file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return writer
+
+class hdf5Writer:
+    def __init__(self, save_to, file_mode):
+        self.save_to = save_to
+        self.save_to_type = type(save_to)
+        self.file_mode = file_mode
+        self.resolve_base()
+
+    def __del__(self):
+        self.close()
+
+    def check_hdf5_type(self, obj):
+        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+            return True
+        else:
+            return False
+
+    def resolve_base(self):
+        if self.check_hdf5_type(self.save_to):
+            self.base = self.save_to
+            self._close_base_ = False
+        elif self.save_to_type is str:
+            self.base = h5py.File(self.save_to, self.file_mode)
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+                'file or group.'.format(self.save_to_type))
+
+    def resolve_where(self, where):
+        if where is None:
+            loc = self.base
+        elif self.check_hdf5_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a writable type. Must be "
+                    "hdf5 file or group".format(where))
+        return loc
+
+    def write_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
+        for attr in obj._save_attrs_:
+            try:
+                loc.create_dataset(attr, data=getattr(obj, attr))
+            except AttributeError:
+                warnings.warn("Save attribute '{}' was not saved as it does "
+                        "not exist.".format(attr), RuntimeWarning)
+        return None
+
+    def write_dict(self, thedict, where=None):
+        loc = self.resolve_where(where)
+        for key in thedict.keys():
+            loc.create_dataset(key, data=thedict[key])
+        return None
+
+    def sub(self, name):
+        return self.base.create_group(name)
+
+    def groups(self, where):
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+
+
+    def close(self):
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        #else:
+        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        return None
+
+def subgroup(name, save_to, fmt):
+    if fmt == 'hdf5':
+        group = subgroup_hdf5(name, save_to)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
+    return group
+
+def base_hdf5(save_to):
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        group = save_to.create_group(name)
+    else:
+        raise SyntaxError('save_to must be an hdf5 file or group.')
+    return group
+
+def subgroup_hdf5(name, save_to):
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        group = save_to.create_group(name)
+    else:
+        raise SyntaxError('save_to must be an hdf5 file or group.')
+    return group
+
+def save(obj, save_to, fmt='hdf5', file_mode='w'):
+    if fmt == 'hdf5':
+        write_hdf5(obj, save_to, file_mode=file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
+    return None
+
+def write_hdf5(obj, save_to, file_mode='w'):
+    """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
+
+    Parameters
+    __________
+    obj: object to save
+        must have _save_attrs_ list attribute. Otherwise AttributeError raised.
+    save_loc : str or path-like; hdf5 file or group
+        file or group to write to. If str or path-like, file is created. If
+        hdf5 file or group instance, datasets are created there.
+    file_mode='w': str
+        hdf5 file mode. Default is 'w'.
+    """
+    # check save_loc is an accepted type
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        file_group = save_to
+        close = False
+    elif save_to_type is str:
+        file_group = h5py.File(save_to, file_mode)
+        close = True
+    else:
+        raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+            'file or group.'.format(save_to_type))
+
+    # save to file or group
+    for attr in obj._save_attrs_:
+        file_group.create_dataset(attr, data=getattr(obj, attr))
+
+    # close file if created
+    if close:
+        file_group.close()
+
+    return None
 
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file

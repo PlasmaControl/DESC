@@ -4,6 +4,8 @@ import sys
 import warnings
 import os
 
+from desc.input_reader import InputReader
+
 
 def get_device(gpuID=False):
     """Checks available GPUs and selects the one with the most available memory
@@ -58,68 +60,18 @@ def get_device(gpuID=False):
         return jax.devices('cpu')[0]
 
 
-def get_parser():
-    """Gets parser for command line arguments.
-
-    Parameters
-    ----------
-
-    Returns
-    -------
-    parser : argparse object
-        argument parser
-
-    """
-
-    parser = argparse.ArgumentParser(prog='DESC',
-                                     description='DESC computes equilibria by solving the force balance equations. '
-                                     + 'It can also be used for perturbation analysis and sensitivity studies '
-                                     + 'to see how the equilibria change as input parameters are varied.')
-    parser.add_argument('input_file', nargs='*',
-                        help='Path to input file')
-    parser.add_argument('-o', '--output', metavar='output_file',
-                        help='Path to output file. If not specified, defaults to <input_name>.output')
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help='Plot results after solver finishes')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Do not display any progress information')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Display detailed progress information')
-    parser.add_argument('--vmec', metavar='vmec_path',
-                        help='Path to VMEC data for comparison plot')
-    parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
-                        help='Use GPU if available, and an optional device ID to use a specific GPU.'
-                        + ' If no ID is given, default is to select the GPU with most available memory.'
-                        + ' Note that not all of the computation will be done '
-                        + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
-    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
-                        + " and autodiff won't work but may be useful for debugging")
-    parser.add_argument('--version', action='store_true',
-                        help='Display version number and exit')
-    return parser
-
-
-def main(args=sys.argv[1:]):
+def main(cl_args=None):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.
     """
-    parser = get_parser()
-    args = parser.parse_args(args)
 
-    if args.version:
+    ir = InputReader(cl_args=cl_args)
+
+    if ir.args.version:
         import desc
         print(desc.__version__)
         return
-
-    if len(args.input_file) == 0:
-        print('Input file path must be specified')
-        return
-
-    if args.numpy:
-        os.environ['DESC_USE_NUMPY'] = 'True'
-    else:
-        os.environ['DESC_USE_NUMPY'] = ''
 
     import desc
 
@@ -127,35 +79,21 @@ def main(args=sys.argv[1:]):
 
     from desc.continuation import solve_eq_continuation
     from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-    from desc.input_output import read_input, output_to_file
+    #from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
     from desc.vmec import read_vmec_output, vmec_error
 
     if use_jax:
-        device = get_device(args.gpu)
+        device = get_device(ir.args.gpu)
         print("Using device: " + str(device))
     else:
         device = None
 
-    in_fname = str(pathlib.Path(args.input_file[0]).resolve())
-    out_fname = args.output if args.output else in_fname+'.output'
-
-    print("Reading input from {}".format(in_fname))
-    inputs = read_input(in_fname)
-    print("Output will be written to {}".format(out_fname))
-
-    if args.quiet:
-        inputs['verbose'] = 0
-    elif args.verbose:
-        inputs['verbose'] = 2
-    else:
-        inputs['verbose'] = 1
-
     # solve equilibrium
     iterations, timer = solve_eq_continuation(
-        inputs, checkpoint_filename=out_fname, device=device)
+        ir.inputs, checkpoint_filename=ir.output_path, device=device)
 
-    if args.plot:
+    if ir.args.plot:
 
         equil_init = iterations['init']
         equil = iterations['final']
@@ -164,9 +102,9 @@ def main(args=sys.argv[1:]):
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 
         # plot comparison to VMEC
-        if args.vmec:
+        if ir.args.vmec:
             print('Plotting comparison to VMEC, this may take a few moments...')
-            vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
+            vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
             err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
             print("Error relative to VMEC solution: {} mm".format(err*1e3))

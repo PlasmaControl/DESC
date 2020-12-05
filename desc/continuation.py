@@ -140,6 +140,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if verbose > 1:
                 timer.disp("Initial guess computation")
             equil_init = {
+                'M': M[ii],
+                'N': N[ii],
                 'cR': cR,
                 'cZ': cZ,
                 'cL': cL,
@@ -309,6 +311,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         cR, cZ, cL = unpack_state(jnp.matmul(sym_mat, x), RZ_transform.num_modes)
         equil = {
+            'M': M[ii],
+            'N': N[ii],
             'cR': cR,
             'cZ': cZ,
             'cL': cL,

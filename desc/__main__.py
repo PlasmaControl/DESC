@@ -168,8 +168,8 @@ def main(args=sys.argv[1:]):
             print('Plotting comparison to VMEC, this may take a few moments...')
             vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
-   #         err = vmec_error(equil, vmec_data, Npol=8, Ntor=8)
-   #         print("Error relative to VMEC solution: {} mm".format(err*1e3))
+            err = vmec_error(equil, vmec_data, Nt=8, Nz=8)
+            print("Average error relative to VMEC solution: {} meters".format(err))
 
         # plot force balance error
       #  print('Plotting force balance error, this may take a few moments...')

@@ -13,8 +13,9 @@ def SOLOVEV(tmpdir_factory):
     print('Running SOLOVEV test')
     print('exec_dir=',exec_dir)
     print('cwd=',cwd)
-    
-    SOLOVEV_run = subprocess.run(['python','-m', 'desc','-o',str(temp_dir),input_filename],
+
+    SOLOVEV_run = subprocess.run(['python', '-m', 'desc', '-o',
+                                  str(temp_dir),input_filename],
                          stdout = subprocess.PIPE, universal_newlines=True,
                          timeout = max_time, cwd=exec_dir)
     SOLOVEV_out = {'output': SOLOVEV_run, 'filepath':temp_dir}
@@ -24,4 +25,3 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if 'DSHAPE' in getattr(item, 'fixturenames', ()):
             item.add_marker('slow')
-

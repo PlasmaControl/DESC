@@ -3,11 +3,12 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from desc.nodes import get_nodes_grid
-from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
-from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
+
+from desc.backend import TextColors
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
+from desc.grid import LinearGrid
+from desc.transform import Transform
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
 from desc.configuration import compute_contravariant_basis, compute_jacobian
 from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
@@ -418,12 +419,12 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
     cR0 = equil0['cR']
     cZ0 = equil0['cZ']
     NFP0 = equil0['NFP']
-    zern_idx0 = equil0['zern_idx']
+    basis0 = equil0['RZ_basis']
 
     cR1 = equil1['cR']
     cZ1 = equil1['cZ']
     NFP1 = equil1['NFP']
-    zern_idx1 = equil1['zern_idx']
+    basis1 = equil1['RZ_basis']
 
     if NFP0 == NFP1:
         NFP = NFP0
@@ -431,7 +432,7 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
         raise ValueError(
             TextColors.FAIL + "NFP must be the same for both solutions" + TextColors.ENDC)
 
-    if max(np.max(zern_idx0[:, 2]), np.max(zern_idx1[:, 2])) == 0:
+    if max(np.max(basis0.modes[:, 2]), np.max(basis1.modes[:, 2])) == 0:
         Nz = 1
         rows = 1
     else:
@@ -439,30 +440,30 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
         rows = 2
 
     Nr = kwargs.get('Nr', 8)
-    Nv = kwargs.get('Nv', 13)
+    Nt = kwargs.get('Nt', 13)
 
     NNr = 100
-    NNv = 360
+    NNt = 360
 
     # constant rho surfaces
-    nodes_r, vols = get_nodes_grid(NFP, nr=Nr, nt=NNv, nz=Nz)
-    zernike_transform0_r = ZernikeTransform(nodes_r, zern_idx0, NFP)
-    zernike_transform1_r = ZernikeTransform(nodes_r, zern_idx1, NFP)
+    grid_r = LinearGrid(L=Nr, M=NNt, N=Nz, NFP=NFP, endpoint=True)
+    transf_0r = Transform(grid_r, basis0)
+    transf_1r = Transform(grid_r, basis1)
 
     # constant theta surfaces
-    nodes_v, vols = get_nodes_grid(NFP, nr=NNr, nt=Nv, nz=Nz)
-    zernike_transform0_v = ZernikeTransform(nodes_v, zern_idx0, NFP)
-    zernike_transform1_v = ZernikeTransform(nodes_v, zern_idx1, NFP)
+    grid_t = LinearGrid(L=NNr, M=Nt, N=Nz, NFP=NFP, endpoint=True)
+    transf_0t = Transform(grid_t, basis0)
+    transf_1t = Transform(grid_t, basis1)
 
-    R0r = zernike_transform0_r.transform(cR0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z0r = zernike_transform0_r.transform(cZ0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    R1r = zernike_transform1_r.transform(cR1, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z1r = zernike_transform1_r.transform(cZ1, 0, 0, 0).reshape((Nr, NNv, Nz))
+    R0r = transf_0r.transform(cR0).reshape((Nr, NNt, Nz), order='F')
+    Z0r = transf_0r.transform(cZ0).reshape((Nr, NNt, Nz), order='F')
+    R1r = transf_1r.transform(cR1).reshape((Nr, NNt, Nz), order='F')
+    Z1r = transf_1r.transform(cZ1).reshape((Nr, NNt, Nz), order='F')
 
-    R0v = zernike_transform0_v.transform(cR0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z0v = zernike_transform0_v.transform(cZ0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    R1v = zernike_transform1_v.transform(cR1, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z1v = zernike_transform1_v.transform(cZ1, 0, 0, 0).reshape((NNr, Nv, Nz))
+    R0v = transf_0t.transform(cR0).reshape((NNr, Nt, Nz), order='F')
+    Z0v = transf_0t.transform(cZ0).reshape((NNr, Nt, Nz), order='F')
+    R1v = transf_1t.transform(cR1).reshape((NNr, Nt, Nz), order='F')
+    Z1v = transf_1t.transform(cZ1).reshape((NNr, Nt, Nz), order='F')
 
     plt.figure()
     for k in range(Nz):
@@ -504,11 +505,11 @@ def plot_vmec_comparison(vmec_data, equil):
     cR = equil['cR']
     cZ = equil['cZ']
     NFP = equil['NFP']
-    zern_idx = equil['zern_idx']
+    basis = equil['RZ_basis']
 
     Nr = 8
-    Nv = 360
-    if np.max(zern_idx[:, 2]) == 0:
+    Nt = 360
+    if np.max(basis.modes[:, 2]) == 0:
         Nz = 1
         rows = 1
     else:
@@ -520,21 +521,17 @@ def plot_vmec_comparison(vmec_data, equil):
     idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
     if s_idx != 0:
         idxes = np.pad(idxes, (1, 0), mode='constant')
-    r = np.sqrt(idxes/Nr_vmec)
-    v = np.linspace(0, 2*np.pi, Nv)
-    z = np.linspace(0, 2*np.pi/NFP, Nz)
-    rr, vv, zz = np.meshgrid(r, v, z, indexing='ij')
-    rr = rr.flatten()
-    vv = vv.flatten()
-    zz = zz.flatten()
-    nodes = [rr, vv, zz]
-    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP)
+        Nr += 1
+    rho = np.sqrt(idxes/Nr_vmec)
+    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, surfs=rho, endpoint=True)
+    transf = Transform(grid, basis)
 
-    R_desc = zernike_transform.transform(cR, 0, 0, 0).reshape((r.size, Nv, Nz))
-    Z_desc = zernike_transform.transform(cZ, 0, 0, 0).reshape((r.size, Nv, Nz))
+    R_desc = transf.transform(cR).reshape((Nr, Nt, Nz), order='F')
+    Z_desc = transf.transform(cZ).reshape((Nr, Nt, Nz), order='F')
 
     R_vmec, Z_vmec = vmec_interpolate(
-        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'], v, z)
+        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'],
+        np.unique(grid.nodes[:, 1]), np.unique(grid.nodes[:, 2]))
 
     plt.figure()
     for k in range(Nz):

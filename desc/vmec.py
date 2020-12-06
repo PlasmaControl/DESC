@@ -3,7 +3,9 @@ from scipy.optimize import fsolve
 from netCDF4 import Dataset
 
 from desc.backend import sign
-from desc.zernike import ZernikeTransform
+from desc.grid import LinearGrid
+from desc.basis import FourierZernikeBasis
+from desc.transform import Transform
 
 
 # TODO: add other fields including B, rmns, zmnc, lmnc, etc
@@ -44,7 +46,7 @@ def read_vmec_output(fname):
     return vmec_data
 
 
-def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
+def vmec_error(equil, vmec_data, Nt=8, Nz=8):
     """Computes error in SFL coordinates compared to VMEC solution
 
     Parameters
@@ -53,9 +55,9 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
         dictionary of DESC equilibrium parameters
     vmec_data : dict
         dictionary of VMEC equilibrium parameters
-    Npol : int
+    Nt : int
         number of poloidal angles to sample (Default value = 8)
-    Ntor : int
+    Nz : int
         number of toroidal angles to sample (Default value = 8)
 
     Returns
@@ -64,36 +66,29 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
         average Euclidean distance between VMEC and DESC sample points
 
     """
-
     ns = np.size(vmec_data['psi'])
-    vartheta = np.linspace(0, 2*np.pi, Npol, endpoint=False)
-    zeta = np.linspace(0, 2*np.pi/vmec_data['NFP'], Ntor, endpoint=False)
-    phi = zeta
+    rho = np.sqrt(vmec_data['psi'])
+    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil['NFP'], surfs=rho)
+    basis = FourierZernikeBasis(M=equil['M'], N=equil['N'], NFP=equil['NFP'])
+    transf = Transform(grid, basis)
+    vartheta = np.unique(grid.nodes[:, 1])
+    phi = np.unique(grid.nodes[:, 2])
 
-    r = np.tile(np.sqrt(vmec_data['psi'])
-                [..., np.newaxis, np.newaxis], (1, Npol, Ntor))
-    v = np.tile(vartheta[np.newaxis, ..., np.newaxis], (ns, 1, Ntor))
-    z = np.tile(zeta[np.newaxis, np.newaxis, ...], (ns, Npol, 1))
-    nodes = np.stack([r.flatten(), v.flatten(), z.flatten()])
-    zernike_transform = ZernikeTransform(
-        nodes, equil['zern_idx'], equil['NFP'], method='fft')
-    R_desc = zernike_transform.transform(
-        equil['cR'], 0, 0, 0).reshape((ns, Npol, Ntor))
-    Z_desc = zernike_transform.transform(
-        equil['cZ'], 0, 0, 0).reshape((ns, Npol, Ntor))
+    R_desc = transf.transform(equil['cR']).reshape((ns, Nt, Nz), order='F')
+    Z_desc = transf.transform(equil['cZ']).reshape((ns, Nt, Nz), order='F')
 
     print('Interpolating VMEC solution to sfl coordinates')
-    R_vmec = np.zeros((ns, Npol, Ntor))
-    Z_vmec = np.zeros((ns, Npol, Ntor))
-    for k in range(Ntor):           # toroidal angle
-        for i in range(ns):         # flux surface
-            theta = np.zeros((Npol,))
-            for j in range(Npol):   # poloidal angle
-                f0 = sfl_err(np.array([0]), vartheta[j], zeta[k], vmec_data, i)
+    R_vmec = np.zeros((ns, Nt, Nz))
+    Z_vmec = np.zeros((ns, Nt, Nz))
+    for k in range(Nz):         # toroidal angle
+        for i in range(ns):     # flux surface
+            theta = np.zeros((Nt,))
+            for j in range(Nt): # poloidal angle
+                f0 = sfl_err(np.array([0]), vartheta[j], phi[k], vmec_data, i)
                 f2pi = sfl_err(np.array([2*np.pi]),
-                               vartheta[j], zeta[k], vmec_data, i)
+                               vartheta[j], phi[k], vmec_data, i)
                 flag = (sign(f0) + sign(f2pi)) / 2
-                args = (vartheta[j], zeta[k], vmec_data, i, flag)
+                args = (vartheta[j], phi[k], vmec_data, i, flag)
                 t = fsolve(sfl_err, vartheta[j], args=args)
                 if flag != 0:
                     t = np.remainder(t+np.pi, 2*np.pi)
@@ -107,7 +102,7 @@ def vmec_error(equil, vmec_data, Npol=8, Ntor=8):
                                                vmec_data['xn'], theta, phi[k], trig='sin').flatten()
                 Z_vmec[i, :, k] += vmec_transf(vmec_data['zmnc'][i, :], vmec_data['xm'],
                                                vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-        print('{}%'.format((k+1)/Ntor*100))
+        print('{}%'.format((k+1)/Nz*100))
 
     return np.mean(np.sqrt((R_vmec - R_desc)**2 + (Z_vmec - Z_desc)**2))
 

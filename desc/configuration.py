@@ -1,17 +1,143 @@
 import numpy as np
 from collections.abc import MutableSequence
 
-from desc.backend import jnp, put, opsindex, cross, dot, presfun, iotafun, TextColors, unpack_x
+from desc.backend import jnp, put, opsindex, cross, dot, TextColors, sign
 from desc.init_guess import get_initial_guess_scale_bdry
-from desc.zernike import symmetric_x
 from desc.boundary_conditions import format_bdry
 from desc import equilibrium_io as eq_io
 
 
+# TODO: can probably remove this function if we enforce symmetry in Basis
+def symmetry_matrix(RZ_modes, lambda_modes, sym:bool):
+        """Compute stellarator symmetry linear constraint matrix
+
+        Parameters
+        ----------
+        RZ_modes : ndarray, shape(Nz_coeffs,3)
+            array of spectral basis modes (l,m,n) for R and Z
+        lambda_modes : ndarray, shape(Nl_coeffs,2)
+            array of spectral basis modes (l,m,n) for lambda
+        sym : bool
+            True for stellarator symmetry, False otherwise
+
+        Returns
+        -------
+        sym_mat : ndarray of float
+            stellarator symmetry linear constraint matrix
+            x_full = sym_mat * x_sym
+            x_sym = sym_mat.T * x_full
+
+        """
+        if sym:
+            m_zern = RZ_modes[:, 1]
+            n_zern = RZ_modes[:, 2]
+            m_lambda = lambda_modes[:, 1]
+            n_lambda = lambda_modes[:, 2]
+
+            # symmetric indices of R, Z, lambda
+            idx_R = sign(m_zern)*sign(n_zern) > 0
+            idx_Z = sign(m_zern)*sign(n_zern) < 0
+            idx_L = sign(m_lambda)*sign(n_lambda) < 0
+
+            idx_x = np.concatenate([idx_R, idx_Z, idx_L])
+            sym_mat = np.diag(idx_x, k=0).astype(int)[:, idx_x]
+        else:
+            sym_mat = np.eye(2*RZ_modes.shape[0] + lambda_modes.shape[0])
+
+        return sym_mat
+
+
+# TODO: can probably replace this function when Configuration interacts with Solver
+def change_resolution(x_old, stell_sym, RZ_basis_old, RZ_basis_new, L_basis_old, L_basis_new):
+    """
+
+    Parameters
+    ----------
+    x_old : ndarray
+        DESCRIPTION.
+    RZ_basis_old : FourierZernikeBasis
+        DESCRIPTION.
+    RZ_basis_new : FourierZernikeBasis
+        DESCRIPTION.
+    L_basis_old : DoubleFourierSeries
+        DESCRIPTION.
+    L_basis_new : DoubleFourierSeries
+        DESCRIPTION.
+
+    Returns
+    -------
+    x_new : ndarray
+        
+
+    """
+    old_modes = RZ_basis_old.modes
+    new_modes = RZ_basis_new.modes
+
+    sym_mat_old = symmetry_matrix(RZ_basis_old.modes, L_basis_old.modes, sym=stell_sym)
+    cR_old, cZ_old, cL_old = unpack_state(np.matmul(sym_mat_old, x_old), RZ_basis_old.num_modes)
+
+    cR_new = np.zeros((RZ_basis_new.num_modes,))
+    cZ_new = np.zeros((RZ_basis_new.num_modes,))
+    cL_new = np.zeros((L_basis_new.num_modes,))
+
+    for i in range(RZ_basis_new.num_modes):
+        idx = np.where(np.all(np.array([
+                    np.array(old_modes[:, 0] == new_modes[i, 0]),
+                    np.array(old_modes[:, 1] == new_modes[i, 1]),
+                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
+        if len(idx):
+            cR_new[i] = cR_old[idx[0]]
+            cZ_new[i] = cZ_old[idx[0]]
+
+    for i in range(L_basis_new.num_modes):
+        idx = np.where(np.all(np.array([
+                    np.array(old_modes[:, 0] == new_modes[i, 0]),
+                    np.array(old_modes[:, 1] == new_modes[i, 1]),
+                    np.array(old_modes[:, 2] == new_modes[i, 2])]), axis=0))[0]
+        if len(idx):
+            cL_new[i] = cL_old[idx[0]]
+
+    sym_mat_new = symmetry_matrix(RZ_basis_new.modes, L_basis_new.modes, sym=stell_sym)
+    x_new = np.concatenate([cR_new, cZ_new, cL_new])
+    x_new = jnp.matmul(sym_mat_new.T, x_new)
+    return x_new
+
+
+def unpack_state(x, nRZ):
+    """Unpacks the optimization state vector x into cR, cZ, cL components
+
+    Parameters
+    ----------
+    x : ndarray
+        vector to unpack
+    nRZ : int
+        number of R,Z coeffs
+
+    Returns
+    -------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    cL : ndarray
+        spectral coefficients of lambda
+
+    """
+
+    cR = x[:nRZ]
+    cZ = x[nRZ:2*nRZ]
+    cL = x[2*nRZ:]
+    return cR, cZ, cL
+
+
 class Configuration():
+    """Configuration constains information about a plasma state, including the 
+       shapes of flux surfaces and profile inputs. It can compute additional 
+       information, such as the magnetic field and plasma currents. 
+    """
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
-    def __init__(self, inputs=None, load_from=None, file_format='hdf5'): #bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None) -> None:
+    def __init__(self, inputs:dict=None, load_from:str=None, file_format:str='hdf5') -> None:
         """Initializes a configuration
 
         Parameters
@@ -36,11 +162,14 @@ class Configuration():
             True for stellarator symmetry, False otherwise
         x : ndarray
             state vector of independent variables: [cR, cZ, cL]. If not supplied,
-            the flux surfaces are scaled from the boundary and magnetic axis
         axis : ndarray, shape(Naxis,3)
             array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
-        """
 
+        Returns
+        -------
+        None
+
+        """
         self._save_attrs_ = ['__bdry', '__cP', '__cI', '__Psi', '__NFP',
                 '__zern_idx','__lambda_idx', '__sym', 'x', 'axis', '__cR',
                 '__cZ', '__cL']
@@ -57,7 +186,7 @@ class Configuration():
         else:
             raise RuntimeError('inputs or load_from must be specified.')
 
-    def _init_from_inputs_(self, inputs=None):
+    def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
             inputs = self.inputs
         self.__bdry = inputs['bdry']
@@ -72,40 +201,33 @@ class Configuration():
         self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
             np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
 
-            # embed this if-else into the symmetric_x function
-        if sym:
-            # TODO: move symmetric_x inside configuration.py
-            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
-        else:
-            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
+        self.__sym_mat = symmetry_matrix(self.__zern_idx, self.__lambda_idx, sym=self.__sym)
 
         if inputs['x'] is None:
             # TODO: change input reader to make the default axis=None
             if inputs['axis'] is None:
-                axis = bdry[np.where(inputs['bdry'][:, 0] == 0)[0], 1:]
+                axis = self.__bdry[np.where(inputs['bdry'][:, 0] == 0)[0], 1:]
             self.__cR, self.__cZ = get_initial_guess_scale_bdry(
                 axis, inputs['bdry'], 1.0, inputs['zern_idx'], inputs['NFP'], mode='spectral', rcond=1e-6)
             self.__cL = np.zeros(len(inputs['lambda_idx']))
             self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
-            self.__x = np.matmul(sym_mat.T, inputs['x'])#self.__x)
+            self.__x = np.matmul(self.__sym_mat.T, inputs['x'])
         else:
             self.__x = inputs['x']
             try:
-                # TODO: move unpack_x inside configuration.py
-                self.__cR, self.__cZ, self.__cL = unpack_x(np.matmul(sym_mat, self.__x), len(inputs['zern_idx']))
+                self.__cR, self.__cZ, self.__cL = unpack_state(
+                    np.matmul(self.__sym_mat, self.__x), len(self.__zern_idx))
             except:
                 raise ValueError(TextColors.FAIL +
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
-        return None
 
-    def _init_from_file_(self, load_from=None, file_format=None):
+    def _init_from_file_(self, load_from:str=None, file_format:str=None) -> None:
         if load_from is None:
             load_from = self.load_from
         if file_format is None:
             file_format = self._file_format_
         reader = eq_io.reader_factory(load_from, file_format)
         reader.read_obj(self)
-        return None
 
     @property
     def bdry(self):
@@ -157,12 +279,8 @@ class Configuration():
     @sym.setter
     def sym(self, sym):
         self.__sym = sym
-        if sym:
-            # TODO: move symmetric_x inside configuration.py
-            sym_mat = symmetric_x(self.__zern_idx, self.__lambda_idx)
-        else:
-            sym_mat = np.eye(2*self.__zern_idx.shape[0] + self.__lambda_idx.shape[0])
-        self.__x = np.matmul(sym_mat.T, self.__x)
+        self.__sym_mat = symmetry_matrix(self.__zern_idx, self.__lambda_idx, sym=self.__sym)
+        self.__x = np.matmul(self.__sym_mat, self.__x)
 
     def attributes(self):
         return (self.x, self.bdryR, self.bdryZ, self.cP, self.cI, self.Psi)
@@ -208,29 +326,15 @@ class Configuration():
 
 
 class Equilibrium(Configuration):
+    """Equilibrium is a decorator design pattern on top of Configuration.
+       It adds information about how the equilibrium configuration was solved. 
+    """
 
-    def __init__(self, inputs=None, load_from=None, file_format='hdf5'):#bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None, objective=None, optimizer=None) -> None:
+    def __init__(self, inputs:dict=None, load_from:str=None, file_format:str='hdf5') -> None:
+        super().__init__(inputs, load_from, file_format)
         self.__addl_save_attrs__ = ['objective', 'optimizer', 'solved']
-        self.inputs = inputs
-        self.load_from = load_from
-        if inputs is not None:
-            self._init_from_inputs_()
-        elif load_from is not None:
-            if file_format is None:
-                raise RuntimeError('file_format argument must be included when loading from file.')
-            self._file_format_ = file_format
-            self._init_from_file_()
-        else:
-            raise RuntimeError('inputs or load_from must be specified.')
 
-
-        #self.initial = Configuration(self, bdry, cP, cI, Psi, NFP, zern_idx, lambda_idx, sym=False, x=None, axis=None)
-        #self._save_attrs_ = self.initial._save_attrs_ + ['objective', 'optimizer', 'solved']
-        #self.__objective = objective
-        #self.__optimizer = optimizer
-        #self.solved = False
-
-    def _init_from_inputs_(self, inputs=None):
+    def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
             inputs = self.inputs
         self.initial = Configuration(inputs=inputs)
@@ -238,9 +342,8 @@ class Equilibrium(Configuration):
         self.__objective = inputs['objective']
         self.__optimizer = inputs['optimizer']
         self.solved = False
-        return None
 
-    def _init_from_file_(self, load_from=None, file_format=None):
+    def _init_from_file_(self, load_from:str=None, file_format:str=None) -> None:
         if load_from is None:
             load_from = self.load_from
         if file_format is None:
@@ -249,7 +352,6 @@ class Equilibrium(Configuration):
         self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
         self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
         reader.read_obj(self)
-        return None
 
     def optimize(self):
         pass
@@ -280,10 +382,14 @@ class Equilibrium(Configuration):
         writer.close()
         return None
 
-    # TODO: Does this inherit from Equilibrium? I don't think so because they have different constructors
-class EquilibriaFamily(MutableSequence):
 
-    def __init__(self, inputs=None, load_from=None, file_format='hdf5'):#equilibria, solver=None) -> None:
+# XXX: Should this (also) inherit from Equilibrium?
+class EquiliriaFamily(MutableSequence):
+    """EquilibriaFamily stores a list of Equilibria. Its default behavior acts
+       like the last Equilibrium in the list.
+    """
+
+    def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
         self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
@@ -298,11 +404,6 @@ class EquilibriaFamily(MutableSequence):
             self._init_from_file_()
         else:
             raise RuntimeError('inputs or load_from must be specified.')
-
-        #self.__equilibria = equilibria
-        #self.__solver = solver
-        #self.output_path = inputs['output_path'] #need some way to integrate this
-        #check if file exists - option to overwrite
 
     def _init_from_inputs_(self, inputs=None):
         if inputs is None:
@@ -343,14 +444,6 @@ class EquilibriaFamily(MutableSequence):
     def __len__(self):
         return len(self.__equilibria)
 
-    #@property
-    #def equilibria(self):
-    #    return self.__equilibria
-
-    #@equilibria.setter
-    #def equilibria(self, equilibria):
-    #    self.__equilibria = equilibria
-
     @property
     def solver(self):
         return self.__solver
@@ -359,7 +452,7 @@ class EquilibriaFamily(MutableSequence):
     def solver(self, solver):
         self.__solver = solver
 
-    def save(self, idx, save_to=None, file_format=None):
+    def save(self, idx, save_to=None, file_format=None) -> None:
         if type(idx) is not int:
             # implement fancier indexing later
             raise NotImplementedError('idx must be a single integer index')
@@ -374,23 +467,11 @@ class EquilibriaFamily(MutableSequence):
         self[idx].save(writer.sub(str(idx)), file_format=file_format,
                 file_mode=self._file_mode_)
         writer.close()
-        return None
 
-    #def load(self, filename):
-    #    reader = eq_io.reader_factory(filename, file_format)
-    #    self.inputs = {}
-    #    reader.read_dict(self.inputs, where=reader.sub('inputs'))
-    #    self.__equilibria = []
-    #    neqilibria = reader.count()
-    #    for i in range(nequilibria):
-    #        self.append(reader.load_equilibrium(where=reader.sub(str(i))))
-    #    return None
-        #self.__equilibria = []
-        #for
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 
-
-def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mode='equil'):
+# TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
+def compute_coordinate_derivatives(cR, cZ, RZ_transform, zeta_ratio=1.0):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
 
     Parameters
@@ -399,14 +480,12 @@ def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mo
         spectral coefficients of R
     cZ : ndarray
         spectral coefficients of Z
-    zernike_transform : ZernikeTransform
+    RZ_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
     zeta_ratio : float
         scale factor for zeta derivatives. Setting to zero
         effectively solves for individual tokamak solutions at each toroidal plane,
         setting to 1 solves for a stellarator. (Default value = 1.0)
-    mode : str
-        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
     Returns
     -------
@@ -417,72 +496,60 @@ def compute_coordinate_derivatives(cR, cZ, zernike_transform, zeta_ratio=1.0, mo
     """
     # notation: X_y means derivative of X wrt y
     coord_der = {}
-    coord_der['R'] = zernike_transform.transform(cR, 0, 0, 0)
-    coord_der['Z'] = zernike_transform.transform(cZ, 0, 0, 0)
+    coord_der['R'] = RZ_transform.transform(cR, 0, 0, 0)
+    coord_der['Z'] = RZ_transform.transform(cZ, 0, 0, 0)
     coord_der['0'] = jnp.zeros_like(coord_der['R'])
 
-    coord_der['R_r'] = zernike_transform.transform(cR, 1, 0, 0)
-    coord_der['Z_r'] = zernike_transform.transform(cZ, 1, 0, 0)
-    coord_der['R_v'] = zernike_transform.transform(cR, 0, 1, 0)
-    coord_der['Z_v'] = zernike_transform.transform(cZ, 0, 1, 0)
-    coord_der['R_z'] = zernike_transform.transform(cR, 0, 0, 1) * zeta_ratio
-    coord_der['Z_z'] = zernike_transform.transform(cZ, 0, 0, 1) * zeta_ratio
+    coord_der['R_r'] = RZ_transform.transform(cR, 1, 0, 0)
+    coord_der['Z_r'] = RZ_transform.transform(cZ, 1, 0, 0)
+    coord_der['R_v'] = RZ_transform.transform(cR, 0, 1, 0)
+    coord_der['Z_v'] = RZ_transform.transform(cZ, 0, 1, 0)
+    coord_der['R_z'] = RZ_transform.transform(cR, 0, 0, 1) * zeta_ratio
+    coord_der['Z_z'] = RZ_transform.transform(cZ, 0, 0, 1) * zeta_ratio
 
-    coord_der['R_rr'] = zernike_transform.transform(cR, 2, 0, 0)
-    coord_der['Z_rr'] = zernike_transform.transform(cZ, 2, 0, 0)
-    coord_der['R_rv'] = zernike_transform.transform(cR, 1, 1, 0)
-    coord_der['Z_rv'] = zernike_transform.transform(cZ, 1, 1, 0)
-    coord_der['R_rz'] = zernike_transform.transform(cR, 1, 0, 1) * zeta_ratio
-    coord_der['Z_rz'] = zernike_transform.transform(cZ, 1, 0, 1) * zeta_ratio
-    coord_der['R_vv'] = zernike_transform.transform(cR, 0, 2, 0)
-    coord_der['Z_vv'] = zernike_transform.transform(cZ, 0, 2, 0)
-    coord_der['R_vz'] = zernike_transform.transform(cR, 0, 1, 1) * zeta_ratio
-    coord_der['Z_vz'] = zernike_transform.transform(cZ, 0, 1, 1) * zeta_ratio
-    coord_der['R_zz'] = zernike_transform.transform(cR, 0, 0, 2) * zeta_ratio
-    coord_der['Z_zz'] = zernike_transform.transform(cZ, 0, 0, 2) * zeta_ratio
+    coord_der['R_rr'] = RZ_transform.transform(cR, 2, 0, 0)
+    coord_der['Z_rr'] = RZ_transform.transform(cZ, 2, 0, 0)
+    coord_der['R_rv'] = RZ_transform.transform(cR, 1, 1, 0)
+    coord_der['Z_rv'] = RZ_transform.transform(cZ, 1, 1, 0)
+    coord_der['R_rz'] = RZ_transform.transform(cR, 1, 0, 1) * zeta_ratio
+    coord_der['Z_rz'] = RZ_transform.transform(cZ, 1, 0, 1) * zeta_ratio
+    coord_der['R_vv'] = RZ_transform.transform(cR, 0, 2, 0)
+    coord_der['Z_vv'] = RZ_transform.transform(cZ, 0, 2, 0)
+    coord_der['R_vz'] = RZ_transform.transform(cR, 0, 1, 1) * zeta_ratio
+    coord_der['Z_vz'] = RZ_transform.transform(cZ, 0, 1, 1) * zeta_ratio
+    coord_der['R_zz'] = RZ_transform.transform(cR, 0, 0, 2) * zeta_ratio
+    coord_der['Z_zz'] = RZ_transform.transform(cZ, 0, 0, 2) * zeta_ratio
 
     # axis or QS terms
-    if len(zernike_transform.axn) or mode == 'qs':
-        coord_der['R_rrr'] = zernike_transform.transform(cR, 3, 0, 0)
-        coord_der['Z_rrr'] = zernike_transform.transform(cZ, 3, 0, 0)
-        coord_der['R_rrv'] = zernike_transform.transform(cR, 2, 1, 0)
-        coord_der['Z_rrv'] = zernike_transform.transform(cZ, 2, 1, 0)
-        coord_der['R_rrz'] = zernike_transform.transform(
-            cR, 2, 0, 1) * zeta_ratio
-        coord_der['Z_rrz'] = zernike_transform.transform(
-            cZ, 2, 0, 1) * zeta_ratio
-        coord_der['R_rvv'] = zernike_transform.transform(cR, 1, 2, 0)
-        coord_der['Z_rvv'] = zernike_transform.transform(cZ, 1, 2, 0)
-        coord_der['R_rvz'] = zernike_transform.transform(
-            cR, 1, 1, 1) * zeta_ratio
-        coord_der['Z_rvz'] = zernike_transform.transform(
-            cZ, 1, 1, 1) * zeta_ratio
-        coord_der['R_rzz'] = zernike_transform.transform(
-            cR, 1, 0, 2) * zeta_ratio
-        coord_der['Z_rzz'] = zernike_transform.transform(
-            cZ, 1, 0, 2) * zeta_ratio
-        coord_der['R_vvv'] = zernike_transform.transform(cR, 0, 3, 0)
-        coord_der['Z_vvv'] = zernike_transform.transform(cZ, 0, 3, 0)
-        coord_der['R_vvz'] = zernike_transform.transform(
-            cR, 0, 2, 1) * zeta_ratio
-        coord_der['Z_vvz'] = zernike_transform.transform(
-            cZ, 0, 2, 1) * zeta_ratio
-        coord_der['R_vzz'] = zernike_transform.transform(
-            cR, 0, 1, 2) * zeta_ratio
-        coord_der['Z_vzz'] = zernike_transform.transform(
-            cZ, 0, 1, 2) * zeta_ratio
-        coord_der['R_zzz'] = zernike_transform.transform(
-            cR, 0, 0, 3) * zeta_ratio
-        coord_der['Z_zzz'] = zernike_transform.transform(
-            cZ, 0, 0, 3) * zeta_ratio
+    if RZ_transform.grid.axis.size > 0 or RZ_transform.derivs == 'qs':
+        coord_der['R_rrr'] = RZ_transform.transform(cR, 3, 0, 0)
+        coord_der['Z_rrr'] = RZ_transform.transform(cZ, 3, 0, 0)
+        coord_der['R_rrv'] = RZ_transform.transform(cR, 2, 1, 0)
+        coord_der['Z_rrv'] = RZ_transform.transform(cZ, 2, 1, 0)
+        coord_der['R_rrz'] = RZ_transform.transform(cR, 2, 0, 1) * zeta_ratio
+        coord_der['Z_rrz'] = RZ_transform.transform(cZ, 2, 0, 1) * zeta_ratio
+        coord_der['R_rvv'] = RZ_transform.transform(cR, 1, 2, 0)
+        coord_der['Z_rvv'] = RZ_transform.transform(cZ, 1, 2, 0)
+        coord_der['R_rvz'] = RZ_transform.transform(cR, 1, 1, 1) * zeta_ratio
+        coord_der['Z_rvz'] = RZ_transform.transform(cZ, 1, 1, 1) * zeta_ratio
+        coord_der['R_rzz'] = RZ_transform.transform(cR, 1, 0, 2) * zeta_ratio
+        coord_der['Z_rzz'] = RZ_transform.transform(cZ, 1, 0, 2) * zeta_ratio
+        coord_der['R_vvv'] = RZ_transform.transform(cR, 0, 3, 0)
+        coord_der['Z_vvv'] = RZ_transform.transform(cZ, 0, 3, 0)
+        coord_der['R_vvz'] = RZ_transform.transform(cR, 0, 2, 1) * zeta_ratio
+        coord_der['Z_vvz'] = RZ_transform.transform(cZ, 0, 2, 1) * zeta_ratio
+        coord_der['R_vzz'] = RZ_transform.transform(cR, 0, 1, 2) * zeta_ratio
+        coord_der['Z_vzz'] = RZ_transform.transform(cZ, 0, 1, 2) * zeta_ratio
+        coord_der['R_zzz'] = RZ_transform.transform(cR, 0, 0, 3) * zeta_ratio
+        coord_der['Z_zzz'] = RZ_transform.transform(cZ, 0, 0, 3) * zeta_ratio
 
-        coord_der['R_rrvv'] = zernike_transform.transform(cR, 2, 2, 0)
-        coord_der['Z_rrvv'] = zernike_transform.transform(cZ, 2, 2, 0)
+        coord_der['R_rrvv'] = RZ_transform.transform(cR, 2, 2, 0)
+        coord_der['Z_rrvv'] = RZ_transform.transform(cZ, 2, 2, 0)
 
     return coord_der
 
 
-def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
+def compute_covariant_basis(coord_der, RZ_transform):
     """Computes covariant basis vectors at grid points
 
     Parameters
@@ -490,7 +557,7 @@ def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
     coord_der : dict
         dictionary of ndarray containing the coordinate
         derivatives at each node, such as computed by ``compute_coordinate_derivatives``
-    zernike_transform : ZernikeTransform
+    RZ_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
     mode : str
         one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
@@ -535,7 +602,7 @@ def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
         [coord_der['R_zz'], coord_der['R_z'], coord_der['Z_zz']])
 
     # axis or QS terms
-    if len(zernike_transform.axn) or mode == 'qs':
+    if RZ_transform.grid.axis.size > 0 or RZ_transform.derivs == 'qs':
         cov_basis['e_rho_rr'] = jnp.array(
             [coord_der['R_rrr'], coord_der['0'],   coord_der['Z_rrr']])
         cov_basis['e_rho_rv'] = jnp.array(
@@ -578,7 +645,7 @@ def compute_covariant_basis(coord_der, zernike_transform, mode='equil'):
     return cov_basis
 
 
-def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transform):
+def compute_contravariant_basis(coord_der, cov_basis, jacobian, RZ_transform):
     """Computes contravariant basis vectors and jacobian elements
 
     Parameters
@@ -592,7 +659,7 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transfor
     jacobian : dict
         dictionary of ndarray containing coordinate jacobian
         and partial derivatives, such as computed by ``compute_jacobian``
-    zernike_transform : ZernikeTransform
+    RZ_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
 
     Returns
@@ -601,7 +668,6 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transfor
         dictionary of ndarray containing contravariant basis vectors and jacobian elements
 
     """
-
     # subscripts (superscripts) denote covariant (contravariant) basis vectors
     con_basis = {}
 
@@ -614,24 +680,24 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transfor
         [coord_der['0'], 1/coord_der['R'], coord_der['0']])
 
     # axis terms
-    if len(zernike_transform.axn):
-        axn = zernike_transform.axn
+    if RZ_transform.grid.axis.size > 0:
+        axn = RZ_transform.grid.axis
         con_basis['e^rho'] = put(con_basis['e^rho'], opsindex[:, axn], (cross(
             cov_basis['e_theta_r'][:, axn], cov_basis['e_zeta'][:, axn], 0)/jacobian['g_r'][axn]))
         # e^theta = infinite at the axis
 
     # metric coefficients
-    con_basis['g^rr'] = dot(con_basis['e^rho'],  con_basis['e^rho'],  0)
-    con_basis['g^rv'] = dot(con_basis['e^rho'],  con_basis['e^theta'], 0)
-    con_basis['g^rz'] = dot(con_basis['e^rho'],  con_basis['e^zeta'], 0)
+    con_basis['g^rr'] = dot(con_basis['e^rho'],   con_basis['e^rho'],   0)
+    con_basis['g^rv'] = dot(con_basis['e^rho'],   con_basis['e^theta'], 0)
+    con_basis['g^rz'] = dot(con_basis['e^rho'],   con_basis['e^zeta'],  0)
     con_basis['g^vv'] = dot(con_basis['e^theta'], con_basis['e^theta'], 0)
-    con_basis['g^vz'] = dot(con_basis['e^theta'], con_basis['e^zeta'], 0)
-    con_basis['g^zz'] = dot(con_basis['e^zeta'], con_basis['e^zeta'], 0)
+    con_basis['g^vz'] = dot(con_basis['e^theta'], con_basis['e^zeta'],  0)
+    con_basis['g^zz'] = dot(con_basis['e^zeta'],  con_basis['e^zeta'],  0)
 
     return con_basis
 
 
-def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
+def compute_jacobian(coord_der, cov_basis, RZ_transform):
     """Computes coordinate jacobian and derivatives
 
     Parameters
@@ -642,10 +708,8 @@ def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
     cov_basis : dict
         dictionary of ndarray containing covariant basis
         vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-    zernike_transform : ZernikeTransform
+    RZ_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
-    mode : str
-        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
 
     Returns
     -------
@@ -674,7 +738,7 @@ def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
                                           cov_basis['e_zeta_z'], 0), 0)
 
     # axis or QS terms
-    if len(zernike_transform.axn) or mode == 'qs':
+    if RZ_transform.grid.axis.size > 0 or RZ_transform.derivs == 'qs':
         jacobian['g_rr'] = dot(cov_basis['e_rho_rr'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
             + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0)*2 \
             + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_r'], 0), 0)*2 \
@@ -731,7 +795,7 @@ def compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil'):
     return jacobian
 
 
-def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform, mode='equil'):
+def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, iota_transform, mode='force'):
     """Computes magnetic field components at node locations
 
     Parameters
@@ -746,10 +810,11 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         coefficients to pass to rotational transform function
     Psi_lcfs : float
         total toroidal flux (in Webers) within LCFS
-    zernike_transform : ZernikeTransform
+    iota_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
     mode : str
-        one of 'equil' or 'qs'. Whether to compute field terms for equilibrium or quasisymmetry optimization (Default value = 'equil')
+        one of 'force' or 'qs'. Whether to compute field terms for equilibrium
+        or quasisymmetry optimization (Default value = 'force')
 
     Returns
     -------
@@ -759,14 +824,13 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
         covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     magnetic_field = {}
-    r = zernike_transform.nodes[0]
-    axn = zernike_transform.axn
-    iota = iotafun(r, 0, cI)
-    iota_r = iotafun(r, 1, cI)
+    r = iota_transform.grid.nodes[:, 0]
+    axn = iota_transform.grid.axis
+    iota = iota_transform.transform(cI, 0)
+    iota_r = iota_transform.transform(cI, 1)
 
     # toroidal flux
     magnetic_field['psi'] = Psi_lcfs*r**2
@@ -846,7 +910,7 @@ def compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform,
     return magnetic_field
 
 
-def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform):
+def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, iota_transform):
     """Computes current density field at node locations
 
     Parameters
@@ -865,9 +929,7 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
         such as computed by ``compute_magnetic_field``.
     cI : ndarray
         coefficients to pass to rotational transform function.
-    Psi_lcfs : float
-        total toroidal flux (in Webers) within LCFS.
-    zernike_transform : ZernikeTransform
+    iota_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
 
     Returns
@@ -878,14 +940,12 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
         component of the current, with the derivative wrt to y.
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     plasma_current = {}
     mu0 = 4*jnp.pi*1e-7
-    r = zernike_transform.nodes[0]
-    axn = zernike_transform.axn
-    iota = iotafun(r, 0, cI)
+    axn = iota_transform.grid.axis
+    iota = iota_transform.transform(cI, 0)
 
     # axis terms
     if len(axn):
@@ -921,7 +981,7 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, P
     return plasma_current
 
 
-def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_transform):
+def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, iota_transform):
     """Computes magnetic field magnitude at node locations
 
     Parameters
@@ -934,7 +994,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
         such as computed by ``compute_magnetic_field``.
     cI : ndarray
         coefficients to pass to rotational transform function
-    zernike_transform : ZernikeTransform
+    iota_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
 
     Returns
@@ -943,12 +1003,10 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
         dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
 
     """
-
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     B_mag = {}
-    r = zernike_transform.nodes[0]
-    iota = iotafun(r, 0, cI)
+    iota = iota_transform.transform(cI, 0)
 
     B_mag['|B|'] = jnp.abs(magnetic_field['B^zeta'])*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0) +
                                                               2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))
@@ -988,7 +1046,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_tran
     return B_mag
 
 
-def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
+def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, pres_transform):
     """Computes force error magnitude at node locations
 
     Parameters
@@ -1013,11 +1071,9 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         such as computed by ``compute_plasma_current``.
     cP : ndarray
         parameters to pass to pressure function
-    cI : ndarray
-        parameters to pass to rotational transform function
     Psi_lcfs : float
         total toroidal flux (in Webers) within LCFS
-    zernike_transform : ZernikeTransform
+    pres_transform : Transform
         object with transform method to go from spectral to physical space with derivatives
 
     Returns
@@ -1028,11 +1084,9 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
         magnitude of pressure gradient at each node.
 
     """
-
     mu0 = 4*jnp.pi*1e-7
-    r = zernike_transform.nodes[0]
-    axn = zernike_transform.axn
-    pres_r = presfun(r, 1, cP)
+    axn = pres_transform.grid.axis
+    pres_r = pres_transform.transform(cP, 1)
 
     # force balance error covariant components
     F_rho = jacobian['g']*(plasma_current['J^theta']*magnetic_field['B^zeta'] -

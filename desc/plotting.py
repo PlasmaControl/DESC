@@ -5,10 +5,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from desc.backend import TextColors
-from desc.input_output import read_desc
+from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
 from desc.grid import LinearGrid
-from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
 from desc.configuration import compute_contravariant_basis, compute_jacobian

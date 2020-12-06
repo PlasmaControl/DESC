@@ -11,7 +11,7 @@ from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.transform import Transform
 from desc.configuration import unpack_state, symmetry_matrix, change_resolution
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
-from desc.input_output import Checkpoint
+from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
 
 

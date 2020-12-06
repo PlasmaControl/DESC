@@ -819,6 +819,6 @@ def equals(a, b) -> bool:
     if a.keys() != b.keys():
         return False
     return all(equals(a[key], b[key]) if isinstance(a[key], dict)
-               else np.allclose(a[key], b[key]) if isinstance(a[key], np.ndarray)
+               else jnp.allclose(a[key], b[key]) if isinstance(a[key], jnp.ndarray)
                else (a[key] == b[key])
                for key in a)

@@ -235,10 +235,14 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                                                        pert_order[ii], verbose, timer)
 
         # equilibrium objective function
+        if optim_method in ['bfgs']:
+            scalar = True
+        else:
+            scalar = False
         obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
                 RZ_transform=RZ_transform, RZb_transform=RZb_transform,
                 L_transform=L_transform, pres_transform=pres_transform,
-                iota_transform=iota_transform, stell_sym=stell_sym, scalar=False)
+                iota_transform=iota_transform, stell_sym=stell_sym, scalar=scalar)
         equil_obj = obj_fun.compute
         callback = obj_fun.callback
         args = (cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii],

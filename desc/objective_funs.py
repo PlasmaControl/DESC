@@ -11,14 +11,11 @@ from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
-
 # TODO: lots of documentation needs to be updated!
 
 class ObjectiveFunction(ABC):
     """
     Objective function used to calculate the residual error in the optimization of an Equilibrium
-
-    ...
 
     Attributes
     ----------
@@ -53,57 +50,39 @@ class ObjectiveFunction(ABC):
     -------
     compute(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)
         compute the equilibrium objective function
-
     callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)
         function that prints equilibrium errors
-
+    
     """
-
-    def __init__(self, RZ_transform:Transform=None,
-                 RZb_transform:Transform=None, L_transform:Transform=None,
-                 pres_transform:Transform=None, iota_transform:Transform=None,
-                 stell_sym:bool=True, scalar:bool=False) -> None:
-        """Initializes an ObjectiveFunction
-
-        Parameters
-        ----------
-        RZ_transform : Transform, optional
-            transforms R and Z coefficients to real space in the volume
-        RZb_transform : Transform, optional
-            transforms R and Z coefficients to real space on the surface
-        L_transform : Transform, optional
-            transforms lambda coefficients to real space
-        pres_transform : Transform, optional
-            transforms pressure coefficients to real space
-        iota_transform : Transform, optional
-            transforms rotational transform coefficients to real space
-        stell_sym : bool, optional
-            True for stellarator symmetry (Default), False otherwise
-        scalar : bool, optional
-            True for scalar objectives, False otherwise (Default)
-
-        Returns
-        -------
-        None
-
-        """
+    
+    def __init__(self,stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar):
         self.stell_sym = stell_sym
-        self.sym_mat = symmetry_matrix(RZ_transform.basis.modes, L_transform.basis.modes, self.stell_sym)
-        self.RZ_transform = RZ_transform
-        self.RZb_transform = RZb_transform
-        self.L_transform = L_transform
-        self.pres_transform = pres_transform
-        self.iota_transform = iota_transform
+        # stellarator symmetry
+        if stell_sym:
+            self.sym_mat = symmetric_x(zern_idx, lambda_idx)
+        else:
+            self.sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
+        self.errr_mode = errr_mode
+        self.bdry_mode = bdry_mode
+        self.bdry_fun = bdry_fun
+        self.M = M
+        self.N = N
+        self.NFP = NFP
+        self.zernike_transform = zernike_transform
+        self.bdry_zernike_transform = bdry_zernike_transform
+        self.zern_idx = zern_idx
+        self.lambda_idx = lambda_idx
+        self.bdryM = bdryM
+        self.bdryN = bdryN
         self.scalar = scalar
-
+        
     @abstractmethod
-    def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def compute(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
     @abstractmethod
-    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def callback(self, x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
-
-
+    
 class ForceErrorNodes(ObjectiveFunction):
     """ObjectiveFunction object subclass that minimizes equilibrium force balance error"""
 
@@ -135,7 +114,6 @@ class ForceErrorNodes(ObjectiveFunction):
         None
 
         """
-
         super().__init__(RZ_transform, RZb_transform, L_transform, pres_transform, iota_transform, stell_sym, scalar)
         self.equil_fun = compute_force_error_nodes # uses force balance error as objective function
         self.bdry_fun = compute_bdry_err
@@ -271,6 +249,77 @@ class AccelErrorSpectral(ObjectiveFunction):
         print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
                 resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
 
+
+class ObjectiveFunctionFactory():
+    """Factory Class for Objective Functions
+    
+    Attributes
+    ----------
+    
+    Methods
+    -------
+    get_obj_fxn(attributes)
+        takes Equilibrium.attributes and uses it to compute and return the value of the objective function
+    """
+    
+    def get_equil_obj_fun(self, stell_sym, errr_mode, bdry_mode, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar=False) -> ObjectiveFunction:
+        """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
+    
+        Parameters
+        ----------
+        stell_sym : bool
+            True if stellarator symmetry is enforced
+        errr_mode : string
+            'force' or 'accel'. Method to use for calculating equilibrium error.
+        bdry_mode : string
+            'real' or 'spectral'. Method to use for calculating boundary error.
+        M : int
+            maximum poloidal resolution
+        N : int
+            maximum toroidal resolution
+        NFP : int
+            number of field periods
+        zernike_transform : ZernikeTransform
+            object with transform method to go from spectral to physical space with derivatives
+        bdry_zernike_transform : ZernikeTransform
+            zernike transform object for boundary conditions
+        zern_idx : ndarray of int, shape(N_coeffs,3)
+            mode numbers for Zernike basis
+        lambda_idx : ndarray of int, shape(N_lambda,2)
+            mode numbers for Fourier basis
+        bdryM : ndarray of int
+            poloidal mode numbers for boundary
+        bdryN : ndarray of int
+            toroidal mode numbers for boundary
+        scalar : bool
+             whether to have objective compute scalar or vector error (Default value = False)
+    
+        Returns
+        -------
+        obj_fxn : ObjectiveFunction
+            equilibrium objective function object, containing the compute and callback method for the objective function
+
+    
+        """
+
+        if bdry_mode == 'real':
+            raise ValueError(TextColors.FAIL + "evaluating bdry error in real space coordinates is currently broken." +
+                             " Please yell at one of the developers and we will fix it" + TextColors.ENDC)
+            bdry_fun = compute_bdry_err_RZ
+        elif bdry_mode == 'spectral':
+            bdry_fun = compute_bdry_err_four
+        else:
+            raise ValueError(TextColors.FAIL + "Requested boundary error mode is not implemented." +
+                             " Available boundary error mode is 'spectral'" + TextColors.ENDC)
+        if errr_mode == 'force':
+            obj_fun = ForceErrorNodes(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
+        elif errr_mode == 'accel':
+            obj_fun = AccelErrorSpectral(stell_sym, errr_mode, bdry_mode, bdry_fun, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar)
+        else:
+            raise ValueError(TextColors.FAIL + "Requested Objective Function is not implemented." +
+                             " Available objective functions are 'force' and 'accel'" + TextColors.ENDC)
+        return obj_fun
+            
 
 class ObjectiveFunctionFactory():
     """Factory Class for Objective Functions

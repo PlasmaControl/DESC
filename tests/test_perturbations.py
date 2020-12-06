@@ -1,4 +1,3 @@
-"""
 import unittest
 import numpy as np
 from desc.backend import jnp
@@ -6,10 +5,10 @@ from desc.perturbations import perturb_continuation_params
 
 
 class TestPerturbations(unittest.TestCase):
-    "tests for pertubations functions""
+    """tests for pertubations functions"""
 
     def test_perturb_continuation_params_1D(self):
-        "1D test function where linear perturb is exact""
+        """1D test function where linear perturb is exact"""
 
         def test_fun(x, a0, a1, a2, a3, a4, c0, c1, c2, c3):
             return jnp.array([(x[0] - a0) * (x[0] - c0)])
@@ -38,7 +37,7 @@ class TestPerturbations(unittest.TestCase):
             np.argsort(err[1, :]), np.linspace(0, n-1, n))
 
     def test_perturb_continuation_params_2D(self):
-        ""2D test function to check convergence rates""
+        """2D test function to check convergence rates"""
 
         def test_fun(x, a0, a1, a2, a3, a4, c0, c1, c2, c3):
             return jnp.array([a0 + c0*x[0] + c1*x[1]**2,
@@ -77,4 +76,3 @@ class TestPerturbations(unittest.TestCase):
             np.argsort(err[0, :]), np.linspace(0, n-1, n))
         np.testing.assert_array_almost_equal(
             np.argsort(err[1, :]), np.linspace(0, n-1, n))
-"""

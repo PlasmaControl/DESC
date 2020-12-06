@@ -62,8 +62,8 @@ class TestTransform(unittest.TestCase):
         correct_vals = c[0] + c[1]*x + c[2]*x**2
         correct_ders = c[1] + c[2]*2*x
 
-        np.testing.assert_allclose(correct_vals, values)
-        np.testing.assert_allclose(correct_ders, derivs)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface
@@ -100,10 +100,10 @@ class TestTransform(unittest.TestCase):
         dz = transf.transform(c, 0, 0, 1)   # zeta derivative
         dtz = transf.transform(c, 0, 1, 1)  # mixed derivative
 
-        np.testing.assert_allclose(correct_d0, d0)
-        np.testing.assert_allclose(correct_dt, dt)
-        np.testing.assert_allclose(correct_dz, dz)
-        np.testing.assert_allclose(correct_dtz, dtz)
+        np.testing.assert_allclose(d0, correct_d0, atol=1e-8)
+        np.testing.assert_allclose(dt, correct_dt, atol=1e-8)
+        np.testing.assert_allclose(dz, correct_dz, atol=1e-8)
+        np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
     def test_volume(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume
@@ -135,7 +135,7 @@ class TestTransform(unittest.TestCase):
 
         values = transf.transform(c, 0, 0, 0)
 
-        np.testing.assert_allclose(correct_vals, values)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_set_grid(self):
         """Tests the grid setter method

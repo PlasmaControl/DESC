@@ -19,8 +19,8 @@ class TestBasis(unittest.TestCase):
         correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
         correct_p2 = np.array([[0, 0, 2], [0, 0, 0], [0, 0, 0], [0, 0, 2]])
 
-        np.testing.assert_allclose(correct_p1, p1)
-        np.testing.assert_allclose(correct_p2, p2)
+        np.testing.assert_allclose(p1, correct_p1, atol=1e-8)
+        np.testing.assert_allclose(p2, correct_p2, atol=1e-8)
 
     def test_polyval(self):
         """Tests polyval_vec function
@@ -31,7 +31,7 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([x**2, x, np.ones_like(x), x**2+x+1])
         values = polyval_vec(p, x)
 
-        np.testing.assert_allclose(correct_vals, values)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_powers(self):
         """Tests powers function
@@ -45,8 +45,8 @@ class TestBasis(unittest.TestCase):
         values = powers(r, l, dr=0)
         derivs = powers(r, l, dr=1)
 
-        np.testing.assert_allclose(correct_vals, values)
-        np.testing.assert_allclose(correct_ders, derivs)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_jacobi(self):
         """Tests jacobi function
@@ -71,8 +71,8 @@ class TestBasis(unittest.TestCase):
         values = jacobi(r, l, m, 0)
         derivs = jacobi(r, l, m, 1)
 
-        np.testing.assert_allclose(correct_vals, values)
-        np.testing.assert_allclose(correct_ders, derivs)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_fourier(self):
         """Tests fourier function
@@ -86,8 +86,8 @@ class TestBasis(unittest.TestCase):
         values = fourier(t, m, dt=0)
         derivs = fourier(t, m, dt=1)
 
-        np.testing.assert_allclose(correct_vals, values)
-        np.testing.assert_allclose(correct_ders, derivs)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_power_series(self):
         """Tests PowerSeries evaluation
@@ -102,8 +102,8 @@ class TestBasis(unittest.TestCase):
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
         derivs = basis.evaluate(grid.nodes, derivatives=np.array([1, 0, 0]))
 
-        np.testing.assert_allclose(correct_vals, values)
-        np.testing.assert_allclose(correct_ders, derivs)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_double_fourier(self):
         """Tests DoubleFourierSeries evaluation
@@ -119,4 +119,4 @@ class TestBasis(unittest.TestCase):
         basis = DoubleFourierSeries(M=1, N=1)
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
 
-        np.testing.assert_allclose(correct_vals, values)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)

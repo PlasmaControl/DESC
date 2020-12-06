@@ -25,7 +25,8 @@ class TestGrid(unittest.TestCase):
                                     2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3,
                                     4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3])]).T
 
-        np.testing.assert_allclose(grid.nodes, nodes)
+        np.testing.assert_allclose(grid.nodes, nodes, atol=1e-8)
+
         self.assertAlmostEqual(np.sum(grid.volumes[:, 0]*
                                       grid.volumes[:, 1]*
                                       grid.volumes[:, 2]),
@@ -50,8 +51,9 @@ class TestGrid(unittest.TestCase):
                                            6*np.pi/5, 4*np.pi/3, 8*np.pi/5]),
                                  np.zeros((int((M+1)**2),))]).T
 
-        np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes)
-        np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes)
+        np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, atol=1e-8)
+        np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
+
         self.assertAlmostEqual(np.sum(grid_ansi.volumes[:, 0]*
                                       grid_ansi.volumes[:, 1]*
                                       grid_ansi.volumes[:, 2]),

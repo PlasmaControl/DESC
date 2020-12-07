@@ -144,7 +144,7 @@ class ForceErrorNodes(ObjectiveFunction):
                                     errZb.flatten()/errr_ratio])
 
         if not self.stell_sym:
-            errL0 = compute_lambda_err(cL, self.lambda_idx, self.NFP)
+            errL0 = compute_lambda_err(cL, self.L_transform.basis)
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
         if self.scalar:
@@ -225,7 +225,7 @@ class AccelErrorSpectral(ObjectiveFunction):
                                     errZb.flatten()/errr_ratio])
 
         if not self.stell_sym:
-            errL0 = compute_lambda_err(cL, self.lambda_idx, self.NFP)
+            errL0 = compute_lambda_err(cL, self.L_transform.basis)
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
         if self.scalar:

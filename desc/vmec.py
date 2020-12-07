@@ -46,7 +46,7 @@ def read_vmec_output(fname):
     return vmec_data
 
 
-def vmec_error(equil, vmec_data, Nt=8, Nz=8):
+def vmec_error(equil, vmec_data, Nt=8, Nz=0):
     """Computes error in SFL coordinates compared to VMEC solution
 
     Parameters
@@ -69,7 +69,7 @@ def vmec_error(equil, vmec_data, Nt=8, Nz=8):
     ns = np.size(vmec_data['psi'])
     rho = np.sqrt(vmec_data['psi'])
     grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil['NFP'], surfs=rho)
-    basis = FourierZernikeBasis(M=equil['M'], N=equil['N'], NFP=equil['NFP'])
+    basis = equil['R_basis']
     transf = Transform(grid, basis)
     vartheta = np.unique(grid.nodes[:, 1])
     phi = np.unique(grid.nodes[:, 2])

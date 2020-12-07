@@ -2,6 +2,7 @@ import numpy as np
 from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, TextColors, sign
+from desc.basis import Basis
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 from desc import equilibrium_io as eq_io
@@ -137,42 +138,27 @@ class Configuration():
     """
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
-    def __init__(self, inputs:dict=None, load_from:str=None, file_format:str='hdf5') -> None:
-        """Initializes a configuration
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
+        """Initializes a Configuration
 
         Parameters
         ----------
-        bdry : ndarray of float, shape(Nbdry,4)
-            array of boundary Fourier coeffs [m,n,Rcoeff, Zcoeff]
-            OR
-            array of real space coordinates, [theta,phi,R,Z]
-        cP : ndarray
-            spectral coefficients of the pressure profile (Pascals)
-        cI : ndarray
-            spectral coefficients of the rotational transform profile
-        Psi : float
-            toroidal flux within the last closed flux surface (Webers)
-        NFP : int
-            number of toroidal field periods
-        zern_idx : ndarray of int, shape(N_coeffs,3)
-            indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
-        lambda_idx : ndarray of int, shape(Nmodes,2)
-            poloidal and toroidal mode numbers [m,n]
-        sym : bool
-            True for stellarator symmetry, False otherwise
-        x : ndarray
-            state vector of independent variables: [cR, cZ, cL]. If not supplied,
-        axis : ndarray, shape(Naxis,3)
-            array of axis Fourier coeffs [n,Rcoeff, Zcoeff]
+        inputs : dict
+            DESCRIPTION
+        load_from : str OR ...
+            DESCRIPTION
+        file_format : str
+            DESCRIPTION
 
         Returns
         -------
         None
 
         """
-        self._save_attrs_ = ['__bdry', '__cP', '__cI', '__Psi', '__NFP',
-                '__zern_idx','__lambda_idx', '__sym', 'x', 'axis', '__cR',
-                '__cZ', '__cL']
+        self._save_attrs_ = ['__cR', '__cZ', '__cL', '__cRb', '__cZb', '__cP',
+                             '__cI', '__Psi', '__NFP', '__R_basis',
+                             '__Z_basis', '__L_basis', '__Rb_basis',
+                             '__Zb_basis', '__P_basis', '__I_basis']
 
         self.inputs = inputs
         self.load_from = load_from
@@ -186,6 +172,10 @@ class Configuration():
         else:
             raise RuntimeError('inputs or load_from must be specified.')
 
+# XXX: Daniel doesn't think this method makes sense here.
+#      We probably shouldn't be creating a Configuration directly from the
+#      inputs, because they are mostly about the "outer loop" parameters.
+#      It would be better to separate out the relevant inputs first.
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
             inputs = self.inputs
@@ -221,7 +211,7 @@ class Configuration():
                 raise ValueError(TextColors.FAIL +
                     "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
 
-    def _init_from_file_(self, load_from:str=None, file_format:str=None) -> None:
+    def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
         if load_from is None:
             load_from = self.load_from
         if file_format is None:
@@ -241,11 +231,43 @@ class Configuration():
             np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
 
     @property
+    def cR(self):
+        return self.__cR
+
+    @cR.setter
+    def cR(self, cR) -> None:
+        self.__cR = cR
+
+    @property
+    def cZ(self):
+        return self.__cZ
+
+    @cZ.setter
+    def cZ(self, cZ) -> None:
+        self.__cZ = cZ
+
+    @property
+    def cRb(self):
+        return self.__cRb
+
+    @cRb.setter
+    def cRb(self, cRb) -> None:
+        self.__cRb = cRb
+
+    @property
+    def cZb(self):
+        return self.__cZb
+
+    @cZb.setter
+    def cZb(self, cZb) -> None:
+        self.__cZb = cZb
+
+    @property
     def cP(self):
         return self.__cP
 
     @cP.setter
-    def cP(self, cP):
+    def cP(self, cP) -> None:
         self.__cP = cP
 
     @property
@@ -253,31 +275,87 @@ class Configuration():
         return self.__cI
 
     @cI.setter
-    def cI(self, cI):
+    def cI(self, cI) -> None:
         self.__cI = cI
 
     @property
-    def Psi(self):
+    def Psi(self) -> float:
         return self.__Psi
 
     @Psi.setter
-    def Psi(self, Psi):
+    def Psi(self, Psi) -> None:
         self.__Psi = Psi
 
     @property
-    def NFP(self):
+    def NFP(self) -> int:
         return self.__NFP
 
     @NFP.setter
-    def NFP(self, NFP):
+    def NFP(self, NFP) -> None:
         self.__NFP = NFP
 
     @property
-    def sym(self):
+    def R_basis(self) -> Basis:
+        return self.__R_basis
+
+    @R_basis.setter
+    def R_basis(self, R_basis:Basis) -> None:
+        self.__R_basis = R_basis
+
+    @property
+    def Z_basis(self) -> Basis:
+        return self.__Z_basis
+
+    @Z_basis.setter
+    def Z_basis(self, Z_basis:Basis) -> None:
+        self.__Z_basis = Z_basis
+
+    @property
+    def L_basis(self) -> Basis:
+        return self.__L_basis
+
+    @L_basis.setter
+    def L_basis(self, L_basis:Basis) -> None:
+        self.__L_basis = L_basis
+
+    @property
+    def Rb_basis(self) -> Basis:
+        return self.__Rb_basis
+
+    @Rb_basis.setter
+    def Rb_basis(self, Rb_basis:Basis) -> None:
+        self.__Rb_basis = Rb_basis
+
+    @property
+    def Zb_basis(self) -> Basis:
+        return self.__Zb_basis
+
+    @Zb_basis.setter
+    def Zb_basis(self, Zb_basis:Basis) -> None:
+        self.__Zb_basis = Zb_basis
+
+    @property
+    def P_basis(self) -> Basis:
+        return self.__P_basis
+
+    @P_basis.setter
+    def P_basis(self, P_basis:Basis) -> None:
+        self.__P_basis = P_basis
+
+    @property
+    def I_basis(self) -> Basis:
+        return self.__I_basis
+
+    @I_basis.setter
+    def I_basis(self, I_basis:Basis) -> None:
+        self.__I_basis = I_basis
+
+    @property
+    def sym(self) -> bool:
         return self.__sym
 
     @sym.setter
-    def sym(self, sym):
+    def sym(self, sym) -> None:
         self.__sym = sym
         self.__sym_mat = symmetry_matrix(self.__zern_idx, self.__lambda_idx, sym=self.__sym)
         self.__x = np.matmul(self.__sym_mat, self.__x)
@@ -330,7 +408,7 @@ class Equilibrium(Configuration):
        It adds information about how the equilibrium configuration was solved. 
     """
 
-    def __init__(self, inputs:dict=None, load_from:str=None, file_format:str='hdf5') -> None:
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
         super().__init__(inputs, load_from, file_format)
         self.__addl_save_attrs__ = ['objective', 'optimizer', 'solved']
 
@@ -343,7 +421,7 @@ class Equilibrium(Configuration):
         self.__optimizer = inputs['optimizer']
         self.solved = False
 
-    def _init_from_file_(self, load_from:str=None, file_format:str=None) -> None:
+    def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
         if load_from is None:
             load_from = self.load_from
         if file_format is None:

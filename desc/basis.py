@@ -3,7 +3,7 @@ import functools
 import numba
 from abc import ABC, abstractmethod
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, fori_loop, flatten_list, factorial, equals
+from desc.backend import jnp, jit, fori_loop, flatten_list, factorial, equals
 
 
 class Basis(ABC):
@@ -48,6 +48,29 @@ class Basis(ABC):
             return False
         return equals(self.__dict__, other.__dict__)
 
+    def _sort_modes_(self) -> None:
+        """Sorts modes for use with FFT
+
+        Returns
+        -------
+        None
+
+        """
+        sort_idx = np.lexsort((self.__modes[:, 0], self.__modes[:, 1],
+                               self.__modes[:, 2]))
+        self.__modes = self.__modes[sort_idx]
+
+    def _def_save_attrs_(self) -> None:
+        """Defines attributes to save
+
+        Returns
+        -------
+        None
+
+        """
+        self._save_attrs_ = ['_Basis__L', '_Basis__M', '_Basis__N', '_Basis__NFP',
+                             '_Basis__modes']
+
     @abstractmethod
     def get_modes(self):
         pass
@@ -59,18 +82,6 @@ class Basis(ABC):
     @abstractmethod
     def change_resolution(self) -> None:
         pass
-
-    def sort_modes(self) -> None:
-        """Sorts modes for use with FFT
-
-        Returns
-        -------
-        None
-
-        """
-        sort_idx = np.lexsort((self.__modes[:, 0], self.__modes[:, 1],
-                               self.__modes[:, 2]))
-        self.__modes = self.__modes[sort_idx]
 
     @property
     def L(self):
@@ -120,7 +131,9 @@ class PowerSeries(Basis):
         self._Basis__NFP = 1
 
         self._Basis__modes = self.get_modes(L=self._Basis__L)
-        self.sort_modes()
+
+        self._sort_modes_()
+        self._def_save_attrs_()
 
     def get_modes(self, L:int=0):
         """Gets mode numbers for power series
@@ -195,7 +208,9 @@ class DoubleFourierSeries(Basis):
         self._Basis__NFP = NFP
 
         self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
-        self.sort_modes()
+
+        self._sort_modes_()
+        self._def_save_attrs_()
 
     def get_modes(self, M:int=0, N:int=0) -> None:
         """Gets mode numbers for double fourier series
@@ -319,7 +334,9 @@ class FourierZernikeBasis(Basis):
 
         self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M, N=self._Basis__N,
                                       index=self.__index)
-        self.sort_modes()
+
+        self._sort_modes_()
+        self._def_save_attrs_()
 
     def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):
         """Gets mode numbers for Fourier-Zernike basis functions

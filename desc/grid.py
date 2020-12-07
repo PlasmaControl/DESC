@@ -46,8 +46,10 @@ class Grid():
         self.__sym = False
 
         self.__nodes, self.__volumes = self.create_nodes(nodes)
-        self.sort_nodes()
-        self.find_axis()
+
+        self._sort_nodes_()
+        self._find_axis_()
+        self._def_save_attrs()
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -67,6 +69,40 @@ class Grid():
         if self.__class__ != other.__class__:
             return False
         return equals(self.__dict__, other.__dict__)
+
+    def _sort_nodes_(self) -> None:
+        """Sorts nodes for use with FFT
+
+            Returns
+            -------
+            None
+
+        """
+        sort_idx = np.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
+                               self.__nodes[:, 2]))
+        self.__nodes = self.__nodes[sort_idx]
+        self.__volumes = self.__volumes[sort_idx]
+
+    def _find_axis_(self) -> None:
+        """Finds indices of axis nodes
+
+        Returns
+        -------
+        None
+
+        """
+        self.__axis = np.where(self.__nodes[:, 0] == 0)[0]
+
+    def _def_save_attrs_(self) -> None:
+        """Defines attributes to save
+
+        Returns
+        -------
+        None
+
+        """
+        self._save_attrs_ = ['_Grid__L', '_Grid__M', '_Grid__N', '_Grid__NFP',
+                             '_Grid__sym', '_Grid__nodes', '_Grid__volumes']
 
     def create_nodes(self, nodes):
         """Allows for custom node creation
@@ -89,29 +125,6 @@ class Grid():
     @abstractmethod
     def change_resolution(self) -> None:
         pass
-
-    def sort_nodes(self) -> None:
-        """Sorts nodes for use with FFT
-
-            Returns
-            -------
-            None
-
-        """
-        sort_idx = np.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
-                               self.__nodes[:, 2]))
-        self.__nodes = self.__nodes[sort_idx]
-        self.__volumes = self.__volumes[sort_idx]
-
-    def find_axis(self) -> None:
-        """Finds indices of axis nodes
-
-        Returns
-        -------
-        None
-
-        """
-        self.__axis = np.where(self.__nodes[:, 0] == 0)[0]
 
     @property
     def L(self):
@@ -202,8 +215,10 @@ class LinearGrid(Grid):
                             L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
                             NFP=self._Grid__NFP, sym=self._Grid__sym,
                             endpoint=self.__endpoint, surfs=self.__surfs)
-        self.sort_nodes()
-        self.find_axis()
+
+        self._sort_nodes_()
+        self._find_axis_()
+        self._def_save_attrs_()
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
                      sym:bool=False, endpoint:bool=False,
@@ -345,8 +360,10 @@ class ConcentricGrid(Grid):
                         M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
                         sym=self._Grid__sym, axis=self.__axis,
                         index=self.__index, surfs=self.__surfs)
-        self.sort_nodes()
-        self.find_axis()
+
+        self._sort_nodes_()
+        self._find_axis_()
+        self._def_save_attrs_()
 
     def create_nodes(self, M:int, N:int, NFP:int=1, sym:bool=False,
                        axis:bool=True, index='ansi', surfs='cheb1'):

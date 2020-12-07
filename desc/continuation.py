@@ -114,13 +114,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             RZ_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
                                            NFP=NFP, index=zern_mode)
             L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP)
-            pres_basis = PowerSeries(L=cP.size-1)
-            iota_basis = PowerSeries(L=cI.size-1)
+            P_basis = PowerSeries(L=cP.size-1)
+            I_basis = PowerSeries(L=cI.size-1)
             RZ_transform = Transform(RZ_grid, RZ_basis, derivs=3)
             RZb_transform = Transform(L_grid, RZ_basis)
             L_transform = Transform(L_grid, L_basis, derivs=0)
-            pres_transform = Transform(RZ_grid, pres_basis, derivs=1)
-            iota_transform = Transform(RZ_grid, iota_basis, derivs=1)
+            pres_transform = Transform(RZ_grid, P_basis, derivs=1)
+            iota_transform = Transform(RZ_grid, I_basis, derivs=1)
             timer.stop("Transform precomputation")
             if verbose > 1:
                 timer.disp("Transform precomputation")
@@ -139,25 +139,30 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             timer.stop("Initial guess computation")
             if verbose > 1:
                 timer.disp("Initial guess computation")
-            equil_init = {
+            ratio = np.where(L_basis.modes[:, 2] != 0, bdry_ratio[ii], 1)
+            equil = {
                 'M': M[ii],
                 'N': N[ii],
                 'cR': cR,
                 'cZ': cZ,
                 'cL': cL,
-                'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
-                'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
+                'cRb': cRb*ratio,
+                'cZb': cZb*ratio,
                 'cP': cP*pres_ratio[ii],
                 'cI': cI,
                 'Psi_lcfs': Psi_lcfs,
                 'NFP': NFP,
-                'RZ_basis': RZ_basis,
+                'R_basis': RZ_basis,
+                'Z_basis': RZ_basis,
                 'L_basis': L_basis,
-                'bdry_idx': bdry[:, :2]
+                'Rb_basis': L_basis,
+                'Zb_basis': L_basis,
+                'P_basis': P_basis,
+                'I_basis': I_basis
             }
-            iterations['init'] = equil_init
+            iterations['init'] = equil
             if checkpoint:
-                checkpoint_file.write_iteration(equil_init, 'init', inputs)
+                checkpoint_file.write_iteration(equil, 'init', inputs)
 
         # continuing from previous solution
         else:
@@ -304,21 +309,26 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             callback(x, *args)
 
         cR, cZ, cL = unpack_state(jnp.matmul(sym_mat, x), RZ_transform.num_modes)
+        ratio = np.where(L_basis.modes[:, 2] != 0, bdry_ratio[ii], 1)
         equil = {
             'M': M[ii],
             'N': N[ii],
             'cR': cR,
             'cZ': cZ,
             'cL': cL,
-            'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
-            'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
+            'cRb': cRb*ratio,
+            'cZb': cZb*ratio,
             'cP': cP*pres_ratio[ii],
             'cI': cI,
             'Psi_lcfs': Psi_lcfs,
             'NFP': NFP,
-            'RZ_basis': RZ_basis,
+            'R_basis': RZ_basis,
+            'Z_basis': RZ_basis,
             'L_basis': L_basis,
-            'bdry_idx': bdry[:, :2]
+            'Rb_basis': L_basis,
+            'Zb_basis': L_basis,
+            'P_basis': P_basis,
+            'I_basis': I_basis
         }
 
         iterations[ii] = equil

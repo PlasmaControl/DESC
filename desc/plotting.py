@@ -419,12 +419,12 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
     cR0 = equil0['cR']
     cZ0 = equil0['cZ']
     NFP0 = equil0['NFP']
-    basis0 = equil0['RZ_basis']
+    basis0 = equil0['R_basis']
 
     cR1 = equil1['cR']
     cZ1 = equil1['cZ']
     NFP1 = equil1['NFP']
-    basis1 = equil1['RZ_basis']
+    basis1 = equil1['R_basis']
 
     if NFP0 == NFP1:
         NFP = NFP0
@@ -505,7 +505,7 @@ def plot_vmec_comparison(vmec_data, equil):
     cR = equil['cR']
     cZ = equil['cZ']
     NFP = equil['NFP']
-    basis = equil['RZ_basis']
+    basis = equil['R_basis']
 
     Nr = 8
     Nt = 360

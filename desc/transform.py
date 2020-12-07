@@ -58,13 +58,15 @@ class Transform():
         self.__basis = basis
         self.__derivs = derivs
         self.__rcond = rcond
+
         self.__matrices = {i: {j: {k: {}
                      for k in range(4)} for j in range(4)} for i in range(4)}
+        self.__derivatives = self._get_derivatives_(self.__derivs)
 
-        self.__derivatives = self.get_derivatives(self.__derivs)
-        self.sort_derivatives()
-        self.build()
-        self.build_pinv()
+        self._sort_derivatives_()
+        self._build_()
+        self._build_pinv_()
+        self._def_save_attrs_()
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -85,73 +87,7 @@ class Transform():
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def build(self) -> None:
-        """Builds the transform matrices for each derivative order
-        """
-        for d in self.__derivatives:
-            self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
-                                                        self.__grid.nodes, d)
-
-    def build_pinv(self) -> None:
-        """Builds the transform matrices for each derivative order
-        """
-        # FIXME: this assumes the derivatives are sorted (which they should be)
-        if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
-            A = self.__matrices[0][0][0]
-        else:
-            A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
-        self.__pinv = jnp.linalg.pinv(A, rcond=self.__rcond)
-
-    def transform(self, c, dr=0, dt=0, dz=0):
-        """Transform from spectral domain to physical
-
-        Parameters
-        ----------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients, indexed as (lm,n) flattened in row major order
-        dr : int
-            order of radial derivative
-        dt : int
-            order of poloidal derivative
-        dz : int
-            order of toroidal derivative
-
-        Returns
-        -------
-        x : ndarray, shape(N_nodes,)
-            array of values of function at node locations
-
-        """
-        A = self.__matrices[dr][dt][dz]
-        if type(A) is dict:
-            raise ValueError(TextColors.FAIL +
-                 "Derivative orders are out of initialized bounds" +
-                             TextColors.ENDC)
-        if A.shape[1] != c.size:
-            raise ValueError(TextColors.FAIL +
-                 "Coefficients dimension is incompatible with transform basis" +
-                             TextColors.ENDC)
-
-        return jnp.matmul(A, c)
-
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
-    def fit(self, x):
-        """Transform from physical domain to spectral using least squares fit
-
-        Parameters
-        ----------
-        x : ndarray, shape(N_nodes,)
-            values in real space at coordinates specified by self.grid
-
-        Returns
-        -------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients in self.basis
-
-        """
-        return jnp.matmul(self.__pinv, x)
-
-    def get_derivatives(self, derivs):
+    def _get_derivatives_(self, derivs):
         """Get array of derivatives needed for calculating objective function
 
         Parameters
@@ -204,7 +140,7 @@ class Transform():
                   + TextColors.ENDC)
         return derivatives
 
-    def sort_derivatives(self) -> None:
+    def _sort_derivatives_(self) -> None:
         """Sorts derivatives
 
         Returns
@@ -215,6 +151,82 @@ class Transform():
         sort_idx = np.lexsort((self.__derivatives[:, 0],
                        self.__derivatives[:, 1], self.__derivatives[:, 2]))
         self.__derivatives = self.__derivatives[sort_idx]
+
+    def _build_(self) -> None:
+        """Builds the transform matrices for each derivative order
+        """
+        for d in self.__derivatives:
+            self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
+                                                        self.__grid.nodes, d)
+
+    def _build_pinv_(self) -> None:
+        """Builds the transform matrices for each derivative order
+        """
+        # FIXME: this assumes the derivatives are sorted (which they should be)
+        if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
+            A = self.__matrices[0][0][0]
+        else:
+            A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
+        self.__pinv = jnp.linalg.pinv(A, rcond=self.__rcond)
+
+    def _def_save_attrs_(self) -> None:
+        """Defines attributes to save
+
+        Returns
+        -------
+        None
+
+        """
+        self._save_attrs_ = ['__grid', '__basis', '__derives', '__matrices']
+
+    def transform(self, c, dr=0, dt=0, dz=0):
+        """Transform from spectral domain to physical
+
+        Parameters
+        ----------
+        c : ndarray, shape(N_coeffs,)
+            spectral coefficients, indexed as (lm,n) flattened in row major order
+        dr : int
+            order of radial derivative
+        dt : int
+            order of poloidal derivative
+        dz : int
+            order of toroidal derivative
+
+        Returns
+        -------
+        x : ndarray, shape(N_nodes,)
+            array of values of function at node locations
+
+        """
+        A = self.__matrices[dr][dt][dz]
+        if type(A) is dict:
+            raise ValueError(TextColors.FAIL +
+                 "Derivative orders are out of initialized bounds" +
+                             TextColors.ENDC)
+        if A.shape[1] != c.size:
+            raise ValueError(TextColors.FAIL +
+                 "Coefficients dimension is incompatible with transform basis" +
+                             TextColors.ENDC)
+
+        return jnp.matmul(A, c)
+
+    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
+    def fit(self, x):
+        """Transform from physical domain to spectral using least squares fit
+
+        Parameters
+        ----------
+        x : ndarray, shape(N_nodes,)
+            values in real space at coordinates specified by self.grid
+
+        Returns
+        -------
+        c : ndarray, shape(N_coeffs,)
+            spectral coefficients in self.basis
+
+        """
+        return jnp.matmul(self.__pinv, x)
 
     def change_resolution(self, grid:Grid=None, basis:Basis=None) -> None:
         """Re-builds the matrices with a new grid and basis
@@ -239,8 +251,8 @@ class Transform():
         if self.__grid != grid or self.__basis != basis:
             self.__grid = grid
             self.__basis = basis
-            self.build()
-            self.build_pinv()
+            self._build_()
+            self._build_pinv_()
 
     @property
     def grid(self):

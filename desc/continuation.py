@@ -159,16 +159,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if checkpoint:
                 checkpoint_file.write_iteration(equil_init, 'init', inputs)
 
-            # equilibrium objective function
-            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
-                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
-                L_transform=L_transform, pres_transform=pres_transform,
-                iota_transform=iota_transform, stell_sym=stell_sym, scalar=False)
-            equil_obj = obj_fun.compute
-            callback = obj_fun.callback
-            args = [cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii],
-                    pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
-
         # continuing from previous solution
         else:
             # change grids
@@ -217,7 +207,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
             deltas = np.array([delta_bdry, delta_pres, delta_zeta])
 
-            # equilibrium objective function
+            # need a non-scalar objective function to do the perturbations
             obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
                 RZ_transform=RZ_transform, RZb_transform=RZb_transform,
                 L_transform=L_transform, pres_transform=pres_transform,

@@ -32,7 +32,7 @@ Other linux based clusters should follow a similar process but may differ.
     conda activate ./env
 
 On Princeton's Adroit Cluster
-*************************
+*****************************
 Other linux based clusters should follow a similar process but may differ. 
 
 .. code-block:: bash

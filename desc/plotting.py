@@ -523,7 +523,7 @@ def plot_vmec_comparison(vmec_data, equil):
         idxes = np.pad(idxes, (1, 0), mode='constant')
         Nr += 1
     rho = np.sqrt(idxes/Nr_vmec)
-    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, surfs=rho, endpoint=True)
+    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, rho=rho, endpoint=True)
     transf = Transform(grid, basis)
 
     R_desc = transf.transform(cR).reshape((Nr, Nt, Nz), order='F')

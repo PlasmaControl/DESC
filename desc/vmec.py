@@ -68,7 +68,7 @@ def vmec_error(equil, vmec_data, Nt=8, Nz=4):
     """
     ns = np.size(vmec_data['psi'])
     rho = np.sqrt(vmec_data['psi'])
-    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil['NFP'], surfs=rho)
+    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil['NFP'], rho=rho)
     basis = equil['R_basis']
     transf = Transform(grid, basis)
     vartheta = np.unique(grid.nodes[:, 1])

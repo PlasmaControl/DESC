@@ -177,7 +177,8 @@ class LinearGrid(Grid):
     """
 
     def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
-                 endpoint:bool=False, surfs=np.array([1.0])) -> None:
+                 endpoint:bool=False, rho=np.array([1.0]),
+                 theta=np.array([1.0]), zeta=np.array([1.0])) -> None:
         """Initializes a LinearGrid
 
         Parameters
@@ -195,8 +196,12 @@ class LinearGrid(Grid):
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period. 
             Should be False for use with FFT (Default = False)
-        surfs : ndarray of float
-            radial coordinates
+        rho : ndarray of float
+            radial coordinates (if L == rho.size)
+        theta : ndarray of float
+            poloidal coordinates (if M == theta.size)
+        zeta : ndarray of float
+            toroidal coordinates (if N == zeta.size)
 
         Returns
         -------
@@ -209,20 +214,23 @@ class LinearGrid(Grid):
         self._Grid__NFP = NFP
         self._Grid__sym = sym
         self.__endpoint = endpoint
-        self.__surfs = surfs
+        self.__rho = rho
+        self.__theta = theta
+        self.__zeta = zeta
 
         self._Grid__nodes, self._Grid__volumes = self.create_nodes(
                             L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
                             NFP=self._Grid__NFP, sym=self._Grid__sym,
-                            endpoint=self.__endpoint, surfs=self.__surfs)
+                            endpoint=self.__endpoint, rho=self.__rho,
+                            theta=self.__theta, zeta=self.__zeta)
 
         self._sort_nodes_()
         self._find_axis_()
         self._def_save_attrs_()
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
-                     sym:bool=False, endpoint:bool=False,
-                     surfs=np.array([1.0])):
+                     sym:bool=False, endpoint:bool=False, rho=np.array([1.0]),
+                     theta=np.array([1.0]), zeta=np.array([1.0])):
         """
 
         Parameters
@@ -240,8 +248,12 @@ class LinearGrid(Grid):
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
-        surfs : ndarray of float
-            radial coordinates
+        rho : ndarray of float
+            radial coordinates (if L == rho.size)
+        theta : ndarray of float
+            poloidal coordinates (if M == theta.size)
+        zeta : ndarray of float
+            toroidal coordinates (if N == zeta.size)
 
         Returns
         -------
@@ -252,18 +264,24 @@ class LinearGrid(Grid):
 
         """
         # rho
-        if surfs.size == L:
-            r = surfs
+        if rho.size == L:
+            r = rho
         else:
             r = np.linspace(0, 1, L)
         dr = 1/L
 
         # theta/vartheta
-        t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
+        if theta.size == M:
+            t = theta
+        else:
+            t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
         dt = 2*np.pi/M
 
         # zeta/phi
-        z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
+        if zeta.size == N:
+            z = zeta
+        else:
+            z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
         dz = 2*np.pi/NFP/N
 
         r, t, z = np.meshgrid(r, t, z, indexing='ij')

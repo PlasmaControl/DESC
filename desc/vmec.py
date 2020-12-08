@@ -46,7 +46,7 @@ def read_vmec_output(fname):
     return vmec_data
 
 
-def vmec_error(equil, vmec_data, Nt=8, Nz=0):
+def vmec_error(equil, vmec_data, Nt=8, Nz=4):
     """Computes error in SFL coordinates compared to VMEC solution
 
     Parameters

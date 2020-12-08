@@ -274,8 +274,8 @@ class Transform():
         """
         if self.__grid != grid:
             self.__grid = grid
-            self.build()
-            self.build_pinv()
+            self._build_()
+            self._build_pinv_()
 
     @property
     def basis(self):
@@ -297,8 +297,8 @@ class Transform():
         """
         if self.__basis != basis:
             self.__basis = basis
-            self.build()
-            self.build_pinv()
+            self._build_()
+            self._build_pinv_()
 
     @property
     def derivs(self):

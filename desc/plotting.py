@@ -3,6 +3,7 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from abc import ABC, abstractmethod, classmethod
 from desc.nodes import get_nodes_grid
 from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
 from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
@@ -50,6 +51,14 @@ dash_cycle = cycler(dashes=dashes)
 rcParams['axes.prop_cycle'] = color_cycle
 
 
+class Plotter:
+    def __init__(self):
+        #instantiate a grid
+        pass
+
+    def 1D(self, eq, R=None):
+        pass
+
 def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     """prints coeffs to the terminal
 
@@ -58,7 +67,7 @@ def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     cR,cZ,cL :
         spectral coefficients for R, Z, and lambda
     zern_idx, lambda_idx :
-        mode numbers for zernike and fourier spectral basis.       
+        mode numbers for zernike and fourier spectral basis.
 
     Returns
     -------

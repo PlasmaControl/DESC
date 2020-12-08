@@ -3,7 +3,7 @@ import functools
 import numba
 from abc import ABC, abstractmethod
 
-from desc.backend import jnp, jit, fori_loop, flatten_list, factorial, equals
+from desc.backend import jnp, jit, sign, fori_loop, flatten_list, factorial, equals, Tristate
 
 
 class Basis(ABC):
@@ -19,6 +19,9 @@ class Basis(ABC):
         maximum toroidal resolution
     NFP : int
         number of field periods
+    sym : Tristate
+        True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        None for no symmetry (Default)
     modes : ndarray of int, shape(Nmodes,3)
         array of mode numbers [l,m,n]
         each row is one basis function with modes (l,m,n)
@@ -47,6 +50,23 @@ class Basis(ABC):
         if self.__class__ != other.__class__:
             return False
         return equals(self.__dict__, other.__dict__)
+
+    def _enforce_symmetry_(self) -> None:
+        """Enforces stellarator symmetry
+
+        Returns
+        -------
+        None
+
+        """
+        if self.__sym == True:     # cos(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.__modes[:, 1]) !=
+                                   sign(self.__modes[:, 2]))
+            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
+        elif self.__sym == False:  # sin(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.__modes[:, 1]) ==
+                                   sign(self.__modes[:, 2]))
+            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
 
     def _sort_modes_(self) -> None:
         """Sorts modes for use with FFT
@@ -120,6 +140,11 @@ class PowerSeries(Basis):
     def __init__(self, L:int=0) -> None:
         """Initializes a PowerSeries
 
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+
         Returns
         -------
         None
@@ -129,9 +154,11 @@ class PowerSeries(Basis):
         self._Basis__M = 0
         self._Basis__N = 0
         self._Basis__NFP = 1
+        self._Basis_sym = None
 
         self._Basis__modes = self.get_modes(L=self._Basis__L)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 
@@ -194,8 +221,20 @@ class DoubleFourierSeries(Basis):
        Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M:int=0, N:int=0, NFP:int=1) -> None:
+    def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None) -> None:
         """Initializes a DoubleFourierSeries
+
+        Parameters
+        ----------
+        M : int
+            maximum poloidal resolution
+        N : int
+            maximum toroidal resolution
+        NFP : int
+            number of field periods
+        sym : Tristate
+            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+            None for no symmetry (Default)
 
         Returns
         -------
@@ -206,9 +245,11 @@ class DoubleFourierSeries(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
+        self._Basis_sym = sym
 
         self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 
@@ -282,7 +323,7 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
-                 index:str='ansi') -> None:
+                 sym:Tristate=None, index:str='ansi') -> None:
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -293,6 +334,11 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
+        NFP : int
+            number of field periods
+        sym : Tristate
+            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+            None for no symmetry (Default)
         index : str
             Indexing method, one of the following options: 
             ('ansi','frige','chevron','house').
@@ -330,11 +376,13 @@ class FourierZernikeBasis(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
+        self._Basis_sym = sym
         self.__index = index
 
-        self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M, N=self._Basis__N,
-                                      index=self.__index)
+        self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,
+                                        N=self._Basis__N, index=self.__index)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 

@@ -1,27 +1,27 @@
 # This is the DESC input file for a Solov'ev equilibrium
 
 # global parameters
-stell_sym =   1
-NFP       =   1
-Psi_lcfs  =   1.00000000E+00
+stell_sym = 1
+NFP       = 1
+Psi_lcfs  = 1.0
 
 # spectral resolution
-Mpol   =   8
-Ntor   =   0
-Mnodes =  12
-Nnodes =   0
+Mpol   = 8   8
+Ntor   = 0   1
+Mnodes = 16 16
+Nnodes = 0   2
 
 # continuation parameters
 bdry_ratio = 1
 pres_ratio = 1
 zeta_ratio = 1
-errr_ratio = 1e-4
+errr_ratio = 1E-5
 pert_order = 1
 
 # solver tolerances
-ftol = 1e-6
-xtol = 1e-6
-gtol = 1e-6
+ftol = 1E-6
+xtol = 1E-6
+gtol = 1E-6
 nfev = 100
 
 # solver methods
@@ -32,15 +32,15 @@ zern_mode = ansi
 node_mode = cheb2
 
 # pressure and rotational transform profiles
-l:   0	cP =   1.25000000E-01	cI =   1.00000000E+00
-l:   2	cP =  -1.25000000E-01	cI =   0.00000000E+00
+l:   0  cP =  1.250E-1  cI =  1.000E+0
+l:   2  cP = -1.250E-1  cI =  0.000E+0
 
 # magnetic axis initial guess
-n:   0	aR =   4.00000000E+00	aZ =   0.00000000E+00
+n:   0  aR =  4.000E+0  aZ =  0.000E+0
 
 # fixed-boundary surface shape
-m:   0	n:   0	bR =   3.99900000E+00	bZ =   0.00000000E+00
-m:   1	n:   0	bR =   1.02600000E+00	bZ =   0.00000000E+00
-m:  -1	n:   0	bR =   0.00000000E+00	bZ =   1.58000000E+00
-m:   2	n:   0	bR =  -6.80000000E-02	bZ =   0.00000000E+00
-m:  -2	n:   0	bR =   0.00000000E+00	bZ =   1.00000000E-02
+m:   0  n:   0  bR =  3.999E+0  bZ =  0.000E+0
+m:   1  n:   0  bR =  1.026E+0  bZ =  0.000E+0
+m:  -1  n:   0  bR =  0.000E+0  bZ =  1.580E+0
+m:   2  n:   0  bR = -6.800E-2  bZ =  0.000E+0
+m:  -2  n:   0  bR =  0.000E+0  bZ =  1.000E-2

@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from desc.backend import factorial, put, dot, sign, cross, rms, iotafun, presfun
+from desc.backend import factorial, put, sign
 
 
 class TestBackend(unittest.TestCase):

@@ -4,7 +4,8 @@ from desc.backend import put
 from desc.basis import FourierZernikeBasis
 
 
-def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, RZ_basis:FourierZernikeBasis):
+def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio,
+                 R_basis:FourierZernikeBasis, Z_basis:FourierZernikeBasis):
     """Generate initial guess by scaling boundary shape
 
     Parameters
@@ -17,8 +18,10 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, RZ_basis:FourierZernike
         array of real space coordinates, [theta,phi,R,Z]
     bdry_ratio : float
         fraction in range [0,1] of the full non-axisymmetric boundary to use
-    RZ_basis : FourierZernikeBasis
-        
+    R_basis : FourierZernikeBasis
+        DESCRIPTION
+    Z_basis : FourierZernikeBasis
+        DESCRIPTION
 
     Returns
     -------
@@ -28,10 +31,11 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, RZ_basis:FourierZernike
         Fourier-Zernike coefficients for Z, following indexing given in zern_idx
 
     """
-    modes = RZ_basis.modes
-    num_modes = RZ_basis.num_modes
-    cR = np.zeros((num_modes,))
-    cZ = np.zeros((num_modes,))
+    modes_R = R_basis.modes
+    modes_Z = Z_basis.modes
+
+    cR = np.zeros((R_basis.num_modes,))
+    cZ = np.zeros((Z_basis.num_modes,))
 
     for m, n, bR, bZ in bdry:
 
@@ -49,18 +53,18 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, RZ_basis:FourierZernike
                 aZ = axis[idx, 2][0, 0]
 
             cR = put(cR, np.where(np.logical_and.reduce(
-                (modes[:, 0] == 0, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bR+aR)/2)
+                (modes_R[:, 0] == 0, modes_R[:, 1] == 0, modes_R[:, 2] == n)))[0], (bR+aR)/2)
             cZ = put(cZ, np.where(np.logical_and.reduce(
-                (modes[:, 0] == 0, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bZ+aZ)/2)
+                (modes_Z[:, 0] == 0, modes_Z[:, 1] == 0, modes_Z[:, 2] == n)))[0], (bZ+aZ)/2)
             cR = put(cR, np.where(np.logical_and.reduce(
-                (modes[:, 0] == 2, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bR-aR)/2)
+                (modes_R[:, 0] == 2, modes_R[:, 1] == 0, modes_R[:, 2] == n)))[0], (bR-aR)/2)
             cZ = put(cZ, np.where(np.logical_and.reduce(
-                (modes[:, 0] == 2, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bZ-aZ)/2)
+                (modes_Z[:, 0] == 2, modes_Z[:, 1] == 0, modes_Z[:, 2] == n)))[0], (bZ-aZ)/2)
 
         else:
-            cR = put(cR, np.where(np.logical_and.reduce((modes[:, 0] == np.absolute(
-                m), modes[:, 1] == m, modes[:, 2] == n)))[0], bR)
-            cZ = put(cZ, np.where(np.logical_and.reduce((modes[:, 0] == np.absolute(
-                    m), modes[:, 1] == m, modes[:, 2] == n)))[0], bZ)
+            cR = put(cR, np.where(np.logical_and.reduce((modes_R[:, 0] == np.absolute(
+                m), modes_R[:, 1] == m, modes_R[:, 2] == n)))[0], bR)
+            cZ = put(cZ, np.where(np.logical_and.reduce((modes_Z[:, 0] == np.absolute(
+                    m), modes_Z[:, 1] == m, modes_Z[:, 2] == n)))[0], bZ)
 
     return cR, cZ

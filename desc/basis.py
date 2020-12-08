@@ -104,20 +104,24 @@ class Basis(ABC):
         pass
 
     @property
-    def L(self):
+    def L(self) -> int:
         return self.__L
 
     @property
-    def M(self):
+    def M(self) -> int:
         return self.__M
 
     @property
-    def N(self):
+    def N(self) -> int:
         return self.__N
 
     @property
-    def NFP(self):
+    def NFP(self) -> int:
         return self.__NFP
+
+    @property
+    def sym(self) -> Tristate:
+        return self.__sym
 
     @property
     def modes(self):
@@ -128,7 +132,7 @@ class Basis(ABC):
         self.__modes = modes
 
     @property
-    def num_modes(self):
+    def num_modes(self) -> int:
         return self.__modes.shape[0]
 
 
@@ -154,7 +158,7 @@ class PowerSeries(Basis):
         self._Basis__M = 0
         self._Basis__N = 0
         self._Basis__NFP = 1
-        self._Basis_sym = None
+        self._Basis__sym = None
 
         self._Basis__modes = self.get_modes(L=self._Basis__L)
 
@@ -245,7 +249,7 @@ class DoubleFourierSeries(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
-        self._Basis_sym = sym
+        self._Basis__sym = sym
 
         self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
 
@@ -376,7 +380,7 @@ class FourierZernikeBasis(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
-        self._Basis_sym = sym
+        self._Basis__sym = sym
         self.__index = index
 
         self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,

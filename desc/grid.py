@@ -141,23 +141,23 @@ class Grid():
         pass
 
     @property
-    def L(self):
+    def L(self) -> int:
         return self.__L
 
     @property
-    def M(self):
+    def M(self) -> int:
         return self.__M
 
     @property
-    def N(self):
+    def N(self) -> int:
         return self.__N
 
     @property
-    def NFP(self):
+    def NFP(self) -> int:
         return self.__NFP
 
     @property
-    def sym(self):
+    def sym(self) -> bool:
         return self.__sym
 
     @property

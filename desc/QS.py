@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import pathlib
 
 from desc.backend import get_needed_derivatives, sign
-from desc.zernike import ZernikeTransform, symmetric_x
-from desc.zernike import get_zern_basis_idx_dense, get_double_four_basis_idx_dense
+from desc.transform import ZernikeTransform, symmetric_x
+from desc.transform import get_zern_basis_idx_dense, get_double_four_basis_idx_dense
 from desc.boundary_conditions import format_bdry
 from desc.objective_funs import get_equil_obj_fun, get_qisym_obj_fun
 from desc.nodes import get_nodes_pattern, get_nodes_surf

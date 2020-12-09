@@ -1,12 +1,13 @@
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, Tristate
 from desc.grid import Grid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 
 
-def format_bdry(bdry, basis:DoubleFourierSeries, mode:str='spectral'):
+def format_bdry(bdry, Rb_basis:DoubleFourierSeries,
+                Zb_basis:DoubleFourierSeries, mode:str='spectral'):
     """Formats arrays for boundary conditions and converts between
     real space and fourier representations
 
@@ -15,8 +16,10 @@ def format_bdry(bdry, basis:DoubleFourierSeries, mode:str='spectral'):
     bdry : ndarray, shape(Nbdry,4)
         array of fourier coeffs [m,n,Rcoeff, Zcoeff]
         or array of real space coordinates, [theta,phi,R,Z]
-    basis : DoubleFourierSeries
-        spectral basis for boundary coefficients
+    Rb_basis : DoubleFourierSeries
+        spectral basis for R boundary coefficients
+    Zb_basis : DoubleFourierSeries
+        spectral basis for Z boundary coefficients
     mode : str
         one of 'real', 'spectral'. Whether bdry is specified in real or spectral space.
 
@@ -35,27 +38,30 @@ def format_bdry(bdry, basis:DoubleFourierSeries, mode:str='spectral'):
 
         nodes = np.array([rho, theta, phi]).T
         grid = Grid(nodes)
-        transf = Transform(grid, basis)
+        Rb_transf = Transform(grid, Rb_basis)
+        Zb_transf = Transform(grid, Zb_basis)
 
         # fit real data to spectral coefficients
-        cRb = transf.fit(bdry[:, 2])
-        cZb = transf.fit(bdry[:, 3])
+        cRb = Rb_transf.fit(bdry[:, 2])
+        cZb = Zb_transf.fit(bdry[:, 3])
 
     else:
-        cRb = np.zeros((basis.num_modes,))
-        cZb = np.zeros((basis.num_modes,))
+        cRb = np.zeros((Rb_basis.num_modes,))
+        cZb = np.zeros((Zb_basis.num_modes,))
 
         for m, n, bR, bZ in bdry:
-            idx = np.where(np.logical_and(basis.modes[:, 1] == int(m),
-                                          basis.modes[:, 2] == int(n)))[0]
-            cRb = put(cRb, idx, bR)
-            cZb = put(cZb, idx, bZ)
+            idx_R = np.where(np.logical_and(Rb_basis.modes[:, 1] == int(m),
+                                            Rb_basis.modes[:, 2] == int(n)))[0]
+            idx_Z = np.where(np.logical_and(Zb_basis.modes[:, 1] == int(m),
+                                            Zb_basis.modes[:, 2] == int(n)))[0]
+            cRb = put(cRb, idx_R, bR)
+            cZb = put(cZb, idx_Z, bZ)
 
     return cRb, cZb
 
 
 # XXX: Note that this method cannot be improved with FFT due to non-uniform grid
-def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_ratio):
+def compute_bdry_err(cR, cZ, cL, cRb, cZb, R1_transform, Z1_transform, L_transform, bdry_ratio):
     """Compute boundary error in (theta,phi) Fourier coefficients from non-uniform interpolation grid
 
     Parameters
@@ -72,8 +78,10 @@ def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_rati
         spectral coefficients of Z boundary
     bdry_ratio : float
         fraction in range [0,1] of the full non-axisymmetric boundary to use
-    RZb_transform : Transform
-        transforms cR and cZ to physical space at the boundary
+    R1_transform : Transform
+        transforms cR to physical space at the boundary
+    Z1_transform : Transform
+        transforms cZ to physical space at the boundary
     L_transform : Transform
         transforms cL to physical space
 
@@ -95,21 +103,35 @@ def compute_bdry_err(cR, cZ, cL, cRb, cZb, RZb_transform, L_transform, bdry_rati
 
     # cannot use Transform object with JAX
     nodes = jnp.array([rho, theta, phi]).T
-    A = L_transform.basis.evaluate(nodes)
-    pinv = jnp.linalg.pinv(A, rcond=1e-6)
+    if L_transform.basis.sym == None:
+        A = L_transform.basis.evaluate(nodes)
+        pinv_R = jnp.linalg.pinv(A, rcond=1e-6)
+        pinv_Z = pinv_R
+        ratio_Rb = jnp.where(L_transform.basis.modes[:, 2] != 0, bdry_ratio, 1)
+        ratio_Zb = ratio_Rb
+    else:
+        Rb_basis = DoubleFourierSeries(
+                                M=L_transform.basis.M, N=L_transform.basis.N,
+                                NFP=L_transform.basis.NFP, sym=Tristate(True))
+        Zb_basis = DoubleFourierSeries(
+                                M=L_transform.basis.M, N=L_transform.basis.N,
+                                NFP=L_transform.basis.NFP, sym=Tristate(False))
+        AR = Rb_basis.evaluate(nodes)
+        AZ = Zb_basis.evaluate(nodes)
+        pinv_R = jnp.linalg.pinv(AR, rcond=1e-6)
+        pinv_Z = jnp.linalg.pinv(AZ, rcond=1e-6)
+        ratio_Rb = jnp.where(Rb_basis.modes[:, 2] != 0, bdry_ratio, 1)
+        ratio_Zb = jnp.where(Zb_basis.modes[:, 2] != 0, bdry_ratio, 1)
 
     # LCFS transform and fit
-    R = RZb_transform.transform(cR)
-    Z = RZb_transform.transform(cZ)
-    cR_lcfs = jnp.matmul(pinv, R)
-    cZ_lcfs = jnp.matmul(pinv, Z)
-
-    # ratio of non-axisymmetric boundary modes to use
-    ratio = jnp.where(L_transform.basis.modes[:, 2] != 0, bdry_ratio, 1)
+    R = R1_transform.transform(cR)
+    Z = Z1_transform.transform(cZ)
+    cR_lcfs = jnp.matmul(pinv_R, R)
+    cZ_lcfs = jnp.matmul(pinv_Z, Z)
 
     # compute errors
-    errR = cR_lcfs - cRb*ratio
-    errZ = cZ_lcfs - cZb*ratio
+    errR = cR_lcfs - cRb*ratio_Rb
+    errZ = cZ_lcfs - cZb*ratio_Zb
     return errR, errZ
 
 

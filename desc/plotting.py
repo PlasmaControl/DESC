@@ -72,6 +72,7 @@ class Plot:
         pass
 
     def set_grid(self, grid:str='std', return_grid=False, **kwargs):
+        #include name for a grid. keep instantiated grids
         """Set grid attribute.
 
         Parameters
@@ -107,14 +108,11 @@ class Plot:
 
 
 
-    def plot_1d(self, eq, R=None, Z=None, L=None, ax=None):
+    def plot_1d(self, eq, name, rho=1.0, theta=0.0, zeta=0.0, ax=None):
         # init Transform, call transform method
         pass
 
-    def slice_1d(self, R=None Z=None, L=None):
-        pass
-
-    def plot_2d(self):
+    def plot_2d(self, eq, name):
         pass
 
     def slice_2d(self):
@@ -130,9 +128,12 @@ class Plot:
         if grid is None:
             grid = self.grid
         if name == 'B':
-            spectral_out = eq.compute_magnetic_field()
-            transf = Transform(grid, eq.basis) #HOW DO I GET THE RIGHT BASIS HERE?
-            return transf.Transform(spectral_out)
+            #R_transform = Transform(grid, eq.R_basis) #HOW DO I GET THE RIGHT BASIS HERE?
+            #Z_transform = Transform(grid, eq.Z_basis)
+            #I_transform = Transform(grid, eq.I_basis)
+            #copy paste lines
+            magnetic_field = eq.compute_magnetic_field(grid)
+            return magnetic_field[name]
         elif name == 'J':
             spectral_out = eq.compute_plasma_current()
         elif name == 'Bmag':

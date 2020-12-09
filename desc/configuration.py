@@ -783,21 +783,49 @@ def compute_jacobian(coord_der, cov_basis, axis=jnp.array([]), derivs='force'):
     """
     # notation: subscripts denote partial derivatives
     jacobian = {}
-    jacobian['g'] = dot(cov_basis['e_rho'], cross(
-        cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0)
+    jacobian['g'] = coord_der['R']*(coord_der['R_v']*coord_der['Z_r'] \
+                                  - coord_der['R_r']*coord_der['Z_v'])
+    jacobian['g_r'] = coord_der['R']*(coord_der['R_rv']*coord_der['Z_r']
+                                    + coord_der['R_v']*coord_der['Z_rr']
+                                    - coord_der['R_rr']*coord_der['Z_v']
+                                    - coord_der['R_r']*coord_der['Z_rv']) \
+                    + coord_der['R_r']*(coord_der['R_v']*coord_der['Z_r']
+                                      - coord_der['R_r']*coord_der['Z_v'])
+    jacobian['g_v'] = coord_der['R']*(coord_der['R_vv']*coord_der['Z_r']
+                                    + coord_der['R_v']*coord_der['Z_rv']
+                                    - coord_der['R_rv']*coord_der['Z_v']
+                                    - coord_der['R_r']*coord_der['Z_vv']) \
+                    + coord_der['R_v']*(coord_der['R_v']*coord_der['Z_r']
+                                      - coord_der['R_r']*coord_der['Z_v'])
+    jacobian['g_z'] = coord_der['R']*(coord_der['R_vz']*coord_der['Z_r']
+                                    + coord_der['R_v']*coord_der['Z_rz']
+                                    - coord_der['R_rz']*coord_der['Z_v']
+                                    - coord_der['R_r']*coord_der['Z_vz']) \
+                    + coord_der['R_z']*(coord_der['R_v']*coord_der['Z_r']
+                                      - coord_der['R_r']*coord_der['Z_v'])
 
-    jacobian['g_r'] = dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                          cov_basis['e_zeta_r'], 0), 0)
-    jacobian['g_v'] = dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                          cov_basis['e_zeta_v'], 0), 0)
-    jacobian['g_z'] = dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
-        + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                          cov_basis['e_zeta_z'], 0), 0)
+    """
+    jacobian['g'] = dot(cov_basis['e_rho'],
+                    cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0)
+    jacobian['g_r'] = dot(cov_basis['e_rho_r'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta_r'], 0), 0)
+    jacobian['g_v'] = dot(cov_basis['e_rho_v'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0), 0)
+    jacobian['g_z'] = dot(cov_basis['e_rho_z'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
+                    + dot(cov_basis['e_rho'],
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0), 0)
+    """
 
     # axis or QS terms
     if len(axis) or derivs == 'qs':

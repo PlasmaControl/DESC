@@ -714,6 +714,17 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
+    theta_2d = jnp.atleast_2d(theta).T
+    m_2d = jnp.atleast_2d(m)
+    m_pos = (m_2d >= 0).astype(int)
+    m_neg = (m_2d < 0).astype(int)
+    m_abs = jnp.abs(m_2d)*NFP
+    if dt == 0:
+        return m_pos*np.cos(m_abs*theta_2d) + m_neg*np.sin(m_abs*theta_2d)
+    else:
+        return m_abs*(m_neg-m_pos)*fourier(theta, -m, NFP=NFP, dt=dt-1)
+
+    """
     theta = jnp.atleast_1d(theta)[:, jnp.newaxis]
     m = jnp.atleast_1d(m)[jnp.newaxis]
     m_pos = (m >= 0)
@@ -722,3 +733,4 @@ def fourier(theta, m, NFP=1, dt=0):
     der = (1j*m_abs*NFP)**dt
     exp = der*jnp.exp(1j*m_abs*NFP*theta)
     return m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
+    """

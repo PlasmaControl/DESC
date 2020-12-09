@@ -47,6 +47,7 @@ class Grid():
 
         self.__nodes, self.__volumes = self.create_nodes(nodes)
 
+        self._enforce_symmetry_()
         self._sort_nodes_()
         self._find_axis_()
         self._def_save_attrs()
@@ -69,6 +70,19 @@ class Grid():
         if self.__class__ != other.__class__:
             return False
         return equals(self.__dict__, other.__dict__)
+
+    def _enforce_symmetry_(self) -> None:
+        """Enforces stellarator symmetry
+
+        Returns
+        -------
+        None
+
+        """
+        if self.__sym:  # remove nodes with theta > pi
+            non_sym_idx = np.where(self.__nodes[:, 1] > np.pi)
+            self.__nodes = np.delete(self.__nodes, non_sym_idx, axis=0)
+            self.__volumes = np.delete(self.__volumes, non_sym_idx, axis=0)
 
     def _sort_nodes_(self) -> None:
         """Sorts nodes for use with FFT
@@ -127,23 +141,23 @@ class Grid():
         pass
 
     @property
-    def L(self):
+    def L(self) -> int:
         return self.__L
 
     @property
-    def M(self):
+    def M(self) -> int:
         return self.__M
 
     @property
-    def N(self):
+    def N(self) -> int:
         return self.__N
 
     @property
-    def NFP(self):
+    def NFP(self) -> int:
         return self.__NFP
 
     @property
-    def sym(self):
+    def sym(self) -> bool:
         return self.__sym
 
     @property
@@ -177,7 +191,8 @@ class LinearGrid(Grid):
     """
 
     def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
-                 endpoint:bool=False, surfs=np.array([1.0])) -> None:
+                 endpoint:bool=False, rho=np.array([1.0]),
+                 theta=np.array([1.0]), zeta=np.array([1.0])) -> None:
         """Initializes a LinearGrid
 
         Parameters
@@ -195,8 +210,12 @@ class LinearGrid(Grid):
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period. 
             Should be False for use with FFT (Default = False)
-        surfs : ndarray of float
-            radial coordinates
+        rho : ndarray of float
+            radial coordinates (if L == rho.size)
+        theta : ndarray of float
+            poloidal coordinates (if M == theta.size)
+        zeta : ndarray of float
+            toroidal coordinates (if N == zeta.size)
 
         Returns
         -------
@@ -209,20 +228,23 @@ class LinearGrid(Grid):
         self._Grid__NFP = NFP
         self._Grid__sym = sym
         self.__endpoint = endpoint
-        self.__surfs = surfs
+        self.__rho = rho
+        self.__theta = theta
+        self.__zeta = zeta
 
         self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                            L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
-                            NFP=self._Grid__NFP, sym=self._Grid__sym,
-                            endpoint=self.__endpoint, surfs=self.__surfs)
+                        L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
+                        NFP=self._Grid__NFP, endpoint=self.__endpoint,
+                        rho=self.__rho, theta=self.__theta, zeta=self.__zeta)
 
+        self._enforce_symmetry_()
         self._sort_nodes_()
         self._find_axis_()
         self._def_save_attrs_()
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
-                     sym:bool=False, endpoint:bool=False,
-                     surfs=np.array([1.0])):
+                     endpoint:bool=False, rho=np.array([1.0]),
+                     theta=np.array([1.0]), zeta=np.array([1.0])):
         """
 
         Parameters
@@ -235,13 +257,15 @@ class LinearGrid(Grid):
             toroidal grid resolution (N toroidal nodes, Default = 1)
         NFP : int
             number of field periods (Default = 1)
-        sym : bool
-            True for stellarator symmetry, False otherwise (Default = False)
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
-        surfs : ndarray of float
-            radial coordinates
+        rho : ndarray of float
+            radial coordinates (if L == rho.size)
+        theta : ndarray of float
+            poloidal coordinates (if M == theta.size)
+        zeta : ndarray of float
+            toroidal coordinates (if N == zeta.size)
 
         Returns
         -------
@@ -252,18 +276,24 @@ class LinearGrid(Grid):
 
         """
         # rho
-        if surfs.size == L:
-            r = surfs
+        if rho.size == L:
+            r = rho
         else:
             r = np.linspace(0, 1, L)
         dr = 1/L
 
         # theta/vartheta
-        t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
+        if theta.size == M:
+            t = theta
+        else:
+            t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
         dt = 2*np.pi/M
 
         # zeta/phi
-        z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
+        if zeta.size == N:
+            z = zeta
+        else:
+            z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
         dz = 2*np.pi/NFP/N
 
         r, t, z = np.meshgrid(r, t, z, indexing='ij')
@@ -277,11 +307,6 @@ class LinearGrid(Grid):
 
         nodes = np.stack([r, t, z]).T
         volumes = np.stack([dr, dt, dz]).T
-
-        if sym:
-            non_sym_idx = np.where(t > np.pi)
-            nodes = np.delete(nodes, non_sym_idx, axis=0)
-            volumes = np.delete(volumes, non_sym_idx, axis=0)
 
         return nodes, volumes
 
@@ -357,16 +382,16 @@ class ConcentricGrid(Grid):
         self.__surfs = surfs
 
         self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                        M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
-                        sym=self._Grid__sym, axis=self.__axis,
-                        index=self.__index, surfs=self.__surfs)
+                    M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
+                    axis=self.__axis, index=self.__index, surfs=self.__surfs)
 
+        self._enforce_symmetry_()
         self._sort_nodes_()
         self._find_axis_()
         self._def_save_attrs_()
 
-    def create_nodes(self, M:int, N:int, NFP:int=1, sym:bool=False,
-                       axis:bool=True, index='ansi', surfs='cheb1'):
+    def create_nodes(self, M:int, N:int, NFP:int=1, axis:bool=True,
+                     index='ansi', surfs='cheb1'):
         """
 
         Parameters
@@ -377,8 +402,6 @@ class ConcentricGrid(Grid):
             toroidal grid resolution
         NFP : int
             number of field periods (Default = 1)
-        sym : bool
-            True for stellarator symmetry, False otherwise (Default = False)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = True)
         index : string
@@ -457,11 +480,6 @@ class ConcentricGrid(Grid):
 
         nodes = np.stack([r, t, z]).T
         volumes = np.stack([dr, dt, dz]).T
-
-        if sym:
-            non_sym_idx = np.where(t > np.pi)
-            nodes = np.delete(nodes, non_sym_idx, axis=0)
-            volumes = np.delete(volumes, non_sym_idx, axis=0)
 
         return nodes, volumes
 

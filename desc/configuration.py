@@ -68,7 +68,7 @@ def change_resolution(x_old, stell_sym, RZ_basis_old, RZ_basis_new, L_basis_old,
     Returns
     -------
     x_new : ndarray
-        
+
 
     """
     old_modes = RZ_basis_old.modes
@@ -132,9 +132,9 @@ def unpack_state(x, nRZ):
 
 
 class Configuration():
-    """Configuration constains information about a plasma state, including the 
-       shapes of flux surfaces and profile inputs. It can compute additional 
-       information, such as the magnetic field and plasma currents. 
+    """Configuration constains information about a plasma state, including the
+       shapes of flux surfaces and profile inputs. It can compute additional
+       information, such as the magnetic field and plasma currents.
     """
 
     # TODO: replace zern_idx & lambda_idx with Transform objects
@@ -395,7 +395,24 @@ class Configuration():
         pass
         # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
 
-    def save(self, save_to, file_format='hdf5', file_mode='w'):
+    def save(self, save_to, file_format:str='hdf5', file_mode:str='w'):
+        """Saves the configuration to file.
+
+        Parameters
+        __________
+        save_to : str or file instance
+            Object to save to. May be a string file path or file instance.
+        file_format : str
+            Format of file referenced by save_to. (Default = 'hdf5')
+        file_mode : str
+            File mode for file referenced by save_to. Only applicable if
+            save_to is a string file path. (Default = 'w')
+
+        Returns
+        _______
+        None
+
+        """
         writer = eq_io.writer_factory(save_to, file_format=file_format,
                 file_mode=file_mode)
         writer.write_obj(self)
@@ -405,7 +422,7 @@ class Configuration():
 
 class Equilibrium(Configuration):
     """Equilibrium is a decorator design pattern on top of Configuration.
-       It adds information about how the equilibrium configuration was solved. 
+       It adds information about how the equilibrium configuration was solved.
     """
 
     def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:

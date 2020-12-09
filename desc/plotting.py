@@ -50,13 +50,97 @@ dash_cycle = cycler(dashes=dashes)
 rcParams['axes.prop_cycle'] = color_cycle
 
 
-class Plotter:
-    def __init__(self):
-        #instantiate a grid
+class Plot:
+    """Class for plotting instances of Configuration and Equilibria on a linear grid.
+    """
+    def __init__(self, grid='std', **kwargs):
+        """Initialize a Plot class with a grid.
+
+        Parameters
+        __________
+        grid : str
+            grid descriptor used in set_grid
+        kwargs
+            optional LinearGrid arguments
+
+        Returns
+        _______
+        None
+
+        """
+        self.set_grid(grid)
         pass
 
-    def 1D(self, eq, R=None):
+    def set_grid(self, grid:str='std', return_grid=False, **kwargs):
+        """Set grid attribute.
+
+        Parameters
+        __________
+        grid : str
+            grid descriptor. Default = 'std' with 100 points in each direction.
+            Use 'custom' and kwargs to initialize user-defined grid.
+        return_grid : bool
+            If True, return the initialized grid.
+            If False, set initialized grid as attribute.
+            (Default = False)
+        kwargs
+            optional LinearGrid arguments
+
+        Returns
+        _______
+        LinearGrid instance if return_grid is True, None if return_grid is False.
+
+        """
+        if grid == 'std':
+            the_grid = LinearGrid(L=100, M=100, N=100)
+        elif grid == 'custom':
+            the_grid = LinearGrid(**kwargs)
+        else:
+            raise NotImplementedError("Grid descriptor '{}' is not implemented.")
+
+        if return_grid:
+            return the_grid
+        else:
+            self.grid = the_grid
+            return None
+
+
+
+
+    def plot_1d(self, eq, R=None, Z=None, L=None, ax=None):
+        # init Transform, call transform method
         pass
+
+    def slice_1d(self, R=None Z=None, L=None):
+        pass
+
+    def plot_2d(self):
+        pass
+
+    def slice_2d(self):
+        pass
+
+    def plot_3dsurf(self):
+        pass
+
+    def slice_3dsurf(self):
+        pass
+
+    def compute(self, eq, name, grid=None):
+        if grid is None:
+            grid = self.grid
+        if name == 'B':
+            spectral_out = eq.compute_magnetic_field()
+            transf = Transform(grid, eq.basis) #HOW DO I GET THE RIGHT BASIS HERE?
+            return transf.Transform(spectral_out)
+        elif name == 'J':
+            spectral_out = eq.compute_plasma_current()
+        elif name == 'Bmag':
+            spectral_out = eq.compute_magnetic_field_magnitude()
+        elif name == 'Fmag':
+            spectral_out = eq.compute_force_magnitude()
+        else:
+            raise NotImplementedError("No output named '{}'.".format(name))
 
 def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     """prints coeffs to the terminal

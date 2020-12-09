@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 from datetime import datetime
 import warnings
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from desc.backend import TextColors
 
@@ -151,6 +151,159 @@ def read_desc(filename):
 
     return equil
 
+class IO(ABC):
+    """Abstract Base Class for readers and writers."""
+
+    def __init__(self, target):
+        self.target = target
+        self.resolve_base()
+
+    def __del__(self):
+        self.close()
+
+    def close(self):
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        return None
+
+    def check_type(self, obj):
+        if type(obj) in self.__file_types__:#is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+            return True
+        else:
+            return False
+
+    def resolve_base(self):
+        if self.check_type(self.target):
+            self.base = self.target
+            self._close_base_ = False
+        elif type(self.target) is str:
+            self.base = self.open_file(selt.target, self.file_mode)#h5py.File(self.target, 'r')
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or file '
+                'instance.'.format(type(self.target)))
+
+    def resolve_where(self, where):
+        if where is None:
+            loc = self.base
+        elif self.check_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a readable type.".format(where))
+        return loc
+
+    def sub(self, name):
+        try:
+            return self.base.create_group(name)
+        except ValueError:
+            return self.base[name]
+        except KeyError:
+            raise RuntimeError('Cannot create sub in reader.')
+
+    def groups(self, where=None):
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+    @abstractmethod
+    def open_file(self, file_name, file_mode):
+        pass
+
+    #@abstractmethod
+    #def sub(self, name):
+    #    pass
+
+    #@abstractmethod
+    #def groups(self, where):
+    #    pass
+
+class hdf5IO(ABC):
+    def __init__(self):
+        self.__file_types__ = [h5py._hl.group.Group, h5py._hl.files.File]
+
+    def open_file(self, filename):
+        return h5py.File(file_name, file_mode)
+
+class Reader(ABC):
+
+    @abstractmethod
+    def read_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def read_dict(self, thedict, where=None):
+        pass
+
+class Writer(ABC):
+
+    @abstractmethod
+    def write_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def write_dict(self, thedict, where=None):
+        pass
+
+class hdf5Reader(hdf5IO,Reader,IO):
+    def __init__(self, target):
+        self.target = target
+        super().__init__(target)
+        self.__file_types__ = super().__file_types__#[h5py._hl.group.Group, h5py._hl.files.File]
+
+    def open_file(self, file_name, file_mode):
+        f = super().open_file(file_name, file_mode)
+        return f #h5py.File(file_name, file_mode)
+
+    def read_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
+        for attr in obj._save_attrs_:
+            try:
+                setattr(obj, attr, loc[attr][()])
+            except KeyError:
+                warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+                        RuntimeWarning)
+        return None
+
+    def read_dict(self, thedict, where=None):
+        loc = self.resolve_where(where)
+        for key in loc.keys():
+            try:
+                thedict.update({key : loc[key][()]})
+            except AttributeError:
+                # don't load subgroups
+                pass
+            #    warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+            #            RuntimeWarning)
+        return None
+
+class hdf5Writer(IO,hdf5IO,Writer):
+    def __init__(self, target):
+        super().__init__(target)
+
+    def write_obj(self, obj, where=None):
+        loc = self.resolve_where(where)
+        for attr in obj._save_attrs_:
+            try:
+                loc.create_dataset(attr, data=getattr(obj, attr))
+            except AttributeError:
+                warnings.warn("Save attribute '{}' was not saved as it does "
+                        "not exist.".format(attr), RuntimeWarning)
+        return None
+
+    def write_dict(self, thedict, where=None):
+        loc = self.resolve_where(where)
+        for key in thedict.keys():
+            loc.create_dataset(key, data=thedict[key])
+        return None
+
+
+
+#class hdf5writer(io):
+#    def __init__(self, target):
+#        self.target = target
+#        super().__init__(target)
+#        self.__file_types__ = [h5py._hl.group.Group, h5py._hl.files.File]
+
 def reader_factory(load_from, file_format):
     if file_format == 'hdf5':
         reader = hdf5Reader(load_from)
@@ -158,7 +311,7 @@ def reader_factory(load_from, file_format):
         raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
     return reader
 
-class hdf5Reader:
+"""class hdf5Reader:
     def __init__(self, load_from):
         self.load_from = load_from
         self.resolve_base()
@@ -215,22 +368,6 @@ class hdf5Reader:
             #            RuntimeWarning)
         return None
 
-    #def load_configuration(self, where=None):
-    #    kwargs = {}
-    #    self.read_dict(kwargs, where=where)
-    #    return Configuration(**kwargs)
-
-    #def load_equilibrium(self, where=None):
-    #    kwargs = {}
-    #    self.read_dict(self, where=None)
-    #    eq = Equilibrium(**kwargs)
-
-        # overwrite the configuration in constructor
-    #    configuration_kwargs = {}
-    #    eq.initial = self.load_configuration(configuration_kwargs,
-    #            where=self.sub('initial'))
-    #    return eq
-
     def sub(self, name):
         try:
             return self.base.create_group(name)
@@ -248,7 +385,7 @@ class hdf5Reader:
         #else:
         #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
         return None
-
+"""
 def writer_factory(save_to, file_format, file_mode='w'):
     if file_format == 'hdf5':
         writer = hdf5Writer(save_to, file_mode)

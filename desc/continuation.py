@@ -118,7 +118,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 print("Precomputing Transforms")
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
-                                     axis=True, index=zern_mode, surfs=node_mode)
+                                     axis=False, index=zern_mode, surfs=node_mode)
             L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
             # bases
             R_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
@@ -187,7 +187,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
-                                         axis=True, index=zern_mode, surfs=node_mode)
+                                         axis=False, index=zern_mode, surfs=node_mode)
                 L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
 
             # change bases
@@ -207,7 +207,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 # re-format boundary shape
                 cRb, cZb = format_bdry(bdry, Rb_basis, Zb_basis, bdry_mode)
                 # update state vector
-                
+
                 x = change_resolution(x, R_basis_old, R_basis, Z_basis_old,
                                       Z_basis, L_basis_old, L_basis)
 

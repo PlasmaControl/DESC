@@ -59,6 +59,7 @@ class ObjectiveFunction(ABC):
                  pres_transform:Transform=None, iota_transform:Transform=None,
                  stell_sym:bool=True, scalar:bool=False) -> None:
         """Initializes an ObjectiveFunction
+        
         Parameters
         ----------
         RZ_transform : Transform, optional
@@ -75,9 +76,7 @@ class ObjectiveFunction(ABC):
             True for stellarator symmetry (Default), False otherwise
         scalar : bool, optional
             True for scalar objectives, False otherwise (Default)
-        Returns
-        -------
-        None
+
         """
         self.stell_sym = stell_sym
         self.sym_mat = symmetry_matrix(RZ_transform.basis.modes, L_transform.basis.modes, self.stell_sym)
@@ -103,7 +102,8 @@ class ForceErrorNodes(ObjectiveFunction):
                  L_transform:Transform, pres_transform:Transform,
                  iota_transform:Transform, stell_sym:bool=True,
                  scalar:bool=False) -> None:
-        """Initializes a ForceErrorNodes
+        """Initializes a ForceErrorNodes objective function object
+        
         Parameters
         ----------
         RZ_transform : Transform
@@ -123,6 +123,7 @@ class ForceErrorNodes(ObjectiveFunction):
         Returns
         -------
         None
+        
         """
 
         super().__init__(RZ_transform, RZb_transform, L_transform, pres_transform, iota_transform, stell_sym, scalar)
@@ -184,7 +185,8 @@ class AccelErrorSpectral(ObjectiveFunction):
                  L_transform:Transform, pres_transform:Transform,
                  iota_transform:Transform, stell_sym:bool=True,
                  scalar:bool=False) -> None:
-        """Initializes a AccelErrorNodes
+        """Initializes an AccelErrorNodes objective function object
+        
         Parameters
         ----------
         RZ_transform : Transform
@@ -211,7 +213,7 @@ class AccelErrorSpectral(ObjectiveFunction):
         self.bdry_fun = compute_bdry_err
 
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
-        """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
+        """ Compute spectral acceleration error. Overrides the compute method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(
                     jnp.matmul(self.sym_mat, x), self.RZ_transform.num_modes)
         errRf, errZf = self.equil_fun(
@@ -261,13 +263,16 @@ class AccelErrorSpectral(ObjectiveFunction):
 class ObjectiveFunctionFactory():
     """Factory Class for Objective Functions
     
-    Attributes
-    ----------
-    
     Methods
     -------
-    get_obj_fxn(attributes)
-        takes Equilibrium.attributes and uses it to compute and return the value of the objective function
+    get_equil_obj_fxn(errr_mode, RZ_transform:Transform=None,
+                 RZb_transform:Transform=None, L_transform:Transform=None,
+                 pres_transform:Transform=None, iota_transform:Transform=None,
+                 stell_sym:bool=True, scalar:bool=False)
+    
+        Takes type of objective function and attributes of an equilibrium and uses it to compute and return the corresponding objective function
+        
+    
     """
 
     def get_equil_obj_fun(errr_mode, RZ_transform:Transform=None,
@@ -275,6 +280,7 @@ class ObjectiveFunctionFactory():
                  pres_transform:Transform=None, iota_transform:Transform=None,
                  stell_sym:bool=True, scalar:bool=False) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
+        
         Parameters
         ----------
         errr_mode : str
@@ -298,6 +304,8 @@ class ObjectiveFunctionFactory():
         -------
         obj_fxn : ObjectiveFunction
             equilibrium objective function object, containing the compute and callback method for the objective function
+            
+        
         """
         if errr_mode == 'force':
             obj_fun = ForceErrorNodes(
@@ -320,6 +328,7 @@ class ObjectiveFunctionFactory():
 # TODO: need to turn this into another ObjectiveFun subclass
 def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_idx, modes_pol, modes_tor):
     """Gets the quasisymmetry objective function
+    
     Parameters
     ----------
     stell_sym : bool
@@ -344,6 +353,7 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_
     -------
     qsym_obj : function
         quasisymmetry objective function
+        
     """
 
     # stellarator symmetry
@@ -364,6 +374,7 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_
 
 def curve_self_intersects(x, y):
     """Checks if a curve intersects itself
+    
     Parameters
     ----------
     x,y : ndarray
@@ -372,6 +383,7 @@ def curve_self_intersects(x, y):
     -------
     is_intersected : bool
         whether the curve intersects itself
+        
     """
 
     pts = np.array([x, y])
@@ -398,8 +410,8 @@ def curve_self_intersects(x, y):
 
 
 def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
-    """Checks that an equilibrium has properly nested flux surfaces
-        in a given toroidal plane
+    """Checks that an equilibrium has properly nested flux surfaces in a given toroidal plane
+    
     Parameters
     ----------
     cR : ndarray, shape(RZ_transform.num_modes,)
@@ -418,6 +430,7 @@ def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
     -------
     is_nested : bool
         whether or not the surfaces are nested
+        
     """
 
     grid = LinearGrid(L=L, M=M, N=1, NFP=basis.NFP, endpoint=True)
@@ -434,6 +447,7 @@ def is_nested(cR, cZ, basis, L=10, M=361, zeta=0):
 
 def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform, pres_ratio, zeta_ratio):
     """Computes force balance error at each node, in radial / helical components
+    
     Parameters
     ----------
     cR : ndarray, shape(N_coeffs,)
@@ -462,6 +476,7 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
         radial force balance error at each node
     F_beta : ndarray, shape(N_nodes,)
         helical force balance error at each node
+        
     """
 
     mu0 = 4*jnp.pi*1e-7
@@ -529,6 +544,7 @@ def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
 
 def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform, pres_ratio, zeta_ratio):
     """Computes force balance error at each node, in R, phi, Z components
+    
     Parameters
     ----------
     cR : ndarray, shape(N_coeffs,)
@@ -555,6 +571,7 @@ def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
     -------
     F_err : ndarray, shape(3,N_nodes,)
         F_R, F_phi, F_Z at each node
+        
     """
     mu0 = 4*jnp.pi*1e-7
     axn = pres_transform.grid.axis
@@ -598,8 +615,8 @@ def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
 
 
 def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform, pres_ratio, zeta_ratio):
-    """Computes force balance error at each node, projected back onto zernike 
-    coefficients for R and Z.
+    """Computes force balance error at each node, projected back onto zernike coefficients for R and Z.
+    
     Parameters
     ----------
     cR : ndarray, shape(RZ_transform.num_modes,)
@@ -628,6 +645,7 @@ def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_
         spectral coefficients for d^2R/dt^2
     cZddot : ndarray, shape(N_coeffs,)
         spectral coefficients for d^2Z/dt^2
+        
     """
 
     coord_der = compute_coordinate_derivatives(cR, cZ, RZ_transform)
@@ -649,6 +667,7 @@ def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_
 
 def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform, pres_ratio, zeta_ratio):
     """Computes acceleration error in spectral space
+    
     Parameters
     ----------
     cR : ndarray, shape(N_coeffs,)
@@ -677,6 +696,7 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_tr
         error in cR_zz
     cZ_zz_err : ndarray, shape(N_coeffs,)
         error in cZ_zz
+        
     """
     mu0 = 4*jnp.pi*1e-7
     r = RZ_transform.grid.nodes[:, 0]
@@ -715,6 +735,7 @@ def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_tr
 # TODO: fit_transform should have the same grid as RZ, but a DoubleFourier basis
 def compute_qs_error_spectral(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_transform, iota_transform, pres_ratio, zeta_ratio, fit_transform):
     """Computes quasisymmetry error in spectral space
+    
     Parameters
     ----------
     cR : ndarray, shape(N_coeffs,)
@@ -741,6 +762,7 @@ def compute_qs_error_spectral(cR, cZ, cP, cI, Psi_lcfs, RZ_transform, pres_trans
     -------
     cQS : ndarray
         quasisymmetry error Fourier coefficients
+        
     """
     iota = iota_transform.transform(cI, 0)
 

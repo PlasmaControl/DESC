@@ -32,7 +32,7 @@ Other linux based clusters should follow a similar process but may differ.
     conda activate ./env
 
 On Princeton's Adroit Cluster
-*************************
+*****************************
 Other linux based clusters should follow a similar process but may differ. 
 
 .. code-block:: bash
@@ -50,6 +50,17 @@ Other linux based clusters should follow a similar process but may differ.
     unset PYTHONPATH
     conda activate ./env
 
+Then, to build the documentation locally, from the DESC directory:
+
+.. code-block:: bash
+
+    cd docs
+    pip install sphinx
+    pip install sphinx-rtd-theme
+    pip install sphinx-argparse
+    make html
+
+will build the documentation in the _build/html/ folder of the docs folder.
 
 On Traverse
 ***********

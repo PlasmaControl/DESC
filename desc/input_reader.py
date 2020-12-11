@@ -40,6 +40,18 @@ class InputReader:
 
     """
     def __init__(self, cl_args=None):
+        """Initialize InputReader instance.
+
+        Parameters
+        __________
+        cl_args : None or list (Default = None)
+            command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
+
+        Returns
+        _______
+        None
+
+        """
         self.args = self.parse_args(cl_args=cl_args)
 
         print("Reading input from {}".format(self.input_path))
@@ -48,6 +60,19 @@ class InputReader:
         self.inputs = self.parse_inputs()
 
     def parse_args(self, cl_args=None):
+        """Parse command line arguments.
+
+        Parameters
+        __________
+        cl_args : None or list (Default = None)
+            command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
+
+        Returns
+        _______
+        args : namespace
+            parsed arguments
+
+        """
         self.parser = self._get_parser_()
 
         if cl_args is None:

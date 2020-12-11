@@ -1,8 +1,10 @@
 import numpy as np
-from desc.backend import put, TextColors
+
+from desc.backend import put
+from desc.basis import FourierZernikeBasis
 
 
-def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='spectral', rcond=1e-6):
+def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, RZ_basis:FourierZernikeBasis):
     """Generate initial guess by scaling boundary shape
 
     Parameters
@@ -15,14 +17,8 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='sp
         array of real space coordinates, [theta,phi,R,Z]
     bdry_ratio : float
         fraction in range [0,1] of the full non-axisymmetric boundary to use
-    zern_idx : ndarray, shape(N_coeffs,3)
-        indices for spectral basis, ie an array of [l,m,n] for each spectral coefficient
-    NFP : int
-        number of field periods
-    mode : str
-        one of 'real', 'spectral' - which format is being used for bdryR,bdryZ,poloidal,toroidal (Default value = 'spectral')
-    rcond : float
-         relative limit on singular values for least squares fit to Zernike basis (Default value = 1e-6)
+    RZ_basis : FourierZernikeBasis
+        
 
     Returns
     -------
@@ -32,44 +28,39 @@ def get_initial_guess_scale_bdry(axis, bdry, bdry_ratio, zern_idx, NFP, mode='sp
         Fourier-Zernike coefficients for Z, following indexing given in zern_idx
 
     """
+    modes = RZ_basis.modes
+    num_modes = RZ_basis.num_modes
+    cR = np.zeros((num_modes,))
+    cZ = np.zeros((num_modes,))
 
-    if mode == 'spectral':
-        dimZern = np.shape(zern_idx)[0]
-        cR = np.zeros((dimZern,))
-        cZ = np.zeros((dimZern,))
+    for m, n, bR, bZ in bdry:
 
-        for m, n, bR, bZ in bdry:
+        bR *= np.clip(bdry_ratio+(n == 0), 0, 1)
+        bZ *= np.clip(bdry_ratio+(n == 0), 0, 1)
 
-            bR *= np.clip(bdry_ratio+(n == 0), 0, 1)
-            bZ *= np.clip(bdry_ratio+(n == 0), 0, 1)
+        if m == 0:
 
-            if m == 0:
-
-                idx = np.where(axis[:, 0] == n)
-                if idx[0].size == 0:
-                    aR = bR
-                    aZ = bZ
-                else:
-                    aR = axis[idx, 1][0, 0]
-                    aZ = axis[idx, 2][0, 0]
-
-                cR = put(cR, np.where(np.logical_and.reduce(
-                    (zern_idx[:, 0] == 0, zern_idx[:, 1] == 0, zern_idx[:, 2] == n)))[0], (bR+aR)/2)
-                cZ = put(cZ, np.where(np.logical_and.reduce(
-                    (zern_idx[:, 0] == 0, zern_idx[:, 1] == 0, zern_idx[:, 2] == n)))[0], (bZ+aZ)/2)
-                cR = put(cR, np.where(np.logical_and.reduce(
-                    (zern_idx[:, 0] == 2, zern_idx[:, 1] == 0, zern_idx[:, 2] == n)))[0], (bR-aR)/2)
-                cZ = put(cZ, np.where(np.logical_and.reduce(
-                    (zern_idx[:, 0] == 2, zern_idx[:, 1] == 0, zern_idx[:, 2] == n)))[0], (bZ-aZ)/2)
-
+            idx = np.where(axis[:, 0] == n)
+            if idx[0].size == 0:
+                aR = bR
+                aZ = bZ
             else:
-                cR = put(cR, np.where(np.logical_and.reduce((zern_idx[:, 0] == np.absolute(
-                    m), zern_idx[:, 1] == m, zern_idx[:, 2] == n)))[0], bR)
-                cZ = put(cZ, np.where(np.logical_and.reduce((zern_idx[:, 0] == np.absolute(
-                    m), zern_idx[:, 1] == m, zern_idx[:, 2] == n)))[0], bZ)
+                aR = axis[idx, 1][0, 0]
+                aZ = axis[idx, 2][0, 0]
 
-    else:
-        raise ValueError(
-            TextColors.FAIL + "Can't compute the initial guess in real space" + TextColors.ENDC)
+            cR = put(cR, np.where(np.logical_and.reduce(
+                (modes[:, 0] == 0, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bR+aR)/2)
+            cZ = put(cZ, np.where(np.logical_and.reduce(
+                (modes[:, 0] == 0, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bZ+aZ)/2)
+            cR = put(cR, np.where(np.logical_and.reduce(
+                (modes[:, 0] == 2, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bR-aR)/2)
+            cZ = put(cZ, np.where(np.logical_and.reduce(
+                (modes[:, 0] == 2, modes[:, 1] == 0, modes[:, 2] == n)))[0], (bZ-aZ)/2)
+
+        else:
+            cR = put(cR, np.where(np.logical_and.reduce((modes[:, 0] == np.absolute(
+                m), modes[:, 1] == m, modes[:, 2] == n)))[0], bR)
+            cZ = put(cZ, np.where(np.logical_and.reduce((modes[:, 0] == np.absolute(
+                    m), modes[:, 1] == m, modes[:, 2] == n)))[0], bZ)
 
     return cR, cZ

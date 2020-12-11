@@ -861,3 +861,43 @@ class InputReader:
         # close files
         vmec_file.close()
         desc_file.close()
+
+def get_parser():
+    """Standalone function that gets parser for command line arguments.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    parser : argparse object
+        argument parser
+
+    """
+
+    parser = argparse.ArgumentParser(prog='DESC',
+                                     description='DESC computes equilibria by solving the force balance equations. '
+                                     + 'It can also be used for perturbation analysis and sensitivity studies '
+                                     + 'to see how the equilibria change as input parameters are varied.')
+    parser.add_argument('input_file', nargs='*',
+                        help='Path to input file')
+    parser.add_argument('-o', '--output', metavar='output_file',
+                        help='Path to output file. If not specified, defaults to <input_name>.output')
+    parser.add_argument('-p', '--plot', action='store_true',
+                        help='Plot results after solver finishes')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Do not display any progress information')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Display detailed progress information')
+    parser.add_argument('--vmec', metavar='vmec_path',
+                        help='Path to VMEC data for comparison plot')
+    parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
+                        help='Use GPU if available, and an optional device ID to use a specific GPU.'
+                        + ' If no ID is given, default is to select the GPU with most available memory.'
+                        + ' Note that not all of the computation will be done '
+                        + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
+    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
+                        + " and autodiff won't work but may be useful for debugging")
+    parser.add_argument('--version', action='store_true',
+                        help='Display version number and exit')
+    return parser

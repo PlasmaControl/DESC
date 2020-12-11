@@ -335,6 +335,13 @@ class Configuration():
     def I_basis(self, I_basis:Basis) -> None:
         self.__I_basis = I_basis
 
+    def compute_coordinates(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=0)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=0)
+        coords = compute_coordinates(self.__cR, self.__cZ, R_transform,
+                                     Z_transform)
+        return coords
+
     def compute_coordinate_derivatives(self, grid:Grid) -> dict:
         R_transform = Transform(grid, self.__R_basis, derivs=3)
         Z_transform = Transform(grid, self.__Z_basis, derivs=3)
@@ -597,6 +604,34 @@ class EquiliriaFamily(MutableSequence):
         writer.close()
 
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
+
+def compute_coordinates(cR, cZ, R_transform, Z_transform):
+    """Converts from spectral to real space
+
+    Parameters
+    ----------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    R_transform : Transform
+        transforms R coefficients to real space
+    Z_transform : Transform
+        transforms Z coefficients to real space
+
+    Returns
+    -------
+    coords : dict
+        dictionary of ndarray, shape(N_nodes,) of coordinates evaluated at node locations
+        keys are of the form 'X_y' meaning the derivative of X wrt to y
+
+    """
+    coords = {}
+    coords['R'] = R_transform.transform(cR)
+    coords['Z'] = Z_transform.transform(cZ)
+    coords['phi'] = R_transform.grid.nodes[:, 2]    # phi = zeta
+    coords['X'] = coords['R']*np.cos(coords['phi'])
+    coords['Y'] = coords['R']*np.sin(coords['phi'])
 
 # TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
 def compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform, zeta_ratio=1.0):

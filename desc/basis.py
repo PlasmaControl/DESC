@@ -575,14 +575,14 @@ def polyval_vec(p, x):
 
     """
     p = jnp.atleast_2d(p)
+    x = jnp.atleast_1d(x).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
-    x = jnp.asarray(x).flatten()
     nx = len(x)         # number of coordinates
     y = jnp.zeros((npoly, nx))
 
     def body_fun(k, y):
-        return y*x + p[:, k][:, jnp.newaxis]
+        return y*x + np.atleast_2d(p[:, k]).T
 
     return fori_loop(0, order, body_fun, y)
 

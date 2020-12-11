@@ -183,10 +183,10 @@ class InputReader:
             isVMEC = re.search(r'&INDATA', line)
             if isVMEC:
                 print('Converting VMEC input to DESC input')
-                fname_desc = fname + '_desc'
-                self._vmec_to_desc_input_(self.input_path, fname_desc)
-                print('Generated DESC input file {}:'.format(fname_desc))
-                return read_input(fname_desc)
+                path = self.input_path + '_desc'
+                self._vmec_to_desc_input_(self.input_path, path)
+                print('Generated DESC input file {}:'.format(path))
+                return self.parse_input(path)
 
             # extract numbers & words
             match = re.search(r'[!#]', line)

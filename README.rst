@@ -66,7 +66,7 @@ Contribute
     :alt: Documentation
 
 .. |Travis| image:: https://img.shields.io/travis/dpanici/DESC?logo=travis   
-    :target: https://travis-ci.org/dpanici/DESC
+    :target: https://travis-ci.org/dpanici/DESC.svg?branch=master
     :alt: Build
 
 .. |Codecov| image:: https://codecov.io/gh/dpanici/DESC/branch/master/graph/badge.svg

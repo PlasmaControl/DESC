@@ -1,7 +1,7 @@
 ======================
 Command Line Interface
 ======================
-
+ 
 DESC is executed with the following command line syntax:
 
 .. argparse::
@@ -10,3 +10,4 @@ DESC is executed with the following command line syntax:
    :prog: desc
    :nodefault:
    :nodescription:
+

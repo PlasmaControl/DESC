@@ -536,118 +536,6 @@ def rms(x):
     return jnp.sqrt(jnp.mean(x**2))
 
 
-def iotafun(rho, nu, params):
-    """Rotational transform
-
-    Parameters
-    ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
-
-    Returns
-    -------
-    iota : array-like
-        iota profile (or derivative) evaluated at rho
-
-    """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
-
-
-def presfun(rho, nu, params):
-    """Plasma pressure
-
-    Parameters
-    ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
-
-    Returns
-    -------
-    pres : array-like
-        pressure profile (or derivative) evaluated at rho
-
-    """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
-
-
-def get_needed_derivatives(mode, axis=True):
-    """Get array of derivatives needed for calculating objective function
-
-    Parameters
-    ----------
-    mode : str
-        one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``.
-        What groups of derivatives are needed, based on the objective type.
-    axis : bool
-        whether to include terms needed for axis expansion (Default value = True)
-
-    Returns
-    -------
-    derivs : ndarray
-        combinations of derivatives of R,Z needed
-        to compute objective function. Each row is one set, columns represent
-        the order of derivative for [rho, theta, zeta].
-
-    """
-    equil_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                             [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                             [0, 1, 1], [0, 0, 2]])
-    axis_derivs = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-    qs_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                          [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                          [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
-                          [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
-                          [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
-                          [2, 2, 0]])
-    if mode is None:
-        return np.array([[0, 0, 0]])
-    elif mode.lower() in ['force', 'accel']:
-        if axis:
-            return np.vstack([equil_derivs, axis_derivs])
-        else:
-            return equil_derivs
-    elif mode.lower() in ['all', 'qs']:
-        return qs_derivs
-    else:
-        raise NotImplementedError(
-            TextColors.FAIL + "derivs must be one of 'force', 'accel', 'all', 'qs'" + TextColors.ENDC)
-
-
-def unpack_x(x, nRZ):
-    """Unpacks the optimization state vector x into cR,cZ,cL components
-
-    Parameters
-    ----------
-    x : ndarray
-        vector to unpack
-    nRZ : int
-        number of R,Z coeffs
-
-    Returns
-    -------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
-        spectral coefficients of lambda
-
-    """
-
-    cR = x[:nRZ]
-    cZ = x[nRZ:2*nRZ]
-    cL = x[2*nRZ:]
-    return cR, cZ, cL
-
-
 class FiniteDifferenceJacobian():
     """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
 
@@ -902,80 +790,6 @@ class BlockJacobian():
         return np.vstack([jac(x, *args) for jac in self.jac_blocks])
 
 
-@conditional_decorator(functools.partial(jit), use_jax)
-def polyder_vec(p, m):
-    """Vectorized version of polyder for differentiating multiple polynomials of the same degree
-
-    Parameters
-    ----------
-    p : ndarray, shape(N,M)
-        polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
-        each column is a power of x
-    m : int >=0
-        order of derivative
-
-    Returns
-    -------
-    der : ndarray, shape(N,M)
-        polynomial coefficients for derivative in descending order
-
-    """
-    m = jnp.asarray(m, dtype=int)  # order of derivative
-    p = jnp.atleast_2d(p)
-    l = p.shape[0]               # number of polynomials
-    n = p.shape[1] - 1           # order of polynomials
-
-    D = jnp.arange(n, -1, -1)
-    D = factorial(D)/factorial(D-m)
-
-    p = jnp.roll(D*p, m, axis=1)
-    idx = jnp.arange(p.shape[1])
-    p = jnp.where(idx < m, 0, p)
-
-    return p
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def polyval_vec(p, x):
-    """Evaluate a polynomial at specific values,
-    vectorized for evaluating multiple polynomials of the same degree.
-
-    Parameters
-    ----------
-    p : ndarray, shape(N,M)
-        Array of coefficient for N polynomials of order M. 
-        Each row is one polynomial, given in descending powers of x. 
-    x : ndarray, shape(K,)
-        A number, or 1d array of numbers at
-        which to evaluate p. If greater than 1d it is flattened.
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        polynomials evaluated at x.
-        Each row corresponds to a polynomial, each column to a value of x
-
-    Notes:
-        Horner's scheme is used to evaluate the polynomial. Even so,
-        for polynomials of high degree the values may be inaccurate due to
-        rounding errors. Use carefully.
-
-    """
-    p = jnp.atleast_2d(p)
-    npoly = p.shape[0]
-    order = p.shape[1]
-    x = jnp.asarray(x).flatten()
-    nx = len(x)
-    y = jnp.zeros((npoly, nx))
-
-    def body_fun(k, y):
-        return y * x + p[:, k][:, jnp.newaxis]
-
-    y = fori_loop(0, order, body_fun, y)
-
-    return y
-
-
 if use_jax:
     jacfwd = jax.jacfwd
     jacrev = jax.jacrev
@@ -984,3 +798,27 @@ else:
     jacfwd = FiniteDifferenceJacobian
     jacrev = FiniteDifferenceJacobian
     grad = FiniteDifferenceJacobian
+
+
+def equals(a, b) -> bool:
+    """Compares dictionaries that have numpy array values
+
+    Parameters
+    ----------
+    a : dict
+        reference dictionary
+    b : dict
+        comparison dictionary
+
+    Returns
+    -------
+    bool
+        a == b
+
+    """
+    if a.keys() != b.keys():
+        return False
+    return all(equals(a[key], b[key]) if isinstance(a[key], dict)
+               else jnp.allclose(a[key], b[key]) if isinstance(a[key], jnp.ndarray)
+               else (a[key] == b[key])
+               for key in a)

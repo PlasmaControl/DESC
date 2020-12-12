@@ -68,14 +68,16 @@ def vmec_error(equil, vmec_data, Nt=8, Nz=4):
     """
     ns = np.size(vmec_data['psi'])
     rho = np.sqrt(vmec_data['psi'])
-    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil['NFP'], surfs=rho)
-    basis = equil['R_basis']
-    transf = Transform(grid, basis)
+    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil.NFP, rho=rho)
+    R_basis = equil.R_basis
+    Z_basis = equil.Z_basis
+    R_transf = Transform(grid, R_basis)
+    Z_transf = Transform(grid, Z_basis)
     vartheta = np.unique(grid.nodes[:, 1])
     phi = np.unique(grid.nodes[:, 2])
 
-    R_desc = transf.transform(equil['cR']).reshape((ns, Nt, Nz), order='F')
-    Z_desc = transf.transform(equil['cZ']).reshape((ns, Nt, Nz), order='F')
+    R_desc = R_transf.transform(equil.cR).reshape((ns, Nt, Nz), order='F')
+    Z_desc = Z_transf.transform(equil.cZ).reshape((ns, Nt, Nz), order='F')
 
     print('Interpolating VMEC solution to sfl coordinates')
     R_vmec = np.zeros((ns, Nt, Nz))

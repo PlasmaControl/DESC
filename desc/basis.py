@@ -3,7 +3,7 @@ import functools
 import numba
 from abc import ABC, abstractmethod
 
-from desc.backend import jnp, jit, fori_loop, flatten_list, factorial, equals
+from desc.backend import jnp, jit, sign, fori_loop, flatten_list, factorial, equals, Tristate
 
 
 class Basis(ABC):
@@ -19,6 +19,9 @@ class Basis(ABC):
         maximum toroidal resolution
     NFP : int
         number of field periods
+    sym : Tristate
+        True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        None for no symmetry (Default)
     modes : ndarray of int, shape(Nmodes,3)
         array of mode numbers [l,m,n]
         each row is one basis function with modes (l,m,n)
@@ -47,6 +50,23 @@ class Basis(ABC):
         if self.__class__ != other.__class__:
             return False
         return equals(self.__dict__, other.__dict__)
+
+    def _enforce_symmetry_(self) -> None:
+        """Enforces stellarator symmetry
+
+        Returns
+        -------
+        None
+
+        """
+        if self.__sym == True:     # cos(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.__modes[:, 1]) !=
+                                   sign(self.__modes[:, 2]))
+            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
+        elif self.__sym == False:  # sin(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.__modes[:, 1]) ==
+                                   sign(self.__modes[:, 2]))
+            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
 
     def _sort_modes_(self) -> None:
         """Sorts modes for use with FFT
@@ -84,20 +104,24 @@ class Basis(ABC):
         pass
 
     @property
-    def L(self):
+    def L(self) -> int:
         return self.__L
 
     @property
-    def M(self):
+    def M(self) -> int:
         return self.__M
 
     @property
-    def N(self):
+    def N(self) -> int:
         return self.__N
 
     @property
-    def NFP(self):
+    def NFP(self) -> int:
         return self.__NFP
+
+    @property
+    def sym(self) -> Tristate:
+        return self.__sym
 
     @property
     def modes(self):
@@ -108,7 +132,7 @@ class Basis(ABC):
         self.__modes = modes
 
     @property
-    def num_modes(self):
+    def num_modes(self) -> int:
         return self.__modes.shape[0]
 
 
@@ -120,6 +144,11 @@ class PowerSeries(Basis):
     def __init__(self, L:int=0) -> None:
         """Initializes a PowerSeries
 
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+
         Returns
         -------
         None
@@ -129,9 +158,11 @@ class PowerSeries(Basis):
         self._Basis__M = 0
         self._Basis__N = 0
         self._Basis__NFP = 1
+        self._Basis__sym = None
 
         self._Basis__modes = self.get_modes(L=self._Basis__L)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 
@@ -194,8 +225,20 @@ class DoubleFourierSeries(Basis):
        Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M:int=0, N:int=0, NFP:int=1) -> None:
+    def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None) -> None:
         """Initializes a DoubleFourierSeries
+
+        Parameters
+        ----------
+        M : int
+            maximum poloidal resolution
+        N : int
+            maximum toroidal resolution
+        NFP : int
+            number of field periods
+        sym : Tristate
+            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+            None for no symmetry (Default)
 
         Returns
         -------
@@ -206,9 +249,11 @@ class DoubleFourierSeries(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
+        self._Basis__sym = sym
 
         self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 
@@ -282,7 +327,7 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
-                 index:str='ansi') -> None:
+                 sym:Tristate=None, index:str='ansi') -> None:
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -293,6 +338,11 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
+        NFP : int
+            number of field periods
+        sym : Tristate
+            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+            None for no symmetry (Default)
         index : str
             Indexing method, one of the following options: 
             ('ansi','frige','chevron','house').
@@ -330,11 +380,13 @@ class FourierZernikeBasis(Basis):
         self._Basis__M = M
         self._Basis__N = N
         self._Basis__NFP = NFP
+        self._Basis__sym = sym
         self.__index = index
 
-        self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M, N=self._Basis__N,
-                                      index=self.__index)
+        self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,
+                                        N=self._Basis__N, index=self.__index)
 
+        self._enforce_symmetry_()
         self._sort_modes_()
         self._def_save_attrs_()
 
@@ -523,14 +575,14 @@ def polyval_vec(p, x):
 
     """
     p = jnp.atleast_2d(p)
+    x = jnp.atleast_1d(x).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
-    x = jnp.asarray(x).flatten()
     nx = len(x)         # number of coordinates
     y = jnp.zeros((npoly, nx))
 
     def body_fun(k, y):
-        return y*x + p[:, k][:, jnp.newaxis]
+        return y*x + np.atleast_2d(p[:, k]).T
 
     return fori_loop(0, order, body_fun, y)
 
@@ -662,6 +714,17 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
+    theta_2d = jnp.atleast_2d(theta).T
+    m_2d = jnp.atleast_2d(m)
+    m_pos = (m_2d >= 0).astype(int)
+    m_neg = (m_2d < 0).astype(int)
+    m_abs = jnp.abs(m_2d)*NFP
+    if dt == 0:
+        return m_pos*np.cos(m_abs*theta_2d) + m_neg*np.sin(m_abs*theta_2d)
+    else:
+        return m_abs*(m_neg-m_pos)*fourier(theta, -m, NFP=NFP, dt=dt-1)
+
+    """
     theta = jnp.atleast_1d(theta)[:, jnp.newaxis]
     m = jnp.atleast_1d(m)[jnp.newaxis]
     m_pos = (m >= 0)
@@ -670,3 +733,4 @@ def fourier(theta, m, NFP=1, dt=0):
     der = (1j*m_abs*NFP)**dt
     exp = der*jnp.exp(1j*m_abs*NFP*theta)
     return m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
+    """

@@ -1,82 +1,11 @@
 import numpy as np
 from collections.abc import MutableSequence
 
-from desc.backend import jnp, put, opsindex, cross, dot, TextColors, sign
-from desc.basis import Basis
+from desc.backend import jnp, put, opsindex, cross, dot, TextColors, Tristate
+from desc.basis import Basis, PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 from desc import equilibrium_io as eq_io
-
-
-# TODO: can probably replace this function when Configuration interacts with Solver
-def change_resolution(x_old, R_basis_old, R_basis_new, Z_basis_old,
-                      Z_basis_new, L_basis_old, L_basis_new):
-    """
-
-    Parameters
-    ----------
-    x_old : ndarray
-        DESCRIPTION
-    R_basis_old : FourierZernikeBasis
-        DESCRIPTION
-    R_basis_new : FourierZernikeBasis
-        DESCRIPTION
-    Z_basis_old : FourierZernikeBasis
-        DESCRIPTION
-    Z_basis_new : FourierZernikeBasis
-        DESCRIPTION
-    L_basis_old : DoubleFourierSeries
-        DESCRIPTION
-    L_basis_new : DoubleFourierSeries
-        DESCRIPTION
-
-    Returns
-    -------
-    x_new : ndarray
-        DESCRIPTION
-
-    """
-    old_modes_R = R_basis_old.modes
-    old_modes_Z = Z_basis_old.modes
-    old_modes_L = L_basis_old.modes
-
-    new_modes_R = R_basis_new.modes
-    new_modes_Z = Z_basis_new.modes
-    new_modes_L = L_basis_new.modes
-
-    cR_old, cZ_old, cL_old = unpack_state(x_old, R_basis_old.num_modes,
-                                          Z_basis_old.num_modes)
-
-    cR_new = np.zeros((R_basis_new.num_modes,))
-    cZ_new = np.zeros((Z_basis_new.num_modes,))
-    cL_new = np.zeros((L_basis_new.num_modes,))
-
-    for i in range(R_basis_new.num_modes):
-        idx = np.where(np.all(np.array([
-            np.array(old_modes_R[:, 0] == new_modes_R[i, 0]),
-            np.array(old_modes_R[:, 1] == new_modes_R[i, 1]),
-            np.array(old_modes_R[:, 2] == new_modes_R[i, 2])]), axis=0))[0]
-        if len(idx):
-            cR_new[i] = cR_old[idx[0]]
-
-    for i in range(Z_basis_new.num_modes):
-        idx = np.where(np.all(np.array([
-            np.array(old_modes_Z[:, 0] == new_modes_Z[i, 0]),
-            np.array(old_modes_Z[:, 1] == new_modes_Z[i, 1]),
-            np.array(old_modes_Z[:, 2] == new_modes_Z[i, 2])]), axis=0))[0]
-        if len(idx):
-            cZ_new[i] = cZ_old[idx[0]]
-
-    for i in range(L_basis_new.num_modes):
-        idx = np.where(np.all(np.array([
-            np.array(old_modes_L[:, 0] == new_modes_L[i, 0]),
-            np.array(old_modes_L[:, 1] == new_modes_L[i, 1]),
-            np.array(old_modes_L[:, 2] == new_modes_L[i, 2])]), axis=0))[0]
-        if len(idx):
-            cL_new[i] = cL_old[idx[0]]
-
-    x_new = np.concatenate([cR_new, cZ_new, cL_new])
-    return x_new
 
 
 def unpack_state(x, nR, nZ):
@@ -158,61 +87,177 @@ class Configuration():
                              '__Z_basis', '__L_basis', '__Rb_basis',
                              '__Zb_basis', '__P_basis', '__I_basis']
 
-# XXX: Daniel doesn't think this method makes sense here.
-#      We probably shouldn't be creating a Configuration directly from the
-#      inputs, because they are mostly about the "outer loop" parameters.
-#      It would be better to separate out the relevant inputs first.
     def _init_from_inputs_(self, inputs:dict=None) -> None:
+        """
+
+        Parameters
+        ----------
+        inputs : dict, optional
+            Dictionary of inputs with the following required keys:
+                L : 
+                M : 
+                N : 
+                cP : 
+                cI : 
+                Psi : 
+                NFP : 
+                bdry : 
+            And the following optional keys:
+                sym : 
+                index : 
+                bdry_mode : 
+                bdry_ratio : 
+                axis : 
+                cR : 
+                cZ : 
+                cL : 
+
+        Raises
+        ------
+        ValueError
+            DESCRIPTION.
+
+        Returns
+        -------
+        None
+
+        """
         if inputs is None:
             inputs = self.inputs
-        self.__bdry = inputs['bdry']
-        self.__cP = inputs['cP']
-        self.__cI = inputs['cI']
-        self.__Psi = inputs['Psi']
-        self.__NFP = inputs['NFP']
-        self.__zern_idx = inputs['zern_idx']
-        self.__lambda_idx = inputs['lambda_idx']
-        self.__sym = inputs['sym']
 
-        self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
-            np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
+        # required keys
+        try:
+            self.__L = inputs['L']
+            self.__M = inputs['M']
+            self.__N = inputs['N']
+            self.__cP = inputs['cP']
+            self.__cI = inputs['cI']
+            self.__Psi = inputs['Psi']
+            self.__NFP = inputs['NFP']
+            bdry = inputs['bdry']
+        except:
+            raise ValueError(TextColors.FAIL +
+                             "input dict does not contain proper keys"
+                           + TextColors.ENDC)
 
-        if inputs['x'] is None:
-            # TODO: change input reader to make the default axis=None
-            if inputs['axis'] is None:
-                axis = self.__bdry[np.where(inputs['bdry'][:, 0] == 0)[0], 1:]
-            self.__cR, self.__cZ = get_initial_guess_scale_bdry(
-                axis, inputs['bdry'], 1.0, inputs['zern_idx'], inputs['NFP'], mode='spectral', rcond=1e-6)
-            self.__cL = np.zeros(len(inputs['lambda_idx']))
-            self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
-            self.__x = np.matmul(self.__sym_mat.T, inputs['x'])
+        # optional keys
+        self.__sym = inputs.get('sym', False)
+        self.__index = inputs.get('index', 'ansi')
+        bdry_mode = inputs.get('bdry_mode', 'spectral')
+        bdry_ratio = inputs.get('bdry_ratio', 1.0)
+        axis = inputs.get('axis', bdry[np.where(bdry[:, 0] == 0)[0], 1:])
+
+        # stellarator symmetry for bases
+        if self.__sym:
+            self.__R_sym = Tristate(True)
+            self.__Z_sym = Tristate(False)
+            self.__L_sym = Tristate(False)
         else:
-            self.__x = inputs['x']
-            try:
-                self.__cR, self.__cZ, self.__cL = unpack_state(
-                    np.matmul(self.__sym_mat, self.__x), len(self.__zern_idx))
-            except:
-                raise ValueError(TextColors.FAIL +
-                    "State vector dimension is incompatible with other parameters" + TextColors.ENDC)
+            self.__R_sym = Tristate(None)
+            self.__Z_sym = Tristate(None)
+            self.__L_sym = Tristate(None)
 
-    def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
-        if load_from is None:
-            load_from = self.load_from
-        if file_format is None:
-            file_format = self._file_format_
-        reader = eq_io.reader_factory(load_from, file_format)
-        reader.read_obj(self)
+        # create bases
+        self.__R_basis = FourierZernikeBasis(
+                    L=self.__L, M=self.__M, N=self.__N,
+                    NFP=self.__NFP, sym=self.__R_sym, index=self.__index)
+        self.__Z_basis = FourierZernikeBasis(
+                    L=self.__L, M=self.__M, N=self.__N,
+                    NFP=self.__NFP, sym=self.__Z_sym, index=self.__index)
+        self.__L_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__L_sym)
+        self.__Rb_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__R_sym)
+        self.__Zb_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__Z_sym)
+        self.__P_basis = PowerSeries(L=self.__cP.size-1)
+        self.__I_basis = PowerSeries(L=self.__cI.size-1)
+
+        # format boundary
+        self.__cRb, self.__cZb = format_bdry(
+                            bdry, self.__Rb_basis, self.__Zb_basis, bdry_mode)
+        ratio_Rb = np.where(self.__Rb_basis.modes[:, 2] != 0, bdry_ratio, 1)
+        ratio_Zb = np.where(self.__Zb_basis.modes[:, 2] != 0, bdry_ratio, 1)
+        self.__cRb *= ratio_Rb
+        self.__cZb *= ratio_Zb
+
+        # solution, if provided
+        try:
+            self.__cR = inputs['cR']
+            self.__cZ = inputs['cZ']
+            self.__cL = inputs['cL']
+        except:
+            self.__cR, self.__cZ = get_initial_guess_scale_bdry(
+                        axis, bdry, bdry_ratio, self.__R_basis, self.__Z_basis)
+            self.__cL = np.zeros((self.__L_basis.num_modes,))
+
+        # state vector
+        self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
+
+    def change_resolution(self, L:int=None, M:int=None, N:int=None) -> None:
+        # TODO: check if resolution actually changes
+
+        if L is not None:
+            self.__L = L
+        if M is not None:
+            self.__M = M
+        if N is not None:
+            self.__N = N
+
+        old_modes_R = self.__R_basis.modes
+        old_modes_Z = self.__Z_basis.modes
+        old_modes_L = self.__L_basis.modes
+        old_modes_Rb = self.__Rb_basis.modes
+        old_modes_Zb = self.__Zb_basis.modes
+
+        # create bases
+        self.__R_basis = FourierZernikeBasis(
+                    L=self.__L, M=self.__M, N=self.__N,
+                    NFP=self.__NFP, sym=self.__R_sym, index=self.__index)
+        self.__Z_basis = FourierZernikeBasis(
+                    L=self.__L, M=self.__M, N=self.__N,
+                    NFP=self.__NFP, sym=self.__Z_sym, index=self.__index)
+        self.__L_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__L_sym)
+        self.__Rb_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__R_sym)
+        self.__Zb_basis = DoubleFourierSeries(
+                    M=self.__M, N=self.__N, NFP=self.__NFP, sym=self.__Z_sym)
+
+        def copy_coeffs(c_old, modes_old, modes_new):
+            num_modes = modes_new.shape[0]
+            c_new = np.zeros((num_modes,))
+            for i in range(num_modes):
+                idx = np.where(np.all(np.array([
+                    np.array(modes_old[:, 0] == modes_new[i, 0]),
+                    np.array(modes_old[:, 1] == modes_new[i, 1]),
+                    np.array(modes_old[:, 2] == modes_new[i, 2])]), axis=0))[0]
+                if len(idx):
+                    c_new[i] = c_old[idx[0]]
+            return c_new
+
+        self.__cR = copy_coeffs(self.__cR, old_modes_R, self.__R_basis.modes)
+        self.__cZ = copy_coeffs(self.__cZ, old_modes_Z, self.__Z_basis.modes)
+        self.__cL = copy_coeffs(self.__cL, old_modes_L, self.__L_basis.modes)
+        self.__cRb = copy_coeffs(self.__cRb, old_modes_Rb, self.__Rb_basis.modes)
+        self.__cZb = copy_coeffs(self.__cZb, old_modes_Zb, self.__Zb_basis.modes)
+
+        # state vector
+        self.__x = np.concatenate([self.__cR, self.__cZ, self.__cL])
 
     @property
-    def bdry(self):
-        return self.__bdry
+    def sym(self) -> bool:
+        return self.__sym
 
-    # I have not included __bdry{M,N,R,Z} in _save_attrs_ since the setter sets them via __bdry.
-    @bdry.setter
-    def bdry(self, bdry):
-        self.__bdry = bdry
-        self.__bdryM, self.__bdryN, self.__bdryR, self.__bdryZ = format_bdry(
-            np.max(self.__lambda_idx[:,0]), np.max(self.__lambda_idx[:,1]), self.__NFP, self.__bdry, 'spectral', 'spectral')
+    @property
+    def x(self):
+        return self.__x
+
+    @x.setter
+    def x(self, x) -> None:
+        self.__x = x
+        self.__cR, self.__cZ, self.__cL = unpack_state(
+                self.__x, self.__R_basis.num_modes, self.__Z_basis.num_modes)
 
     @property
     def cR(self):
@@ -397,17 +442,18 @@ class Equilibrium(Configuration):
     """
 
     def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
-        super().__init__(inputs, load_from, file_format)
-        self.__addl_save_attrs__ = ['objective', 'optimizer', 'solved']
+        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format)
+        self._save_attrs_ += ['objective', 'optimizer', 'solved']
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
             inputs = self.inputs
-        self.initial = Configuration(inputs=inputs)
-        self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
-        self.__objective = inputs['objective']
-        self.__optimizer = inputs['optimizer']
-        self.solved = False
+
+        super()._init_from_inputs_(inputs=inputs)
+        self.__initial = Configuration(inputs=inputs)
+        self.__objective = inputs.get('objective', None)
+        self.__optimizer = inputs.get('optimizer', None)
+        self.__solved = False
 
     def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
         if load_from is None:
@@ -418,6 +464,27 @@ class Equilibrium(Configuration):
         self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
         self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
         reader.read_obj(self)
+
+    @property
+    def solved(self) -> bool:
+        return self.__solved
+
+    @property
+    def initial(self) -> Configuration:
+        return self.__initial
+
+    @property
+    def x(self):
+        return self._Configuration__x
+
+    @x.setter
+    def x(self, x) -> None:
+        self._Configuration__x = x
+        self._Configuration__cR, self._Configuration__cZ, self.__cL = \
+            unpack_state(self._Configuration__x,
+                         self._Configuration__R_basis.num_modes,
+                         self._Configuration__Z_basis.num_modes)
+        self.__solved = True
 
     def optimize(self):
         pass
@@ -450,12 +517,17 @@ class Equilibrium(Configuration):
 
 
 # XXX: Should this (also) inherit from Equilibrium?
-class EquiliriaFamily(MutableSequence):
+class EquilibriaFamily(MutableSequence):
     """EquilibriaFamily stores a list of Equilibria. Its default behavior acts
        like the last Equilibrium in the list.
     """
 
+    # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
+        self.__equilibria = []
+        self._file_format_ = file_format
+        self._file_mode_ = 'a'
+        """
         self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
@@ -470,6 +542,7 @@ class EquiliriaFamily(MutableSequence):
             self._init_from_file_()
         else:
             raise RuntimeError('inputs or load_from must be specified.')
+        """
 
     def _init_from_inputs_(self, inputs=None):
         if inputs is None:
@@ -495,17 +568,17 @@ class EquiliriaFamily(MutableSequence):
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
-        return self.__eqilibria[i]
+        return self.__equilibria[i]
 
     def __setitem__(self, i, new_item):
         # add type checking
         self.__equilibria[i] = new_item
 
     def __delitem__(self, i):
-        del self.__equilibrium[i]
+        del self.__equilibria[i]
 
     def insert(self, i, new_item):
-        self.__equilibrium.insert(i, new_item)
+        self.__equilibria.insert(i, new_item)
 
     def __len__(self):
         return len(self.__equilibria)

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.optimize
 import warnings
+import copy
 
 from desc.backend import jit, use_jax, Timer, TextColors, Tristate
 from desc.backend import jacfwd, grad
@@ -297,7 +298,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         timer.stop("Iteration {} solution".format(ii+1))
 
         equil.x = out['x']
-        equil_fam.insert(ii, equil)
+        equil_fam.insert(ii, copy.deepcopy(equil))
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))

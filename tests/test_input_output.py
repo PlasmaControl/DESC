@@ -91,8 +91,8 @@ class Testhdf5Writer(unittest.TestCase):
 
     def test_given_filename(self):
         writer = hdf5Writer(self.filename, self.file_mode)
-        self.assertFalse(writer.check_hdf5_type(writer.save_to))
-        self.assertTrue(writer.check_hdf5_type(writer.base))
+        self.assertFalse(writer.check_type(writer.target))
+        self.assertTrue(writer.check_type(writer.base))
         self.assertTrue(writer._close_base_)
         writer.close()
         self.assertFalse(writer._close_base_)
@@ -100,8 +100,8 @@ class Testhdf5Writer(unittest.TestCase):
     def test_given_file(self):
         f = h5py.File(self.filename, self.file_mode)
         writer = hdf5Writer(f, self.file_mode)
-        self.assertTrue(writer.check_hdf5_type(writer.save_to))
-        self.assertTrue(writer.check_hdf5_type(writer.base))
+        self.assertTrue(writer.check_type(writer.target))
+        self.assertTrue(writer.check_type(writer.base))
         self.assertFalse(writer._close_base_)
         #with self.assertWarns(RuntimeWarning):
         #    writer.close()
@@ -167,8 +167,8 @@ class Testhdf5Reader(unittest.TestCase):
 
     def test_given_filename(self):
         reader = hdf5Reader(self.filename)
-        self.assertFalse(reader.check_hdf5_type(reader.load_from))
-        self.assertTrue(reader.check_hdf5_type(reader.base))
+        self.assertFalse(reader.check_type(reader.target))
+        self.assertTrue(reader.check_type(reader.base))
         self.assertTrue(reader._close_base_)
         reader.close()
         self.assertFalse(reader._close_base_)
@@ -176,8 +176,8 @@ class Testhdf5Reader(unittest.TestCase):
     def test_given_file(self):
         f = h5py.File(self.filename, self.file_mode)
         reader = hdf5Reader(f)
-        self.assertTrue(reader.check_hdf5_type(reader.load_from))
-        self.assertTrue(reader.check_hdf5_type(reader.base))
+        self.assertTrue(reader.check_type(reader.target))
+        self.assertTrue(reader.check_type(reader.base))
         self.assertFalse(reader._close_base_)
         #with self.assertWarns(RuntimeWarning):
         #    reader.close()

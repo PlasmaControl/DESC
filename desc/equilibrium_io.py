@@ -5,7 +5,9 @@ import h5py
 import numpy as np
 from datetime import datetime
 import warnings
-from abc import ABC
+from abc import ABC, abstractmethod
+import io
+import pickle
 
 from desc.backend import TextColors
 
@@ -151,49 +153,269 @@ def read_desc(filename):
 
     return equil
 
-def reader_factory(load_from, file_format):
-    if file_format == 'hdf5':
-        reader = hdf5Reader(load_from)
-    else:
-        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
-    return reader
+class IO(ABC):
+    """Abstract Base Class (ABC) for readers and writers."""
 
-class hdf5Reader:
-    def __init__(self, load_from):
-        self.load_from = load_from
+    def __init__(self):
+        """Initalize ABC IO.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+
+        None
+
+        """
         self.resolve_base()
 
     def __del__(self):
+        """Close file upon garbage colleciton or explicit deletion with del function.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
         self.close()
 
-    def check_hdf5_type(self, obj):
-        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
+    def close(self):
+        """Close file if initialized with class instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        return None
+
+    def resolve_base(self):
+        """Set base attribute.
+
+        Base is target if target is a file instance of type given by
+        _file_types_ attribute. _close_base_ is False.
+
+        Base is a runtime-initialized file if target is a string file path.
+        _close_base_ is True.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        if self.check_type(self.target):
+            self.base = self.target
+            self._close_base_ = False
+        elif type(self.target) is str:
+            self.base = self.open_file(self.target, self.file_mode)
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or file '
+                'instance.'.format(type(self.target)))
+
+    def resolve_where(self, where):
+        """Find where 'where' points and check if it's a readable type.
+
+        Parameters
+        __________
+        where : None or file with type found in _file_types_ attribute
+
+        Returns
+        _______
+        if where is None:
+            base attribute
+        if where is file with type foundin _file_types_
+            where
+
+        """
+        if where is None:
+            loc = self.base
+        elif self.check_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a readable type.".format(where))
+        return loc
+
+    def sub(self, name):
+        """Create subgroup or return if already exists.
+
+        Parameters
+        __________
+        name : str
+            name of subgroup
+
+        Returns
+        _______
+        sub : subgroup instance
+
+        """
+        try:
+            return self.base.create_group(name)
+        except ValueError:
+            return self.base[name]
+        except KeyError:
+            raise RuntimeError('Cannot create sub in reader.')
+
+    def groups(self, where=None):
+        """Finds groups in location given by 'where'.
+
+        Parameters
+        __________
+        where : None or file instance
+
+        Returns
+        _______
+        groups : list
+
+        """
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+    @abstractmethod
+    def open_file(self, file_name, file_mode):
+        pass
+
+    def check_type(self, obj):
+        if type(obj) in self._file_types_:
             return True
         else:
             return False
 
-    def resolve_base(self):
-        if self.check_hdf5_type(self.load_from):
-            self.base = self.load_from
-            self._close_base_ = False
-        elif type(self.load_from) is str:
-            self.base = h5py.File(self.load_from, 'r')
-            self._close_base_ = True
-        else:
-            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
-                'file or group.'.format(type(self.load_from)))
 
-    def resolve_where(self, where):
-        if where is None:
-            loc = self.base
-        elif self.check_hdf5_type(where):
-            loc = where
-        else:
-            raise SyntaxError("where '{}' is not a readable type. Must be "
-                    "hdf5 file or group".format(where))
-        return loc
+class hdf5IO(IO):
+    """Class to wrap ABC IO for hdf5 file format."""
+    def __init__(self):
+        """Initialize hdf5IO instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self._file_types_ = [h5py._hl.group.Group, h5py._hl.files.File]
+        super().__init__()
+
+    def open_file(self, file_name, file_mode):
+        """Open hdf5 file.
+
+        Parameters
+        __________
+        file_name : str
+            path to file to open
+        file_mode : str
+            mode used when opening file
+
+        Returns
+        _______
+        hdf5 file instance
+
+        """
+        return h5py.File(file_name, file_mode)
+
+class PickleIO(IO):
+    """Class to wrap ABC IO for pickle file format. """
+    def __init__(self):
+        """Initialize PickleIO instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self._file_types_ = [io.BufferedWriter]
+        super().__init__()
+
+    def open_file(self, file_name, file_mode):
+        """Open file containing pickled object.
+
+        Parameters
+        __________
+        file_name : str
+            path to file to open
+        file_mode : str
+            mode used when opening file. Binary flag automatically added if missing.
+
+        Returns
+        binary file instance
+
+        """
+        if file_mode[-1] != 'b':
+            file_mode += 'b'
+        return open(file_name, file_mode)
+
+class Reader(ABC):
+    """ABC for all readers."""
+    @abstractmethod
+    def read_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def read_dict(self, thedict, where=None):
+        pass
+
+class Writer(ABC):
+    """ABC for all writers."""
+    @abstractmethod
+    def write_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def write_dict(self, thedict, where=None):
+        pass
+
+class hdf5Reader(hdf5IO,Reader):
+    """Class specifying a Reader with hdf5IO."""
+    def __init__(self, target):
+        """Initialize hdf5Reader class.
+
+        Parameters
+        __________
+        target : str or file instance
+            Path to file OR file instance to be read.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = 'r'
+        super().__init__()
 
     def read_obj(self, obj, where=None):
+        """Read object from file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to read obj from
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
@@ -204,6 +426,20 @@ class hdf5Reader:
         return None
 
     def read_dict(self, thedict, where=None):
+        """Read dictionary from file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies wehre to read dict from
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
         for key in loc.keys():
             try:
@@ -211,89 +447,103 @@ class hdf5Reader:
             except AttributeError:
                 # don't load subgroups
                 pass
-            #    warnings.warn("Save attribute '{}' was not loaded.".format(attr),
-            #            RuntimeWarning)
         return None
 
-    #def load_configuration(self, where=None):
-    #    kwargs = {}
-    #    self.read_dict(kwargs, where=where)
-    #    return Configuration(**kwargs)
+class PickleReader(PickleIO,Reader):
+    """Class specifying a reader with PickleIO."""
+    def __init__(self, target):
+        """Initialize hdf5Reader class.
 
-    #def load_equilibrium(self, where=None):
-    #    kwargs = {}
-    #    self.read_dict(self, where=None)
-    #    eq = Equilibrium(**kwargs)
+        Parameters
+        __________
+        target : str or file instance
+            Path to file OR file instance to be read.
 
-        # overwrite the configuration in constructor
-    #    configuration_kwargs = {}
-    #    eq.initial = self.load_configuration(configuration_kwargs,
-    #            where=self.sub('initial'))
-    #    return eq
+        Returns
+        _______
+        None
 
-    def sub(self, name):
-        try:
-            return self.base.create_group(name)
-        except ValueError:
-            return self.base[name]
+        """
+        self.target = target
+        self.file_mode = 'r'
+        super().__init__()
 
-    def groups(self, where):
+    def read_obj(self, obj=None, where=None):
+        """Read object from file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to read obj from
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
-        return list(loc.keys())
+        if obj is None:
+            return pickle.load(loc)
+        else:
+            obj = pickle.load(loc)
 
-    def close(self):
-        if self._close_base_:
-            self.base.close()
-            self._close_base_ = False
-        #else:
-        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+    def read_dict(self, thedict, where=None):
+        """Read dictionary from file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to read dict from
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        thedict.update(pickle.load(loc))
         return None
 
-def writer_factory(save_to, file_format, file_mode='w'):
-    if file_format == 'hdf5':
-        writer = hdf5Writer(save_to, file_mode)
-    else:
-        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
-    return writer
+class hdf5Writer(hdf5IO,Writer):
+    """Class specifying a writer with hdf5IO."""
+    def __init__(self, target, file_mode='w'):
+        """Initializes hdf5Writer class.
 
-class hdf5Writer:
-    def __init__(self, save_to, file_mode):
-        self.save_to = save_to
-        self.save_to_type = type(save_to)
+        Parameters
+        __________
+        target : str or file instance
+            path OR file instance to write to
+        file_mode : str
+            mode used when opening file.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
         self.file_mode = file_mode
-        self.resolve_base()
-
-    def __del__(self):
-        self.close()
-
-    def check_hdf5_type(self, obj):
-        if type(obj) is h5py._hl.group.Group or type(obj) is h5py._hl.files.File:
-            return True
-        else:
-            return False
-
-    def resolve_base(self):
-        if self.check_hdf5_type(self.save_to):
-            self.base = self.save_to
-            self._close_base_ = False
-        elif self.save_to_type is str:
-            self.base = h5py.File(self.save_to, self.file_mode)
-            self._close_base_ = True
-        else:
-            raise SyntaxError('save_to of type {} is not a filename or hdf5 '
-                'file or group.'.format(self.save_to_type))
-
-    def resolve_where(self, where):
-        if where is None:
-            loc = self.base
-        elif self.check_hdf5_type(where):
-            loc = where
-        else:
-            raise SyntaxError("where '{}' is not a writable type. Must be "
-                    "hdf5 file or group".format(where))
-        return loc
+        super().__init__()
 
     def write_obj(self, obj, where=None):
+        """Write object to file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to write obj to
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
@@ -304,57 +554,130 @@ class hdf5Writer:
         return None
 
     def write_dict(self, thedict, where=None):
+        """Write dictionary to file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to write dict to
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
         for key in thedict.keys():
             loc.create_dataset(key, data=thedict[key])
         return None
 
-    def sub(self, name):
-        return self.base.create_group(name)
+class PickleWriter(PickleIO,Writer):
+    """Class specifying a writer with PickleIO."""
+    def __init__(self, target, file_mode='w'):
+        """Initializes PickleWriter class.
 
-    def groups(self, where):
+        Parameters
+        __________
+        target : str or file instance
+            path OR file instance to write to
+        file_mode : str
+            mode used when opening file.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = file_mode
+        super().__init__()
+
+    def write_obj(self, obj, where=None):
+        """Write object to file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to write obj to
+
+        Returns
+        _______
+        None
+
+        """
         loc = self.resolve_where(where)
-        return list(loc.keys())
-
-
-
-    def close(self):
-        if self._close_base_:
-            self.base.close()
-            self._close_base_ = False
-        #else:
-        #    warnings.warn('File cannot be closed in this scope.', RuntimeWarning)
+        pickle.dump(obj, loc)
         return None
 
-def subgroup(name, save_to, fmt):
-    if fmt == 'hdf5':
-        group = subgroup_hdf5(name, save_to)
-    else:
-        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
-    return group
+    def write_dict(self, thedict, where=None):
+        """Write dictionary to file in group specified by where argument.
 
-def base_hdf5(save_to):
-    save_to_type = type(save_to)
-    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
-        group = save_to.create_group(name)
-    else:
-        raise SyntaxError('save_to must be an hdf5 file or group.')
-    return group
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to write dict to
 
-def subgroup_hdf5(name, save_to):
-    save_to_type = type(save_to)
-    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
-        group = save_to.create_group(name)
-    else:
-        raise SyntaxError('save_to must be an hdf5 file or group.')
-    return group
+        Returns
+        _______
+        None
 
-def save(obj, save_to, fmt='hdf5', file_mode='w'):
-    if fmt == 'hdf5':
-        write_hdf5(obj, save_to, file_mode=file_mode)
+        """
+        if type(thedict) is not dict:
+            raise TypeError('Object provided is not a dictionary.')
+        self.write_object(thedict, where=where)
+        return None
+
+def reader_factory(load_from, file_format):
+    """Select and return instance of appropriate reader class for given file format.
+
+    Parameters
+    __________
+    load_from : str or file instance
+        file path or instance from which to read
+    file_format : str
+        format of file to be read
+
+    Returns
+    _______
+    Reader instance
+
+    """
+    if file_format == 'hdf5':
+        reader = hdf5Reader(load_from)
+    elif file_format == 'pickle':
+        reader = PickleReader(load_from)
     else:
-        raise NotImplementedError("Format '{}' has not been implemented.".format(fmt))
-    return None
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return reader
+
+def writer_factory(save_to, file_format, file_mode='w'):
+    """Select and return instance of appropriate reader class for given file format.
+
+    Parameters
+    __________
+    load_from : str or file instance
+        file path or instance from which to read
+    file_format : str
+        format of file to be read
+
+    Returns
+    _______
+    Reader instance
+
+    """
+    if file_format == 'hdf5':
+        writer = hdf5Writer(save_to, file_mode)
+    elif file_format == 'pickle':
+        writer = PickleWriter(save_to, file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return writer
 
 def write_hdf5(obj, save_to, file_mode='w'):
     """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.

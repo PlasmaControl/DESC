@@ -221,6 +221,7 @@ class AccelErrorSpectral(ObjectiveFunction):
         """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
                       self.R_transform.num_modes, self.Z_transform.num_modes)
+
         errRf, errZf = self.equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, self.R_transform, self.Z_transform, self.P_transform, self.I_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
@@ -267,14 +268,15 @@ class AccelErrorSpectral(ObjectiveFunction):
 
 class ObjectiveFunctionFactory():
     """Factory Class for Objective Functions
-
-    Attributes
-    ----------
-
+    
     Methods
     -------
-    get_obj_fxn(attributes)
-        takes Equilibrium.attributes and uses it to compute and return the value of the objective function
+    get_equil_obj_fxn(errr_mode, RZ_transform:Transform=None,
+                 RZb_transform:Transform=None, L_transform:Transform=None,
+                 pres_transform:Transform=None, iota_transform:Transform=None,
+                 stell_sym:bool=True, scalar:bool=False)
+    
+        Takes type of objective function and attributes of an equilibrium and uses it to compute and return the corresponding objective function
 
     """
 
@@ -440,7 +442,6 @@ def is_nested(cR, cZ, R_basis, Z_basis, L=10, M=361, zeta=0):
         whether or not the surfaces are nested
 
     """
-
     grid = LinearGrid(L=L, M=M, N=1, NFP=R_basis.NFP, endpoint=True)
     R_transf = Transform(grid, R_basis)
     Z_transf = Transform(grid, Z_basis)

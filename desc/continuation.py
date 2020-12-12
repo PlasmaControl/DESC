@@ -84,7 +84,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         Z_sym = Tristate(None)
         L_sym = Tristate(None)
 
-    equil_fam = EquilibriaFamily()
+    equil_fam = EquilibriaFamily(inputs=inputs)
 
     arr_len = M.size
     for ii in range(arr_len):

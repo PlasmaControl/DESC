@@ -94,6 +94,7 @@ def main(cl_args=None):
 
     if ir.args.plot:
 
+        equil_fam.save()
         equil_init = equil_fam[0].initial
         equil = equil_fam[-1]
         print('Plotting flux surfaces, this may take a few moments...')

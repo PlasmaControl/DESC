@@ -83,10 +83,10 @@ class Configuration():
         None
 
         """
-        self._save_attrs_ = ['__cR', '__cZ', '__cL', '__cRb', '__cZb', '__cP',
-                             '__cI', '__Psi', '__NFP', '__R_basis',
-                             '__Z_basis', '__L_basis', '__Rb_basis',
-                             '__Zb_basis', '__P_basis', '__I_basis']
+        self._save_attrs_ = ['cR', 'cZ', 'cL', 'cRb', 'cZb', 'cP',
+                             'cI', 'Psi', 'NFP', 'R_basis',
+                             'Z_basis', 'L_basis', 'Rb_basis',
+                             'Zb_basis', 'P_basis', 'I_basis']
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         """
@@ -594,24 +594,20 @@ class EquilibriaFamily(MutableSequence):
     # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
         self.__equilibria = []
-        self._file_format_ = file_format
-        self._file_mode_ = 'a'
-        """
-        self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
         self._file_format_ = file_format
         self._file_mode_ = 'a'
         if inputs is not None:
-            self._init_from_inputs_()
+            # hack
+            pass #self._init_from_inputs_()
         elif load_from is not None:
             if file_format is None:
                 raise RuntimeError('file_format argument must be included when loading from file.')
-            self._file_format_ = file_format
-            self._init_from_file_()
+            self._init_from_file_(self._file_format_, self._file_mode_)
         else:
-            raise RuntimeError('inputs or load_from must be specified.')
-        """
+            # hack
+            pass #raise RuntimeError('inputs or load_from must be specified.')
 
     def _init_from_inputs_(self, inputs=None):
         if inputs is None:
@@ -660,19 +656,31 @@ class EquilibriaFamily(MutableSequence):
     def solver(self, solver):
         self.__solver = solver
 
-    def save(self, idx, save_to=None, file_format=None) -> None:
-        if type(idx) is not int:
-            # implement fancier indexing later
-            raise NotImplementedError('idx must be a single integer index')
+    def __slice__(self, idx):
+        if idx is None:
+            theslice = slice(None,None)
+        elif type(idx) is int:
+            theslice = idx
+        elif type(idx) is list:
+            try:
+                theslice = slice(idx[0], idx[1], idx[2])
+            except IndexError:
+                theslice = slice(idx[0], idx[1])
+        else:
+            raise TypeError('index is not a valid type.')
+        return theslice
 
+    def save(self, idx=None, save_to=None, file_format=None) -> None:
+        theslice = self.__slice__(idx)
         if save_to is None:
             save_to = self.inputs['output_path']
         if file_format is None:
             file_format = self._file_format_
 
         writer = eq_io.writer_factory(self.inputs['output_path'],
-                file_format=file_format, file_mode=self.file_mode)
-        self[idx].save(writer.sub(str(idx)), file_format=file_format,
+                file_format=file_format, file_mode=self._file_mode_)
+        for i in range(len(self[theslice])):
+            self[i].save(writer.sub(str(idx)), file_format=file_format,
                 file_mode=self._file_mode_)
         writer.close()
 

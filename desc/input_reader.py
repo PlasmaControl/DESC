@@ -191,6 +191,8 @@ class InputReader:
             'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
         }
 
+        inputs['output_path'] = self.output_path
+
         if self.args.quiet:
             inputs['verbose'] = 0
         elif self.args.verbose:

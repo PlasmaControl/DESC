@@ -1,8 +1,11 @@
 import numpy as np
 from collections.abc import MutableSequence
 
+from desc.backend import jnp
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
+from desc.basis import Basis, FourierZernikeBasis, DoubleFourierSeries
+from desc.grid import Grid
 from desc import equilibrium_io as eq_io
 
 

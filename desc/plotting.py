@@ -3,7 +3,7 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from abc import ABC, abstractmethod, classmethod
+from abc import ABC, abstractmethod
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
 from desc.grid import LinearGrid
@@ -92,7 +92,7 @@ class Plot:
         dimension of grid nodes along which to plot
 
         """
-        n = [nn > 1 for nn in grid._Grid_nodes.shape[:-1]]
+        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
         if np.sum(n) > 1:
             raise ValueError('Input dimension is greater than 1.')
         try:
@@ -114,14 +114,13 @@ class Plot:
         tuple of dimensions of grid nodes along which to plot
 
         """
-        n = [nn > 1 for nn in grid._Grid_nodes.shape[:-1]]
+        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
         if np.sum(n) < 2:
             raise ValueError('Input dimension is less than 2.')
         elif np.sum(n) > 2:
             raise ValueError('Input dimension is greater than 2.')
-        try:
-            dim = [0,1,2]
-            dim.remove(n.index(False))
+        dim = [0,1,2]
+        dim.remove(n.index(False))
         return tuple(dim)
 
     def grid_slice_1d(self, grid, dim):
@@ -203,21 +202,31 @@ class Plot:
         for key in kwargs.keys():
             if key in grid_args.keys():
                 grid_args[key] = kwargs[key]
+        plot_axes = [0,1,2]
         grid_args['rho'] = self.__format_rtz__(grid_args['rho'])
+        if L == 1:
+            plot_axes.remove(0)
         grid_args['theta'] = self.__format_rtz__(grid_args['theta'])
+        if M == 1:
+            plot_axes.remove(1)
         grid_args['zeta'] = self.__format_rtz__(grid_args['zeta'])
-        return LinearGrid(**grid_args)
+        if N == 1:
+            plot_axes.remove(2)
+        return LinearGrid(**grid_args), tuple(plot_axes)
 
     def plot_1d(self, eq, name, grid=None, ax=None, **kwargs):
         if grid is None:
-            grid = self.get_grid(eq.NFP, **kwargs)
-        dim = self.find_plot_ax_1d(grid)
-        theslice = self.grid_slice_1d(grid, dim)
+            grid, plot_axis= self.get_grid(eq.NFP, **kwargs)
+        if len(plot_axis) != 1:
+            return ValueError('Grid must be 1D.')
+        plot_axis=plot_axis[0]
+        #dim = self.find_plot_ax_1d(grid)
+        #theslice = self.grid_slice_1d(grid, dim)
         name_dict = self.format_name(name)
         ary = self.compute(eq, name_dict, grid)
         ax = self.format_ax(ax)
-        ax.plot(grid._Grid_nodes[theslice], ary[theslice])
-        ax.set_xlabel(self.axis_labels[dim])
+        ax.plot(grid.nodes[:,plot_axis], ary)
+        ax.set_xlabel(self.axis_labels[plot_axis])
         ax.set_ylabel(self.name_label(name_dict))
         return ax
 
@@ -225,15 +234,40 @@ class Plot:
         if grid is None:
             if kwargs == {}:
                 kwargs.update({'M':100})
-            grid = self.get_grid(eq.NFP, **kwargs)
-        dim = self.find_plot_ax_2d(grid)
-        theslice = self.grid_slice_2d(grid, dim)
+            grid, plot_axes = self.get_grid(eq.NFP, **kwargs)
+        if len(plot_axes) != 2:
+            return ValueError('Grid must be 2D.')
+        #dim = self.find_plot_ax_2d(grid)
+        #theslice = self.grid_slice_2d(grid, dim)
         name_dict = self.format_name(name)
         ary = self.compute(eq, name_dict, grid)
         ax = self.format_ax(ax)
-        ax.imshow(grid._Grid_nodes[theslice], ary[theslice])#????????????
-        ax.set_xlabel(self.axis_labels[dim[0]])
-        ax.set_ylabel(self.axis_labels[dim[1]])
+        #unroll array to be 2D
+        if 0 in plot_axes:
+            if 1 in plot_axes:
+                sqary = np.zeros((grid.L, grid.M))
+                for i in range(grid.M):
+                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
+            elif 2 in plot_axes:
+                sqary = np.zeros((grid.L, grid.N))
+                for i in range(grid.N):
+                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
+            else:
+                raise ValueError('Grid must be 2D')
+        elif 1 in plot_axes:
+            sqary = np.zeros((grid.M, grid.N))
+            for i in range(grid.M):
+                sqary[i,:] = ary[i*grid.M:(i+1)*grid.N]
+        else:
+            raise ValueError('Grid must be 2D.')
+        imshow_kwargs = {'origin': 'lower',
+                        'interpolation': 'bilinear'}
+        imshow_kwargs['extent'] = [grid.nodes[0,plot_axes[0]],
+                grid.nodes[-1,plot_axes[0]], grid.nodes[0,plot_axes[1]],
+                grid.nodes[-1,plot_axes[1]]]
+        ax.imshow(sqary, **imshow_kwargs)#????????????
+        ax.set_xlabel(self.axis_labels[plot_axes[0]])
+        ax.set_ylabel(self.axis_labels[plot_axes[1]])
         return ax
 
     def plot_3dsurf(self):
@@ -335,15 +369,16 @@ class Plot:
         """
         esc = r'\\'[:-1]
         if name_dict['d'] == '':
-            label = r'$' + base + '^{' + esc + name_dict['sups'] + ' ' + power '}_{' +
-                esc + name_dict['subs'] + '}$'
+            label = r'$' + name_dict['base'] + '^{' + esc + name_dict['sups'] +\
+                    ' ' + power + '}_{' + esc + name_dict['subs'] + '}$'
         else:
             if name_dict['power'] == '':
-                label = r'$d' + base + '^{' + esc + name_dict['sups'] + '}_{' +
-                    esc + name_dict['subs'] + '}'
+                label = r'$d' + name_dict['base'] + '^{' + esc +\
+                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] + '}'
             else:
-                label = r'$(d' + base + '^{' + esc + name_dict['sups'] + '}_{' +
-                    esc + name_dict['subs'] + '})^{' + name_dict['power'] + '}'
+                label = r'$(d' + name_dict['base'] + '^{' + esc +\
+                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] +\
+                    '})^{' + name_dict['power'] + '}'
         return label
 
     def __name_key__(self, name_dict):

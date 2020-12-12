@@ -88,14 +88,14 @@ def main(cl_args=None):
         device = None
 
     # solve equilibrium
-    iterations, timer = solve_eq_continuation(
+    equil_fam, timer = solve_eq_continuation(
         ir.inputs, checkpoint_filename=None, device=device)
       # ir.inputs, checkpoint_filename=ir.output_path, device=device)
 
     if ir.args.plot:
 
-        equil_init = iterations['init']
-        equil = iterations['final']
+        equil_init = equil_fam[0].initial
+        equil = equil_fam[-1]
         print('Plotting flux surfaces, this may take a few moments...')
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')

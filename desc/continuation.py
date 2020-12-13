@@ -128,8 +128,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'bdry_mode': bdry_mode,
                 'bdry_ratio': bdry_ratio[ii],
                 'axis': axis
-            }
-            
+            } 
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
@@ -142,10 +141,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                                                             equil.L_basis, \
                                                             equil.P_basis, \
                                                             equil.I_basis
+
+
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                      axis=False, index=zern_mode, surfs=node_mode)
             L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+
             # transforms
             R_transform = Transform(RZ_grid, R_basis, derivs=3)
             Z_transform = Transform(RZ_grid, Z_basis, derivs=3)
@@ -154,7 +156,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             L_transform = Transform(L_grid,  L_basis, derivs=0)
             P_transform = Transform(RZ_grid, P_basis, derivs=1)
             I_transform = Transform(RZ_grid, I_basis, derivs=1)
-
+            
             timer.stop("Transform precomputation")
             if verbose > 1:
                 timer.disp("Transform precomputation")
@@ -191,7 +193,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
                         delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
-                
+
             R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
             Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)
             R1_transform.change_resolution(grid=L_grid, basis=R_basis)
@@ -313,6 +315,12 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
             callback(x, *args)
+
+
+#        if checkpoint:
+#            if verbose > 0:
+#                print('Saving latest iteration')
+#            checkpoint_file.write_iteration(equil, ii+1, inputs)
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'

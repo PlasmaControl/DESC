@@ -490,7 +490,7 @@ class hdf5Reader(hdf5IO,Reader):
                         else:
                             try:
                                 #initialized an object from object_lib
-                                print('setting attribute', attr, 'as an ', theattr)
+                                #print('setting attribute', attr, 'as an ', theattr)
                                 setattr(obj, attr, self.obj_lib[theattr](load_from=loc[attr],
                                     file_format=self._file_format_, obj_lib=self.obj_lib))
                             except KeyError:

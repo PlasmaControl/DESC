@@ -558,6 +558,10 @@ class Equilibrium(Configuration,IOAble):
     def initial(self) -> Configuration:
         return self.__initial
 
+    @initial.setter
+    def initial(self, conf:Configuration) -> None:
+        self.__initial = conf
+
     @property
     def x(self):
         return self._Configuration__x

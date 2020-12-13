@@ -1,10 +1,8 @@
 import numpy as np
-import functools
-import numba
 from abc import ABC, abstractmethod
 from desc.equilibrium_io import IOAble
 
-from desc.backend import jnp, jit, sign, fori_loop, flatten_list, factorial, equals, Tristate
+from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, Tristate
 
 
 class Basis(IOAble,ABC):
@@ -530,7 +528,6 @@ class FourierZernikeBasis(Basis):
             self.sort_nodes()
 
 
-@functools.partial(jit)
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
@@ -562,7 +559,6 @@ def polyder_vec(p, m):
     return p
 
 
-@functools.partial(jit)
 def polyval_vec(p, x):
     """Evaluate a polynomial at specific values,
     vectorized for evaluating multiple polynomials of the same degree.
@@ -596,12 +592,11 @@ def polyval_vec(p, x):
     y = jnp.zeros((npoly, nx))
 
     def body_fun(k, y):
-        return y*x + np.atleast_2d(p[:, k]).T
+        return y*x + jnp.atleast_2d(p[:, k]).T
 
     return fori_loop(0, order, body_fun, y)
 
 
-@numba.jit(forceobj=True)
 def power_coeffs(l):
     """Power series
 
@@ -624,7 +619,6 @@ def power_coeffs(l):
     return coeffs
 
 
-@functools.partial(jit, static_argnums=(1))
 def powers(rho, l, dr=0):
     """Power series
 
@@ -648,7 +642,6 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-@numba.jit(forceobj=True)
 def jacobi_coeffs(l, m):
     """Jacobi polynomials
 
@@ -681,7 +674,6 @@ def jacobi_coeffs(l, m):
     return np.fliplr(np.where(lm_even, coeffs, 0))
 
 
-@functools.partial(jit, static_argnums=(1, 2))
 def jacobi(rho, l, m, dr=0):
     """Jacobi polynomials
 
@@ -707,7 +699,6 @@ def jacobi(rho, l, m, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-@functools.partial(jit, static_argnums=(1))
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series
 
@@ -734,17 +725,6 @@ def fourier(theta, m, NFP=1, dt=0):
     m_neg = (m_2d < 0).astype(int)
     m_abs = jnp.abs(m_2d)*NFP
     if dt == 0:
-        return m_pos*np.cos(m_abs*theta_2d) + m_neg*np.sin(m_abs*theta_2d)
+        return m_pos*jnp.cos(m_abs*theta_2d) + m_neg*jnp.sin(m_abs*theta_2d)
     else:
         return m_abs*(m_neg-m_pos)*fourier(theta, -m, NFP=NFP, dt=dt-1)
-
-    """
-    theta = jnp.atleast_1d(theta)[:, jnp.newaxis]
-    m = jnp.atleast_1d(m)[jnp.newaxis]
-    m_pos = (m >= 0)
-    m_neg = (m < 0)
-    m_abs = jnp.abs(m)
-    der = (1j*m_abs*NFP)**dt
-    exp = der*jnp.exp(1j*m_abs*NFP*theta)
-    return m_pos*jnp.real(exp) + m_neg*jnp.imag(exp)
-    """

@@ -92,13 +92,9 @@ class AutoDiffJacobian(Jacobian):
         None
 
         """
-        if mode not in ['fwd', 'rev', 'grad']:
-            raise ValueError(TextColors.FAIL +
-                         "invalid mode option for automatic differentiation"
-                           + TextColors.ENDC)
         self._Jacobian__fun = fun
         self._Jacobian__argnum = argnum
-        self.__mode = mode
+        self.mode = mode
 
     def compute(self, *args):
         """Computes the jacobian matrix
@@ -116,12 +112,25 @@ class AutoDiffJacobian(Jacobian):
             argument at position argnum.
 
         """
+        return self.__compute(*args)
+
+    @property
+    def mode(self) -> str:
+        return self.__mode
+
+    @mode.setter
+    def mode(self, mode:str) -> None:
+        if mode not in ['fwd', 'rev', 'grad']:
+            raise ValueError(TextColors.FAIL +
+                         "invalid mode option for automatic differentiation"
+                           + TextColors.ENDC)
+        self.__mode = mode
         if self.__mode == 'fwd':
-            return jax.jacfwd(self._Jacobian__fun, self._Jacobian__argnum)
+            self.__compute = jax.jacfwd(self._Jacobian__fun, self._Jacobian__argnum)
         elif self.__mode == 'rev':
-            return jax.jacrev(self._Jacobian__fun, self._Jacobian__argnum)
+            self.__compute = jax.jacrev(self._Jacobian__fun, self._Jacobian__argnum)
         elif self.__mode == 'grad':
-            return jax.grad(self._Jacobian__fun, self._Jacobian__argnum)
+            self.__compute = jax.grad(self._Jacobian__fun, self._Jacobian__argnum)
 
 
 class FiniteDiffJacobian(Jacobian):

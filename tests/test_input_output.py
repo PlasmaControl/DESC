@@ -206,6 +206,7 @@ class Testhdf5Reader(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             reader.read_dict(otherdict, where='not a readable type')
         reader.close()
+        print(self.thedict, newdict, newsubdict)
         self.assertTrue(self.thedict == newdict)
         self.assertTrue(self.thedict == newsubdict)
 
@@ -217,7 +218,6 @@ class Testhdf5Reader(unittest.TestCase):
         with self.assertWarns(RuntimeWarning):
             reader.read_obj(mo)
         del mo._save_attrs_[-1]
-        print(mo._save_attrs_)
         submo = MockObject()
         reader.read_obj(submo, where=reader.sub(self.subgroup))
         for key in mo._save_attrs_:

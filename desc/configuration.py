@@ -642,10 +642,6 @@ class EquilibriaFamily(MutableSequence,IOAble):
     # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
         self.__equilibria = []
-        self._file_format_ = file_format
-        self._file_mode_ = 'a'
-        """
-        self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
         self._file_format_ = file_format

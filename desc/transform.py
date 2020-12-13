@@ -206,7 +206,7 @@ class Transform():
                              TextColors.ENDC)
         if A.shape[1] != c.size:
             raise ValueError(TextColors.FAIL +
-                 "Coefficients dimension is incompatible with transform basis" +
+                 "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(c.size, A.shape[1]) +
                              TextColors.ENDC)
 
         return jnp.matmul(A, c)

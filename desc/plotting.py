@@ -416,15 +416,17 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
 
     """
 
-    cR0 = equil0['cR']
-    cZ0 = equil0['cZ']
-    NFP0 = equil0['NFP']
-    basis0 = equil0['R_basis']
+    cR0 = equil0.cR
+    cZ0 = equil0.cZ
+    NFP0 = equil0.NFP
+    R_basis0 = equil0.R_basis
+    Z_basis0 = equil0.Z_basis
 
-    cR1 = equil1['cR']
-    cZ1 = equil1['cZ']
-    NFP1 = equil1['NFP']
-    basis1 = equil1['R_basis']
+    cR1 = equil1.cR
+    cZ1 = equil1.cZ
+    NFP1 = equil1.NFP
+    R_basis1 = equil1.R_basis
+    Z_basis1 = equil1.Z_basis
 
     if NFP0 == NFP1:
         NFP = NFP0
@@ -432,7 +434,7 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
         raise ValueError(
             TextColors.FAIL + "NFP must be the same for both solutions" + TextColors.ENDC)
 
-    if max(np.max(basis0.modes[:, 2]), np.max(basis1.modes[:, 2])) == 0:
+    if max(np.max(R_basis0.modes[:, 2]), np.max(R_basis1.modes[:, 2])) == 0:
         Nz = 1
         rows = 1
     else:
@@ -447,23 +449,27 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
 
     # constant rho surfaces
     grid_r = LinearGrid(L=Nr, M=NNt, N=Nz, NFP=NFP, endpoint=True)
-    transf_0r = Transform(grid_r, basis0)
-    transf_1r = Transform(grid_r, basis1)
+    R_transf_0r = Transform(grid_r, R_basis0)
+    Z_transf_0r = Transform(grid_r, Z_basis0)
+    R_transf_1r = Transform(grid_r, R_basis1)
+    Z_transf_1r = Transform(grid_r, Z_basis1)
 
     # constant theta surfaces
     grid_t = LinearGrid(L=NNr, M=Nt, N=Nz, NFP=NFP, endpoint=True)
-    transf_0t = Transform(grid_t, basis0)
-    transf_1t = Transform(grid_t, basis1)
+    R_transf_0t = Transform(grid_t, R_basis0)
+    Z_transf_0t = Transform(grid_t, Z_basis0)
+    R_transf_1t = Transform(grid_t, R_basis1)
+    Z_transf_1t = Transform(grid_t, Z_basis1)
 
-    R0r = transf_0r.transform(cR0).reshape((Nr, NNt, Nz), order='F')
-    Z0r = transf_0r.transform(cZ0).reshape((Nr, NNt, Nz), order='F')
-    R1r = transf_1r.transform(cR1).reshape((Nr, NNt, Nz), order='F')
-    Z1r = transf_1r.transform(cZ1).reshape((Nr, NNt, Nz), order='F')
+    R0r = R_transf_0r.transform(cR0).reshape((Nr, NNt, Nz), order='F')
+    Z0r = Z_transf_0r.transform(cZ0).reshape((Nr, NNt, Nz), order='F')
+    R1r = R_transf_1r.transform(cR1).reshape((Nr, NNt, Nz), order='F')
+    Z1r = Z_transf_1r.transform(cZ1).reshape((Nr, NNt, Nz), order='F')
 
-    R0v = transf_0t.transform(cR0).reshape((NNr, Nt, Nz), order='F')
-    Z0v = transf_0t.transform(cZ0).reshape((NNr, Nt, Nz), order='F')
-    R1v = transf_1t.transform(cR1).reshape((NNr, Nt, Nz), order='F')
-    Z1v = transf_1t.transform(cZ1).reshape((NNr, Nt, Nz), order='F')
+    R0v = R_transf_0t.transform(cR0).reshape((NNr, Nt, Nz), order='F')
+    Z0v = Z_transf_0t.transform(cZ0).reshape((NNr, Nt, Nz), order='F')
+    R1v = R_transf_1t.transform(cR1).reshape((NNr, Nt, Nz), order='F')
+    Z1v = Z_transf_1t.transform(cZ1).reshape((NNr, Nt, Nz), order='F')
 
     plt.figure()
     for k in range(Nz):
@@ -502,14 +508,15 @@ def plot_vmec_comparison(vmec_data, equil):
 
     """
 
-    cR = equil['cR']
-    cZ = equil['cZ']
-    NFP = equil['NFP']
-    basis = equil['R_basis']
+    cR = equil.cR
+    cZ = equil.cZ
+    NFP = equil.NFP
+    R_basis = equil.R_basis
+    Z_basis = equil.Z_basis
 
     Nr = 8
     Nt = 360
-    if np.max(basis.modes[:, 2]) == 0:
+    if np.max(R_basis.modes[:, 2]) == 0:
         Nz = 1
         rows = 1
     else:
@@ -523,11 +530,12 @@ def plot_vmec_comparison(vmec_data, equil):
         idxes = np.pad(idxes, (1, 0), mode='constant')
         Nr += 1
     rho = np.sqrt(idxes/Nr_vmec)
-    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, surfs=rho, endpoint=True)
-    transf = Transform(grid, basis)
+    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, rho=rho, endpoint=True)
+    R_transf = Transform(grid, R_basis)
+    Z_transf = Transform(grid, Z_basis)
 
-    R_desc = transf.transform(cR).reshape((Nr, Nt, Nz), order='F')
-    Z_desc = transf.transform(cZ).reshape((Nr, Nt, Nz), order='F')
+    R_desc = R_transf.transform(cR).reshape((Nr, Nt, Nz), order='F')
+    Z_desc = Z_transf.transform(cZ).reshape((Nr, Nt, Nz), order='F')
 
     R_vmec, Z_vmec = vmec_interpolate(
         vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'],

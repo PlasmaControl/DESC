@@ -53,32 +53,33 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
         L_grid = LinearGrid(M=2, N=1)
         RZ_basis = FourierZernikeBasis(M=2, N=0)
         L_basis = DoubleFourierSeries(M=2, N=0)
-        pres_basis = PowerSeries(L=3)
-        iota_basis = PowerSeries(L=3)
+        PI_basis = PowerSeries(L=3)
         RZ_transform = Transform(RZ_grid, RZ_basis)
-        RZb_transform = Transform(L_grid, RZ_basis)
+        RZ1_transform = Transform(L_grid, RZ_basis)
         L_transform = Transform(L_grid, L_basis)
-        pres_transform = Transform(RZ_grid, pres_basis)
-        iota_transform = Transform(RZ_grid, iota_basis)
+        PI_transform = Transform(RZ_grid, PI_basis)
 
         errr_mode = 'force'
         obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
-                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
-                L_transform=L_transform, pres_transform=pres_transform,
-                iota_transform=iota_transform)
+                R_transform=RZ_transform, Z_transform=RZ_transform,
+                R1_transform=RZ1_transform, Z1_transform=RZ1_transform,
+                L_transform=L_transform, P_transform=PI_transform,
+                I_transform=PI_transform)
         self.assertIsInstance(obj_fun, ForceErrorNodes)
 
         errr_mode = 'accel'
         obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
-                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
-                L_transform=L_transform, pres_transform=pres_transform,
-                iota_transform=iota_transform)
+                R_transform=RZ_transform, Z_transform=RZ_transform,
+                R1_transform=RZ1_transform, Z1_transform=RZ1_transform,
+                L_transform=L_transform, P_transform=PI_transform,
+                I_transform=PI_transform)
         self.assertIsInstance(obj_fun, AccelErrorSpectral)
 
         # test unimplemented errr_mode
         with self.assertRaises(ValueError):
             errr_mode = 'not implemented'
             obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
-                RZ_transform=RZ_transform, RZb_transform=RZb_transform,
-                L_transform=L_transform, pres_transform=pres_transform,
-                iota_transform=iota_transform)
+                R_transform=RZ_transform, Z_transform=RZ_transform,
+                R1_transform=RZ1_transform, Z1_transform=RZ1_transform,
+                L_transform=L_transform, P_transform=PI_transform,
+                I_transform=PI_transform)

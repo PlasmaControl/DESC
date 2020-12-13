@@ -1,7 +1,13 @@
 import numpy as np
 import time
 
-from desc.backend import jacfwd, Timer
+from desc.backend import use_jax, Timer
+from desc.jacobian import AutoDiffJacobian, FiniteDiffJacobian
+
+if use_jax:
+    jac = AutoDiffJacobian
+else:
+    jac = FiniteDiffJacobian
 
 
 def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbose=False, timer=None):
@@ -48,7 +54,7 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
 
         # partial derivatives wrt x
         timer.start('df/dx computation')
-        obj_jac_x = jacfwd(equil_obj, argnums=0)
+        obj_jac_x = jac(equil_obj, argnum=0).compute
         Jx = obj_jac_x(x, *args).reshape((dimF, dimX))
         timer.stop('df/dx computation')
         RHS = f
@@ -61,7 +67,7 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
                 if verbose > 1:
                     print("Perturbing {}".format(delta_strings[i]))
                 timer.start('df/dc computation ({})'.format(delta_strings[i]))
-                obj_jac_c = jacfwd(equil_obj, argnums=6+i)
+                obj_jac_c = jac(equil_obj, argnum=6+i).compute
                 Jc = obj_jac_c(x, *args).reshape((dimF, dimC))
                 timer.stop("df/dc computation ({})".format(delta_strings[i]))
                 RHS += np.tensordot(Jc, np.atleast_1d(deltas[i]), axes=1)
@@ -75,7 +81,7 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
         # partial derivatives wrt x
         Jxi = np.linalg.pinv(Jx, rcond=1e-6)
         timer.start("df/dxx computation")
-        obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
+        obj_jac_xx = jac(jac(equil_obj, argnum=0).compute, argnum=0).compute
         Jxx = obj_jac_xx(x, *args).reshape((dimF, dimX, dimX))
         timer.stop("df/dxx computation")
         RHS += 0.5 * np.tensordot(Jxx, np.tensordot(np.tensordot(Jxi, RHS, axes=1),
@@ -89,8 +95,8 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
                 if verbose > 1:
                     print("Perturbing {}".format(delta_strings[i]))
                 timer.start("df/dcc computation ({})".format(delta_strings[i]))
-                obj_jac_cc = jacfwd(
-                    jacfwd(equil_obj, argnums=6+i), argnums=6+i)
+                obj_jac_cc = jac(
+                    jac(equil_obj, argnum=6+i).compute, argnum=6+i).compute
                 Jcc = obj_jac_cc(x, *args).reshape((dimF, dimC, dimC))
                 timer.stop("df/dcc computation ({})".format(delta_strings[i]))
                 RHS += 0.5 * np.tensordot(Jcc, np.tensordot(np.atleast_1d(deltas[i]),
@@ -100,7 +106,8 @@ def perturb_continuation_params(x, equil_obj, deltas, args, pert_order=1, verbos
                         "df/dcc computation ({})".format(delta_strings[i]))
 
                 timer.start("df/dxc computation ({})".format(delta_strings[i]))
-                obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=6+i)
+                obj_jac_xc = jac(
+                    jac(equil_obj, argnum=0).compute, argnum=6+i).compute
                 Jxc = obj_jac_xc(x, *args).reshape((dimF, dimX, dimC))
                 timer.stop("df/dxc computation ({})".format(delta_strings[i]))
                 RHS -= np.tensordot(Jxc, np.tensordot(Jxi, np.tensordot(RHS, np.atleast_1d(deltas[i]),
@@ -171,7 +178,7 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
 
         # partial derivatives wrt x
         t0 = time.perf_counter()
-        obj_jac_x = jacfwd(equil_obj, argnums=0)
+        obj_jac_x = jac(equil_obj, argnum=0).compute
         Jx = obj_jac_x(*args).reshape((dimF, dimX))
         t1 = time.perf_counter()
         if verbose > 1:
@@ -182,7 +189,7 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
         for i in arg_idx:
             dimC = args[i].size
             t0 = time.perf_counter()
-            obj_jac_c = jacfwd(equil_obj, argnums=i)
+            obj_jac_c = jac(equil_obj, argnum=i).compute
             Jc_i = obj_jac_c(*args).reshape((dimF, dimC))
             Jc_i = Jc_i[:, arg_dict[i]]
             t1 = time.perf_counter()
@@ -199,7 +206,7 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
 
         # partial derivatives wrt x
         t0 = time.perf_counter()
-        obj_jac_xx = jacfwd(jacfwd(equil_obj, argnums=0), argnums=0)
+        obj_jac_xx = jac(jac(equil_obj, argnum=0).compute, argnum=0).compute
         Jxx = obj_jac_xx(*args).reshape((dimF, dimX, dimX))
         t1 = time.perf_counter()
         if verbose > 1:
@@ -210,13 +217,13 @@ def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=Fals
         for i in arg_idx:
             dimC = args[i].size
             t0 = time.perf_counter()
-            obj_jac_cc = jacfwd(jacfwd(equil_obj, argnums=i), argnums=i)
+            obj_jac_cc = jac(jac(equil_obj, argnum=i).compute, argnum=i).compute
             Jcc_i = obj_jac_cc(*args).reshape((dimF, dimC, dimC))
             Jcc_i = Jcc_i[:, arg_dict[i], arg_dict[i]]
             t1 = time.perf_counter()
             if verbose > 1:
                 print("df/dcc computation time: {} s".format(t1-t0))
-            obj_jac_xc = jacfwd(jacfwd(equil_obj, argnums=0), argnums=i)
+            obj_jac_xc = jac(jac(equil_obj, argnum=0).compute, argnum=i).compute
             Jxc_i = obj_jac_xc(*args).reshape((dimF, dimX, dimC))
             Jxc_i = Jxc_i[:, :, arg_dict[i]]
             t2 = time.perf_counter()

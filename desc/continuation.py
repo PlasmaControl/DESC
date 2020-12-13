@@ -4,7 +4,6 @@ import warnings
 import copy
 
 from desc.backend import jit, use_jax, Timer, TextColors, Tristate
-from desc.backend import jacfwd, grad
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.transform import Transform
@@ -12,6 +11,7 @@ from desc.configuration import Equilibrium, EquilibriaFamily
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
 from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
+from desc.jacobian import AutoDiffJacobian
 
 
 def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
@@ -72,9 +72,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         checkpoint_file = Checkpoint(checkpoint_filename, write_ascii=True)
     else:
         checkpoint = False
-
-    if not use_jax:
-        pert_order *= 0
 
     if stell_sym:
         R_sym = Tristate(True)
@@ -245,16 +242,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         if use_jax:
             if optim_method in ['bfgs']:
-                jac = grad(equil_obj, argnums=0)
+                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='grad')
             else:
-                jac = jacfwd(equil_obj, argnums=0)
+                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='fwd')
             if verbose > 0:
                 print("Compiling objective function")
             if device is None:
                 import jax
                 device = jax.devices()[0]
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
-            jac_obj_jit = jit(jac, device=device)
+            jac_obj_jit = jit(jac.compute, device=device)
             timer.start("Iteration {} compilation".format(ii+1))
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)

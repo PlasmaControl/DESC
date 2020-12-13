@@ -13,7 +13,7 @@ Nnodes = 0   2
 
 # continuation parameters
 bdry_ratio = 1
-pres_ratio = 1
+pres_ratio = 0 1
 zeta_ratio = 1
 errr_ratio = 1E-5
 pert_order = 1

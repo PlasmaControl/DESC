@@ -14,6 +14,7 @@ from desc.equilibrium_io import IOAble
 
 
 class ObjectiveFunction(IOAble,ABC):
+
     """Objective function used in the optimization of an Equilibrium
 
     Attributes
@@ -41,7 +42,6 @@ class ObjectiveFunction(IOAble,ABC):
         compute the equilibrium objective function
     callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)
         function that prints equilibrium errors
-
     """
     _save_attrs_ = ['scalar', 'R_transform', 'Z_transform', 'R1_transform',
             'Z1_transform', 'L_transform', 'P_transform', 'I_transform']

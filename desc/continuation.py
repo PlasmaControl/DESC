@@ -86,7 +86,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         L_sym = Tristate(None)
 
     equil_fam = EquilibriaFamily(inputs=inputs)
-
+  
     arr_len = M.size
     for ii in range(arr_len):
 
@@ -298,7 +298,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         timer.stop("Iteration {} solution".format(ii+1))
 
         equil.x = out['x']
-        equil_fam.append(copy.deepcopy(equil))#insert(ii, copy.deepcopy(equil))
+
+        equil_fam.append(copy.deepcopy(equil))
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))

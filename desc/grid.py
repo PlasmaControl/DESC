@@ -42,6 +42,7 @@ class Grid(IOAble):
         None
 
         """
+
         if load_from is None:
             self.__L = None
             self.__M = None
@@ -200,6 +201,7 @@ class LinearGrid(Grid):
                  endpoint:bool=False, rho=np.array([1.0]),
                  theta=np.array([1.0]), zeta=np.array([1.0]),
                  load_from=None, file_format=None, obj_lib=None) -> None:
+
         """Initializes a LinearGrid
 
         Parameters
@@ -229,6 +231,7 @@ class LinearGrid(Grid):
         None
 
         """
+
         if load_from is None:
             self._Grid__L = L
             self._Grid__M = M

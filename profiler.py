@@ -3,8 +3,6 @@ from desc.continuation import solve_eq_continuation
 
 ir = InputReader(cl_args=['examples/DESC/HELIOTRON'])
 iterations, timer = solve_eq_continuation(ir.inputs)
-<<<<<<< HEAD
-=======
 
 ###
 
@@ -57,4 +55,3 @@ Z1_transform = Transform(L_grid, Z_basis)
 L_transform = Transform(L_grid,  L_basis, derivs=0)
 P_transform = Transform(RZ_grid, P_basis, derivs=1)
 I_transform = Transform(RZ_grid, I_basis, derivs=1)
->>>>>>> e5617779224485c12b8c2e635dfb67e86ee9a1dd

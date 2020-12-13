@@ -38,11 +38,14 @@ def unpack_state(x, nR, nZ):
     cL = x[nR+nZ:]
     return cR, cZ, cL
 
+
 class Configuration(IOAble):
+
     """Configuration constains information about a plasma state, including the
        shapes of flux surfaces and profile inputs. It can compute additional
        information, such as the magnetic field and plasma currents.
     """
+
     _save_attrs_ = ['cR', 'cZ', 'cL', 'cRb', 'cZb', 'cP',
                              'cI', 'Psi', 'NFP', 'R_basis',
                              'Z_basis', 'L_basis', 'Rb_basis',
@@ -121,6 +124,7 @@ class Configuration(IOAble):
                 cR :
                 cZ :
                 cL :
+
 
         Raises
         ------
@@ -502,6 +506,7 @@ class Configuration(IOAble):
             File mode for file referenced by save_to. Only applicable if
             save_to is a string file path. (Default = 'w')
 
+
         Returns
         _______
         None
@@ -575,6 +580,27 @@ class Equilibrium(Configuration,IOAble):
                          self._Configuration__Z_basis.num_modes)
         self.__solved = True
 
+    @property
+    def solved(self) -> bool:
+        return self.__solved
+
+    @property
+    def initial(self) -> Configuration:
+        return self.__initial
+
+    @property
+    def x(self):
+        return self._Configuration__x
+
+    @x.setter
+    def x(self, x) -> None:
+        self._Configuration__x = x
+        self._Configuration__cR, self._Configuration__cZ, self.__cL = \
+            unpack_state(self._Configuration__x,
+                         self._Configuration__R_basis.num_modes,
+                         self._Configuration__Z_basis.num_modes)
+        self.__solved = True
+
     def optimize(self):
         pass
 
@@ -615,6 +641,10 @@ class EquilibriaFamily(MutableSequence,IOAble):
 
     # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
+        self.__equilibria = []
+        self._file_format_ = file_format
+        self._file_mode_ = 'a'
+        """
         self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
@@ -1324,6 +1354,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform)
     """
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
+    
     magnetic_field_mag = {}
     iota = I_transform.transform(cI, 0)
 

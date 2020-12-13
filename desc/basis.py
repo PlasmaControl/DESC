@@ -231,6 +231,7 @@ class DoubleFourierSeries(Basis):
 
     def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None,
             load_from=None, file_format=None, obj_lib=None) -> None:
+
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -337,6 +338,7 @@ class FourierZernikeBasis(Basis):
     def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
                  sym:Tristate=None, index:str='ansi',
                  load_from=None, file_format=None, obj_lib=None) -> None:
+
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -401,6 +403,7 @@ class FourierZernikeBasis(Basis):
             #self._def_save_attrs_()
         else:
             self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):
         """Gets mode numbers for Fourier-Zernike basis functions

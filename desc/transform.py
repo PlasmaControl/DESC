@@ -5,9 +5,10 @@ from itertools import permutations, combinations_with_replacement
 from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors, equals
 from desc.grid import Grid
 from desc.basis import Basis
+from desc.equilibrium_io import IOAble
 
 
-class Transform():
+class Transform(IOAble):
     """Transform
 
     Attributes
@@ -28,8 +29,10 @@ class Transform():
         DESCRIPTION
 
     """
+    _save_attrs_ = ['grid', 'basis', 'derives', 'matrices']
 
-    def __init__(self, grid:Grid, basis:Basis, derivs=0, rcond=1e-6) -> None:
+    def __init__(self, grid:Grid=None, basis:Basis=None, derivs=0, rcond=1e-6,
+            load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a Transform
 
         Parameters
@@ -54,19 +57,22 @@ class Transform():
         None
 
         """
-        self.__grid = grid
-        self.__basis = basis
-        self.__derivs = derivs
-        self.__rcond = rcond
+        if load_from is None:
+            self.__grid = grid
+            self.__basis = basis
+            self.__derivs = derivs
+            self.__rcond = rcond
 
-        self.__matrices = {i: {j: {k: {}
-                     for k in range(4)} for j in range(4)} for i in range(4)}
-        self.__derivatives = self._get_derivatives_(self.__derivs)
+            self.__matrices = {i: {j: {k: {}
+                         for k in range(4)} for j in range(4)} for i in range(4)}
+            self.__derivatives = self._get_derivatives_(self.__derivs)
 
-        self._sort_derivatives_()
-        self._build_()
-        self._build_pinv_()
-        self._def_save_attrs_()
+            self._sort_derivatives_()
+            self._build_()
+            self._build_pinv_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -135,7 +141,7 @@ class Transform():
                                     [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
                                     [2, 2, 0]])
         else:
-            raise NotImplementedError(TextColors.FAIL + 
+            raise NotImplementedError(TextColors.FAIL +
                   "order options are 'force', 'qs', or a non-negative int"
                   + TextColors.ENDC)
         return derivatives

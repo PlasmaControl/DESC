@@ -2,9 +2,10 @@ import numpy as np
 from abc import abstractmethod
 
 from desc.backend import TextColors, equals
+from desc.equilibrium_io import IOAble
 
 
-class Grid():
+class Grid(IOAble):
     """Grid is a base class for collocation grids
 
     Attributes
@@ -25,8 +26,10 @@ class Grid():
         node spacing (drho,dtheta,dzeta) at each node coordinate
 
     """
+    _save_attrs_ = ['_Grid__L', '_Grid__M', '_Grid__N', '_Grid__NFP',
+                             '_Grid__sym', '_Grid__nodes', '_Grid__volumes']
 
-    def __init__(self, nodes) -> None:
+    def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a custom grid without a pre-defined pattern
 
         Parameters
@@ -39,18 +42,21 @@ class Grid():
         None
 
         """
-        self.__L = None
-        self.__M = None
-        self.__N = None
-        self.__NFP = None
-        self.__sym = False
+        if load_from is None:
+            self.__L = None
+            self.__M = None
+            self.__N = None
+            self.__NFP = None
+            self.__sym = False
 
-        self.__nodes, self.__volumes = self.create_nodes(nodes)
+            self.__nodes, self.__volumes = self.create_nodes(nodes)
 
-        self._enforce_symmetry_()
-        self._sort_nodes_()
-        self._find_axis_()
-        self._def_save_attrs()
+            self._enforce_symmetry_()
+            self._sort_nodes_()
+            self._find_axis_()
+            #self._def_save_attrs()
+        else:
+            self._init_from_file(load_from, file_format=file_format, obj_lib=obj_lib)
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -186,13 +192,14 @@ class Grid():
 
 
 class LinearGrid(Grid):
-    """LinearGrid is a collocation grid in which the nodes are linearly 
-       spaced in each coordinate. 
+    """LinearGrid is a collocation grid in which the nodes are linearly
+       spaced in each coordinate.
     """
 
     def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
                  endpoint:bool=False, rho=np.array([1.0]),
-                 theta=np.array([1.0]), zeta=np.array([1.0])) -> None:
+                 theta=np.array([1.0]), zeta=np.array([1.0]),
+                 load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a LinearGrid
 
         Parameters
@@ -208,7 +215,7 @@ class LinearGrid(Grid):
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False)
         endpoint : bool
-            if True, theta=0 and zeta=0 are duplicated after a full period. 
+            if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
         rho : ndarray of float
             radial coordinates (if L == rho.size)
@@ -222,25 +229,28 @@ class LinearGrid(Grid):
         None
 
         """
-        self._Grid__L = L
-        self._Grid__M = M
-        self._Grid__N = N
-        self._Grid__NFP = NFP
-        self._Grid__sym = sym
-        self.__endpoint = endpoint
-        self.__rho = rho
-        self.__theta = theta
-        self.__zeta = zeta
+        if load_from is None:
+            self._Grid__L = L
+            self._Grid__M = M
+            self._Grid__N = N
+            self._Grid__NFP = NFP
+            self._Grid__sym = sym
+            self.__endpoint = endpoint
+            self.__rho = rho
+            self.__theta = theta
+            self.__zeta = zeta
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                        L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
-                        NFP=self._Grid__NFP, endpoint=self.__endpoint,
-                        rho=self.__rho, theta=self.__theta, zeta=self.__zeta)
+            self._Grid__nodes, self._Grid__volumes = self.create_nodes(
+                            L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
+                            NFP=self._Grid__NFP, endpoint=self.__endpoint,
+                            rho=self.__rho, theta=self.__theta, zeta=self.__zeta)
 
-        self._enforce_symmetry_()
-        self._sort_nodes_()
-        self._find_axis_()
-        self._def_save_attrs_()
+            self._enforce_symmetry_()
+            self._sort_nodes_()
+            self._find_axis_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
                      endpoint:bool=False, rho=np.array([1.0]),
@@ -332,18 +342,19 @@ class LinearGrid(Grid):
             self._Grid__M = M
             self._Grid__N = N
             self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=L, M=M, N=N,
-                                 NFP=self._Grid__NFP, sym=self._Grid__sym, 
+                                 NFP=self._Grid__NFP, sym=self._Grid__sym,
                                  endpoint=self.__endpoint, surfs=self.__surfs)
             self.sort_nodes()
 
 
 class ConcentricGrid(Grid):
-    """ConcentricGrid is a collocation grid in which the nodes are arranged 
-       in concentric circles within each toroidal cross-section. 
+    """ConcentricGrid is a collocation grid in which the nodes are arranged
+       in concentric circles within each toroidal cross-section.
     """
 
     def __init__(self, M:int, N:int, NFP:int=1, sym:bool=False, axis:bool=True,
-                 index='ansi', surfs='cheb1') -> None:
+                 index='ansi', surfs='cheb1', load_from=None, file_format=None,
+                 obj_lib=None) -> None:
         """Initializes a ConcentricGrid
 
         Parameters
@@ -372,23 +383,26 @@ class ConcentricGrid(Grid):
         None
 
         """
-        self._Grid__L = M+1
-        self._Grid__M = M
-        self._Grid__N = N
-        self._Grid__NFP = NFP
-        self._Grid__sym = sym
-        self.__axis = axis
-        self.__index = index
-        self.__surfs = surfs
+        if load_from is None:
+            self._Grid__L = M+1
+            self._Grid__M = M
+            self._Grid__N = N
+            self._Grid__NFP = NFP
+            self._Grid__sym = sym
+            self.__axis = axis
+            self.__index = index
+            self.__surfs = surfs
 
-        self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                    M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
-                    axis=self.__axis, index=self.__index, surfs=self.__surfs)
+            self._Grid__nodes, self._Grid__volumes = self.create_nodes(
+                        M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
+                        axis=self.__axis, index=self.__index, surfs=self.__surfs)
 
-        self._enforce_symmetry_()
-        self._sort_nodes_()
-        self._find_axis_()
-        self._def_save_attrs_()
+            self._enforce_symmetry_()
+            self._sort_nodes_()
+            self._find_axis_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, M:int, N:int, NFP:int=1, axis:bool=True,
                      index='ansi', surfs='cheb1'):

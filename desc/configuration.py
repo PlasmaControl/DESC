@@ -3,10 +3,11 @@ from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, TextColors, Tristate
 from desc.basis import Basis, PowerSeries, DoubleFourierSeries, FourierZernikeBasis
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
-from desc import equilibrium_io as eq_io
+#from desc import equilibrium_io as eq_io
+from desc.equilibrium_io import IOAble, reader_factory, writer_factory
 
 
 def unpack_state(x, nR, nZ):
@@ -37,14 +38,22 @@ def unpack_state(x, nR, nZ):
     cL = x[nR+nZ:]
     return cR, cZ, cL
 
-
-class Configuration():
+class Configuration(IOAble):
     """Configuration constains information about a plasma state, including the
        shapes of flux surfaces and profile inputs. It can compute additional
        information, such as the magnetic field and plasma currents.
     """
+    _save_attrs_ = ['cR', 'cZ', 'cL', 'cRb', 'cZb', 'cP',
+                             'cI', 'Psi', 'NFP', 'R_basis',
+                             'Z_basis', 'L_basis', 'Rb_basis',
+                             'Zb_basis', 'P_basis', 'I_basis']
+    _object_lib_ = {'PowerSeries' : PowerSeries,
+                            'DoubleFourierSeries'   : DoubleFourierSeries,
+                            'FourierZernikeBasis'   : FourierZernikeBasis,
+                            'LinearGrid'            : LinearGrid,
+                            'ConcentricGrid'        : ConcentricGrid}
 
-    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5', obj_lib=None) -> None:
         """Initializes a Configuration
 
         Parameters
@@ -61,7 +70,7 @@ class Configuration():
         None
 
         """
-        self._def_save_attrs_()
+        #self._def_save_attrs_()
 
         self.inputs = inputs
         self.load_from = load_from
@@ -71,7 +80,7 @@ class Configuration():
             if file_format is None:
                 raise RuntimeError('file_format argument must be included when loading from file.')
             self._file_format_ = file_format
-            self._init_from_file_()
+            self._init_from_file_(obj_lib=obj_lib)
         else:
             raise RuntimeError('inputs or load_from must be specified.')
 
@@ -480,7 +489,7 @@ class Configuration():
             jacobian, magnetic_field, plasma_current, self.__cP, P_transform)
         return force_mag
 
-    def save(self, save_to, file_format:str='hdf5', file_mode:str='w'):
+    #def save(self, save_to, file_format:str='hdf5', file_mode:str='w'):
         """Saves the configuration to file.
 
         Parameters
@@ -498,21 +507,24 @@ class Configuration():
         None
 
         """
-        writer = eq_io.writer_factory(save_to, file_format=file_format,
-                file_mode=file_mode)
-        writer.write_obj(self)
-        writer.close()
-        return None
+    #    writer = eq_io.writer_factory(save_to, file_format=file_format,
+    #            file_mode=file_mode)
+    #    writer.write_obj(self)
+    #    writer.close()
+    #    return None
 
 
-class Equilibrium(Configuration):
+class Equilibrium(Configuration,IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
        It adds information about how the equilibrium configuration was solved.
     """
+    _save_attrs_ = Configuration._save_attrs_ + ['initial', 'objective', 'optimizer', 'solved']
+    _object_lib_ = Configuration._object_lib_
+    _object_lib_.update({'Configuration' : Configuration})
 
-    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
-        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format)
-        self._save_attrs_ += ['objective', 'optimizer', 'solved']
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5', obj_lib=None) -> None:
+        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
@@ -524,19 +536,23 @@ class Equilibrium(Configuration):
         self.__optimizer = inputs.get('optimizer', None)
         self.__solved = False
 
-    def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
-        if load_from is None:
-            load_from = self.load_from
-        if file_format is None:
-            file_format = self._file_format_
-        reader = eq_io.reader_factory(load_from, file_format)
-        self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
-        self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
-        reader.read_obj(self)
+    #def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
+    #    if load_from is None:
+    #        load_from = self.load_from
+    #    if file_format is None:
+    #        file_format = self._file_format_
+    #    reader = eq_io.reader_factory(load_from, file_format)
+    #    self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
+   #     self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
+  #      reader.read_obj(self)
 
     @property
     def solved(self) -> bool:
         return self.__solved
+
+    @solved.setter
+    def solved(self, issolved):
+        self.__solved = issolved
 
     @property
     def initial(self) -> Configuration:
@@ -576,20 +592,22 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
-    def save(self, save_to, file_format='hdf5', file_mode='w'):
-        writer = eq_io.writer_factory(save_to, file_format=file_format,
-                file_mode=file_mode)
-        writer.write_obj(self)
-        writer.write_obj(self.initial, where=writer.sub('initial'))
-        writer.close()
-        return None
+    #def save(self, save_to, file_format='hdf5', file_mode='w'):
+    #    writer = eq_io.writer_factory(save_to, file_format=file_format,
+    #            file_mode=file_mode)
+    #    writer.write_obj(self)
+    #    writer.write_obj(self.initial, where=writer.sub('initial'))
+    #    writer.close()
+    #    return None
 
 
 # XXX: Should this (also) inherit from Equilibrium?
-class EquilibriaFamily(MutableSequence):
-    """EquilibriaFamily stores a list of Equilibria. Its default behavior acts
-       like the last Equilibrium in the list.
+class EquilibriaFamily(MutableSequence,IOAble):
+    """EquilibriaFamily stores a list of Equilibria
     """
+    _save_attrs_ = ['inputs', 'equilibria']
+    _object_lib_ = Equilibrium._object_lib_
+    _object_lib_.update({'Equilibrium' : Equilibrium})
 
     # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
@@ -599,12 +617,11 @@ class EquilibriaFamily(MutableSequence):
         self._file_format_ = file_format
         self._file_mode_ = 'a'
         if inputs is not None:
-            # hack
-            pass #self._init_from_inputs_()
+            self._init_from_inputs_()
         elif load_from is not None:
             if file_format is None:
                 raise RuntimeError('file_format argument must be included when loading from file.')
-            self._init_from_file_(self._file_format_, self._file_mode_)
+            self._init_from_file_(load_from, file_format=file_format)
         else:
             # hack
             pass #raise RuntimeError('inputs or load_from must be specified.')
@@ -612,24 +629,23 @@ class EquilibriaFamily(MutableSequence):
     def _init_from_inputs_(self, inputs=None):
         if inputs is None:
             inputs = self.inputs
-        writer = eq_io.writer_factory(self.inputs['output_path'],
+        writer = writer_factory(self.inputs['output_path'],
                 file_format=self._file_format_, file_mode='w')
-        writer.write_dict(self.inputs, where=writer.sub('inputs'))
         writer.close()
-        self.append(Equilibrium(inputs=self.inputs))
+        #self.append(Equilibrium(inputs=self.inputs))
         return None
 
-    def _init_from_file_(self, load_from=None, file_format=None):
-        if load_from is None:
-            load_from = self.load_from
-        if file_format is None:
-            file_format = self._file_format_
-        reader = eq_io.reader_factory(self.load_from, file_format=file_format)
-        idx = 0
-        while str(idx) in reader.groups():
-            self.append(Equilibrium(load_from=reader.sub(str(idx))))
-            idx += 1
-        return None
+    #def _init_from_file_(self, load_from=None, file_format=None):
+    #    if load_from is None:
+    #        load_from = self.load_from
+    #    if file_format is None:
+    #        file_format = self._file_format_
+    #    reader = reader_factory(self.load_from, file_format=file_format)
+    #    idx = 0
+    #    while str(idx) in reader.groups():
+    #        self.append(Equilibrium(load_from=reader.sub(str(idx))))
+    #        idx += 1
+    #    return None
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -656,6 +672,14 @@ class EquilibriaFamily(MutableSequence):
     def solver(self, solver):
         self.__solver = solver
 
+    @property
+    def equilibria(self):
+        return self.__equilibria
+
+    @equilibria.setter
+    def equilibria(self, eq):
+        self.__equilibria = eq
+
     def __slice__(self, idx):
         if idx is None:
             theslice = slice(None,None)
@@ -670,19 +694,22 @@ class EquilibriaFamily(MutableSequence):
             raise TypeError('index is not a valid type.')
         return theslice
 
-    def save(self, idx=None, save_to=None, file_format=None) -> None:
-        theslice = self.__slice__(idx)
+    def save(self, save_to=None, file_format=None) -> None:
+        #theslice = self.__slice__(idx)
         if save_to is None:
             save_to = self.inputs['output_path']
         if file_format is None:
             file_format = self._file_format_
 
-        writer = eq_io.writer_factory(self.inputs['output_path'],
-                file_format=file_format, file_mode=self._file_mode_)
-        for i in range(len(self[theslice])):
-            self[i].save(writer.sub(str(idx)), file_format=file_format,
-                file_mode=self._file_mode_)
-        writer.close()
+        super().save(save_to, file_format=file_format)
+        #writer = writer_factory(self.inputs['output_path'],
+        #        file_format=file_format, file_mode=self._file_mode_)
+        #writer.write_dict(self.inputs, where=writer.sub('inputs'))
+        #for i in range(len(self[theslice])):
+        #    print('saving index {}'.format(i))
+        #    self[i].save(writer.sub(str(idx)), file_format=file_format,
+        #        file_mode=self._file_mode_)
+        #writer.close()
 
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
 

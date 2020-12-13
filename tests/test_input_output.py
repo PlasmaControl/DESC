@@ -206,7 +206,11 @@ class Testhdf5Reader(unittest.TestCase):
         with self.assertRaises(SyntaxError):
             reader.read_dict(otherdict, where='not a readable type')
         reader.close()
-        print(self.thedict, newdict, newsubdict)
+        if type(newdict['a']) is bytes:
+            for key in newdict.keys():
+                newdict[key] = newdict[key].decode('ascii')
+            for key in newsubdict.keys():
+                newsubdict[key] = newsubdict[key].decode('ascii')
         self.assertTrue(self.thedict == newdict)
         self.assertTrue(self.thedict == newsubdict)
 

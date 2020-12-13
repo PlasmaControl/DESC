@@ -299,7 +299,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
         equil.x = out['x']
         equil_fam.append(copy.deepcopy(equil))#insert(ii, copy.deepcopy(equil))
-        print(len(equil_fam))
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))

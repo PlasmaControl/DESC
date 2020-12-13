@@ -470,8 +470,10 @@ class hdf5Reader(hdf5IO,Reader):
             self.obj_lib = obj_lib
         elif hasattr(self, 'obj_lib'):
             pass
-        else:
+        elif hasattr(obj, '_object_lib_'):
             self.obj_lib = obj._object_lib_
+        else:
+            pass
         loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
@@ -709,7 +711,7 @@ class hdf5Writer(hdf5IO,Writer):
         loc.create_dataset('name', data=type(obj).__name__)
         for attr in obj._save_attrs_:
             try:
-                print(attr)
+                #print(attr) #debugging
                 loc.create_dataset(attr, data=getattr(obj, attr))
             except AttributeError:
                 warnings.warn("Save attribute '{}' was not saved as it does "

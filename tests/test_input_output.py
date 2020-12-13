@@ -53,7 +53,8 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment '
             'variable incorrect with default argument')
         self.assertFalse(ir.args.version, 'version is not default False')
-        self.assertEqual(len(ir.inputs), 27, 'number of inputs does not match '
+        self.assertEqual(len(ir.inputs), 28, 'number of inputs does not match '
+
             'number expected in MIN_INPUT')
         # test equality of arguments
 
@@ -81,7 +82,7 @@ class TestInputReader(unittest.TestCase):
 
 class MockObject:
     def __init__(self):
-        self._save_attrs_ = ['1', '2', '3']
+        self._save_attrs_ = ['a', 'b', 'c']
 
 class Testhdf5Writer(unittest.TestCase):
 
@@ -134,8 +135,11 @@ class Testhdf5Writer(unittest.TestCase):
     def test_write_obj(self):
         mo = MockObject()
         writer = hdf5Writer(self.filename, self.file_mode)
+        #writer should throw runtime warning if any save_attrs are undefined
         with self.assertWarns(RuntimeWarning):
             writer.write_obj(mo)
+        writer.close()
+        writer = hdf5Writer(self.filename, self.file_mode)
         for name in mo._save_attrs_:
             setattr(mo, name, name)
         writer.write_obj(mo)
@@ -156,7 +160,7 @@ class Testhdf5Reader(unittest.TestCase):
     def setUp(self):
         self.filename = 'reader_test_file'
         self.file_mode = 'r'
-        self.thedict = {'1':1, '2':2, '3':3}
+        self.thedict = {'a':'a', 'b':'b', 'c':'c'}
         f = h5py.File(self.filename, 'w')
         self.subgroup = 'subgroup'
         g = f.create_group(self.subgroup)
@@ -213,6 +217,7 @@ class Testhdf5Reader(unittest.TestCase):
         with self.assertWarns(RuntimeWarning):
             reader.read_obj(mo)
         del mo._save_attrs_[-1]
+        print(mo._save_attrs_)
         submo = MockObject()
         reader.read_obj(submo, where=reader.sub(self.subgroup))
         for key in mo._save_attrs_:

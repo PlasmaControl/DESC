@@ -110,6 +110,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("================")
 
         # initial solution
+        # at initial soln, must: create bases, create grids, create transforms
         if ii == 0:
             timer.start("Iteration {} total".format(ii+1))
 
@@ -128,24 +129,23 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'bdry_ratio': bdry_ratio[ii],
                 'axis': axis
             }
-            equil = Equilibrium(inputs=inputs_ii)
-            x = equil.x
-
+            
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
+            # create initial Equilibrium
+            equil = Equilibrium(inputs=inputs_ii)
+            x = equil.x # initial state vector
+            # bases (extracted from Equilibrium)
+            R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
+                                                            equil.Z_basis, \
+                                                            equil.L_basis, \
+                                                            equil.P_basis, \
+                                                            equil.I_basis
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                      axis=False, index=zern_mode, surfs=node_mode)
             L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
-            # bases
-            R_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
-                                          NFP=NFP, sym=R_sym, index=zern_mode)
-            Z_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
-                                          NFP=NFP, sym=Z_sym, index=zern_mode)
-            L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP, sym=L_sym)
-            P_basis = PowerSeries(L=cP.size-1)
-            I_basis = PowerSeries(L=cI.size-1)
             # transforms
             R_transform = Transform(RZ_grid, R_basis, derivs=3)
             Z_transform = Transform(RZ_grid, Z_basis, derivs=3)
@@ -154,6 +154,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             L_transform = Transform(L_grid,  L_basis, derivs=0)
             P_transform = Transform(RZ_grid, P_basis, derivs=1)
             I_transform = Transform(RZ_grid, I_basis, derivs=1)
+
             timer.stop("Transform precomputation")
             if verbose > 1:
                 timer.disp("Transform precomputation")
@@ -162,6 +163,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 #                checkpoint_file.write_iteration(equil, 'init', inputs)
 
         # continuing from previous solution
+        # if continuing, must: 
+        # make new grids, 
+        # update bases, 
+        # update transforms, 
+        # create a non-scalar obj fxn (so would have to check that error mode is able
+        #                           to be non-scalar, i.e. errr_mode='energy' would not work )
+        # perturb continuation parameters
         else:
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
@@ -171,13 +179,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
             # change bases
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
-                R_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
-                                              NFP=NFP, sym=R_sym, index=zern_mode)
-                Z_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
-                                              NFP=NFP, sym=Z_sym, index=zern_mode)
-                L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP, sym=L_sym)
-
-                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii])
+                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii]) # update equilibrium bases to the new resolutions
+                R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
                 x = equil.x
 
             # change transform matrices
@@ -188,6 +191,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                     Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
                         delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+                
             R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
             Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)
             R1_transform.change_resolution(grid=L_grid, basis=R_basis)
@@ -309,11 +313,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
             callback(x, *args)
-
-#        if checkpoint:
-#            if verbose > 0:
-#                print('Saving latest iteration')
-#            checkpoint_file.write_iteration(equil, ii+1, inputs)
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'

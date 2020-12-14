@@ -176,8 +176,8 @@ class FiniteDiffJacobian(Jacobian):
             argument at position argnum.
 
         """
-        f0 = self._Jacobian__fun(*args)
-        x0 = args[self._Jacobian__argnum]
+        f0 = np.atleast_1d(self._Jacobian__fun(*args))
+        x0 = np.atleast_1d(args[self._Jacobian__argnum])
         m = f0.size
         n = x0.size
         J = np.zeros((m, n))
@@ -193,7 +193,7 @@ class FiniteDiffJacobian(Jacobian):
             f2 = self._Jacobian__fun(*args2)
             df = f2 - f1
             dfdx = df / dx
-            J = put(J.T, i, dfdx).T
+            J = put(J.T, i, dfdx.flatten()).T
         if m == 1:
             J = np.ravel(J)
         return J

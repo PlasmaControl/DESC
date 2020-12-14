@@ -3,8 +3,7 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-from desc.backend import TextColors
+from abc import ABC, abstractmethod
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
 from desc.grid import LinearGrid
@@ -51,6 +50,360 @@ dash_cycle = cycler(dashes=dashes)
 rcParams['axes.prop_cycle'] = color_cycle
 
 
+class Plot:
+    """Class for plotting instances of Configuration and Equilibria on a linear grid.
+    """
+    def __init__(self, ):#grid='std', **kwargs):
+        """Initialize a Plot class.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self.axis_labels = [r'$\zeta$', r'$\theta$', r'$R$']#, r'$\theta$', r'$\zeta$']
+        pass
+
+    def __format_rtz__(self, rtz):
+        type_rtz = type(rtz)
+        if type_rtz is np.ndarray:
+            return rtz
+        elif type_rtz is list:
+            return np.array(rtz)
+        elif type_rtz is float:
+            return np.array([rtz])
+        else:
+            raise TypeError('rho, theta, and zeta must be a numpy array, list '
+                'of floats, or float.')
+
+    def find_plot_ax_1d(self, grid):
+        """Find index of plot axis for 1D plots.
+
+        Parameters
+        __________
+        grid : LinearGrid
+            instantiated LinearGrid object
+
+        Returns
+        _______
+        dimension of grid nodes along which to plot
+
+        """
+        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
+        if np.sum(n) > 1:
+            raise ValueError('Input dimension is greater than 1.')
+        try:
+            dim = n.index(True)
+        except ValueError:
+            raise ValueError('One axis must be a plotting axis.')
+        return dim
+
+    def find_plot_ax_2d(self, grid):
+        """Find index of plot axis for 2D plots.
+
+        Parameters
+        __________
+        grid : LinearGrid
+            instantiated LinearGrid object
+
+        Returns
+        _______
+        tuple of dimensions of grid nodes along which to plot
+
+        """
+        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
+        if np.sum(n) < 2:
+            raise ValueError('Input dimension is less than 2.')
+        elif np.sum(n) > 2:
+            raise ValueError('Input dimension is greater than 2.')
+        dim = [0,1,2]
+        dim.remove(n.index(False))
+        return tuple(dim)
+
+    def grid_slice_1d(self, grid, dim):
+        """Slice grid nodes in 1D.
+
+        Parameters
+        __________
+        grid : Grid
+            grid to be sliced
+        dim : int
+            dimension along which to slice
+
+        Returns
+        _______
+        slice : tuple
+
+        """
+        theslice = [0,0,0,dim]
+        theslice[dim[0]] = slice(None,None)
+        theslice[dim[1]] = slice(None,None)
+        return tuple(theslice)
+
+    def grid_slice_2d(self, grid, dim):
+        """Slice grid nodes in 2D.
+
+        Parameters
+        __________
+        grid : Grid
+            grid to be sliced
+        dim : list of ints
+            dimensions along which to slice
+
+        Returns
+        _______
+        slice : tuple
+
+        """
+        theslice = [0,0,0,dim]
+        theslice[dim] = slice(None,None)
+        return tuple(theslice)
+
+    def format_ax(self, ax):
+        """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
+
+        Parameters
+        __________
+        ax : None or matplotlib AxesSubplot instance
+
+        Returns
+        _______
+        matplotlib AxesSubplot instance
+
+        """
+        if ax is None:
+            fig, ax = plt.subplots()
+            return ax
+        elif type(ax) is matplotlib.axes._subplots.AxesSubplot:
+            return ax
+        else:
+            raise TypeError('ax agument must be None or an axis instance.')
+
+    def get_grid(self, NFP, **kwargs):
+        """Get grid for plotting.
+
+        Parameters
+        __________
+        NFP : int
+            number of (?)
+        kwargs
+            any arguments taken by LinearGrid
+
+        Returns
+        _______
+        LinearGrid
+
+        """
+        grid_args = {'rho':1.0, 'L':100, 'theta':0.0, 'M':1, 'zeta':0.0, 'N':1,
+            'endpoints':False, 'NFP':NFP}
+        for key in kwargs.keys():
+            if key in grid_args.keys():
+                grid_args[key] = kwargs[key]
+        plot_axes = [0,1,2]
+        grid_args['rho'] = self.__format_rtz__(grid_args['rho'])
+        if L == 1:
+            plot_axes.remove(0)
+        grid_args['theta'] = self.__format_rtz__(grid_args['theta'])
+        if M == 1:
+            plot_axes.remove(1)
+        grid_args['zeta'] = self.__format_rtz__(grid_args['zeta'])
+        if N == 1:
+            plot_axes.remove(2)
+        return LinearGrid(**grid_args), tuple(plot_axes)
+
+    def plot_1d(self, eq, name, grid=None, ax=None, **kwargs):
+        if grid is None:
+            grid, plot_axis= self.get_grid(eq.NFP, **kwargs)
+        if len(plot_axis) != 1:
+            return ValueError('Grid must be 1D.')
+        plot_axis=plot_axis[0]
+        #dim = self.find_plot_ax_1d(grid)
+        #theslice = self.grid_slice_1d(grid, dim)
+        name_dict = self.format_name(name)
+        ary = self.compute(eq, name_dict, grid)
+        ax = self.format_ax(ax)
+        ax.plot(grid.nodes[:,plot_axis], ary)
+        ax.set_xlabel(self.axis_labels[plot_axis])
+        ax.set_ylabel(self.name_label(name_dict))
+        return ax
+
+    def plot_2d(self, eq, name, grid=None, ax=None, **kwargs):
+        if grid is None:
+            if kwargs == {}:
+                kwargs.update({'M':100})
+            grid, plot_axes = self.get_grid(eq.NFP, **kwargs)
+        if len(plot_axes) != 2:
+            return ValueError('Grid must be 2D.')
+        #dim = self.find_plot_ax_2d(grid)
+        #theslice = self.grid_slice_2d(grid, dim)
+        name_dict = self.format_name(name)
+        ary = self.compute(eq, name_dict, grid)
+        ax = self.format_ax(ax)
+        #unroll array to be 2D
+        if 0 in plot_axes:
+            if 1 in plot_axes:
+                sqary = np.zeros((grid.L, grid.M))
+                for i in range(grid.M):
+                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
+            elif 2 in plot_axes:
+                sqary = np.zeros((grid.L, grid.N))
+                for i in range(grid.N):
+                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
+            else:
+                raise ValueError('Grid must be 2D')
+        elif 1 in plot_axes:
+            sqary = np.zeros((grid.M, grid.N))
+            for i in range(grid.M):
+                sqary[i,:] = ary[i*grid.M:(i+1)*grid.N]
+        else:
+            raise ValueError('Grid must be 2D.')
+        imshow_kwargs = {'origin': 'lower',
+                        'interpolation': 'bilinear'}
+        imshow_kwargs['extent'] = [grid.nodes[0,plot_axes[0]],
+                grid.nodes[-1,plot_axes[0]], grid.nodes[0,plot_axes[1]],
+                grid.nodes[-1,plot_axes[1]]]
+        ax.imshow(sqary, **imshow_kwargs)#????????????
+        ax.set_xlabel(self.axis_labels[plot_axes[0]])
+        ax.set_ylabel(self.axis_labels[plot_axes[1]])
+        return ax
+
+    def plot_3dsurf(self):
+        pass
+
+    def compute(self, eq, name, grid):
+        """Compute value specified by name on grid for equilibrium eq.
+
+        Parameters
+        __________
+        eq : Configuration or Equilibrium
+            Configuration or Equilibrium instance
+        name : str or dict
+            formatted string or parsed dictionary from format_name method
+        grid : Grid
+            grid on which to compute value specified by name
+
+        Returns
+        _______
+        array of values
+
+        """
+        if type(name) is not dict:
+            name_dict = self.format_name(name)
+        else:
+            name_dict = name
+        # compute primitives from equilibtrium methods
+        if name_dict['base'] == 'B':
+            out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'J':
+            out = eq.compute_plasma_current(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'Bmag':
+            out = eq.compute_magnetic_field_magnitude(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'Fmag':
+            out = eq.compute_force_magnitude(grid)[self.__name_key__(name_dict)]
+        else:
+            raise NotImplementedError("No output for base named '{}'.".format(name_dict['base']))
+
+        #secondary calculations
+        power = name_dict['power']
+        if power != '':
+            try:
+                power = float(power)
+            except ValueError:
+                #handle fractional exponents
+                if '/' in power:
+                    frac = power.split('/')
+                    power = frac[0] / frac[1]
+                else:
+                    raise ValueError("Could not convert string to float: '{}'".format(power))
+            out = out**power
+        return out
+
+    def format_name(self, name):
+        """Parse name string into dictionary.
+
+        Parameters
+        __________
+        name : str
+
+        Returns
+        _______
+        parsed name : dict
+
+        """
+        name_dict = {'base':'', 'sups':'', 'subs':'', 'power':'', 'd':''}
+        if '**' in name:
+            parsename, power = name.split('**')
+            if '_' in power or '^' in power:
+                raise SyntaxError('Power operands must come after components and derivatives.')
+        else:
+            power = ''
+        name_dict['power'] += power
+        if '_' in parsename:
+            split = parsename.split('_')
+            if len(split) == 3:
+                name_dict['base'] += split[0]
+                name_dict['subs'] += split[1]
+                name_dict['d'] += split[2]
+            elif '^' in split[0]:
+                name_dict['base'], name_dict['sups'] = split[0].split('^')
+                name_dict['d'] = split[1]
+        if '^' in parsename:
+            name_dict['base'], name_dict['sups'] = parsename.split('^')
+        return name_dict
+
+    def name_label(self, name_dict):
+        """Create label for name dictionary.
+
+        Parameters
+        __________
+        name_dict : dict
+            name dictionary created by format_name method
+
+        Returns
+        _______
+        label : str
+
+        """
+        esc = r'\\'[:-1]
+        if name_dict['d'] == '':
+            label = r'$' + name_dict['base'] + '^{' + esc + name_dict['sups'] +\
+                    ' ' + power + '}_{' + esc + name_dict['subs'] + '}$'
+        else:
+            if name_dict['power'] == '':
+                label = r'$d' + name_dict['base'] + '^{' + esc +\
+                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] + '}'
+            else:
+                label = r'$(d' + name_dict['base'] + '^{' + esc +\
+                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] +\
+                    '})^{' + name_dict['power'] + '}'
+        return label
+
+    def __name_key__(self, name_dict):
+        """Reconstruct name for dictionary key used in Configuration compute methods.
+
+        Parameters
+        __________
+        name_dict : dict
+            name dictionary created by format_name method
+
+        Returns
+        _______
+        name_key : str
+
+        """
+        out = name_dict['base']
+        if name_dict['sups'] != '':
+            out += '^' + name_dict['sups']
+        if name_dict['subs'] != '':
+            out += '_' + name_dict['subs']
+        if name_dict['d'] != '':
+            out += '_' + name_dict['d']
+        return out
+
+
 def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     """prints coeffs to the terminal
 
@@ -59,7 +412,7 @@ def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
     cR,cZ,cL :
         spectral coefficients for R, Z, and lambda
     zern_idx, lambda_idx :
-        mode numbers for zernike and fourier spectral basis.       
+        mode numbers for zernike and fourier spectral basis.
 
     Returns
     -------

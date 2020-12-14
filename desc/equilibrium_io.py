@@ -153,6 +153,54 @@ def read_desc(filename):
 
     return equil
 
+class IOAble(ABC):
+    """Abstract Base Class for savable and loadable objects."""
+
+    def _init_from_file_(self, load_from=None, file_format:str=None, obj_lib=None) -> None:
+        """Initialize from file.
+
+        Parameters
+        __________
+        load_from : str file path OR file instance (Default self.load_from)
+            file to initialize from
+        file_format : str (Default self._file_format_)
+            file format of file initializing from
+
+        Returns
+        _______
+        None
+
+        """
+        if load_from is None:
+            load_from = self.load_from
+        if file_format is None:
+            file_format = self._file_format_
+        reader = reader_factory(load_from, file_format)
+        reader.read_obj(self, obj_lib=obj_lib)
+        return None
+
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        """Save the object.
+
+        Parameters
+        __________
+        save_to : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if save_to is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if save_to is a file path
+
+        Returns
+        _______
+        None
+
+        """
+        writer = writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.close()
+
 class IO(ABC):
     """Abstract Base Class (ABC) for readers and writers."""
 
@@ -249,6 +297,51 @@ class IO(ABC):
             raise SyntaxError("where '{}' is not a readable type.".format(where))
         return loc
 
+    @abstractmethod
+    def open_file(self, file_name, file_mode):
+        pass
+
+    def check_type(self, obj):
+        if type(obj) in self._file_types_:
+            return True
+        else:
+            return False
+
+
+class hdf5IO(IO):
+    """Class to wrap ABC IO for hdf5 file format."""
+    def __init__(self):
+        """Initialize hdf5IO instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self._file_types_ = [h5py._hl.group.Group, h5py._hl.files.File]
+        self._file_format_ = 'hdf5'
+        super().__init__()
+
+    def open_file(self, file_name, file_mode):
+        """Open hdf5 file.
+
+        Parameters
+        __________
+        file_name : str
+            path to file to open
+        file_mode : str
+            mode used when opening file
+
+        Returns
+        _______
+        hdf5 file instance
+
+        """
+        return h5py.File(file_name, file_mode)
+
     def sub(self, name):
         """Create subgroup or return if already exists.
 
@@ -284,50 +377,6 @@ class IO(ABC):
         loc = self.resolve_where(where)
         return list(loc.keys())
 
-    @abstractmethod
-    def open_file(self, file_name, file_mode):
-        pass
-
-    def check_type(self, obj):
-        if type(obj) in self._file_types_:
-            return True
-        else:
-            return False
-
-
-class hdf5IO(IO):
-    """Class to wrap ABC IO for hdf5 file format."""
-    def __init__(self):
-        """Initialize hdf5IO instance.
-
-        Parameters
-        __________
-
-        Returns
-        _______
-        None
-
-        """
-        self._file_types_ = [h5py._hl.group.Group, h5py._hl.files.File]
-        super().__init__()
-
-    def open_file(self, file_name, file_mode):
-        """Open hdf5 file.
-
-        Parameters
-        __________
-        file_name : str
-            path to file to open
-        file_mode : str
-            mode used when opening file
-
-        Returns
-        _______
-        hdf5 file instance
-
-        """
-        return h5py.File(file_name, file_mode)
-
 class PickleIO(IO):
     """Class to wrap ABC IO for pickle file format. """
     def __init__(self):
@@ -342,6 +391,7 @@ class PickleIO(IO):
 
         """
         self._file_types_ = [io.BufferedWriter]
+        self._file_format_ = 'pickle'
         super().__init__()
 
     def open_file(self, file_name, file_mode):
@@ -401,7 +451,7 @@ class hdf5Reader(hdf5IO,Reader):
         self.file_mode = 'r'
         super().__init__()
 
-    def read_obj(self, obj, where=None):
+    def read_obj(self, obj, where=None, obj_lib=None):
         """Read object from file in group specified by where argument.
 
         Parameters
@@ -416,6 +466,14 @@ class hdf5Reader(hdf5IO,Reader):
         None
 
         """
+        if obj_lib is not None:
+            self.obj_lib = obj_lib
+        elif hasattr(self, 'obj_lib'):
+            pass
+        elif hasattr(obj, '_object_lib_'):
+            self.obj_lib = obj._object_lib_
+        else:
+            pass
         loc = self.resolve_where(where)
         for attr in obj._save_attrs_:
             try:
@@ -423,16 +481,95 @@ class hdf5Reader(hdf5IO,Reader):
             except KeyError:
                 warnings.warn("Save attribute '{}' was not loaded.".format(attr),
                         RuntimeWarning)
+            except AttributeError:
+                try:
+                    if 'name' in loc[attr].keys():
+                        theattr = loc[attr]['name'][()]
+                        if theattr == 'list':
+                            setattr(obj, attr, self.read_list(where=loc[attr]))
+                        elif theattr == 'dict':
+                            setattr(obj, attr, self.read_dict(where=loc[attr]))
+                        else:
+                            try:
+                                #initialized an object from object_lib
+                                #print('setting attribute', attr, 'as an ', theattr)
+                                setattr(obj, attr, self.obj_lib[theattr](load_from=loc[attr],
+                                    file_format=self._file_format_, obj_lib=self.obj_lib))
+                            except KeyError:
+                                warnings.warn("No object_lib  '{}'.".format(attr),
+                                        RuntimeWarning)
+                    else:
+                        warnings.warn("Could not load attribute '{}'.".format(attr),
+                                RuntimeWarning)
+                except AttributeError:
+                    warnings.warn("Could not set attribute '{}'.".format(attr),
+                                RuntimeWarning)
+                #    theattr = loc[attr][()]
+                #    print('for attr', attr, 'theattr is', theattr, 'with object', obj)
+                #    if type(theattr) is np.bool_:
+                #        print('converting bool')
+                #        newattr = bool(theattr)
+                #        print('new type is', type(newattr))
+                #        setattr(obj, attr, newattr)
+                #    else:
+                #        raise NotImplementedError("Data of type '{}' has not "
+                #            "been made compatible with loading.".format(type(loc[attr][()])))
         return None
 
-    def read_dict(self, thedict, where=None):
+    def read_dict(self, thedict=None, where=None):
         """Read dictionary from file in group specified by where argument.
 
         Parameters
         __________
-        thedict : dictionary
+        thedict : dictionary (Default None)
             dictionary to update from the file
-        where : None of file instance
+        where : None or file instance
+            specifies where to read dict from
+
+        Returns
+        _______
+        None
+
+        """
+        ret = False
+        if thedict is None:
+            thedict = {}
+            ret = True
+        loc = self.resolve_where(where)
+        for key in loc.keys():
+            try:
+                thedict[key] = loc[key][()]
+            except AttributeError:
+                if 'name' in loc[key].keys():
+                    theattr = loc[key]['name'][()]
+                    if theattr == 'list':
+                        thedict[theattr] = self.read_list(where=loc[key])
+                    elif theattr == 'dict':
+                        thedict[theattr] = self.read_dict(where=loc[key])
+                    else:
+                        try:
+                            #initialized an object from object_lib
+                            thedict[theattr] = self.obj_lib[theattr](load_from=loc[key],
+                                    file_format=self._file_format_, obj_lib=self.obj_lib)
+                        except KeyError:
+                            warnings.warn("Could not load attribute '{}'.".format(key),
+                                    RuntimeWarning)
+                else:
+                    warnings.warn("Could not load attribute '{}'.".format(key),
+                            RuntimeWarning)
+        if ret:
+            return thedict
+        else:
+            return None
+
+    def read_list(self, thelist=None, where=None):
+        """Read list from file in group specified by where argument.
+
+        Parameters
+        __________
+        thelist : list (Default None)
+            list to update from the file
+        where : None or file instance
             specifies wehre to read dict from
 
         Returns
@@ -440,14 +577,39 @@ class hdf5Reader(hdf5IO,Reader):
         None
 
         """
+        ret = False
+        if thelist is None:
+            thelist = []
+            ret = True
         loc = self.resolve_where(where)
-        for key in loc.keys():
+        i = 0
+        while str(i) in loc.keys():
             try:
-                thedict.update({key : loc[key][()]})
+                thelist.append(loc[str(i)][()])
             except AttributeError:
-                # don't load subgroups
-                pass
-        return None
+                if 'name' in loc[str(i)].keys():
+                    theattr = loc[str(i)]['name'][()]
+                    print('loading a ', theattr, 'from list')
+                    if theattr == 'list':
+                        thelist.append(self.read_list(where=theattr))
+                    elif theattr == 'dict':
+                        thelist.append(self.read_dict(where=theattr))
+                    else:
+                        try:
+                            #initialized an object from object_lib
+                            thelist.append(self.obj_lib[theattr](load_from=loc[str(i)],
+                                file_format=self._file_format_, obj_lib=self.obj_lib))
+                        except KeyError:
+                            warnings.warn("Could not load list index '{}'.".format(i),
+                                    RuntimeWarning)
+                else:
+                    warnings.warn("Could not load list index '{}'.".format(i),
+                            RuntimeWarning)
+            i += 1
+        if ret:
+            return thelist
+        else:
+            return None
 
 class PickleReader(PickleIO,Reader):
     """Class specifying a reader with PickleIO."""
@@ -545,12 +707,29 @@ class hdf5Writer(hdf5IO,Writer):
 
         """
         loc = self.resolve_where(where)
+        #save name of object class
+        loc.create_dataset('name', data=type(obj).__name__)
         for attr in obj._save_attrs_:
             try:
+                #print(attr) #debugging
                 loc.create_dataset(attr, data=getattr(obj, attr))
             except AttributeError:
                 warnings.warn("Save attribute '{}' was not saved as it does "
                         "not exist.".format(attr), RuntimeWarning)
+            except TypeError:
+                theattr = getattr(obj, attr)
+                if type(theattr) is dict:
+                    self.write_dict(theattr, where=self.sub(attr))
+                elif type(theattr) is list:
+                    self.write_list(theattr, where=self.sub(attr))
+                else:
+                    try:
+                        group = loc.create_group(attr)
+                        sub_obj = getattr(obj, attr)
+                        sub_obj.save(group)
+                    except AttributeError:
+                        warnings.warn("Could not save object '{}'.".format(attr),
+                                RuntimeWarning)
         return None
 
     def write_dict(self, thedict, where=None):
@@ -559,8 +738,8 @@ class hdf5Writer(hdf5IO,Writer):
         Parameters
         __________
         thedict : dictionary
-            dictionary to update from the file
-        where : None of file instance
+            dictionary to write to file
+        where : None or file instance
             specifies where to write dict to
 
         Returns
@@ -569,8 +748,37 @@ class hdf5Writer(hdf5IO,Writer):
 
         """
         loc = self.resolve_where(where)
+        loc.create_dataset('name', data='dict')
         for key in thedict.keys():
-            loc.create_dataset(key, data=thedict[key])
+            try:
+                loc.create_dataset(key, data=thedict[key])
+            except TypeError:
+                self.write_obj(thedict[key], loc)
+        return None
+
+    def write_list(self, thelist, where=None):
+        """Write list to file in group specified by where argument.
+
+        Parameters
+        __________
+        thelist : list
+            list to write to file
+        where : None or file instance
+            specifies where to write list to
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        loc.create_dataset('name', data='list')
+        for i in range(len(thelist)):
+            try:
+                loc.create_dataset(str(i), data=thelist[i])
+            except TypeError:
+                subloc = loc.create_group(str(i))
+                self.write_obj(thelist[i], where=subloc)
         return None
 
 class PickleWriter(PickleIO,Writer):

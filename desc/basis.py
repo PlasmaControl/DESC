@@ -1,10 +1,11 @@
 import numpy as np
 from abc import ABC, abstractmethod
+from desc.equilibrium_io import IOAble
 
 from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, Tristate
 
 
-class Basis(ABC):
+class Basis(IOAble,ABC):
     """Basis is an abstract base class for spectral basis sets
 
     Attributes
@@ -25,6 +26,8 @@ class Basis(ABC):
         each row is one basis function with modes (l,m,n)
 
     """
+    _save_attrs_ = ['_Basis__L', '_Basis__M', '_Basis__N', '_Basis__NFP',
+                             '_Basis__modes']
 
     @abstractmethod
     def __init__(self) -> None:
@@ -139,7 +142,7 @@ class PowerSeries(Basis):
        Power series in the radial coordinate.
     """
 
-    def __init__(self, L:int=0) -> None:
+    def __init__(self, L:int=0, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a PowerSeries
 
         Parameters
@@ -152,17 +155,20 @@ class PowerSeries(Basis):
         None
 
         """
-        self._Basis__L = L
-        self._Basis__M = 0
-        self._Basis__N = 0
-        self._Basis__NFP = 1
-        self._Basis__sym = None
+        if load_from is None:
+            self._Basis__L = L
+            self._Basis__M = 0
+            self._Basis__N = 0
+            self._Basis__NFP = 1
+            self._Basis__sym = None
 
-        self._Basis__modes = self.get_modes(L=self._Basis__L)
+            self._Basis__modes = self.get_modes(L=self._Basis__L)
 
-        self._enforce_symmetry_()
-        self._sort_modes_()
-        self._def_save_attrs_()
+            self._enforce_symmetry_()
+            self._sort_modes_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def get_modes(self, L:int=0):
         """Gets mode numbers for power series
@@ -223,7 +229,9 @@ class DoubleFourierSeries(Basis):
        Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None) -> None:
+    def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None,
+            load_from=None, file_format=None, obj_lib=None) -> None:
+
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -243,17 +251,20 @@ class DoubleFourierSeries(Basis):
         None
 
         """
-        self._Basis__L = 0
-        self._Basis__M = M
-        self._Basis__N = N
-        self._Basis__NFP = NFP
-        self._Basis__sym = sym
+        if load_from is None:
+            self._Basis__L = 0
+            self._Basis__M = M
+            self._Basis__N = N
+            self._Basis__NFP = NFP
+            self._Basis__sym = sym
 
-        self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
+            self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
 
-        self._enforce_symmetry_()
-        self._sort_modes_()
-        self._def_save_attrs_()
+            self._enforce_symmetry_()
+            self._sort_modes_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def get_modes(self, M:int=0, N:int=0) -> None:
         """Gets mode numbers for double fourier series
@@ -325,7 +336,9 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
-                 sym:Tristate=None, index:str='ansi') -> None:
+                 sym:Tristate=None, index:str='ansi',
+                 load_from=None, file_format=None, obj_lib=None) -> None:
+
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -342,7 +355,7 @@ class FourierZernikeBasis(Basis):
             True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
             None for no symmetry (Default)
         index : str
-            Indexing method, one of the following options: 
+            Indexing method, one of the following options:
             ('ansi','frige','chevron','house').
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -374,19 +387,23 @@ class FourierZernikeBasis(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        self._Basis__L = L
-        self._Basis__M = M
-        self._Basis__N = N
-        self._Basis__NFP = NFP
-        self._Basis__sym = sym
-        self.__index = index
+        if load_from is None:
+            self._Basis__L = L
+            self._Basis__M = M
+            self._Basis__N = N
+            self._Basis__NFP = NFP
+            self._Basis__sym = sym
+            self.__index = index
 
-        self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,
-                                        N=self._Basis__N, index=self.__index)
+            self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,
+                                            N=self._Basis__N, index=self.__index)
 
-        self._enforce_symmetry_()
-        self._sort_modes_()
-        self._def_save_attrs_()
+            self._enforce_symmetry_()
+            self._sort_modes_()
+            #self._def_save_attrs_()
+        else:
+            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):
         """Gets mode numbers for Fourier-Zernike basis functions
@@ -400,7 +417,7 @@ class FourierZernikeBasis(Basis):
         N : int
             maximum toroidal resolution
         index : str
-            Indexing method, one of the following options: 
+            Indexing method, one of the following options:
             ('ansi','frige','chevron','house').
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -552,8 +569,8 @@ def polyval_vec(p, x):
     Parameters
     ----------
     p : ndarray, shape(N,M)
-        Array of coefficient for N polynomials of order M. 
-        Each row is one polynomial, given in descending powers of x. 
+        Array of coefficient for N polynomials of order M.
+        Each row is one polynomial, given in descending powers of x.
     x : ndarray, shape(K,)
         A number, or 1d array of numbers at
         which to evaluate p. If greater than 1d it is flattened.
@@ -594,7 +611,7 @@ def power_coeffs(l):
     Returns
     -------
     coeffsy : ndarray, shape(l+1,)
-        
+
 
     """
     l = np.atleast_1d(l).astype(int)
@@ -641,7 +658,7 @@ def jacobi_coeffs(l, m):
     Returns
     -------
     coeffs : ndarray
-        
+
 
     """
     factorial = np.math.factorial

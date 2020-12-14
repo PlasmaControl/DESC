@@ -1,0 +1,349 @@
+Timer unit: 1e-07 s
+
+Total time: 141.75 s
+File: C:\Users\d2dud\Documents\GitHub\DESC_APC524\desc\continuation.py
+Function: solve_eq_continuation at line 18
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    18                                           def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
+    19                                               """Solves for an equilibrium by continuation method
+    20                                           
+    21                                               Steps up resolution, perturbs pressure, 3d bdry etc.
+    22                                           
+    23                                               Parameters
+    24                                               ----------
+    25                                               inputs : dict
+    26                                                   dictionary with input parameters defining problem setup and solver options
+    27                                               checkpoint_filename : str or path-like
+    28                                                   file to save checkpoint data (Default value = None)
+    29                                               device : jax.device or None
+    30                                                   device handle to JIT compile to (Default value = None)
+    31                                           
+    32                                               Returns
+    33                                               -------
+    34                                               iterations : dict
+    35                                                   dictionary of intermediate solutions
+    36                                               timer : Timer
+    37                                                   Timer object containing timing data for individual iterations
+    38                                           
+    39                                               """
+    40         1       5070.0   5070.0      0.0      timer = Timer()
+    41         1        188.0    188.0      0.0      timer.start("Total time")
+    42                                           
+    43         1        133.0    133.0      0.0      stell_sym = inputs['stell_sym']
+    44         1        134.0    134.0      0.0      NFP = inputs['NFP']
+    45         1        131.0    131.0      0.0      Psi_lcfs = inputs['Psi_lcfs']
+    46         1        131.0    131.0      0.0      M = inputs['Mpol']                  # arr
+    47         1        128.0    128.0      0.0      N = inputs['Ntor']                  # arr
+    48         1        130.0    130.0      0.0      delta_lm = inputs['delta_lm']       # arr
+    49         1        127.0    127.0      0.0      Mnodes = inputs['Mnodes']           # arr
+    50         1         94.0     94.0      0.0      Nnodes = inputs['Nnodes']           # arr
+    51         1         63.0     63.0      0.0      bdry_ratio = inputs['bdry_ratio']   # arr
+    52         1         68.0     68.0      0.0      pres_ratio = inputs['pres_ratio']   # arr
+    53         1         63.0     63.0      0.0      zeta_ratio = inputs['zeta_ratio']   # arr
+    54         1        118.0    118.0      0.0      errr_ratio = inputs['errr_ratio']   # arr
+    55         1         59.0     59.0      0.0      pert_order = inputs['pert_order']   # arr
+    56         1         75.0     75.0      0.0      ftol = inputs['ftol']               # arr
+    57         1        132.0    132.0      0.0      xtol = inputs['xtol']               # arr
+    58         1        133.0    133.0      0.0      gtol = inputs['gtol']               # arr
+    59         1        355.0    355.0      0.0      nfev = inputs['nfev']               # arr
+    60         1         27.0     27.0      0.0      optim_method = inputs['optim_method']
+    61         1         20.0     20.0      0.0      errr_mode = inputs['errr_mode']
+    62         1         19.0     19.0      0.0      bdry_mode = inputs['bdry_mode']
+    63         1         19.0     19.0      0.0      zern_mode = inputs['zern_mode']
+    64         1         18.0     18.0      0.0      node_mode = inputs['node_mode']
+    65         1         41.0     41.0      0.0      cP = inputs['cP']
+    66         1         40.0     40.0      0.0      cI = inputs['cI']
+    67         1         41.0     41.0      0.0      axis = inputs['axis']
+    68         1         40.0     40.0      0.0      bdry = inputs['bdry']
+    69         1         43.0     43.0      0.0      verbose = inputs['verbose']
+    70                                           
+    71         1         60.0     60.0      0.0      if checkpoint_filename is not None:
+    72                                                   checkpoint = True
+    73                                                   checkpoint_file = Checkpoint(checkpoint_filename, write_ascii=True)
+    74                                               else:
+    75         1         37.0     37.0      0.0          checkpoint = False
+    76         1         34.0     34.0      0.0      iterations = {}
+    77                                           
+    78         1         53.0     53.0      0.0      if not use_jax:
+    79         1        232.0    232.0      0.0          pert_order *= 0
+    80                                           
+    81         1         38.0     38.0      0.0      arr_len = M.size
+    82         2        117.0     58.5      0.0      for ii in range(arr_len):
+    83                                           
+    84         1         35.0     35.0      0.0          if verbose > 0:
+    85         1       5150.0   5150.0      0.0              print("================")
+    86         1        391.0    391.0      0.0              print("Step {}/{}".format(ii+1, arr_len))
+    87         1        296.0    296.0      0.0              print("================")
+    88         1         29.0     29.0      0.0              print("Spectral resolution (M,N,delta_lm)=({},{},{})".format(
+    89         1        484.0    484.0      0.0                  M[ii], N[ii], delta_lm[ii]))
+    90         1         27.0     27.0      0.0              print("Node resolution (M,N)=({},{})".format(
+    91         1        323.0    323.0      0.0                  Mnodes[ii], Nnodes[ii]))
+    92         1        357.0    357.0      0.0              print("Boundary ratio = {}".format(bdry_ratio[ii]))
+    93         1        334.0    334.0      0.0              print("Pressure ratio = {}".format(pres_ratio[ii]))
+    94         1        328.0    328.0      0.0              print("Zeta ratio = {}".format(zeta_ratio[ii]))
+    95         1        339.0    339.0      0.0              print("Error ratio = {}".format(errr_ratio[ii]))
+    96         1        368.0    368.0      0.0              print("Perturbation Order = {}".format(pert_order[ii]))
+    97         1        624.0    624.0      0.0              print("Function tolerance = {}".format(ftol[ii]))
+    98         1       2030.0   2030.0      0.0              print("Gradient tolerance = {}".format(gtol[ii]))
+    99         1        668.0    668.0      0.0              print("State vector tolerance = {}".format(xtol[ii]))
+   100         1        999.0    999.0      0.0              print("Max function evaluations = {}".format(nfev[ii]))
+   101         1        488.0    488.0      0.0              print("================")
+   102                                           
+   103                                                   # initial solution
+   104         1         70.0     70.0      0.0          if ii == 0:
+   105                                                       # interpolator
+   106         1        134.0    134.0      0.0              timer.start("Iteration {} total".format(ii+1))
+   107         1         43.0     43.0      0.0              timer.start("Transform precomputation")
+   108         1         33.0     33.0      0.0              if verbose > 0:
+   109         1        334.0    334.0      0.0                  print("Precomputing Transforms")
+   110         1         37.0     37.0      0.0              RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+   111         1      12020.0  12020.0      0.0                                       axis=True, index=zern_mode, surfs=node_mode)
+   112                                                       # FIXME: hard-coded non-symmetric L_grid until symmetry is implemented in Basis
+   113         1      14074.0  14074.0      0.0              L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=False)
+   114         1         40.0     40.0      0.0              RZ_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
+   115         1       6165.0   6165.0      0.0                                             NFP=NFP, index=zern_mode)
+   116         1       1275.0   1275.0      0.0              L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP)
+   117         1        275.0    275.0      0.0              P_basis = PowerSeries(L=cP.size-1)
+   118         1        240.0    240.0      0.0              I_basis = PowerSeries(L=cI.size-1)
+   119         1   13077105.0 13077105.0      0.9              RZ_transform = Transform(RZ_grid, RZ_basis, derivs=3)
+   120         1      78754.0  78754.0      0.0              RZb_transform = Transform(L_grid, RZ_basis)
+   121         1      18855.0  18855.0      0.0              L_transform = Transform(L_grid, L_basis, derivs=0)
+   122         1      19436.0  19436.0      0.0              pres_transform = Transform(RZ_grid, P_basis, derivs=1)
+   123         1      16402.0  16402.0      0.0              iota_transform = Transform(RZ_grid, I_basis, derivs=1)
+   124         1        327.0    327.0      0.0              timer.stop("Transform precomputation")
+   125         1         22.0     22.0      0.0              if verbose > 1:
+   126                                                           timer.disp("Transform precomputation")
+   127                                                       # format boundary shape
+   128         1       1213.0   1213.0      0.0              cRb, cZb = format_bdry(bdry, L_basis, bdry_mode)
+   129                                           
+   130                                                       # initial guess
+   131         1         49.0     49.0      0.0              timer.start("Initial guess computation")
+   132         1         22.0     22.0      0.0              if verbose > 0:
+   133         1       3145.0   3145.0      0.0                  print("Computing initial guess")
+   134         1       9300.0   9300.0      0.0              cR, cZ = get_initial_guess_scale_bdry(axis, bdry, bdry_ratio[ii], RZ_basis)
+   135         1         77.0     77.0      0.0              cL = np.zeros((L_basis.num_modes,))
+   136         1         95.0     95.0      0.0              x = jnp.concatenate([cR, cZ, cL])
+   137         1      15570.0  15570.0      0.0              sym_mat = symmetry_matrix(RZ_basis.modes, L_basis.modes, sym=stell_sym)
+   138         1       8047.0   8047.0      0.0              x = jnp.matmul(sym_mat.T, x)
+   139         1        547.0    547.0      0.0              timer.stop("Initial guess computation")
+   140         1         39.0     39.0      0.0              if verbose > 1:
+   141                                                           timer.disp("Initial guess computation")
+   142         1        197.0    197.0      0.0              ratio = np.where(L_basis.modes[:, 2] != 0, bdry_ratio[ii], 1)
+   143                                                       equil = {
+   144         1         41.0     41.0      0.0                  'M': M[ii],
+   145         1         36.0     36.0      0.0                  'N': N[ii],
+   146         1         33.0     33.0      0.0                  'cR': cR,
+   147         1         36.0     36.0      0.0                  'cZ': cZ,
+   148         1         34.0     34.0      0.0                  'cL': cL,
+   149         1         63.0     63.0      0.0                  'cRb': cRb*ratio,
+   150         1         48.0     48.0      0.0                  'cZb': cZb*ratio,
+   151         1        101.0    101.0      0.0                  'cP': cP*pres_ratio[ii],
+   152         1         33.0     33.0      0.0                  'cI': cI,
+   153         1         33.0     33.0      0.0                  'Psi_lcfs': Psi_lcfs,
+   154         1         37.0     37.0      0.0                  'NFP': NFP,
+   155         1         32.0     32.0      0.0                  'R_basis': RZ_basis,
+   156         1         32.0     32.0      0.0                  'Z_basis': RZ_basis,
+   157         1         32.0     32.0      0.0                  'L_basis': L_basis,
+   158         1         33.0     33.0      0.0                  'Rb_basis': L_basis,
+   159         1         34.0     34.0      0.0                  'Zb_basis': L_basis,
+   160         1         33.0     33.0      0.0                  'P_basis': P_basis,
+   161         1         59.0     59.0      0.0                  'I_basis': I_basis
+   162                                                       }
+   163         1         35.0     35.0      0.0              iterations['init'] = equil
+   164         1         34.0     34.0      0.0              if checkpoint:
+   165                                                           checkpoint_file.write_iteration(equil, 'init', inputs)
+   166                                           
+   167                                                   # continuing from previous solution
+   168                                                   else:
+   169                                                       # change grids
+   170                                                       if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
+   171                                                           RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+   172                                                                                    axis=True, index=zern_mode, surfs=node_mode)
+   173                                                           # FIXME: hard-coded non-symmetric L_grid until symmetry is implemented in Basis
+   174                                                           L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=False)
+   175                                           
+   176                                                       # change bases
+   177                                                       if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
+   178                                                           RZ_basis_old = RZ_basis
+   179                                                           L_basis_old = L_basis
+   180                                                           RZ_basis = FourierZernikeBasis(L=delta_lm[ii], M=M[ii], N=N[ii],
+   181                                                                                          NFP=NFP, index=zern_mode)
+   182                                                           L_basis = DoubleFourierSeries(M=M[ii], N=N[ii], NFP=NFP)
+   183                                           
+   184                                                           # re-format boundary shape
+   185                                                           cRb, cZb = format_bdry(bdry, L_basis, bdry_mode)
+   186                                                           # update state vector
+   187                                                           sym_mat = symmetry_matrix(RZ_basis.modes, L_basis.modes, sym=stell_sym)
+   188                                                           x = change_resolution(x, stell_sym, RZ_basis_old, RZ_basis, L_basis_old, L_basis)
+   189                                           
+   190                                                       # change transform matrices
+   191                                                       timer.start(
+   192                                                           "Iteration {} changing resolution".format(ii+1))
+   193                                                       if verbose > 0:
+   194                                                           print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+   195                                                               Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
+   196                                                           print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
+   197                                                                   delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+   198                                                       RZ_transform.change_resolution(grid=RZ_grid, basis=RZ_basis)
+   199                                                       RZb_transform.change_resolution(grid=L_grid, basis=RZ_basis)
+   200                                                       L_transform.change_resolution(grid=L_grid, basis=L_basis)
+   201                                                       pres_transform.change_resolution(grid=RZ_grid)
+   202                                                       iota_transform.change_resolution(grid=RZ_grid)
+   203                                                       timer.stop(
+   204                                                           "Iteration {} changing resolution".format(ii+1))
+   205                                                       if verbose > 1:
+   206                                                           timer.disp(
+   207                                                               "Iteration {} changing resolution".format(ii+1))
+   208                                           
+   209                                                       # continuation parameters
+   210                                                       delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
+   211                                                       delta_pres = pres_ratio[ii] - pres_ratio[ii-1]
+   212                                                       delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
+   213                                                       deltas = np.array([delta_bdry, delta_pres, delta_zeta])
+   214                                           
+   215                                                       # need a non-scalar objective function to do the perturbations
+   216                                                       obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
+   217                                                           RZ_transform=RZ_transform, RZb_transform=RZb_transform,
+   218                                                           L_transform=L_transform, pres_transform=pres_transform,
+   219                                                           iota_transform=iota_transform, stell_sym=stell_sym, scalar=False)
+   220                                                       equil_obj = obj_fun.compute
+   221                                                       callback = obj_fun.callback
+   222                                                       args = [cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
+   223                                                               pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
+   224                                           
+   225                                                       # perturbations
+   226                                                       if np.any(deltas):
+   227                                                           if verbose > 1:
+   228                                                               print("Perturbing equilibrium")
+   229                                                           x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
+   230                                                                                                  pert_order[ii], verbose, timer)
+   231                                           
+   232                                                   # equilibrium objective function
+   233         1         41.0     41.0      0.0          if optim_method in ['bfgs']:
+   234                                                       scalar = True
+   235                                                   else:
+   236         1         34.0     34.0      0.0              scalar = False
+   237         1         51.0     51.0      0.0          obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
+   238         1         34.0     34.0      0.0                  RZ_transform=RZ_transform, RZb_transform=RZb_transform,
+   239         1         35.0     35.0      0.0                  L_transform=L_transform, pres_transform=pres_transform,
+   240         1      14322.0  14322.0      0.0                  iota_transform=iota_transform, stell_sym=stell_sym, scalar=scalar)
+   241         1         52.0     52.0      0.0          equil_obj = obj_fun.compute
+   242         1         37.0     37.0      0.0          callback = obj_fun.callback
+   243         1         50.0     50.0      0.0          args = (cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio[ii],
+   244         1         52.0     52.0      0.0                  pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
+   245                                           
+   246         1         42.0     42.0      0.0          if use_jax:
+   247                                                       if optim_method in ['bfgs']:
+   248                                                           jac = grad(equil_obj, argnums=0)
+   249                                                       else:
+   250                                                           jac = jacfwd(equil_obj, argnums=0)
+   251                                                       if verbose > 0:
+   252                                                           print("Compiling objective function")
+   253                                                       if device is None:
+   254                                                           import jax
+   255                                                           device = jax.devices()[0]
+   256                                                       equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
+   257                                                       jac_obj_jit = jit(jac, device=device)
+   258                                                       timer.start("Iteration {} compilation".format(ii+1))
+   259                                                       f0 = equil_obj_jit(x, *args)
+   260                                                       J0 = jac_obj_jit(x, *args)
+   261                                                       timer.stop("Iteration {} compilation".format(ii+1))
+   262                                                       if verbose > 1:
+   263                                                           timer.disp("Iteration {} compilation".format(ii+1))
+   264                                                   else:
+   265         1         36.0     36.0      0.0              equil_obj_jit = equil_obj
+   266         1         38.0     38.0      0.0              jac_obj_jit = '2-point'
+   267         1         37.0     37.0      0.0          if verbose > 0:
+   268         1       1570.0   1570.0      0.0              print("Starting optimization")
+   269                                           
+   270         1         41.0     41.0      0.0          x_init = x
+   271         1        101.0    101.0      0.0          timer.start("Iteration {} solution".format(ii+1))
+   272         1         40.0     40.0      0.0          if optim_method in ['bfgs']:
+   273                                                       out = scipy.optimize.minimize(equil_obj_jit,
+   274                                                                                     x0=x_init,
+   275                                                                                     args=args,
+   276                                                                                     method=optim_method,
+   277                                                                                     jac=jac_obj_jit,
+   278                                                                                     tol=gtol[ii],
+   279                                                                                     options={'maxiter': nfev[ii],
+   280                                                                                              'disp': verbose})
+   281                                           
+   282         1         38.0     38.0      0.0          elif optim_method in ['trf', 'lm', 'dogleg']:
+   283         1         87.0     87.0      0.0              out = scipy.optimize.least_squares(equil_obj_jit,
+   284         1         34.0     34.0      0.0                                                 x0=x_init,
+   285         1         34.0     34.0      0.0                                                 args=args,
+   286         1         34.0     34.0      0.0                                                 jac=jac_obj_jit,
+   287         1         53.0     53.0      0.0                                                 method=optim_method,
+   288         1         35.0     35.0      0.0                                                 x_scale='jac',
+   289         1         45.0     45.0      0.0                                                 ftol=ftol[ii],
+   290         1         41.0     41.0      0.0                                                 xtol=xtol[ii],
+   291         1         40.0     40.0      0.0                                                 gtol=gtol[ii],
+   292         1         37.0     37.0      0.0                                                 max_nfev=nfev[ii],
+   293         1 1398430025.0 1398430025.0     98.7                                                 verbose=verbose)
+   294                                                   else:
+   295                                                       raise NotImplementedError(
+   296                                                           TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogleg'" + TextColors.ENDC)
+   297                                           
+   298         1        659.0    659.0      0.0          timer.stop("Iteration {} solution".format(ii+1))
+   299         1         48.0     48.0      0.0          x = out['x']
+   300                                           
+   301         1         40.0     40.0      0.0          if verbose > 1:
+   302                                                       timer.disp("Iteration {} solution".format(ii+1))
+   303                                                       timer.pretty_print("Iteration {} avg time per step".format(ii+1),
+   304                                                                          timer["Iteration {} solution".format(ii+1)]/out['nfev'])
+   305         1         40.0     40.0      0.0          if verbose > 0:
+   306         1        540.0    540.0      0.0              print("Start of Step {}:".format(ii+1))
+   307         1     158954.0 158954.0      0.0              callback(x_init, *args)
+   308         1        859.0    859.0      0.0              print("End of Step {}:".format(ii+1))
+   309         1     150189.0 150189.0      0.0              callback(x, *args)
+   310                                           
+   311         1      11382.0  11382.0      0.0          cR, cZ, cL = unpack_state(jnp.matmul(sym_mat, x), RZ_transform.num_modes)
+   312         1        266.0    266.0      0.0          ratio = np.where(L_basis.modes[:, 2] != 0, bdry_ratio[ii], 1)
+   313                                                   equil = {
+   314         1         50.0     50.0      0.0              'M': M[ii],
+   315         1         49.0     49.0      0.0              'N': N[ii],
+   316         1         45.0     45.0      0.0              'cR': cR,
+   317         1         46.0     46.0      0.0              'cZ': cZ,
+   318         1         44.0     44.0      0.0              'cL': cL,
+   319         1         75.0     75.0      0.0              'cRb': cRb*ratio,
+   320         1         61.0     61.0      0.0              'cZb': cZb*ratio,
+   321         1        100.0    100.0      0.0              'cP': cP*pres_ratio[ii],
+   322         1         34.0     34.0      0.0              'cI': cI,
+   323         1         33.0     33.0      0.0              'Psi_lcfs': Psi_lcfs,
+   324         1         33.0     33.0      0.0              'NFP': NFP,
+   325         1         33.0     33.0      0.0              'R_basis': RZ_basis,
+   326         1         33.0     33.0      0.0              'Z_basis': RZ_basis,
+   327         1         32.0     32.0      0.0              'L_basis': L_basis,
+   328         1         32.0     32.0      0.0              'Rb_basis': L_basis,
+   329         1         33.0     33.0      0.0              'Zb_basis': L_basis,
+   330         1         34.0     34.0      0.0              'P_basis': P_basis,
+   331         1         50.0     50.0      0.0              'I_basis': I_basis
+   332                                                   }
+   333                                           
+   334         1         37.0     37.0      0.0          iterations[ii] = equil
+   335         1         34.0     34.0      0.0          iterations['final'] = equil
+   336         1         34.0     34.0      0.0          if checkpoint:
+   337                                                       if verbose > 0:
+   338                                                           print('Saving latest iteration')
+   339                                                       checkpoint_file.write_iteration(equil, ii+1, inputs)
+   340                                           
+   341         1    5420636.0 5420636.0      0.4          if not is_nested(cR, cZ, RZ_basis):
+   342                                                       warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
+   343                                                                     + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
+   344                                                       break
+   345                                           
+   346         1         47.0     47.0      0.0      if checkpoint:
+   347                                                   checkpoint_file.close()
+   348                                           
+   349         1        699.0    699.0      0.0      timer.stop("Total time")
+   350         1       4922.0   4922.0      0.0      print('====================')
+   351         1        385.0    385.0      0.0      print('Done')
+   352         1         34.0     34.0      0.0      if verbose > 1:
+   353                                                   timer.disp("Total time")
+   354         1         30.0     30.0      0.0      if checkpoint_filename is not None:
+   355                                                   print('Output written to {}'.format(checkpoint_filename))
+   356         1        340.0    340.0      0.0      print('====================')
+   357                                           
+   358         1         28.0     28.0      0.0      return iterations, timer

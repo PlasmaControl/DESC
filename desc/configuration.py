@@ -3,9 +3,11 @@ from collections.abc import MutableSequence
 
 from desc.backend import jnp, put, opsindex, cross, dot, TextColors, Tristate
 from desc.basis import Basis, PowerSeries, DoubleFourierSeries, FourierZernikeBasis
+from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
-from desc import equilibrium_io as eq_io
+#from desc import equilibrium_io as eq_io
+from desc.equilibrium_io import IOAble, reader_factory, writer_factory
 
 
 def unpack_state(x, nR, nZ):
@@ -37,13 +39,24 @@ def unpack_state(x, nR, nZ):
     return cR, cZ, cL
 
 
-class Configuration():
+class Configuration(IOAble):
+
     """Configuration constains information about a plasma state, including the
        shapes of flux surfaces and profile inputs. It can compute additional
        information, such as the magnetic field and plasma currents.
     """
 
-    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
+    _save_attrs_ = ['cR', 'cZ', 'cL', 'cRb', 'cZb', 'cP',
+                             'cI', 'Psi', 'NFP', 'R_basis',
+                             'Z_basis', 'L_basis', 'Rb_basis',
+                             'Zb_basis', 'P_basis', 'I_basis']
+    _object_lib_ = {'PowerSeries' : PowerSeries,
+                            'DoubleFourierSeries'   : DoubleFourierSeries,
+                            'FourierZernikeBasis'   : FourierZernikeBasis,
+                            'LinearGrid'            : LinearGrid,
+                            'ConcentricGrid'        : ConcentricGrid}
+
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5', obj_lib=None) -> None:
         """Initializes a Configuration
 
         Parameters
@@ -60,7 +73,7 @@ class Configuration():
         None
 
         """
-        self._def_save_attrs_()
+        #self._def_save_attrs_()
 
         self.inputs = inputs
         self.load_from = load_from
@@ -70,7 +83,7 @@ class Configuration():
             if file_format is None:
                 raise RuntimeError('file_format argument must be included when loading from file.')
             self._file_format_ = file_format
-            self._init_from_file_()
+            self._init_from_file_(obj_lib=obj_lib)
         else:
             raise RuntimeError('inputs or load_from must be specified.')
 
@@ -82,10 +95,10 @@ class Configuration():
         None
 
         """
-        self._save_attrs_ = ['__cR', '__cZ', '__cL', '__cRb', '__cZb', '__cP',
-                             '__cI', '__Psi', '__NFP', '__R_basis',
-                             '__Z_basis', '__L_basis', '__Rb_basis',
-                             '__Zb_basis', '__P_basis', '__I_basis']
+        self._save_attrs_ = ['cR', 'cZ', 'cL', 'cRb', 'cZb', 'cP',
+                             'cI', 'Psi', 'NFP', 'R_basis',
+                             'Z_basis', 'L_basis', 'Rb_basis',
+                             'Zb_basis', 'P_basis', 'I_basis']
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         """
@@ -94,23 +107,24 @@ class Configuration():
         ----------
         inputs : dict, optional
             Dictionary of inputs with the following required keys:
-                L : 
-                M : 
-                N : 
-                cP : 
-                cI : 
-                Psi : 
-                NFP : 
-                bdry : 
+                L :
+                M :
+                N :
+                cP :
+                cI :
+                Psi :
+                NFP :
+                bdry :
             And the following optional keys:
-                sym : 
-                index : 
-                bdry_mode : 
-                bdry_ratio : 
-                axis : 
-                cR : 
-                cZ : 
-                cL : 
+                sym :
+                index :
+                bdry_mode :
+                bdry_ratio :
+                axis :
+                cR :
+                cZ :
+                cL :
+
 
         Raises
         ------
@@ -379,54 +393,143 @@ class Configuration():
     def I_basis(self, I_basis:Basis) -> None:
         self.__I_basis = I_basis
 
-    def compute_coordinate_derivatives(self):
-        pass
-        # return compute_coordinate_derivatives(self.cR, self.cZ, zernike_transform, zeta_ratio=1.0, mode='equil')
+    def compute_coordinates(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=0)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=0)
+        coords = compute_coordinates(self.__cR, self.__cZ, R_transform,
+                                     Z_transform)
+        return coords
 
-    def compute_covariant_basis(self):
-        pass
-        # return compute_covariant_basis(coord_der, zernike_transform, mode='equil')
+    def compute_coordinate_derivatives(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        return coord_der
 
-    def compute_contravariant_basis(self):
-        pass
-        # return compute_contravariant_basis(coord_der, cov_basis, jacobian, zernike_transform)
+    def compute_covariant_basis(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        return cov_basis
 
-    def compute_jacobian(self):
-        pass
-        # return compute_jacobian(coord_der, cov_basis, zernike_transform, mode='equil')
+    def compute_contravariant_basis(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian, axis=grid.axis)
+        return con_basis
 
-    def compute_magnetic_field(self):
-        pass
-        # return compute_magnetic_field(cov_basis, jacobian, cI, Psi_lcfs, zernike_transform, mode='equil')
+    def compute_jacobian(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        return jacobian
 
-    def compute_plasma_current(self):
-        pass
-        # return compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
+    def compute_magnetic_field(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        I_transform = Transform(grid, self.__I_basis, derivs=1)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self.__cI,
+                                                self.__Psi_lcfs, I_transform)
+        return magnetic_field
 
-    def compute_magnetic_field_magnitude(self):
-        pass
-        # return def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, zernike_transform)
+    def compute_plasma_current(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        I_transform = Transform(grid, self.__I_basis, derivs=1)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self.__cI,
+                                                self.__Psi_lcfs, I_transform)
+        plasma_current = compute_plasma_current(coord_der, cov_basis, jacobian,
+                                        magnetic_field, self.__cI, I_transform)
+        return plasma_current
 
-    def compute_force_magnitude(self):
-        pass
-        # return def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform):
+    def compute_magnetic_field_magnitude(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        I_transform = Transform(grid, self.__I_basis, derivs=1)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self.__cI,
+                                                self.__Psi_lcfs, I_transform)
+        magnetic_field_mag = compute_magnetic_field_magnitude(cov_basis,
+                                      magnetic_field, self.__cI, I_transform)
+        return magnetic_field_mag
 
-    def save(self, save_to, file_format='hdf5', file_mode='w'):
-        writer = eq_io.writer_factory(save_to, file_format=file_format,
-                file_mode=file_mode)
-        writer.write_obj(self)
-        writer.close()
-        return None
+    def compute_force_magnitude(self, grid:Grid) -> dict:
+        R_transform = Transform(grid, self.__R_basis, derivs=3)
+        Z_transform = Transform(grid, self.__Z_basis, derivs=3)
+        I_transform = Transform(grid, self.__I_basis, derivs=1)
+        P_transform = Transform(grid, self.__P_basis, derivs=1)
+        coord_der = compute_coordinate_derivatives(self.__cR, self.__cZ,
+                                                   R_transform, Z_transform)
+        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
+        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
+        con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian,
+                                                axis=grid.axis)
+        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self.__cI,
+                                                self.__Psi_lcfs, I_transform)
+        plasma_current = compute_plasma_current(coord_der, cov_basis, jacobian,
+                                        magnetic_field, self.__cI, I_transform)
+        force_mag = compute_force_magnitude(coord_der, cov_basis, con_basis,
+            jacobian, magnetic_field, plasma_current, self.__cP, P_transform)
+        return force_mag
+
+    #def save(self, save_to, file_format:str='hdf5', file_mode:str='w'):
+        """Saves the configuration to file.
+
+        Parameters
+        __________
+        save_to : str or file instance
+            Object to save to. May be a string file path or file instance.
+        file_format : str
+            Format of file referenced by save_to. (Default = 'hdf5')
+        file_mode : str
+            File mode for file referenced by save_to. Only applicable if
+            save_to is a string file path. (Default = 'w')
 
 
-class Equilibrium(Configuration):
+        Returns
+        _______
+        None
+
+        """
+    #    writer = eq_io.writer_factory(save_to, file_format=file_format,
+    #            file_mode=file_mode)
+    #    writer.write_obj(self)
+    #    writer.close()
+    #    return None
+
+
+class Equilibrium(Configuration,IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
-       It adds information about how the equilibrium configuration was solved. 
+       It adds information about how the equilibrium configuration was solved.
     """
+    _save_attrs_ = Configuration._save_attrs_ + ['initial', 'objective', 'optimizer', 'solved']
+    _object_lib_ = Configuration._object_lib_
+    _object_lib_.update({'Configuration' : Configuration})
 
-    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5') -> None:
-        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format)
-        self._save_attrs_ += ['objective', 'optimizer', 'solved']
+    def __init__(self, inputs:dict=None, load_from=None, file_format:str='hdf5', obj_lib=None) -> None:
+        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         if inputs is None:
@@ -438,15 +541,44 @@ class Equilibrium(Configuration):
         self.__optimizer = inputs.get('optimizer', None)
         self.__solved = False
 
-    def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
-        if load_from is None:
-            load_from = self.load_from
-        if file_format is None:
-            file_format = self._file_format_
-        reader = eq_io.reader_factory(load_from, file_format)
-        self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
-        self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
-        reader.read_obj(self)
+    #def _init_from_file_(self, load_from=None, file_format:str=None) -> None:
+    #    if load_from is None:
+    #        load_from = self.load_from
+    #    if file_format is None:
+    #        file_format = self._file_format_
+    #    reader = eq_io.reader_factory(load_from, file_format)
+    #    self.initial = Configuration(load_from=reader.sub('initial'), file_format=file_format)
+   #     self._save_attrs_ = self.initial._save_attrs_ + self.__addl_save_attrs__
+  #      reader.read_obj(self)
+
+    @property
+    def solved(self) -> bool:
+        return self.__solved
+
+    @solved.setter
+    def solved(self, issolved):
+        self.__solved = issolved
+
+    @property
+    def initial(self) -> Configuration:
+        return self.__initial
+
+    @initial.setter
+    def initial(self, conf:Configuration) -> None:
+        self.__initial = conf
+
+    @property
+    def x(self):
+        return self._Configuration__x
+
+    @x.setter
+    def x(self, x) -> None:
+        self._Configuration__x = x
+        self._Configuration__cR, self._Configuration__cZ, self.__cL = \
+            unpack_state(self._Configuration__x,
+                         self._Configuration__R_basis.num_modes,
+                         self._Configuration__Z_basis.num_modes)
+        self.__solved = True
 
     @property
     def solved(self) -> bool:
@@ -490,27 +622,25 @@ class Equilibrium(Configuration):
         self.__optimizer = optimizer
         self.solved = False
 
-    def save(self, save_to, file_format='hdf5', file_mode='w'):
-        writer = eq_io.writer_factory(save_to, file_format=file_format,
-                file_mode=file_mode)
-        writer.write_obj(self)
-        writer.write_obj(self.initial, where=writer.sub('initial'))
-        writer.close()
-        return None
+    #def save(self, save_to, file_format='hdf5', file_mode='w'):
+    #    writer = eq_io.writer_factory(save_to, file_format=file_format,
+    #            file_mode=file_mode)
+    #    writer.write_obj(self)
+    #    writer.write_obj(self.initial, where=writer.sub('initial'))
+    #    writer.close()
+    #    return None
 
 
 # XXX: Should this (also) inherit from Equilibrium?
-class EquilibriaFamily(MutableSequence):
-    """EquilibriaFamily stores a list of Equilibria. Its default behavior acts
-       like the last Equilibrium in the list.
+class EquilibriaFamily(MutableSequence,IOAble):
+    """EquilibriaFamily stores a list of Equilibria
     """
+    _save_attrs_ = ['inputs', 'equilibria']
+    _object_lib_ = Equilibrium._object_lib_
+    _object_lib_.update({'Equilibrium' : Equilibrium})
 
     # FIXME: This should not have the same signiture as Configuration if it does not inherit from it
     def __init__(self, inputs=None, load_from=None, file_format='hdf5') -> None:
-        self.__equilibria = []
-        self._file_format_ = file_format
-        self._file_mode_ = 'a'
-        """
         self.__equilibria = []
         self.inputs = inputs
         self.load_from = load_from
@@ -521,33 +651,31 @@ class EquilibriaFamily(MutableSequence):
         elif load_from is not None:
             if file_format is None:
                 raise RuntimeError('file_format argument must be included when loading from file.')
-            self._file_format_ = file_format
-            self._init_from_file_()
+            self._init_from_file_(load_from, file_format=file_format)
         else:
-            raise RuntimeError('inputs or load_from must be specified.')
-        """
+            # hack
+            pass #raise RuntimeError('inputs or load_from must be specified.')
 
     def _init_from_inputs_(self, inputs=None):
         if inputs is None:
             inputs = self.inputs
-        writer = eq_io.writer_factory(self.inputs['output_path'],
+        writer = writer_factory(self.inputs['output_path'],
                 file_format=self._file_format_, file_mode='w')
-        writer.write_dict(self.inputs, where=writer.sub('inputs'))
         writer.close()
-        self.append(Equilibrium(inputs=self.inputs))
+        #self.append(Equilibrium(inputs=self.inputs))
         return None
 
-    def _init_from_file_(self, load_from=None, file_format=None):
-        if load_from is None:
-            load_from = self.load_from
-        if file_format is None:
-            file_format = self._file_format_
-        reader = eq_io.reader_factory(self.load_from, file_format=file_format)
-        idx = 0
-        while str(idx) in reader.groups():
-            self.append(Equilibrium(load_from=reader.sub(str(idx))))
-            idx += 1
-        return None
+    #def _init_from_file_(self, load_from=None, file_format=None):
+    #    if load_from is None:
+    #        load_from = self.load_from
+    #    if file_format is None:
+    #        file_format = self._file_format_
+    #    reader = reader_factory(self.load_from, file_format=file_format)
+    #    idx = 0
+    #    while str(idx) in reader.groups():
+    #        self.append(Equilibrium(load_from=reader.sub(str(idx))))
+    #        idx += 1
+    #    return None
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -574,23 +702,74 @@ class EquilibriaFamily(MutableSequence):
     def solver(self, solver):
         self.__solver = solver
 
-    def save(self, idx, save_to=None, file_format=None) -> None:
-        if type(idx) is not int:
-            # implement fancier indexing later
-            raise NotImplementedError('idx must be a single integer index')
+    @property
+    def equilibria(self):
+        return self.__equilibria
 
+    @equilibria.setter
+    def equilibria(self, eq):
+        self.__equilibria = eq
+
+    def __slice__(self, idx):
+        if idx is None:
+            theslice = slice(None,None)
+        elif type(idx) is int:
+            theslice = idx
+        elif type(idx) is list:
+            try:
+                theslice = slice(idx[0], idx[1], idx[2])
+            except IndexError:
+                theslice = slice(idx[0], idx[1])
+        else:
+            raise TypeError('index is not a valid type.')
+        return theslice
+
+    def save(self, save_to=None, file_format=None) -> None:
+        #theslice = self.__slice__(idx)
         if save_to is None:
             save_to = self.inputs['output_path']
         if file_format is None:
             file_format = self._file_format_
 
-        writer = eq_io.writer_factory(self.inputs['output_path'],
-                file_format=file_format, file_mode=self.file_mode)
-        self[idx].save(writer.sub(str(idx)), file_format=file_format,
-                file_mode=self._file_mode_)
-        writer.close()
+        super().save(save_to, file_format=file_format)
+        #writer = writer_factory(self.inputs['output_path'],
+        #        file_format=file_format, file_mode=self._file_mode_)
+        #writer.write_dict(self.inputs, where=writer.sub('inputs'))
+        #for i in range(len(self[theslice])):
+        #    print('saving index {}'.format(i))
+        #    self[i].save(writer.sub(str(idx)), file_format=file_format,
+        #        file_mode=self._file_mode_)
+        #writer.close()
 
 # TODO: overwrite all Equilibrium methods and default to self.__equilibria[-1]
+
+def compute_coordinates(cR, cZ, R_transform, Z_transform):
+    """Converts from spectral to real space
+
+    Parameters
+    ----------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    R_transform : Transform
+        transforms R coefficients to real space
+    Z_transform : Transform
+        transforms Z coefficients to real space
+
+    Returns
+    -------
+    coords : dict
+        dictionary of ndarray, shape(N_nodes,) of coordinates evaluated at node locations
+        keys are of the form 'X_y' meaning the derivative of X wrt to y
+
+    """
+    coords = {}
+    coords['R'] = R_transform.transform(cR)
+    coords['Z'] = Z_transform.transform(cZ)
+    coords['phi'] = R_transform.grid.nodes[:, 2]    # phi = zeta
+    coords['X'] = coords['R']*np.cos(coords['phi'])
+    coords['Y'] = coords['R']*np.sin(coords['phi'])
 
 # TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
 def compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform, zeta_ratio=1.0):
@@ -1165,27 +1344,28 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform)
 
     Returns
     -------
-    B_mag : dict
+    magnetic_field_mag : dict
         dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
 
     """
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
-    B_mag = {}
+    
+    magnetic_field_mag = {}
     iota = I_transform.transform(cI, 0)
 
-    B_mag['|B|'] = jnp.abs(magnetic_field['B^zeta'])*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0) +
+    magnetic_field_mag['|B|'] = jnp.abs(magnetic_field['B^zeta'])*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0) +
                                                               2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))
 
-    B_mag['|B|_v'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
+    magnetic_field_mag['|B|_v'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0)) \
         / (2*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)))
 
-    B_mag['|B|_z'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_z']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
+    magnetic_field_mag['|B|_z'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_z']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
         / (2*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)))
 
-    B_mag['|B|_vv'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_vv']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
+    magnetic_field_mag['|B|_vv'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_vv']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0)) \
         / jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*(dot(cov_basis['e_theta_v'], cov_basis['e_theta_v'], 0)+dot(cov_basis['e_theta'], cov_basis['e_theta_vv'], 0))+2*iota*(dot(cov_basis['e_theta_vv'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_vv'], 0)+2*dot(cov_basis['e_theta_v'], cov_basis['e_zeta_v'], 0))+2*(dot(cov_basis['e_zeta_v'], cov_basis['e_zeta_v'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta_vv'], 0))) \
@@ -1193,7 +1373,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform)
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0))**2 \
         / (2*(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))**(3/2))
 
-    B_mag['|B|_zz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_zz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
+    magnetic_field_mag['|B|_zz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_zz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_z']*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
         / jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*(dot(cov_basis['e_theta_z'], cov_basis['e_theta_z'], 0)+dot(cov_basis['e_theta'], cov_basis['e_theta_zz'], 0))+2*iota*(dot(cov_basis['e_theta_zz'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_zz'], 0)+2*dot(cov_basis['e_theta_z'], cov_basis['e_zeta_z'], 0))+2*(dot(cov_basis['e_zeta_z'], cov_basis['e_zeta_z'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta_vz'], 0))) \
@@ -1201,7 +1381,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform)
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0))**2 \
         / (2*(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))**(3/2))
 
-    B_mag['|B|_vz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_vz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
+    magnetic_field_mag['|B|_vz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_vz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
         / jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*(dot(cov_basis['e_theta_z'], cov_basis['e_theta_v'], 0)+dot(cov_basis['e_theta'], cov_basis['e_theta_vz'], 0))+2*iota*(dot(cov_basis['e_theta_vz'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta_v'], cov_basis['e_zeta_z'], 0)+dot(cov_basis['e_theta_z'], cov_basis['e_zeta_v'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_vz'], 0))+2*(dot(cov_basis['e_zeta_z'], cov_basis['e_zeta_v'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta_vz'], 0))) \
@@ -1209,7 +1389,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform)
         + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0))*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
         / (2*(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))**(3/2))
 
-    return B_mag
+    return magnetic_field_mag
 
 
 def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, P_transform):
@@ -1244,12 +1424,11 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
 
     Returns
     -------
-    force_magnitude : ndarray, shape(N_nodes,)
-        force error magnitudes at each node.
-    p_mag : ndarray, shape(N_nodes,)
-        magnitude of pressure gradient at each node.
+    force_mag : dict
+        dictionary of ndarray, shape(N_nodes,) of force magnitudes
 
     """
+    force_mag = {}
     mu0 = 4*jnp.pi*1e-7
     axis = P_transform.grid.axis
     pres_r = P_transform.transform(cP, 1)
@@ -1289,8 +1468,7 @@ def compute_force_magnitude(coord_der, cov_basis, con_basis, jacobian, magnetic_
     Fg_vz = F_theta*F_zeta * con_basis['g^vz']
 
     # magnitudes
-    force_magnitude = jnp.sqrt(
-        Fg_rr + Fg_vv + Fg_zz + 2*Fg_rv + 2*Fg_rz + 2*Fg_vz)
-    p_mag = jnp.sqrt(pres_r*pres_r*con_basis['g^rr'])
+    force_mag['|F|'] = jnp.sqrt(Fg_rr + Fg_vv + Fg_zz + 2*Fg_rv + 2*Fg_rz + 2*Fg_vz)
+    force_mag['|grad(p)|'] = jnp.sqrt(pres_r*pres_r*con_basis['g^rr'])
 
-    return force_magnitude, p_mag
+    return force_mag

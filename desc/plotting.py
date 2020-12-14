@@ -2,7 +2,9 @@ import os
 from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
+import re
 from abc import ABC, abstractmethod
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
@@ -53,7 +55,8 @@ rcParams['axes.prop_cycle'] = color_cycle
 class Plot:
     """Class for plotting instances of Configuration and Equilibria on a linear grid.
     """
-    def __init__(self, ):#grid='std', **kwargs):
+    axis_labels = [r'$R$', r'$\theta$', r'$\zeta$']
+    def __init__(self):#grid='std', **kwargs):
         """Initialize a Plot class.
 
         Parameters
@@ -64,7 +67,6 @@ class Plot:
         None
 
         """
-        self.axis_labels = [r'$\zeta$', r'$\theta$', r'$R$']#, r'$\theta$', r'$\zeta$']
         pass
 
     def __format_rtz__(self, rtz):
@@ -79,89 +81,6 @@ class Plot:
             raise TypeError('rho, theta, and zeta must be a numpy array, list '
                 'of floats, or float.')
 
-    def find_plot_ax_1d(self, grid):
-        """Find index of plot axis for 1D plots.
-
-        Parameters
-        __________
-        grid : LinearGrid
-            instantiated LinearGrid object
-
-        Returns
-        _______
-        dimension of grid nodes along which to plot
-
-        """
-        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
-        if np.sum(n) > 1:
-            raise ValueError('Input dimension is greater than 1.')
-        try:
-            dim = n.index(True)
-        except ValueError:
-            raise ValueError('One axis must be a plotting axis.')
-        return dim
-
-    def find_plot_ax_2d(self, grid):
-        """Find index of plot axis for 2D plots.
-
-        Parameters
-        __________
-        grid : LinearGrid
-            instantiated LinearGrid object
-
-        Returns
-        _______
-        tuple of dimensions of grid nodes along which to plot
-
-        """
-        n = [nn > 1 for nn in grid.nodes.shape[:-1]]
-        if np.sum(n) < 2:
-            raise ValueError('Input dimension is less than 2.')
-        elif np.sum(n) > 2:
-            raise ValueError('Input dimension is greater than 2.')
-        dim = [0,1,2]
-        dim.remove(n.index(False))
-        return tuple(dim)
-
-    def grid_slice_1d(self, grid, dim):
-        """Slice grid nodes in 1D.
-
-        Parameters
-        __________
-        grid : Grid
-            grid to be sliced
-        dim : int
-            dimension along which to slice
-
-        Returns
-        _______
-        slice : tuple
-
-        """
-        theslice = [0,0,0,dim]
-        theslice[dim[0]] = slice(None,None)
-        theslice[dim[1]] = slice(None,None)
-        return tuple(theslice)
-
-    def grid_slice_2d(self, grid, dim):
-        """Slice grid nodes in 2D.
-
-        Parameters
-        __________
-        grid : Grid
-            grid to be sliced
-        dim : list of ints
-            dimensions along which to slice
-
-        Returns
-        _______
-        slice : tuple
-
-        """
-        theslice = [0,0,0,dim]
-        theslice[dim] = slice(None,None)
-        return tuple(theslice)
-
     def format_ax(self, ax):
         """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
@@ -171,14 +90,14 @@ class Plot:
 
         Returns
         _______
-        matplotlib AxesSubplot instance
+        matpliblib Figure instance, matplotlib AxesSubplot instance
 
         """
         if ax is None:
             fig, ax = plt.subplots()
-            return ax
+            return fig, ax
         elif type(ax) is matplotlib.axes._subplots.AxesSubplot:
-            return ax
+            return plt.gcf(), ax
         else:
             raise TypeError('ax agument must be None or an axis instance.')
 
@@ -190,7 +109,7 @@ class Plot:
         NFP : int
             number of (?)
         kwargs
-            any arguments taken by LinearGrid
+            any arguments taken by LinearGrid (Default L=100, M=1, N=1)
 
         Returns
         _______
@@ -198,23 +117,43 @@ class Plot:
 
         """
         grid_args = {'rho':1.0, 'L':100, 'theta':0.0, 'M':1, 'zeta':0.0, 'N':1,
-            'endpoints':False, 'NFP':NFP}
+            'endpoint':False, 'NFP':NFP}
         for key in kwargs.keys():
             if key in grid_args.keys():
                 grid_args[key] = kwargs[key]
         plot_axes = [0,1,2]
         grid_args['rho'] = self.__format_rtz__(grid_args['rho'])
-        if L == 1:
+        if grid_args['L'] == 1:
             plot_axes.remove(0)
         grid_args['theta'] = self.__format_rtz__(grid_args['theta'])
-        if M == 1:
+        if grid_args['M'] == 1:
             plot_axes.remove(1)
         grid_args['zeta'] = self.__format_rtz__(grid_args['zeta'])
-        if N == 1:
+        if grid_args['N'] == 1:
             plot_axes.remove(2)
         return LinearGrid(**grid_args), tuple(plot_axes)
 
     def plot_1d(self, eq, name, grid=None, ax=None, **kwargs):
+        """Plot 1D slice from Equilibrium or Configuration.
+
+        Parameters
+        __________
+        eq : Equilibrium or Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid (optional)
+            grid object defining coordinates to plot on
+        ax : matplotlib AxesSubplot (optional)
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid (Default L=100, M=1, N=1)
+
+        Returns
+        _______
+        axis
+
+        """
         if grid is None:
             grid, plot_axis= self.get_grid(eq.NFP, **kwargs)
         if len(plot_axis) != 1:
@@ -231,6 +170,26 @@ class Plot:
         return ax
 
     def plot_2d(self, eq, name, grid=None, ax=None, **kwargs):
+        """Plot 2D slice from Equilibrium or Configuration.
+
+        Parameters
+        __________
+        eq : Equilibrium or Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid (optional)
+            grid object defining coordinates to plot on
+        ax : matplotlib AxesSubplot (optional)
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid (Default L=100, M=100, N=1)
+
+        Returns
+        _______
+        axis
+
+        """
         if grid is None:
             if kwargs == {}:
                 kwargs.update({'M':100})
@@ -241,7 +200,8 @@ class Plot:
         #theslice = self.grid_slice_2d(grid, dim)
         name_dict = self.format_name(name)
         ary = self.compute(eq, name_dict, grid)
-        ax = self.format_ax(ax)
+        fig, ax = self.format_ax(ax)
+        divider = make_axes_locatable(ax)
         #unroll array to be 2D
         if 0 in plot_axes:
             if 1 in plot_axes:
@@ -260,14 +220,22 @@ class Plot:
                 sqary[i,:] = ary[i*grid.M:(i+1)*grid.N]
         else:
             raise ValueError('Grid must be 2D.')
-        imshow_kwargs = {'origin': 'lower',
-                        'interpolation': 'bilinear'}
+        imshow_kwargs = {'origin'       : 'lower',
+                        'interpolation' : 'bilinear',
+                        'aspect'        : 'auto'}
         imshow_kwargs['extent'] = [grid.nodes[0,plot_axes[0]],
                 grid.nodes[-1,plot_axes[0]], grid.nodes[0,plot_axes[1]],
                 grid.nodes[-1,plot_axes[1]]]
-        ax.imshow(sqary, **imshow_kwargs)#????????????
+        im = ax.imshow(sqary.T, **imshow_kwargs)
+        cax_kwargs = {'size': '5%',
+                    'pad'   : 0.05}
+        cax = divider.append_axes('right', **cax_kwargs)
+        cbar = fig.colorbar(im, cax=cax)
+        cbar.formatter.set_powerlimits((0,0))
+        cbar.update_ticks()
         ax.set_xlabel(self.axis_labels[plot_axes[0]])
         ax.set_ylabel(self.axis_labels[plot_axes[1]])
+        ax.set_title(self.name_label(name_dict))
         return ax
 
     def plot_3dsurf(self):
@@ -299,9 +267,9 @@ class Plot:
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'J':
             out = eq.compute_plasma_current(grid)[self.__name_key__(name_dict)]
-        elif name_dict['base'] == 'Bmag':
+        elif name_dict['base'] == '|B|':
             out = eq.compute_magnetic_field_magnitude(grid)[self.__name_key__(name_dict)]
-        elif name_dict['base'] == 'Fmag':
+        elif name_dict['base'] == '|F|':
             out = eq.compute_force_magnitude(grid)[self.__name_key__(name_dict)]
         else:
             raise NotImplementedError("No output for base named '{}'.".format(name_dict['base']))
@@ -340,6 +308,7 @@ class Plot:
                 raise SyntaxError('Power operands must come after components and derivatives.')
         else:
             power = ''
+            parsename = name
         name_dict['power'] += power
         if '_' in parsename:
             split = parsename.split('_')
@@ -350,8 +319,18 @@ class Plot:
             elif '^' in split[0]:
                 name_dict['base'], name_dict['sups'] = split[0].split('^')
                 name_dict['d'] = split[1]
-        if '^' in parsename:
+            elif len(split) == 2:
+                name_dict['base'], other = split
+                if other in ['rho', 'theta', 'zeta']:
+                    name_dict['subs'] = other
+                else:
+                    name_dict['d'] = other
+            else:
+                raise SyntaxError('String format is not valid.')
+        elif '^' in parsename:
             name_dict['base'], name_dict['sups'] = parsename.split('^')
+        else:
+            name_dict['base'] = parsename
         return name_dict
 
     def name_label(self, name_dict):
@@ -368,17 +347,53 @@ class Plot:
 
         """
         esc = r'\\'[:-1]
-        if name_dict['d'] == '':
-            label = r'$' + name_dict['base'] + '^{' + esc + name_dict['sups'] +\
-                    ' ' + power + '}_{' + esc + name_dict['subs'] + '}$'
+
+        if 'mag' in name_dict['base']:
+            base = '|' + re.sub('mag', '', name_dict['base']) + '|'
         else:
-            if name_dict['power'] == '':
-                label = r'$d' + name_dict['base'] + '^{' + esc +\
-                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] + '}'
+            base = name_dict['base']
+        if name_dict['d'] != '':
+            dstr0 = 'd'
+            dstr1 = '/d' + name_dict['d']
+            if name_dict['power'] != '':
+                dstr0 = '(' + dstr0
+                dstr1 = dstr1 + ')^{' + name_dict['power'] + '}'
             else:
-                label = r'$(d' + name_dict['base'] + '^{' + esc +\
-                    name_dict['sups'] + '}_{' + esc + name_dict['subs'] +\
-                    '})^{' + name_dict['power'] + '}'
+                pass
+        else:
+            dstr0 = ''
+            dstr1 = ''
+            #label = r'$' + name_dict['base'] + '^{' + esc + name_dict['sups'] +\
+            #        ' ' + power + '}_{' + esc + name_dict['subs'] + '}$'
+
+        if name_dict['power'] != '':
+            if name_dict['d'] != '':
+                pstr = ''
+            else:
+                pstr = name_dict['power']
+        else:
+            pstr = ''
+
+        if name_dict['sups'] != '':
+            supstr = '^{' + esc + name_dict['sups'] + ' ' + pstr + '}'
+        elif pstr != '':
+            supstr = '^{' + pstr + '}'
+        else:
+            supstr = ''
+        if name_dict['subs'] != '':
+            substr = '_{' + esc + name_dict['subs'] + '}'
+        else:
+            substr = ''
+        #else:
+        #    if name_dict['power'] == '':
+        #        label = r'$d' + name_dict['base'] + '^{' + esc +\
+        #            name_dict['sups'] + '}_{' + esc + name_dict['subs'] + '}/d'
+        #            + name_dict['d'] + '$'
+        #    else:
+        #        label = r'$(d' + name_dict['base'] + '^{' + esc +\
+        #            name_dict['sups'] + '}_{' + esc + name_dict['subs'] +\
+        #            '})^{' + name_dict['power'] + '}$'
+        label = r'$' + dstr0 + base + supstr + substr + dstr1 + '$'
         return label
 
     def __name_key__(self, name_dict):

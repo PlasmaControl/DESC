@@ -91,7 +91,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         Z_sym = Tristate(None)
         L_sym = Tristate(None)
 
-    equil_fam = EquilibriaFamily(inputs=inputs)
+    
   
     arr_len = M.size
     for ii in range(arr_len):
@@ -133,13 +133,16 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'index': zern_mode,
                 'bdry_mode': bdry_mode,
                 'bdry_ratio': bdry_ratio[ii],
-                'axis': axis
+                'axis': axis,
+                'output_path': checkpoint_filename
             } 
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
-            # create initial Equilibrium
-            equil = Equilibrium(inputs=inputs_ii)
+            equil_fam = EquilibriaFamily(inputs=inputs_ii)
+            # Get initial Equilibrium from equil_fam
+            equil = equil_fam[ii] 
+            
             x = equil.x # initial state vector
             # bases (extracted from Equilibrium)
             R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
@@ -314,7 +317,10 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("End of Step {}:".format(ii+1))
             callback(x, *args)
 
-
+        if checkpoint:
+            if verbose > 0:
+                print('Saving latest iteration')
+            equil_fam.save()
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'

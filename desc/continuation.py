@@ -17,7 +17,12 @@ from desc.perturbations import perturb_continuation_params
 def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     """Solves for an equilibrium by continuation method
 
-    Steps up resolution, perturbs pressure, 3d bdry etc.
+    Follows this procedure to solve the equilibrium:
+        1. Creates an initial guess from the given inputs
+        2. Optimizes the equilibrium's flux surfaces by minimizing
+            the given objective function.
+        3. Step up to higher resolution and perturb the previous solution
+        4. Repeat 2 and 3 until at desired resolution
 
     Parameters
     ----------
@@ -30,8 +35,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
     Returns
     -------
-    iterations : dict
-        dictionary of intermediate solutions
+    equil_fam : EquilibriaFamily
+        Container object that contains a list of the intermediate solutions,
+            as well as the final solution, stored as Equilibrium objects
     timer : Timer
         Timer object containing timing data for individual iterations
 
@@ -161,17 +167,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if verbose > 1:
                 timer.disp("Transform precomputation")
 
-#            if checkpoint:
-#                checkpoint_file.write_iteration(equil, 'init', inputs)
 
         # continuing from previous solution
-        # if continuing, must: 
-        # make new grids, 
-        # update bases, 
-        # update transforms, 
-        # create a non-scalar obj fxn (so would have to check that error mode is able
-        #                           to be non-scalar, i.e. errr_mode='energy' would not work )
-        # perturb continuation parameters
         else:
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
@@ -317,18 +314,13 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             callback(x, *args)
 
 
-#        if checkpoint:
-#            if verbose > 0:
-#                print('Saving latest iteration')
-#            checkpoint_file.write_iteration(equil, ii+1, inputs)
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
                           + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
             break
 
-#    if checkpoint:
-#        checkpoint_file.close()
+
 
     timer.stop("Total time")
     print('====================')

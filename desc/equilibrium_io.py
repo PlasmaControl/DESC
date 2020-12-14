@@ -589,7 +589,7 @@ class hdf5Reader(hdf5IO,Reader):
             except AttributeError:
                 if 'name' in loc[str(i)].keys():
                     theattr = loc[str(i)]['name'][()]
-                    print('loading a ', theattr, 'from list')
+                    #print('loading a ', theattr, 'from list') #debug
                     if theattr == 'list':
                         thelist.append(self.read_list(where=theattr))
                     elif theattr == 'dict':

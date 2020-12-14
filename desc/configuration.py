@@ -8,7 +8,7 @@ from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 #from desc import equilibrium_io as eq_io
 from desc.equilibrium_io import IOAble, reader_factory, writer_factory
-
+from desc.transform import Transform
 
 def unpack_state(x, nR, nZ):
     """Unpacks the optimization state vector x into cR, cZ, cL components
@@ -288,7 +288,15 @@ class Configuration(IOAble):
     @cZ.setter
     def cZ(self, cZ) -> None:
         self.__cZ = cZ
+        
+    @property
+    def cL(self):
+        return self.__cL
 
+    @cL.setter
+    def cL(self, cL) -> None:
+        self.__cZ = cL
+        
     @property
     def cRb(self):
         return self.__cRb
@@ -662,7 +670,7 @@ class EquilibriaFamily(MutableSequence,IOAble):
         writer = writer_factory(self.inputs['output_path'],
                 file_format=self._file_format_, file_mode='w')
         writer.close()
-        #self.append(Equilibrium(inputs=self.inputs))
+        self.append(Equilibrium(inputs=self.inputs))
         return None
 
     #def _init_from_file_(self, load_from=None, file_format=None):

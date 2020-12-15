@@ -55,7 +55,7 @@ rcParams['axes.prop_cycle'] = color_cycle
 class Plot:
     """Class for plotting instances of Configuration and Equilibria on a linear grid.
     """
-    axis_labels = [r'$R$', r'$\theta$', r'$\zeta$']
+    axis_labels = [r'$\rho$', r'$\theta$', r'$\zeta$']
     def __init__(self):#grid='std', **kwargs):
         """Initialize a Plot class.
 

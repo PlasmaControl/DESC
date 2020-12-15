@@ -562,6 +562,14 @@ def equals(a, b) -> bool:
 
 
 class Tristate(object):
+    """ Tristate to determine type of symmetry for R,Z, and L.
+    
+        Possible values are:
+            True for cos(m*t-n*z) symmetry
+            False for sin(m*t-n*z) symmetry
+            None for no symmetry (Default)
+
+        """
 
     def __init__(self, value=None):
        if any(value is v for v in (True, False, None)):

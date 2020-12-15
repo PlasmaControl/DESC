@@ -7,24 +7,6 @@ from desc.equilibrium_io import IOAble
 
 class Grid(IOAble):
     """Grid is a base class for collocation grids
-
-    Attributes
-    ----------
-    L : int
-        radial grid resolution
-    M : int
-        poloidal grid resolution
-    N : int
-        toroidal grid resolution
-    NFP : int
-        number of field periods
-    sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
-    nodes : ndarray of float, size(3,Nnodes)
-        node coordinates, in (rho,theta,zeta)
-    volumes : ndarray of float, size(3,Nnodes)
-        node spacing (drho,dtheta,dzeta) at each node coordinate
-
     """
     _save_attrs_ = ['_Grid__L', '_Grid__M', '_Grid__N', '_Grid__NFP',
                              '_Grid__sym', '_Grid__nodes', '_Grid__volumes']
@@ -149,26 +131,33 @@ class Grid(IOAble):
 
     @property
     def L(self) -> int:
+        """int: radial grid resolution"""
         return self.__L
 
     @property
     def M(self) -> int:
+        """ int: poloidal grid resolution"""
         return self.__M
 
     @property
     def N(self) -> int:
+        """ int: toroidal grid resolution"""
         return self.__N
 
     @property
     def NFP(self) -> int:
+        """ int: number of field periods"""
         return self.__NFP
 
     @property
     def sym(self) -> bool:
+        """ bool: True for stellarator symmetry, False otherwise (Default = False)"""
         return self.__sym
 
     @property
     def nodes(self):
+        """ndarray: array of float, size(3,Nnodes): 
+        node coordinates, in (rho,theta,zeta)"""
         return self.__nodes
 
     @nodes.setter
@@ -177,6 +166,8 @@ class Grid(IOAble):
 
     @property
     def volumes(self):
+        """ ndarray: array of float, size(3,Nnodes): 
+        node spacing (drho,dtheta,dzeta) at each node coordinate"""
         return self.__volumes
 
     @volumes.setter
@@ -185,6 +176,7 @@ class Grid(IOAble):
 
     @property
     def num_nodes(self):
+        """ int: total number of nodes"""
         return self.__nodes.shape[0]
 
     @property

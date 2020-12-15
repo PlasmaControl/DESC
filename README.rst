@@ -30,6 +30,10 @@ DESC requires an input file to specify the equilibrium and solver options, and c
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
 
+As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :bash:'desc' directory is 
+:bash:`python -u -m desc -p examples/DESC/DSHAPE`
+Where the :bash:`-u` flag is so Python prints the output of the optimization in real time as opposed to storing in a buffer, and the :bash:`-p` flag tells DESC to plot the results once it finishes.
+
 .. _Installation: https://desc-apc524.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-apc524.readthedocs.io/en/latest/command_line.html
 .. _Inputs: https://desc-apc524.readthedocs.io/en/latest/input.html

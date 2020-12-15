@@ -7,24 +7,6 @@ from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, 
 
 class Basis(IOAble,ABC):
     """Basis is an abstract base class for spectral basis sets
-
-    Attributes
-    ----------
-    L : int
-        maximum radial resolution
-    M : int
-        maximum poloidal resolution
-    N : int
-        maximum toroidal resolution
-    NFP : int
-        number of field periods
-    sym : Tristate
-        True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
-        None for no symmetry (Default)
-    modes : ndarray of int, shape(Nmodes,3)
-        array of mode numbers [l,m,n]
-        each row is one basis function with modes (l,m,n)
-
     """
     _save_attrs_ = ['_Basis__L', '_Basis__M', '_Basis__N', '_Basis__NFP',
                              '_Basis__modes']
@@ -102,30 +84,48 @@ class Basis(IOAble,ABC):
 
     @abstractmethod
     def change_resolution(self) -> None:
+        """Change resolution of the basis to the given resolutions.
+        
+
+        Returns
+        -------
+        None
+
+        """
         pass
 
     @property
     def L(self) -> int:
+        """ int: maximum radial resolution"""
         return self.__L
 
     @property
     def M(self) -> int:
+        """ int:  maximum poloidal resolution"""
         return self.__M
 
     @property
     def N(self) -> int:
+        """ int: maximum toroidal resolution"""
         return self.__N
 
     @property
     def NFP(self) -> int:
+        """ int: number of field periods"""
         return self.__NFP
 
     @property
     def sym(self) -> Tristate:
+        """ Tristate: 
+        True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        None for no symmetry (Default)"""
         return self.__sym
 
     @property
     def modes(self):
+        """ndarray:  arrauy of int, shape(Nmodes,3): 
+        array of mode numbers [l,m,n],
+        each row is one basis function with modes (l,m,n)"""
         return self.__modes
 
     @modes.setter
@@ -206,7 +206,7 @@ class PowerSeries(Basis):
         return powers(nodes[:, 0], self._Basis__modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L:int) -> None:
-        """
+        """Change resolution of the basis to the given resolution. Overrides parent Basis object's change_resolution method.
 
         Parameters
         ----------
@@ -308,7 +308,7 @@ class DoubleFourierSeries(Basis):
         return poloidal*toroidal
 
     def change_resolution(self, M:int, N:int) -> None:
-        """
+        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
 
         Parameters
         ----------
@@ -504,7 +504,7 @@ class FourierZernikeBasis(Basis):
         return radial*poloidal*toroidal
 
     def change_resolution(self, M:int, N:int, delta_lm:int) -> None:
-        """
+        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
 
         Parameters
         ----------

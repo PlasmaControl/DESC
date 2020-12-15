@@ -102,7 +102,7 @@ class ForceErrorNodes(ObjectiveFunction):
                  R1_transform:Transform=None, Z1_transform:Transform=None,
                  L_transform:Transform=None, P_transform:Transform=None,
                  I_transform:Transform=None) -> None:
-        """Initializes a ForceErrorNodes
+        """Initializes a ForceErrorNodes object
 
         Parameters
         ----------
@@ -189,7 +189,7 @@ class AccelErrorSpectral(ObjectiveFunction):
                  R1_transform:Transform=None, Z1_transform:Transform=None,
                  L_transform:Transform=None, P_transform:Transform=None,
                  I_transform:Transform=None) -> None:
-        """Initializes a AccelErrorNodes
+        """Initializes an AccelErrorNodes object
 
         Parameters
         ----------
@@ -221,7 +221,7 @@ class AccelErrorSpectral(ObjectiveFunction):
         self.bdry_fun = compute_bdry_err
 
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
-        """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
+        """ Compute spectral space acceleration error. Overrides the compute method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
                       self.R_transform.num_modes, self.Z_transform.num_modes)
 

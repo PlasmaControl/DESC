@@ -10,4 +10,4 @@ To build the documentation locally, from the DESC directory:
 
 will build the documentation in the _build/html/ folder of the docs folder.
 
-To build the pdf, type ''make pdf'' from the docs/ directory.
+To build the pdf, type ``make pdf`` from the docs/ directory.

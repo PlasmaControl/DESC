@@ -23,6 +23,7 @@ class Grid(IOAble):
         None
 
         """
+        self._file_format_ = file_format
 
         if load_from is None:
             self._L = None
@@ -36,9 +37,10 @@ class Grid(IOAble):
             self._enforce_symmetry_()
             self._sort_nodes_()
             self._find_axis_()
-            #self._def_save_attrs()
+
         else:
-            self._init_from_file(load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -222,6 +224,7 @@ class LinearGrid(Grid):
         None
 
         """
+        self._file_format_ = file_format
 
         if load_from is None:
             self._L = L
@@ -242,9 +245,10 @@ class LinearGrid(Grid):
             self._enforce_symmetry_()
             self._sort_nodes_()
             self._find_axis_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
                      endpoint:bool=False, rho=np.array([1.0]),
@@ -377,6 +381,8 @@ class ConcentricGrid(Grid):
         None
 
         """
+        self._file_format_ = file_format
+
         if load_from is None:
             self._L = M+1
             self._M = M
@@ -394,9 +400,10 @@ class ConcentricGrid(Grid):
             self._enforce_symmetry_()
             self._sort_nodes_()
             self._find_axis_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, M:int, N:int, NFP:int=1, axis:bool=True,
                      index='ansi', surfs='cheb1'):

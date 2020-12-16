@@ -154,6 +154,8 @@ class PowerSeries(Basis):
         None
 
         """
+        self._file_format_ = file_format
+
         if load_from is None:
             self._L = L
             self._M = 0
@@ -165,9 +167,10 @@ class PowerSeries(Basis):
 
             self._enforce_symmetry_()
             self._sort_modes_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def get_modes(self, L:int=0):
         """Gets mode numbers for power series
@@ -250,6 +253,8 @@ class DoubleFourierSeries(Basis):
         None
 
         """
+        self._file_format_ = file_format
+
         if load_from is None:
             self._L = 0
             self._M = M
@@ -261,9 +266,10 @@ class DoubleFourierSeries(Basis):
 
             self._enforce_symmetry_()
             self._sort_modes_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def get_modes(self, M:int=0, N:int=0) -> None:
         """Gets mode numbers for double fourier series
@@ -386,6 +392,8 @@ class FourierZernikeBasis(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
+        self._file_format_ = file_format
+
         if load_from is None:
             self._L = L
             self._M = M
@@ -399,9 +407,10 @@ class FourierZernikeBasis(Basis):
 
             self._enforce_symmetry_()
             self._sort_modes_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
 
     def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):

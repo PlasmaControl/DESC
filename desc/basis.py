@@ -8,8 +8,7 @@ from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, 
 class Basis(IOAble,ABC):
     """Basis is an abstract base class for spectral basis sets
     """
-    _save_attrs_ = ['_Basis__L', '_Basis__M', '_Basis__N', '_Basis__NFP',
-                             '_Basis__modes']
+    _save_attrs_ = ['_L', '_M', '_N', '_NFP', '_modes']
 
     @abstractmethod
     def __init__(self) -> None:
@@ -42,14 +41,14 @@ class Basis(IOAble,ABC):
         None
 
         """
-        if self.__sym == True:     # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.__modes[:, 1]) !=
-                                   sign(self.__modes[:, 2]))
-            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
-        elif self.__sym == False:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.__modes[:, 1]) ==
-                                   sign(self.__modes[:, 2]))
-            self.__modes = np.delete(self.__modes, non_sym_idx, axis=0)
+        if self._sym == True:     # cos(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self._modes[:, 1]) !=
+                                   sign(self._modes[:, 2]))
+            self._modes = np.delete(self._modes, non_sym_idx, axis=0)
+        elif self._sym == False:  # sin(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self._modes[:, 1]) ==
+                                   sign(self._modes[:, 2]))
+            self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
     def _sort_modes_(self) -> None:
         """Sorts modes for use with FFT
@@ -59,9 +58,9 @@ class Basis(IOAble,ABC):
         None
 
         """
-        sort_idx = np.lexsort((self.__modes[:, 0], self.__modes[:, 1],
-                               self.__modes[:, 2]))
-        self.__modes = self.__modes[sort_idx]
+        sort_idx = np.lexsort((self._modes[:, 0], self._modes[:, 1],
+                               self._modes[:, 2]))
+        self._modes = self._modes[sort_idx]
 
     def _def_save_attrs_(self) -> None:
         """Defines attributes to save
@@ -71,8 +70,8 @@ class Basis(IOAble,ABC):
         None
 
         """
-        self._save_attrs_ = ['_Basis__L', '_Basis__M', '_Basis__N', '_Basis__NFP',
-                             '_Basis__modes']
+        self._save_attrs_ = ['_L', '_M', '_N', '_NFP',
+                             '_modes']
 
     @abstractmethod
     def get_modes(self):
@@ -97,44 +96,44 @@ class Basis(IOAble,ABC):
     @property
     def L(self) -> int:
         """ int: maximum radial resolution"""
-        return self.__L
+        return self._L
 
     @property
     def M(self) -> int:
         """ int:  maximum poloidal resolution"""
-        return self.__M
+        return self._M
 
     @property
     def N(self) -> int:
         """ int: maximum toroidal resolution"""
-        return self.__N
+        return self._N
 
     @property
     def NFP(self) -> int:
         """ int: number of field periods"""
-        return self.__NFP
+        return self._NFP
 
     @property
     def sym(self) -> Tristate:
         """ Tristate: 
         True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
         None for no symmetry (Default)"""
-        return self.__sym
+        return self._sym
 
     @property
     def modes(self):
         """ndarray:  arrauy of int, shape(Nmodes,3): 
         array of mode numbers [l,m,n],
         each row is one basis function with modes (l,m,n)"""
-        return self.__modes
+        return self._modes
 
     @modes.setter
     def modes(self, modes) -> None:
-        self.__modes = modes
+        self._modes = modes
 
     @property
     def num_modes(self) -> int:
-        return self.__modes.shape[0]
+        return self._modes.shape[0]
 
 
 class PowerSeries(Basis):
@@ -156,13 +155,13 @@ class PowerSeries(Basis):
 
         """
         if load_from is None:
-            self._Basis__L = L
-            self._Basis__M = 0
-            self._Basis__N = 0
-            self._Basis__NFP = 1
-            self._Basis__sym = None
+            self._L = L
+            self._M = 0
+            self._N = 0
+            self._NFP = 1
+            self._sym = None
 
-            self._Basis__modes = self.get_modes(L=self._Basis__L)
+            self._modes = self.get_modes(L=self._L)
 
             self._enforce_symmetry_()
             self._sort_modes_()
@@ -203,7 +202,7 @@ class PowerSeries(Basis):
             basis functions evaluated at nodes
 
         """
-        return powers(nodes[:, 0], self._Basis__modes[:, 0], dr=derivatives[0])
+        return powers(nodes[:, 0], self._modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L:int) -> None:
         """Change resolution of the basis to the given resolution. Overrides parent Basis object's change_resolution method.
@@ -218,9 +217,9 @@ class PowerSeries(Basis):
         None
 
         """
-        if L != self._Basis__L:
-            self._Basis__L = L
-            self._Basis__modes = self.get_modes(self._Basis__L)
+        if L != self._L:
+            self._L = L
+            self._modes = self.get_modes(self._L)
             self.sort_nodes()
 
 
@@ -252,13 +251,13 @@ class DoubleFourierSeries(Basis):
 
         """
         if load_from is None:
-            self._Basis__L = 0
-            self._Basis__M = M
-            self._Basis__N = N
-            self._Basis__NFP = NFP
-            self._Basis__sym = sym
+            self._L = 0
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
 
-            self._Basis__modes = self.get_modes(M=self._Basis__M, N=self._Basis__N)
+            self._modes = self.get_modes(M=self._M, N=self._N)
 
             self._enforce_symmetry_()
             self._sort_modes_()
@@ -303,8 +302,8 @@ class DoubleFourierSeries(Basis):
             basis functions evaluated at nodes
 
         """
-        poloidal = fourier(nodes[:, 1], self._Basis__modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
+        poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return poloidal*toroidal
 
     def change_resolution(self, M:int, N:int) -> None:
@@ -322,10 +321,10 @@ class DoubleFourierSeries(Basis):
         None
 
         """
-        if M != self._Basis__M or N != self._Basis__N:
-            self._Basis__M = M
-            self._Basis__N = N
-            self._Basis__modes = self.get_modes(self._Basis__M, self._Basis__N)
+        if M != self._M or N != self._N:
+            self._M = M
+            self._N = N
+            self._modes = self.get_modes(self._M, self._N)
             self.sort_nodes()
 
 
@@ -388,15 +387,15 @@ class FourierZernikeBasis(Basis):
 
         """
         if load_from is None:
-            self._Basis__L = L
-            self._Basis__M = M
-            self._Basis__N = N
-            self._Basis__NFP = NFP
-            self._Basis__sym = sym
-            self.__index = index
+            self._L = L
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
+            self._index = index
 
-            self._Basis__modes = self.get_modes(L=self._Basis__L, M=self._Basis__M,
-                                            N=self._Basis__N, index=self.__index)
+            self._modes = self.get_modes(L=self._L, M=self._M,
+                                            N=self._N, index=self._index)
 
             self._enforce_symmetry_()
             self._sort_modes_()
@@ -498,9 +497,9 @@ class FourierZernikeBasis(Basis):
             basis functions evaluated at nodes
 
         """
-        radial = jacobi(nodes[:, 0], self._Basis__modes[:, 0], self._Basis__modes[:, 1], dr=derivatives[0])
-        poloidal = fourier(nodes[:, 1], self._Basis__modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._Basis__modes[:, 2], NFP=self._Basis__NFP, dt=derivatives[2])
+        radial = jacobi(nodes[:, 0], self._modes[:, 0], self._modes[:, 1], dr=derivatives[0])
+        poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return radial*poloidal*toroidal
 
     def change_resolution(self, M:int, N:int, delta_lm:int) -> None:
@@ -522,12 +521,12 @@ class FourierZernikeBasis(Basis):
         None
 
         """
-        if M != self._Basis__M or N != self._Basis__N or delta_lm != self.__delta_lm:
-            self._Basis__M = M
-            self._Basis__N = N
-            self.__delta_lm = delta_lm
-            self._Basis__modes = self.get_modes(self._Basis__M, self._Basis__N,
-                          delta_lm=self.__delta_lm, indexing=self.__indexing)
+        if M != self._M or N != self._N or delta_lm != self._delta_lm:
+            self._M = M
+            self._N = N
+            self._delta_lm = delta_lm
+            self._modes = self.get_modes(self._M, self._N,
+                          delta_lm=self._delta_lm, indexing=self._indexing)
             self.sort_nodes()
 
 

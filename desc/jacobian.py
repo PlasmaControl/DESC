@@ -50,19 +50,19 @@ class Jacobian(ABC):
 
     @property
     def fun(self) -> callable:
-        return self.__fun
+        return self._fun
 
     @fun.setter
     def fun(self, fun:callable) -> None:
-        self.__fun = fun
+        self._fun = fun
 
     @property
     def argnum(self) -> int:
-        return self.__argnum
+        return self._argnum
 
     @argnum.setter
     def argnum(self, argnum:int) -> None:
-        self.__argnum = argnum
+        self._argnum = argnum
 
 
 class AutoDiffJacobian(Jacobian):
@@ -92,8 +92,8 @@ class AutoDiffJacobian(Jacobian):
         None
 
         """
-        self._Jacobian__fun = fun
-        self._Jacobian__argnum = argnum
+        self._fun = fun
+        self._argnum = argnum
         self.mode = mode
 
     def compute(self, *args):
@@ -112,11 +112,11 @@ class AutoDiffJacobian(Jacobian):
             argument at position argnum.
 
         """
-        return self.__compute(*args)
+        return self._compute(*args)
 
     @property
     def mode(self) -> str:
-        return self.__mode
+        return self._mode
 
     @mode.setter
     def mode(self, mode:str) -> None:
@@ -124,13 +124,13 @@ class AutoDiffJacobian(Jacobian):
             raise ValueError(TextColors.FAIL +
                          "invalid mode option for automatic differentiation"
                            + TextColors.ENDC)
-        self.__mode = mode
-        if self.__mode == 'fwd':
-            self.__compute = jax.jacfwd(self._Jacobian__fun, self._Jacobian__argnum)
-        elif self.__mode == 'rev':
-            self.__compute = jax.jacrev(self._Jacobian__fun, self._Jacobian__argnum)
-        elif self.__mode == 'grad':
-            self.__compute = jax.grad(self._Jacobian__fun, self._Jacobian__argnum)
+        self._mode = mode
+        if self._mode == 'fwd':
+            self._compute = jax.jacfwd(self._fun, self._argnum)
+        elif self._mode == 'rev':
+            self._compute = jax.jacrev(self._fun, self._argnum)
+        elif self._mode == 'grad':
+            self._compute = jax.grad(self._fun, self._argnum)
 
 
 class FiniteDiffJacobian(Jacobian):
@@ -156,8 +156,8 @@ class FiniteDiffJacobian(Jacobian):
         None
 
         """
-        self._Jacobian__fun = fun
-        self._Jacobian__argnum = argnum
+        self._fun = fun
+        self._argnum = argnum
         self.rel_step = rel_step
 
     def compute(self, *args):
@@ -176,8 +176,8 @@ class FiniteDiffJacobian(Jacobian):
             argument at position argnum.
 
         """
-        f0 = np.atleast_1d(self._Jacobian__fun(*args))
-        x0 = np.atleast_1d(args[self._Jacobian__argnum])
+        f0 = np.atleast_1d(self._fun(*args))
+        x0 = np.atleast_1d(args[self._argnum])
         m = f0.size
         n = x0.size
         J = np.zeros((m, n))
@@ -187,10 +187,10 @@ class FiniteDiffJacobian(Jacobian):
             x1 = x0 - h_vecs[i]
             x2 = x0 + h_vecs[i]
             dx = x2[i] - x1[i]
-            args1 = args[0:self._Jacobian__argnum] + (x1,) + args[self._Jacobian__argnum+1:]
-            args2 = args[0:self._Jacobian__argnum] + (x2,) + args[self._Jacobian__argnum+1:]
-            f1 = self._Jacobian__fun(*args1)
-            f2 = self._Jacobian__fun(*args2)
+            args1 = args[0:self._argnum] + (x1,) + args[self._argnum+1:]
+            args2 = args[0:self._argnum] + (x2,) + args[self._argnum+1:]
+            f1 = self._fun(*args1)
+            f2 = self._fun(*args2)
             df = f2 - f1
             dfdx = df / dx
             J = put(J.T, i, dfdx.flatten()).T

@@ -3,18 +3,16 @@ import scipy.optimize
 import warnings
 import copy
 
-from desc.backend import jit, use_jax, Timer, TextColors, Tristate
+from desc.backend import jit, use_jax, Timer, TextColors
 from desc.grid import LinearGrid, ConcentricGrid
-from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.transform import Transform
-from desc.configuration import Equilibrium, EquilibriaFamily
+from desc.configuration import EquilibriaFamily
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
-from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
 from desc.jacobian import AutoDiffJacobian
 
 
-def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
+def solve_eq_continuation(inputs, file_name=None, device=None):
     """Solves for an equilibrium by continuation method
 
     Follows this procedure to solve the equilibrium:
@@ -28,7 +26,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     ----------
     inputs : dict
         dictionary with input parameters defining problem setup and solver options
-    checkpoint_filename : str or path-like
+    file_name : str or path-like
         file to save checkpoint data (Default value = None)
     device : jax.device or None
         device handle to JIT compile to (Default value = None)
@@ -73,23 +71,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     bdry = inputs['bdry']
     verbose = inputs['verbose']
 
-    if checkpoint_filename is not None:
+    if file_name is not None:
         checkpoint = True
-        checkpoint_file = Checkpoint(checkpoint_filename, write_ascii=True)
     else:
         checkpoint = False
 
-    if stell_sym:
-        R_sym = Tristate(True)
-        Z_sym = Tristate(False)
-        L_sym = Tristate(False)
-    else:
-        R_sym = Tristate(None)
-        Z_sym = Tristate(None)
-        L_sym = Tristate(None)
-
-    
-  
     arr_len = M.size
     for ii in range(arr_len):
 
@@ -131,8 +117,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'bdry_mode': bdry_mode,
                 'bdry_ratio': bdry_ratio[ii],
                 'axis': axis,
-                'output_path': checkpoint_filename
-            } 
+            }
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
@@ -317,22 +302,20 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
-            equil_fam.save()
+            equil_fam.save(file_name)
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
                           + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
             break
 
-
-
     timer.stop("Total time")
     print('====================')
     print('Done')
     if verbose > 1:
         timer.disp("Total time")
-    if checkpoint_filename is not None:
-        print('Output written to {}'.format(checkpoint_filename))
+    if file_name is not None:
+        print('Output written to {}'.format(file_name))
     print('====================')
 
     return equil_fam, timer

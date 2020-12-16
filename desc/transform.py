@@ -57,6 +57,8 @@ class Transform(IOAble):
         None
 
         """
+        self._file_format_ = file_format
+
         if load_from is None:
             self._grid = grid
             self._basis = basis
@@ -64,15 +66,17 @@ class Transform(IOAble):
             self._rcond = rcond
 
             self._matrices = {i: {j: {k: {}
-                         for k in range(4)} for j in range(4)} for i in range(4)}
+                     for k in range(4)} for j in range(4)} for i in range(4)}
             self._derivatives = self._get_derivatives_(self._derivs)
 
             self._sort_derivatives_()
             self._build_()
             self._build_pinv_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator

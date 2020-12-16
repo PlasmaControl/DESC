@@ -8,8 +8,7 @@ from desc.equilibrium_io import IOAble
 class Grid(IOAble):
     """Grid is a base class for collocation grids
     """
-    _save_attrs_ = ['_Grid__L', '_Grid__M', '_Grid__N', '_Grid__NFP',
-                             '_Grid__sym', '_Grid__nodes', '_Grid__volumes']
+    _save_attrs_ = ['_L', '_M', '_N', '_NFP', '_sym', '_nodes', '_volumes']
 
     def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a custom grid without a pre-defined pattern
@@ -26,13 +25,13 @@ class Grid(IOAble):
         """
 
         if load_from is None:
-            self.__L = None
-            self.__M = None
-            self.__N = None
-            self.__NFP = None
-            self.__sym = False
+            self._L = None
+            self._M = None
+            self._N = None
+            self._NFP = None
+            self._sym = False
 
-            self.__nodes, self.__volumes = self.create_nodes(nodes)
+            self._nodes, self._volumes = self.create_nodes(nodes)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -68,10 +67,10 @@ class Grid(IOAble):
         None
 
         """
-        if self.__sym:  # remove nodes with theta > pi
-            non_sym_idx = np.where(self.__nodes[:, 1] > np.pi)
-            self.__nodes = np.delete(self.__nodes, non_sym_idx, axis=0)
-            self.__volumes = np.delete(self.__volumes, non_sym_idx, axis=0)
+        if self._sym:  # remove nodes with theta > pi
+            non_sym_idx = np.where(self._nodes[:, 1] > np.pi)
+            self._nodes = np.delete(self._nodes, non_sym_idx, axis=0)
+            self._volumes = np.delete(self._volumes, non_sym_idx, axis=0)
 
     def _sort_nodes_(self) -> None:
         """Sorts nodes for use with FFT
@@ -81,10 +80,10 @@ class Grid(IOAble):
             None
 
         """
-        sort_idx = np.lexsort((self.__nodes[:, 0], self.__nodes[:, 1],
-                               self.__nodes[:, 2]))
-        self.__nodes = self.__nodes[sort_idx]
-        self.__volumes = self.__volumes[sort_idx]
+        sort_idx = np.lexsort((self._nodes[:, 0], self._nodes[:, 1],
+                               self._nodes[:, 2]))
+        self._nodes = self._nodes[sort_idx]
+        self._volumes = self._volumes[sort_idx]
 
     def _find_axis_(self) -> None:
         """Finds indices of axis nodes
@@ -94,7 +93,7 @@ class Grid(IOAble):
         None
 
         """
-        self.__axis = np.where(self.__nodes[:, 0] == 0)[0]
+        self._axis = np.where(self._nodes[:, 0] == 0)[0]
 
     def _def_save_attrs_(self) -> None:
         """Defines attributes to save
@@ -104,8 +103,8 @@ class Grid(IOAble):
         None
 
         """
-        self._save_attrs_ = ['_Grid__L', '_Grid__M', '_Grid__N', '_Grid__NFP',
-                             '_Grid__sym', '_Grid__nodes', '_Grid__volumes']
+        self._save_attrs_ = ['_L', '_M', '_N', '_NFP',
+                             '_sym', '_nodes', '_volumes']
 
     def create_nodes(self, nodes):
         """Allows for custom node creation
@@ -132,56 +131,56 @@ class Grid(IOAble):
     @property
     def L(self) -> int:
         """int: radial grid resolution"""
-        return self.__L
+        return self._L
 
     @property
     def M(self) -> int:
         """ int: poloidal grid resolution"""
-        return self.__M
+        return self._M
 
     @property
     def N(self) -> int:
         """ int: toroidal grid resolution"""
-        return self.__N
+        return self._N
 
     @property
     def NFP(self) -> int:
         """ int: number of field periods"""
-        return self.__NFP
+        return self._NFP
 
     @property
     def sym(self) -> bool:
         """ bool: True for stellarator symmetry, False otherwise (Default = False)"""
-        return self.__sym
+        return self._sym
 
     @property
     def nodes(self):
         """ndarray: array of float, size(3,Nnodes): 
         node coordinates, in (rho,theta,zeta)"""
-        return self.__nodes
+        return self._nodes
 
     @nodes.setter
     def nodes(self, nodes) -> None:
-        self.__nodes = nodes
+        self._nodes = nodes
 
     @property
     def volumes(self):
         """ ndarray: array of float, size(3,Nnodes): 
         node spacing (drho,dtheta,dzeta) at each node coordinate"""
-        return self.__volumes
+        return self._volumes
 
     @volumes.setter
     def volumes(self, volumes) -> None:
-        self.__volumes = volumes
+        self._volumes = volumes
 
     @property
     def num_nodes(self):
         """ int: total number of nodes"""
-        return self.__nodes.shape[0]
+        return self._nodes.shape[0]
 
     @property
     def axis(self):
-        return self.__axis
+        return self._axis
 
 
 class LinearGrid(Grid):
@@ -225,20 +224,20 @@ class LinearGrid(Grid):
         """
 
         if load_from is None:
-            self._Grid__L = L
-            self._Grid__M = M
-            self._Grid__N = N
-            self._Grid__NFP = NFP
-            self._Grid__sym = sym
-            self.__endpoint = endpoint
-            self.__rho = rho
-            self.__theta = theta
-            self.__zeta = zeta
+            self._L = L
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
+            self._endpoint = endpoint
+            self._rho = rho
+            self._theta = theta
+            self._zeta = zeta
 
-            self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                            L=self._Grid__L, M=self._Grid__M, N=self._Grid__N,
-                            NFP=self._Grid__NFP, endpoint=self.__endpoint,
-                            rho=self.__rho, theta=self.__theta, zeta=self.__zeta)
+            self._nodes, self._volumes = self.create_nodes(
+                            L=self._L, M=self._M, N=self._N,
+                            NFP=self._NFP, endpoint=self._endpoint,
+                            rho=self._rho, theta=self._theta, zeta=self._zeta)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -332,13 +331,13 @@ class LinearGrid(Grid):
         None
 
         """
-        if L != self._Grid__L or M != self._Grid__M or N != self._Grid__N:
-            self._Grid__L = L
-            self._Grid__M = M
-            self._Grid__N = N
-            self._Grid__nodes, self._Grid__volumes = self.create_nodes(L=L, M=M, N=N,
-                                 NFP=self._Grid__NFP, sym=self._Grid__sym,
-                                 endpoint=self.__endpoint, surfs=self.__surfs)
+        if L != self._L or M != self._M or N != self._N:
+            self._L = L
+            self._M = M
+            self._N = N
+            self._nodes, self._volumes = self.create_nodes(L=L, M=M, N=N,
+                                 NFP=self._NFP, sym=self._sym,
+                                 endpoint=self._endpoint, surfs=self._surfs)
             self.sort_nodes()
 
 
@@ -379,18 +378,18 @@ class ConcentricGrid(Grid):
 
         """
         if load_from is None:
-            self._Grid__L = M+1
-            self._Grid__M = M
-            self._Grid__N = N
-            self._Grid__NFP = NFP
-            self._Grid__sym = sym
-            self.__axis = axis
-            self.__index = index
-            self.__surfs = surfs
+            self._L = M+1
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
+            self._axis = axis
+            self._index = index
+            self._surfs = surfs
 
-            self._Grid__nodes, self._Grid__volumes = self.create_nodes(
-                        M=self._Grid__M, N=self._Grid__N, NFP=self._Grid__NFP,
-                        axis=self.__axis, index=self.__index, surfs=self.__surfs)
+            self._nodes, self._volumes = self.create_nodes(
+                        M=self._M, N=self._N, NFP=self._NFP,
+                        axis=self._axis, index=self._index, surfs=self._surfs)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -507,12 +506,12 @@ class ConcentricGrid(Grid):
         None
 
         """
-        if M != self._Grid__M or N != self._Grid__N:
-            self._Grid__L = M+1
-            self._Grid__M = M
-            self._Grid__N = N
-            self._Grid__nodes, self._Grid__volumes = self.create_nodes(M=M, N=N,
-                         NFP=self._Grid__NFP, sym=self._Grid__sym, surfs=self.__surfs)
+        if M != self._M or N != self._N:
+            self._L = M+1
+            self._M = M
+            self._N = N
+            self._nodes, self._volumes = self.create_nodes(M=M, N=N,
+                         NFP=self._NFP, sym=self._sym, surfs=self._surfs)
             self.sort_nodes()
 
 

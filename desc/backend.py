@@ -536,451 +536,59 @@ def rms(x):
     return jnp.sqrt(jnp.mean(x**2))
 
 
-def iotafun(rho, nu, params):
-    """Rotational transform
+
+def equals(a, b) -> bool:
+    """Compares dictionaries that have numpy array values
 
     Parameters
     ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
+    a : dict
+        reference dictionary
+    b : dict
+        comparison dictionary
 
     Returns
     -------
-    iota : array-like
-        iota profile (or derivative) evaluated at rho
+    bool
+        a == b
 
     """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
+    if a.keys() != b.keys():
+        return False
+    return all(equals(a[key], b[key]) if isinstance(a[key], dict)
+               else jnp.allclose(a[key], b[key]) if isinstance(a[key], jnp.ndarray)
+               else (a[key] == b[key])
+               for key in a)
 
 
-def presfun(rho, nu, params):
-    """Plasma pressure
-
-    Parameters
-    ----------
-    rho : array-like
-        coordinates at which to evaluate
-    nu : int
-        order of derivative (for compatibility with scipy spline routines)
-    params : array-like
-        polynomial coefficients to use for calculating profile
-
-    Returns
-    -------
-    pres : array-like
-        pressure profile (or derivative) evaluated at rho
-
-    """
-    return jnp.polyval(jnp.polyder(params[::-1], nu), rho)
-
-
-def get_needed_derivatives(mode, axis=True):
-    """Get array of derivatives needed for calculating objective function
-
-    Parameters
-    ----------
-    mode : str
-        one of ``None``, ``'force'``, ``'accel'``, ``'qs'``, or ``'all'``.
-        What groups of derivatives are needed, based on the objective type.
-    axis : bool
-        whether to include terms needed for axis expansion (Default value = True)
-
-    Returns
-    -------
-    derivs : ndarray
-        combinations of derivatives of R,Z needed
-        to compute objective function. Each row is one set, columns represent
-        the order of derivative for [rho, theta, zeta].
-
-    """
-    equil_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                             [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                             [0, 1, 1], [0, 0, 2]])
-    axis_derivs = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-    qs_derivs = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                          [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                          [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
-                          [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
-                          [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
-                          [2, 2, 0]])
-    if mode is None:
-        return np.array([[0, 0, 0]])
-    elif mode.lower() in ['force', 'accel']:
-        if axis:
-            return np.vstack([equil_derivs, axis_derivs])
-        else:
-            return equil_derivs
-    elif mode.lower() in ['all', 'qs']:
-        return qs_derivs
-    else:
-        raise NotImplementedError(
-            TextColors.FAIL + "derivs must be one of 'force', 'accel', 'all', 'qs'" + TextColors.ENDC)
-
-
-def unpack_x(x, nRZ):
-    """Unpacks the optimization state vector x into cR,cZ,cL components
-
-    Parameters
-    ----------
-    x : ndarray
-        vector to unpack
-    nRZ : int
-        number of R,Z coeffs
-
-    Returns
-    -------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
-        spectral coefficients of lambda
-
-    """
-
-    cR = x[:nRZ]
-    cZ = x[nRZ:2*nRZ]
-    cL = x[2*nRZ:]
-    return cR, cZ, cL
-
-
-class FiniteDifferenceJacobian():
-    """Class that wraps a function and computes its jacobian using 2nd order centered finite differences
-
-    Parameters
-    ----------
-    fun : callable
-        function to wrap
-    argnums : int
-        index of arguments to differentiate with respect to (Default value = 0)
-    rel_step : float
-        relative step size for finite differences.
-        step_size = rel_step * x0 * max(1,abs(x0))
-        (Default value = np.finfo.eps**1/3)
-
-    Returns
-    -------
-    jac_fun : callable
-        object that computes the jacobian of fun.
-
-    """
-
-    def __init__(self, fun, argnums=0, rel_step=np.finfo(np.float64).eps**(1/3), **kwargs):
-        self.fun = fun
-        self.argnums = argnums
-        self.rel_step = rel_step
-
-    def __call__(self, *args):
-        """Evaluate the jacobian of fun at x0.
-
-        Parameters
-        ----------
-        args : tuple
-            point to evaluate jacobian
-
-        Returns
-        -------
-        dF/dx : ndarray
-            Jacobian of fun at x0.
+class Tristate(object):
+    """ Tristate to determine type of symmetry for R,Z, and L.
+    
+        Possible values are:
+            True for cos(m*t-n*z) symmetry
+            False for sin(m*t-n*z) symmetry
+            None for no symmetry (Default)
 
         """
-        f0 = self.fun(*args)
-        x0 = args[self.argnums]
-        m = f0.size
-        n = x0.size
-        J_transposed = np.zeros((n, m))
-        sign_x0 = (x0 >= 0).astype(float) * 2 - 1
-        h = self.rel_step * sign_x0 * np.maximum(1.0, jnp.abs(x0))
-        h_vecs = np.diag(h)
-        for i in range(h.size):
-            x1 = x0 - h_vecs[i]
-            x2 = x0 + h_vecs[i]
-            dx = x2[i] - x1[i]
-            args1 = args[0:self.argnums] + (x1,) + args[self.argnums+1:]
-            args2 = args[0:self.argnums] + (x2,) + args[self.argnums+1:]
-            f1 = self.fun(*args1)
-            f2 = self.fun(*args2)
-            df = f2 - f1
-            dfdx = df / dx
-            J_transposed = put(J_transposed, i, dfdx)
-        if m == 1:
-            J_transposed = np.ravel(J_transposed)
-        return J_transposed.T
 
+    def __init__(self, value=None):
+       if any(value is v for v in (True, False, None)):
+          self.value = value
+       else:
+           raise ValueError("Tristate value must be True, False, or None")
 
-class SPSAJacobian():
-    """Class for computing jacobian simultaneous perturbation stochastic approximation
+    def __eq__(self, other):
+       return (self.value is other.value if isinstance(other, Tristate)
+               else self.value is other)
 
-    Parameters
-    ----------
-    fun : callable
-        function to be differentiated
-    rel_step : float
-        relative step size for finite difference (Default value = 1e-6)
-    N : int
-        number of samples to take (Default value = 100)
+    def __ne__(self, other):
+       return not self == other
 
-    Returns
-    -------
-    jac_fun : callable
-        object that computes the jacobian of fun.
+    def __bool__(self):
+       raise TypeError("Tristate object may not be used as a Boolean")
 
-    """
+    def __str__(self):
+        return str(self.value)
 
-    def __init__(self, fun, rel_step=1e-6, N=100, **kwargs):
-
-        self.fun = fun
-        self.rel_step = rel_step
-        self.N = N
-
-    def __call__(self, x0, *args, **kwargs):
-        """Update and get the jacobian"""
-
-        f0 = self.fun(x0, *args)
-        m = f0.size
-        n = x0.size
-
-        J = np.zeros((m, n))
-        sign_x0 = (x0 >= 0).astype(float) * 2 - 1
-        h = self.rel_step * sign_x0 * np.maximum(1.0, np.abs(x0))
-
-        for i in range(self.N):
-            dx = (np.random.binomial(1, .5, x0.shape)*2-1)*h
-            x1 = x0 + dx
-            x2 = x0 - dx
-            dx = (x1 - x2).flatten()[np.newaxis]
-            f1 = np.atleast_1d(self.fun(x1, *args))
-            f2 = np.atleast_1d(self.fun(x2, *args))
-            df = (f1-f2).flatten()[:, np.newaxis]
-            dfdx = df/dx
-            J += dfdx
-        return J/self.N
-
-
-class BroydenJacobian():
-    """Class for computing jacobian using rank 1 updates
-
-    Parameters
-    ----------
-    fun : callable
-        function to be differentiated
-    x0 : array-like
-        starting point
-    f0 : array-like
-        function evaluated at starting point
-    J0 : array-like
-        estimate of jacobian at starting point
-        If not given, the identity matrix is used
-    minstep : float
-        minimum step size for updating the jacobian (Default value = 1e-12)
-
-    Returns
-    -------
-    jac_fun : callable
-        object that computes the jacobian of fun.
-
-    """
-
-    def __init__(self, fun, x0, f0, J0=None, minstep=1e-12, **kwargs):
-
-        self.fun = fun
-        self.x0 = x0
-        self.f0 = f0
-        self.shape = (f0.size, x0.size)
-        self.J = J0 if J0 is not None else np.eye(*self.shape)
-        self.minstep = minstep
-        self.x1 = self.x0
-        self.f1 = self.f0
-
-    def __call__(self, x, *args, **kwargs):
-        """Update and get the jacobian"""
-
-        self.x0 = self.x1
-        self.f0 = self.f1
-        self.x1 = x
-        dx = self.x1-self.x0
-        step = np.linalg.norm(dx)
-        if step < self.minstep:
-            return self.J
-        else:
-            self.f1 = self.fun(x, *args)
-            df = self.f1 - self.f0
-            update = (df - self.J.dot(dx))/step**2
-            update = update[:, np.newaxis]*dx[np.newaxis, :]
-            self.J += update
-            return self.J
-
-
-class BlockJacobian():
-    """Computes a jacobian matrix in smaller blocks.
-
-    Takes a large jacobian and splits it into smaller blocks
-    (row-wise) for easier computation, possibly allowing each
-    block to be computed independently on different devices in
-    parallel. Also helps to reduce memory load, allowing
-    computation of larger jacobians on limited memory GPUs
-
-    Parameters
-    ----------
-    fun : callable
-        function to take jacobian of
-    N : int
-        dimension of fun(x)
-    M : int
-        dimension of x
-    block_size : int
-        size (number of rows) of each block.
-        the last block may be smaller depending on N and block_size
-    num_blocks : int
-        number of blocks (only used if block size
-        is not given).
-    devices : list or tuple of jax.device
-        list of jax devices to use.
-        Blocks will be split evenly across them.
-    usejit : bool
-        whether to apply JIT compilation. Generally
-        only worth it if jacobian will be called many times
-
-    Returns
-    -------
-    jac_fun : callable
-        object that computes the jacobian of fun.
-
-    """
-
-    def __init__(self, fun, N, M, block_size=None, num_blocks=None,
-                 devices=None, usejit=False):
-
-        self.fun = fun
-        self.N = N
-        self.M = M
-
-        # could probably add some fancier logic here to look at M as well when deciding how
-        # to split blocks? Though we can't really split the jacobian columnwise without a lot
-        # of surgery on the objective function
-        if block_size is not None and num_blocks is not None:
-            raise ValueError(TextColors.FAIL +
-                             "can specify either block_size or num_blocks, not both" + TextColors.ENDC)
-        elif block_size is None and num_blocks is None:
-            self.block_size = N
-            self.num_blocks = 1
-        elif block_size is not None:
-            self.block_size = block_size
-            self.num_blocks = np.ceil(N/block_size).astype(int)
-        else:
-            self.num_blocks = num_blocks
-            self.block_size = np.ceil(N/num_blocks).astype(int)
-
-        if type(devices) in [list, tuple]:
-            self.devices = devices
-        else:
-            self.devices = [devices]
-
-        self.usejit = usejit
-        self.f_blocks = []
-        self.jac_blocks = []
-
-        for i in range(self.num_blocks):
-            # need the i=i in the lambda signature, otherwise i is scoped to
-            # the loop and get overwritten, making each function compute the same subset
-            self.f_blocks.append(
-                lambda x, *args, i=i: self.fun(x, *args)[i*self.block_size:(i+1)*self.block_size])
-            # need to use jacrev here to actually get memory savings
-            # (plus, these blocks should be wide and short)
-            if self.usejit:
-                self.jac_blocks.append(
-                    jit(jacrev(self.f_blocks[i]), device=self.devices[i % len(self.devices)]))
-            else:
-                self.jac_blocks.append(jacrev(self.f_blocks[i]))
-
-    def __call__(self, x, *args):
-
-        return np.vstack([jac(x, *args) for jac in self.jac_blocks])
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def polyder_vec(p, m):
-    """Vectorized version of polyder for differentiating multiple polynomials of the same degree
-
-    Parameters
-    ----------
-    p : ndarray, shape(N,M)
-        polynomial coefficients. Each row is 1 polynomial, in descending powers of x,
-        each column is a power of x
-    m : int >=0
-        order of derivative
-
-    Returns
-    -------
-    der : ndarray, shape(N,M)
-        polynomial coefficients for derivative in descending order
-
-    """
-    m = jnp.asarray(m, dtype=int)  # order of derivative
-    p = jnp.atleast_2d(p)
-    l = p.shape[0]               # number of polynomials
-    n = p.shape[1] - 1           # order of polynomials
-
-    D = jnp.arange(n, -1, -1)
-    D = factorial(D)/factorial(D-m)
-
-    p = jnp.roll(D*p, m, axis=1)
-    idx = jnp.arange(p.shape[1])
-    p = jnp.where(idx < m, 0, p)
-
-    return p
-
-
-@conditional_decorator(functools.partial(jit), use_jax)
-def polyval_vec(p, x):
-    """Evaluate a polynomial at specific values,
-    vectorized for evaluating multiple polynomials of the same degree.
-
-    Parameters
-    ----------
-    p : ndarray, shape(N,M)
-        Array of coefficient for N polynomials of order M. 
-        Each row is one polynomial, given in descending powers of x. 
-    x : ndarray, shape(K,)
-        A number, or 1d array of numbers at
-        which to evaluate p. If greater than 1d it is flattened.
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        polynomials evaluated at x.
-        Each row corresponds to a polynomial, each column to a value of x
-
-    Notes:
-        Horner's scheme is used to evaluate the polynomial. Even so,
-        for polynomials of high degree the values may be inaccurate due to
-        rounding errors. Use carefully.
-
-    """
-    p = jnp.atleast_2d(p)
-    npoly = p.shape[0]
-    order = p.shape[1]
-    x = jnp.asarray(x).flatten()
-    nx = len(x)
-    y = jnp.zeros((npoly, nx))
-
-    def body_fun(k, y):
-        return y * x + p[:, k][:, jnp.newaxis]
-
-    y = fori_loop(0, order, body_fun, y)
-
-    return y
-
-
-if use_jax:
-    jacfwd = jax.jacfwd
-    jacrev = jax.jacrev
-    grad = jax.grad
-else:
-    jacfwd = FiniteDifferenceJacobian
-    jacrev = FiniteDifferenceJacobian
-    grad = FiniteDifferenceJacobian
+    def __repr__(self):
+        return "Tristate(%s)" % self.value

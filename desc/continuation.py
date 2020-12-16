@@ -1,73 +1,28 @@
 import numpy as np
 import scipy.optimize
 import warnings
-from desc.backend import jnp, jit, use_jax, Timer, TextColors
-from desc.backend import get_needed_derivatives, unpack_x, jacfwd, grad
-from desc.zernike import ZernikeTransform, get_zern_basis_idx_dense
-from desc.zernike import get_double_four_basis_idx_dense, symmetric_x
-from desc.init_guess import get_initial_guess_scale_bdry
-from desc.boundary_conditions import format_bdry
-from desc.objective_funs import get_equil_obj_fun, is_nested
-from desc.nodes import get_nodes_pattern, get_nodes_surf
-from desc.input_output import Checkpoint
+import copy
+
+from desc.backend import jit, use_jax, Timer, TextColors, Tristate
+from desc.grid import LinearGrid, ConcentricGrid
+from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
+from desc.transform import Transform
+from desc.configuration import Equilibrium, EquilibriaFamily
+from desc.objective_funs import is_nested, ObjectiveFunctionFactory
+from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
-
-
-def expand_resolution(x, zernike_transform, bdry_zernike_transform, zern_idx_old, zern_idx_new,
-                      lambda_idx_old, lambda_idx_new):
-    """Expands solution to a higher resolution by filling with zeros
-    Also modifies zernike transform object to work at higher resolution
-
-    Parameters
-    ----------
-    x : ndarray
-        solution at initial resolution
-    zernike_transform : ZernikeTransform
-        zernike transform object corresponding to initial x
-    bdry_zernike_transform : ZernikeTransform
-        zernike transform object corresponding to initial x at bdry
-    zern_idx_old : ndarray of int, shape(nRZ_old,3)
-        mode indices corresponding to initial R,Z
-    zern_idx_new : ndarray of int, shape(nRZ_new,3)
-        mode indices corresponding to new R,Z
-    lambda_idx_old : ndarray of int, shape(nL_old,2)
-        mode indices corresponding to initial lambda
-    lambda_idx_new : ndarray of int, shape(nL_new,2)
-        mode indices corresponding to new lambda
-
-    Returns
-    -------
-    x_new : ndarray
-        solution expanded to new resolution
-    zernike_transform : ZernikeTransform
-        zernike transform object corresponding to expanded x
-    bdry_zernike_transform : ZernikeTransform
-        zernike transform object corresponding to expanded x at bdry
-
-    """
-
-    cR, cZ, cL = unpack_x(x, len(zern_idx_old))
-    cR_new = np.zeros(len(zern_idx_new))
-    cZ_new = np.zeros(len(zern_idx_new))
-    cL_new = np.zeros(len(lambda_idx_new))
-    old_in_new = np.where((zern_idx_new[:, None] == zern_idx_old).all(-1))[0]
-    cR_new[old_in_new] = cR
-    cZ_new[old_in_new] = cZ
-    old_in_new = np.where(
-        (lambda_idx_new[:, None] == lambda_idx_old).all(-1))[0]
-    cL_new[old_in_new] = cL
-    x_new = np.concatenate([cR_new, cZ_new, cL_new])
-
-    zernike_transform.expand_spectral_resolution(zern_idx_new)
-    bdry_zernike_transform.expand_spectral_resolution(zern_idx_new)
-
-    return x_new, zernike_transform, bdry_zernike_transform
+from desc.jacobian import AutoDiffJacobian
 
 
 def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     """Solves for an equilibrium by continuation method
 
-    Steps up resolution, perturbs pressure, 3d bdry etc.
+    Follows this procedure to solve the equilibrium:
+        1. Creates an initial guess from the given inputs
+        2. Optimizes the equilibrium's flux surfaces by minimizing
+            the given objective function.
+        3. Step up to higher resolution and perturb the previous solution
+        4. Repeat 2 and 3 until at desired resolution
 
     Parameters
     ----------
@@ -80,8 +35,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
 
     Returns
     -------
-    iterations : dict
-        dictionary of intermediate solutions
+    equil_fam : EquilibriaFamily
+        Container object that contains a list of the intermediate solutions,
+            as well as the final solution, stored as Equilibrium objects
     timer : Timer
         Timer object containing timing data for individual iterations
 
@@ -122,11 +78,18 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         checkpoint_file = Checkpoint(checkpoint_filename, write_ascii=True)
     else:
         checkpoint = False
-    iterations = {}
 
-    if not use_jax:
-        pert_order *= 0
+    if stell_sym:
+        R_sym = Tristate(True)
+        Z_sym = Tristate(False)
+        L_sym = Tristate(False)
+    else:
+        R_sym = Tristate(None)
+        Z_sym = Tristate(None)
+        L_sym = Tristate(None)
 
+    
+  
     arr_len = M.size
     for ii in range(arr_len):
 
@@ -150,125 +113,96 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("================")
 
         # initial solution
+        # at initial soln, must: create bases, create grids, create transforms
         if ii == 0:
-            # interpolator
             timer.start("Iteration {} total".format(ii+1))
-            timer.start("Fourier-Zernike precomputation")
-            if verbose > 0:
-                print("Precomputing Fourier-Zernike basis")
-            nodes, volumes = get_nodes_pattern(
-                Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
-            derivatives = get_needed_derivatives('all')
-            zern_idx = get_zern_basis_idx_dense(
-                M[ii], N[ii], delta_lm[ii], zern_mode)
-            lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
-            zernike_transform = ZernikeTransform(
-                nodes, zern_idx, NFP, derivatives, volumes, method='fft')
-            # bdry interpolator
-            bdry_nodes, _ = get_nodes_surf(
-                Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
-            bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP, [
-                0, 0, 0], method='direct')
-            timer.stop("Fourier-Zernike precomputation")
-            if verbose > 1:
-                timer.disp("Fourier-Zernike precomputation")
-            # format boundary shape
-            bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
-                M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
 
-            # stellarator symmetry
-            if stell_sym:
-                sym_mat = symmetric_x(zern_idx, lambda_idx)
-            else:
-                sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
-
-            # initial guess
-            timer.start("Initial guess computation")
-            if verbose > 0:
-                print("Computing initial guess")
-            cR_init, cZ_init = get_initial_guess_scale_bdry(
-                axis, bdry, bdry_ratio[ii], zern_idx, NFP, mode=bdry_mode, rcond=1e-6)
-            cL_init = np.zeros(len(lambda_idx))
-            x_init = jnp.concatenate([cR_init, cZ_init, cL_init])
-            x_init = jnp.matmul(sym_mat.T, x_init)
-            x = x_init
-            timer.stop("Initial guess computation")
-            if verbose > 1:
-                timer.disp("Initial guess computation")
-            equil_init = {
-                'cR': cR_init,
-                'cZ': cZ_init,
-                'cL': cL_init,
-                'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
-                'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
+            inputs_ii = {
+                'L': delta_lm[ii],
+                'M': M[ii],
+                'N': N[ii],
                 'cP': cP*pres_ratio[ii],
                 'cI': cI,
-                'Psi_lcfs': Psi_lcfs,
+                'Psi': Psi_lcfs,
                 'NFP': NFP,
-                'zern_idx': zern_idx,
-                'lambda_idx': lambda_idx,
-                'bdry_idx': bdry[:, :2]
-            }
-            iterations['init'] = equil_init
-            if checkpoint:
-                checkpoint_file.write_iteration(equil_init, 'init', inputs)
+                'bdry': bdry,
+                'sym': stell_sym,
+                'index': zern_mode,
+                'bdry_mode': bdry_mode,
+                'bdry_ratio': bdry_ratio[ii],
+                'axis': axis,
+                'output_path': checkpoint_filename
+            } 
+            timer.start("Transform precomputation")
+            if verbose > 0:
+                print("Precomputing Transforms")
+            equil_fam = EquilibriaFamily(inputs=inputs_ii)
+            # Get initial Equilibrium from equil_fam
+            equil = equil_fam[ii] 
+            
+            x = equil.x # initial state vector
+            # bases (extracted from Equilibrium)
+            R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
+                                                            equil.Z_basis, \
+                                                            equil.L_basis, \
+                                                            equil.P_basis, \
+                                                            equil.I_basis
 
-            # equilibrium objective function
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
-                                                    bdry_pol, bdry_tor)
-            args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
-                    pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii]]
 
-        # continuing from prev soln
+            # grids
+            RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+                                     axis=False, index=zern_mode, surfs=node_mode)
+            L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+
+            # transforms
+            R_transform = Transform(RZ_grid, R_basis, derivs=3)
+            Z_transform = Transform(RZ_grid, Z_basis, derivs=3)
+            R1_transform = Transform(L_grid, R_basis)
+            Z1_transform = Transform(L_grid, Z_basis)
+            L_transform = Transform(L_grid,  L_basis, derivs=0)
+            P_transform = Transform(RZ_grid, P_basis, derivs=1)
+            I_transform = Transform(RZ_grid, I_basis, derivs=1)
+            
+            timer.stop("Transform precomputation")
+            if verbose > 1:
+                timer.disp("Transform precomputation")
+
+
+        # continuing from previous solution
         else:
-            # collocation nodes
+            # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
-                timer.start(
-                    "Iteration {} changing node resolution".format(ii+1))
-                if verbose > 0:
-                    print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
-                        Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
-                nodes, volumes = get_nodes_pattern(
-                    Mnodes[ii], Nnodes[ii], NFP, index=zern_mode, surfs=node_mode, sym=stell_sym, axis=False)
-                bdry_nodes, _ = get_nodes_surf(
-                    Mnodes[ii], Nnodes[ii], NFP, surf=1.0, sym=stell_sym)
-                zernike_transform.expand_nodes(nodes, volumes)
-                bdry_zernike_transform.expand_nodes(bdry_nodes)
-                timer.stop(
-                    "Iteration {} changing node resolution".format(ii+1))
-                if verbose > 1:
-                    timer.disp(
-                        "Iteration {} changing node resolution".format(ii+1))
+                RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+                                         axis=False, index=zern_mode, surfs=node_mode)
+                L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
 
-            # spectral resolution
+            # change bases
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
-                timer.start(
-                    "Iteration {} changing spectral resolution".format(ii+1))
-                if verbose > 0:
-                    print("Changing spectral resolution from (M,N,delta_lm) = ({},{},{}) to ({},{},{})".format(
-                        M[ii-1], N[ii-1], delta_lm[ii-1], M[ii], N[ii], delta_lm[ii]))
-                zern_idx_old = zern_idx
-                lambda_idx_old = lambda_idx
-                zern_idx = get_zern_basis_idx_dense(
-                    M[ii], N[ii], delta_lm[ii], zern_mode)
-                lambda_idx = get_double_four_basis_idx_dense(M[ii], N[ii])
-                bdry_pol, bdry_tor, bdryR, bdryZ = format_bdry(
-                    M[ii], N[ii], NFP, bdry, bdry_mode, bdry_mode)
+                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii]) # update equilibrium bases to the new resolutions
+                R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
+                x = equil.x
 
-                x, zernike_transform, bdry_zernike_transform = expand_resolution(jnp.matmul(sym_mat, x), zernike_transform, bdry_zernike_transform,
-                                                                                 zern_idx_old, zern_idx, lambda_idx_old, lambda_idx)
-                # stellarator symmetry
-                if stell_sym:
-                    sym_mat = symmetric_x(zern_idx, lambda_idx)
-                else:
-                    sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
-                x = jnp.matmul(sym_mat.T, x)
-                timer.stop(
-                    "Iteration {} changing spectral resolution".format(ii+1))
-                if verbose > 1:
-                    timer.disp(
-                        "Iteration {} changing spectral resolution".format(ii+1))
+            # change transform matrices
+            timer.start(
+                "Iteration {} changing resolution".format(ii+1))
+            if verbose > 0:
+                print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
+                    Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
+                print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
+                        delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+
+            R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
+            Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)
+            R1_transform.change_resolution(grid=L_grid, basis=R_basis)
+            Z1_transform.change_resolution(grid=L_grid, basis=Z_basis)
+            L_transform.change_resolution(grid=L_grid, basis=L_basis)
+            P_transform.change_resolution(grid=RZ_grid)
+            I_transform.change_resolution(grid=RZ_grid)
+            timer.stop(
+                "Iteration {} changing resolution".format(ii+1))
+            if verbose > 1:
+                timer.disp(
+                    "Iteration {} changing resolution".format(ii+1))
 
             # continuation parameters
             delta_bdry = bdry_ratio[ii] - bdry_ratio[ii-1]
@@ -276,38 +210,54 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             delta_zeta = zeta_ratio[ii] - zeta_ratio[ii-1]
             deltas = np.array([delta_bdry, delta_pres, delta_zeta])
 
-            # equilibrium objective function
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
-                                                    bdry_pol, bdry_tor)
-            args = [bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii-1],
-                    pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1]]
+            # need a non-scalar objective function to do the perturbations
+            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
+                    errr_mode, scalar=False,
+                    R_transform=R_transform, Z_transform=Z_transform,
+                    R1_transform=R1_transform, Z1_transform=Z1_transform,
+                    L_transform=L_transform, P_transform=P_transform,
+                    I_transform=I_transform)
+            equil_obj = obj_fun.compute
+            callback = obj_fun.callback
+            args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
+                    bdry_ratio[ii-1], pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1])
 
+            # TODO: should probably perturb before expanding resolution
+            # perturbations
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
                 x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
                                                        pert_order[ii], verbose, timer)
 
-        args = (bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio[ii],
-                pres_ratio[ii], zeta_ratio[ii], errr_ratio[ii])
-
+        # equilibrium objective function
         if optim_method in ['bfgs']:
-            equil_obj, callback = get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M[ii], N[ii],
-                                                    NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx,
-                                                    bdry_pol, bdry_tor, scalar=True)
-            jac = grad(equil_obj, argnums=0)
+            scalar = True
         else:
-            jac = jacfwd(equil_obj, argnums=0)
+            scalar = False
+        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
+                    errr_mode, scalar=scalar,
+                    R_transform=R_transform, Z_transform=Z_transform,
+                    R1_transform=R1_transform, Z1_transform=Z1_transform,
+                    L_transform=L_transform, P_transform=P_transform,
+                    I_transform=I_transform)
+        equil_obj = obj_fun.compute
+        callback = obj_fun.callback
+        args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
+                bdry_ratio[ii-1], pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1])
 
         if use_jax:
+            if optim_method in ['bfgs']:
+                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='grad')
+            else:
+                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='fwd')
             if verbose > 0:
                 print("Compiling objective function")
             if device is None:
                 import jax
                 device = jax.devices()[0]
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
-            jac_obj_jit = jit(jac, device=device)
+            jac_obj_jit = jit(jac.compute, device=device)
             timer.start("Iteration {} compilation".format(ii+1))
             f0 = equil_obj_jit(x, *args)
             J0 = jac_obj_jit(x, *args)
@@ -349,7 +299,10 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogleg'" + TextColors.ENDC)
 
         timer.stop("Iteration {} solution".format(ii+1))
-        x = out['x']
+
+        equil.x = out['x']
+
+        equil_fam.append(copy.deepcopy(equil))
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))
@@ -361,36 +314,17 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("End of Step {}:".format(ii+1))
             callback(x, *args)
 
-        cR, cZ, cL = unpack_x(np.matmul(sym_mat, x), len(zern_idx))
-        equil = {
-            'cR': cR,
-            'cZ': cZ,
-            'cL': cL,
-            'bdryR': bdry[:, 2]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
-            'bdryZ': bdry[:, 3]*np.where((bdry[:, 1] == 0), bdry_ratio[ii], 1),
-            'cP': cP*pres_ratio[ii],
-            'cI': cI,
-            'Psi_lcfs': Psi_lcfs,
-            'NFP': NFP,
-            'zern_idx': zern_idx,
-            'lambda_idx': lambda_idx,
-            'bdry_idx': bdry[:, :2]
-        }
-
-        iterations[ii] = equil
-        iterations['final'] = equil
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
-            checkpoint_file.write_iteration(equil, ii+1, inputs)
+            equil_fam.save()
 
-        if not is_nested(cR, cZ, zern_idx, NFP):
+        if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
                           + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
             break
 
-    if checkpoint:
-        checkpoint_file.close()
+
 
     timer.stop("Total time")
     print('====================')
@@ -401,4 +335,4 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         print('Output written to {}'.format(checkpoint_filename))
     print('====================')
 
-    return iterations, timer
+    return equil_fam, timer

@@ -95,7 +95,7 @@ Spectral Resolution
    Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
 
 - ``Mpol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
-- ``delta_;m`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2*M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
+- ``delta_lm`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2*M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
 - ``Ntor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
 - ``Mnodes`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
 - ``Nnodes`` (int): Relative toroidal density of collocation nodes. Default = ``round(1.5*Ntor)``. 

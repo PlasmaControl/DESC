@@ -4,365 +4,12 @@ import warnings
 import h5py
 import numpy as np
 from datetime import datetime
+import warnings
+from abc import ABC, abstractmethod
+import io
+import pickle
 
 from desc.backend import TextColors
-
-
-def read_input(fname):
-    """Reads input from DESC input file, converts from VMEC input if necessary
-
-    Parameters
-    ----------
-    fname : string
-        filename of input file
-
-    Returns
-    -------
-    inputs : dict
-        all the input parameters and options
-
-    """
-
-    # default values
-    inputs = {
-        'stell_sym': False,
-        'NFP': 1,
-        'Psi_lcfs': 1.0,
-        'Mpol': np.atleast_1d(0),
-        'Ntor': np.atleast_1d(0),
-        'delta_lm': np.atleast_1d(None),
-        'Mnodes': np.atleast_1d(0),
-        'Nnodes': np.atleast_1d(0),
-        'bdry_ratio': np.atleast_1d(1.0),
-        'pres_ratio': np.atleast_1d(1.0),
-        'zeta_ratio': np.atleast_1d(1.0),
-        'errr_ratio': np.atleast_1d(1e-2),
-        'pert_order': np.atleast_1d(1),
-        'ftol': np.atleast_1d(1e-6),
-        'xtol': np.atleast_1d(1e-6),
-        'gtol': np.atleast_1d(1e-6),
-        'nfev': np.atleast_1d(None),
-        'optim_method': 'trf',
-        'errr_mode': 'force',
-        'bdry_mode': 'spectral',
-        'zern_mode': 'fringe',
-        'node_mode': 'cheb1',
-        'cP': np.atleast_1d(0.0),
-        'cI': np.atleast_1d(0.0),
-        'axis': np.atleast_2d((0, 0.0, 0.0)),
-        'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
-    }
-
-    file = open(fname, 'r')
-    num_form = r'[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
-
-    for line in file:
-
-        # check if VMEC input file format
-        isVMEC = re.search(r'&INDATA', line)
-        if isVMEC:
-            print('Converting VMEC input to DESC input')
-            fname_desc = fname + '_desc'
-            vmec_to_desc_input(fname, fname_desc)
-            print('Generated DESC input file {}:'.format(fname_desc))
-            return read_input(fname_desc)
-
-        # extract numbers & words
-        match = re.search(r'[!#]', line)
-        if match:
-            comment = match.start()
-        else:
-            comment = len(line)
-        match = re.search(r'=', line)
-        if match:
-            equals = match.start()
-        else:
-            equals = len(line)
-        command = (line.strip()+' ')[0:comment]
-        argument = (command.strip()+' ')[0:equals]
-        numbers = [float(x) for x in re.findall(
-            num_form, command) if re.search(r'\d', x)]
-        words = command[equals+1:].split()
-
-        # global parameters
-        match = re.search(r'stell_sym', argument, re.IGNORECASE)
-        if match:
-            inputs['stell_sym'] = int(numbers[0])
-        match = re.search(r'NFP', argument, re.IGNORECASE)
-        if match:
-            inputs['NFP'] = int(numbers[0])
-        match = re.search(r'Psi_lcfs', argument, re.IGNORECASE)
-        if match:
-            inputs['Psi_lcfs'] = numbers[0]
-
-        # spectral resolution
-        match = re.search(r'Mpol', argument, re.IGNORECASE)
-        if match:
-            inputs['Mpol'] = np.array(numbers).astype(int)
-        match = re.search(r'Ntor', argument, re.IGNORECASE)
-        if match:
-            inputs['Ntor'] = np.array(numbers).astype(int)
-        match = re.search(r'delta_lm', argument, re.IGNORECASE)
-        if match:
-            inputs['delta_lm'] = np.array(numbers).astype(int)
-        match = re.search(r'Mnodes', argument, re.IGNORECASE)
-        if match:
-            inputs['Mnodes'] = np.array(numbers).astype(int)
-        match = re.search(r'Nnodes', argument, re.IGNORECASE)
-        if match:
-            inputs['Nnodes'] = np.array(numbers).astype(int)
-
-        # continuation parameters
-        match = re.search(r'bdry_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['bdry_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'pres_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['pres_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'zeta_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['zeta_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'errr_ratio', argument, re.IGNORECASE)
-        if match:
-            inputs['errr_ratio'] = np.array(numbers).astype(float)
-        match = re.search(r'pert_order', argument, re.IGNORECASE)
-        if match:
-            inputs['pert_order'] = np.array(numbers).astype(int)
-
-        # solver tolerances
-        match = re.search(r'ftol', argument, re.IGNORECASE)
-        if match:
-            inputs['ftol'] = np.array(numbers).astype(float)
-        match = re.search(r'xtol', argument, re.IGNORECASE)
-        if match:
-            inputs['xtol'] = np.array(numbers).astype(float)
-        match = re.search(r'gtol', argument, re.IGNORECASE)
-        if match:
-            inputs['gtol'] = np.array(numbers).astype(float)
-        match = re.search(r'nfev', argument, re.IGNORECASE)
-        if match:
-            inputs['nfev'] = np.array(
-                [None if i == 0 else i for i in numbers]).astype(int)
-
-        # solver methods
-        match = re.search(r'optim_method', argument, re.IGNORECASE)
-        if match:
-            inputs['optim_method'] = words[0]
-        match = re.search(r'errr_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['errr_mode'] = words[0]
-        match = re.search(r'bdry_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['bdry_mode'] = words[0]
-        match = re.search(r'zern_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['zern_mode'] = words[0]
-        match = re.search(r'node_mode', argument, re.IGNORECASE)
-        if match:
-            inputs['node_mode'] = words[0]
-
-        # coefficient indicies
-        match = re.search(r'l\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            l = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-        match = re.search(r'm\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            m = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-        match = re.search(r'n\s*:\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            n = [int(x) for x in re.findall(num_form, match.group(0))
-                 if re.search(r'\d', x)][0]
-
-        # profile coefficients
-        match = re.search(r'cP\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            cP = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            if inputs['cP'].size < l+1:
-                inputs['cP'] = np.pad(
-                    inputs['cP'], (0, l+1-inputs['cP'].size), mode='constant')
-            inputs['cP'][l] = cP
-        match = re.search(r'cI\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            cI = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            if inputs['cI'].size < l+1:
-                inputs['cI'] = np.pad(
-                    inputs['cI'], (0, l+1-inputs['cI'].size), mode='constant')
-            inputs['cI'][l] = cI
-
-        # magnetic axis Fourier modes
-        match = re.search(r'aR\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            aR = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-            if axis_idx.size == 0:
-                axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                inputs['axis'] = np.pad(
-                    inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                inputs['axis'][axis_idx[0], 0] = n
-            inputs['axis'][axis_idx[0], 1] = aR
-        match = re.search(r'aZ\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            aZ = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-            if axis_idx.size == 0:
-                axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                inputs['axis'] = np.pad(
-                    inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                inputs['axis'][axis_idx[0], 0] = n
-            inputs['axis'][axis_idx[0], 2] = aZ
-
-        # boundary Fourier modes
-        match = re.search(r'bR\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            bR = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-            bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
-            if bdry_idx.size == 0:
-                bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                inputs['bdry'] = np.pad(
-                    inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                inputs['bdry'][bdry_idx[0], 0] = m
-                inputs['bdry'][bdry_idx[0], 1] = n
-            inputs['bdry'][bdry_idx[0], 2] = bR
-        match = re.search(r'bZ\s*=\s*'+num_form, command, re.IGNORECASE)
-        if match:
-            bZ = [float(x) for x in re.findall(
-                num_form, match.group(0)) if re.search(r'\d', x)][0]
-            bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-            bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
-            bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
-            if bdry_idx.size == 0:
-                bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                inputs['bdry'] = np.pad(
-                    inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                inputs['bdry'][bdry_idx[0], 0] = m
-                inputs['bdry'][bdry_idx[0], 1] = n
-            inputs['bdry'][bdry_idx[0], 3] = bZ
-
-    # error handling
-    if np.any(inputs['Mpol'] == 0):
-        raise IOError(TextColors.FAIL +
-                      'Mpol is not assigned' + TextColors.ENDC)
-    if np.sum(inputs['bdry']) == 0:
-        raise IOError(
-            TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
-    arrs = ['Mpol', 'Ntor', 'delta_lm', 'Mnodes', 'Nnodes', 'bdry_ratio',
-            'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
-            'ftol', 'xtol', 'gtol', 'nfev']
-    arr_len = 0
-    for a in arrs:
-        arr_len = max(arr_len, len(inputs[a]))
-    for a in arrs:
-        if inputs[a].size == 1:
-            inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
-        elif inputs[a].size != arr_len:
-            raise IOError(TextColors.FAIL +
-                          'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
-
-    # unsupplied values
-    if np.sum(inputs['Mnodes']) == 0:
-        inputs['Mnodes'] = np.rint(1.5*inputs['Mpol']).astype(int)
-    if np.sum(inputs['Nnodes']) == 0:
-        inputs['Nnodes'] = np.rint(1.5*inputs['Ntor']).astype(int)
-    if np.sum(inputs['axis']) == 0:
-        axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
-        inputs['axis'] = inputs['bdry'][axis_idx, 1:]
-    if None in inputs['delta_lm']:
-        default_deltas = {'fringe': 2*inputs['Mpol'],
-                          'ansi': inputs['Mpol'],
-                          'chevron': inputs['Mpol'],
-                          'house': 2*inputs['Mpol']}
-        inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
-
-    return inputs
-
-
-def write_desc_input(filename, inputs):
-    """Generates a DESC input file from a dictionary of parameters
-
-    Parameters
-    ----------
-    filename : str or path-like
-        name of the file to create
-    inputs : dict
-        dictionary of input parameters
-
-    Returns
-    -------
-
-    """
-
-    f = open(filename, 'w+')
-
-    f.write('# global parameters \n')
-    f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
-    f.write('NFP = {} \n'.format(inputs['NFP']))
-    f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
-
-    f.write('\n# spectral resolution \n')
-    f.write('Mpol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
-    f.write('Ntor = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
-    f.write('Mnodes = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
-    f.write('Nnodes = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
-
-    f.write('\n# continuation parameters \n')
-    f.write('bdry_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['bdry_ratio'])])))
-    f.write('pres_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
-    f.write('zeta_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
-    f.write('errr_ratio = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
-    f.write('pert_order = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
-
-    f.write('\n# solver tolerances \n')
-    f.write('ftol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['ftol'])])))
-    f.write('xtol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['xtol'])])))
-    f.write('gtol = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['gtol'])])))
-    f.write('nfev = {} \n'.format(
-        ', '.join([str(i) for i in np.atleast_1d(inputs['nfev'])])))
-
-    f.write('\n# solver methods \n')
-    f.write('optim_method = {} \n'.format(inputs['optim_method']))
-    f.write('errr_mode = {} \n'.format(inputs['errr_mode']))
-    f.write('bdry_mode = {} \n'.format(inputs['bdry_mode']))
-    f.write('zern_mode = {} \n'.format(inputs['zern_mode']))
-    f.write('node_mode = {} \n'.format(inputs['node_mode']))
-
-    f.write('\n# pressure and rotational transform profiles \n')
-    for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
-        f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
-            int(i), cP, cI))
-
-    f.write('\n# magnetic axis initial guess \n')
-    for (n, cR, cZ) in inputs['axis']:
-        f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
-            int(n), cR, cZ))
-
-    f.write('\n# fixed-boundary surface shape \n')
-    for (m, n, cR, cZ) in inputs['bdry']:
-        f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
-            int(m), int(n), cR, cZ))
-
-    f.close()
-
 
 def output_to_file(fname, equil):
     """Prints the equilibrium solution to a text file
@@ -506,6 +153,774 @@ def read_desc(filename):
 
     return equil
 
+class IOAble(ABC):
+    """Abstract Base Class for savable and loadable objects."""
+
+    def _init_from_file_(self, load_from=None, file_format:str=None, obj_lib=None) -> None:
+        """Initialize from file.
+
+        Parameters
+        __________
+        load_from : str file path OR file instance (Default self.load_from)
+            file to initialize from
+        file_format : str (Default self._file_format_)
+            file format of file initializing from
+
+        Returns
+        _______
+        None
+
+        """
+        if load_from is None:
+            load_from = self.load_from
+        if file_format is None:
+            file_format = self._file_format_
+        reader = reader_factory(load_from, file_format)
+        reader.read_obj(self, obj_lib=obj_lib)
+        return None
+
+    def save(self, save_to, file_format='hdf5', file_mode='w'):
+        """Save the object.
+
+        Parameters
+        __________
+        save_to : str file path OR file instance
+            location to save object
+        file_format : str (Default hdf5)
+            format of save file. Only used if save_to is a file path
+        file_mode : str (Default w - overwrite)
+            mode for save file. Only used if save_to is a file path
+
+        Returns
+        _______
+        None
+
+        """
+        writer = writer_factory(save_to, file_format=file_format,
+                file_mode=file_mode)
+        writer.write_obj(self)
+        writer.close()
+
+class IO(ABC):
+    """Abstract Base Class (ABC) for readers and writers."""
+
+    def __init__(self):
+        """Initalize ABC IO.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+
+        None
+
+        """
+        self.resolve_base()
+
+    def __del__(self):
+        """Close file upon garbage colleciton or explicit deletion with del function.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self.close()
+
+    def close(self):
+        """Close file if initialized with class instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        if self._close_base_:
+            self.base.close()
+            self._close_base_ = False
+        return None
+
+    def resolve_base(self):
+        """Set base attribute.
+
+        Base is target if target is a file instance of type given by
+        _file_types_ attribute. _close_base_ is False.
+
+        Base is a runtime-initialized file if target is a string file path.
+        _close_base_ is True.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        if self.check_type(self.target):
+            self.base = self.target
+            self._close_base_ = False
+        elif type(self.target) is str:
+            self.base = self.open_file(self.target, self.file_mode)
+            self._close_base_ = True
+        else:
+            raise SyntaxError('save_to of type {} is not a filename or file '
+                'instance.'.format(type(self.target)))
+
+    def resolve_where(self, where):
+        """Find where 'where' points and check if it's a readable type.
+
+        Parameters
+        __________
+        where : None or file with type found in _file_types_ attribute
+
+        Returns
+        _______
+        if where is None:
+            base attribute
+        if where is file with type foundin _file_types_
+            where
+
+        """
+        if where is None:
+            loc = self.base
+        elif self.check_type(where):
+            loc = where
+        else:
+            raise SyntaxError("where '{}' is not a readable type.".format(where))
+        return loc
+
+    @abstractmethod
+    def open_file(self, file_name, file_mode):
+        pass
+
+    def check_type(self, obj):
+        if type(obj) in self._file_types_:
+            return True
+        else:
+            return False
+
+
+class hdf5IO(IO):
+    """Class to wrap ABC IO for hdf5 file format."""
+    def __init__(self):
+        """Initialize hdf5IO instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self._file_types_ = [h5py._hl.group.Group, h5py._hl.files.File]
+        self._file_format_ = 'hdf5'
+        super().__init__()
+
+    def open_file(self, file_name, file_mode):
+        """Open hdf5 file.
+
+        Parameters
+        __________
+        file_name : str
+            path to file to open
+        file_mode : str
+            mode used when opening file
+
+        Returns
+        _______
+        hdf5 file instance
+
+        """
+        return h5py.File(file_name, file_mode)
+
+    def sub(self, name):
+        """Create subgroup or return if already exists.
+
+        Parameters
+        __________
+        name : str
+            name of subgroup
+
+        Returns
+        _______
+        sub : subgroup instance
+
+        """
+        try:
+            return self.base.create_group(name)
+        except ValueError:
+            return self.base[name]
+        except KeyError:
+            raise RuntimeError('Cannot create sub in reader.')
+
+    def groups(self, where=None):
+        """Finds groups in location given by 'where'.
+
+        Parameters
+        __________
+        where : None or file instance
+
+        Returns
+        _______
+        groups : list
+
+        """
+        loc = self.resolve_where(where)
+        return list(loc.keys())
+
+class PickleIO(IO):
+    """Class to wrap ABC IO for pickle file format. """
+    def __init__(self):
+        """Initialize PickleIO instance.
+
+        Parameters
+        __________
+
+        Returns
+        _______
+        None
+
+        """
+        self._file_types_ = [io.BufferedWriter]
+        self._file_format_ = 'pickle'
+        super().__init__()
+
+    def open_file(self, file_name, file_mode):
+        """Open file containing pickled object.
+
+        Parameters
+        __________
+        file_name : str
+            path to file to open
+        file_mode : str
+            mode used when opening file. Binary flag automatically added if missing.
+
+        Returns
+        binary file instance
+
+        """
+        if file_mode[-1] != 'b':
+            file_mode += 'b'
+        return open(file_name, file_mode)
+
+class Reader(ABC):
+    """ABC for all readers."""
+    @abstractmethod
+    def read_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def read_dict(self, thedict, where=None):
+        pass
+
+class Writer(ABC):
+    """ABC for all writers."""
+    @abstractmethod
+    def write_obj(self, obj, where=None):
+        pass
+
+    @abstractmethod
+    def write_dict(self, thedict, where=None):
+        pass
+
+class hdf5Reader(hdf5IO,Reader):
+    """Class specifying a Reader with hdf5IO."""
+    def __init__(self, target):
+        """Initialize hdf5Reader class.
+
+        Parameters
+        __________
+        target : str or file instance
+            Path to file OR file instance to be read.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = 'r'
+        super().__init__()
+
+    def read_obj(self, obj, where=None, obj_lib=None):
+        """Read object from file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to read obj from
+
+        Returns
+        _______
+        None
+
+        """
+        if obj_lib is not None:
+            self.obj_lib = obj_lib
+        elif hasattr(self, 'obj_lib'):
+            pass
+        elif hasattr(obj, '_object_lib_'):
+            self.obj_lib = obj._object_lib_
+        else:
+            pass
+        loc = self.resolve_where(where)
+        for attr in obj._save_attrs_:
+            try:
+                setattr(obj, attr, loc[attr][()])
+            except KeyError:
+                warnings.warn("Save attribute '{}' was not loaded.".format(attr),
+                        RuntimeWarning)
+            except AttributeError:
+                try:
+                    if 'name' in loc[attr].keys():
+                        theattr = loc[attr]['name'][()]
+                        if theattr == 'list':
+                            setattr(obj, attr, self.read_list(where=loc[attr]))
+                        elif theattr == 'dict':
+                            setattr(obj, attr, self.read_dict(where=loc[attr]))
+                        else:
+                            try:
+                                #initialized an object from object_lib
+                                #print('setting attribute', attr, 'as an ', theattr)
+                                setattr(obj, attr, self.obj_lib[theattr](load_from=loc[attr],
+                                    file_format=self._file_format_, obj_lib=self.obj_lib))
+                            except KeyError:
+                                warnings.warn("No object_lib  '{}'.".format(attr),
+                                        RuntimeWarning)
+                    else:
+                        warnings.warn("Could not load attribute '{}'.".format(attr),
+                                RuntimeWarning)
+                except AttributeError:
+                    warnings.warn("Could not set attribute '{}'.".format(attr),
+                                RuntimeWarning)
+                #    theattr = loc[attr][()]
+                #    print('for attr', attr, 'theattr is', theattr, 'with object', obj)
+                #    if type(theattr) is np.bool_:
+                #        print('converting bool')
+                #        newattr = bool(theattr)
+                #        print('new type is', type(newattr))
+                #        setattr(obj, attr, newattr)
+                #    else:
+                #        raise NotImplementedError("Data of type '{}' has not "
+                #            "been made compatible with loading.".format(type(loc[attr][()])))
+        return None
+
+    def read_dict(self, thedict=None, where=None):
+        """Read dictionary from file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary (Default None)
+            dictionary to update from the file
+        where : None or file instance
+            specifies where to read dict from
+
+        Returns
+        _______
+        None
+
+        """
+        ret = False
+        if thedict is None:
+            thedict = {}
+            ret = True
+        loc = self.resolve_where(where)
+        for key in loc.keys():
+            try:
+                thedict[key] = loc[key][()]
+            except AttributeError:
+                if 'name' in loc[key].keys():
+                    theattr = loc[key]['name'][()]
+                    if theattr == 'list':
+                        thedict[theattr] = self.read_list(where=loc[key])
+                    elif theattr == 'dict':
+                        thedict[theattr] = self.read_dict(where=loc[key])
+                    else:
+                        try:
+                            #initialized an object from object_lib
+                            thedict[theattr] = self.obj_lib[theattr](load_from=loc[key],
+                                    file_format=self._file_format_, obj_lib=self.obj_lib)
+                        except KeyError:
+                            warnings.warn("Could not load attribute '{}'.".format(key),
+                                    RuntimeWarning)
+                else:
+                    warnings.warn("Could not load attribute '{}'.".format(key),
+                            RuntimeWarning)
+        if ret:
+            return thedict
+        else:
+            return None
+
+    def read_list(self, thelist=None, where=None):
+        """Read list from file in group specified by where argument.
+
+        Parameters
+        __________
+        thelist : list (Default None)
+            list to update from the file
+        where : None or file instance
+            specifies wehre to read dict from
+
+        Returns
+        _______
+        None
+
+        """
+        ret = False
+        if thelist is None:
+            thelist = []
+            ret = True
+        loc = self.resolve_where(where)
+        i = 0
+        while str(i) in loc.keys():
+            try:
+                thelist.append(loc[str(i)][()])
+            except AttributeError:
+                if 'name' in loc[str(i)].keys():
+                    theattr = loc[str(i)]['name'][()]
+                    #print('loading a ', theattr, 'from list') #debug
+                    if theattr == 'list':
+                        thelist.append(self.read_list(where=theattr))
+                    elif theattr == 'dict':
+                        thelist.append(self.read_dict(where=theattr))
+                    else:
+                        try:
+                            #initialized an object from object_lib
+                            thelist.append(self.obj_lib[theattr](load_from=loc[str(i)],
+                                file_format=self._file_format_, obj_lib=self.obj_lib))
+                        except KeyError:
+                            warnings.warn("Could not load list index '{}'.".format(i),
+                                    RuntimeWarning)
+                else:
+                    warnings.warn("Could not load list index '{}'.".format(i),
+                            RuntimeWarning)
+            i += 1
+        if ret:
+            return thelist
+        else:
+            return None
+
+class PickleReader(PickleIO,Reader):
+    """Class specifying a reader with PickleIO."""
+    def __init__(self, target):
+        """Initialize hdf5Reader class.
+
+        Parameters
+        __________
+        target : str or file instance
+            Path to file OR file instance to be read.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = 'r'
+        super().__init__()
+
+    def read_obj(self, obj=None, where=None):
+        """Read object from file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to read obj from
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        if obj is None:
+            return pickle.load(loc)
+        else:
+            obj = pickle.load(loc)
+
+    def read_dict(self, thedict, where=None):
+        """Read dictionary from file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to read dict from
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        thedict.update(pickle.load(loc))
+        return None
+
+class hdf5Writer(hdf5IO,Writer):
+    """Class specifying a writer with hdf5IO."""
+    def __init__(self, target, file_mode='w'):
+        """Initializes hdf5Writer class.
+
+        Parameters
+        __________
+        target : str or file instance
+            path OR file instance to write to
+        file_mode : str
+            mode used when opening file.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = file_mode
+        super().__init__()
+
+    def write_obj(self, obj, where=None):
+        """Write object to file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to write obj to
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        #save name of object class
+        loc.create_dataset('name', data=type(obj).__name__)
+        for attr in obj._save_attrs_:
+            try:
+                #print(attr) #debugging
+                loc.create_dataset(attr, data=getattr(obj, attr))
+            except AttributeError:
+                warnings.warn("Save attribute '{}' was not saved as it does "
+                        "not exist.".format(attr), RuntimeWarning)
+            except TypeError:
+                theattr = getattr(obj, attr)
+                if type(theattr) is dict:
+                    self.write_dict(theattr, where=self.sub(attr))
+                elif type(theattr) is list:
+                    self.write_list(theattr, where=self.sub(attr))
+                else:
+                    try:
+                        group = loc.create_group(attr)
+                        sub_obj = getattr(obj, attr)
+                        sub_obj.save(group)
+                    except AttributeError:
+                        warnings.warn("Could not save object '{}'.".format(attr),
+                                RuntimeWarning)
+        return None
+
+    def write_dict(self, thedict, where=None):
+        """Write dictionary to file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to write to file
+        where : None or file instance
+            specifies where to write dict to
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        loc.create_dataset('name', data='dict')
+        for key in thedict.keys():
+            try:
+                loc.create_dataset(key, data=thedict[key])
+            except TypeError:
+                self.write_obj(thedict[key], loc)
+        return None
+
+    def write_list(self, thelist, where=None):
+        """Write list to file in group specified by where argument.
+
+        Parameters
+        __________
+        thelist : list
+            list to write to file
+        where : None or file instance
+            specifies where to write list to
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        loc.create_dataset('name', data='list')
+        for i in range(len(thelist)):
+            try:
+                loc.create_dataset(str(i), data=thelist[i])
+            except TypeError:
+                subloc = loc.create_group(str(i))
+                self.write_obj(thelist[i], where=subloc)
+        return None
+
+class PickleWriter(PickleIO,Writer):
+    """Class specifying a writer with PickleIO."""
+    def __init__(self, target, file_mode='w'):
+        """Initializes PickleWriter class.
+
+        Parameters
+        __________
+        target : str or file instance
+            path OR file instance to write to
+        file_mode : str
+            mode used when opening file.
+
+        Returns
+        _______
+        None
+
+        """
+        self.target = target
+        self.file_mode = file_mode
+        super().__init__()
+
+    def write_obj(self, obj, where=None):
+        """Write object to file in group specified by where argument.
+
+        Parameters
+        __________
+        obj : python object instance
+            object must have _save_attrs_ attribute to have attributes read and loaded
+        where : None or file insance
+            specifies where to write obj to
+
+        Returns
+        _______
+        None
+
+        """
+        loc = self.resolve_where(where)
+        pickle.dump(obj, loc)
+        return None
+
+    def write_dict(self, thedict, where=None):
+        """Write dictionary to file in group specified by where argument.
+
+        Parameters
+        __________
+        thedict : dictionary
+            dictionary to update from the file
+        where : None of file instance
+            specifies where to write dict to
+
+        Returns
+        _______
+        None
+
+        """
+        if type(thedict) is not dict:
+            raise TypeError('Object provided is not a dictionary.')
+        self.write_object(thedict, where=where)
+        return None
+
+def reader_factory(load_from, file_format):
+    """Select and return instance of appropriate reader class for given file format.
+
+    Parameters
+    __________
+    load_from : str or file instance
+        file path or instance from which to read
+    file_format : str
+        format of file to be read
+
+    Returns
+    _______
+    Reader instance
+
+    """
+    if file_format == 'hdf5':
+        reader = hdf5Reader(load_from)
+    elif file_format == 'pickle':
+        reader = PickleReader(load_from)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return reader
+
+def writer_factory(save_to, file_format, file_mode='w'):
+    """Select and return instance of appropriate reader class for given file format.
+
+    Parameters
+    __________
+    load_from : str or file instance
+        file path or instance from which to read
+    file_format : str
+        format of file to be read
+
+    Returns
+    _______
+    Reader instance
+
+    """
+    if file_format == 'hdf5':
+        writer = hdf5Writer(save_to, file_mode)
+    elif file_format == 'pickle':
+        writer = PickleWriter(save_to, file_mode)
+    else:
+        raise NotImplementedError("Format '{}' has not been implemented.".format(file_format))
+    return writer
+
+def write_hdf5(obj, save_to, file_mode='w'):
+    """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
+
+    Parameters
+    __________
+    obj: object to save
+        must have _save_attrs_ list attribute. Otherwise AttributeError raised.
+    save_loc : str or path-like; hdf5 file or group
+        file or group to write to. If str or path-like, file is created. If
+        hdf5 file or group instance, datasets are created there.
+    file_mode='w': str
+        hdf5 file mode. Default is 'w'.
+    """
+    # check save_loc is an accepted type
+    save_to_type = type(save_to)
+    if save_to_type is h5py._hl.group.Group or save_to_type is h5py._hl.files.File:
+        file_group = save_to
+        close = False
+    elif save_to_type is str:
+        file_group = h5py.File(save_to, file_mode)
+        close = True
+    else:
+        raise SyntaxError('save_to of type {} is not a filename or hdf5 '
+            'file or group.'.format(save_to_type))
+
+    # save to file or group
+    for attr in obj._save_attrs_:
+        file_group.create_dataset(attr, data=getattr(obj, attr))
+
+    # close file if created
+    if close:
+        file_group.close()
+
+    return None
 
 def write_desc_h5(filename, equilibrium):
     """Writes a DESC equilibrium to a hdf5 format binary file

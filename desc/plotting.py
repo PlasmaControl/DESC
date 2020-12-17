@@ -59,6 +59,7 @@ class Plot:
     """
     axis_labels_rtz = [r'$\rho$', r'$\theta$', r'$\zeta$']
     axis_labels_RPZ = [r'$R$', r'$\phi$', r'$Z$']
+    axis_labels_XYZ = [r'$X$', r'$Y$', r'$Z$']
 
     def __init__(self):
         """Initialize a Plot class.
@@ -126,7 +127,7 @@ class Plot:
         return grid, tuple(plot_axes)
 
     def plot_1d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
-        """Plot 1D slice from Equilibrium or Configuration.
+        """Plots 1D profiles.
 
         Parameters
         ----------
@@ -162,12 +163,13 @@ class Plot:
         data = data[:, 0, 0]
 
         ax.plot(grid.nodes[:,plot_axes[0]], data)
+
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.name_label(name_dict))
         return ax
 
     def plot_2d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
-        """Plot 2D slice from Equilibrium or Configuration.
+        """Plots 2D cross-sections.
 
         Parameters
         ----------
@@ -223,13 +225,91 @@ class Plot:
         cbar = fig.colorbar(im, cax=cax)
         cbar.formatter.set_powerlimits((0,0))
         cbar.update_ticks()
+
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.axis_labels_rtz[plot_axes[1]])
         ax.set_title(self.name_label(name_dict))
         return ax
 
-    def plot_3dsurf(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
-        pass
+    def plot_3d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
+        """Plots 3D surfaces.
+
+        Parameters
+        ----------
+        eq : Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid, optional
+            grid of coordinates to plot at
+        ax : matplotlib AxesSubplot, optional
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid
+
+        Returns
+        -------
+        axis
+
+        """
+        if grid is None:
+            if kwargs == {}:
+                kwargs.update({'M':25, 'N':25})
+            grid, plot_axes= self.get_grid(**kwargs)
+        if len(plot_axes) != 2:
+            return ValueError(TextColors.FAIL + "Grid must be 2D"
+                            + TextColors.ENDC)
+
+        name_dict = self.format_name(name)
+        data = self.compute(eq, name_dict, grid)
+        fig, ax = self.format_ax(ax)
+        divider = make_axes_locatable(ax)
+
+        coords = eq.compute_coordinates(grid)
+        X = coords['X'].reshape((grid.L, grid.M, grid.N), order='F')
+        Y = coords['Y'].reshape((grid.L, grid.M, grid.N), order='F')
+        Z = coords['Z'].reshape((grid.L, grid.M, grid.N), order='F')
+
+        # reshape data to 2D
+        if 0 in plot_axes:
+            if 1 in plot_axes:      # rho & theta
+                data = data[:, :, 0]
+                X = X[:, :, 0]
+                Y = Y[:, :, 0]
+                Z = Z[:, :, 0]
+            else:                   # rho & zeta
+                data = data[:, 0, :]
+                X = X[:, 0, :]
+                Y = Y[:, 0, :]
+                Z = Z[:, 0, :]
+        else:                       # theta & zeta
+            data = data[0, :, :]
+            X = X[0, :, :]
+            Y = Y[0, :, :]
+            Z = Z[0, :, :]
+
+        cax_kwargs = {'size' : '5%',
+                      'pad'  : 0.05}
+
+        minn, maxx = data.min(), data.max()
+        m = plt.cm.ScalarMappable()
+        m.set_array([])
+        fcolors = m.to_rgba(data)
+
+        ax = fig.gca(projection='3d')
+        im = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, facecolors=fcolors,
+                             vmin=minn, vmax=maxx, shade=False)
+
+        cax = divider.append_axes('right', **cax_kwargs)
+        cbar = fig.colorbar(im, cax=cax)
+        cbar.formatter.set_powerlimits((0,0))
+        cbar.update_ticks()
+
+        ax.set_xlabel(self.axis_labels_XYZ[0])
+        ax.set_ylabel(self.axis_labels_XYZ[1])
+        ax.set_zlabel(self.axis_labels_XYZ[2])
+        ax.set_title(self.name_label(name_dict))
+        return ax
 
     def compute(self, eq:Configuration, name:str, grid:Grid):
         """Compute value specified by name on grid for equilibrium eq.

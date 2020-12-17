@@ -864,6 +864,8 @@ def compute_coordinates(cR, cZ, R_transform, Z_transform):
     coords['X'] = coords['R']*np.cos(coords['phi'])
     coords['Y'] = coords['R']*np.sin(coords['phi'])
 
+    return coords
+
 # TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
 def compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform, zeta_ratio=1.0):
     """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords

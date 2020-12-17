@@ -536,7 +536,6 @@ def rms(x):
     return jnp.sqrt(jnp.mean(x**2))
 
 
-
 def equals(a, b) -> bool:
     """Compares dictionaries that have numpy array values
 

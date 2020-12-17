@@ -5,11 +5,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import re
-from abc import ABC, abstractmethod
+
+from desc.backend import TextColors
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
+from desc.configuration import Configuration
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
 from desc.configuration import compute_contravariant_basis, compute_jacobian
 from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
@@ -55,41 +57,31 @@ rcParams['axes.prop_cycle'] = color_cycle
 class Plot:
     """Class for plotting instances of Configuration and Equilibria on a linear grid.
     """
-    axis_labels = [r'$\rho$', r'$\theta$', r'$\zeta$']
-    def __init__(self):#grid='std', **kwargs):
+    axis_labels_rtz = [r'$\rho$', r'$\theta$', r'$\zeta$']
+    axis_labels_RPZ = [r'$R$', r'$\phi$', r'$Z$']
+
+    def __init__(self):
         """Initialize a Plot class.
 
         Parameters
-        __________
+        ----------
 
         Returns
-        _______
+        -------
         None
 
         """
         pass
 
-    def __format_rtz__(self, rtz):
-        type_rtz = type(rtz)
-        if type_rtz is np.ndarray:
-            return rtz
-        elif type_rtz is list:
-            return np.array(rtz)
-        elif type_rtz is float:
-            return np.array([rtz])
-        else:
-            raise TypeError('rho, theta, and zeta must be a numpy array, list '
-                'of floats, or float.')
-
     def format_ax(self, ax):
         """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
         Parameters
-        __________
+        ----------
         ax : None or matplotlib AxesSubplot instance
 
         Returns
-        _______
+        -------
         matpliblib Figure instance, matplotlib AxesSubplot instance
 
         """
@@ -99,170 +91,170 @@ class Plot:
         elif type(ax) is matplotlib.axes._subplots.AxesSubplot:
             return plt.gcf(), ax
         else:
-            raise TypeError('ax agument must be None or an axis instance.')
+            raise TypeError(TextColors.FAIL +
+                            "ax agument must be None or an axis instance"
+                           + TextColors.ENDC)
 
-    def get_grid(self, NFP, **kwargs):
+    def get_grid(self, **kwargs):
         """Get grid for plotting.
 
         Parameters
-        __________
-        NFP : int
-            number of (?)
+        ----------
         kwargs
             any arguments taken by LinearGrid (Default L=100, M=1, N=1)
 
         Returns
-        _______
+        -------
         LinearGrid
 
         """
-        grid_args = {'rho':1.0, 'L':100, 'theta':0.0, 'M':1, 'zeta':0.0, 'N':1,
-            'endpoint':False, 'NFP':NFP}
+        grid_args = {'L':1, 'M':1, 'N':1, 'NFP':1, 'sym':False,
+                     'endpoint':True, 'rho':None, 'theta':None, 'zeta':None}
         for key in kwargs.keys():
             if key in grid_args.keys():
                 grid_args[key] = kwargs[key]
-        plot_axes = [0,1,2]
-        grid_args['rho'] = self.__format_rtz__(grid_args['rho'])
-        if grid_args['L'] == 1:
-            plot_axes.remove(0)
-        grid_args['theta'] = self.__format_rtz__(grid_args['theta'])
-        if grid_args['M'] == 1:
-            plot_axes.remove(1)
-        grid_args['zeta'] = self.__format_rtz__(grid_args['zeta'])
-        if grid_args['N'] == 1:
-            plot_axes.remove(2)
-        return LinearGrid(**grid_args), tuple(plot_axes)
+        grid = LinearGrid(**grid_args)
 
-    def plot_1d(self, eq, name, grid=None, ax=None, **kwargs):
+        plot_axes = [0,1,2]
+        if grid.L == 1:
+            plot_axes.remove(0)
+        if grid.M == 1:
+            plot_axes.remove(1)
+        if grid.N == 1:
+            plot_axes.remove(2)
+
+        return grid, tuple(plot_axes)
+
+    def plot_1d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
         """Plot 1D slice from Equilibrium or Configuration.
 
         Parameters
-        __________
-        eq : Equilibrium or Configuration
+        ----------
+        eq : Configuration
             object from which to plot
         name : str
             name of variable to plot
-        grid : Grid (optional)
-            grid object defining coordinates to plot on
-        ax : matplotlib AxesSubplot (optional)
+        grid : Grid, optional
+            grid of coordinates to plot at
+        ax : matplotlib AxesSubplot, optional
             axis to plot on
         kwargs
-            any arguments taken by LinearGrid (Default L=100, M=1, N=1)
+            any arguments taken by LinearGrid
 
         Returns
-        _______
-        axis
-
-        """
-        if grid is None:
-            grid, plot_axis= self.get_grid(eq.NFP, **kwargs)
-        if len(plot_axis) != 1:
-            return ValueError('Grid must be 1D.')
-        plot_axis=plot_axis[0]
-        #dim = self.find_plot_ax_1d(grid)
-        #theslice = self.grid_slice_1d(grid, dim)
-        name_dict = self.format_name(name)
-        ary = self.compute(eq, name_dict, grid)
-        ax = self.format_ax(ax)
-        ax.plot(grid.nodes[:,plot_axis], ary)
-        ax.set_xlabel(self.axis_labels[plot_axis])
-        ax.set_ylabel(self.name_label(name_dict))
-        return ax
-
-    def plot_2d(self, eq, name, grid=None, ax=None, **kwargs):
-        """Plot 2D slice from Equilibrium or Configuration.
-
-        Parameters
-        __________
-        eq : Equilibrium or Configuration
-            object from which to plot
-        name : str
-            name of variable to plot
-        grid : Grid (optional)
-            grid object defining coordinates to plot on
-        ax : matplotlib AxesSubplot (optional)
-            axis to plot on
-        kwargs
-            any arguments taken by LinearGrid (Default L=100, M=100, N=1)
-
-        Returns
-        _______
+        -------
         axis
 
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M':100})
-            grid, plot_axes = self.get_grid(eq.NFP, **kwargs)
-        if len(plot_axes) != 2:
-            return ValueError('Grid must be 2D.')
-        #dim = self.find_plot_ax_2d(grid)
-        #theslice = self.grid_slice_2d(grid, dim)
+                kwargs.update({'L':100})
+            grid, plot_axes= self.get_grid(**kwargs)
+        if len(plot_axes) != 1:
+            return ValueError(TextColors.FAIL + "Grid must be 1D"
+                            + TextColors.ENDC)
+
         name_dict = self.format_name(name)
-        ary = self.compute(eq, name_dict, grid)
+        data = self.compute(eq, name_dict, grid)
+        fig, ax = self.format_ax(ax)
+
+        # reshape data to 1D
+        data = data[:, 0, 0]
+
+        ax.plot(grid.nodes[:,plot_axes[0]], data)
+        ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
+        ax.set_ylabel(self.name_label(name_dict))
+        return ax
+
+    def plot_2d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
+        """Plot 2D slice from Equilibrium or Configuration.
+
+        Parameters
+        ----------
+        eq : Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid, optional
+            grid of coordinates to plot at
+        ax : matplotlib AxesSubplot, optional
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid
+
+        Returns
+        -------
+        axis
+
+        """
+        if grid is None:
+            if kwargs == {}:
+                kwargs.update({'M':25, 'N':25})
+            grid, plot_axes= self.get_grid(**kwargs)
+        if len(plot_axes) != 2:
+            return ValueError(TextColors.FAIL + "Grid must be 2D"
+                            + TextColors.ENDC)
+
+        name_dict = self.format_name(name)
+        data = self.compute(eq, name_dict, grid)
         fig, ax = self.format_ax(ax)
         divider = make_axes_locatable(ax)
-        #unroll array to be 2D
+
+        # reshape data to 2D
         if 0 in plot_axes:
-            if 1 in plot_axes:
-                sqary = np.zeros((grid.L, grid.M))
-                for i in range(grid.M):
-                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
-            elif 2 in plot_axes:
-                sqary = np.zeros((grid.L, grid.N))
-                for i in range(grid.N):
-                    sqary[i,:] = ary[i*grid.L:(i+1)*grid.L]
-            else:
-                raise ValueError('Grid must be 2D')
-        elif 1 in plot_axes:
-            sqary = np.zeros((grid.M, grid.N))
-            for i in range(grid.M):
-                sqary[i,:] = ary[i*grid.M:(i+1)*grid.N]
-        else:
-            raise ValueError('Grid must be 2D.')
-        imshow_kwargs = {'origin'       : 'lower',
-                        'interpolation' : 'bilinear',
-                        'aspect'        : 'auto'}
+            if 1 in plot_axes:      # rho & theta
+                data = data[:, :, 0]
+            else:                   # rho & zeta
+                data = data[:, 0, :]
+        else:                       # theta & zeta
+            data = data[0, :, :]
+
+        imshow_kwargs = {'origin'        : 'lower',
+                         'interpolation' : 'bilinear',
+                         'aspect'        : 'auto'}
         imshow_kwargs['extent'] = [grid.nodes[0,plot_axes[0]],
                 grid.nodes[-1,plot_axes[0]], grid.nodes[0,plot_axes[1]],
                 grid.nodes[-1,plot_axes[1]]]
-        im = ax.imshow(sqary.T, **imshow_kwargs)
-        cax_kwargs = {'size': '5%',
-                    'pad'   : 0.05}
+        cax_kwargs = {'size' : '5%',
+                      'pad'  : 0.05}
+
+        im = ax.imshow(data.T, **imshow_kwargs)
         cax = divider.append_axes('right', **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
         cbar.formatter.set_powerlimits((0,0))
         cbar.update_ticks()
-        ax.set_xlabel(self.axis_labels[plot_axes[0]])
-        ax.set_ylabel(self.axis_labels[plot_axes[1]])
+        ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
+        ax.set_ylabel(self.axis_labels_rtz[plot_axes[1]])
         ax.set_title(self.name_label(name_dict))
         return ax
 
-    def plot_3dsurf(self):
+    def plot_3dsurf(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
         pass
 
-    def compute(self, eq, name, grid):
+    def compute(self, eq:Configuration, name:str, grid:Grid):
         """Compute value specified by name on grid for equilibrium eq.
 
         Parameters
-        __________
-        eq : Configuration or Equilibrium
-            Configuration or Equilibrium instance
-        name : str or dict
-            formatted string or parsed dictionary from format_name method
-        grid : Grid
-            grid on which to compute value specified by name
+        ----------
+        eq : Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid, optional
+            grid of coordinates to plot at
 
         Returns
-        _______
-        array of values
+        -------
+        out, float array of shape (L, M, N)
+            computed values
 
         """
         if type(name) is not dict:
             name_dict = self.format_name(name)
         else:
             name_dict = name
-        # compute primitives from equilibtrium methods
+
+        # primary calculations
         if name_dict['base'] == 'B':
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'J':
@@ -274,30 +266,31 @@ class Plot:
         else:
             raise NotImplementedError("No output for base named '{}'.".format(name_dict['base']))
 
-        #secondary calculations
+        # secondary calculations
         power = name_dict['power']
         if power != '':
             try:
                 power = float(power)
             except ValueError:
-                #handle fractional exponents
+                # handle fractional exponents
                 if '/' in power:
                     frac = power.split('/')
                     power = frac[0] / frac[1]
                 else:
                     raise ValueError("Could not convert string to float: '{}'".format(power))
             out = out**power
-        return out
+
+        return out.reshape((grid.L, grid.M, grid.N), order='F')
 
     def format_name(self, name):
         """Parse name string into dictionary.
 
         Parameters
-        __________
+        ----------
         name : str
 
         Returns
-        _______
+        -------
         parsed name : dict
 
         """
@@ -337,12 +330,12 @@ class Plot:
         """Create label for name dictionary.
 
         Parameters
-        __________
+        ----------
         name_dict : dict
             name dictionary created by format_name method
 
         Returns
-        _______
+        -------
         label : str
 
         """
@@ -400,12 +393,12 @@ class Plot:
         """Reconstruct name for dictionary key used in Configuration compute methods.
 
         Parameters
-        __________
+        ----------
         name_dict : dict
             name dictionary created by format_name method
 
         Returns
-        _______
+        -------
         name_key : str
 
         """
@@ -417,6 +410,9 @@ class Plot:
         if name_dict['d'] != '':
             out += '_' + name_dict['d']
         return out
+
+
+# TODO: all of these other plotting routines should be re-written inside the Plot class
 
 
 def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):

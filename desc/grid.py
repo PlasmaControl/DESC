@@ -191,8 +191,7 @@ class LinearGrid(Grid):
     """
 
     def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
-                 endpoint:bool=False, rho=np.array([1.0]),
-                 theta=np.array([1.0]), zeta=np.array([1.0]),
+                 endpoint:bool=False, rho=None, theta=None, zeta=None,
                  load_from=None, file_format=None, obj_lib=None) -> None:
 
         """Initializes a LinearGrid
@@ -212,12 +211,12 @@ class LinearGrid(Grid):
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
-        rho : ndarray of float
-            radial coordinates (if L == rho.size)
-        theta : ndarray of float
-            poloidal coordinates (if M == theta.size)
-        zeta : ndarray of float
-            toroidal coordinates (if N == zeta.size)
+        rho : ndarray of float, optional
+            radial coordinates
+        theta : ndarray of float, optional
+            poloidal coordinates
+        zeta : ndarray of float, optional
+            toroidal coordinates
 
         Returns
         -------
@@ -251,8 +250,7 @@ class LinearGrid(Grid):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
-                     endpoint:bool=False, rho=np.array([1.0]),
-                     theta=np.array([1.0]), zeta=np.array([1.0])):
+                     endpoint:bool=False, rho=None, theta=None, zeta=None):
         """
 
         Parameters
@@ -268,12 +266,12 @@ class LinearGrid(Grid):
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
-        rho : ndarray of float
-            radial coordinates (if L == rho.size)
-        theta : ndarray of float
-            poloidal coordinates (if M == theta.size)
-        zeta : ndarray of float
-            toroidal coordinates (if N == zeta.size)
+        rho : ndarray of float, optional
+            radial coordinates
+        theta : ndarray of float, optional
+            poloidal coordinates
+        zeta : ndarray of float, optional
+            toroidal coordinates
 
         Returns
         -------
@@ -284,22 +282,27 @@ class LinearGrid(Grid):
 
         """
         # rho
-        if rho.size == L:
-            r = rho
+        if rho is not None:
+            r = np.asarray(rho)
+            L = r.size
+        elif L == 1:
+            r = np.array([1.0])
         else:
             r = np.linspace(0, 1, L)
         dr = 1/L
 
         # theta/vartheta
-        if theta.size == M:
-            t = theta
+        if theta is not None:
+            t = np.asarray(theta)
+            M = t.size
         else:
             t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
         dt = 2*np.pi/M
 
         # zeta/phi
-        if zeta.size == N:
-            z = zeta
+        if zeta is not None:
+            z = np.asarray(zeta)
+            N = z.size
         else:
             z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
         dz = 2*np.pi/NFP/N

@@ -29,7 +29,7 @@ class Transform(IOAble):
         DESCRIPTION
 
     """
-    _save_attrs_ = ['grid', 'basis', 'derives', 'matrices']
+    _io_attrs_ = ['_grid', '_basis', '_derives', '_matrices']
 
     def __init__(self, grid:Grid=None, basis:Basis=None, derivs=0, rcond=1e-6,
             load_from=None, file_format=None, obj_lib=None) -> None:
@@ -178,16 +178,6 @@ class Transform(IOAble):
         else:
             A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
         self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
-
-    def _def_save_attrs_(self) -> None:
-        """Defines attributes to save
-
-        Returns
-        -------
-        None
-
-        """
-        self._save_attrs_ = ['_grid', '_basis', '_derives', '_matrices']
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical

@@ -319,7 +319,7 @@ class hdf5Reader(hdf5IO,Reader):
         Parameters
         ----------
         obj : python object instance
-            object must have _save_attrs_ attribute to have attributes read and loaded
+            object must have _io_attrs_ attribute to have attributes read and loaded
         where : None or file insance
             specifies where to read obj from
 
@@ -337,7 +337,7 @@ class hdf5Reader(hdf5IO,Reader):
         else:
             pass
         loc = self.resolve_where(where)
-        for attr in obj._save_attrs_:
+        for attr in obj._io_attrs_:
             try:
                 setattr(obj, attr, loc[attr][()])
             except KeyError:
@@ -358,7 +358,7 @@ class hdf5Reader(hdf5IO,Reader):
                                 setattr(obj, attr, self.obj_lib[theattr](load_from=loc[attr],
                                     file_format=self._file_format_, obj_lib=self.obj_lib))
                             except KeyError:
-                                warnings.warn("No object_lib  '{}'.".format(attr),
+                                warnings.warn("No object_lib '{}'.".format(attr),
                                         RuntimeWarning)
                     else:
                         warnings.warn("Could not load attribute '{}'.".format(attr),
@@ -366,16 +366,6 @@ class hdf5Reader(hdf5IO,Reader):
                 except AttributeError:
                     warnings.warn("Could not set attribute '{}'.".format(attr),
                                 RuntimeWarning)
-                #    theattr = loc[attr][()]
-                #    print('for attr', attr, 'theattr is', theattr, 'with object', obj)
-                #    if type(theattr) is np.bool_:
-                #        print('converting bool')
-                #        newattr = bool(theattr)
-                #        print('new type is', type(newattr))
-                #        setattr(obj, attr, newattr)
-                #    else:
-                #        raise NotImplementedError("Data of type '{}' has not "
-                #            "been made compatible with loading.".format(type(loc[attr][()])))
         return None
 
     def read_dict(self, thedict=None, where=None):
@@ -498,7 +488,7 @@ class PickleReader(PickleIO,Reader):
         Parameters
         ----------
         obj : python object instance
-            object must have _save_attrs_ attribute to have attributes read and loaded
+            object must have _io_attrs_ attribute to have attributes read and loaded
         where : None or file insance
             specifies where to read obj from
 
@@ -559,7 +549,7 @@ class hdf5Writer(hdf5IO,Writer):
         Parameters
         ----------
         obj : python object instance
-            object must have _save_attrs_ attribute to have attributes read and loaded
+            object must have _io_attrs_ attribute to have attributes read and loaded
         where : None or file insance
             specifies where to write obj to
 
@@ -571,9 +561,8 @@ class hdf5Writer(hdf5IO,Writer):
         loc = self.resolve_where(where)
         #save name of object class
         loc.create_dataset('name', data=type(obj).__name__)
-        for attr in obj._save_attrs_:
+        for attr in obj._io_attrs_:
             try:
-                #print(attr) #debugging
                 loc.create_dataset(attr, data=getattr(obj, attr))
             except AttributeError:
                 warnings.warn("Save attribute '{}' was not saved as it does "
@@ -670,7 +659,7 @@ class PickleWriter(PickleIO,Writer):
         Parameters
         ----------
         obj : python object instance
-            object must have _save_attrs_ attribute to have attributes read and loaded
+            object must have _io_attrs_ attribute to have attributes read and loaded
         where : None or file insance
             specifies where to write obj to
 
@@ -750,12 +739,12 @@ def writer_factory(file_name, file_format, file_mode='w'):
     return writer
 
 def write_hdf5(obj, file_name, file_mode='w'):
-    """Writes attributes of obj from obj._save_attrs_ list to an hdf5 file.
+    """Writes attributes of obj from obj._io_attrs_ list to an hdf5 file.
 
     Parameters
     ----------
     obj: object to save
-        must have _save_attrs_ list attribute. Otherwise AttributeError raised.
+        must have _io_attrs_ list attribute. Otherwise AttributeError raised.
     save_loc : str or path-like; hdf5 file or group
         file or group to write to. If str or path-like, file is created. If
         hdf5 file or group instance, datasets are created there.
@@ -775,7 +764,7 @@ def write_hdf5(obj, file_name, file_mode='w'):
             'file or group.'.format(file_name_type))
 
     # save to file or group
-    for attr in obj._save_attrs_:
+    for attr in obj._io_attrs_:
         file_group.create_dataset(attr, data=getattr(obj, attr))
 
     # close file if created

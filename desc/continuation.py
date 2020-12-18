@@ -118,21 +118,19 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 'bdry_ratio': bdry_ratio[ii],
                 'axis': axis,
             }
+            equil_fam = EquilibriaFamily(inputs=inputs_ii)
+            equil = equil_fam[ii]
+
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
-            equil_fam = EquilibriaFamily(inputs=inputs_ii)
-            # Get initial Equilibrium from equil_fam
-            equil = equil_fam[ii] 
-            
-            x = equil.x # initial state vector
+
             # bases (extracted from Equilibrium)
             R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
                                                             equil.Z_basis, \
                                                             equil.L_basis, \
                                                             equil.P_basis, \
                                                             equil.I_basis
-
 
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
@@ -147,7 +145,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             L_transform = Transform(L_grid,  L_basis, derivs=0)
             P_transform = Transform(RZ_grid, P_basis, derivs=1)
             I_transform = Transform(RZ_grid, I_basis, derivs=1)
-            
+
             timer.stop("Transform precomputation")
             if verbose > 1:
                 timer.disp("Transform precomputation")
@@ -155,6 +153,9 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
         # continuing from previous solution
         else:
+            equil_fam.append(copy.deepcopy(equil))
+            equil = equil_fam[ii]
+
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
@@ -165,7 +166,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
                 equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii]) # update equilibrium bases to the new resolutions
                 R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
-                x = equil.x
 
             # change transform matrices
             timer.start(
@@ -212,8 +212,9 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
-                x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
+                x, timer = perturb_continuation_params(equil.x, equil_obj, deltas, args,
                                                        pert_order[ii], verbose, timer)
+                equil.x = x
 
         # equilibrium objective function
         if optim_method in ['bfgs']:
@@ -255,7 +256,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         if verbose > 0:
             print("Starting optimization")
 
-        x_init = x
+        x_init = equil.x
         timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
@@ -287,8 +288,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
         equil.x = out['x']
 
-        equil_fam.append(copy.deepcopy(equil))
-
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))
             timer.pretty_print("Iteration {} avg time per step".format(ii+1),
@@ -297,7 +296,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
-            callback(x, *args)
+            callback(equil.x, *args)
 
         if checkpoint:
             if verbose > 0:

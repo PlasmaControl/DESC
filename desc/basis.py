@@ -8,7 +8,7 @@ from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, 
 class Basis(IOAble,ABC):
     """Basis is an abstract base class for spectral basis sets
     """
-    _save_attrs_ = ['_L', '_M', '_N', '_NFP', '_modes']
+    _io_attrs_ = ['_L', '_M', '_N', '_NFP', '_modes']
 
     @abstractmethod
     def __init__(self) -> None:
@@ -61,17 +61,6 @@ class Basis(IOAble,ABC):
         sort_idx = np.lexsort((self._modes[:, 0], self._modes[:, 1],
                                self._modes[:, 2]))
         self._modes = self._modes[sort_idx]
-
-    def _def_save_attrs_(self) -> None:
-        """Defines attributes to save
-
-        Returns
-        -------
-        None
-
-        """
-        self._save_attrs_ = ['_L', '_M', '_N', '_NFP',
-                             '_modes']
 
     @abstractmethod
     def get_modes(self):

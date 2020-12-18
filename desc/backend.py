@@ -322,6 +322,35 @@ class Timer():
         self._times[key] = val
 
 
+def unpack_state(x, nR, nZ):
+    """Unpacks the optimization state vector x into cR, cZ, cL components
+
+    Parameters
+    ----------
+    x : ndarray
+        vector to unpack: x = [cR, cZ, cL]
+    nR : int
+        number of cR coefficients
+    nZ : int
+        number of cZ coefficients
+
+    Returns
+    -------
+    cR : ndarray
+        spectral coefficients of R
+    cZ : ndarray
+        spectral coefficients of Z
+    cL : ndarray
+        spectral coefficients of lambda
+
+    """
+
+    cR = x[:nR]
+    cZ = x[nR:nR+nZ]
+    cL = x[nR+nZ:]
+    return cR, cZ, cL
+
+
 class _Indexable():
     """Helper object for building indexes for indexed update functions.
     This is a singleton object that overrides the ``__getitem__`` method

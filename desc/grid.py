@@ -1,5 +1,4 @@
 import numpy as np
-from abc import abstractmethod
 
 from desc.backend import TextColors, equals
 from desc.equilibrium_io import IOAble
@@ -8,7 +7,7 @@ from desc.equilibrium_io import IOAble
 class Grid(IOAble):
     """Grid is a base class for collocation grids
     """
-    _save_attrs_ = ['_L', '_M', '_N', '_NFP', '_sym', '_nodes', '_volumes']
+    _io_attrs_ = ['_L', '_M', '_N', '_NFP', '_sym', '_nodes', '_volumes']
 
     def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a custom grid without a pre-defined pattern
@@ -97,17 +96,6 @@ class Grid(IOAble):
         """
         self._axis = np.where(self._nodes[:, 0] == 0)[0]
 
-    def _def_save_attrs_(self) -> None:
-        """Defines attributes to save
-
-        Returns
-        -------
-        None
-
-        """
-        self._save_attrs_ = ['_L', '_M', '_N', '_NFP',
-                             '_sym', '_nodes', '_volumes']
-
     def create_nodes(self, nodes):
         """Allows for custom node creation
 
@@ -126,7 +114,6 @@ class Grid(IOAble):
         volumes = np.zeros_like(nodes)
         return nodes, volumes
 
-    @abstractmethod
     def change_resolution(self) -> None:
         pass
 

@@ -96,8 +96,8 @@ class Plot:
             else:
                 fig, ax = plt.subplots()
                 return fig, ax
-# FIXME: cannot check types against matplotlib.axes._subplots.AxesSubplot, as it throws
-# error that it has not such attribute
+# FIXME: cannot check types against matplotlib.axes._subplots.AxesSubplot,
+# as it throws an error that it has no such attribute
         elif type(ax) is matplotlib.axes._subplots.AxesSubplot or matplotlib.axes._subplots.Axes3DSubplot:
             return plt.gcf(), ax
         else:
@@ -271,7 +271,6 @@ class Plot:
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
-        # ax = fig.add_subplot(111,projection='3d')
         fig, ax = self.format_ax(ax,is3d=True)
         divider = make_axes_locatable(ax)
 
@@ -309,7 +308,6 @@ class Plot:
         im = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, facecolors=fcolors,
                              vmin=minn, vmax=maxx)
         fig.colorbar(m)
-
 
         ax.set_xlabel(self.axis_labels_XYZ[0])
         ax.set_ylabel(self.axis_labels_XYZ[1])

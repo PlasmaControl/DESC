@@ -74,12 +74,14 @@ class Plot:
         """
         pass
 
-    def format_ax(self, ax):
+    def format_ax(self, ax, is3d=False):
         """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
         Parameters
         ----------
         ax : None or matplotlib AxesSubplot instance
+        
+        is3d: bool, default is False
 
         Returns
         -------
@@ -87,9 +89,16 @@ class Plot:
 
         """
         if ax is None:
-            fig, ax = plt.subplots()
-            return fig, ax
-        elif type(ax) is matplotlib.axes._subplots.AxesSubplot:
+            if is3d:
+                fig = plt.figure()
+                ax = fig.add_subplot(111,projection='3d')
+                return fig, ax
+            else:
+                fig, ax = plt.subplots()
+                return fig, ax
+# FIXME: cannot check types against matplotlib.axes._subplots.AxesSubplot, as it throws
+# error that it has not such attribute
+        elif type(ax) is matplotlib.axes._subplots.AxesSubplot or matplotlib.axes._subplots.Axes3DSubplot:
             return plt.gcf(), ax
         else:
             raise TypeError(TextColors.FAIL +
@@ -262,7 +271,8 @@ class Plot:
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
-        fig, ax = self.format_ax(ax)
+        # ax = fig.add_subplot(111,projection='3d')
+        fig, ax = self.format_ax(ax,is3d=True)
         divider = make_axes_locatable(ax)
 
         coords = eq.compute_coordinates(grid)
@@ -296,14 +306,10 @@ class Plot:
         m.set_array([])
         fcolors = m.to_rgba(data)
 
-        ax = fig.gca(projection='3d')
         im = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, facecolors=fcolors,
-                             vmin=minn, vmax=maxx, shade=False)
+                             vmin=minn, vmax=maxx)
+        fig.colorbar(m)
 
-        cax = divider.append_axes('right', **cax_kwargs)
-        cbar = fig.colorbar(im, cax=cax)
-        cbar.formatter.set_powerlimits((0,0))
-        cbar.update_ticks()
 
         ax.set_xlabel(self.axis_labels_XYZ[0])
         ax.set_ylabel(self.axis_labels_XYZ[1])

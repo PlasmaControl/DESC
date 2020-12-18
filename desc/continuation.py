@@ -150,11 +150,12 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             if verbose > 1:
                 timer.disp("Transform precomputation")
 
-
         # continuing from previous solution
         else:
             equil_fam.append(copy.deepcopy(equil))
             equil = equil_fam[ii]
+            equil.x0 = equil.x  # new initial guess is previous solution
+            equil.solved = False
 
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
@@ -287,6 +288,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         timer.stop("Iteration {} solution".format(ii+1))
 
         equil.x = out['x']
+        equil.solved = True
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))

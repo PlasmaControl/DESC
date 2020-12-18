@@ -52,6 +52,7 @@ class Configuration(IOAble):
                 bdry_mode : str, how to calculate error at bdry, default is 'spectral'
                 bdry_ratio :
                 axis :
+                x : ndarray, state vector of spectral coefficients
                 cR : ndarray, spectral coefficients of R
                 cZ : ndarray, spectral coefficients of Z
                 cL : ndarray, spectral coefficients of L
@@ -132,16 +133,19 @@ class Configuration(IOAble):
 
         # solution, if provided
         try:
-            self._cR = inputs['cR']
-            self._cZ = inputs['cZ']
-            self._cL = inputs['cL']
+            self._x = inputs['x']
+            self._cR, self._cZ, self._cL = unpack_state(
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
         except:
-            self._cR, self._cZ = get_initial_guess_scale_bdry(
+            try:
+                self._cR = inputs['cR']
+                self._cZ = inputs['cZ']
+                self._cL = inputs['cL']
+            except:
+                self._cR, self._cZ = get_initial_guess_scale_bdry(
                         axis, bdry, bdry_ratio, self._R_basis, self._Z_basis)
-            self._cL = np.zeros((self._L_basis.num_modes,))
-
-        # state vector
-        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+                self._cL = np.zeros((self._L_basis.num_modes,))
+            self._x = np.concatenate([self._cR, self._cZ, self._cL])
 
     def change_resolution(self, L:int=None, M:int=None, N:int=None) -> None:
         # TODO: check if resolution actually changes
@@ -216,6 +220,7 @@ class Configuration(IOAble):
     @cR.setter
     def cR(self, cR) -> None:
         self._cR = cR
+        self._x = np.concatenate([self._cR, self._cZ, self._cL])
 
     @property
     def cZ(self):
@@ -225,7 +230,8 @@ class Configuration(IOAble):
     @cZ.setter
     def cZ(self, cZ) -> None:
         self._cZ = cZ
-        
+        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+
     @property
     def cL(self):
         """ spectral coefficients of L """
@@ -234,6 +240,7 @@ class Configuration(IOAble):
     @cL.setter
     def cL(self, cL) -> None:
         self._cL = cL
+        self._x = np.concatenate([self._cR, self._cZ, self._cL])
 
     @property
     def cRb(self):
@@ -639,7 +646,7 @@ class Configuration(IOAble):
         return force_mag
 
 
-class Equilibrium(Configuration,IOAble):
+class Equilibrium(Configuration, IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
        It adds information about how the equilibrium configuration was solved.
     """
@@ -654,73 +661,26 @@ class Equilibrium(Configuration,IOAble):
 
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         super()._init_from_inputs_(inputs=inputs)
-        self._initial = Configuration(inputs=inputs)
+        self._x0 = self._x
         self._objective = inputs.get('objective', None)
         self._optimizer = inputs.get('optimizer', None)
         self._solved = False
+
+    @property
+    def x0(self):
+        return self._x0
+
+    @x0.setter
+    def x0(self, x0) -> None:
+        self._x0 = x0
 
     @property
     def solved(self) -> bool:
         return self._solved
 
     @solved.setter
-    def solved(self, issolved):
-        self._solved = issolved
-
-    @property
-    def initial(self) -> Configuration:
-        """
-        Initial Configuration from which the Equilibrium was solved
-
-        Returns
-        -------
-        Configuration
-
-        """
-        return self._initial
-
-    @initial.setter
-    def initial(self, config:Configuration) -> None:
-        self._initial = config
-
-    @property
-    def x(self):
-        """ State vector of (cR,cZ,cL) """
-        return self._x
-
-    @x.setter
-    def x(self, x) -> None:
-        self._x = x
-        self._cR, self._cZ, self._cL = \
-            unpack_state(self._x,
-                         self._R_basis.num_modes,
-                         self._Z_basis.num_modes)
-        self._solved = True
-
-    @property
-    def solved(self) -> bool:
-        """Boolean, if the Equilibrium has been solved or not"""
-        return self._solved
-
-    @property
-    def initial(self) -> Configuration:
-        return self._initial
-
-    @property
-    def x(self):
-        return self._x
-
-    @x.setter
-    def x(self, x) -> None:
-        self._x = x
-        self._cR, self._cZ, self._cL = \
-            unpack_state(self._x,
-                         self._R_basis.num_modes,
-                         self._Z_basis.num_modes)
-        self._solved = True
-
-    def optimize(self):
-        pass
+    def solved(self, solved) -> None:
+        self._solved = solved
 
     @property
     def objective(self):
@@ -739,6 +699,37 @@ class Equilibrium(Configuration,IOAble):
     def optimizer(self, optimizer):
         self._optimizer = optimizer
         self.solved = False
+
+    @property
+    def initial(self) -> Configuration:
+        """
+        Initial Configuration from which the Equilibrium was solved
+
+        Returns
+        -------
+        Configuration
+
+        """
+        bdryR = np.array([self._Rb_basis.modes[:, 1:2],
+                          self._cRb, np.zeros_like(self._cRb)]).T
+        bdryZ = np.array([self._Zb_basis.modes[:, 1:2],
+                          np.zeros_like(self._cRb), self._cZb]).T
+        inputs = {'L': self._L,
+                  'M': self._M,
+                  'N': self._N,
+                  'cP': self._cP,
+                  'cI': self._cI,
+                  'Psi': self._Psi,
+                  'NFP': self._NFP,
+                  'bdry': np.vstack((bdryR, bdryZ)),
+                  'sym': self._sym,
+                  'index': self._index,
+                  'x': self._x0
+                 }
+        return Configuration(inputs=inputs)
+
+    def optimize(self):
+        pass
 
 
 # XXX: Should this (also) inherit from Equilibrium?

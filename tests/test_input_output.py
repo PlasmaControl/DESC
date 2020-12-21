@@ -2,10 +2,9 @@ import unittest
 import os
 import pathlib
 import h5py
+
 from desc.input_reader import InputReader
 from desc.equilibrium_io import hdf5Writer, hdf5Reader
-from desc.configuration import Configuration, Equilibrium
-#from desc.input_output import read_input
 
 
 class TestInputReader(unittest.TestCase):
@@ -17,11 +16,11 @@ class TestInputReader(unittest.TestCase):
 
     def test_no_input_file(self):
         with self.assertRaises(NameError):
-            ir = InputReader(cl_args=self.argv0)
+            InputReader(cl_args=self.argv0)
 
     def test_nonexistant_input_file(self):
         with self.assertRaises(FileNotFoundError):
-            ir = InputReader(cl_args=self.argv1)
+            InputReader(cl_args=self.argv1)
 
     def test_min_input(self):
         ir = InputReader(cl_args=self.argv2)
@@ -49,7 +48,7 @@ class TestInputReader(unittest.TestCase):
 
     def test_np_environ(self):
         argv = self.argv2 + ['--numpy']
-        ir = InputReader(cl_args=argv)
+        InputReader(cl_args=argv)
         self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy '
             'environment variable incorrect on use')
 

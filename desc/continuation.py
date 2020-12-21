@@ -3,7 +3,8 @@ import scipy.optimize
 import warnings
 import copy
 
-from desc.backend import jit, use_jax, Timer, TextColors
+from desc.backend import TextColors, use_jax, jit
+from desc.utils import Timer
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.configuration import EquilibriaFamily

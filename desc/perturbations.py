@@ -1,7 +1,8 @@
 import numpy as np
 import time
 
-from desc.backend import use_jax, Timer
+from desc.backend import use_jax
+from desc.utils import Timer
 from desc.jacobian import AutoDiffJacobian, FiniteDiffJacobian
 
 if use_jax:

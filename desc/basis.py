@@ -1,8 +1,9 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from desc.equilibrium_io import IOAble
 
-from desc.backend import jnp, sign, fori_loop, flatten_list, factorial, equals, Tristate
+from desc.backend import jnp, fori_loop, factorial
+from desc.utils import Tristate, sign, flatten_list, equals
+from desc.equilibrium_io import IOAble
 
 
 class Basis(IOAble,ABC):

@@ -1,6 +1,7 @@
 import numpy as np
 
-from desc.backend import jnp, put, Tristate
+from desc.backend import jnp, put
+from desc.utils import Tristate
 from desc.grid import Grid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform

@@ -2,7 +2,8 @@ import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot
 
-from desc.backend import jnp, put, cross, dot, TextColors, unpack_state
+from desc.backend import TextColors, jnp, put
+from desc.utils import unpack_state, dot, cross
 from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform

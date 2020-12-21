@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 
-from desc.backend import use_jax, put, TextColors
+from desc.backend import TextColors, use_jax, put
 
 if use_jax:
     import jax

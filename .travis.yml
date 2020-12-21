@@ -9,6 +9,8 @@ branches:
   only:
   - master
   - dev
+  - v1.0
+  - dev1.0
 
 # command to install dependencies
 install:
@@ -30,5 +32,5 @@ notifications:
     on_success: change
     recipients: 
       - ddudt@pppl.gov
+      - wconlin@princeton.edu
       - dpanici@princeton.edu
-      - eyerger@princeton.edu

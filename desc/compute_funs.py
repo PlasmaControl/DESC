@@ -1,6 +1,8 @@
 import numpy as np
 
-from desc.backend import jnp, put, opsindex, cross, dot
+from desc.backend import jnp, put
+from desc.utils import opsindex
+from desc.utils import dot, cross
 from desc.transform import Transform
 
 

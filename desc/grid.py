@@ -1,6 +1,7 @@
 import numpy as np
 
-from desc.backend import TextColors, equals
+from desc.backend import TextColors
+from desc.utils import equals
 from desc.equilibrium_io import IOAble
 
 

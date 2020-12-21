@@ -1,7 +1,8 @@
 import numpy as np
 from collections.abc import MutableSequence
 
-from desc.backend import TextColors, Tristate, unpack_state
+from desc.backend import TextColors
+from desc.utils import Tristate, unpack_state
 from desc.basis import Basis, PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform

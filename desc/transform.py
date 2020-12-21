@@ -2,7 +2,8 @@ import numpy as np
 import functools
 from itertools import permutations, combinations_with_replacement
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors, equals
+from desc.backend import TextColors, use_jax, jnp, jit
+from desc.utils import conditional_decorator, equals
 from desc.grid import Grid
 from desc.basis import Basis
 from desc.equilibrium_io import IOAble

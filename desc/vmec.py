@@ -1,10 +1,9 @@
 import numpy as np
-from scipy.optimize import fsolve
 from netCDF4 import Dataset
+from scipy.optimize import fsolve
 
-from desc.backend import sign
+from desc.utils import sign
 from desc.grid import LinearGrid
-from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
 
 

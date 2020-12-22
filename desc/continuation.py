@@ -247,8 +247,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
             jac_obj_jit = jit(jac.compute, device=device)
             timer.start("Iteration {} compilation".format(ii+1))
-            f0 = equil_obj_jit(x, *args)
-            J0 = jac_obj_jit(x, *args)
+            f0 = equil_obj_jit(equil.x, *args)
+            J0 = jac_obj_jit(equil.x, *args)
             timer.stop("Iteration {} compilation".format(ii+1))
             if verbose > 1:
                 timer.disp("Iteration {} compilation".format(ii+1))

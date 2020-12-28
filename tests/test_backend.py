@@ -1,6 +1,8 @@
 import unittest
 import numpy as np
-from desc.backend import factorial, put, sign
+
+from desc.backend import factorial, put
+from desc.utils import sign
 
 
 class TestBackend(unittest.TestCase):

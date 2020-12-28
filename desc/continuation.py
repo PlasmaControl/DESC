@@ -3,18 +3,17 @@ import scipy.optimize
 import warnings
 import copy
 
-from desc.backend import jit, use_jax, Timer, TextColors, Tristate
+from desc.backend import TextColors, use_jax, jit
+from desc.utils import Timer
 from desc.grid import LinearGrid, ConcentricGrid
-from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.transform import Transform
-from desc.configuration import Equilibrium, EquilibriaFamily
+from desc.configuration import EquilibriaFamily
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
-from desc.equilibrium_io import Checkpoint
 from desc.perturbations import perturb_continuation_params
 from desc.jacobian import AutoDiffJacobian
 
 
-def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
+def solve_eq_continuation(inputs, file_name=None, device=None):
     """Solves for an equilibrium by continuation method
 
     Follows this procedure to solve the equilibrium:
@@ -28,7 +27,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     ----------
     inputs : dict
         dictionary with input parameters defining problem setup and solver options
-    checkpoint_filename : str or path-like
+    file_name : str or path-like
         file to save checkpoint data (Default value = None)
     device : jax.device or None
         device handle to JIT compile to (Default value = None)
@@ -73,23 +72,11 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
     bdry = inputs['bdry']
     verbose = inputs['verbose']
 
-    if checkpoint_filename is not None:
+    if file_name is not None:
         checkpoint = True
-        checkpoint_file = Checkpoint(checkpoint_filename, write_ascii=True)
     else:
         checkpoint = False
 
-    if stell_sym:
-        R_sym = Tristate(True)
-        Z_sym = Tristate(False)
-        L_sym = Tristate(False)
-    else:
-        R_sym = Tristate(None)
-        Z_sym = Tristate(None)
-        L_sym = Tristate(None)
-
-    
-  
     arr_len = M.size
     for ii in range(arr_len):
 
@@ -131,23 +118,20 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
                 'bdry_mode': bdry_mode,
                 'bdry_ratio': bdry_ratio[ii],
                 'axis': axis,
-                'output_path': checkpoint_filename
-            } 
+            }
+            equil_fam = EquilibriaFamily(inputs=inputs_ii)
+            equil = equil_fam[ii]
+
             timer.start("Transform precomputation")
             if verbose > 0:
                 print("Precomputing Transforms")
-            equil_fam = EquilibriaFamily(inputs=inputs_ii)
-            # Get initial Equilibrium from equil_fam
-            equil = equil_fam[ii] 
-            
-            x = equil.x # initial state vector
+
             # bases (extracted from Equilibrium)
             R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
                                                             equil.Z_basis, \
                                                             equil.L_basis, \
                                                             equil.P_basis, \
                                                             equil.I_basis
-
 
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
@@ -162,14 +146,18 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             L_transform = Transform(L_grid,  L_basis, derivs=0)
             P_transform = Transform(RZ_grid, P_basis, derivs=1)
             I_transform = Transform(RZ_grid, I_basis, derivs=1)
-            
+
             timer.stop("Transform precomputation")
             if verbose > 1:
                 timer.disp("Transform precomputation")
 
-
         # continuing from previous solution
         else:
+            equil_fam.append(copy.deepcopy(equil))
+            equil = equil_fam[ii]
+            equil.x0 = equil.x  # new initial guess is previous solution
+            equil.solved = False
+
             # change grids
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
@@ -180,7 +168,6 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
                 equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii]) # update equilibrium bases to the new resolutions
                 R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
-                x = equil.x
 
             # change transform matrices
             timer.start(
@@ -227,8 +214,9 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             if np.any(deltas):
                 if verbose > 1:
                     print("Perturbing equilibrium")
-                x, timer = perturb_continuation_params(x, equil_obj, deltas, args,
+                x, timer = perturb_continuation_params(equil.x, equil_obj, deltas, args,
                                                        pert_order[ii], verbose, timer)
+                equil.x = x
 
         # equilibrium objective function
         if optim_method in ['bfgs']:
@@ -259,8 +247,8 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
             jac_obj_jit = jit(jac.compute, device=device)
             timer.start("Iteration {} compilation".format(ii+1))
-            f0 = equil_obj_jit(x, *args)
-            J0 = jac_obj_jit(x, *args)
+            f0 = equil_obj_jit(equil.x, *args)
+            J0 = jac_obj_jit(equil.x, *args)
             timer.stop("Iteration {} compilation".format(ii+1))
             if verbose > 1:
                 timer.disp("Iteration {} compilation".format(ii+1))
@@ -270,7 +258,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         if verbose > 0:
             print("Starting optimization")
 
-        x_init = x
+        x_init = equil.x
         timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
@@ -301,8 +289,7 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
         timer.stop("Iteration {} solution".format(ii+1))
 
         equil.x = out['x']
-
-        equil_fam.append(copy.deepcopy(equil))
+        equil.solved = True
 
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))
@@ -312,27 +299,25 @@ def solve_eq_continuation(inputs, checkpoint_filename=None, device=None):
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
-            callback(x, *args)
+            callback(equil.x, *args)
 
         if checkpoint:
             if verbose > 0:
                 print('Saving latest iteration')
-            equil_fam.save()
+            equil_fam.save(file_name)
 
         if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
             warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
                           + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
             break
 
-
-
     timer.stop("Total time")
     print('====================')
     print('Done')
     if verbose > 1:
         timer.disp("Total time")
-    if checkpoint_filename is not None:
-        print('Output written to {}'.format(checkpoint_filename))
+    if file_name is not None:
+        print('Output written to {}'.format(file_name))
     print('====================')
 
     return equil_fam, timer

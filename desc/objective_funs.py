@@ -2,15 +2,16 @@ import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot
 
-from desc.backend import jnp, put, cross, dot, TextColors
-from desc.configuration import unpack_state
-from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
-from desc.configuration import compute_contravariant_basis, compute_jacobian
-from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_magnetic_field_magnitude
+from desc.backend import TextColors, jnp, put
+from desc.utils import unpack_state, dot, cross
 from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.equilibrium_io import IOAble
+from desc.compute_funs import compute_coordinates, compute_coordinate_derivatives
+from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
+from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
+from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
 
 
 class ObjectiveFunction(IOAble,ABC):
@@ -43,8 +44,8 @@ class ObjectiveFunction(IOAble,ABC):
     callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)
         function that prints equilibrium errors
     """
-    _save_attrs_ = ['scalar', 'R_transform', 'Z_transform', 'R1_transform',
-            'Z1_transform', 'L_transform', 'P_transform', 'I_transform']
+    _io_attrs_ = ['scalar', 'R_transform', 'Z_transform', 'R1_transform',
+                  'Z1_transform', 'L_transform', 'P_transform', 'I_transform']
 
     def __init__(self, scalar:bool=False,
                  R_transform:Transform=None, Z_transform:Transform=None,

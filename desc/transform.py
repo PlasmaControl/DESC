@@ -2,7 +2,8 @@ import numpy as np
 import functools
 from itertools import permutations, combinations_with_replacement
 
-from desc.backend import jnp, conditional_decorator, jit, use_jax, TextColors, equals
+from desc.backend import TextColors, use_jax, jnp, jit
+from desc.utils import conditional_decorator, equals
 from desc.grid import Grid
 from desc.basis import Basis
 from desc.equilibrium_io import IOAble
@@ -29,7 +30,7 @@ class Transform(IOAble):
         DESCRIPTION
 
     """
-    _save_attrs_ = ['grid', 'basis', 'derives', 'matrices']
+    _io_attrs_ = ['_grid', '_basis', '_derives', '_matrices']
 
     def __init__(self, grid:Grid=None, basis:Basis=None, derivs=0, rcond=1e-6,
             load_from=None, file_format=None, obj_lib=None) -> None:
@@ -57,22 +58,26 @@ class Transform(IOAble):
         None
 
         """
-        if load_from is None:
-            self.__grid = grid
-            self.__basis = basis
-            self.__derivs = derivs
-            self.__rcond = rcond
+        self._file_format_ = file_format
 
-            self.__matrices = {i: {j: {k: {}
-                         for k in range(4)} for j in range(4)} for i in range(4)}
-            self.__derivatives = self._get_derivatives_(self.__derivs)
+        if load_from is None:
+            self._grid = grid
+            self._basis = basis
+            self._derivs = derivs
+            self._rcond = rcond
+
+            self._matrices = {i: {j: {k: {}
+                     for k in range(4)} for j in range(4)} for i in range(4)}
+            self._derivatives = self._get_derivatives_(self._derivs)
 
             self._sort_derivatives_()
             self._build_()
             self._build_pinv_()
-            #self._def_save_attrs_()
+
         else:
-            self._init_from_file_(load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -130,7 +135,7 @@ class Transform(IOAble):
                                     [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
                                     [0, 1, 1], [0, 0, 2]])
             # FIXME: this assumes the Grid is sorted (which it should be)
-            if np.all(self.__grid.nodes[:, 0] == np.array([0, 0, 0])):
+            if np.all(self._grid.nodes[:, 0] == np.array([0, 0, 0])):
                 axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
                 derivatives = np.vstack([derivatives, axis])
         elif derivs.lower() == 'qs':
@@ -154,36 +159,26 @@ class Transform(IOAble):
         None
 
         """
-        sort_idx = np.lexsort((self.__derivatives[:, 0],
-                       self.__derivatives[:, 1], self.__derivatives[:, 2]))
-        self.__derivatives = self.__derivatives[sort_idx]
+        sort_idx = np.lexsort((self._derivatives[:, 0],
+                       self._derivatives[:, 1], self._derivatives[:, 2]))
+        self._derivatives = self._derivatives[sort_idx]
 
     def _build_(self) -> None:
         """Builds the transform matrices for each derivative order
         """
-        for d in self.__derivatives:
-            self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
-                                                        self.__grid.nodes, d)
+        for d in self._derivatives:
+            self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
+                                                        self._grid.nodes, d)
 
     def _build_pinv_(self) -> None:
         """Builds the transform matrices for each derivative order
         """
         # FIXME: this assumes the derivatives are sorted (which they should be)
-        if np.all(self.__derivatives[0, :] == np.array([0, 0, 0])):
-            A = self.__matrices[0][0][0]
+        if np.all(self._derivatives[0, :] == np.array([0, 0, 0])):
+            A = self._matrices[0][0][0]
         else:
-            A = self.__basis.evaluate(self.__grid.nodes, np.array([0, 0, 0]))
-        self.__pinv = jnp.linalg.pinv(A, rcond=self.__rcond)
-
-    def _def_save_attrs_(self) -> None:
-        """Defines attributes to save
-
-        Returns
-        -------
-        None
-
-        """
-        self._save_attrs_ = ['__grid', '__basis', '__derives', '__matrices']
+            A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
+        self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical
@@ -205,7 +200,7 @@ class Transform(IOAble):
             array of values of function at node locations
 
         """
-        A = self.__matrices[dr][dt][dz]
+        A = self._matrices[dr][dt][dz]
         if type(A) is dict:
             raise ValueError(TextColors.FAIL +
                  "Derivative orders are out of initialized bounds" +
@@ -232,7 +227,7 @@ class Transform(IOAble):
             spectral coefficients in self.basis
 
         """
-        return jnp.matmul(self.__pinv, x)
+        return jnp.matmul(self._pinv, x)
 
     def change_resolution(self, grid:Grid=None, basis:Basis=None) -> None:
         """Re-builds the matrices with a new grid and basis
@@ -250,19 +245,19 @@ class Transform(IOAble):
 
         """
         if grid is None:
-            grid = self.__grid
+            grid = self._grid
         if basis is None:
-            basis = self.__basis
+            basis = self._basis
 
-        if self.__grid != grid or self.__basis != basis:
-            self.__grid = grid
-            self.__basis = basis
+        if self._grid != grid or self._basis != basis:
+            self._grid = grid
+            self._basis = basis
             self._build_()
             self._build_pinv_()
 
     @property
     def grid(self):
-        return self.__grid
+        return self._grid
 
     @grid.setter
     def grid(self, grid:Grid) -> None:
@@ -278,14 +273,14 @@ class Transform(IOAble):
         None
 
         """
-        if self.__grid != grid:
-            self.__grid = grid
+        if self._grid != grid:
+            self._grid = grid
             self._build_()
             self._build_pinv_()
 
     @property
     def basis(self):
-        return self.__basis
+        return self._basis
 
     @basis.setter
     def basis(self, basis:Basis) -> None:
@@ -301,18 +296,18 @@ class Transform(IOAble):
         None
 
         """
-        if self.__basis != basis:
-            self.__basis = basis
+        if self._basis != basis:
+            self._basis = basis
             self._build_()
             self._build_pinv_()
 
     @property
     def derivs(self):
-        return self.__derivs
+        return self._derivs
 
     @property
     def derivatives(self):
-        return self.__derivatives
+        return self._derivatives
 
     @derivatives.setter
     def derivatives(self, derivs) -> None:
@@ -334,33 +329,33 @@ class Transform(IOAble):
         None
 
         """
-        if derivs != self.__derivs:
-            self.__derivs = derivs
+        if derivs != self._derivs:
+            self._derivs = derivs
 
-            old_derivatives = self.__derivatives
-            self.__derivatives = self.get_derivatives(self.__derivs)
+            old_derivatives = self._derivatives
+            self._derivatives = self.get_derivatives(self._derivs)
             self.sort_derivatives()
-            new_derivatives = self.__derivatives
+            new_derivatives = self._derivatives
 
             new_not_in_old = (
                 new_derivatives[:, None] == old_derivatives).all(-1).any(-1)
             derivs_to_add = new_derivatives[~new_not_in_old]
 
             for d in derivs_to_add:
-                self.__matrices[d[0]][d[1]][d[2]] = self.__basis.evaluate(
-                                                        self.__grid.nodes, d)
+                self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
+                                                        self._grid.nodes, d)
 
     @property
     def matrices(self):
-        return self.__matrices
+        return self._matrices
 
     @property
     def num_nodes(self):
-        return self.__grid.num_nodes
+        return self._grid.num_nodes
 
     @property
     def num_modes(self):
-        return self.__basis.num_modes
+        return self._basis.num_modes
 
 
 # these functions are currently unused ---------------------------------------

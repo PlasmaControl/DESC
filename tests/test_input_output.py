@@ -2,21 +2,10 @@ import unittest
 import os
 import pathlib
 import h5py
+
 from desc.input_reader import InputReader
 from desc.equilibrium_io import hdf5Writer, hdf5Reader
-from desc.configuration import Configuration, Equilibrium
-#from desc.input_output import read_input
 
-
-#class TestIO(unittest.TestCase):
-#    """tests for input/output functions"""
-#
-#    def test_min_input(self):
-#        dirname = os.path.dirname(__file__)
-#        filename = os.path.join(dirname, 'MIN_INPUT')
-#        inputs = read_input(filename)
-#
-#        self.assertEqual(len(inputs), 26)
 
 class TestInputReader(unittest.TestCase):
 
@@ -27,11 +16,11 @@ class TestInputReader(unittest.TestCase):
 
     def test_no_input_file(self):
         with self.assertRaises(NameError):
-            ir = InputReader(cl_args=self.argv0)
+            InputReader(cl_args=self.argv0)
 
     def test_nonexistant_input_file(self):
         with self.assertRaises(FileNotFoundError):
-            ir = InputReader(cl_args=self.argv1)
+            InputReader(cl_args=self.argv1)
 
     def test_min_input(self):
         ir = InputReader(cl_args=self.argv2)
@@ -54,13 +43,12 @@ class TestInputReader(unittest.TestCase):
             'variable incorrect with default argument')
         self.assertFalse(ir.args.version, 'version is not default False')
         self.assertEqual(len(ir.inputs), 28, 'number of inputs does not match '
-
             'number expected in MIN_INPUT')
         # test equality of arguments
 
     def test_np_environ(self):
         argv = self.argv2 + ['--numpy']
-        ir = InputReader(cl_args=argv)
+        InputReader(cl_args=argv)
         self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy '
             'environment variable incorrect on use')
 
@@ -80,9 +68,12 @@ class TestInputReader(unittest.TestCase):
     def test_vmec_to_desc_input(self):
         pass
 
+
 class MockObject:
+
     def __init__(self):
-        self._save_attrs_ = ['a', 'b', 'c']
+        self._io_attrs_ = ['a', 'b', 'c']
+
 
 class Testhdf5Writer(unittest.TestCase):
 
@@ -140,20 +131,21 @@ class Testhdf5Writer(unittest.TestCase):
             writer.write_obj(mo)
         writer.close()
         writer = hdf5Writer(self.filename, self.file_mode)
-        for name in mo._save_attrs_:
+        for name in mo._io_attrs_:
             setattr(mo, name, name)
         writer.write_obj(mo)
         groupname = 'initial'
         writer.write_obj(mo, where=writer.sub(groupname))
         writer.close()
         f = h5py.File(self.filename, 'r')
-        for key in mo._save_attrs_:
+        for key in mo._io_attrs_:
             self.assertTrue(key in f.keys())
         self.assertTrue(groupname in f.keys())
         initial = f[groupname]
-        for key in mo._save_attrs_:
+        for key in mo._io_attrs_:
             self.assertTrue(key in initial.keys())
         f.close()
+
 
 class Testhdf5Reader(unittest.TestCase):
 
@@ -218,13 +210,13 @@ class Testhdf5Reader(unittest.TestCase):
         mo = MockObject()
         reader = hdf5Reader(self.filename)
         reader.read_obj(mo)
-        mo._save_attrs_  += '4'
+        mo._io_attrs_  += '4'
         with self.assertWarns(RuntimeWarning):
             reader.read_obj(mo)
-        del mo._save_attrs_[-1]
+        del mo._io_attrs_[-1]
         submo = MockObject()
         reader.read_obj(submo, where=reader.sub(self.subgroup))
-        for key in mo._save_attrs_:
+        for key in mo._io_attrs_:
             self.assertTrue(hasattr(mo, key))
             self.assertTrue(hasattr(submo, key))
 

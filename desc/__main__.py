@@ -89,11 +89,11 @@ def main(cl_args=None):
 
     # solve equilibrium
     equil_fam, timer = solve_eq_continuation(
-        ir.inputs, checkpoint_filename=ir.output_path, device=device)
+        ir.inputs, file_name=ir.output_path, device=device)
 
     if ir.args.plot:
 
-        equil_fam.save()
+        equil_fam.save(ir.output_path)
 
         equil_init = equil_fam[0].initial
         equil = equil_fam[-1]

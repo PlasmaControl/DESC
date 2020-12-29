@@ -49,7 +49,8 @@ else:
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
-
+    from jax.scipy.linalg import cho_factor, cho_solve, qr
+    
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
 
@@ -96,7 +97,8 @@ if use_jax:
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial
-
+    from scipy.linalg import cho_factor, cho_solve, qr
+    
     # we divide by zero in a few places but then overwrite with the
     # correct asmptotic values, so lets suppress annoying warnings about that
     np.seterr(divide='ignore', invalid='ignore')

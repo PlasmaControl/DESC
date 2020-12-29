@@ -4,8 +4,18 @@ import numpy as np
 from desc.optimize import fmin_scalar
 from desc.optimize.utils import make_spd, chol_U_update
 from scipy.optimize import rosen, rosen_der, rosen_hess
-
+from desc.derivatives import Derivative
 from numpy.random import default_rng
+
+
+def ellipsoid(x, p, q):
+    i = jnp.arange(x.size) + 1
+    d = x.size
+    return jnp.sum((i/d)**p*x**(2 + q*2*i))
+
+
+ellipsoid_grad = Derivative(ellipsoid, argnum=0, mode='grad')
+ellipsoid_hess = Derivative(ellipsoid, argnum=0, mode='hess')
 
 
 class TestUtils(unittest.TestCase):
@@ -47,7 +57,8 @@ class TestFmin(unittest.TestCase):
         true_x = np.ones(7)
 
         out = fmin_scalar(rosen, x0, rosen_der, hess=rosen_hess,
-                          verbose=1, method='dogleg', x_scale='hess', options={})
+                          verbose=1, method='dogleg', x_scale='hess',
+                          options={'ga_accept_threshold': 1})
 
         np.testing.assert_allclose(out['x'], true_x)
 
@@ -57,7 +68,8 @@ class TestFmin(unittest.TestCase):
         x0 = rando.random(7)
         true_x = np.ones(7)
         out = fmin_scalar(rosen, x0, rosen_der, hess=rosen_hess,
-                          verbose=1, method='subspace', x_scale='hess', options={})
+                          verbose=1, method='subspace', x_scale='hess',
+                          options={'ga_accept_threshold': 1})
 
         np.testing.assert_allclose(out['x'], true_x)
 
@@ -67,7 +79,8 @@ class TestFmin(unittest.TestCase):
         x0 = rando.random(7)
         true_x = np.ones(7)
         out = fmin_scalar(rosen, x0, rosen_der, hess='bfgs', verbose=1,
-                          method='dogleg', x_scale='hess', options={'ga_accept_threshold': 0})
+                          method='dogleg', x_scale='hess',
+                          options={'ga_accept_threshold': 0})
         np.testing.assert_allclose(out['x'], true_x)
 
     def test_rosenbrock_bfgs_subspace(self):
@@ -76,5 +89,6 @@ class TestFmin(unittest.TestCase):
         x0 = rando.random(7)
         true_x = np.ones(7)
         out = fmin_scalar(rosen, x0, rosen_der, hess='bfgs', verbose=1,
-                          method='subspace', x_scale='hess', options={'ga_accept_threshold': 0})
+                          method='subspace', x_scale='hess',
+                          options={'ga_accept_threshold': 0})
         np.testing.assert_allclose(out['x'], true_x)

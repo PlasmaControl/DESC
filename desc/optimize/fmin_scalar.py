@@ -129,17 +129,18 @@ def fmin_scalar(fun, x0, grad,
         'hessian_exception_strategy', 'damp_update')
     hess_min_curvature = options.pop('hessian_minimum_curvature', None)
     ga_fd_step = options.pop('ga_fd_step', 0.1)
-    ga_accept_threshold = options.pop('ga_accept_threshold', 1)
+    ga_accept_threshold = options.pop('ga_accept_threshold', 0)
+    return_all = options.pop('return_all', False)
+    return_tr = options.pop('return_tr', False)
 
-    if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0:
+    if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0 and callable(hess):
         hess_recompute_iters = np.arange(1, maxiter, hess_recompute_freq)
-    elif np.size(hess_recompute_freq) == 1:  # never recompute
+    elif np.size(hess_recompute_freq) == 1 or not callable(hess):  # never recompute
         hess_recompute_iters = []
     else:
         hess_recompute_iters = hess_recompute_freq
 
     if hess == 'bfgs':
-        bfgs = True
         if init_hess is None:
             init_hess = 'auto'
         hess = CholeskyHessian(N, init_hess,
@@ -192,6 +193,11 @@ def fmin_scalar(fun, x0, grad,
     if verbose > 1:
         print_header_nonlinear()
 
+    if return_all:
+        allx = [x]
+    if return_tr:
+        alltr = [trust_radius]
+
     while True:
 
         if iteration in hess_recompute_iters:
@@ -199,7 +205,7 @@ def fmin_scalar(fun, x0, grad,
             nhev += 1
 
         success, message = check_termination(actual_reduction, f, step_norm, x_norm, dg_norm, g_norm, ratio,
-                                             ftol, xtol, rgtol, agtol, iteration, maxiter, nfev, max_nfev, ngev, max_ngev)
+                                             ftol, xtol, rgtol, agtol, iteration, maxiter, nfev, max_nfev, ngev, max_ngev, nhev, max_nhev)
         if success is not None:
             result = OptimizeResult(x=x, success=success, fun=f, jac=g, hess=hess.get_matrix(),
                                     inv_hess=hess.get_inverse(), optimality=g_norm, nfev=nfev,
@@ -258,7 +264,8 @@ def fmin_scalar(fun, x0, grad,
                                                step_h_norm, hits_boundary, max_trust_radius, min_trust_radius,
                                                tr_increase_threshold, tr_increase_ratio,
                                                tr_decrease_threshold, tr_decrease_ratio, ga_ratio, ga_accept_threshold)
-
+        if return_tr:
+            alltr.append(trust_radius)
         # if reduction was enough, accept the step
         if ratio > step_accept_threshold:
             x_old = x
@@ -274,13 +281,21 @@ def fmin_scalar(fun, x0, grad,
             hess.update(x_new, x_old, g, g_old)
 
             if hess_scale:
-                scale, scale_inv = hess.get_scale()
+                scale, scale_inv = hess.get_scale(scale_inv)
             if verbose > 1:
                 print_iteration_nonlinear(iteration, nfev, f, actual_reduction,
                                           step_norm, g_norm)
 
             if callback is not None:
-                callback(np.copy(x), result)
+                stop = callback(np.copy(x), result)
+                if stop:
+                    result = OptimizeResult(x=x, success=None, fun=f, jac=g, hess=hess.get_matrix(),
+                                            inv_hess=hess.get_inverse(), optimality=g_norm, nfev=nfev,
+                                            ngev=ngev, nhev=nhev, nit=iteration, message=status_messages['callback'])
+                    break
+
+            if return_all:
+                allx.append(x)
 
             iteration += 1
 
@@ -295,4 +310,8 @@ def fmin_scalar(fun, x0, grad,
         print("         Gradient evaluations: {:d}".format(result['ngev']))
         print("         Hessian evaluations: {:d}".format(result['nhev']))
 
+    if return_all:
+        result['allvecs'] = allx
+    if return_tr:
+        result['alltr'] = alltr
     return result

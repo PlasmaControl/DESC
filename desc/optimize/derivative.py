@@ -44,7 +44,7 @@ class OptimizerDerivative(ABC):
         pass
 
     @abstractmethod
-    def get_scale(self):
+    def get_scale(self, prev_scale=None):
         """Compute scaling vector"""
         pass
 
@@ -216,13 +216,15 @@ class CholeskyHessian(OptimizerDerivative):
     def _cholesky(self, A):
         return jnp.linalg.cholesky(A).T
 
-    def get_scale(self):
+    def get_scale(self, prev_scale=None):
 
-        return compute_jac_scale(self._U)
+        return compute_jac_scale(self._U, prev_scale)
 
 
-def compute_jac_scale(A):
-    d = jnp.sum(A**2, axis=0)**0.5
-    d = jnp.where(d == 0, 1, d)
+def compute_jac_scale(A, prev_scale_inv=None):
+    scale_inv = jnp.sum(A**2, axis=0)**0.5
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
-    return 1/d, d
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1/scale_inv, scale_inv

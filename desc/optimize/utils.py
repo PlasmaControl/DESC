@@ -164,6 +164,8 @@ status_messages = {'success': 'Optimization terminated successfully.',
                    'been exceeded.',
                    'max_ngev': 'Maximum number of gradient evaluations has '
                    'been exceeded.',
+                   'max_nhev': 'Maximum number of hessian evaluations has '
+                   'been exceeded.',
                    'maxiter': 'Maximum number of iterations has been '
                               'exceeded.',
                    'pr_loss': 'Desired error not necessarily achieved due '
@@ -178,7 +180,7 @@ status_messages = {'success': 'Optimization terminated successfully.',
 
 
 def check_termination(dF, F, dx_norm, x_norm, dg_norm, g_norm, ratio, ftol, xtol, rgtol, agtol,
-                      iteration, maxiter, nfev, max_nfev, ngev, max_ngev):
+                      iteration, maxiter, nfev, max_nfev, ngev, max_ngev, nhev, max_nhev):
     """Check termination condition and get message."""
     ftol_satisfied = dF < abs(ftol * F) and ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
@@ -196,15 +198,18 @@ def check_termination(dF, F, dx_norm, x_norm, dg_norm, g_norm, ratio, ftol, xtol
             message += '\n' + status_messages['rgtol']
         if agtol_satisfied:
             message += '\n' + status_messages['agtol']
-    elif iteration > maxiter:
+    elif iteration >= maxiter:
         success = False
         message = status_messages['maxiter']
-    elif nfev > max_nfev:
+    elif nfev >= max_nfev:
         success = False
         message = status_messages['max_nfev']
-    elif ngev > max_ngev:
+    elif ngev >= max_ngev:
         success = False
         message = status_messages['max_ngev']
+    elif nhev >= max_nhev:
+        success = False
+        message = status_messages['max_nhev']
     else:
         success = None
         message = None

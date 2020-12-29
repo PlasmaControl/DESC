@@ -10,7 +10,6 @@ from desc.transform import Transform
 from desc.configuration import EquilibriaFamily
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
 from desc.perturbations import perturb_continuation_params
-from desc.jacobian import AutoDiffJacobian
 
 
 def solve_eq_continuation(inputs, file_name=None, device=None):
@@ -202,7 +201,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
             # need a non-scalar objective function to do the perturbations
             obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
-                errr_mode, scalar=False,
+                errr_mode,
                 R_transform=R_transform, Z_transform=Z_transform,
                 R1_transform=R1_transform, Z1_transform=Z1_transform,
                 L_transform=L_transform, P_transform=P_transform,

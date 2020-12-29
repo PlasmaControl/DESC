@@ -15,11 +15,7 @@ from desc.compute_funs import compute_coordinates, compute_coordinate_derivative
 from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
 from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
 from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
-
-if use_jax:
-    from desc.jacobian import AutoDiffJacobian as Jacobian
-else:
-    from desc.jacobian import FiniteDiffJacobian as Jacobian
+from desc.derivatives import Derivative
 
 
 class ObjectiveFunction(IOAble, ABC):
@@ -90,9 +86,9 @@ class ObjectiveFunction(IOAble, ABC):
         self.P_transform = P_transform
         self.I_transform = I_transform
 
-        self._grad = Jacobian(self.compute_scalar, mode='grad')
-        self._hess = Jacobian(self.compute_scalar, mode='hess')
-        self._jac = Jacobian(self.compute, mode='fwd')
+        self._grad = Derivative(self.compute_scalar, mode='grad')
+        self._hess = Derivative(self.compute_scalar, mode='hess')
+        self._jac = Derivative(self.compute, mode='fwd')
 
     @abstractmethod
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):

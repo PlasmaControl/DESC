@@ -2,10 +2,12 @@ import unittest
 import numpy as np
 
 from desc.backend import jnp
-from desc.jacobian import AutoDiffJacobian, FiniteDiffJacobian
+from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative
+
+from numpy.random import default_rng
 
 
-class TestJacobian(unittest.TestCase):
+class TestDerivative(unittest.TestCase):
     """Tests Grid classes"""
 
     def test_finite_diff_vec(self):
@@ -17,7 +19,7 @@ class TestJacobian(unittest.TestCase):
         y = np.array([60, 1, 100, 0.02])
         a = -2
 
-        jac = FiniteDiffJacobian(test_fun, argnum=0)
+        jac = FiniteDiffDerivative(test_fun, argnum=0)
         J = jac.compute(x, y, a)
         correct_J = np.diag(y)
 
@@ -32,7 +34,7 @@ class TestJacobian(unittest.TestCase):
         y = np.array([60, 1, 100, 0.02])
         a = -2
 
-        jac = FiniteDiffJacobian(test_fun, argnum=0)
+        jac = FiniteDiffDerivative(test_fun, argnum=0)
         J = jac.compute(x, y, a)
         correct_J = y
 
@@ -51,7 +53,7 @@ class TestJacobian(unittest.TestCase):
         y = np.array([60, 1, 100, 0.02])
         a = -2
 
-        jac = AutoDiffJacobian(test_fun, argnum=0)
+        jac = AutoDiffDerivative(test_fun, argnum=0)
         J = jac.compute(x, y, a)
         correct_J = np.diag(-np.sin(x) + y)
 
@@ -66,10 +68,28 @@ class TestJacobian(unittest.TestCase):
         y = np.array([60, 1, 100, 0.02])
         a = -2
 
-        jac_AD = AutoDiffJacobian(test_fun, argnum=0)
+        jac_AD = AutoDiffDerivative(test_fun, argnum=0)
         J_AD = jac_AD.compute(x, y, a)
 
-        jac_FD = AutoDiffJacobian(test_fun, argnum=0)
+        jac_FD = AutoDiffDerivative(test_fun, argnum=0)
         J_FD = jac_FD.compute(x, y, a)
 
         np.testing.assert_allclose(J_FD, J_AD, atol=1e-8)
+
+    def test_fd_hessian(self):
+        rando = default_rng(seed=0)
+
+        n = 5
+        A = rando.random((n, n))
+        A = A + A.T
+        g = rando.random(n)
+
+        def f(x):
+            return 5 + g.dot(x) + x.dot(1/2*A.dot(x))
+
+        hess = FiniteDiffDerivative(f, argnum=0, mode='hess')
+
+        y = rando.random(n)
+        A1 = hess(y)
+
+        np.testing.assert_allclose(A1, A)

@@ -1,10 +1,11 @@
 import numpy as np
 from desc.backend import jnp, cho_factor, cho_solve, qr
 
+
 def solve_trust_region_dogleg(g, hess, scale, trust_radius):
     """
     Solve trust region subproblem the dog-leg method.
-    
+
     Parameters
     ----------
     g : ndarray
@@ -15,14 +16,14 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
         scaling array for gradient and hessian
     trust_radius : float
         We are allowed to wander only this far away from the origin.
-        
+
     Returns
     -------
     p : ndarray
         The proposed step.
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
-        
+
     Notes
     -----
     The Hessian is required to be positive definite.
@@ -38,7 +39,8 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
 
     # This is the predicted optimum along the direction of steepest descent.
     Bg = hess.dot(scale**2 * g)
-    p_cauchy = -(jnp.dot(scale*g, scale*g) / jnp.dot(scale*g, scale*Bg)) * scale * g
+    p_cauchy = -(jnp.dot(scale*g, scale*g) /
+                 jnp.dot(scale*g, scale*Bg)) * scale * g
 
     # If the Cauchy point is outside the trust region,
     # then return the point where the path intersects the boundary.
@@ -55,17 +57,17 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
     # Solve this for positive time t using the quadratic formula.
     delta = p_newton - p_cauchy
     _, tb = get_boundaries_intersections(p_cauchy, delta,
-                                              trust_radius)
+                                         trust_radius)
     p_boundary = p_cauchy + tb * delta
     hits_boundary = True
 
     return p_boundary, hits_boundary
-      
+
 
 def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, verbose=0):
     """Solve a trust region problem over the 2d subspace spanned by the gradient
     and Newton direction
-    
+
     Parameters
     ----------
     grad : ndarray
@@ -85,50 +87,53 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, verbose=0):
         True if the proposed step is on the boundary of the trust region.
 
     """
-    
     if hess.is_pos_def:
         p_newton = -1/scale*hess.solve(grad)
     else:
         p_newton = hess.negative_curvature_direction
-    S = np.vstack([grad,p_newton]).T
-    S, _ = qr(S,mode='economic')
+    S = np.vstack([grad, p_newton]).T
+    S, _ = qr(S, mode='economic')
     g = S.T.dot(scale * grad)
-    B = S.T.dot(scale * hess.dot(scale * S))
-    
+    B = S.T.dot(scale[:, jnp.newaxis] * hess.dot(scale[:, jnp.newaxis] * S))
+
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
     # p = Sq
-    
+
     try:
         R, lower = cho_factor(B)
         q = -cho_solve((R, lower), g)
         if np.dot(q, q) <= trust_radius**2:
             return S.dot(q), True
-    except LinAlgError:
+    except np.linalg.linalg.LinAlgError:
         pass
- 
+
     a = B[0, 0] * trust_radius ** 2
     b = B[0, 1] * trust_radius ** 2
     c = B[1, 1] * trust_radius ** 2
- 
+
     d = g[0] * trust_radius
     f = g[1] * trust_radius
- 
-    coeffs = np.array([-b + d, 2 * (a - c + f), 6 * b, 2 * (-a + c + f), -b - d])
+
+    coeffs = np.array([-b + d, 2 * (a - c + f), 6 *
+                       b, 2 * (-a + c + f), -b - d])
     t = np.roots(coeffs)  # Can handle leading zeros.
     t = np.real(t[np.isreal(t)])
- 
+
     q = trust_radius * np.vstack((2 * t / (1 + t**2), (1 - t**2) / (1 + t**2)))
     value = 0.5 * np.sum(q * B.dot(q), axis=0) + np.dot(g, q)
     i = np.argmin(value)
     q = q[:, i]
     p = S.dot(q)
-    
+
     return p, False
+
+# not used yet, need to get some other stuff working first
+# TODO: give this the same signature as the others?
 
 
 def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
-                           rtol=0.01, max_iter=10):
+                           rtol=0.01, max_iter=10):  # pragma: no cover
     """Solve a trust-region problem arising in least-squares minimization.
     This function implements a method described by J. J. More [1]_ and used
     in MINPACK, but it relies on a single SVD of Jacobian instead of series
@@ -233,12 +238,12 @@ def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
 
 
 def update_tr_radius(trust_radius, actual_reduction, predicted_reduction,
-                     step_norm, bound_hit, max_tr=np.inf, min_tr=0, 
-                     increase_threshold=0.75, increase_ratio=2, 
+                     step_norm, bound_hit, max_tr=np.inf, min_tr=0,
+                     increase_threshold=0.75, increase_ratio=2,
                      decrease_threshold=0.25, decrease_ratio=0.25,
                      ga_ratio=0, ga_accept_threshold=1):
     """Update the radius of a trust region based on the cost reduction.
-    
+
     Parameters
     ----------
     trust_radius : float
@@ -263,8 +268,8 @@ def update_tr_radius(trust_radius, actual_reduction, predicted_reduction,
         ratio of geodesic acceleration step size to original step size
     ga_accept_threshold: float
         only accept step if ga_ratio < ga_accept_threshold
-    
-    
+
+
     Returns
     -------
     trust_radius : float
@@ -283,11 +288,10 @@ def update_tr_radius(trust_radius, actual_reduction, predicted_reduction,
         trust_radius = decrease_ratio * step_norm
     elif ratio > increase_threshold and bound_hit:
         trust_radius *= increase_ratio
-    
+
     trust_radius = np.clip(trust_radius, min_tr, max_tr)
 
     return trust_radius, ratio
-
 
 
 def get_boundaries_intersections(z, d, trust_radius):

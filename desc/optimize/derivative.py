@@ -1,6 +1,7 @@
 import numpy as np
 import functools
-from desc.backend import jnp, cho_factor, cho_solve, conditional_decorator, jit, use_jax
+from desc.backend import jnp, cho_factor, cho_solve, jit, use_jax
+from desc.utils import conditional_decorator
 from abc import ABC, abstractmethod
 from .utils import make_spd, chol_U_update
 
@@ -10,35 +11,35 @@ class OptimizerDerivative(ABC):
     shape = None
     min_eig = None
     is_pos_def = None
-    negative_curvature_direction=None
+    negative_curvature_direction = None
 
     @abstractmethod
     def update(self, x_new, x_old, grad_new, grad_old, iteration):
         """Update the internal matrix A"""
         pass
-    
+
     @abstractmethod
-    def recompute(self,x):
+    def recompute(self, x):
         """Recompute the full correct internal matrix at the point x"""
         pass
-    
+
     @abstractmethod
     def get_matrix(self):
         """Return the internal matrix A"""
         pass
-    
+
     @abstractmethod
     def get_inverse(self):
         """Return the inverse of the internal matrix A^-1"""
         pass
 
     @abstractmethod
-    def dot(self,x):
+    def dot(self, x):
         """Compute dot(A,x)"""
         pass
-    
+
     @abstractmethod
-    def solve(self,b):
+    def solve(self, b):
         """Solve A*x = b for x"""
         pass
 
@@ -47,17 +48,17 @@ class OptimizerDerivative(ABC):
         """Compute scaling vector"""
         pass
 
-        
+
 class CholeskyHessian(OptimizerDerivative):
-    
+
     def __init__(self, n, init_hess='auto', hessfun=None, hessfun_args=(), exception_strategy='damp_update', min_curvature=None, damp_ratio=0.2):
         self._n = n
-        self.shape = (n,n)
+        self.shape = (n, n)
         self.is_pos_def = True
         self.min_eig = None
         self.negative_curvature_direction = None
         self._damp_ratio = damp_ratio
-        
+
         if hessfun is not None:
             if callable(hessfun):
                 self._hessfun = hessfun
@@ -67,7 +68,7 @@ class CholeskyHessian(OptimizerDerivative):
         else:
             self._hessfun = None
             self._hessfun_args = ()
-            
+
         if exception_strategy == 'skip_update':
             if min_curvature is not None:
                 self.min_curvature = min_curvature
@@ -80,10 +81,9 @@ class CholeskyHessian(OptimizerDerivative):
                 self.min_curvature = 0.2
         else:
             raise ValueError("`exception_strategy` must be 'skip_update' "
-                             "or 'damp_update'.")   
+                             "or 'damp_update'.")
         self.exception_strategy = exception_strategy
-        
-        
+
         if init_hess is None and hessfun is None:
             self._U = np.eye(n)
             self._initialized = True
@@ -92,20 +92,18 @@ class CholeskyHessian(OptimizerDerivative):
             self._U = np.eye(n)
             self._initialized = False
             self._initialization = 'hessfun'
-        elif isinstance(init_hess,str) and init_hess=='auto':
+        elif isinstance(init_hess, str) and init_hess == 'auto':
             self._U = np.eye(n)
             self._initialized = False
             self._initialization = 'auto'
-        elif isinstance(init_hess, str): 
+        elif isinstance(init_hess, str):
             raise ValueError('unknown hessian initialization')
         else:
             init_hess = make_spd(init_hess, delta=self.min_curvature, tol=0.1)
             self._U = self._cholesky(init_hess).T
             self._initialized = True
             self._initialization = 'init_hess'
-        
 
-            
     def _auto_scale_init(self, delta_x, delta_grad):
         # Heuristic to scale matrix at first iteration.
         # Described in Nocedal and Wright "Numerical Optimization"
@@ -116,16 +114,15 @@ class CholeskyHessian(OptimizerDerivative):
         if ys == 0.0 or y_norm2 == 0 or s_norm2 == 0:
             scale = 1
         else:
-            scale = y_norm2 / ys    
+            scale = y_norm2 / ys
         self._U = self._U * np.sqrt(scale)
         self._initialized = True
-        
-    def recompute(self,x):
-        H = self._hessfun(x,*self._hessfun_args)
+
+    def recompute(self, x):
+        H = self._hessfun(x, *self._hessfun_args)
         H = make_spd(H, delta=self.min_curvature, tol=0.1)
         U = self._cholesky(H)
-        self._U = U #self._damp_ratio*self._U + (1-self._damp_ratio)*U
-        
+        self._U = U  # self._damp_ratio*self._U + (1-self._damp_ratio)*U
 
     def update(self, x_new, x_old, grad_new, grad_old):
         """Update internal matrix.
@@ -144,10 +141,10 @@ class CholeskyHessian(OptimizerDerivative):
         x_old = np.asarray(x_old)
         grad_new = np.asarray(grad_new)
         grad_old = np.asarray(grad_old)
-        
+
         delta_x = x_new - x_old
         delta_grad = grad_new - grad_old
-        
+
         if np.all(delta_x == 0.0):
             return
         if np.all(delta_grad == 0.0):
@@ -157,16 +154,16 @@ class CholeskyHessian(OptimizerDerivative):
                 self._auto_scale_init(delta_x, delta_grad)
             elif self._initialization == 'hessfun':
                 self.recompute(x_new)
-        
-        self._bfgs_update(delta_x,delta_grad)
-        
-    def _bfgs_update(self,delta_x, delta_grad):
-            
+
+        self._bfgs_update(delta_x, delta_grad)
+
+    def _bfgs_update(self, delta_x, delta_grad):
+
         if np.all(delta_x == 0.0):
             return
         if np.all(delta_grad == 0.0):
             return
-        
+
         s = delta_x
         y = delta_grad
 
@@ -186,47 +183,46 @@ class CholeskyHessian(OptimizerDerivative):
                 update_factor = (1-self.min_curvature) / (1 - sy/sBs)
                 y = update_factor*y + (1-update_factor)*Bs
                 sy = np.dot(s, y)
- 
+
         u = np.asarray(y)
         v = np.asarray(Bs)
         alpha = np.asarray(1/sy)
         beta = np.asarray(-1/sBs)
-        
+
         self._U = chol_U_update(np.asarray(self._U), u, alpha)
         self._U = chol_U_update(np.asarray(self._U), v, beta)
-    
+
     def get_matrix(self):
-        return jnp.dot(self._U.T,self._U)
-    
+        return jnp.dot(self._U.T, self._U)
+
     def get_inverse(self):
         return cho_solve((self._U, False), jnp.eye(self._n))
-    
-    def dot(self,x):
+
+    def dot(self, x):
         return self._dot(self._U.T, self._dot(self._U, x))
-    
-    def solve(self,x):
+
+    def solve(self, x):
         return self._cho_solve(self._U, x)
-    
+
     @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
     def _dot(self, A, b):
-        return jnp.dot(A,b)
-    
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)    
+        return jnp.dot(A, b)
+
+    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
     def _cho_solve(self, U, x):
         return cho_solve((U, False), x)
 
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax) 
+    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
     def _cholesky(self, A):
         return jnp.linalg.cholesky(A).T
-    
+
     def get_scale(self):
 
-        return compute_jac_scale(self._U)        
+        return compute_jac_scale(self._U)
 
 
 def compute_jac_scale(A):
     d = jnp.sum(A**2, axis=0)**0.5
     d = jnp.where(d == 0, 1, d)
 
-    return 1/d, d 
-        
+    return 1/d, d

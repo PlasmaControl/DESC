@@ -38,7 +38,7 @@ def fmin_scalar(fun, x0, grad,
         additional arguments passed to fun, grad, and hess
     method : 'dogleg' or 'subspace'
         method to use for trust region subproblem
-    x_scale : array_like or 'jac', optional
+    x_scale : array_like or 'hess', optional
         Characteristic scale of each variable. Setting `x_scale` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         An alternative view is that the size of a trust region along jth
@@ -203,6 +203,8 @@ def fmin_scalar(fun, x0, grad,
         if iteration in hess_recompute_iters:
             hess.recompute(x)
             nhev += 1
+            if hess_scale:
+                scale, scale_inv = hess.get_scale(scale_inv)
 
         success, message = check_termination(actual_reduction, f, step_norm, x_norm, dg_norm, g_norm, ratio,
                                              ftol, xtol, rgtol, agtol, iteration, maxiter, nfev, max_nfev, ngev, max_ngev, nhev, max_nhev)
@@ -278,7 +280,9 @@ def fmin_scalar(fun, x0, grad,
             dg_norm = np.linalg.norm(dg, ord=gnorm_ord)
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
-            hess.update(x_new, x_old, g, g_old)
+            # don't update the hessian if we're going to recompute on the next iteration
+            if iteration+1 not in hess_recompute_iters:
+                hess.update(x_new, x_old, g, g_old)
 
             if hess_scale:
                 scale, scale_inv = hess.get_scale(scale_inv)

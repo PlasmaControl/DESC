@@ -64,7 +64,7 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
     return p_boundary, hits_boundary
 
 
-def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, verbose=0):
+def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
     """Solve a trust region problem over the 2d subspace spanned by the gradient
     and Newton direction
 

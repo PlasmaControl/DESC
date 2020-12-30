@@ -6,240 +6,301 @@ from desc.utils import dot, cross
 from desc.transform import Transform
 
 
-def compute_coordinates(cR, cZ, R_transform:Transform, Z_transform:Transform):
-    """Converts from spectral to real space
+def compute_polar_coords(R0_n, Z0_n, r_lmn, l_lmn,
+                         R0_transform:Transform, Z0_transform:Transform,
+                         r_transform:Transform, l_transform:Transform):
+    """Transforms spectral coefficients of polar coordinates to real space.
 
     Parameters
     ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    R_transform : Transform
-        transforms R coefficients to real space
-    Z_transform : Transform
-        transforms Z coefficients to real space
+    R0_n : ndarray
+        spectral coefficients of R0
+    Z0_n : ndarray
+        spectral coefficients of Z0
+    r_lmn : ndarray
+        spectral coefficients of r
+    l_lmn : ndarray
+        spectral coefficients of lambda
+    R0_transform : Transform
+        transforms R0_n coefficients to real space
+    Z0_transform : Transform
+        transforms Z0_n coefficients to real space
+    r_transform : Transform
+        transforms r_lmn coefficients to real space
+    l_transform : Transform
+        transforms l_lmn coefficients to real space
 
     Returns
     -------
-    coords : dict
-        dictionary of ndarray, shape(N_nodes,) of coordinates evaluated at node locations.
-        keys are of the form 'X_y' meaning the derivative of X wrt to y
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates
+        evaluated at grid nodes.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    coords = {}
-    coords['R'] = R_transform.transform(cR)
-    coords['Z'] = Z_transform.transform(cZ)
-    coords['phi'] = R_transform.grid.nodes[:, 2]    # phi = zeta
-    coords['X'] = coords['R']*np.cos(coords['phi'])
-    coords['Y'] = coords['R']*np.sin(coords['phi'])
+    polar_coords = {}
 
-    return coords
+    polar_coords['rho']   = R0_transform.grid.nodes[:, 0]
+    polar_coords['theta'] = R0_transform.grid.nodes[:, 1]
+    polar_coords['zeta']  = R0_transform.grid.nodes[:, 2]
+    polar_coords['0'] = jnp.zeros_like(polar_coords['rho'])
 
-# TODO: eliminate unnecessary derivatives for speedup (eg. R_rrr)
-def compute_coordinate_derivatives(cR, cZ, R_transform:Transform, Z_transform:Transform, zeta_ratio=1.0):
-    """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords
+    polar_coords['R0'] = R0_transform.transfrom(R0_n)
+    polar_coords['Z0'] = Z0_transform.transfrom(Z0_n)
+    polar_coords['r'] = r_transform.transform(r_lmn)
+    polar_coords['lambda'] = l_transform.transform(l_lmn)
+
+    return polar_coords
+
+
+def compute_polar_coords_force(R0_n, Z0_n, r_lmn, l_lmn,
+                               R0_transform:Transform, Z0_transform:Transform,
+                               r_transform:Transform, l_transform:Transform):
+    """Transforms spectral coefficients of polar coordinates to real space.
+    Also computes partial derivatives needed for force balance without the
+    magnetic axis.
 
     Parameters
     ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    R_transform : Transform
-        transforms R coefficients to real space
-    Z_transform : Transform
-        transforms Z coefficients to real space
+    R0_n : ndarray
+        spectral coefficients of R0
+    Z0_n : ndarray
+        spectral coefficients of Z0
+    r_lmn : ndarray
+        spectral coefficients of r
+    l_lmn : ndarray
+        spectral coefficients of lambda
+    R0_transform : Transform
+        transforms R0_n coefficients to real space
+    Z0_transform : Transform
+        transforms Z0_n coefficients to real space
+    r_transform : Transform
+        transforms r_lmn coefficients to real space
+    l_transform : Transform
+        transforms l_lmn coefficients to real space
+
+    Returns
+    -------
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates
+        evaluated at grid nodes.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    polar_coords = {}
+    polar_coords['rho']   = R0_transform.grid.nodes[:, 0]
+    polar_coords['theta'] = R0_transform.grid.nodes[:, 1]
+    polar_coords['0'] = jnp.zeros_like(polar_coords['rho'])
+
+    polar_coords['R0'] = R0_transform.transfrom(R0_n)
+    polar_coords['Z0'] = Z0_transform.transfrom(Z0_n)
+    polar_coords['r'] = r_transform.transform(r_lmn)
+    polar_coords['lambda'] = l_transform.transform(l_lmn)
+
+    polar_coords['R0_z'] = R0_transform.transfrom(R0_n, 0, 0, 1)
+    polar_coords['Z0_z'] = R0_transform.transfrom(Z0_n, 0, 0, 1)
+
+    polar_coords['R0_zz'] = R0_transform.transfrom(R0_n, 0, 0, 2)
+    polar_coords['Z0_zz'] = R0_transform.transfrom(Z0_n, 0, 0, 2)
+
+    polar_coords['r_r'] = r_transform.transform(r_lmn, 1, 0, 0)
+    polar_coords['r_t'] = r_transform.transform(r_lmn, 0, 1, 0)
+    polar_coords['r_z'] = r_transform.transform(r_lmn, 0, 0, 1)
+
+    polar_coords['r_rr'] = r_transform.transform(r_lmn, 2, 0, 0)
+    polar_coords['r_rt'] = r_transform.transform(r_lmn, 1, 1, 0)
+    polar_coords['r_rz'] = r_transform.transform(r_lmn, 1, 0, 1)
+    polar_coords['r_tt'] = r_transform.transform(r_lmn, 0, 2, 0)
+    polar_coords['r_tz'] = r_transform.transform(r_lmn, 0, 1, 1)
+    polar_coords['r_zz'] = r_transform.transform(r_lmn, 0, 0, 2)
+
+    polar_coords['lambda_r'] = l_transform.transform(l_lmn, 1, 0, 0)
+    polar_coords['lambda_t'] = l_transform.transform(l_lmn, 0, 1, 0)
+    polar_coords['lambda_z'] = l_transform.transform(l_lmn, 0, 0, 1)
+
+    polar_coords['lambda_r'] = l_transform.transform(l_lmn, 1, 0, 0)
+    polar_coords['lambda_t'] = l_transform.transform(l_lmn, 0, 1, 0)
+    polar_coords['lambda_z'] = l_transform.transform(l_lmn, 0, 0, 1)
+
+    polar_coords['lambda_rt'] = l_transform.transform(l_lmn, 1, 1, 0)
+    polar_coords['lambda_rz'] = l_transform.transform(l_lmn, 1, 0, 1)
+    polar_coords['lambda_tt'] = l_transform.transform(l_lmn, 0, 2, 0)
+    polar_coords['lambda_tz'] = l_transform.transform(l_lmn, 0, 1, 1)
+    polar_coords['lambda_zz'] = l_transform.transform(l_lmn, 0, 0, 2)
+
+    return polar_coords
+
+
+def compute_toroidal_coords(polar_coords):
+    """Computes toroidal coordinates from polar coordinates.
+
+    Parameters
+    ----------
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates
+        evaluated at grid nodes.
+
+    Returns
+    -------
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+        evaluated at grid nodes.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    toroidal_coords = {}
+    toroidal_coords['R'] = polar_coords['R0'] + polar_coords['r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z'] = polar_coords['Z0'] + polar_coords['r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['phi'] = polar_coords['zeta']   # phi = zeta
+    toroidal_coords['X'] = toroidal_coords['R']*np.cos(toroidal_coords['phi'])
+    toroidal_coords['Y'] = toroidal_coords['R']*np.sin(toroidal_coords['phi'])
+    toroidal_coords['0'] = polar_coords['0']
+
+    return toroidal_coords
+
+
+def compute_toroidal_coords_force(polar_coords, zeta_ratio=1.0):
+    """Computes toroidal coordinates from polar coordinates.
+    Also computes partial derivatives needed for force balance without the
+    magnetic axis.
+
+    Parameters
+    ----------
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates
+        evaluated at grid nodes.
     zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero
-        effectively solves for individual tokamak solutions at each toroidal plane,
+        scale factor for zeta derivatives. Setting to zero effectively solves
+        for individual tokamak solutions at each toroidal plane,
         setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
-    coord_der : dict
-        dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations.
-        keys are of the form 'X_y' meaning the derivative of X wrt to y
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+        evaluated at grid nodes.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
     # notation: X_y means derivative of X wrt y
-    coord_der = {}
-    coord_der['R'] = R_transform.transform(cR, 0, 0, 0)
-    coord_der['Z'] = Z_transform.transform(cZ, 0, 0, 0)
-    coord_der['0'] = jnp.zeros_like(coord_der['R'])
+    toroidal_coords = {}
 
-    coord_der['R_r'] = R_transform.transform(cR, 1, 0, 0)
-    coord_der['Z_r'] = Z_transform.transform(cZ, 1, 0, 0)
-    coord_der['R_v'] = R_transform.transform(cR, 0, 1, 0)
-    coord_der['Z_v'] = Z_transform.transform(cZ, 0, 1, 0)
-    coord_der['R_z'] = R_transform.transform(cR, 0, 0, 1) * zeta_ratio
-    coord_der['Z_z'] = Z_transform.transform(cZ, 0, 0, 1) * zeta_ratio
+    # 0th order
+    toroidal_coords['R'] = polar_coords['R0'] + polar_coords['r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z'] = polar_coords['Z0'] + polar_coords['r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['0'] = polar_coords['0']
 
-    coord_der['R_rr'] = R_transform.transform(cR, 2, 0, 0)
-    coord_der['Z_rr'] = Z_transform.transform(cZ, 2, 0, 0)
-    coord_der['R_rv'] = R_transform.transform(cR, 1, 1, 0)
-    coord_der['Z_rv'] = Z_transform.transform(cZ, 1, 1, 0)
-    coord_der['R_rz'] = R_transform.transform(cR, 1, 0, 1) * zeta_ratio
-    coord_der['Z_rz'] = Z_transform.transform(cZ, 1, 0, 1) * zeta_ratio
-    coord_der['R_vv'] = R_transform.transform(cR, 0, 2, 0)
-    coord_der['Z_vv'] = Z_transform.transform(cZ, 0, 2, 0)
-    coord_der['R_vz'] = R_transform.transform(cR, 0, 1, 1) * zeta_ratio
-    coord_der['Z_vz'] = Z_transform.transform(cZ, 0, 1, 1) * zeta_ratio
-    coord_der['R_zz'] = R_transform.transform(cR, 0, 0, 2) * zeta_ratio
-    coord_der['Z_zz'] = Z_transform.transform(cZ, 0, 0, 2) * zeta_ratio
+    # 1st order
+    toroidal_coords['R_r'] = polar_coords['r_r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_r'] = polar_coords['r_r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['R_v'] = polar_coords['r_t']*jnp.cos(polar_coords['theta']) - polar_coords['r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['Z_v'] = polar_coords['r_t']*jnp.sin(polar_coords['theta']) + polar_coords['r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['R_z'] = polar_coords['R0_z'] + polar_coords['r_z']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_z'] = polar_coords['Z0_z'] + polar_coords['r_z']*jnp.sin(polar_coords['theta'])
 
-    # axis or QS terms
-    if R_transform.grid.axis.size > 0 or R_transform.derivs == 'qs':
-        coord_der['R_rrr'] = R_transform.transform(cR, 3, 0, 0)
-        coord_der['Z_rrr'] = Z_transform.transform(cZ, 3, 0, 0)
-        coord_der['R_rrv'] = R_transform.transform(cR, 2, 1, 0)
-        coord_der['Z_rrv'] = Z_transform.transform(cZ, 2, 1, 0)
-        coord_der['R_rrz'] = R_transform.transform(cR, 2, 0, 1) * zeta_ratio
-        coord_der['Z_rrz'] = Z_transform.transform(cZ, 2, 0, 1) * zeta_ratio
-        coord_der['R_rvv'] = R_transform.transform(cR, 1, 2, 0)
-        coord_der['Z_rvv'] = Z_transform.transform(cZ, 1, 2, 0)
-        coord_der['R_rvz'] = R_transform.transform(cR, 1, 1, 1) * zeta_ratio
-        coord_der['Z_rvz'] = Z_transform.transform(cZ, 1, 1, 1) * zeta_ratio
-        coord_der['R_rzz'] = R_transform.transform(cR, 1, 0, 2) * zeta_ratio
-        coord_der['Z_rzz'] = Z_transform.transform(cZ, 1, 0, 2) * zeta_ratio
-        coord_der['R_vvv'] = R_transform.transform(cR, 0, 3, 0)
-        coord_der['Z_vvv'] = Z_transform.transform(cZ, 0, 3, 0)
-        coord_der['R_vvz'] = R_transform.transform(cR, 0, 2, 1) * zeta_ratio
-        coord_der['Z_vvz'] = Z_transform.transform(cZ, 0, 2, 1) * zeta_ratio
-        coord_der['R_vzz'] = R_transform.transform(cR, 0, 1, 2) * zeta_ratio
-        coord_der['Z_vzz'] = Z_transform.transform(cZ, 0, 1, 2) * zeta_ratio
-        coord_der['R_zzz'] = R_transform.transform(cR, 0, 0, 3) * zeta_ratio
-        coord_der['Z_zzz'] = Z_transform.transform(cZ, 0, 0, 3) * zeta_ratio
+    # 2nd order
+    toroidal_coords['R_rr'] = polar_coords['r_rr']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_rr'] = polar_coords['r_rr']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['R_rt'] = polar_coords['r_rt']*jnp.cos(polar_coords['theta']) - polar_coords['r_r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['Z_rt'] = polar_coords['r_rt']*jnp.sin(polar_coords['theta']) + polar_coords['r_r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['R_rz'] = polar_coords['r_rz']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_rz'] = polar_coords['r_rz']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['R_tt'] = polar_coords['r_tt']*jnp.cos(polar_coords['theta']) - 2*polar_coords['r_t']*jnp.sin(polar_coords['theta']) - polar_coords['r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_tt'] = polar_coords['r_tt']*jnp.sin(polar_coords['theta']) + 2*polar_coords['r_t']*jnp.cos(polar_coords['theta']) - polar_coords['r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['R_tz'] = polar_coords['r_tz']*jnp.cos(polar_coords['theta']) - polar_coords['r_z']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['Z_tz'] = polar_coords['r_tz']*jnp.sin(polar_coords['theta']) + polar_coords['r_z']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['R_zz'] = polar_coords['R0_zz'] + polar_coords['r_zz']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['Z_zz'] = polar_coords['Z0_zz'] + polar_coords['r_zz']*jnp.sin(polar_coords['theta'])
 
-        coord_der['R_rrvv'] = R_transform.transform(cR, 2, 2, 0)
-        coord_der['Z_rrvv'] = Z_transform.transform(cZ, 2, 2, 0)
+    # apply zeta ratio
+    toroidal_coords['R_z'] *= zeta_ratio
+    toroidal_coords['Z_z'] *= zeta_ratio
+    toroidal_coords['R_rz'] *= zeta_ratio
+    toroidal_coords['Z_rz'] *= zeta_ratio
+    toroidal_coords['R_tz'] *= zeta_ratio
+    toroidal_coords['Z_tz'] *= zeta_ratio
+    toroidal_coords['R_zz'] *= zeta_ratio
+    toroidal_coords['Z_zz'] *= zeta_ratio
 
-    return coord_der
+    return toroidal_coords
 
 
-def compute_covariant_basis(coord_der, axis=jnp.array([]), derivs='force'):
-    """Computes covariant basis vectors at grid points
+def compute_covariant_basis_force(toroidal_coords):
+    """Computes covariant basis vectors needed for force balance without the
+    magnetic axis.
 
     Parameters
     ----------
-    coord_der : dict
-        dictionary of ndarray containing the coordinate
-        derivatives at each node, such as computed by ``compute_coordinate_derivatives``
-    axis : ndarray, optional
-        indicies of axis nodes
-    derivs : str
-        type of calculation being performed
-        ``'force'``: all of the derivatives needed to calculate an
-        equilibrium from the force balance equations
-        ``'qs'``: all of the derivatives needed to calculate quasi-
-        symmetry from the triple-product equation
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+        evaluated at grid nodes.
 
     Returns
     -------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis
-        vectors and derivatives at each node. Keys are of the form 'e_x_y',
-        meaning the unit vector in the x direction, differentiated wrt to y.
+        dictionary of ndarray, shape(3,num_nodes), containing covariant basis
+        vectors and derivatives at grid nodes.
+        Keys are of the form 'e_x_y', meaning the covariant basis vector in
+        the x direction, differentiated wrt to y.
 
     """
     # notation: subscript word is direction of unit vector, subscript letters denote partial derivatives
-    # eg, e_rho_v is the v derivative of the covariant basis vector in the rho direction
+    # eg, e_rho_t is the theta derivative of the covariant basis vector in the rho direction
     cov_basis = {}
+
     cov_basis['e_rho'] = jnp.array(
-        [coord_der['R_r'],  coord_der['0'],   coord_der['Z_r']])
+        [toroidal_coords['R_r'],  toroidal_coords['0'],   toroidal_coords['Z_r']])
     cov_basis['e_theta'] = jnp.array(
-        [coord_der['R_v'],  coord_der['0'],   coord_der['Z_v']])
+        [toroidal_coords['R_t'],  toroidal_coords['0'],   toroidal_coords['Z_t']])
     cov_basis['e_zeta'] = jnp.array(
-        [coord_der['R_z'],  coord_der['R'],   coord_der['Z_z']])
+        [toroidal_coords['R_z'],  toroidal_coords['R'],   toroidal_coords['Z_z']])
 
     cov_basis['e_rho_r'] = jnp.array(
-        [coord_der['R_rr'], coord_der['0'],   coord_der['Z_rr']])
-    cov_basis['e_rho_v'] = jnp.array(
-        [coord_der['R_rv'], coord_der['0'],   coord_der['Z_rv']])
+        [toroidal_coords['R_rr'], toroidal_coords['0'],   toroidal_coords['Z_rr']])
+    cov_basis['e_rho_t'] = jnp.array(
+        [toroidal_coords['R_rt'], toroidal_coords['0'],   toroidal_coords['Z_rt']])
     cov_basis['e_rho_z'] = jnp.array(
-        [coord_der['R_rz'], coord_der['0'],   coord_der['Z_rz']])
+        [toroidal_coords['R_rz'], toroidal_coords['0'],   toroidal_coords['Z_rz']])
 
     cov_basis['e_theta_r'] = jnp.array(
-        [coord_der['R_rv'], coord_der['0'],   coord_der['Z_rv']])
-    cov_basis['e_theta_v'] = jnp.array(
-        [coord_der['R_vv'], coord_der['0'],   coord_der['Z_vv']])
+        [toroidal_coords['R_rt'], toroidal_coords['0'],   toroidal_coords['Z_rt']])
+    cov_basis['e_theta_t'] = jnp.array(
+        [toroidal_coords['R_tt'], toroidal_coords['0'],   toroidal_coords['Z_tt']])
     cov_basis['e_theta_z'] = jnp.array(
-        [coord_der['R_vz'], coord_der['0'],   coord_der['Z_vz']])
+        [toroidal_coords['R_tz'], toroidal_coords['0'],   toroidal_coords['Z_tz']])
 
     cov_basis['e_zeta_r'] = jnp.array(
-        [coord_der['R_rz'], coord_der['R_r'], coord_der['Z_rz']])
-    cov_basis['e_zeta_v'] = jnp.array(
-        [coord_der['R_vz'], coord_der['R_v'], coord_der['Z_vz']])
+        [toroidal_coords['R_rz'], toroidal_coords['R_r'], toroidal_coords['Z_rz']])
+    cov_basis['e_zeta_t'] = jnp.array(
+        [toroidal_coords['R_tz'], toroidal_coords['R_t'], toroidal_coords['Z_tz']])
     cov_basis['e_zeta_z'] = jnp.array(
-        [coord_der['R_zz'], coord_der['R_z'], coord_der['Z_zz']])
-
-    # axis or QS terms
-    if len(axis) or derivs == 'qs':
-        cov_basis['e_rho_rr'] = jnp.array(
-            [coord_der['R_rrr'], coord_der['0'],   coord_der['Z_rrr']])
-        cov_basis['e_rho_rv'] = jnp.array(
-            [coord_der['R_rrv'], coord_der['0'],   coord_der['Z_rrv']])
-        cov_basis['e_rho_rz'] = jnp.array(
-            [coord_der['R_rrz'], coord_der['0'],   coord_der['Z_rrz']])
-        cov_basis['e_rho_vv'] = jnp.array(
-            [coord_der['R_rvv'], coord_der['0'],   coord_der['Z_rvv']])
-        cov_basis['e_rho_vz'] = jnp.array(
-            [coord_der['R_rvz'], coord_der['0'],   coord_der['Z_rvz']])
-        cov_basis['e_rho_zz'] = jnp.array(
-            [coord_der['R_rzz'], coord_der['0'],   coord_der['Z_rzz']])
-
-        cov_basis['e_theta_rr'] = jnp.array(
-            [coord_der['R_rrv'], coord_der['0'],   coord_der['Z_rrv']])
-        cov_basis['e_theta_rv'] = jnp.array(
-            [coord_der['R_rvv'], coord_der['0'],   coord_der['Z_rvv']])
-        cov_basis['e_theta_rz'] = jnp.array(
-            [coord_der['R_rvz'], coord_der['0'],   coord_der['Z_rvz']])
-        cov_basis['e_theta_vv'] = jnp.array(
-            [coord_der['R_vvv'], coord_der['0'],   coord_der['Z_vvv']])
-        cov_basis['e_theta_vz'] = jnp.array(
-            [coord_der['R_vvz'], coord_der['0'],   coord_der['Z_vvz']])
-        cov_basis['e_theta_zz'] = jnp.array(
-            [coord_der['R_vzz'], coord_der['0'],   coord_der['Z_vzz']])
-
-        cov_basis['e_zeta_rr'] = jnp.array(
-            [coord_der['R_rrz'], coord_der['R_rr'], coord_der['Z_rrz']])
-        cov_basis['e_zeta_rv'] = jnp.array(
-            [coord_der['R_rvz'], coord_der['R_rv'], coord_der['Z_rvz']])
-        cov_basis['e_zeta_rz'] = jnp.array(
-            [coord_der['R_rzz'], coord_der['R_rz'], coord_der['Z_rzz']])
-        cov_basis['e_zeta_vv'] = jnp.array(
-            [coord_der['R_vvz'], coord_der['R_vv'], coord_der['Z_vvz']])
-        cov_basis['e_zeta_vz'] = jnp.array(
-            [coord_der['R_vzz'], coord_der['R_vz'], coord_der['Z_vzz']])
-        cov_basis['e_zeta_zz'] = jnp.array(
-            [coord_der['R_zzz'], coord_der['R_zz'], coord_der['Z_zzz']])
+        [toroidal_coords['R_zz'], toroidal_coords['R_z'], toroidal_coords['Z_zz']])
 
     return cov_basis
 
 
-def compute_contravariant_basis(coord_der, cov_basis, jacobian, axis=jnp.array([])):
-    """Computes contravariant basis vectors and jacobian elements
+def compute_contravariant_basis(toroidal_coords, cov_basis, jacobian):
+    """Computes contravariant basis vectors.
 
     Parameters
     ----------
-    coord_der : dict
-        dictionary of ndarray containing coordinate derivatives
-        evaluated at node locations, such as computed by ``compute_coordinate_derivatives``
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+        evaluated at grid nodes.
     cov_basis : dict
-        dictionary of ndarray containing covariant basis vectors
-        and derivatives at each node, such as computed by ``compute_covariant_basis``
+        dictionary of ndarray, shape(3,num_nodes), containing covariant basis
+        vectors and derivatives at grid nodes.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian
-        and partial derivatives, such as computed by ``compute_jacobian``
-        axis : ndarray, optional
-        indicies of axis nodes
-    axis : ndarray, optional
-        indicies of axis nodes
+        dictionary of ndarray, shape(num_nodes,), of coordinate jacobian and
+        partial derivatives.
 
     Returns
     -------
     con_basis : dict
-        dictionary of ndarray containing contravariant basis vectors and jacobian elements
+        dictionary of ndarray, shape(3,num_nodes), containing contravariant
+        basis vectors and derivatives at grid nodes.
+        Keys are of the form 'e^x_y', meaning the contravariant basis vector
+        in the x direction, differentiated wrt to y.
 
     """
     # subscripts (superscripts) denote covariant (contravariant) basis vectors
@@ -247,81 +308,40 @@ def compute_contravariant_basis(coord_der, cov_basis, jacobian, axis=jnp.array([
 
     # contravariant basis vectors
     con_basis['e^rho'] = cross(
-        cov_basis['e_theta'], cov_basis['e_zeta'], 0)/jacobian['g']
+        cov_basis['e_theta'], cov_basis['e_zeta'], 0) / jacobian['g']
     con_basis['e^theta'] = cross(
-        cov_basis['e_zeta'], cov_basis['e_rho'], 0)/jacobian['g']
+        cov_basis['e_zeta'], cov_basis['e_rho'], 0) / jacobian['g']
     con_basis['e^zeta'] = jnp.array(
-        [coord_der['0'], 1/coord_der['R'], coord_der['0']])
-
-    # axis terms
-    if len(axis):
-        con_basis['e^rho'] = put(con_basis['e^rho'], opsindex[:, axis], (cross(
-            cov_basis['e_theta_r'][:, axis], cov_basis['e_zeta'][:, axis], 0)/jacobian['g_r'][axis]))
-        # e^theta = infinite at the axis
-
-    # metric coefficients
-    con_basis['g^rr'] = dot(con_basis['e^rho'],   con_basis['e^rho'],   0)
-    con_basis['g^rv'] = dot(con_basis['e^rho'],   con_basis['e^theta'], 0)
-    con_basis['g^rz'] = dot(con_basis['e^rho'],   con_basis['e^zeta'],  0)
-    con_basis['g^vv'] = dot(con_basis['e^theta'], con_basis['e^theta'], 0)
-    con_basis['g^vz'] = dot(con_basis['e^theta'], con_basis['e^zeta'],  0)
-    con_basis['g^zz'] = dot(con_basis['e^zeta'],  con_basis['e^zeta'],  0)
+        [toroidal_coords['0'], 1/toroidal_coords['R'], toroidal_coords['0']])
 
     return con_basis
 
 
-def compute_jacobian(coord_der, cov_basis, axis=jnp.array([]), derivs='force'):
-    """Computes coordinate jacobian and derivatives
+def compute_jacobian_force(toroidal_coords, cov_basis):
+    """Computes coordinate jacobian and derivatives needed for force balance
+    without the magnetic axis.
 
     Parameters
     ----------
-    coord_der : dict
-        dictionary of ndarray containing of coordinate
-        derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+        evaluated at grid nodes.
     cov_basis : dict
-        dictionary of ndarray containing covariant basis
-        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
-    axis : ndarray, optional
-        indicies of axis nodes
-    derivs : str
-        type of calculation being performed
-        ``'force'``: all of the derivatives needed to calculate an
-        equilibrium from the force balance equations
-        ``'qs'``: all of the derivatives needed to calculate quasi-
-        symmetry from the triple-product equation
+        dictionary of ndarray, shape(3,num_nodes), containing covariant basis
+        vectors and derivatives at grid nodes.
 
     Returns
     -------
     jacobian : dict
-        dictionary of ndarray, shape(N_nodes,) of coordinate
-        jacobian and partial derivatives. Keys are of the form `g_x` meaning
-        the x derivative of the coordinate jacobian g
+        dictionary of ndarray, shape(num_nodes,), of coordinate jacobian and
+        partial derivatives.
+        Keys are of the form 'g_x' meaning the x derivative of the coordinate
+        jacobian g.
 
     """
     # notation: subscripts denote partial derivatives
     jacobian = {}
-    jacobian['g'] = coord_der['R']*(coord_der['R_v']*coord_der['Z_r'] \
-                                  - coord_der['R_r']*coord_der['Z_v'])
-    jacobian['g_r'] = coord_der['R']*(coord_der['R_rv']*coord_der['Z_r']
-                                    + coord_der['R_v']*coord_der['Z_rr']
-                                    - coord_der['R_rr']*coord_der['Z_v']
-                                    - coord_der['R_r']*coord_der['Z_rv']) \
-                    + coord_der['R_r']*(coord_der['R_v']*coord_der['Z_r']
-                                      - coord_der['R_r']*coord_der['Z_v'])
-    jacobian['g_v'] = coord_der['R']*(coord_der['R_vv']*coord_der['Z_r']
-                                    + coord_der['R_v']*coord_der['Z_rv']
-                                    - coord_der['R_rv']*coord_der['Z_v']
-                                    - coord_der['R_r']*coord_der['Z_vv']) \
-                    + coord_der['R_v']*(coord_der['R_v']*coord_der['Z_r']
-                                      - coord_der['R_r']*coord_der['Z_v'])
-    jacobian['g_z'] = coord_der['R']*(coord_der['R_vz']*coord_der['Z_r']
-                                    + coord_der['R_v']*coord_der['Z_rz']
-                                    - coord_der['R_rz']*coord_der['Z_v']
-                                    - coord_der['R_r']*coord_der['Z_vz']) \
-                    + coord_der['R_z']*(coord_der['R_v']*coord_der['Z_r']
-                                      - coord_der['R_r']*coord_der['Z_v'])
 
-    """
     jacobian['g'] = dot(cov_basis['e_rho'],
                     cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0)
     jacobian['g_r'] = dot(cov_basis['e_rho_r'],
@@ -330,222 +350,147 @@ def compute_jacobian(coord_der, cov_basis, axis=jnp.array([]), derivs='force'):
                       cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
                       cross(cov_basis['e_theta'], cov_basis['e_zeta_r'], 0), 0)
-    jacobian['g_v'] = dot(cov_basis['e_rho_v'],
+    jacobian['g_v'] = dot(cov_basis['e_rho_t'],
                       cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
-                      cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
+                      cross(cov_basis['e_theta_t'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
-                      cross(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0), 0)
+                      cross(cov_basis['e_theta'], cov_basis['e_zeta_t'], 0), 0)
     jacobian['g_z'] = dot(cov_basis['e_rho_z'],
                       cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
                       cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
                       cross(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0), 0)
-    """
-
-    # axis or QS terms
-    if len(axis) or derivs == 'qs':
-        jacobian['g_rr'] = dot(cov_basis['e_rho_rr'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0)*2 \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_r'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_rr'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta_r'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_rr'], 0), 0)
-        jacobian['g_rv'] = dot(cov_basis['e_rho_rv'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_v'], 0), 0) \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_rv'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta_v'], 0), 0) \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_r'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta_r'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_rv'], 0), 0)
-        jacobian['g_rz'] = dot(cov_basis['e_rho_rz'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_r'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_z'], 0), 0) \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta_r'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_rz'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_r'], cov_basis['e_zeta_z'], 0), 0) \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_r'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta_r'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_rz'], 0), 0)
-
-        jacobian['g_vv'] = dot(cov_basis['e_rho_vv'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0)*2 \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_v'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_vv'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta_v'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_vv'], 0), 0)
-        jacobian['g_vz'] = dot(cov_basis['e_rho_vz'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_v'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_z'], 0), 0) \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_vz'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_v'], cov_basis['e_zeta_z'], 0), 0) \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_v'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta_v'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_vz'], 0), 0)
-        jacobian['g_zz'] = dot(cov_basis['e_rho_zz'], cross(cov_basis['e_theta'],   cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0)*2 \
-            + dot(cov_basis['e_rho_z'], cross(cov_basis['e_theta'],   cov_basis['e_zeta_z'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_zz'], cov_basis['e_zeta'], 0), 0) \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta_z'], cov_basis['e_zeta_z'], 0), 0)*2 \
-            + dot(cov_basis['e_rho'],   cross(cov_basis['e_theta'],
-                                              cov_basis['e_zeta_zz'], 0), 0)
 
     return jacobian
 
 
-def compute_magnetic_field(cov_basis, jacobian, cI, Psi, I_transform:Transform, derivs='force'):
-    """Computes magnetic field components at node locations
+def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_lmn, i_transform:Transform):
+    """Computes magnetic field components needed for force balance without the
+    magnetic axis.
 
     Parameters
     ----------
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates
+        evaluated at grid nodes.
     cov_basis : dict
-        dictionary of ndarray containing covariant basis
-        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+        dictionary of ndarray, shape(3,num_nodes), containing covariant basis
+        vectors and derivatives at grid nodes.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian
-        and partial derivatives, such as computed by ``compute_jacobian``.
-    cI : ndarray
-        coefficients to pass to rotational transform function
+        dictionary of ndarray, shape(num_nodes,), of coordinate jacobian and
+        partial derivatives.
     Psi : float
-        total toroidal flux (in Webers) within LCFS
-    I_transform : Transform
-        object with transform method to go from spectral to physical space with derivatives
-    derivs : str
-        type of calculation being performed
-        ``'force'``: all of the derivatives needed to calculate an
-        equilibrium from the force balance equations
-        ``'qs'``: all of the derivatives needed to calculate quasi-
-        symmetry from the triple-product equation
+        total toroidal flux (in Webers) within the last closed flux surface
+    i_lmn : ndarray
+        spectral coefficients of iota
+    i_transform : Transform
+        transforms i_lmn coefficients to real space
 
     Returns
     -------
     magnetic_field: dict
-        dictionary of ndarray, shape(N_nodes,) of magnetic field
-        and derivatives. Keys are of the form 'B_x_y' or 'B^x_y', meaning the
-        covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
+        dictionary of ndarray, shape(num_nodes,) of magnetic field components
+        and derivatives.
+        Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+        or contravariant (B^x) component of the magnetic field, with the
+        derivative wrt to y.
 
     """
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     magnetic_field = {}
-    r = I_transform.grid.nodes[:, 0]
-    axis = I_transform.grid.axis
-    iota = I_transform.transform(cI, 0)
-    iota_r = I_transform.transform(cI, 1)
+
+    # rotational transform
+    iota = i_transform.transform(i_lmn, 0)
+    iota_r = i_transform.transform(i_lmn, 1)
 
     # toroidal flux
-    magnetic_field['psi'] = Psi*r**2
-    magnetic_field['psi_r'] = 2*Psi*r
-    magnetic_field['psi_rr'] = 2*Psi*jnp.ones_like(r)
+    magnetic_field['psi'] = Psi*polar_coords['rho']**2
+    magnetic_field['psi_r'] = 2*Psi*polar_coords['rho']
+    magnetic_field['psi_rr'] = 2*Psi*jnp.ones_like(polar_coords['rho'])
 
-    # contravariant B components
-    magnetic_field['B^rho'] = jnp.zeros_like(r)
-    magnetic_field['B^zeta'] = magnetic_field['psi_r'] / \
-        (2*jnp.pi*jacobian['g'])
-    if len(axis):
-        magnetic_field['B^zeta'] = put(
-            magnetic_field['B^zeta'], axis, magnetic_field['psi_rr'][axis] / (2*jnp.pi*jacobian['g_r'][axis]))
-    magnetic_field['B^theta'] = iota * magnetic_field['B^zeta']
-    magnetic_field['B_con'] = magnetic_field['B^rho']*cov_basis['e_rho'] + magnetic_field['B^theta'] * \
-        cov_basis['e_theta'] + magnetic_field['B^zeta']*cov_basis['e_zeta']
+    # note: B^rho components are ignored since they are all 0
 
-    # covariant B components
-    magnetic_field['B_rho'] = magnetic_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] +
-            cov_basis['e_zeta'], cov_basis['e_rho'], 0)
-    magnetic_field['B_theta'] = magnetic_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] +
-            cov_basis['e_zeta'], cov_basis['e_theta'], 0)
-    magnetic_field['B_zeta'] = magnetic_field['B^zeta'] * \
-        dot(iota*cov_basis['e_theta'] +
-            cov_basis['e_zeta'], cov_basis['e_zeta'], 0)
+    # contravariant components
+    B0 = magnetic_field['psi_r'] / (2*jnp.pi*jacobian['g'])
+    magnetic_field['B^theta'] = B0*(iota - polar_coords['lambda_z'])
+    magnetic_field['B^zeta']  = B0*(1    + polar_coords['lambda_t'])
+    magnetic_field['B_con'] = magnetic_field['B^theta']*cov_basis['e_theta'] \
+                            + magnetic_field['B^zeta']* cov_basis['e_zeta']
 
-    # B^{zeta} derivatives
-    magnetic_field['B^zeta_r'] = magnetic_field['psi_rr'] / (2*jnp.pi*jacobian['g']) - \
-        (magnetic_field['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
-    magnetic_field['B^zeta_v'] = - \
-        (magnetic_field['psi_r']*jacobian['g_v']) / (2*jnp.pi*jacobian['g']**2)
-    magnetic_field['B^zeta_z'] = - \
-        (magnetic_field['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
+    # contravariant component derivatives
+    B0_r = magnetic_field['psi_rr'] / (2*jnp.pi*jacobian['g']) \
+         - (magnetic_field['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
+    B0_t = -(magnetic_field['psi_r']*jacobian['g_v']) / (2*jnp.pi*jacobian['g']**2)
+    B0_z = -(magnetic_field['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
+    magnetic_field['B^theta_r'] = B0_r*(iota - polar_coords['lambda_z']) \
+                                + B0*(iota_r - polar_coords['lambda_rz'])
+    magnetic_field['B^theta_t'] = B0_t*(iota - polar_coords['lambda_z']) \
+                                - B0*polar_coords['lambda_tz']
+    magnetic_field['B^theta_z'] = B0_z*(iota - polar_coords['lambda_z']) \
+                                - B0*polar_coords['lambda_zz']
+    magnetic_field['B^zeta_r']  = B0_r*(1 + polar_coords['lambda_t']) \
+                                + B0*polar_coords['lambda_rt']
+    magnetic_field['B^zeta_t']  = B0_t*(1 + polar_coords['lambda_t']) \
+                                + B0*polar_coords['lambda_tt']
+    magnetic_field['B^zeta_z']  = B0_z*(1 + polar_coords['lambda_t']) \
+                                + B0*polar_coords['lambda_tz']
+    magnetic_field['B_con_r'] = magnetic_field['B^theta_r']*cov_basis['e_theta'] \
+                              + magnetic_field['B^theta']*  cov_basis['e_theta_r'] \
+                              + magnetic_field['B^zeta_r']* cov_basis['e_zeta'] \
+                              + magnetic_field['B^zeta']*   cov_basis['e_zeta_r']
+    magnetic_field['B_con_t'] = magnetic_field['B^theta_t']*cov_basis['e_theta'] \
+                              + magnetic_field['B^theta']*  cov_basis['e_theta_t'] \
+                              + magnetic_field['B^zeta_t']* cov_basis['e_zeta'] \
+                              + magnetic_field['B^zeta']*   cov_basis['e_zeta_t']
+    magnetic_field['B_con_z'] = magnetic_field['B^theta_z']*cov_basis['e_theta'] \
+                              + magnetic_field['B^theta']*  cov_basis['e_theta_z'] \
+                              + magnetic_field['B^zeta_z']* cov_basis['e_zeta'] \
+                              + magnetic_field['B^zeta']*   cov_basis['e_zeta_z']
 
-    # axis terms
-    if len(axis):
-        magnetic_field['B^zeta_r'] = put(magnetic_field['B^zeta_r'], axis, -(magnetic_field['psi_rr']
-                                                                            [axis]*jacobian['g_rr'][axis]) / (4*jnp.pi*jacobian['g_r'][axis]**2))
-        magnetic_field['B^zeta_v'] = put(magnetic_field['B^zeta_v'], axis, 0)
-        magnetic_field['B^zeta_z'] = put(magnetic_field['B^zeta_z'], axis, -(magnetic_field['psi_rr']
-                                                                            [axis]*jacobian['g_rz'][axis]) / (2*jnp.pi*jacobian['g_r'][axis]**2))
+    # covariant components
+    magnetic_field['B_rho']   = dot(magnetic_field['B_con'], cov_basis['e_rho'], 0)
+    magnetic_field['B_theta'] = dot(magnetic_field['B_con'], cov_basis['e_theta'], 0)
+    magnetic_field['B_zeta']  = dot(magnetic_field['B_con'], cov_basis['e_zeta'], 0)
 
-    # QS terms
-    if derivs == 'qs':
-        magnetic_field['B^zeta_vv'] = - (magnetic_field['psi_r']*jacobian['g_vv']) / (2*jnp.pi*jacobian['g']**2) \
-            + (magnetic_field['psi_r']*jacobian['g_v']
-               ** 2) / (jnp.pi*jacobian['g']**3)
-        magnetic_field['B^zeta_vz'] = - (magnetic_field['psi_r']*jacobian['g_vz']) / (2*jnp.pi*jacobian['g']**2) \
-            + (magnetic_field['psi_r']*jacobian['g_v']*jacobian['g_z']) / \
-            (jnp.pi*jacobian['g']**3)
-        magnetic_field['B^zeta_zz'] = - (magnetic_field['psi_r']*jacobian['g_zz']) / (2*jnp.pi*jacobian['g']**2) \
-            + (magnetic_field['psi_r']*jacobian['g_z']
-               ** 2) / (jnp.pi*jacobian['g']**3)
-
-    # covariant B component derivatives
-    magnetic_field['B_theta_r'] = magnetic_field['B^zeta_r']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_theta'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota_r*cov_basis['e_theta']+iota*cov_basis['e_rho_v']+cov_basis['e_zeta_r'], cov_basis['e_theta'], 0)
-                                    + dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_rho_v'], 0))
-    magnetic_field['B_zeta_r'] = magnetic_field['B^zeta_r']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_zeta'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota_r*cov_basis['e_theta']+iota*cov_basis['e_rho_v']+cov_basis['e_zeta_r'], cov_basis['e_zeta'], 0)
-                                    + dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_zeta_r'], 0))
-    magnetic_field['B_rho_v'] = magnetic_field['B^zeta_v']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_rho'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota*cov_basis['e_theta_v']+cov_basis['e_zeta_v'], cov_basis['e_rho'], 0)
-                                    + dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_rho_v'], 0))
-    magnetic_field['B_zeta_v'] = magnetic_field['B^zeta_v']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_zeta'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota*cov_basis['e_theta_v']+cov_basis['e_zeta_v'], cov_basis['e_zeta'], 0)
-                                    + dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0))
-    magnetic_field['B_rho_z'] = magnetic_field['B^zeta_z']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_rho'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota*cov_basis['e_theta_z']+cov_basis['e_zeta_z'], cov_basis['e_rho'], 0)
-                                    + dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_rho_z'], 0))
-    magnetic_field['B_theta_z'] = magnetic_field['B^zeta_z']*dot(iota*cov_basis['e_theta']+cov_basis['e_zeta'], cov_basis['e_theta'], 0) \
-        + magnetic_field['B^zeta']*(dot(iota*cov_basis['e_theta_z']+cov_basis['e_zeta_z'], cov_basis['e_theta'], 0)
-                                    + dot(iota*cov_basis['e_theta'] + cov_basis['e_zeta'], cov_basis['e_theta_z'], 0))
+    # covariant component derivatives
+    magnetic_field['B_rho_t']   = dot(magnetic_field['B_con_t'], cov_basis['e_rho'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_rho_t'], 0)
+    magnetic_field['B_rho_z']   = dot(magnetic_field['B_con_z'], cov_basis['e_rho'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_rho_z'], 0)
+    magnetic_field['B_theta_r'] = dot(magnetic_field['B_con_r'], cov_basis['e_theta'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_theta_r'], 0)
+    magnetic_field['B_theta_z'] = dot(magnetic_field['B_con_z'], cov_basis['e_theta'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_theta_z'], 0)
+    magnetic_field['B_zeta_r']  = dot(magnetic_field['B_con_r'], cov_basis['e_zeta'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_zeta_r'], 0)
+    magnetic_field['B_zeta_t']  = dot(magnetic_field['B_con_t'], cov_basis['e_zeta'], 0) \
+                                + dot(magnetic_field['B_con'],   cov_basis['e_zeta_t'], 0)
 
     return magnetic_field
 
 
-def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, I_transform:Transform):
+def compute_plasma_current(cov_basis, jacobian, magnetic_field):
     """Computes current density field at node locations
 
     Parameters
     ----------
     cov_basis : dict
-        dictionary of ndarray containing covariant basis
-        vectors and derivatives at each node, such as computed by ``compute_covariant_basis``.
+        dictionary of ndarray, shape(3,num_nodes), containing covariant basis
+        vectors and derivatives at grid nodes.
     jacobian : dict
-        dictionary of ndarray containing coordinate jacobian
-        and partial derivatives, such as computed by ``compute_jacobian``.
-    coord_der : dict
-        dictionary of ndarray containing of coordinate
-        derivatives evaluated at node locations, such as computed by ``compute_coordinate_derivatives``.
-    magnetic_field : dict
-        dictionary of ndarray containing magnetic field and derivatives,
-        such as computed by ``compute_magnetic_field``.
-    cI : ndarray
-        coefficients to pass to rotational transform function.
-    I_transform : Transform
-        object with transform method to go from spectral to physical space with derivatives
+        dictionary of ndarray, shape(num_nodes,), of coordinate jacobian and
+        partial derivatives.
+    magnetic_field: dict
+        dictionary of ndarray, shape(num_nodes,) of magnetic field components
+        and derivatives.
 
     Returns
     -------
     plasma_current : dict
-        dictionary of ndarray, shape(N_nodes,) of current field.
+        dictionary of ndarray, shape(num_nodes,), of plasma current field.
         Keys are of the form 'J^x_y' meaning the contravariant (J^x)
         component of the current, with the derivative wrt to y.
 
@@ -554,39 +499,18 @@ def compute_plasma_current(coord_der, cov_basis, jacobian, magnetic_field, cI, I
     # subscripts (superscripts) denote covariant (contravariant) components of the field
     plasma_current = {}
     mu0 = 4*jnp.pi*1e-7
-    axis = I_transform.grid.axis
-    iota = I_transform.transform(cI, 0)
 
-    # axis terms
-    if len(axis):
-        g_rrv = 2*coord_der['R_rv']*(coord_der['Z_r']*coord_der['R_rv'] - coord_der['R_r']*coord_der['Z_rv']) \
-            + 2*coord_der['R_r']*(coord_der['Z_r']*coord_der['R_rvv'] - coord_der['R_r']*coord_der['Z_rvv']) \
-            + coord_der['R']*(2*coord_der['Z_rr']*coord_der['R_rvv'] - 2*coord_der['R_rr']*coord_der['Z_rvv']
-                              + coord_der['R_rv']*coord_der['Z_rrv'] -
-                              coord_der['Z_rv']*coord_der['R_rrv']
-                              + coord_der['Z_r']*coord_der['R_rrvv'] - coord_der['R_r']*coord_der['Z_rrvv'])
-        Bsup_zeta_rv = magnetic_field['psi_rr']*(2*jacobian['g_rr']*jacobian['g_rv'] -
-                                                 jacobian['g_r']*g_rrv) / (4*jnp.pi*jacobian['g_r']**3)
-        Bsub_zeta_rv = Bsup_zeta_rv*dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0) + magnetic_field['B^zeta']*dot(
-            iota*cov_basis['e_rho_vv'] + 2*cov_basis['e_zeta_rv'], cov_basis['e_zeta'], 0)
-        Bsub_theta_rz = magnetic_field['B^zeta_z']*dot(cov_basis['e_zeta'], cov_basis['e_rho_v'], 0) + magnetic_field['B^zeta']*(
-            dot(cov_basis['e_zeta_z'], cov_basis['e_rho_v'], 0) + dot(cov_basis['e_zeta'], cov_basis['e_rho_vz'], 0))
-
-    # contravariant J components
-    plasma_current['J^rho'] = (magnetic_field['B_zeta_v'] -
-                               magnetic_field['B_theta_z']) / (mu0*jacobian['g'])
-    plasma_current['J^theta'] = (magnetic_field['B_rho_z'] -
-                                 magnetic_field['B_zeta_r']) / (mu0*jacobian['g'])
-    plasma_current['J^zeta'] = (magnetic_field['B_theta_r'] -
-                                magnetic_field['B_rho_v']) / (mu0*jacobian['g'])
-
-    # axis terms
-    if len(axis):
-        plasma_current['J^rho'] = put(plasma_current['J^rho'], axis,
-                                      (Bsub_zeta_rv[axis] - Bsub_theta_rz[axis]) / (jacobian['g_r'][axis]))
-
-    plasma_current['J_con'] = plasma_current['J^rho']*cov_basis['e_rho'] + plasma_current['J^theta'] * \
-        cov_basis['e_theta'] + plasma_current['J^zeta']*cov_basis['e_zeta']
+    # contravariant components
+    plasma_current['J^rho']   = (magnetic_field['B_zeta_t']  - magnetic_field['B_theta_z']) \
+                              / (mu0*jacobian['g'])
+    plasma_current['J^theta'] = (magnetic_field['B_rho_z']   - magnetic_field['B_zeta_r']) \
+                              / (mu0*jacobian['g'])
+    plasma_current['J^zeta']  = (magnetic_field['B_theta_r'] - magnetic_field['B_rho_t']) \
+                              / (mu0*jacobian['g'])
+    
+    plasma_current['J_con'] = plasma_current['J^rho']*  cov_basis['e_rho'] \
+                            + plasma_current['J^theta']*cov_basis['e_theta'] \
+                            + plasma_current['J^zeta']* cov_basis['e_zeta']
 
     return plasma_current
 
@@ -621,7 +545,6 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform:
     """
     # notation: 1 letter subscripts denote derivatives, eg psi_rr = d^2 psi / dr^2
     # subscripts (superscripts) denote covariant (contravariant) components of the field
-    
     magnetic_field_mag = {}
     iota = I_transform.transform(cI, 0)
 

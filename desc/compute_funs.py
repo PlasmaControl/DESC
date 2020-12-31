@@ -364,7 +364,7 @@ def compute_jacobian_force(toroidal_coords, cov_basis):
     return jacobian
 
 
-def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_lmn, i_transform:Transform):
+def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_l, i_transform:Transform):
     """Computes magnetic field components needed for force balance without the
     magnetic axis.
 
@@ -381,10 +381,10 @@ def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_lmn, 
         partial derivatives.
     Psi : float
         total toroidal flux (in Webers) within the last closed flux surface
-    i_lmn : ndarray
+    i_l : ndarray
         spectral coefficients of iota
     i_transform : Transform
-        transforms i_lmn coefficients to real space
+        transforms i_l coefficients to real space
 
     Returns
     -------
@@ -401,8 +401,8 @@ def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_lmn, 
     magnetic_field = {}
 
     # rotational transform
-    iota = i_transform.transform(i_lmn, 0)
-    iota_r = i_transform.transform(i_lmn, 1)
+    iota = i_transform.transform(i_l, 0)
+    iota_r = i_transform.transform(i_l, 1)
 
     # toroidal flux
     magnetic_field['psi'] = Psi*polar_coords['rho']**2
@@ -470,8 +470,9 @@ def compute_magnetic_field_force(polar_coords, cov_basis, jacobian, Psi, i_lmn, 
     return magnetic_field
 
 
-def compute_plasma_current(cov_basis, jacobian, magnetic_field):
-    """Computes current density field at node locations
+def compute_plasma_current_force(cov_basis, jacobian, magnetic_field):
+    """Computes current density field components needed for force balance
+    without the magnetic axis.
 
     Parameters
     ----------

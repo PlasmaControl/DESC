@@ -43,14 +43,14 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
     timer = Timer()
     timer.start("Total time")
 
-    stell_sym = inputs['stell_sym']
+    sym = inputs['sym']
     NFP = inputs['NFP']
-    Psi_lcfs = inputs['Psi_lcfs']
-    M = inputs['Mpol']                  # arr
-    N = inputs['Ntor']                  # arr
-    delta_lm = inputs['delta_lm']       # arr
-    Mnodes = inputs['Mnodes']           # arr
-    Nnodes = inputs['Nnodes']           # arr
+    Psi = inputs['Psi']
+    L = inputs['L_rad']                 # arr
+    M = inputs['M_pol']                 # arr
+    N = inputs['N_tor']                 # arr
+    M_grid = inputs['M_grid']           # arr
+    N_grid = inputs['N_grid']           # arr
     bdry_ratio = inputs['bdry_ratio']   # arr
     pres_ratio = inputs['pres_ratio']   # arr
     zeta_ratio = inputs['zeta_ratio']   # arr
@@ -65,10 +65,9 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
     bdry_mode = inputs['bdry_mode']
     zern_mode = inputs['zern_mode']
     node_mode = inputs['node_mode']
-    cP = inputs['cP']
-    cI = inputs['cI']
+    profiles = inputs['profiles']
     axis = inputs['axis']
-    bdry = inputs['bdry']
+    boundary = inputs['boundary']
     verbose = inputs['verbose']
 
     if file_name is not None:
@@ -83,10 +82,10 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             print("================")
             print("Step {}/{}".format(ii+1, arr_len))
             print("================")
-            print("Spectral resolution (M,N,delta_lm)=({},{},{})".format(
-                M[ii], N[ii], delta_lm[ii]))
+            print("Spectral resolution (L,M,N)=({},{},{})".format(
+                L[ii], M[ii], N[ii]))
             print("Node resolution (M,N)=({},{})".format(
-                Mnodes[ii], Nnodes[ii]))
+                M_grid[ii], N_grid[ii]))
             print("Boundary ratio = {}".format(bdry_ratio[ii]))
             print("Pressure ratio = {}".format(pres_ratio[ii]))
             print("Zeta ratio = {}".format(zeta_ratio[ii]))
@@ -104,19 +103,18 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             timer.start("Iteration {} total".format(ii+1))
 
             inputs_ii = {
-                'L': delta_lm[ii],
+                'sym': sym,
+                'NFP': NFP,
+                'Psi': Psi,
+                'L': L[ii],
                 'M': M[ii],
                 'N': N[ii],
-                'cP': cP*pres_ratio[ii],
-                'cI': cI,
-                'Psi': Psi_lcfs,
-                'NFP': NFP,
-                'bdry': bdry,
-                'sym': stell_sym,
                 'index': zern_mode,
                 'bdry_mode': bdry_mode,
                 'bdry_ratio': bdry_ratio[ii],
+                'profiles': profiles,
                 'axis': axis,
+                'boundary': boundary
             }
             equil_fam = EquilibriaFamily(inputs=inputs_ii)
             equil = equil_fam[ii]
@@ -133,10 +131,10 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 equil.I_basis
 
             # grids
-            RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+            RZ_grid = ConcentricGrid(M_grid[ii], N_grid[ii], NFP=NFP, sym=sym,
                                      axis=False, index=zern_mode, surfs=node_mode)
             L_grid = LinearGrid(
-                M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+                M=M_grid[ii], N=2*N_grid[ii]+1, NFP=NFP, sym=sym)
 
             # transforms
             R_transform = Transform(RZ_grid, R_basis, derivs=3)
@@ -159,26 +157,26 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             equil.solved = False
 
             # change grids
-            if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
-                RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
+            if M_grid[ii] != M_grid[ii-1] or N_grid[ii] != N_grid[ii-1]:
+                RZ_grid = ConcentricGrid(M_grid[ii], N_grid[ii], NFP=NFP, sym=sym,
                                          axis=False, index=zern_mode, surfs=node_mode)
                 L_grid = LinearGrid(
-                    M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+                    M=M_grid[ii], N=2*N_grid[ii]+1, NFP=NFP, sym=sym)
 
             # change bases
-            if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
+            if M[ii] != M[ii-1] or N[ii] != N[ii-1] or L[ii] != L[ii-1]:
                 # update equilibrium bases to the new resolutions
-                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii])
+                equil.change_resolution(L=L[ii], M=M[ii], N=N[ii])
                 R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
 
             # change transform matrices
             timer.start(
                 "Iteration {} changing resolution".format(ii+1))
             if verbose > 0:
-                print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
-                    Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
+                print("Changing node resolution from (M_grid,N_grid) = ({},{}) to ({},{})".format(
+                    M_grid[ii-1], N_grid[ii-1], M_grid[ii], N_grid[ii]))
                 print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
-                    delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+                    L[ii-1], M[ii-1], N[ii-1], L[ii], M[ii], N[ii]))
 
             R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
             Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)

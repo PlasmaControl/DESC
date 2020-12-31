@@ -269,33 +269,40 @@ def conditional_decorator(dec, condition, *args, **kwargs):
     return decorator
 
 
-def unpack_state(x, nR, nZ):
-    """Unpacks the optimization state vector x into cR, cZ, cL components
+def unpack_state(x, nR0, nZ0, nr, nl):
+    """Unpacks the state vector x into R0_n, Z0_n, r_lmn, l_lmn components
 
     Parameters
     ----------
     x : ndarray
         vector to unpack: x = [cR, cZ, cL]
-    nR : int
-        number of cR coefficients
-    nZ : int
-        number of cZ coefficients
+    nR0 : int
+        number of R0_n coefficients
+    nZ0 : int
+        number of Z0_n coefficients
+    nr : int
+        number of r_lmn coefficients
+    nl : int
+        number of l_lmn coefficients
 
     Returns
     -------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
+    R0_n : ndarray
+        spectral coefficients of R0
+    Z0_n : ndarray
+        spectral coefficients of Z0
+    r_lmn : ndarray
+        spectral coefficients of r
+    l_lmn : ndarray
         spectral coefficients of lambda
 
     """
 
-    cR = x[:nR]
-    cZ = x[nR:nR+nZ]
-    cL = x[nR+nZ:]
-    return cR, cZ, cL
+    R0_n = x[:nR0]
+    Z0_n = x[nR0:nR0+nZ0]
+    r_lmn = x[nR0+nZ0:nR0+nZ0+nr]
+    l_lmn = x[nR0+nZ0+nr:nR0+nZ0+nr+nl]
+    return R0_n, Z0_n, r_lmn, l_lmn
 
 
 def equals(a, b) -> bool:

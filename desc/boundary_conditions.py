@@ -1,64 +1,10 @@
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import jnp
 from desc.utils import Tristate
 from desc.grid import Grid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
-
-
-def format_bdry(bdry, Rb_basis:DoubleFourierSeries,
-                Zb_basis:DoubleFourierSeries, mode:str='spectral'):
-    """Formats arrays for boundary conditions and converts between
-    real space and fourier representations
-
-    Parameters
-    ----------
-    bdry : ndarray, shape(Nbdry,4)
-        array of fourier coeffs [m,n,Rcoeff, Zcoeff]
-        or array of real space coordinates, [theta,phi,R,Z]
-    Rb_basis : DoubleFourierSeries
-        spectral basis for R boundary coefficients
-    Zb_basis : DoubleFourierSeries
-        spectral basis for Z boundary coefficients
-    mode : str
-        one of 'real', 'spectral'. Whether bdry is specified in real or spectral space.
-
-    Returns
-    -------
-    cRb : ndarray
-        spectral coefficients for R boundary
-    cZb : ndarray
-        spectral coefficients for Z boundary
-
-    """
-    if mode == 'real':
-        theta = bdry[:, 0]
-        phi = bdry[:, 1]
-        rho = np.ones_like(theta)
-
-        nodes = np.array([rho, theta, phi]).T
-        grid = Grid(nodes)
-        Rb_transf = Transform(grid, Rb_basis)
-        Zb_transf = Transform(grid, Zb_basis)
-
-        # fit real data to spectral coefficients
-        cRb = Rb_transf.fit(bdry[:, 2])
-        cZb = Zb_transf.fit(bdry[:, 3])
-
-    else:
-        cRb = np.zeros((Rb_basis.num_modes,))
-        cZb = np.zeros((Zb_basis.num_modes,))
-
-        for m, n, bR, bZ in bdry:
-            idx_R = np.where(np.logical_and(Rb_basis.modes[:, 1] == int(m),
-                                            Rb_basis.modes[:, 2] == int(n)))[0]
-            idx_Z = np.where(np.logical_and(Zb_basis.modes[:, 1] == int(m),
-                                            Zb_basis.modes[:, 2] == int(n)))[0]
-            cRb = put(cRb, idx_R, bR)
-            cZb = put(cZb, idx_Z, bZ)
-
-    return cRb, cZb
 
 
 # XXX: Note that this method cannot be improved with FFT due to non-uniform grid

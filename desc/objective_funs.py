@@ -9,9 +9,9 @@ from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.equilibrium_io import IOAble
-from desc.compute_funs import compute_coordinates, compute_coordinate_derivatives
-from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
-from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
+from desc.compute_funs import compute_polar_coords_force, compute_toroidal_coords_force
+from desc.compute_funs import compute_covariant_basis_force
+from desc.compute_funs import compute_jacobian_force, compute_magnetic_field_force, compute_plasma_current_force
 from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
 from desc.derivatives import Derivative
 

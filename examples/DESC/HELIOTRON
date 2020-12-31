@@ -1,15 +1,16 @@
 # This is the DESC input file for a heliotron
 
 # global parameters
-stell_sym = 1
-NFP       = 19
-Psi_lcfs  = 1.00000000E+00
+sym = 1
+NFP = 19
+Psi = 1.00000000E+00
 
 # spectral resolution
-Mpol   =  8
-Ntor   =  2
-Mnodes =  12
-Nnodes =  3
+L_rad  = 8
+M_pol  = 8
+N_tor  = 2
+M_grid = 12
+N_grid = 3
 
 # continuation parameters
 bdry_ratio = 1
@@ -32,18 +33,18 @@ zern_mode = ansi
 node_mode = cheb1
 
 # pressure and rotational transform profiles
-l:   0	cP =   1.80000000E+04	cI =   1.00000000E+00
-l:   2	cP =  -3.60000000E+04	cI =   1.50000000E+00
-l:   4	cP =   1.80000000E+04
+l:   0	p =   1.80000000E+04	i =   1.00000000E+00
+l:   2	p =  -3.60000000E+04	i =   1.50000000E+00
+l:   4	p =   1.80000000E+04
 
 # magnetic axis initial guess
-n:   0	aR =   1.00000000E+01	aZ =   0.00000000E+00
+n:   0	R0 =   1.00000000E+01	Z0 =   0.00000000E+00
 
 # fixed-boundary surface shape
-m:   0	n:   0	bR =   1.00000000E+01
-m:   1	n:   0	bR =   1.00000000E+00
-m:   1	n:   1	bR =   3.00000000E-01
-m:  -1	n:  -1	bR =  -3.00000000E-01
-m:  -1	n:   0	bZ =   1.00000000E+00
-m:   1	n:  -1	bZ =  -3.00000000E-01
-m:  -1	n:   1	bZ =  -3.00000000E-01
+m:   0	n:   0	R1 =   1.00000000E+01
+m:   1	n:   0	R1 =   1.00000000E+00
+m:   1	n:   1	R1 =   3.00000000E-01
+m:  -1	n:  -1	R1 =  -3.00000000E-01
+m:  -1	n:   0	Z1 =   1.00000000E+00
+m:   1	n:  -1	Z1 =  -3.00000000E-01
+m:  -1	n:   1	Z1 =  -3.00000000E-01

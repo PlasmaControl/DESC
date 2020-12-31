@@ -12,10 +12,11 @@ from desc.vmec import vmec_interpolate
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.configuration import Configuration
+"""
 from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
 from desc.configuration import compute_contravariant_basis, compute_jacobian
 from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
-
+"""
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
                      (0.8359, 0.3682, 0.0000),  # vermillion

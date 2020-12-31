@@ -216,6 +216,104 @@ class PowerSeries(Basis):
             self.sort_nodes()
 
 
+class FourierSeries(Basis):
+    """1D basis set for use with the magnetic axis.
+       Fourier series in the toroidal coordinate.
+    """
+
+    def __init__(self, N:int=0, NFP:int=1, sym:Tristate=None,
+            load_from=None, file_format=None, obj_lib=None) -> None:
+
+        """Initializes a DoubleFourierSeries
+
+        Parameters
+        ----------
+        N : int
+            maximum toroidal resolution
+        NFP : int
+            number of field periods
+        sym : Tristate
+            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+            None for no symmetry (Default)
+
+        Returns
+        -------
+        None
+
+        """
+        self._file_format_ = file_format
+
+        if load_from is None:
+            self._L = 0
+            self._M = 0
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
+
+            self._modes = self.get_modes(N=self._N)
+
+            self._enforce_symmetry_()
+            self._sort_modes_()
+
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+
+    def get_modes(self, N:int=0) -> None:
+        """Gets mode numbers for double fourier series
+
+        Parameters
+        ----------
+        N : int
+            maximum toroidal resolution
+
+        Returns
+        -------
+        modes : ndarray of int, shape(Nmodes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
+
+        """
+        dim_tor = 2*N+1
+        return np.array([[0, 0, n-N] for n in range(dim_tor)])
+
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
+        """Evaluates basis functions at specified nodes
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(3,N)
+            node coordinates, in (rho,theta,zeta)
+        derivatives : ndarray of int, shape(3,)
+            order of derivatives to compute in (rho,theta,zeta)
+
+        Returns
+        -------
+        y : ndarray, shape(N,K)
+            basis functions evaluated at nodes
+
+        """
+        return fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+
+    def change_resolution(self, N:int) -> None:
+        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
+
+        Parameters
+        ----------
+        N : int
+            maximum toroidal resolution
+
+        Returns
+        -------
+        None
+
+        """
+        if N != self._N:
+            self._N = N
+            self._modes = self.get_modes(self._N)
+            self.sort_nodes()
+
+
 class DoubleFourierSeries(Basis):
     """2D basis set for use on a single flux surface.
        Fourier series in both the poloidal and toroidal coordinates.

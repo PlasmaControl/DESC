@@ -1,20 +1,22 @@
 import numpy as np
 from collections.abc import MutableSequence
 
-from desc.backend import TextColors
+from desc.backend import TextColors, put
 from desc.utils import Tristate, unpack_state
-from desc.basis import Basis, PowerSeries, DoubleFourierSeries, FourierZernikeBasis
+from desc.basis import Basis, PowerSeries, FourierSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.init_guess import get_initial_guess_scale_bdry
 from desc.boundary_conditions import format_bdry
 from desc.objective_funs import ObjectiveFunction
 from desc.equilibrium_io import IOAble
+
+"""
 from desc.compute_funs import compute_coordinates, compute_coordinate_derivatives
 from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
 from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
 from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
-
+"""
 
 class Configuration(IOAble):
     """Configuration contains information about a plasma state, including the
@@ -22,9 +24,10 @@ class Configuration(IOAble):
        information, such as the magnetic field and plasma currents.
     """
 
-    _io_attrs_ = ['_cR', '_cZ', '_cL', '_cRb', '_cZb', '_cP', '_cI', '_Psi', '_NFP',
-                  '_R_basis', '_Z_basis', '_L_basis', '_Rb_basis', '_Zb_basis',
-                  '_P_basis', '_I_basis']
+    _io_attrs_ = ['_R0_n', '_Z0_n', '_r_lmn', '_l_lmn', '_R1_mn', '_Z1_mn',
+                  '_p_l', '_i_l', '_Psi', '_NFP',
+                  '_R0_basis', '_Z0_basis', '_r_basis', '_l_basis',
+                  '_R1_basis', '_Z1_basis', '_p_basis', '_i_basis']
 
     _object_lib_ = {'PowerSeries'         : PowerSeries,
                     'DoubleFourierSeries' : DoubleFourierSeries,
@@ -43,8 +46,8 @@ class Configuration(IOAble):
                 L : int, radial resolution
                 M : int, poloidal resolution
                 N : int, toroidal resolution
-                cP : ndarray, pressure spectral coefficients, indexed as (lm,n) flattened in row major order
-                cI : ndarray, iota spectral coefficients, indexed as (lm,n) flattened in row major order
+                p_l : ndarray, spectral coefficients of pressure profile
+                i_l : ndarray, spectral coefficients of rotational transform
                 Psi : float, total toroidal flux (in Webers) within LCFS
                 NFP : int, number of field periods
                 bdry : ndarray, array of fourier coeffs [m,n,Rcoeff, Zcoeff]
@@ -58,9 +61,10 @@ class Configuration(IOAble):
                 errr_ratio : float, Weight on the force balance equations, relative to the boundary condition equations. Default = 1e-8.
                 axis : ndarray, Fourier coefficients for initial guess for the axis
                 x : ndarray, state vector of spectral coefficients
-                cR : ndarray, spectral coefficients of R
-                cZ : ndarray, spectral coefficients of Z
-                cL : ndarray, spectral coefficients of L
+                R0_n : ndarray, spectral coefficients of R0
+                Z0_n : ndarray, spectral coefficients of Z0
+                r_lmn : ndarray, spectral coefficients of r
+                l_lmn : ndarray, spectral coefficients of lambda
         load_from : str file path OR file instance
             file to initialize from
         file_format : str 
@@ -81,14 +85,13 @@ class Configuration(IOAble):
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         # required inputs
         try:
+            self._NFP = inputs['NFP']
+            self._Psi = inputs['Psi']
             self._L = inputs['L']
             self._M = inputs['M']
             self._N = inputs['N']
-            self._cP = inputs['cP']
-            self._cI = inputs['cI']
-            self._Psi = inputs['Psi']
-            self._NFP = inputs['NFP']
-            bdry = inputs['bdry']
+            profiles = inputs['profiles']
+            boundary = inputs['boundary']
         except:
             raise ValueError(TextColors.FAIL +
                              "input dict does not contain proper keys"
@@ -102,57 +105,64 @@ class Configuration(IOAble):
         self.pres_ratio = inputs.get('pres_ratio', 1.0)
         self.zeta_ratio = inputs.get('zeta_ratio', 1.0)
         self.errr_ratio = inputs.get('errr_ratio', 1e-8)
-        axis = inputs.get('axis', bdry[np.where(bdry[:, 0] == 0)[0], 1:])
 
         # stellarator symmetry for bases
         if self._sym:
             self._R_sym = Tristate(True)
             self._Z_sym = Tristate(False)
-            self._L_sym = Tristate(False)
         else:
             self._R_sym = Tristate(None)
             self._Z_sym = Tristate(None)
-            self._L_sym = Tristate(None)
 
         # create bases
-        self._R_basis = FourierZernikeBasis(
+        self._R0_basis = FourierSeries(
+            N=self._N, NFP=self._NFP, sym=self._R_sym)
+        self._Z0_basis = FourierSeries(
+            N=self._N, NFP=self._NFP, sym=self._Z_sym)
+        self._r_basis = FourierZernikeBasis(
             L=self._L, M=self._M, N=self._N,
             NFP=self._NFP, sym=self._R_sym, index=self._index)
-        self._Z_basis = FourierZernikeBasis(
+        self._l_basis = FourierZernikeBasis(
             L=self._L, M=self._M, N=self._N,
             NFP=self._NFP, sym=self._Z_sym, index=self._index)
-        self._L_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
-        self._Rb_basis = DoubleFourierSeries(
+        self._R1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
-        self._Zb_basis = DoubleFourierSeries(
+        self._Z1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
-        self._P_basis = PowerSeries(L=self._cP.size-1)
-        self._I_basis = PowerSeries(L=self._cI.size-1)
+        self._p_basis = PowerSeries(L=self._p_l.size-1)
+        self._i_basis = PowerSeries(L=self._i_l.size-1)
+
+        # format profiles
+        self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
 
         # format boundary
-        self._cRb, self._cZb = format_bdry(
-            bdry, self._Rb_basis, self._Zb_basis, self.bdry_mode)
-        ratio_Rb = np.where(self._Rb_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
-        ratio_Zb = np.where(self._Zb_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
-        self._cRb *= ratio_Rb
-        self._cZb *= ratio_Zb
+        self._R1_n, self._Z1_n = format_boundary(
+            boundary, self._R1_basis, self._Z1_basis, self.bdry_mode)
+        ratio_R1 = np.where(self._R1_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
+        ratio_Z1 = np.where(self._Z1_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
+        self._R1_n *= ratio_R1
+        self._Z1_n *= ratio_Z1
 
         # solution, if provided
         try:
             self._x = inputs['x']
-            self._cR, self._cZ, self._cL = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
+            self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn = unpack_state(
+                self._x, self._R0_basis.num_modes, self._Z0_basis.num_modes,
+                self._r_basis.num_modes, self._l_basis.num_modes)
         except:
             try:
-                self._cR = inputs['cR']
-                self._cZ = inputs['cZ']
-                self._cL = inputs['cL']
+                self._R0_n = inputs['R0_n']
+                self._Z0_n = inputs['Z0_n']
+                self._r_lmn = inputs['r_lmn']
+                self._l_lmn = inputs['l_lmn']
             except:
-                self._cR, self._cZ = get_initial_guess_scale_bdry(
-                    axis, bdry, self.bdry_ratio, self._R_basis, self._Z_basis)
-                self._cL = np.zeros((self._L_basis.num_modes,))
-            self._x = np.concatenate([self._cR, self._cZ, self._cL])
+                # create initial guess
+                axis = inputs.get('axis', boundary[np.where(boundary[:, 0] == 0)[0], 1:])
+                self._R0_n, self._Z0_n = format_axis(axis, self._R0_basis, self._Z0_basis)
+                self._r_lmn = np.zeros((self._r_basis.num_modes,))
+                self._l_lmn = np.zeros((self._l_basis.num_modes,))
+                # TODO: set r_lmn coefficients for initial guess
+            self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     def change_resolution(self, L:int=None, M:int=None, N:int=None) -> None:
         # TODO: check if resolution actually changes
@@ -167,8 +177,8 @@ class Configuration(IOAble):
         old_modes_R = self._R_basis.modes
         old_modes_Z = self._Z_basis.modes
         old_modes_L = self._L_basis.modes
-        old_modes_Rb = self._Rb_basis.modes
-        old_modes_Zb = self._Zb_basis.modes
+        old_modes_R1 = self._R1_basis.modes
+        old_modes_Z1 = self._Z1_basis.modes
 
         # create bases
         self._R_basis = FourierZernikeBasis(
@@ -179,9 +189,9 @@ class Configuration(IOAble):
             NFP=self._NFP, sym=self._Z_sym, index=self._index)
         self._L_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
-        self._Rb_basis = DoubleFourierSeries(
+        self._R1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
-        self._Zb_basis = DoubleFourierSeries(
+        self._Z1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
 
         def copy_coeffs(c_old, modes_old, modes_new):
@@ -196,14 +206,14 @@ class Configuration(IOAble):
                     c_new[i] = c_old[idx[0]]
             return c_new
 
-        self._cR = copy_coeffs(self._cR, old_modes_R, self._R_basis.modes)
-        self._cZ = copy_coeffs(self._cZ, old_modes_Z, self._Z_basis.modes)
+        self._R0_n = copy_coeffs(self._R0_n, old_modes_R, self._R_basis.modes)
+        self._Z0_n = copy_coeffs(self._Z0_n, old_modes_Z, self._Z_basis.modes)
         self._cL = copy_coeffs(self._cL, old_modes_L, self._L_basis.modes)
-        self._cRb = copy_coeffs(self._cRb, old_modes_Rb, self._Rb_basis.modes)
-        self._cZb = copy_coeffs(self._cZb, old_modes_Zb, self._Zb_basis.modes)
+        self._R1_n = copy_coeffs(self._R1_n, old_modes_R1, self._R1_basis.modes)
+        self._Z1_n = copy_coeffs(self._Z1_n, old_modes_Z1, self._Z1_basis.modes)
 
         # state vector
-        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
 
     @property
     def sym(self) -> bool:
@@ -216,28 +226,28 @@ class Configuration(IOAble):
     @x.setter
     def x(self, x) -> None:
         self._x = x
-        self._cR, self._cZ, self._cL = unpack_state(
+        self._R0_n, self._Z0_n, self._cL = unpack_state(
             self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
 
     @property
-    def cR(self):
+    def R0_n(self):
         """ spectral coefficients of R """
-        return self._cR
+        return self._R0_n
 
-    @cR.setter
-    def cR(self, cR) -> None:
-        self._cR = cR
-        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+    @R0_n.setter
+    def R0_n(self, R0_n) -> None:
+        self._R0_n = R0_n
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
 
     @property
-    def cZ(self):
+    def Z0_n(self):
         """ spectral coefficients of Z """
-        return self._cZ
+        return self._Z0_n
 
-    @cZ.setter
-    def cZ(self, cZ) -> None:
-        self._cZ = cZ
-        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+    @Z0_n.setter
+    def Z0_n(self, Z0_n) -> None:
+        self._Z0_n = Z0_n
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
 
     @property
     def cL(self):
@@ -247,25 +257,25 @@ class Configuration(IOAble):
     @cL.setter
     def cL(self, cL) -> None:
         self._cL = cL
-        self._x = np.concatenate([self._cR, self._cZ, self._cL])
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
 
     @property
-    def cRb(self):
+    def R1_n(self):
         """ spectral coefficients of R at the boundary"""
-        return self._cRb
+        return self._R1_n
 
-    @cRb.setter
-    def cRb(self, cRb) -> None:
-        self._cRb = cRb
+    @R1_n.setter
+    def R1_n(self, R1_n) -> None:
+        self._R1_n = R1_n
 
     @property
-    def cZb(self):
+    def Z1_n(self):
         """ spectral coefficients of Z at the boundary"""
-        return self._cZb
+        return self._Z1_n
 
-    @cZb.setter
-    def cZb(self, cZb) -> None:
-        self._cZb = cZb
+    @Z1_n.setter
+    def Z1_n(self, Z1_n) -> None:
+        self._Z1_n = Z1_n
 
     @property
     def cP(self):
@@ -352,7 +362,7 @@ class Configuration(IOAble):
         self._L_basis = L_basis
 
     @property
-    def Rb_basis(self) -> Basis:
+    def R1_basis(self) -> Basis:
         """
         Spectral basis for R at the boundary
 
@@ -361,14 +371,14 @@ class Configuration(IOAble):
         Basis
 
         """
-        return self._Rb_basis
+        return self._R1_basis
 
-    @Rb_basis.setter
-    def Rb_basis(self, Rb_basis:Basis) -> None:
-        self._Rb_basis = Rb_basis
+    @R1_basis.setter
+    def R1_basis(self, R1_basis:Basis) -> None:
+        self._R1_basis = R1_basis
 
     @property
-    def Zb_basis(self) -> Basis:
+    def Z1_basis(self) -> Basis:
         """
         Spectral basis for Z at the boundary
 
@@ -377,11 +387,11 @@ class Configuration(IOAble):
         Basis
 
         """
-        return self._Zb_basis
+        return self._Z1_basis
 
-    @Zb_basis.setter
-    def Zb_basis(self, Zb_basis:Basis) -> None:
-        self._Zb_basis = Zb_basis
+    @Z1_basis.setter
+    def Z1_basis(self, Z1_basis:Basis) -> None:
+        self._Z1_basis = Z1_basis
 
     @property
     def P_basis(self) -> Basis:
@@ -433,7 +443,7 @@ class Configuration(IOAble):
 
         R_transform = Transform(grid, self._R_basis, derivs=0)
         Z_transform = Transform(grid, self._Z_basis, derivs=0)
-        coords = compute_coordinates(self._cR, self._cZ, R_transform,
+        coords = compute_coordinates(self._R0_n, self._Z0_n, R_transform,
                                      Z_transform)
         return coords
 
@@ -454,7 +464,7 @@ class Configuration(IOAble):
         """
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         return coord_der
 
@@ -477,7 +487,7 @@ class Configuration(IOAble):
         """
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         return cov_basis
@@ -500,7 +510,7 @@ class Configuration(IOAble):
         """
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -528,7 +538,7 @@ class Configuration(IOAble):
         """
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -554,7 +564,7 @@ class Configuration(IOAble):
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
         I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -582,7 +592,7 @@ class Configuration(IOAble):
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
         I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -610,7 +620,7 @@ class Configuration(IOAble):
         R_transform = Transform(grid, self._R_basis, derivs=3)
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
         I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -639,7 +649,7 @@ class Configuration(IOAble):
         Z_transform = Transform(grid, self._Z_basis, derivs=3)
         I_transform = Transform(grid, self._I_basis, derivs=1)
         P_transform = Transform(grid, self._P_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._cR, self._cZ,
+        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
@@ -720,10 +730,10 @@ class Equilibrium(Configuration, IOAble):
         Configuration
 
         """
-        bdryR = np.array([self._Rb_basis.modes[:, 1:2],
-                          self._cRb, np.zeros_like(self._cRb)]).T
-        bdryZ = np.array([self._Zb_basis.modes[:, 1:2],
-                          np.zeros_like(self._cRb), self._cZb]).T
+        bdryR = np.array([self._R1_basis.modes[:, 1:2],
+                          self._R1_n, np.zeros_like(self._R1_n)]).T
+        bdryZ = np.array([self._Z1_basis.modes[:, 1:2],
+                          np.zeros_like(self._R1_n), self._Z1_n]).T
         inputs = {'L': self._L,
                   'M': self._M,
                   'N': self._N,
@@ -745,7 +755,7 @@ class Equilibrium(Configuration, IOAble):
         if self._optimizer is None or self._objective is None:
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving.")
-        args = (self.cRb, self.cZb, self.cP, self.cI, self.Psi,
+        args = (self.R1_n, self.Z1_n, self.cP, self.cI, self.Psi,
                 self.bdry_ratio, self.pres_ratio, self.zeta_ratio, self.errr_ratio)
 
         result = self._optimizer.optimize(self._objective, self.x, args=args)
@@ -827,3 +837,121 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return theslice
 
 # TODO: overwrite all Equilibrium methods and default to self._equilibria[-1]
+
+# these functions are needed to format the input arrays
+
+def format_profiles(profiles, p_basis:PowerSeries, i_basis:PowerSeries):
+    """Formats profile input arrays
+
+    Parameters
+    ----------
+    profiles : ndarray, shape(Nbdry,3)
+        array of fourier coeffs [l, p, i]
+    p_basis : PowerSeries
+        spectral basis for p_l coefficients
+    i_basis : PowerSeries
+        spectral basis for i_l coefficients
+
+    Returns
+    -------
+    p_l : ndarray
+        spectral coefficients for pressure profile
+    i_l : ndarray
+        spectral coefficients for rotational transform profile
+
+    """
+    p_l = np.zeros((p_basis.num_modes,))
+    i_l = np.zeros((i_basis.num_modes,))
+
+    for l, p, i in profiles:
+        idx_p = np.where(p_basis.modes[:, 0] == int(l))[0]
+        idx_i = np.where(i_basis.modes[:, 0] == int(l))[0]
+        p_l = put(p_l, idx_p, p)
+        i_l = put(i_l, idx_i, i)
+
+    return p_l, i_l
+
+
+def format_boundary(boundary, R1_basis:DoubleFourierSeries,
+                    Z1_basis:DoubleFourierSeries, mode:str='spectral'):
+    """Formats boundary arrays and converts between real and fourier representations
+
+    Parameters
+    ----------
+    boundary : ndarray, shape(Nbdry,4)
+        array of fourier coeffs [m, n, R1, Z1]
+        or array of real space coordinates, [theta, phi, R, Z]
+    R1_basis : DoubleFourierSeries
+        spectral basis for R1_mn coefficients
+    Z1_basis : DoubleFourierSeries
+        spectral basis for Z1_mn coefficients
+    mode : str
+        one of 'real', 'spectral'. Whether bdry is specified in real or spectral space.
+
+    Returns
+    -------
+    R1_mn : ndarray
+        spectral coefficients for R boundary
+    Z1_mn : ndarray
+        spectral coefficients for Z boundary
+
+    """
+    if mode == 'real':
+        theta = boundary[:, 0]
+        phi = boundary[:, 1]
+        rho = np.ones_like(theta)
+
+        nodes = np.array([rho, theta, phi]).T
+        grid = Grid(nodes)
+        R1_tform = Transform(grid, R1_basis)
+        Z1_tform = Transform(grid, Z1_basis)
+
+        # fit real data to spectral coefficients
+        R1_mn = R1_tform.fit(boundary[:, 2])
+        Z1_mn = Z1_tform.fit(boundary[:, 3])
+
+    else:
+        R1_mn = np.zeros((R1_basis.num_modes,))
+        Z1_mn = np.zeros((Z1_basis.num_modes,))
+
+        for m, n, R1, Z1 in boundary:
+            idx_R = np.where(np.logical_and(R1_basis.modes[:, 1] == int(m),
+                                            R1_basis.modes[:, 2] == int(n)))[0]
+            idx_Z = np.where(np.logical_and(Z1_basis.modes[:, 1] == int(m),
+                                            Z1_basis.modes[:, 2] == int(n)))[0]
+            R1_mn = put(R1_mn, idx_R, R1)
+            Z1_mn = put(Z1_mn, idx_Z, Z1)
+
+    return R1_mn, Z1_mn
+
+
+def format_axis(axis, R0_basis:FourierSeries, Z0_basis:FourierSeries):
+    """Formats magnetic axis input arrays
+
+    Parameters
+    ----------
+    axis : ndarray, shape(Nbdry,3)
+        array of fourier coeffs [l, p, i]
+    R0_basis : FourierSeries
+        spectral basis for R0_n coefficients
+    Z0_basis : PowerSeries
+        spectral basis for Z0_n coefficients
+
+    Returns
+    -------
+    R0_n : ndarray
+        spectral coefficients for magnetic axis R coordinate
+    Z0_n : ndarray
+        spectral coefficients for magnetic axis Z coordinate
+
+    """
+    R0_n = np.zeros((R0_basis.num_modes,))
+    Z0_n = np.zeros((Z0_basis.num_modes,))
+
+    for n, R0, Z0 in axis:
+        idx_R0 = np.where(R0_basis.modes[:, 0] == int(n))[0]
+        idx_Z0 = np.where(Z0_basis.modes[:, 0] == int(n))[0]
+        R0_n = put(R0_n, idx_R0, R0)
+        Z0_n = put(Z0_n, idx_Z0, Z0)
+
+    return R0_n, Z0_n

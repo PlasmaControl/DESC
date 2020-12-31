@@ -161,14 +161,14 @@ class InputReader:
 
         # default values
         inputs = {
-            'stell_sym': False,
+            'sym': False,
             'NFP': 1,
-            'Psi_lcfs': 1.0,
-            'Mpol': np.atleast_1d(0),
-            'Ntor': np.atleast_1d(0),
-            'delta_lm': np.atleast_1d(None),
-            'Mnodes': np.atleast_1d(0),
-            'Nnodes': np.atleast_1d(0),
+            'Psi': 1.0,
+            'L': np.atleast_1d(None),
+            'M': np.atleast_1d(0),
+            'N': np.atleast_1d(0),
+            'M_grid': np.atleast_1d(0),
+            'N_grid': np.atleast_1d(0),
             'bdry_ratio': np.atleast_1d(1.0),
             'pres_ratio': np.atleast_1d(1.0),
             'zeta_ratio': np.atleast_1d(1.0),
@@ -183,10 +183,9 @@ class InputReader:
             'bdry_mode': 'spectral',
             'zern_mode': 'fringe',
             'node_mode': 'cheb1',
-            'cP': np.atleast_1d(0.0),
-            'cI': np.atleast_1d(0.0),
-            'axis': np.atleast_2d((0, 0.0, 0.0)),
-            'bdry': np.atleast_2d((0, 0, 0.0, 0.0))
+            'profiles': np.atleast_2d((0, 0.0, 0.0)),
+            'boundary': np.atleast_2d((0, 0, 0.0, 0.0)),
+            'axis':     np.atleast_2d((0, 0.0, 0.0)),
         }
 
         inputs['output_path'] = self.output_path
@@ -231,32 +230,32 @@ class InputReader:
             words = command[equals+1:].split()
 
             # global parameters
-            match = re.search(r'stell_sym', argument, re.IGNORECASE)
+            match = re.search(r'sym', argument, re.IGNORECASE)
             if match:
-                inputs['stell_sym'] = int(numbers[0])
+                inputs['sym'] = int(numbers[0])
             match = re.search(r'NFP', argument, re.IGNORECASE)
             if match:
                 inputs['NFP'] = int(numbers[0])
-            match = re.search(r'Psi_lcfs', argument, re.IGNORECASE)
+            match = re.search(r'Psi', argument, re.IGNORECASE)
             if match:
-                inputs['Psi_lcfs'] = numbers[0]
+                inputs['Psi'] = numbers[0]
 
             # spectral resolution
-            match = re.search(r'Mpol', argument, re.IGNORECASE)
+            match = re.search(r'L_rad', argument, re.IGNORECASE)
             if match:
-                inputs['Mpol'] = np.array(numbers).astype(int)
-            match = re.search(r'Ntor', argument, re.IGNORECASE)
+                inputs['L'] = np.array(numbers).astype(int)
+            match = re.search(r'M_pol', argument, re.IGNORECASE)
             if match:
-                inputs['Ntor'] = np.array(numbers).astype(int)
-            match = re.search(r'delta_lm', argument, re.IGNORECASE)
+                inputs['M'] = np.array(numbers).astype(int)
+            match = re.search(r'N_tor', argument, re.IGNORECASE)
             if match:
-                inputs['delta_lm'] = np.array(numbers).astype(int)
-            match = re.search(r'Mnodes', argument, re.IGNORECASE)
+                inputs['N'] = np.array(numbers).astype(int)
+            match = re.search(r'M_grid', argument, re.IGNORECASE)
             if match:
-                inputs['Mnodes'] = np.array(numbers).astype(int)
-            match = re.search(r'Nnodes', argument, re.IGNORECASE)
+                inputs['M_grid'] = np.array(numbers).astype(int)
+            match = re.search(r'N_grid', argument, re.IGNORECASE)
             if match:
-                inputs['Nnodes'] = np.array(numbers).astype(int)
+                inputs['N_grid'] = np.array(numbers).astype(int)
 
             # continuation parameters
             match = re.search(r'bdry_ratio', argument, re.IGNORECASE)
@@ -354,51 +353,33 @@ class InputReader:
                      if re.search(r'\d', x)][0]
 
             # profile coefficients
-            match = re.search(r'cP\s*=\s*'+num_form, command, re.IGNORECASE)
+            match = re.search(r'p\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
-                cP = [float(x) for x in re.findall(
+                p_l = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
-                if inputs['cP'].size < l+1:
-                    inputs['cP'] = np.pad(
-                        inputs['cP'], (0, l+1-inputs['cP'].size), mode='constant')
-                inputs['cP'][l] = cP
-            match = re.search(r'cI\s*=\s*'+num_form, command, re.IGNORECASE)
+                prof_idx = np.where(inputs['profiles'][:, 0] == l)[0]
+                if prof_idx.size == 0:
+                    prof_idx = np.atleast_1d(inputs['profiles'].shape[0])
+                    inputs['profiles'] = np.pad(
+                        inputs['profiles'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['profiles'][prof_idx[0], 0] = l
+                inputs['profiles'][prof_idx[0], 1] = p_l
+            match = re.search(r'i\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
-                cI = [float(x) for x in re.findall(
+                i_l = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
-                if inputs['cI'].size < l+1:
-                    inputs['cI'] = np.pad(
-                        inputs['cI'], (0, l+1-inputs['cI'].size), mode='constant')
-                inputs['cI'][l] = cI
+                prof_idx = np.where(inputs['profiles'][:, 0] == n)[0]
+                if prof_idx.size == 0:
+                    prof_idx = np.atleast_1d(inputs['profiles'].shape[0])
+                    inputs['profiles'] = np.pad(
+                        inputs['profiles'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['profiles'][prof_idx[0], 0] = l
+                inputs['profiles'][prof_idx[0], 2] = i_l
 
-            # magnetic axis Fourier modes
-            match = re.search(r'aR\s*=\s*'+num_form, command, re.IGNORECASE)
+            # boundary surface coefficients
+            match = re.search(r'R1\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
-                aR = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
-                axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-                if axis_idx.size == 0:
-                    axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                    inputs['axis'] = np.pad(
-                        inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                    inputs['axis'][axis_idx[0], 0] = n
-                inputs['axis'][axis_idx[0], 1] = aR
-            match = re.search(r'aZ\s*=\s*'+num_form, command, re.IGNORECASE)
-            if match:
-                aZ = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
-                axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
-                if axis_idx.size == 0:
-                    axis_idx = np.atleast_1d(inputs['axis'].shape[0])
-                    inputs['axis'] = np.pad(
-                        inputs['axis'], ((0, 1), (0, 0)), mode='constant')
-                    inputs['axis'][axis_idx[0], 0] = n
-                inputs['axis'][axis_idx[0], 2] = aZ
-
-            # boundary Fourier modes
-            match = re.search(r'bR\s*=\s*'+num_form, command, re.IGNORECASE)
-            if match:
-                bR = [float(x) for x in re.findall(
+                R1 = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
                 bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
                 bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
@@ -409,10 +390,10 @@ class InputReader:
                         inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
                     inputs['bdry'][bdry_idx[0], 0] = m
                     inputs['bdry'][bdry_idx[0], 1] = n
-                inputs['bdry'][bdry_idx[0], 2] = bR
-            match = re.search(r'bZ\s*=\s*'+num_form, command, re.IGNORECASE)
+                inputs['bdry'][bdry_idx[0], 2] = R1
+            match = re.search(r'Z1\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
-                bZ = [float(x) for x in re.findall(
+                Z1 = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
                 bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
                 bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
@@ -423,16 +404,40 @@ class InputReader:
                         inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
                     inputs['bdry'][bdry_idx[0], 0] = m
                     inputs['bdry'][bdry_idx[0], 1] = n
-                inputs['bdry'][bdry_idx[0], 3] = bZ
+                inputs['bdry'][bdry_idx[0], 3] = Z1
+
+            # magnetic axis coefficients
+            match = re.search(r'R0\s*=\s*'+num_form, command, re.IGNORECASE)
+            if match:
+                R0_n = [float(x) for x in re.findall(
+                    num_form, match.group(0)) if re.search(r'\d', x)][0]
+                axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
+                if axis_idx.size == 0:
+                    axis_idx = np.atleast_1d(inputs['axis'].shape[0])
+                    inputs['axis'] = np.pad(
+                        inputs['axis'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['axis'][axis_idx[0], 0] = n
+                inputs['axis'][axis_idx[0], 1] = R0_n
+            match = re.search(r'Z0\s*=\s*'+num_form, command, re.IGNORECASE)
+            if match:
+                Z0_n = [float(x) for x in re.findall(
+                    num_form, match.group(0)) if re.search(r'\d', x)][0]
+                axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
+                if axis_idx.size == 0:
+                    axis_idx = np.atleast_1d(inputs['axis'].shape[0])
+                    inputs['axis'] = np.pad(
+                        inputs['axis'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['axis'][axis_idx[0], 0] = n
+                inputs['axis'][axis_idx[0], 2] = Z0_n
 
         # error handling
-        if np.any(inputs['Mpol'] == 0):
+        if np.any(inputs['M_pol'] == 0):
             raise IOError(TextColors.FAIL +
-                          'Mpol is not assigned' + TextColors.ENDC)
+                          'M_pol is not assigned' + TextColors.ENDC)
         if np.sum(inputs['bdry']) == 0:
             raise IOError(
                 TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
-        arrs = ['Mpol', 'Ntor', 'delta_lm', 'Mnodes', 'Nnodes', 'bdry_ratio',
+        arrs = ['L_rad', 'M_pol', 'N_tor', 'M_grid', 'N_grid', 'bdry_ratio',
                 'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
                 'ftol', 'xtol', 'gtol', 'nfev']
         arr_len = 0
@@ -446,19 +451,19 @@ class InputReader:
                               'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
 
         # unsupplied values
-        if np.sum(inputs['Mnodes']) == 0:
-            inputs['Mnodes'] = np.rint(1.5*inputs['Mpol']).astype(int)
-        if np.sum(inputs['Nnodes']) == 0:
-            inputs['Nnodes'] = np.rint(1.5*inputs['Ntor']).astype(int)
+        if np.sum(inputs['M_grid']) == 0:
+            inputs['M_grid'] = np.rint(1.5*inputs['M_pol']).astype(int)
+        if np.sum(inputs['N_grid']) == 0:
+            inputs['N_grid'] = np.rint(1.5*inputs['N_tor']).astype(int)
         if np.sum(inputs['axis']) == 0:
             axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
             inputs['axis'] = inputs['bdry'][axis_idx, 1:]
-        if None in inputs['delta_lm']:
-            default_deltas = {'fringe': 2*inputs['Mpol'],
-                              'ansi': inputs['Mpol'],
-                              'chevron': inputs['Mpol'],
-                              'house': 2*inputs['Mpol']}
-            inputs['delta_lm'] = default_deltas[inputs['zern_mode']]
+        if None in inputs['L_rad']:
+            default_L_rad = {'fringe': 2*inputs['M_pol'],
+                             'ansi': inputs['M_pol'],
+                             'chevron': inputs['M_pol'],
+                             'house': 2*inputs['M_pol']}
+            inputs['L_rad'] = default_L_rad[inputs['zern_mode']]
 
         return inputs
 
@@ -486,7 +491,7 @@ class InputReader:
         f = open(filename, 'w+')
 
         f.write('# global parameters \n')
-        f.write('stell_sym = {} \n'.format(inputs['stell_sym']))
+        f.write('sym = {} \n'.format(inputs['sym']))
         f.write('NFP = {} \n'.format(inputs['NFP']))
         f.write('Psi_lcfs = {} \n'.format(inputs['Psi_lcfs']))
 
@@ -495,10 +500,10 @@ class InputReader:
             ', '.join([str(i) for i in np.atleast_1d(inputs['Mpol'])])))
         f.write('Ntor = {} \n'.format(
             ', '.join([str(i) for i in np.atleast_1d(inputs['Ntor'])])))
-        f.write('Mnodes = {} \n'.format(
-            ', '.join([str(i) for i in np.atleast_1d(inputs['Mnodes'])])))
-        f.write('Nnodes = {} \n'.format(
-            ', '.join([str(i) for i in np.atleast_1d(inputs['Nnodes'])])))
+        f.write('M_grid = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['M_grid'])])))
+        f.write('N_grid = {} \n'.format(
+            ', '.join([str(i) for i in np.atleast_1d(inputs['N_grid'])])))
 
         f.write('\n# continuation parameters \n')
         f.write('bdry_ratio = {} \n'.format(
@@ -530,19 +535,19 @@ class InputReader:
         f.write('node_mode = {} \n'.format(inputs['node_mode']))
 
         f.write('\n# pressure and rotational transform profiles \n')
-        for i, (cP, cI) in enumerate(zip(inputs['cP'], inputs['cI'])):
-            f.write('l: {:3d}  cP = {:16.8E}  cI = {:16.8E} \n'.format(
-                int(i), cP, cI))
-
-        f.write('\n# magnetic axis initial guess \n')
-        for (n, cR, cZ) in inputs['axis']:
-            f.write('n: {:3d}  aR = {:16.8E}  aZ = {:16.8E} \n'.format(
-                int(n), cR, cZ))
+        for (l, p, i) in inputs['axis']:
+            f.write('l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n'.format(
+                int(l), p, i))
 
         f.write('\n# fixed-boundary surface shape \n')
-        for (m, n, cR, cZ) in inputs['bdry']:
-            f.write('m: {:3d}  n: {:3d}  bR = {:16.8E}  bZ = {:16.8E} \n'.format(
-                int(m), int(n), cR, cZ))
+        for (m, n, R1, Z1) in inputs['boundary']:
+            f.write('m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n'.format(
+                int(m), int(n), R1, Z1))
+
+        f.write('\n# magnetic axis initial guess \n')
+        for (n, R0, Z0) in inputs['axis']:
+            f.write('n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n'.format(
+                int(n), R0, Z0))
 
         f.close()
 
@@ -576,8 +581,8 @@ class InputReader:
         Ntor = 99
 
         pres_scale = 1.0
-        cP = np.array([0.0])
-        cI = np.array([0.0])
+        p_l = np.array([0.0])
+        i_l = np.array([0.0])
         axis = np.array([[0, 0, 0.0]])
         bdry = np.array([[0, 0, 0.0, 0.0]])
 
@@ -592,9 +597,9 @@ class InputReader:
             match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
             if match:
                 if re.search(r'T', match.group(0), re.IGNORECASE):
-                    desc_file.write('stell_sym \t=   0\n')
+                    desc_file.write('sym \t=   0\n')
                 else:
-                    desc_file.write('stell_sym \t=   1\n')
+                    desc_file.write('sym \t=   1\n')
             match = re.search(r'NFP\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 numbers = [int(x) for x in re.findall(
@@ -604,17 +609,17 @@ class InputReader:
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
-                desc_file.write('Psi_lcfs\t= {:16.8E}\n'.format(numbers[0]))
+                desc_file.write('Psi\t= {:16.8E}\n'.format(numbers[0]))
             match = re.search(r'MPOL\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 numbers = [int(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
-                desc_file.write('Mpol\t\t= {:3d}\n'.format(numbers[0]))
+                desc_file.write('M_pol\t\t= {:3d}\n'.format(numbers[0]))
             match = re.search(r'NTOR\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 numbers = [int(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
-                desc_file.write('Ntor\t\t= {:3d}\n'.format(numbers[0]))
+                desc_file.write('N_tor\t\t= {:3d}\n'.format(numbers[0]))
                 Ntor = numbers[0]
 
             # pressure profile
@@ -656,9 +661,9 @@ class InputReader:
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 for k in range(len(numbers)):
                     l = 2*k
-                    if cP.size < l+1:
-                        cP = np.pad(cP, (0, l+1-cP.size), mode='constant')
-                    cP[l] = numbers[k]
+                    if p_l.size < l+1:
+                        p_l = np.pad(p_l, (0, l+1-p_l.size), mode='constant')
+                    p_l[l] = numbers[k]
 
             # rotational transform
             match = re.search(r'NCURR\s*=(\s*'+num_form+')*',
@@ -679,9 +684,9 @@ class InputReader:
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 for k in range(len(numbers)):
                     l = 2*k
-                    if cI.size < l+1:
-                        cI = np.pad(cI, (0, l+1-cI.size), mode='constant')
-                    cI[l] = numbers[k]
+                    if i_l.size < l+1:
+                        i_l = np.pad(i_l, (0, l+1-i_l.size), mode='constant')
+                    i_l[l] = numbers[k]
 
             # magnetic axis
             match = re.search(r'RAXIS\s*=(\s*'+num_form+')*',
@@ -855,31 +860,31 @@ class InputReader:
                     raise IOError(
                         TextColors.FAIL + 'Cannot handle multi-line VMEC inputs!' + TextColors.ENDC)
 
-        cP *= pres_scale
+        p_l *= pres_scale
         desc_file.write('\n')
         desc_file.write('# pressure and rotational transform profiles\n')
-        for k in range(max(cP.size, cI.size)):
-            if k >= cP.size:
+        for k in range(max(p_l.size, i_l.size)):
+            if k >= p_l.size:
                 desc_file.write(
-                    'l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k, 0.0, cI[k]))
-            elif k >= cI.size:
+                    'l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n'.format(k, 0.0, i_l[k]))
+            elif k >= i_l.size:
                 desc_file.write(
-                    'l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k, cP[k], 0.0))
+                    'l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n'.format(k, p_l[k], 0.0))
             else:
                 desc_file.write(
-                    'l: {:3d}\tcP = {:16.8E}\tcI = {:16.8E}\n'.format(k, cP[k], cI[k]))
-
-        desc_file.write('\n')
-        desc_file.write('# magnetic axis initial guess\n')
-        for k in range(np.shape(axis)[0]):
-            desc_file.write('n: {:3d}\taR = {:16.8E}\taZ = {:16.8E}\n'.format(
-                int(axis[k, 0]), axis[k, 1], axis[k, 2]))
+                    'l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n'.format(k, p_l[k], i_l[k]))
 
         desc_file.write('\n')
         desc_file.write('# fixed-boundary surface shape\n')
         for k in range(np.shape(bdry)[0]):
-            desc_file.write('m: {:3d}\tn: {:3d}\tbR = {:16.8E}\tbZ = {:16.8E}\n'.format(
+            desc_file.write('m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n'.format(
                 int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]))
+
+        desc_file.write('\n')
+        desc_file.write('# magnetic axis initial guess\n')
+        for k in range(np.shape(axis)[0]):
+            desc_file.write('n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n'.format(
+                int(axis[k, 0]), axis[k, 1], axis[k, 2]))
 
         desc_file.truncate()
 

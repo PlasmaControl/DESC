@@ -2,8 +2,9 @@ import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot
 
-from desc.backend import TextColors, jnp, put
+from desc.backend import TextColors, jnp, put, use_jax
 from desc.utils import unpack_state, dot, cross
+
 from desc.boundary_conditions import compute_bdry_err, compute_lambda_err
 from desc.grid import LinearGrid
 from desc.transform import Transform
@@ -12,16 +13,15 @@ from desc.compute_funs import compute_coordinates, compute_coordinate_derivative
 from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
 from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
 from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
+from desc.derivatives import Derivative
 
 
-class ObjectiveFunction(IOAble,ABC):
+class ObjectiveFunction(IOAble, ABC):
 
     """Objective function used in the optimization of an Equilibrium
 
     Attributes
     ----------
-    scalar : bool, optional
-        True for scalar objectives, False otherwise (Default)
     R_transform : Transform, optional
         transforms R coefficients to real space in the volume
     Z_transform : Transform, optional
@@ -47,17 +47,15 @@ class ObjectiveFunction(IOAble,ABC):
     _io_attrs_ = ['scalar', 'R_transform', 'Z_transform', 'R1_transform',
                   'Z1_transform', 'L_transform', 'P_transform', 'I_transform']
 
-    def __init__(self, scalar:bool=False,
-                 R_transform:Transform=None, Z_transform:Transform=None,
-                 R1_transform:Transform=None, Z1_transform:Transform=None,
-                 L_transform:Transform=None, P_transform:Transform=None,
-                 I_transform:Transform=None) -> None:
+    def __init__(self,
+                 R_transform: Transform = None, Z_transform: Transform = None,
+                 R1_transform: Transform = None, Z1_transform: Transform = None,
+                 L_transform: Transform = None, P_transform: Transform = None,
+                 I_transform: Transform = None) -> None:
         """Initializes an ObjectiveFunction
 
         Parameters
         ----------
-        scalar : bool, optional
-            True for scalar objectives, False otherwise (Default)
         R_transform : Transform, optional
             transforms R coefficients to real space in the volume
         Z_transform : Transform, optional
@@ -78,7 +76,6 @@ class ObjectiveFunction(IOAble,ABC):
         None
 
         """
-        self.scalar = scalar
         self.R_transform = R_transform
         self.Z_transform = Z_transform
         self.R1_transform = R1_transform
@@ -87,28 +84,44 @@ class ObjectiveFunction(IOAble,ABC):
         self.P_transform = P_transform
         self.I_transform = I_transform
 
+        self._grad = Derivative(self.compute_scalar, mode='grad')
+        self._hess = Derivative(self.compute_scalar, mode='hess')
+        self._jac = Derivative(self.compute, mode='fwd')
+
     @abstractmethod
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
+
+    @abstractmethod
+    def compute_scalar(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        pass
+
     @abstractmethod
     def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         pass
+
+    def grad(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        return self._grad.compute(x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio)
+
+    def hess(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        return self._hess.compute(x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio)
+
+    def jac(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        return self._jac.compute(x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio)
 
 
 class ForceErrorNodes(ObjectiveFunction):
     """Minimizes equilibrium force balance error in physical space"""
 
-    def __init__(self, scalar:bool=False,
-                 R_transform:Transform=None, Z_transform:Transform=None,
-                 R1_transform:Transform=None, Z1_transform:Transform=None,
-                 L_transform:Transform=None, P_transform:Transform=None,
-                 I_transform:Transform=None) -> None:
+    def __init__(self,
+                 R_transform: Transform = None, Z_transform: Transform = None,
+                 R1_transform: Transform = None, Z1_transform: Transform = None,
+                 L_transform: Transform = None, P_transform: Transform = None,
+                 I_transform: Transform = None) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters
         ----------
-        scalar : bool, optional
-            True for scalar objectives, False otherwise (Default)
         R_transform : Transform, optional
             transforms R coefficients to real space in the volume
         Z_transform : Transform, optional
@@ -129,15 +142,16 @@ class ForceErrorNodes(ObjectiveFunction):
         None
 
         """
-        super().__init__(scalar, R_transform, Z_transform, R1_transform,
+        super().__init__(R_transform, Z_transform, R1_transform,
                          Z1_transform, L_transform, P_transform, I_transform)
         self.equil_fun = compute_force_error_nodes
         self.bdry_fun = compute_bdry_err
+        self.scalar = False
 
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         """ Compute force balance error. Overrides the compute method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
-                      self.R_transform.num_modes, self.Z_transform.num_modes)
+                                  self.R_transform.num_modes, self.Z_transform.num_modes)
         errRf, errZf = self.equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, self.R_transform, self.Z_transform, self.P_transform, self.I_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
@@ -152,14 +166,18 @@ class ForceErrorNodes(ObjectiveFunction):
             errL0 = compute_lambda_err(cL, self.L_transform.basis)
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
-        if self.scalar:
-            residual = jnp.log1p(jnp.sum(residual**2))
         return residual
 
-    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
+    def compute_scalar(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        residual = self.compute(
+            x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio)
+        residual = jnp.sum(residual**2)
+        return residual
+
+    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0) -> bool:
         """ Print residuals. Overrides callback method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
-                      self.R_transform.num_modes, self.Z_transform.num_modes)
+                                  self.R_transform.num_modes, self.Z_transform.num_modes)
         errRf, errZf = self.equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, self.R_transform, self.Z_transform, self.P_transform, self.I_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
@@ -179,17 +197,18 @@ class ForceErrorNodes(ObjectiveFunction):
                                     errL0.flatten()/errr_ratio])
         resid_rms = 1/2*jnp.sum(residual**2)
         print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
-                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+            resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+        return False
 
 
 class AccelErrorSpectral(ObjectiveFunction):
     """Minimizes equilibrium acceleration error in spectral space"""
 
-    def __init__(self, scalar:bool=False,
-                 R_transform:Transform=None, Z_transform:Transform=None,
-                 R1_transform:Transform=None, Z1_transform:Transform=None,
-                 L_transform:Transform=None, P_transform:Transform=None,
-                 I_transform:Transform=None) -> None:
+    def __init__(self,
+                 R_transform: Transform = None, Z_transform: Transform = None,
+                 R1_transform: Transform = None, Z1_transform: Transform = None,
+                 L_transform: Transform = None, P_transform: Transform = None,
+                 I_transform: Transform = None) -> None:
         """Initializes an AccelErrorNodes object
 
         Parameters
@@ -216,15 +235,16 @@ class AccelErrorSpectral(ObjectiveFunction):
         None
 
         """
-        super().__init__(scalar, R_transform, Z_transform, R1_transform,
+        super().__init__(R_transform, Z_transform, R1_transform,
                          Z1_transform, L_transform, P_transform, I_transform)
         self.equil_fun = compute_accel_error_spectral
         self.bdry_fun = compute_bdry_err
+        self.scalar = False
 
     def compute(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
         """ Compute spectral space acceleration error. Overrides the compute method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
-                      self.R_transform.num_modes, self.Z_transform.num_modes)
+                                  self.R_transform.num_modes, self.Z_transform.num_modes)
 
         errRf, errZf = self.equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, self.R_transform, self.Z_transform, self.P_transform, self.I_transform, pres_ratio, zeta_ratio)
@@ -240,14 +260,18 @@ class AccelErrorSpectral(ObjectiveFunction):
             errL0 = compute_lambda_err(cL, self.L_transform.basis)
             residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
 
-        if self.scalar:
-            residual = jnp.log1p(jnp.sum(residual**2))
         return residual
 
-    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0)->None:
+    def compute_scalar(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+        residual = self.compute(
+            x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio, pres_ratio, zeta_ratio, errr_ratio)
+        residual = jnp.sum(residual**2)
+        return residual
+
+    def callback(self, x, cRb, cZb, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0) -> None:
         """ Print residuals. Overrides callback method of the parent ObjectiveFunction"""
         cR, cZ, cL = unpack_state(x,
-                      self.R_transform.num_modes, self.Z_transform.num_modes)
+                                  self.R_transform.num_modes, self.Z_transform.num_modes)
         errRf, errZf = self.equil_fun(
             cR, cZ, cP, cI, Psi_lcfs, self.R_transform, self.Z_transform, self.P_transform, self.I_transform, pres_ratio, zeta_ratio)
         errRb, errZb = self.bdry_fun(
@@ -267,7 +291,7 @@ class AccelErrorSpectral(ObjectiveFunction):
                                     errL0.flatten()/errr_ratio])
         resid_rms = 1/2*jnp.sum(residual**2)
         print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
-                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+            resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
 
 
 class ObjectiveFunctionFactory():
@@ -284,11 +308,11 @@ class ObjectiveFunctionFactory():
 
     """
 
-    def get_equil_obj_fun(errr_mode, scalar:bool=False,
-                  R_transform:Transform=None, Z_transform:Transform=None,
-                  R1_transform:Transform=None, Z1_transform:Transform=None,
-                  L_transform:Transform=None, P_transform:Transform=None,
-                  I_transform:Transform=None) -> ObjectiveFunction:
+    def get_equil_obj_fun(errr_mode,
+                          R_transform: Transform = None, Z_transform: Transform = None,
+                          R1_transform: Transform = None, Z1_transform: Transform = None,
+                          L_transform: Transform = None, P_transform: Transform = None,
+                          I_transform: Transform = None) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
 
         Parameters
@@ -296,8 +320,6 @@ class ObjectiveFunctionFactory():
         errr_mode : str
             error mode of the objective function
             one of 'force', 'accel'
-        scalar : bool, optional
-            True for scalar objectives, False otherwise (Default)
         R_transform : Transform, optional
             transforms R coefficients to real space in the volume
         Z_transform : Transform, optional
@@ -320,17 +342,15 @@ class ObjectiveFunctionFactory():
 
         """
         if errr_mode == 'force':
-            obj_fun = ForceErrorNodes(scalar=scalar,
-                R_transform=R_transform, Z_transform=Z_transform,
-                R1_transform=R1_transform, Z1_transform=Z1_transform,
-                L_transform=L_transform, P_transform=P_transform,
-                I_transform=I_transform)
+            obj_fun = ForceErrorNodes(R_transform=R_transform, Z_transform=Z_transform,
+                                      R1_transform=R1_transform, Z1_transform=Z1_transform,
+                                      L_transform=L_transform, P_transform=P_transform,
+                                      I_transform=I_transform)
         elif errr_mode == 'accel':
-            obj_fun = AccelErrorSpectral(scalar=scalar,
-                R_transform=R_transform, Z_transform=Z_transform,
-                R1_transform=R1_transform, Z1_transform=Z1_transform,
-                L_transform=L_transform, P_transform=P_transform,
-                I_transform=I_transform)
+            obj_fun = AccelErrorSpectral(R_transform=R_transform, Z_transform=Z_transform,
+                                         R1_transform=R1_transform, Z1_transform=Z1_transform,
+                                         L_transform=L_transform, P_transform=P_transform,
+                                         I_transform=I_transform)
         else:
             raise ValueError(TextColors.FAIL + "Requested Objective Function is not implemented." +
                              " Available objective functions are 'force' and 'accel'" + TextColors.ENDC)
@@ -373,7 +393,8 @@ def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_
 
     def qisym_obj(x, cI, Psi_lcfs):
 
-        cR, cZ, cL = unpack_state(jnp.matmul(sym_mat, x), RZ_transform.num_modes)
+        cR, cZ, cL = unpack_state(jnp.matmul(
+            sym_mat, x), RZ_transform.num_modes)
         errQS = compute_qs_error_spectral(
             cR, cZ, cI, Psi_lcfs, NFP, zernike_transform, modes_pol, modes_tor, 1.0)
 
@@ -453,7 +474,8 @@ def is_nested(cR, cZ, R_basis, Z_basis, L=10, M=361, zeta=0):
     Rs = R_transf.transform(cR).reshape((L, -1), order='F')
     Zs = Z_transf.transform(cZ).reshape((L, -1), order='F')
 
-    p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True) for R, Z in zip(Rs, Zs)]
+    p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True)
+         for R, Z in zip(Rs, Zs)]
     nested = np.all([p[i+1].contains_path(p[i]) for i in range(len(p)-1)])
     intersects = np.any([curve_self_intersects(R, Z) for R, Z in zip(Rs, Zs)])
     return nested and not intersects
@@ -603,7 +625,8 @@ def compute_force_error_RphiZ(cR, cZ, cP, cI, Psi_lcfs, R_transform,
     pres_r = P_transform.transform(cP, 1) * pres_ratio
 
     # compute fields components
-    coord_der = compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform)
+    coord_der = compute_coordinate_derivatives(
+        cR, cZ, R_transform, Z_transform)
     cov_basis = compute_covariant_basis(
         coord_der, R_transform.grid.axis, R_transform.derivs)
     jacobian = compute_jacobian(
@@ -680,7 +703,8 @@ def compute_force_error_RddotZddot(cR, cZ, cP, cI, Psi_lcfs, R_transform,
         spectral coefficients for d^2Z/dt^2
 
     """
-    coord_der = compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform)
+    coord_der = compute_coordinate_derivatives(
+        cR, cZ, R_transform, Z_transform)
     F_err = compute_force_error_RphiZ(
         cR, cZ, cP, cI, Psi_lcfs, R_transform, Z_transform, P_transform, I_transform)
     num_nodes = R_transform.num_nodes  # FIXME: this needs symmetry
@@ -806,7 +830,8 @@ def compute_qs_error_spectral(cR, cZ, cP, cI, Psi_lcfs, R_transform,
     """
     iota = I_transform.transform(cI, 0)
 
-    coord_der = compute_coordinate_derivatives(cR, cZ, R_transform, Z_transform)
+    coord_der = compute_coordinate_derivatives(
+        cR, cZ, R_transform, Z_transform)
     cov_basis = compute_covariant_basis(
         coord_der, R_transform.grid.axis, R_transform.derivs)
     jacobian = compute_jacobian(

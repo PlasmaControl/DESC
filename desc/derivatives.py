@@ -7,13 +7,13 @@ if use_jax:
     import jax
 
 
-class Jacobian(ABC):
-    """Jacobian is an abstract base class for jacobian matrix calculations
+class _Derivative(ABC):
+    """_Derivative is an abstract base class for derivative matrix calculations
     """
 
     @abstractmethod
-    def __init__(self, fun:callable, argnum:int=0, **kwargs) -> None:
-        """Initializes an Jacobian
+    def __init__(self, fun: callable, argnum: int = 0, **kwargs) -> None:
+        """Initializes a Derivative object
 
         Parameters
         ----------
@@ -31,12 +31,12 @@ class Jacobian(ABC):
 
     @abstractmethod
     def compute(self, *args):
-        """Computes the jacobian matrix
+        """Computes the derivative matrix
 
         Parameters
         ----------
         *args : list
-            Arguments of the objective function where the jacobian is to be
+            Arguments of the objective function where the derivative is to be
             evaluated at.
 
         Returns
@@ -64,13 +64,16 @@ class Jacobian(ABC):
     def argnum(self, argnum:int) -> None:
         self._argnum = argnum
 
+    def __call__(self, *args):
+        return self.compute(*args)
 
-class AutoDiffJacobian(Jacobian):
-    """Computes jacobians using automatic differentiation with JAX
+
+class AutoDiffDerivative(_Derivative):
+    """Computes derivatives using automatic differentiation with JAX
     """
 
-    def __init__(self, fun:callable, argnum:int=0, mode:str='fwd') -> None:
-        """Initializes an AutoDiffJacobian
+    def __init__(self, fun: callable, argnum: int = 0, mode: str = 'fwd') -> None:
+        """Initializes an AutoDiffDerivative
 
         Parameters
         ----------
@@ -80,7 +83,8 @@ class AutoDiffJacobian(Jacobian):
             Specifies which positional argument to differentiate with respect to
         mode : str, optional
             Automatic differentiation mode.
-            One of 'fwd' (forward mode), 'rev' (reverse mode), or 'grad' (gradient).
+            One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
+            'grad' (gradient of a scalar function), or 'hess' (hessian of a scalar function)
             Default = 'fwd'
 
         Raises
@@ -97,12 +101,12 @@ class AutoDiffJacobian(Jacobian):
         self.mode = mode
 
     def compute(self, *args):
-        """Computes the jacobian matrix
+        """Computes the derivative matrix
 
         Parameters
         ----------
         *args : list
-            Arguments of the objective function where the jacobian is to be
+            Arguments of the objective function where the derivative is to be
             evaluated at.
 
         Returns
@@ -119,11 +123,11 @@ class AutoDiffJacobian(Jacobian):
         return self._mode
 
     @mode.setter
-    def mode(self, mode:str) -> None:
-        if mode not in ['fwd', 'rev', 'grad']:
+    def mode(self, mode: str) -> None:
+        if mode not in ['fwd', 'rev', 'grad', 'hess']:
             raise ValueError(TextColors.FAIL +
-                         "invalid mode option for automatic differentiation"
-                           + TextColors.ENDC)
+                             "invalid mode option for automatic differentiation"
+                             + TextColors.ENDC)
         self._mode = mode
         if self._mode == 'fwd':
             self._compute = jax.jacfwd(self._fun, self._argnum)
@@ -131,15 +135,17 @@ class AutoDiffJacobian(Jacobian):
             self._compute = jax.jacrev(self._fun, self._argnum)
         elif self._mode == 'grad':
             self._compute = jax.grad(self._fun, self._argnum)
+        elif self._mode == 'hess':
+            self._compute = jax.hessian(self._fun, self._argnum)
 
 
-class FiniteDiffJacobian(Jacobian):
-    """Computes jacobians using 2nd order centered finite differences
+class FiniteDiffDerivative(_Derivative):
+    """Computes derivatives using 2nd order centered finite differences
     """
 
-    def __init__(self, fun:callable, argnum:int=0,
-                 rel_step:float=1e-3) -> None:
-        """Initializes a FiniteDiffJacobian
+    def __init__(self, fun: callable, argnum: int = 0, mode: str = 'fwd',
+                 rel_step: float = 1e-3) -> None:
+        """Initializes a FiniteDiffDerivative
 
         Parameters
         ----------
@@ -159,14 +165,59 @@ class FiniteDiffJacobian(Jacobian):
         self._fun = fun
         self._argnum = argnum
         self.rel_step = rel_step
+        self.mode = mode
 
-    def compute(self, *args):
-        """Computes the jacobian matrix
+    def _compute_hessian(self, *args):
+        """Computes the hessian matrix using 2nd order centered finite differences.
 
         Parameters
         ----------
         *args : list
-            Arguments of the objective function where the jacobian is to be
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        H : ndarray of float, shape(len(x),len(x))
+            d^2f/dx^2, where f is the output of the function fun and x is the input
+            argument at position argnum.
+
+        """
+
+        def f(x):
+            tempargs = args[0:self._argnum] + \
+                (x,) + args[self._argnum+1:]
+            return self._fun(*tempargs)
+
+        x = np.atleast_1d(args[self._argnum])
+        n = len(x)
+        fx = f(x)
+        h = np.maximum(1.0, np.abs(x))*self.rel_step
+        ee = np.diag(h)
+        dtype = fx.dtype
+        hess = np.outer(h, h)
+
+        for i in range(n):
+            eei = ee[i, :]
+            hess[i, i] = (f(x + 2 * eei) - 2 * fx +
+                          f(x - 2 * eei)) / (4. * hess[i, i])
+            for j in range(i + 1, n):
+                eej = ee[j, :]
+                hess[i, j] = (f(x + eei + eej)
+                              - f(x + eei - eej)
+                              - f(x - eei + eej)
+                              + f(x - eei - eej)) / (4. * hess[j, i])
+                hess[j, i] = hess[i, j]
+
+        return hess
+
+    def _compute_grad_or_jac(self, *args):
+        """Computes the gradient or jacobian matrix (ie, first derivative)
+
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
             evaluated at.
 
         Returns
@@ -176,8 +227,12 @@ class FiniteDiffJacobian(Jacobian):
             argument at position argnum.
 
         """
-        f0 = np.atleast_1d(self._fun(*args))
+        def f(x):
+            tempargs = args[0:self._argnum] + (x,) + args[self._argnum+1:]
+            return self._fun(*tempargs)
+
         x0 = np.atleast_1d(args[self._argnum])
+        f0 = f(x0)
         m = f0.size
         n = x0.size
         J = np.zeros((m, n))
@@ -187,10 +242,8 @@ class FiniteDiffJacobian(Jacobian):
             x1 = x0 - h_vecs[i]
             x2 = x0 + h_vecs[i]
             dx = x2[i] - x1[i]
-            args1 = args[0:self._argnum] + (x1,) + args[self._argnum+1:]
-            args2 = args[0:self._argnum] + (x2,) + args[self._argnum+1:]
-            f1 = self._fun(*args1)
-            f2 = self._fun(*args2)
+            f1 = f(x1)
+            f2 = f(x2)
             df = f2 - f1
             dfdx = df / dx
             J = put(J.T, i, dfdx.flatten()).T
@@ -198,8 +251,52 @@ class FiniteDiffJacobian(Jacobian):
             J = np.ravel(J)
         return J
 
+    @property
+    def mode(self) -> str:
+        return self._mode
 
-# these classes currently do not meet the Jacobian API -----------------------
+    @mode.setter
+    def mode(self, mode: str) -> None:
+        if mode not in ['fwd', 'rev', 'grad', 'hess']:
+            raise ValueError(TextColors.FAIL +
+                             "invalid mode option for finite difference differentiation"
+                             + TextColors.ENDC)
+        self._mode = mode
+        if self._mode == 'fwd':
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == 'rev':
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == 'grad':
+            self._compute = self._compute_grad_or_jac
+        elif self._mode == 'hess':
+            self._compute = self._compute_hessian
+
+    def compute(self, *args):
+        """Computes the derivative matrix
+
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        J : ndarray of float, shape(len(f),len(x))
+            df/dx, where f is the output of the function fun and x is the input
+            argument at position argnum.
+
+        """
+        return self._compute(*args)
+
+
+if use_jax:
+    Derivative = AutoDiffDerivative
+else:
+    Derivative = FiniteDiffDerivative
+
+
+# these classes currently do not meet the Derivative API -----------------------
 
 
 class SPSAJacobian():

@@ -235,6 +235,10 @@ def compute_covariant_basis_force(toroidal_coords):
         dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
         evaluated at grid nodes.
 
+    coord_der : dict
+        dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations.
+        keys are of the form 'X_y' meaning the derivative of X wrt to y
+
     Returns
     -------
     cov_basis : dict
@@ -356,12 +360,6 @@ def compute_jacobian_force(toroidal_coords, cov_basis):
                       cross(cov_basis['e_theta_t'], cov_basis['e_zeta'], 0), 0) \
                     + dot(cov_basis['e_rho'],
                       cross(cov_basis['e_theta'], cov_basis['e_zeta_t'], 0), 0)
-    jacobian['g_z'] = dot(cov_basis['e_rho_z'],
-                      cross(cov_basis['e_theta'], cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],
-                      cross(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0), 0) \
-                    + dot(cov_basis['e_rho'],
-                      cross(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0), 0)
 
     return jacobian
 
@@ -507,7 +505,7 @@ def compute_plasma_current(cov_basis, jacobian, magnetic_field):
                               / (mu0*jacobian['g'])
     plasma_current['J^zeta']  = (magnetic_field['B_theta_r'] - magnetic_field['B_rho_t']) \
                               / (mu0*jacobian['g'])
-    
+
     plasma_current['J_con'] = plasma_current['J^rho']*  cov_basis['e_rho'] \
                             + plasma_current['J^theta']*cov_basis['e_theta'] \
                             + plasma_current['J^zeta']* cov_basis['e_zeta']
@@ -569,7 +567,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform:
             / (2*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))) \
             + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_v'], 0)+2*iota*(dot(cov_basis['e_theta_v'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_v'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_v'], 0))**2 \
             / (2*(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))**(3/2))
-    
+
         magnetic_field_mag['|B|_zz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_zz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
             + jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_z']*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
             / jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
@@ -577,7 +575,7 @@ def compute_magnetic_field_magnitude(cov_basis, magnetic_field, cI, I_transform:
             / (2*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))) \
             + jnp.abs(magnetic_field['B^zeta'])*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0))**2 \
             / (2*(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0))**(3/2))
-    
+
         magnetic_field_mag['|B|_vz'] = jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_vz']*jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \
             + jnp.sign(magnetic_field['B^zeta'])*magnetic_field['B^zeta_v']*(2*iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta_z'], 0)+2*iota*(dot(cov_basis['e_theta_z'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0))+2*dot(cov_basis['e_zeta'], cov_basis['e_zeta_z'], 0)) \
             / jnp.sqrt(iota**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0)+2*iota*dot(cov_basis['e_theta'], cov_basis['e_zeta'], 0)+dot(cov_basis['e_zeta'], cov_basis['e_zeta'], 0)) \

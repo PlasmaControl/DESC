@@ -25,6 +25,7 @@ class Configuration(IOAble):
     _io_attrs_ = ['_cR', '_cZ', '_cL', '_cRb', '_cZb', '_cP', '_cI', '_Psi', '_NFP',
                   '_R_basis', '_Z_basis', '_L_basis', '_Rb_basis', '_Zb_basis',
                   '_P_basis', '_I_basis']
+
     _object_lib_ = {'PowerSeries'         : PowerSeries,
                     'DoubleFourierSeries' : DoubleFourierSeries,
                     'FourierZernikeBasis' : FourierZernikeBasis,
@@ -51,8 +52,11 @@ class Configuration(IOAble):
                 sym : bool, is the problem stellarator symmetric or not, default is False
                 index : str, type of Zernike indexing scheme to use, default is 'ansi'
                 bdry_mode : str, how to calculate error at bdry, default is 'spectral'
-                bdry_ratio :
-                axis :
+                bdry_ratio : float, Multiplier on the 3D boundary modes. Default = 1.0.
+                pres_ratio : float, Multiplier on the pressure profile. Default = 1.0.
+                zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
+                errr_ratio : float, Weight on the force balance equations, relative to the boundary condition equations. Default = 1e-8.
+                axis : ndarray, Fourier coefficients for initial guess for the axis
                 x : ndarray, state vector of spectral coefficients
                 cR : ndarray, spectral coefficients of R
                 cZ : ndarray, spectral coefficients of Z
@@ -70,7 +74,6 @@ class Configuration(IOAble):
         self._file_format_ = file_format
         if load_from is None:
             self._init_from_inputs_(inputs=inputs)
-
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
@@ -94,8 +97,11 @@ class Configuration(IOAble):
         # optional inputs
         self._sym = inputs.get('sym', False)
         self._index = inputs.get('index', 'ansi')
-        bdry_mode = inputs.get('bdry_mode', 'spectral')
-        bdry_ratio = inputs.get('bdry_ratio', 1.0)
+        self.bdry_mode = inputs.get('bdry_mode', 'spectral')
+        self.bdry_ratio = inputs.get('bdry_ratio', 1.0)
+        self.pres_ratio = inputs.get('pres_ratio', 1.0)
+        self.zeta_ratio = inputs.get('zeta_ratio', 1.0)
+        self.errr_ratio = inputs.get('errr_ratio', 1e-8)
         axis = inputs.get('axis', bdry[np.where(bdry[:, 0] == 0)[0], 1:])
 
         # stellarator symmetry for bases
@@ -110,25 +116,25 @@ class Configuration(IOAble):
 
         # create bases
         self._R_basis = FourierZernikeBasis(
-                    L=self._L, M=self._M, N=self._N,
-                    NFP=self._NFP, sym=self._R_sym, index=self._index)
+            L=self._L, M=self._M, N=self._N,
+            NFP=self._NFP, sym=self._R_sym, index=self._index)
         self._Z_basis = FourierZernikeBasis(
-                    L=self._L, M=self._M, N=self._N,
-                    NFP=self._NFP, sym=self._Z_sym, index=self._index)
+            L=self._L, M=self._M, N=self._N,
+            NFP=self._NFP, sym=self._Z_sym, index=self._index)
         self._L_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
         self._Rb_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
         self._Zb_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
         self._P_basis = PowerSeries(L=self._cP.size-1)
         self._I_basis = PowerSeries(L=self._cI.size-1)
 
         # format boundary
         self._cRb, self._cZb = format_bdry(
-                            bdry, self._Rb_basis, self._Zb_basis, bdry_mode)
-        ratio_Rb = np.where(self._Rb_basis.modes[:, 2] != 0, bdry_ratio, 1)
-        ratio_Zb = np.where(self._Zb_basis.modes[:, 2] != 0, bdry_ratio, 1)
+            bdry, self._Rb_basis, self._Zb_basis, self.bdry_mode)
+        ratio_Rb = np.where(self._Rb_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
+        ratio_Zb = np.where(self._Zb_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
         self._cRb *= ratio_Rb
         self._cZb *= ratio_Zb
 
@@ -144,7 +150,7 @@ class Configuration(IOAble):
                 self._cL = inputs['cL']
             except:
                 self._cR, self._cZ = get_initial_guess_scale_bdry(
-                        axis, bdry, bdry_ratio, self._R_basis, self._Z_basis)
+                    axis, bdry, self.bdry_ratio, self._R_basis, self._Z_basis)
                 self._cL = np.zeros((self._L_basis.num_modes,))
             self._x = np.concatenate([self._cR, self._cZ, self._cL])
 
@@ -166,17 +172,17 @@ class Configuration(IOAble):
 
         # create bases
         self._R_basis = FourierZernikeBasis(
-                    L=self._L, M=self._M, N=self._N,
-                    NFP=self._NFP, sym=self._R_sym, index=self._index)
+            L=self._L, M=self._M, N=self._N,
+            NFP=self._NFP, sym=self._R_sym, index=self._index)
         self._Z_basis = FourierZernikeBasis(
-                    L=self._L, M=self._M, N=self._N,
-                    NFP=self._NFP, sym=self._Z_sym, index=self._index)
+            L=self._L, M=self._M, N=self._N,
+            NFP=self._NFP, sym=self._Z_sym, index=self._index)
         self._L_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
         self._Rb_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
         self._Zb_basis = DoubleFourierSeries(
-                    M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
 
         def copy_coeffs(c_old, modes_old, modes_new):
             num_modes = modes_new.shape[0]
@@ -211,7 +217,7 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._cR, self._cZ, self._cL = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
 
     @property
     def cR(self):
@@ -409,7 +415,7 @@ class Configuration(IOAble):
     def I_basis(self, I_basis:Basis) -> None:
         self._I_basis = I_basis
 
-    def compute_coordinates(self, grid:Grid) -> dict:
+    def compute_coordinates(self, grid: Grid) -> dict:
         """Converts from spectral to real space by calling :func:`desc.configuration.compute_coordinates` 
 
         Parameters
@@ -431,7 +437,7 @@ class Configuration(IOAble):
                                      Z_transform)
         return coords
 
-    def compute_coordinate_derivatives(self, grid:Grid) -> dict:
+    def compute_coordinate_derivatives(self, grid: Grid) -> dict:
         """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords by calling :func:`desc.configuration.compute_coordinate_derivatives`
 
         Parameters
@@ -452,9 +458,9 @@ class Configuration(IOAble):
                                                    R_transform, Z_transform)
         return coord_der
 
-    def compute_covariant_basis(self, grid:Grid) -> dict:
+    def compute_covariant_basis(self, grid: Grid) -> dict:
         """Computes covariant basis vectors at grid points by calling :func:`desc.configuration.compute_covariant_basis`
-        
+
 
         Parameters
         ----------
@@ -476,7 +482,7 @@ class Configuration(IOAble):
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         return cov_basis
 
-    def compute_contravariant_basis(self, grid:Grid) -> dict:
+    def compute_contravariant_basis(self, grid: Grid) -> dict:
         """Computes contravariant basis vectors and jacobian elements by calling :func:`desc.configuration.compute_contravariant_basis`
 
         Parameters
@@ -498,12 +504,13 @@ class Configuration(IOAble):
                                                    R_transform, Z_transform)
         cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian, axis=grid.axis)
+        con_basis = compute_contravariant_basis(
+            coord_der, cov_basis, jacobian, axis=grid.axis)
         return con_basis
 
-    def compute_jacobian(self, grid:Grid) -> dict:
+    def compute_jacobian(self, grid: Grid) -> dict:
         """Computes coordinate jacobian and derivatives by calling :func:`desc.configuration.compute_jacobian`
-        
+
         Parameters
         ----------
         grid : Grid
@@ -527,9 +534,9 @@ class Configuration(IOAble):
         jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
         return jacobian
 
-    def compute_magnetic_field(self, grid:Grid) -> dict:
+    def compute_magnetic_field(self, grid: Grid) -> dict:
         """Computes magnetic field components at node locations by calling :func:`desc.configuration.compute_magnetic_field`
-        
+
         Parameters
         ----------
         grid : Grid
@@ -555,7 +562,7 @@ class Configuration(IOAble):
                                                 self._Psi, I_transform)
         return magnetic_field
 
-    def compute_plasma_current(self, grid:Grid) -> dict:
+    def compute_plasma_current(self, grid: Grid) -> dict:
         """Computes current density field at node locations by calling :func:`desc.configuration.compute_plasma_current`
 
         Parameters
@@ -585,9 +592,9 @@ class Configuration(IOAble):
                                         magnetic_field, self._cI, I_transform)
         return plasma_current
 
-    def compute_magnetic_field_magnitude(self, grid:Grid) -> dict:
+    def compute_magnetic_field_magnitude(self, grid: Grid) -> dict:
         """Computes magnetic field magnitude at node locations by calling :func:`desc.configuration.compute_magnetic_field_magnitude`
-        
+
         Parameters
         ----------
         grid : Grid
@@ -613,7 +620,7 @@ class Configuration(IOAble):
                                       magnetic_field, self._cI, I_transform)
         return magnetic_field_mag
 
-    def compute_force_magnitude(self, grid:Grid) -> dict:
+    def compute_force_magnitude(self, grid: Grid) -> dict:
         """Computes force error magnitude at node locations by calling :func:`desc.configuration.compute_force_magnitude`
 
         Parameters
@@ -651,7 +658,8 @@ class Equilibrium(Configuration, IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
        It adds information about how the equilibrium configuration was solved.
     """
-    _io_attrs_ = Configuration._io_attrs_ + ['_initial', '_objective', '_optimizer', '_solved']
+    _io_attrs_ = Configuration._io_attrs_ \
+               + ['_initial', '_objective', '_optimizer', '_solved']
     _object_lib_ = Configuration._object_lib_
     _object_lib_.update({'Configuration' : Configuration,
                          'ObjectiveFunction' : ObjectiveFunction})
@@ -665,6 +673,7 @@ class Equilibrium(Configuration, IOAble):
         self._x0 = self._x
         self._objective = inputs.get('objective', None)
         self._optimizer = inputs.get('optimizer', None)
+        self.optimizer_results = {}
         self._solved = False
 
     @property
@@ -732,6 +741,18 @@ class Equilibrium(Configuration, IOAble):
     def optimize(self):
         pass
 
+    def solve(self):
+        if self._optimizer is None or self._objective is None:
+            raise AttributeError(
+                "Equilibrium must have objective and optimizer defined before solving.")
+        args = (self.cRb, self.cZb, self.cP, self.cI, self.Psi,
+                self.bdry_ratio, self.pres_ratio, self.zeta_ratio, self.errr_ratio)
+
+        result = self._optimizer.optimize(self._objective, self.x, args=args)
+        self.optimizer_results = result
+        self.x = result['x']
+        self.solved = True  # TODO: do we still call it solved if the solver exited early?
+        return result
 
 # XXX: Should this (also) inherit from Equilibrium?
 class EquilibriaFamily(IOAble, MutableSequence):
@@ -739,7 +760,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
     """
     _io_attrs_ = ['equilibria']
     _object_lib_ = Equilibrium._object_lib_
-    _object_lib_.update({'Equilibrium' : Equilibrium})
+    _object_lib_.update({'Equilibrium': Equilibrium})
 
     def __init__(self, inputs=None, load_from=None, file_format='hdf5',
                  obj_lib=None) -> None:
@@ -760,8 +781,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):
-        # add type checking
-        self._equilibria[i] = new_item
+        if isinstance(new_item, Configuration):
+            self._equilibria[i] = new_item
+        else:
+            raise ValueError(
+                "Members of EquilibriaFamily should be of type Configuration or a subclass")
 
     def __delitem__(self, i):
         del self._equilibria[i]
@@ -790,7 +814,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     def __slice__(self, idx):
         if idx is None:
-            theslice = slice(None,None)
+            theslice = slice(None, None)
         elif type(idx) is int:
             theslice = idx
         elif type(idx) is list:

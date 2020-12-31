@@ -10,7 +10,6 @@ from desc.transform import Transform
 from desc.configuration import EquilibriaFamily
 from desc.objective_funs import is_nested, ObjectiveFunctionFactory
 from desc.perturbations import perturb_continuation_params
-from desc.jacobian import AutoDiffJacobian
 
 
 def solve_eq_continuation(inputs, file_name=None, device=None):
@@ -127,16 +126,17 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 print("Precomputing Transforms")
 
             # bases (extracted from Equilibrium)
-            R_basis, Z_basis, L_basis, P_basis, I_basis =   equil.R_basis, \
-                                                            equil.Z_basis, \
-                                                            equil.L_basis, \
-                                                            equil.P_basis, \
-                                                            equil.I_basis
+            R_basis, Z_basis, L_basis, P_basis, I_basis = equil.R_basis, \
+                equil.Z_basis, \
+                equil.L_basis, \
+                equil.P_basis, \
+                equil.I_basis
 
             # grids
             RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                      axis=False, index=zern_mode, surfs=node_mode)
-            L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+            L_grid = LinearGrid(
+                M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
 
             # transforms
             R_transform = Transform(RZ_grid, R_basis, derivs=3)
@@ -162,11 +162,13 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             if Mnodes[ii] != Mnodes[ii-1] or Nnodes[ii] != Nnodes[ii-1]:
                 RZ_grid = ConcentricGrid(Mnodes[ii], Nnodes[ii], NFP=NFP, sym=stell_sym,
                                          axis=False, index=zern_mode, surfs=node_mode)
-                L_grid = LinearGrid(M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
+                L_grid = LinearGrid(
+                    M=Mnodes[ii], N=2*Nnodes[ii]+1, NFP=NFP, sym=stell_sym)
 
             # change bases
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or delta_lm[ii] != delta_lm[ii-1]:
-                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii]) # update equilibrium bases to the new resolutions
+                # update equilibrium bases to the new resolutions
+                equil.change_resolution(L=delta_lm[ii], M=M[ii], N=N[ii])
                 R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
 
             # change transform matrices
@@ -176,7 +178,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 print("Changing node resolution from (Mnodes,Nnodes) = ({},{}) to ({},{})".format(
                     Mnodes[ii-1], Nnodes[ii-1], Mnodes[ii], Nnodes[ii]))
                 print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
-                        delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
+                    delta_lm[ii-1], M[ii-1], N[ii-1], delta_lm[ii], M[ii], N[ii]))
 
             R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
             Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)
@@ -199,11 +201,11 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
             # need a non-scalar objective function to do the perturbations
             obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
-                    errr_mode, scalar=False,
-                    R_transform=R_transform, Z_transform=Z_transform,
-                    R1_transform=R1_transform, Z1_transform=Z1_transform,
-                    L_transform=L_transform, P_transform=P_transform,
-                    I_transform=I_transform)
+                errr_mode,
+                R_transform=R_transform, Z_transform=Z_transform,
+                R1_transform=R1_transform, Z1_transform=Z1_transform,
+                L_transform=L_transform, P_transform=P_transform,
+                I_transform=I_transform)
             equil_obj = obj_fun.compute
             callback = obj_fun.callback
             args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
@@ -224,31 +226,41 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         else:
             scalar = False
         obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
-                    errr_mode, scalar=scalar,
-                    R_transform=R_transform, Z_transform=Z_transform,
-                    R1_transform=R1_transform, Z1_transform=Z1_transform,
-                    L_transform=L_transform, P_transform=P_transform,
-                    I_transform=I_transform)
+            errr_mode,
+            R_transform=R_transform, Z_transform=Z_transform,
+            R1_transform=R1_transform, Z1_transform=Z1_transform,
+            L_transform=L_transform, P_transform=P_transform,
+            I_transform=I_transform)
         equil_obj = obj_fun.compute
+        equil_obj_scalar = obj_fun.compute_scalar
+        grad = obj_fun.grad
+        hess = obj_fun.hess
+        jac = obj_fun.jac
         callback = obj_fun.callback
         args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
                 bdry_ratio[ii-1], pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1])
 
         if use_jax:
-            if optim_method in ['bfgs']:
-                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='grad')
-            else:
-                jac = AutoDiffJacobian(equil_obj, argnum=0, mode='fwd')
             if verbose > 0:
                 print("Compiling objective function")
             if device is None:
                 import jax
                 device = jax.devices()[0]
-            equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
-            jac_obj_jit = jit(jac.compute, device=device)
             timer.start("Iteration {} compilation".format(ii+1))
-            f0 = equil_obj_jit(equil.x, *args)
-            J0 = jac_obj_jit(equil.x, *args)
+
+            if optim_method in ['bfgs']:
+                equil_obj_jit = jit(
+                    equil_obj_scalar, static_argnums=(), device=device)
+                grad_obj_jit = jit(grad, device=device)
+                f0 = equil_obj_jit(equil.x, *args)
+                g0 = grad_obj_jit(equil.x, *args)
+            else:
+                equil_obj_jit = jit(
+                    equil_obj, static_argnums=(), device=device)
+                jac_obj_jit = jit(jac, device=device)
+                f0 = equil_obj_jit(equil.x, *args)
+                j0 = jac_obj_jit(equil.x, *args)
+
             timer.stop("Iteration {} compilation".format(ii+1))
             if verbose > 1:
                 timer.disp("Iteration {} compilation".format(ii+1))
@@ -265,12 +277,12 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                                           x0=x_init,
                                           args=args,
                                           method=optim_method,
-                                          jac=jac_obj_jit,
+                                          jac=grad_obj_jit,
                                           tol=gtol[ii],
                                           options={'maxiter': nfev[ii],
                                                    'disp': verbose})
 
-        elif optim_method in ['trf', 'lm', 'dogleg']:
+        elif optim_method in ['trf', 'lm', 'dogbox']:
             out = scipy.optimize.least_squares(equil_obj_jit,
                                                x0=x_init,
                                                args=args,
@@ -284,7 +296,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                                                verbose=verbose)
         else:
             raise NotImplementedError(
-                TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogleg'" + TextColors.ENDC)
+                TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogbox'" + TextColors.ENDC)
 
         timer.stop("Iteration {} solution".format(ii+1))
 

@@ -172,7 +172,6 @@ class InputReader:
             'bdry_ratio': np.atleast_1d(1.0),
             'pres_ratio': np.atleast_1d(1.0),
             'zeta_ratio': np.atleast_1d(1.0),
-            'errr_ratio': np.atleast_1d(1e-2),
             'pert_order': np.atleast_1d(1),
             'ftol': np.atleast_1d(1e-6),
             'xtol': np.atleast_1d(1e-6),
@@ -267,41 +266,6 @@ class InputReader:
             match = re.search(r'zeta_ratio', argument, re.IGNORECASE)
             if match:
                 inputs['zeta_ratio'] = np.array(numbers).astype(float)
-            match = re.search(r'errr_ratio', argument, re.IGNORECASE)
-            if match:
-                inputs['errr_ratio'] = np.array(numbers).astype(float)
-            match = re.search(r'pert_order', argument, re.IGNORECASE)
-            if match:
-                inputs['pert_order'] = np.array(numbers).astype(int)
-
-            # solver tolerances
-            match = re.search(r'ftol', argument, re.IGNORECASE)
-            if match:
-                inputs['ftol'] = np.array(numbers).astype(float)
-            match = re.search(r'xtol', argument, re.IGNORECASE)
-            if match:
-                inputs['xtol'] = np.array(numbers).astype(float)
-            match = re.search(r'gtol', argument, re.IGNORECASE)
-            if match:
-                inputs['gtol'] = np.array(numbers).astype(float)
-            match = re.search(r'nfev', argument, re.IGNORECASE)
-            if match:
-                inputs['nfev'] = np.array(
-                    [None if i == 0 else i for i in numbers]).astype(int)
-
-            # continuation parameters
-            match = re.search(r'bdry_ratio', argument, re.IGNORECASE)
-            if match:
-                inputs['bdry_ratio'] = np.array(numbers).astype(float)
-            match = re.search(r'pres_ratio', argument, re.IGNORECASE)
-            if match:
-                inputs['pres_ratio'] = np.array(numbers).astype(float)
-            match = re.search(r'zeta_ratio', argument, re.IGNORECASE)
-            if match:
-                inputs['zeta_ratio'] = np.array(numbers).astype(float)
-            match = re.search(r'errr_ratio', argument, re.IGNORECASE)
-            if match:
-                inputs['errr_ratio'] = np.array(numbers).astype(float)
             match = re.search(r'pert_order', argument, re.IGNORECASE)
             if match:
                 inputs['pert_order'] = np.array(numbers).astype(int)
@@ -438,7 +402,7 @@ class InputReader:
             raise IOError(
                 TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
         arrs = ['L_rad', 'M_pol', 'N_tor', 'M_grid', 'N_grid', 'bdry_ratio',
-                'pres_ratio', 'zeta_ratio', 'errr_ratio', 'pert_order',
+                'pres_ratio', 'zeta_ratio', 'pert_order',
                 'ftol', 'xtol', 'gtol', 'nfev']
         arr_len = 0
         for a in arrs:
@@ -512,8 +476,6 @@ class InputReader:
             ', '.join([str(i) for i in np.atleast_1d(inputs['pres_ratio'])])))
         f.write('zeta_ratio = {} \n'.format(
             ', '.join([str(i) for i in np.atleast_1d(inputs['zeta_ratio'])])))
-        f.write('errr_ratio = {} \n'.format(
-            ', '.join([str(i) for i in np.atleast_1d(inputs['errr_ratio'])])))
         f.write('pert_order = {} \n'.format(
             ', '.join([str(i) for i in np.atleast_1d(inputs['pert_order'])])))
 

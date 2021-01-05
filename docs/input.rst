@@ -15,22 +15,21 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    # this is also a comment
    
    # global parameters
-   stell_sym = 1
-   NFP       = 19
-   Psi_lcfs  = 1.00000000E+00
+   sym = 1
+   NFP = 19
+   Psi = 1.00000000E+00
    
    # spectral resolution
-   Mpol     =   6   8  10  10  11  11  12
-   delta_lm =   0   4   8  12  16  20  24
-   Ntor     =   0,  1,  2,  2,  3,  3,  4
-   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
+   L_rad  =   0   4   8  12  16  20  24
+   M_pol  =   6,  8, 10, 10, 11, 11, 12
+   N_tor  =   0;  1;  2;  2;  3;  3;  4
+   M_grid =  [9, 12, 15, 15, 16, 17, 18]
+   N_grid =  [0;  2;  3;  3;  4;  5;  6]
    
    # continuation parameters
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
    pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
    zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   errr_ratio = 1e-3
    pert_order = 1
    
    # solver tolerances
@@ -46,21 +45,21 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    node_mode = cheb1
    
    # pressure and rotational transform profiles
-   l:   0   cP =   1.80000000E+04   cI =   1.00000000E+00
-   l:   2   cP =  -3.60000000E+04   cI =   1.50000000E+00
-   l:   4   cP =   1.80000000E+04
+   l:   0   p =  1.80000000E+04   i =  1.00000000E+00
+   l:   2   p = -3.60000000E+04   i =  1.50000000E+00
+   l:   4   p =  1.80000000E+04
    
    # magnetic axis initial guess
-   n:   0   aR =   1.00000000E+01   aZ =   0.00000000E+00
+   n:   0  R0 =  1.00000000E+01  Z0 =  0.00000000E+00
    
    # fixed-boundary surface shape
-   m:   0   n:   0  bR =   1.00000000E+01   bZ =   0.00000000E+00
-   m:   1   n:   0  bR =   1.00000000E+00
-   m:   1   n:   1  bR =   3.00000000E-01
-   m:  -1   n:  -1  bR =  -3.00000000E-01
-   m:  -1   n:   0  bZ =   1.00000000E+00
-   m:   1   n:  -1  bZ =  -3.00000000E-01
-   m:  -1   n:   1  bZ =  -3.00000000E-01
+   m:   0   n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
+   m:   1   n:   0  R1 =  1.00000000E+00
+   m:   1   n:   1  R1 =  3.00000000E-01
+   m:  -1   n:  -1  R1 = -3.00000000E-01
+   m:  -1   n:   0  Z1 =  1.00000000E+00
+   m:   1   n:  -1  Z1 = -3.00000000E-01
+   m:  -1   n:   1  Z1 = -3.00000000E-01
 
 General Notes
 *************
@@ -68,40 +67,40 @@ General Notes
 Both ``!`` and ``#`` are recognized to denote comments at the end of a line. 
 Whitespace is always ignored, except for newline characters. 
 Multiple inputs can be given on the same line of the input file, but a single input cannot span multiple lines. 
-None of the inputs are case-sensitive; for example ``Mpol``, ``MPOL``, and ``mPol`` are all the same. 
+None of the inputs are case-sensitive; for example ``M_pol``, ``M_POL``, and ``m_Pol`` are all the same. 
 
 Global Parameters
 *****************
 
 .. code-block:: text
 
-   stell_sym = 1
-   NFP       = 19
-   Psi_lcfs  = 1.00000000E+00
+   sym = 1
+   NFP = 19
+   Psi = 1.00000000E+00
 
-- ``stell_sym`` (bool): True (1) to assume stellarator symmetry, False (0) otherwise. Default = 0. 
+- ``sym`` (bool): True (1) to assume stellarator symmetry, False (0) otherwise. Default = 0. 
 - ``NFP`` (int): Number of toroidal field periods, :math:`N_{FP}`. Default = 1. 
-- ``Psi_lcfs`` (float): The toroidal magnetic flux through the last closed flux surface, :math:`\psi_a` (Webers). Default = 1.0. 
+- ``Psi`` (float): The toroidal magnetic flux through the last closed flux surface, :math:`\psi_a` (Webers). Default = 1.0. 
 
 Spectral Resolution
 *******************
 
 .. code-block:: text
 
-   Mpol     =   6   8  10  10  11  11  12
-   delta_lm =   0   4   8  12  16  20  24
-   Ntor     =   0,  1,  2,  2,  3,  3,  4
-   Mnodes   =  [9, 12, 15, 15, 16, 17, 18]
-   Nnodes   =  [0;  2;  3;  3;  4;  5;  6]
+   L_rad  =   0   4   8  12  16  20  24
+   M_pol  =   6,  8, 10, 10, 11, 11, 12
+   N_tor  =   0;  1;  2;  2;  3;  3;  4
+   M_grid =  [9, 12, 15, 15, 16, 17, 18]
+   N_grid =  [0;  2;  3;  3;  4;  5;  6]
 
-- ``Mpol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
-- ``delta_lm`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2*M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
-- ``Ntor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
-- ``Mnodes`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
-- ``Nnodes`` (int): Relative toroidal density of collocation nodes. Default = ``round(1.5*Ntor)``. 
+- ``L_rad`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
+- ``M_pol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
+- ``N_tor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
+- ``M_grid`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
+- ``N_grid`` (int): Relative toroidal density of collocation nodes. Default = ``round(1.5*Ntor)``. 
 
-When ``Mnodes = Mpol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set. 
-When ``Nnodes = Ntor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series. 
+When ``M_grid = M_pol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set. 
+When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series. 
 Convergence is typically superior when the number of nodes exceeds the number of spectral coefficients, but this adds compuational cost. 
 
 These arguments can be passed as arrays, where each index of the array denotes the value to use at that iteration. 
@@ -116,23 +115,18 @@ Continuation Parameters
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
    pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
    zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   errr_ratio = 1e-3
    pert_order = 1
 
 - ``bdry_ratio`` (float): Multiplier on the 3D boundary modes. Default = 1.0. 
 - ``pres_ratio`` (float): Multiplier on the pressure profile. Default = 1.0. 
 - ``zeta_ratio`` (float): Multiplier on the toroidal derivatives. Default = 1.0. 
-- ``errr_ratio`` (float): Weight on the force balance equations, relative to the boundary condition equations. Default = 1e-2. 
 - ``pert_order`` (int): Order of the perturbation approximation: 0 = no perturbation, 1 = linear, 2 = quadratic. Default = 1. 
 
 When all of the ``_ratio`` parameters are set to 1.0, the equilibrium is solved using the exact boundary modes and pressure profile as was input. 
 ``bdry_ratio = 0`` ignores all of the non-axisymmetric modes, ``pres_ratio = 0`` assumes a vacuum pressure profile, and ``zeta_ratio = 0`` is equivalent to solving a tokamak equilibrium at each toroidal cross-section. 
 
-The fixed-boundary surface shape input is not explicitly enforced. 
-If a solution converges to an equilibrium with a different boundary than the one intended, try decreasing ``errr_ratio``. 
-
 These arguments are also passed as arrays for each iteration. 
-If only one value is given, as with ``errr_ratio`` and ``pert_order`` in this example, that value will be used for all iterations. 
+If only one value is given, as with ``pert_order`` in this example, that value will be used for all iterations. 
 
 Solver Tolerances
 *****************
@@ -184,13 +178,13 @@ Pressure & Rotational Transform Profiles
 
 .. code-block:: text
 
-   l:   0   cP =   1.80000000E+04   cI =   1.00000000E+00
-   l:   2   cP =  -3.60000000E+04   cI =   1.50000000E+00
-   l:   4   cP =   1.80000000E+04
+   l:   0   p =  1.80000000E+04   i =  1.00000000E+00
+   l:   2   p = -3.60000000E+04   i =  1.50000000E+00
+   l:   4   p =  1.80000000E+04
 
 - ``l`` (int): Radial polynomial order. 
-- ``cP`` (float): Pressure profile coefficient. 
-- ``cI`` (float): Rotational transform coefficient. 
+- ``p`` (float): Pressure profile coefficient. :math:`p_{l}` 
+- ``i`` (float): Rotational transform coefficient. :math:`\iota_{l}` 
 
 The pressure and rotational transform profiles are given as a power series in the flux surface label 
 :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
@@ -202,7 +196,7 @@ The pressure and rotational transform profiles are given as a power series in th
    \iota(\rho) &= \sum \iota_{l} \rho^{l}.
    \end{aligned}
 
-The coefficients :math:`p_{l}` and :math:`\iota_{l}` are specified by the input variables ``cP`` and ``cI``, respectively. 
+The coefficients :math:`p_{l}` and :math:`\iota_{l}` are specified by the input variables ``p`` and ``i``, respectively. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 
 
@@ -220,26 +214,26 @@ Magnetic Axis Initial Guess
 
 .. code-block:: text
 
-   n:   0   aR =   1.00000000E+01   aZ =   0.00000000E+00
+   n:   0  R0 =  1.00000000E+01  Z0 =  0.00000000E+00
 
 - ``n`` (int): Toroidal mode number. 
-- ``aR`` (float): Fourier coefficient of the R coordinate of the magnetic axis. 
-- ``aZ`` (float): Fourier coefficient of the Z coordinate of the magnetic axis. 
+- ``R0`` (float): Fourier coefficient of the R coordinate of the magnetic axis. :math:`R^{0}_{n}` 
+- ``Z0`` (float): Fourier coefficient of the Z coordinate of the magnetic axis. :math:`Z^{0}_{n}` 
 
 An initial guess for the magnetic axis can be supplied in the form: 
 
 .. math::
 
    \begin{aligned}
-   R^{a}(\phi) &= \sum_{n=-N}^{N} R^{a}_{n} \mathcal{F}_{n}(\phi) \\
-   Z^{a}(\phi) &= \sum_{n=-N}^{N} Z^{a}_{n} \mathcal{F}_{n}(\phi) \\
+   R_{0}(\phi) &= \sum_{n=-N}^{N} R^{0}_{n} \mathcal{F}_{n}(\phi) \\
+   Z_{0}(\phi) &= \sum_{n=-N}^{N} Z^{0}_{n} \mathcal{F}_{n}(\phi) \\
    \mathcal{F}_{n}(\phi) &= \begin{cases}
    \cos(|n|N_{FP}\phi) &\text{for }n\ge0 \\
    \sin(|n|N_{FP}\phi) &\text{for }n<0. \\
    \end{cases}
    \end{aligned}
 
-The coefficients :math:`R^{a}_{n}` and :math:`Z^{a}_{n}` are specified by the input variables ``aR`` and ``aZ``, respectively. 
+The coefficients :math:`R^{0}_{n}` and :math:`Z^{0}_{n}` are specified by the input variables ``R0`` and ``Z0``, respectively. 
 The Fourier mode number :math:`n` is given by ``n``, which must be on the same input line as the coefficients. 
 
 If no initial guess is provided for the magnetic axis, then the :math:`m = 0` modes of the fixed-boundary surface shape input are used. 
@@ -249,26 +243,26 @@ Fixed-Boundary Surface Shape
 
 .. code-block:: text
 
-   m:   0   n:   0  bR =   1.00000000E+01  bZ =   0.00000000E+00
-   m:   1   n:   0  bR =   1.00000000E+00
-   m:   1   n:   1  bR =   3.00000000E-01
-   m:  -1   n:  -1  bR =  -3.00000000E-01
-   m:  -1   n:   0  bZ =   1.00000000E+00
-   m:   1   n:  -1  bZ =  -3.00000000E-01
-   m:  -1   n:   1  bZ =  -3.00000000E-01
+   m:   0   n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
+   m:   1   n:   0  R1 =  1.00000000E+00
+   m:   1   n:   1  R1 =  3.00000000E-01
+   m:  -1   n:  -1  R1 = -3.00000000E-01
+   m:  -1   n:   0  Z1 =  1.00000000E+00
+   m:   1   n:  -1  Z1 = -3.00000000E-01
+   m:  -1   n:   1  Z1 = -3.00000000E-01
 
 - ``m`` (int): Poloidal mode number. 
 - ``n`` (int): Toroidal mode number. 
-- ``bR`` (float): Fourier coefficient of the R coordinate of the last closed flux surface. 
-- ``bZ`` (float): Fourier coefficient of the Z coordinate of the last closed flux surface. 
+- ``R1`` (float): Fourier coefficient of the R coordinate of the last closed flux surface. :math:`R^{1}_{mn}` 
+- ``Z1`` (float): Fourier coefficient of the Z coordinate of the last closed flux surface. :math:`Z^{1}_{mn}` 
 
 The shape of the fixed-boundary surface is given as a double Fourier series of the form: 
 
 .. math::
 
    \begin{aligned}
-   R^{b}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} R^{b}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
-   Z^{b}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} Z^{b}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
+   R_{1}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} R^{1}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
+   Z_{1}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} Z^{1}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
    \mathcal{G}^{m}_{n}(\theta,\phi) &= \begin{cases}
    \cos(|m|\theta)\cos(|n|N_{FP}\phi) &\text{for }m\ge0, n\ge0 \\
    \cos(|m|\theta)\sin(|n|N_{FP}\phi) &\text{for }m\ge0, n<0 \\
@@ -277,15 +271,15 @@ The shape of the fixed-boundary surface is given as a double Fourier series of t
    \end{cases}
    \end{aligned}
 
-The coefficients :math:`R^{b}_{mn}` and :math:`Z^{b}_{mn}` are specified by the input variables ``bR`` and ``bZ``, respectively. 
+The coefficients :math:`R^{1}_{mn}` and :math:`Z^{1}_{mn}` are specified by the input variables ``R1`` and ``Z1``, respectively. 
 The Fourier mode numbers :math:`m` and :math:`n` are given by ``m`` and ``n``, respectively, which must be on the same input line as the coefficients. 
 The fixed-boundary surface shape given in the example is equivalent to (using Ptolemy’s identities):
 
 .. math::
 
    \begin{aligned}
-   R^{b}(\theta,\phi) &= 10 + \cos\theta + 0.3 \cos(\theta+19\phi) \\
-   Z^{b}(\theta,\phi) &= \sin\theta - 0.3 \sin(\theta+19\phi).
+   R_{1}(\theta,\phi) &= 10 + \cos\theta + 0.3 \cos(\theta+19\phi) \\
+   Z_{1}(\theta,\phi) &= \sin\theta - 0.3 \sin(\theta+19\phi).
    \end{aligned}
 
 The fixed-boundary surface shape is a required input. 

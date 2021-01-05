@@ -6,7 +6,7 @@ import os
 def SOLOVEV(tmpdir_factory):
     max_time = 5*60 # 5 minute max time for SOLOVEV run
     temp_dir = tmpdir_factory.mktemp('result').join('SOLOVEV_out')
-    input_path = 'tests//inputs//SOLOVEV'
+    input_path = 'examples//DESC//SOLOVEV'
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd,'..')
     input_filename = os.path.join(exec_dir,input_path)

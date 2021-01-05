@@ -164,9 +164,9 @@ class InputReader:
             'sym': False,
             'NFP': 1,
             'Psi': 1.0,
-            'L': np.atleast_1d(None),
-            'M': np.atleast_1d(0),
-            'N': np.atleast_1d(0),
+            'L_rad': np.atleast_1d(None),
+            'M_pol': np.atleast_1d(0),
+            'N_tor': np.atleast_1d(0),
             'M_grid': np.atleast_1d(0),
             'N_grid': np.atleast_1d(0),
             'bdry_ratio': np.atleast_1d(1.0),
@@ -242,13 +242,13 @@ class InputReader:
             # spectral resolution
             match = re.search(r'L_rad', argument, re.IGNORECASE)
             if match:
-                inputs['L'] = np.array(numbers).astype(int)
+                inputs['L_rad'] = np.array(numbers).astype(int)
             match = re.search(r'M_pol', argument, re.IGNORECASE)
             if match:
-                inputs['M'] = np.array(numbers).astype(int)
+                inputs['M_pol'] = np.array(numbers).astype(int)
             match = re.search(r'N_tor', argument, re.IGNORECASE)
             if match:
-                inputs['N'] = np.array(numbers).astype(int)
+                inputs['N_tor'] = np.array(numbers).astype(int)
             match = re.search(r'M_grid', argument, re.IGNORECASE)
             if match:
                 inputs['M_grid'] = np.array(numbers).astype(int)
@@ -317,7 +317,7 @@ class InputReader:
                      if re.search(r'\d', x)][0]
 
             # profile coefficients
-            match = re.search(r'p\s*=\s*'+num_form, command, re.IGNORECASE)
+            match = re.search(r'\sp\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 p_l = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
@@ -328,11 +328,11 @@ class InputReader:
                         inputs['profiles'], ((0, 1), (0, 0)), mode='constant')
                     inputs['profiles'][prof_idx[0], 0] = l
                 inputs['profiles'][prof_idx[0], 1] = p_l
-            match = re.search(r'i\s*=\s*'+num_form, command, re.IGNORECASE)
+            match = re.search(r'\si\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 i_l = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)][0]
-                prof_idx = np.where(inputs['profiles'][:, 0] == n)[0]
+                prof_idx = np.where(inputs['profiles'][:, 0] == l)[0]
                 if prof_idx.size == 0:
                     prof_idx = np.atleast_1d(inputs['profiles'].shape[0])
                     inputs['profiles'] = np.pad(
@@ -344,37 +344,37 @@ class InputReader:
             match = re.search(r'R1\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 R1 = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
-                bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-                bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
+                    num_form, match.group(0)) if re.search(r'\d', x)][1]
+                bdry_m = np.where(inputs['boundary'][:, 0] == m)[0]
+                bdry_n = np.where(inputs['boundary'][:, 1] == n)[0]
                 bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
                 if bdry_idx.size == 0:
-                    bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                    inputs['bdry'] = np.pad(
-                        inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                    inputs['bdry'][bdry_idx[0], 0] = m
-                    inputs['bdry'][bdry_idx[0], 1] = n
-                inputs['bdry'][bdry_idx[0], 2] = R1
+                    bdry_idx = np.atleast_1d(inputs['boundary'].shape[0])
+                    inputs['boundary'] = np.pad(
+                        inputs['boundary'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['boundary'][bdry_idx[0], 0] = m
+                    inputs['boundary'][bdry_idx[0], 1] = n
+                inputs['boundary'][bdry_idx[0], 2] = R1
             match = re.search(r'Z1\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 Z1 = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
-                bdry_m = np.where(inputs['bdry'][:, 0] == m)[0]
-                bdry_n = np.where(inputs['bdry'][:, 1] == n)[0]
+                    num_form, match.group(0)) if re.search(r'\d', x)][1]
+                bdry_m = np.where(inputs['boundary'][:, 0] == m)[0]
+                bdry_n = np.where(inputs['boundary'][:, 1] == n)[0]
                 bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
                 if bdry_idx.size == 0:
-                    bdry_idx = np.atleast_1d(inputs['bdry'].shape[0])
-                    inputs['bdry'] = np.pad(
-                        inputs['bdry'], ((0, 1), (0, 0)), mode='constant')
-                    inputs['bdry'][bdry_idx[0], 0] = m
-                    inputs['bdry'][bdry_idx[0], 1] = n
-                inputs['bdry'][bdry_idx[0], 3] = Z1
+                    bdry_idx = np.atleast_1d(inputs['boundary'].shape[0])
+                    inputs['boundary'] = np.pad(
+                        inputs['boundary'], ((0, 1), (0, 0)), mode='constant')
+                    inputs['boundary'][bdry_idx[0], 0] = m
+                    inputs['boundary'][bdry_idx[0], 1] = n
+                inputs['boundary'][bdry_idx[0], 3] = Z1
 
             # magnetic axis coefficients
             match = re.search(r'R0\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 R0_n = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
+                    num_form, match.group(0)) if re.search(r'\d', x)][1]
                 axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
                 if axis_idx.size == 0:
                     axis_idx = np.atleast_1d(inputs['axis'].shape[0])
@@ -385,7 +385,7 @@ class InputReader:
             match = re.search(r'Z0\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 Z0_n = [float(x) for x in re.findall(
-                    num_form, match.group(0)) if re.search(r'\d', x)][0]
+                    num_form, match.group(0)) if re.search(r'\d', x)][1]
                 axis_idx = np.where(inputs['axis'][:, 0] == n)[0]
                 if axis_idx.size == 0:
                     axis_idx = np.atleast_1d(inputs['axis'].shape[0])
@@ -398,7 +398,7 @@ class InputReader:
         if np.any(inputs['M_pol'] == 0):
             raise IOError(TextColors.FAIL +
                           'M_pol is not assigned' + TextColors.ENDC)
-        if np.sum(inputs['bdry']) == 0:
+        if np.sum(inputs['boundary']) == 0:
             raise IOError(
                 TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
         arrs = ['L_rad', 'M_pol', 'N_tor', 'M_grid', 'N_grid', 'bdry_ratio',
@@ -420,8 +420,8 @@ class InputReader:
         if np.sum(inputs['N_grid']) == 0:
             inputs['N_grid'] = np.rint(1.5*inputs['N_tor']).astype(int)
         if np.sum(inputs['axis']) == 0:
-            axis_idx = np.where(inputs['bdry'][:, 0] == 0)[0]
-            inputs['axis'] = inputs['bdry'][axis_idx, 1:]
+            axis_idx = np.where(inputs['boundary'][:, 0] == 0)[0]
+            inputs['axis'] = inputs['boundary'][axis_idx, 1:]
         if None in inputs['L_rad']:
             default_L_rad = {'fringe': 2*inputs['M_pol'],
                              'ansi': inputs['M_pol'],

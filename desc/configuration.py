@@ -120,8 +120,8 @@ class Configuration(IOAble):
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
         self._Z1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym)
-        self._p_basis = PowerSeries(L=self._p_l.size-1)
-        self._i_basis = PowerSeries(L=self._i_l.size-1)
+        self._p_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
+        self._i_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
 
         # format profiles
         self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
@@ -445,7 +445,7 @@ class Configuration(IOAble):
     def i_basis(self, i_basis:PowerSeries) -> None:
         self._i_basis = i_basis
 
-    def compute_toroidal_coords(self, grid: Grid) -> dict:
+    def compute_toroidal_coords(self, grid:Grid) -> dict:
         """Computes toroidal coordinates from polar coordinates.
 
         Parameters
@@ -771,8 +771,8 @@ def format_axis(axis, R0_basis:FourierSeries, Z0_basis:FourierSeries):
     Z0_n = np.zeros((Z0_basis.num_modes,))
 
     for n, R0, Z0 in axis:
-        idx_R0 = np.where(R0_basis.modes[:, 0] == int(n))[0]
-        idx_Z0 = np.where(Z0_basis.modes[:, 0] == int(n))[0]
+        idx_R0 = np.where(R0_basis.modes[:, 2] == int(n))[0]
+        idx_Z0 = np.where(Z0_basis.modes[:, 2] == int(n))[0]
         R0_n = put(R0_n, idx_R0, R0)
         Z0_n = put(Z0_n, idx_Z0, Z0)
 

@@ -45,8 +45,8 @@ def compute_polar_coords(R0_n, Z0_n, r_lmn, l_lmn,
     polar_coords['zeta']  = R0_transform.grid.nodes[:, 2]
     polar_coords['0'] = jnp.zeros_like(polar_coords['rho'])
 
-    polar_coords['R0'] = R0_transform.transfrom(R0_n)
-    polar_coords['Z0'] = Z0_transform.transfrom(Z0_n)
+    polar_coords['R0'] = R0_transform.transform(R0_n)
+    polar_coords['Z0'] = Z0_transform.transform(Z0_n)
     polar_coords['r'] = r_transform.transform(r_lmn)
     polar_coords['lambda'] = l_transform.transform(l_lmn)
 
@@ -92,16 +92,16 @@ def compute_polar_coords_force(R0_n, Z0_n, r_lmn, l_lmn,
     polar_coords['theta'] = R0_transform.grid.nodes[:, 1]
     polar_coords['0'] = jnp.zeros_like(polar_coords['rho'])
 
-    polar_coords['R0'] = R0_transform.transfrom(R0_n)
-    polar_coords['Z0'] = Z0_transform.transfrom(Z0_n)
+    polar_coords['R0'] = R0_transform.transform(R0_n)
+    polar_coords['Z0'] = Z0_transform.transform(Z0_n)
     polar_coords['r'] = r_transform.transform(r_lmn)
     polar_coords['lambda'] = l_transform.transform(l_lmn)
 
-    polar_coords['R0_z'] = R0_transform.transfrom(R0_n, 0, 0, 1)
-    polar_coords['Z0_z'] = R0_transform.transfrom(Z0_n, 0, 0, 1)
+    polar_coords['R0_z'] = R0_transform.transform(R0_n, 0, 0, 1)
+    polar_coords['Z0_z'] = R0_transform.transform(Z0_n, 0, 0, 1)
 
-    polar_coords['R0_zz'] = R0_transform.transfrom(R0_n, 0, 0, 2)
-    polar_coords['Z0_zz'] = R0_transform.transfrom(Z0_n, 0, 0, 2)
+    polar_coords['R0_zz'] = R0_transform.transform(R0_n, 0, 0, 2)
+    polar_coords['Z0_zz'] = R0_transform.transform(Z0_n, 0, 0, 2)
 
     polar_coords['r_r'] = r_transform.transform(r_lmn, 1, 0, 0)
     polar_coords['r_t'] = r_transform.transform(r_lmn, 0, 1, 0)

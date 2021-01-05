@@ -81,8 +81,9 @@ class Plot:
         Parameters
         ----------
         ax : None or matplotlib AxesSubplot instance
-        
-        is3d: bool, default is False
+            DESCRIPTION
+        is3d: bool
+            default is False
 
         Returns
         -------
@@ -126,7 +127,7 @@ class Plot:
                 grid_args[key] = kwargs[key]
         grid = LinearGrid(**grid_args)
 
-        plot_axes = [0,1,2]
+        plot_axes = [0, 1, 2]
         if grid.L == 1:
             plot_axes.remove(0)
         if grid.M == 1:
@@ -272,8 +273,7 @@ class Plot:
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
-        fig, ax = self.format_ax(ax,is3d=True)
-        divider = make_axes_locatable(ax)
+        fig, ax = self.format_ax(ax, is3d=True)
 
         coords = eq.compute_coordinates(grid)
         X = coords['X'].reshape((grid.L, grid.M, grid.N), order='F')
@@ -298,22 +298,66 @@ class Plot:
             Y = Y[0, :, :]
             Z = Z[0, :, :]
 
-        cax_kwargs = {'size' : '5%',
-                      'pad'  : 0.05}
-
         minn, maxx = data.min(), data.max()
         m = plt.cm.ScalarMappable()
         m.set_array([])
         fcolors = m.to_rgba(data)
 
-        im = ax.plot_surface(X, Y, Z, rstride=1, cstride=1, facecolors=fcolors,
-                             vmin=minn, vmax=maxx)
+        ax.plot_surface(X, Y, Z, rstride=1, cstride=1, facecolors=fcolors,
+                        vmin=minn, vmax=maxx)
         fig.colorbar(m)
 
         ax.set_xlabel(self.axis_labels_XYZ[0])
         ax.set_ylabel(self.axis_labels_XYZ[1])
         ax.set_zlabel(self.axis_labels_XYZ[2])
         ax.set_title(self.name_label(name_dict))
+        return ax
+
+    def plot_surfaces(self, eq:Configuration, grid:Grid=None, ax=None, **kwargs):
+        """Plots flux surfaces.
+
+        Parameters
+        ----------
+        eq : Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid, optional
+            grid of coordinates to plot at
+        ax : matplotlib AxesSubplot, optional
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid
+
+        Returns
+        -------
+        axis
+
+        """
+        if grid is None:
+            if kwargs == {}:
+                kwargs.update({'L':6, 'M':180})
+            grid, plot_axes= self.get_grid(**kwargs)
+        if len(plot_axes) != 2:
+            return ValueError(TextColors.FAIL + "Grid must be 2D"
+                            + TextColors.ENDC)
+        if 2 in plot_axes:
+            return ValueError(TextColors.FAIL + "Grid must be in rho vs theta"
+                            + TextColors.ENDC)
+
+        coords = eq.compute_toroidal_coords(grid)
+        R = coords['R'].reshape((grid.L, grid.M, grid.N), order='F')[:, :, 0]
+        Z = coords['Z'].reshape((grid.L, grid.M, grid.N), order='F')[:, :, 0]
+
+        fig, ax = self.format_ax(ax)
+
+        ax.plot(R[0, 0], Z[0, 0], 'bo')
+        ax.plot(R.T, Z.T, 'b-')
+
+        ax.axis('equal')
+        ax.set_xlabel(self.axis_labels_RPZ[0])
+        ax.set_ylabel(self.axis_labels_RPZ[2])
+
         return ax
 
     def compute(self, eq:Configuration, name:str, grid:Grid):
@@ -498,354 +542,6 @@ class Plot:
 
 
 # TODO: all of these other plotting routines should be re-written inside the Plot class
-
-
-def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
-    """prints coeffs to the terminal
-
-    Parameters
-    ----------
-    cR,cZ,cL :
-        spectral coefficients for R, Z, and lambda
-    zern_idx, lambda_idx :
-        mode numbers for zernike and fourier spectral basis.
-
-    Returns
-    -------
-
-    """
-
-    print('Fourier-Zernike coefficients:')
-    for k, lmn in enumerate(zern_idx):
-        print('l: {:3d}, m: {:3d}, n: {:3d}, cR: {:16.8e}, cZ: {:16.8e}'.format(
-            lmn[0], lmn[1], lmn[2], cR[k], cZ[k]))
-
-    print('Lambda coefficients')
-    for k, mn in enumerate(lambda_idx):
-        print('m: {:3d}, n: {:3d}, cL: {:16.8e}'.format(mn[0], mn[1], cL[k]))
-
-
-def plot_coeffs(cR, cZ, cL, zern_idx, lambda_idx, cR_init=None, cZ_init=None, cL_init=None, **kwargs):
-    """Scatter plots of zernike and lambda coefficients, before and after solving
-
-    Parameters
-    ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
-        spectral coefficients of lambda
-    zern_idx : ndarray
-        array of (l,m,n) indices for each spectral R,Z coeff
-    lambda_idx : ndarray
-        indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
-    cR_init : ndarray
-        initial spectral coefficients of R (Default value = None)
-    cZ_init : ndarray
-        initial spectral coefficients of Z (Default value = None)
-    cL_init : ndarray
-        initial spectral coefficients of lambda (Default value = None)
-    **kwargs :
-        additional plot formatting parameters
-
-    Returns
-    -------
-    fig : matplotlib.figure
-        handle to the figure
-    ax : ndarray of matplotlib.axes
-        handle to axes
-
-    """
-    nRZ = len(cR)
-    nL = len(cL)
-    fig, ax = plt.subplots(1, 3, figsize=(cR.size//5, 6))
-    ax = ax.flatten()
-
-    ax[0].scatter(cR, np.arange(nRZ), s=2, label='Final')
-    if cR_init is not None:
-        ax[0].scatter(cR_init, np.arange(nRZ), s=2, label='Init')
-    ax[0].set_yticks(np.arange(nRZ))
-    ax[0].set_yticklabels([str(i) for i in zern_idx])
-    ax[0].set_xlabel('$R$')
-    ax[0].set_ylabel('[l,m,n]')
-    ax[0].axvline(0, c='k', lw=.25)
-    ax[0].legend(loc='upper right')
-
-    ax[1].scatter(cZ, np.arange(nRZ), s=2, label='Final')
-    if cZ_init is not None:
-        ax[1].scatter(cZ_init, np.arange(nRZ), s=2, label='Init')
-    ax[1].set_yticks(np.arange(nRZ))
-    ax[1].set_yticklabels([str(i) for i in zern_idx])
-    ax[1].set_xlabel('$Z$')
-    ax[1].set_ylabel('[l,m,n]')
-    ax[1].axvline(0, c='k', lw=.25)
-    ax[1].legend()
-
-    ax[2].scatter(cL, np.arange(nL), s=2, label='Final')
-    if cL_init is not None:
-        ax[2].scatter(cL_init, np.arange(nL), s=2, label='Init')
-    ax[2].set_yticks(np.arange(nL))
-    ax[2].set_yticklabels([str(i) for i in lambda_idx])
-    ax[2].set_xlabel('$\lambda$')
-    ax[2].set_ylabel('[m,n]')
-    ax[2].axvline(0, c='k', lw=.25)
-    ax[2].legend()
-
-    plt.subplots_adjust(wspace=.5)
-
-    return fig, ax
-
-
-def plot_coord_surfaces(cR, cZ, zern_idx, NFP, nr=10, nt=12, ax=None, bdryR=None, bdryZ=None, **kwargs):
-    """Plots solutions (currently only zeta=0 plane)
-
-    Parameters
-    ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    zern_idx : ndarray
-        indices for R,Z spectral basis, ie an array of [l,m,n] for each spectral coefficient
-    NFP : int
-        number of field periods
-    nr : int
-        number of flux surfaces to show (Default value = 10)
-    nt : int
-        number of theta lines to show (Default value = 12)
-    ax : matplotlib.axes
-        axes to plot on. If None, a new figure is created. (Default value = None)
-    bdryR :
-         R values of last closed flux surface (Default value = None)
-    bdryZ :
-         Z values of last closed flux surface (Default value = None)
-    **kwargs :
-        additional plot formatting parameters
-
-    Returns
-    -------
-    ax : matplotlib.axes
-        handle to axes used for the plot
-
-    """
-
-    Nr = 100
-    Nt = 361
-    rstep = Nr//nr
-    tstep = Nt//nt
-    zeta = kwargs.get('zeta', 0)
-    r = np.linspace(0, 1, Nr)
-    t = np.linspace(0, 2*np.pi, Nt)
-    r, t = np.meshgrid(r, t, indexing='ij')
-    r = r.flatten()
-    t = t.flatten()
-    z = zeta*np.ones_like(r)
-    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
-
-    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
-    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
-
-    if ax is None:
-        fig, ax = plt.subplots()
-    # plot desired bdry
-    if (bdryR is not None) and (bdryZ is not None):
-        ax.plot(
-            bdryR, bdryZ, color=colorblind_colors[1], lw=2, alpha=.5, dashes=(None, None))
-    # plot r contours
-    ax.plot(R.T[:, ::rstep], Z.T[:, ::rstep],
-            color=colorblind_colors[0], lw=.5, dashes=(None, None))
-    # plot actual bdry
-    ax.plot(R.T[:, -1], Z.T[:, -1], color=colorblind_colors[0],
-            lw=.5, dashes=(None, None))
-    # plot theta contours
-    ax.plot(R[:, ::tstep], Z[:, ::tstep],
-            color=colorblind_colors[0], lw=.5, dashes=dashes[2])
-    ax.axis('equal')
-    ax.set_xlabel('$R$')
-    ax.set_ylabel('$Z$')
-    ax.set_title(kwargs.get('title'))
-    return ax
-
-
-def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, cP, cI, **kwargs):
-    """Plot initial conditions, such as the initial guess for flux surfaces,
-    node locations, and profiles.
-
-    Parameters
-    ----------
-    cR_init : ndarray
-        spectral coefficients of R
-    cZ_init : ndarray
-        spectral coefficients of Z
-    zern_idx : ndarray
-        array of (l,m,n) indices for each spectral R,Z coeff
-    NFP : int
-        number of field periods
-    nodes : ndarray
-        locations of nodes in SFL coordinates
-    cI : array-like
-        paramters to pass to rotational transform function
-    cP : array-like
-        parameters to pass to pressure function
-    **kwargs :
-        additional plot formatting parameters
-
-
-    Returns
-    -------
-    fig : matplotlib.figure
-        handle to figure used for plotting
-    ax : ndarray of matplotlib.axes
-        handles to axes used for plotting
-
-    """
-
-    fig = plt.figure(figsize=kwargs.get('figsize', (9, 3)))
-    gs = matplotlib.gridspec.GridSpec(2, 3)
-    ax0 = plt.subplot(gs[:, 0])
-    ax1 = plt.subplot(gs[:, 1], projection='polar')
-    ax2 = plt.subplot(gs[0, 2])
-    ax3 = plt.subplot(gs[1, 2])
-
-    # coordinate surfaces
-    plot_coord_surfaces(cR_init, cZ_init, zern_idx, NFP, nr=10, nt=12, ax=ax0)
-    ax0.axis('equal')
-    ax0.set_title(r'Initial guess, $\zeta=0$ plane')
-
-    # node locations
-    ax1.scatter(nodes[1], nodes[0], s=1)
-    ax1.set_ylim(0, 1)
-    ax1.set_xticks([0, np.pi/4, np.pi/2, 3/4*np.pi,
-                    np.pi, 5/4*np.pi, 3/2*np.pi, 7/4*np.pi])
-    ax1.set_xticklabels(['$0$', r'$\frac{\pi}{4}$', r'$\frac{\pi}{2}$', r'$\frac{3\pi}{4}$',
-                         r'$\pi$', r'$\frac{4\pi}{4}$', r'$\frac{3\pi}{2}$', r'$2\pi$'])
-    ax1.set_yticklabels([])
-    ax1.set_title(r'Node locations, $\zeta=0$ plane', pad=20)
-
-    # profiles
-    xx = np.linspace(0, 1, 100)
-    ax2.plot(xx, presfun(xx, 0, cP), lw=1)
-    ax2.set_ylabel(r'$p$')
-    ax2.set_xticklabels([])
-    ax2.set_title('Profiles')
-    ax3.plot(xx, iotafun(xx, 0, cI), lw=1)
-    ax3.set_ylabel(r'$\iota$')
-    ax3.set_xlabel(r'$\rho$')
-    plt.subplots_adjust(wspace=0.5, hspace=0.3)
-    ax = np.array([ax0, ax1, ax2, ax3])
-
-    return fig, ax
-
-
-def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma', **kwargs):
-    """Plots force balance error
-
-    Parameters
-    ----------
-    equil : dict
-        dictionary of equilibrium solution quantities
-    domain : str
-        one of 'real', 'sfl'. What basis to use for plotting,
-        real (R,Z) coordinates or straight field line (rho,vartheta) (Default value = 'real')
-    normalize : str
-        Whether and how to normalize values
-        None, False - no normalization, values plotted are force error in Newtons/m^3
-        'local' - normalize by local pressure gradient
-        'global' - normalize by pressure gradient at rho=0.5
-        True - same as 'global' (Default value = 'local')
-    log : bool
-        plot logarithm of error or absolute value (Default value = True)
-    cmap : str
-        colormap to use (Default value = 'plasma')
-    **kwargs :
-        additional plot formatting parameters
-
-    Returns
-    -------
-
-    """
-
-    cR = equil['cR']
-    cZ = equil['cZ']
-    cP = equil['cP']
-    cI = equil['cI']
-    Psi_lcfs = equil['Psi_lcfs']
-    NFP = equil['NFP']
-    zern_idx = equil['zern_idx']
-
-    if np.max(zern_idx[:, 2]) == 0:
-        Nz = 1
-        rows = 1
-    else:
-        Nz = 6
-        rows = 2
-
-    Nr = kwargs.get('Nr', 51)
-    Nv = kwargs.get('Nv', 90)
-    Nlevels = kwargs.get('Nlevels', 100)
-
-    nodes, vols = get_nodes_grid(NFP, nr=Nr, nt=Nv, nz=Nz)
-    derivatives = get_needed_derivatives('all')
-    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP, derivatives)
-
-    # compute fields components
-    coord_der = compute_coordinate_derivatives(cR, cZ, zernike_transform)
-    cov_basis = compute_covariant_basis(coord_der, zernike_transform)
-    jacobian = compute_jacobian(coord_der, cov_basis, zernike_transform)
-    con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, zernike_transform)
-    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
-                                            Psi_lcfs, zernike_transform)
-    plasma_current = compute_plasma_current(coord_der, cov_basis,
-                                            jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
-    force_magnitude, p_mag = compute_force_magnitude(
-        coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform)
-
-    if domain == 'real':
-        xlabel = r'R'
-        ylabel = r'Z'
-        R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nv, Nz))
-        Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nv, Nz))
-    elif domain == 'sfl':
-        xlabel = r'$\vartheta$'
-        ylabel = r'$\rho$'
-        R = nodes[1].reshape((Nr, Nv, Nz))
-        Z = nodes[0].reshape((Nr, Nv, Nz))
-    else:
-        raise ValueError(
-            TextColors.FAIL + "domain must be either 'real' or 'sfl'" + TextColors.ENDC)
-
-    if normalize == 'local':
-        label = r'||F||/$\nabla$p'
-        norm_errF = force_magnitude / p_mag
-    elif normalize == 'global':
-        label = r'||F||/$\nabla$p($\rho$=0.5)'
-        halfn = np.where(nodes[0] == 0.5)[0][0]
-        norm_errF = force_magnitude / p_mag[halfn]
-    else:
-        label = r'||F||'
-        norm_errF = force_magnitude
-
-    if log:
-        label = r'$\mathregular{log}_{10}$('+label+')'
-        norm_errF = np.log10(norm_errF)
-
-    norm_errF = norm_errF.reshape((Nr, Nv, Nz))
-
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-        cf = ax.contourf(R[:, :, k], Z[:, :, k], norm_errF[:, :, k],
-                         cmap=cmap, extend='both', levels=Nlevels)
-        if domain == 'real':
-            ax.axis('equal')
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        cbar = plt.colorbar(cf)
-        if k == 0:
-            cbar.ax.set_ylabel(label)
-    plt.show()
 
 
 def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):

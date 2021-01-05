@@ -65,8 +65,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
     zern_mode = inputs['zern_mode']
     node_mode = inputs['node_mode']
     profiles = inputs['profiles']
-    axis = inputs['axis']
     boundary = inputs['boundary']
+    axis = inputs['axis']
     verbose = inputs['verbose']
 
     if file_name is not None:
@@ -111,8 +111,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 'bdry_mode': bdry_mode,
                 'zeta_ratio': zeta_ratio[ii],
                 'profiles': profiles,
-                'axis': axis,
-                'boundary': boundary
+                'boundary': boundary,
+                'axis': axis
             }
             # apply pressure ratio
             inputs_ii['profiles'][:, 1] *= pres_ratio[ii]

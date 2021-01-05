@@ -54,7 +54,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
     bdry_ratio = inputs['bdry_ratio']   # arr
     pres_ratio = inputs['pres_ratio']   # arr
     zeta_ratio = inputs['zeta_ratio']   # arr
-    errr_ratio = inputs['errr_ratio']   # arr
     pert_order = inputs['pert_order']   # arr
     ftol = inputs['ftol']               # arr
     xtol = inputs['xtol']               # arr
@@ -89,7 +88,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             print("Boundary ratio = {}".format(bdry_ratio[ii]))
             print("Pressure ratio = {}".format(pres_ratio[ii]))
             print("Zeta ratio = {}".format(zeta_ratio[ii]))
-            print("Error ratio = {}".format(errr_ratio[ii]))
             print("Perturbation Order = {}".format(pert_order[ii]))
             print("Function tolerance = {}".format(ftol[ii]))
             print("Gradient tolerance = {}".format(gtol[ii]))
@@ -111,11 +109,18 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 'N': N[ii],
                 'index': zern_mode,
                 'bdry_mode': bdry_mode,
-                'bdry_ratio': bdry_ratio[ii],
+                'zeta_ratio': zeta_ratio[ii],
                 'profiles': profiles,
                 'axis': axis,
                 'boundary': boundary
             }
+            # apply pressure ratio
+            inputs_ii['profiles'][:, 1] *= pres_ratio[ii]
+            # apply boundary ratio
+            bdry_factor = np.where(inputs_ii['boundary'][:, 1] != 0, bdry_ratio[ii], 1)
+            inputs_ii['boundary'][:, 2] *= bdry_factor
+            inputs_ii['boundary'][:, 3] *= bdry_factor
+
             equil_fam = EquilibriaFamily(inputs=inputs_ii)
             equil = equil_fam[ii]
 

@@ -3,16 +3,14 @@ from collections.abc import MutableSequence
 
 from desc.backend import TextColors, put
 from desc.utils import Tristate, unpack_state
-from desc.basis import Basis, PowerSeries, FourierSeries, DoubleFourierSeries, FourierZernikeBasis
+from desc.basis import PowerSeries, FourierSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
-from desc.init_guess import get_initial_guess_scale_bdry
-from desc.boundary_conditions import format_bdry
 from desc.objective_funs import ObjectiveFunction
 from desc.equilibrium_io import IOAble
 
+from desc.compute_funs import compute_polar_coords, compute_toroidal_coords
 """
-from desc.compute_funs import compute_coordinates, compute_coordinate_derivatives
 from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
 from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
 from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
@@ -43,24 +41,20 @@ class Configuration(IOAble):
         ----------
         inputs : dict
             Dictionary of inputs with the following required keys:
+                NFP : int, number of field periods
+                Psi : float, total toroidal flux (in Webers) within LCFS
                 L : int, radial resolution
                 M : int, poloidal resolution
                 N : int, toroidal resolution
-                p_l : ndarray, spectral coefficients of pressure profile
-                i_l : ndarray, spectral coefficients of rotational transform
-                Psi : float, total toroidal flux (in Webers) within LCFS
-                NFP : int, number of field periods
-                bdry : ndarray, array of fourier coeffs [m,n,Rcoeff, Zcoeff]
+                profiles : ndarray, array of profile coeffs [l, p_l, i_l]
+                boundary : ndarray, array of boundary coeffs [m, n, R1_mn, Z1_mn]
             And the following optional keys:
                 sym : bool, is the problem stellarator symmetric or not, default is False
                 index : str, type of Zernike indexing scheme to use, default is 'ansi'
                 bdry_mode : str, how to calculate error at bdry, default is 'spectral'
-                bdry_ratio : float, Multiplier on the 3D boundary modes. Default = 1.0.
-                pres_ratio : float, Multiplier on the pressure profile. Default = 1.0.
                 zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
-                errr_ratio : float, Weight on the force balance equations, relative to the boundary condition equations. Default = 1e-8.
-                axis : ndarray, Fourier coefficients for initial guess for the axis
-                x : ndarray, state vector of spectral coefficients
+                axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
+                x : ndarray, state vector [R0_n, Z0_n, r_lmn, l_lmn]
                 R0_n : ndarray, spectral coefficients of R0
                 Z0_n : ndarray, spectral coefficients of Z0
                 r_lmn : ndarray, spectral coefficients of r
@@ -100,11 +94,8 @@ class Configuration(IOAble):
         # optional inputs
         self._sym = inputs.get('sym', False)
         self._index = inputs.get('index', 'ansi')
-        self.bdry_mode = inputs.get('bdry_mode', 'spectral')
-        self.bdry_ratio = inputs.get('bdry_ratio', 1.0)
-        self.pres_ratio = inputs.get('pres_ratio', 1.0)
-        self.zeta_ratio = inputs.get('zeta_ratio', 1.0)
-        self.errr_ratio = inputs.get('errr_ratio', 1e-8)
+        self._bdry_mode = inputs.get('bdry_mode', 'spectral')
+        self._zeta_ratio = inputs.get('zeta_ratio', 1.0)
 
         # stellarator symmetry for bases
         if self._sym:
@@ -137,31 +128,29 @@ class Configuration(IOAble):
 
         # format boundary
         self._R1_n, self._Z1_n = format_boundary(
-            boundary, self._R1_basis, self._Z1_basis, self.bdry_mode)
-        ratio_R1 = np.where(self._R1_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
-        ratio_Z1 = np.where(self._Z1_basis.modes[:, 2] != 0, self.bdry_ratio, 1)
-        self._R1_n *= ratio_R1
-        self._Z1_n *= ratio_Z1
+            boundary, self._R1_basis, self._Z1_basis, self._bdry_mode)
 
-        # solution, if provided
-        try:
+        # initial solution
+        try:        # solution provided by state vector
             self._x = inputs['x']
             self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn = unpack_state(
                 self._x, self._R0_basis.num_modes, self._Z0_basis.num_modes,
                 self._r_basis.num_modes, self._l_basis.num_modes)
         except:
-            try:
+            try:    # solution provided by components
                 self._R0_n = inputs['R0_n']
                 self._Z0_n = inputs['Z0_n']
                 self._r_lmn = inputs['r_lmn']
                 self._l_lmn = inputs['l_lmn']
-            except:
-                # create initial guess
+            except: # create initial guess
                 axis = inputs.get('axis', boundary[np.where(boundary[:, 0] == 0)[0], 1:])
                 self._R0_n, self._Z0_n = format_axis(axis, self._R0_basis, self._Z0_basis)
                 self._r_lmn = np.zeros((self._r_basis.num_modes,))
                 self._l_lmn = np.zeros((self._l_basis.num_modes,))
-                # TODO: set r_lmn coefficients for initial guess
+                self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
+                    (self._r_basis.modes[:, 0]==0, self._r_basis.modes[:, 1]==0, self._r_basis.modes[:, 2]==0)))[0], 0.5)
+                self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
+                    (self._r_basis.modes[:, 0]==2, self._r_basis.modes[:, 1]==0, self._r_basis.modes[:, 2]==0)))[0], 0.5)
             self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     def change_resolution(self, L:int=None, M:int=None, N:int=None) -> None:
@@ -174,21 +163,24 @@ class Configuration(IOAble):
         if N is not None:
             self._N = N
 
-        old_modes_R = self._R_basis.modes
-        old_modes_Z = self._Z_basis.modes
-        old_modes_L = self._L_basis.modes
+        old_modes_R0 = self._R0_basis.modes
+        old_modes_Z0 = self._Z0_basis.modes
+        old_modes_r = self._r_basis.modes
+        old_modes_l = self._l_basis.modes
         old_modes_R1 = self._R1_basis.modes
         old_modes_Z1 = self._Z1_basis.modes
 
         # create bases
-        self._R_basis = FourierZernikeBasis(
+        self._R0_basis = FourierSeries(
+            N=self._N, NFP=self._NFP, sym=self._R_sym)
+        self._Z0_basis = FourierSeries(
+            N=self._N, NFP=self._NFP, sym=self._Z_sym)
+        self._r_basis = FourierZernikeBasis(
             L=self._L, M=self._M, N=self._N,
             NFP=self._NFP, sym=self._R_sym, index=self._index)
-        self._Z_basis = FourierZernikeBasis(
+        self._l_basis = FourierZernikeBasis(
             L=self._L, M=self._M, N=self._N,
             NFP=self._NFP, sym=self._Z_sym, index=self._index)
-        self._L_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._L_sym)
         self._R1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym)
         self._Z1_basis = DoubleFourierSeries(
@@ -206,14 +198,15 @@ class Configuration(IOAble):
                     c_new[i] = c_old[idx[0]]
             return c_new
 
-        self._R0_n = copy_coeffs(self._R0_n, old_modes_R, self._R_basis.modes)
-        self._Z0_n = copy_coeffs(self._Z0_n, old_modes_Z, self._Z_basis.modes)
-        self._cL = copy_coeffs(self._cL, old_modes_L, self._L_basis.modes)
-        self._R1_n = copy_coeffs(self._R1_n, old_modes_R1, self._R1_basis.modes)
-        self._Z1_n = copy_coeffs(self._Z1_n, old_modes_Z1, self._Z1_basis.modes)
+        self._R0_n  = copy_coeffs(self._R0_n, old_modes_R0, self._R0_basis.modes)
+        self._Z0_n  = copy_coeffs(self._Z0_n, old_modes_Z0, self._Z0_basis.modes)
+        self._r_lmn = copy_coeffs(self._r_lmn, old_modes_r, self._r_basis.modes)
+        self._l_lmn = copy_coeffs(self._l_lmn, old_modes_l, self._l_basis.modes)
+        self._R1_n  = copy_coeffs(self._R1_n, old_modes_R1, self._R1_basis.modes)
+        self._Z1_n  = copy_coeffs(self._Z1_n, old_modes_Z1, self._Z1_basis.modes)
 
         # state vector
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def sym(self) -> bool:
@@ -226,8 +219,9 @@ class Configuration(IOAble):
     @x.setter
     def x(self, x) -> None:
         self._x = x
-        self._R0_n, self._Z0_n, self._cL = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes)
+        self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn = unpack_state(
+                self._x, self._R0_basis.num_modes, self._Z0_basis.num_modes,
+                self._r_basis.num_modes, self._l_basis.num_modes)
 
     @property
     def R0_n(self):
@@ -237,7 +231,7 @@ class Configuration(IOAble):
     @R0_n.setter
     def R0_n(self, R0_n) -> None:
         self._R0_n = R0_n
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def Z0_n(self):
@@ -247,17 +241,27 @@ class Configuration(IOAble):
     @Z0_n.setter
     def Z0_n(self, Z0_n) -> None:
         self._Z0_n = Z0_n
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
-    def cL(self):
-        """ spectral coefficients of L """
-        return self._cL
+    def r_lmn(self):
+        """ spectral coefficients of r """
+        return self._r_lmn
 
-    @cL.setter
-    def cL(self, cL) -> None:
-        self._cL = cL
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._cL])
+    @r_lmn.setter
+    def r_lmn(self, r_lmn) -> None:
+        self._r_lmn = r_lmn
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+
+    @property
+    def l_lmn(self):
+        """ spectral coefficients of lambda """
+        return self._l_lmn
+
+    @l_lmn.setter
+    def l_lmn(self, l_lmn) -> None:
+        self._l_lmn = l_lmn
+        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def R1_n(self):
@@ -278,22 +282,22 @@ class Configuration(IOAble):
         self._Z1_n = Z1_n
 
     @property
-    def cP(self):
+    def p_l(self):
         """ spectral coefficients of pressure """
-        return self._cP
+        return self._p_l
 
-    @cP.setter
-    def cP(self, cP) -> None:
-        self._cP = cP
+    @p_l.setter
+    def p_l(self, p_l) -> None:
+        self._p_l = p_l
 
     @property
-    def cI(self):
+    def i_l(self):
         """ spectral coefficients of iota """
-        return self._cI
+        return self._i_l
 
-    @cI.setter
-    def cI(self, cI) -> None:
-        self._cI = cI
+    @i_l.setter
+    def i_l(self, i_l) -> None:
+        self._i_l = i_l
 
     @property
     def Psi(self) -> float:
@@ -314,119 +318,135 @@ class Configuration(IOAble):
         self._NFP = NFP
 
     @property
-    def R_basis(self) -> Basis:
+    def R0_basis(self) -> FourierSeries:
         """
-        Spectral basis for R
+        Spectral basis for R0
 
         Returns
         -------
-        Basis
+        FourierSeries
 
         """
-        return self._R_basis
+        return self._R0_basis
 
-    @R_basis.setter
-    def R_basis(self, R_basis:Basis) -> None:
-        self._R_basis = R_basis
+    @R0_basis.setter
+    def R0_basis(self, R0_basis:FourierSeries) -> None:
+        self._R0_basis = R0_basis
 
     @property
-    def Z_basis(self) -> Basis:
+    def Z0_basis(self) -> FourierSeries:
         """
-        Spectral basis for Z
+        Spectral basis for Z0
 
         Returns
         -------
-        Basis
+        FourierSeries
 
         """
-        return self._Z_basis
+        return self._Z0_basis
 
-    @Z_basis.setter
-    def Z_basis(self, Z_basis:Basis) -> None:
-        self._Z_basis = Z_basis
+    @Z0_basis.setter
+    def Z0_basis(self, Z0_basis:FourierSeries) -> None:
+        self._Z0_basis = Z0_basis
 
     @property
-    def L_basis(self) -> Basis:
+    def r_basis(self) -> FourierZernikeBasis:
         """
-        Spectral basis for L
+        Spectral basis for r
 
         Returns
         -------
-        Basis
+        FourierZernikeBasis
 
         """
-        return self._L_basis
+        return self._r_basis
 
-    @L_basis.setter
-    def L_basis(self, L_basis:Basis) -> None:
-        self._L_basis = L_basis
+    @r_basis.setter
+    def r_basis(self, r_basis:FourierZernikeBasis) -> None:
+        self._r_basis = r_basis
 
     @property
-    def R1_basis(self) -> Basis:
+    def l_basis(self) -> FourierZernikeBasis:
+        """
+        Spectral basis for lambda
+
+        Returns
+        -------
+        FourierZernikeBasis
+
+        """
+        return self._l_basis
+
+    @l_basis.setter
+    def l_basis(self, l_basis:FourierZernikeBasis) -> None:
+        self._l_basis = l_basis
+
+    @property
+    def R1_basis(self) -> DoubleFourierSeries:
         """
         Spectral basis for R at the boundary
 
         Returns
         -------
-        Basis
+        DoubleFourierSeries
 
         """
         return self._R1_basis
 
     @R1_basis.setter
-    def R1_basis(self, R1_basis:Basis) -> None:
+    def R1_basis(self, R1_basis:DoubleFourierSeries) -> None:
         self._R1_basis = R1_basis
 
     @property
-    def Z1_basis(self) -> Basis:
+    def Z1_basis(self) -> DoubleFourierSeries:
         """
         Spectral basis for Z at the boundary
 
         Returns
         -------
-        Basis
+        DoubleFourierSeries
 
         """
         return self._Z1_basis
 
     @Z1_basis.setter
-    def Z1_basis(self, Z1_basis:Basis) -> None:
+    def Z1_basis(self, Z1_basis:DoubleFourierSeries) -> None:
         self._Z1_basis = Z1_basis
 
     @property
-    def P_basis(self) -> Basis:
+    def p_basis(self) -> PowerSeries:
         """
         Spectral basis for pressure
 
         Returns
         -------
-        Basis
+        PowerSeries
 
         """
-        return self._P_basis
+        return self._p_basis
 
-    @P_basis.setter
-    def P_basis(self, P_basis:Basis) -> None:
-        self._P_basis = P_basis
+    @p_basis.setter
+    def p_basis(self, p_basis:PowerSeries) -> None:
+        self._p_basis = p_basis
 
     @property
-    def I_basis(self) -> Basis:
+    def i_basis(self) -> PowerSeries:
         """
-        Spectral basis for iota
+        Spectral basis for rotational transform
 
         Returns
         -------
-        Basis
+        PowerSeries
 
         """
-        return self._I_basis
+        return self._i_basis
 
-    @I_basis.setter
-    def I_basis(self, I_basis:Basis) -> None:
-        self._I_basis = I_basis
+    @i_basis.setter
+    def i_basis(self, i_basis:PowerSeries) -> None:
+        self._i_basis = i_basis
 
-    def compute_coordinates(self, grid: Grid) -> dict:
-        """Converts from spectral to real space by calling :func:`desc.configuration.compute_coordinates` 
+    def compute_toroidal_coords(self, grid: Grid) -> dict:
+        """Computes toroidal coordinates from polar coordinates.
 
         Parameters
         ----------
@@ -435,233 +455,23 @@ class Configuration(IOAble):
 
         Returns
         -------
-        coords : dict
-            dictionary of ndarray, shape(N_nodes,) of coordinates evaluated at node locations.
-            keys are of the form 'X_y' meaning the derivative of X wrt to y
-
+        toroidal_coords : dict
+            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
+            evaluated at grid nodes.
+            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    
         """
 
-        R_transform = Transform(grid, self._R_basis, derivs=0)
-        Z_transform = Transform(grid, self._Z_basis, derivs=0)
-        coords = compute_coordinates(self._R0_n, self._Z0_n, R_transform,
-                                     Z_transform)
-        return coords
+        R0_transform = Transform(grid, self._R0_basis, derivs=0)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        polar_coords = compute_polar_coords(self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            R0_transform, Z0_transform, r_transform, l_transform)
+        toroidal_coords = compute_toroidal_coords(polar_coords)
+        return toroidal_coords
 
-    def compute_coordinate_derivatives(self, grid: Grid) -> dict:
-        """Converts from spectral to real space and evaluates derivatives of R,Z wrt to SFL coords by calling :func:`desc.configuration.compute_coordinate_derivatives`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes at which to evaluate derivatives.
-
-        Returns
-        -------
-        coord_der : dict
-            dictionary of ndarray, shape(N_nodes,) of coordinate derivatives evaluated at node locations.
-            keys are of the form 'X_y' meaning the derivative of X wrt to y
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        return coord_der
-
-    def compute_covariant_basis(self, grid: Grid) -> dict:
-        """Computes covariant basis vectors at grid points by calling :func:`desc.configuration.compute_covariant_basis`
-
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes at which to find the covariant basis vectors.
-
-        Returns
-        -------
-        cov_basis : dict
-            dictionary of ndarray containing covariant basis
-            vectors and derivatives at each node. Keys are of the form 'e_x_y',
-            meaning the unit vector in the x direction, differentiated wrt to y.
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        return cov_basis
-
-    def compute_contravariant_basis(self, grid: Grid) -> dict:
-        """Computes contravariant basis vectors and jacobian elements by calling :func:`desc.configuration.compute_contravariant_basis`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to find the contravariant basis vectors and the 
-            jacobian elements.
-
-        Returns
-        -------
-        con_basis : dict
-            dictionary of ndarray containing contravariant basis vectors and jacobian elements
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        con_basis = compute_contravariant_basis(
-            coord_der, cov_basis, jacobian, axis=grid.axis)
-        return con_basis
-
-    def compute_jacobian(self, grid: Grid) -> dict:
-        """Computes coordinate jacobian and derivatives by calling :func:`desc.configuration.compute_jacobian`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to find the coordinate jacobian elements and its
-            partial derivatives.
-
-        Returns
-        -------
-        jacobian : dict
-            dictionary of ndarray, shape(N_nodes,) of coordinate
-            jacobian and partial derivatives. Keys are of the form `g_x` meaning
-            the x derivative of the coordinate jacobian g
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        return jacobian
-
-    def compute_magnetic_field(self, grid: Grid) -> dict:
-        """Computes magnetic field components at node locations by calling :func:`desc.configuration.compute_magnetic_field`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to evaluate the magnetic field components
-
-        Returns
-        -------
-        magnetic_field: dict
-            dictionary of ndarray, shape(N_nodes,) of magnetic field
-            and derivatives. Keys are of the form 'B_x_y' or 'B^x_y', meaning the
-            covariant (B_x) or contravariant (B^x) component of the magnetic field, with the derivative wrt to y.
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self._cI,
-                                                self._Psi, I_transform)
-        return magnetic_field
-
-    def compute_plasma_current(self, grid: Grid) -> dict:
-        """Computes current density field at node locations by calling :func:`desc.configuration.compute_plasma_current`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to evaluate the plasma current components
-
-        Returns
-        -------
-        plasma_current : dict
-            dictionary of ndarray, shape(N_nodes,) of current field.
-            Keys are of the form 'J^x_y' meaning the contravariant (J^x)
-            component of the current, with the derivative wrt to y.
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self._cI,
-                                                self._Psi, I_transform)
-        plasma_current = compute_plasma_current(coord_der, cov_basis, jacobian,
-                                        magnetic_field, self._cI, I_transform)
-        return plasma_current
-
-    def compute_magnetic_field_magnitude(self, grid: Grid) -> dict:
-        """Computes magnetic field magnitude at node locations by calling :func:`desc.configuration.compute_magnetic_field_magnitude`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to evaluate the magnetic field magnitude and derivatives
-
-        Returns
-        -------
-        magnetic_field_mag : dict
-            dictionary of ndarray, shape(N_nodes,) of magnetic field magnitude and derivatives
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        I_transform = Transform(grid, self._I_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self._cI,
-                                                self._Psi, I_transform)
-        magnetic_field_mag = compute_magnetic_field_magnitude(cov_basis,
-                                      magnetic_field, self._cI, I_transform)
-        return magnetic_field_mag
-
-    def compute_force_magnitude(self, grid: Grid) -> dict:
-        """Computes force error magnitude at node locations by calling :func:`desc.configuration.compute_force_magnitude`
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of 
-            the nodes at which to evaluate the force error magnitudes
-
-        Returns
-        -------
-        force_mag : dict
-            dictionary of ndarray, shape(N_nodes,) of force magnitudes
-
-        """
-        R_transform = Transform(grid, self._R_basis, derivs=3)
-        Z_transform = Transform(grid, self._Z_basis, derivs=3)
-        I_transform = Transform(grid, self._I_basis, derivs=1)
-        P_transform = Transform(grid, self._P_basis, derivs=1)
-        coord_der = compute_coordinate_derivatives(self._R0_n, self._Z0_n,
-                                                   R_transform, Z_transform)
-        cov_basis = compute_covariant_basis(coord_der, axis=grid.axis)
-        jacobian = compute_jacobian(coord_der, cov_basis, axis=grid.axis)
-        con_basis = compute_contravariant_basis(coord_der, cov_basis, jacobian,
-                                                axis=grid.axis)
-        magnetic_field = compute_magnetic_field(cov_basis, jacobian, self._cI,
-                                                self._Psi, I_transform)
-        plasma_current = compute_plasma_current(coord_der, cov_basis, jacobian,
-                                        magnetic_field, self._cI, I_transform)
-        force_mag = compute_force_magnitude(coord_der, cov_basis, con_basis,
-            jacobian, magnetic_field, plasma_current, self._cP, P_transform)
-        return force_mag
+# TODO: add all other compute functions as Configuration methods
 
 
 class Equilibrium(Configuration, IOAble):
@@ -730,20 +540,30 @@ class Equilibrium(Configuration, IOAble):
         Configuration
 
         """
-        bdryR = np.array([self._R1_basis.modes[:, 1:2],
-                          self._R1_n, np.zeros_like(self._R1_n)]).T
-        bdryZ = np.array([self._Z1_basis.modes[:, 1:2],
-                          np.zeros_like(self._R1_n), self._Z1_n]).T
-        inputs = {'L': self._L,
+        p_modes  = np.array([self._p_basis.modes[:, 0],
+                             self._p_l, np.zeros_like(self._p_l)]).T
+        i_modes  = np.array([self._i_basis.modes[:, 0],
+                             np.zeros_like(self._i_l), self._i_l]).T
+        R0_modes = np.array([self._R0_basis.modes[:, 2],
+                             self._R0_n, np.zeros_like(self._R0_n)]).T
+        Z0_modes = np.array([self._Z0_basis.modes[:, 2],
+                             np.zeros_like(self._R0_n), self._Z0_n]).T
+        R1_modes = np.array([self._R1_basis.modes[:, 1:2],
+                             self._R1_n, np.zeros_like(self._R1_n)]).T
+        Z1_modes = np.array([self._Z1_basis.modes[:, 1:2],
+                             np.zeros_like(self._R1_n), self._Z1_n]).T
+        inputs = {'sym': self._sym,
+                  'NFP': self._NFP,
+                  'Psi': self._Psi,
+                  'L': self._L,
                   'M': self._M,
                   'N': self._N,
-                  'cP': self._cP,
-                  'cI': self._cI,
-                  'Psi': self._Psi,
-                  'NFP': self._NFP,
-                  'bdry': np.vstack((bdryR, bdryZ)),
-                  'sym': self._sym,
                   'index': self._index,
+                  'bdry_mode': self._bdry_mode,
+                  'zeta_ratio': self._zeta_ratio,
+                  'profiles': np.vstack((p_modes, i_modes)),
+                  'axis': np.vstack((R0_modes, Z0_modes)),
+                  'bdry': np.vstack((R1_modes, Z1_modes)),
                   'x': self._x0
                  }
         return Configuration(inputs=inputs)
@@ -755,6 +575,7 @@ class Equilibrium(Configuration, IOAble):
         if self._optimizer is None or self._objective is None:
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving.")
+        # TODO: these args need to be updated
         args = (self.R1_n, self.Z1_n, self.cP, self.cI, self.Psi,
                 self.bdry_ratio, self.pres_ratio, self.zeta_ratio, self.errr_ratio)
 
@@ -763,6 +584,7 @@ class Equilibrium(Configuration, IOAble):
         self.x = result['x']
         self.solved = True  # TODO: do we still call it solved if the solver exited early?
         return result
+
 
 # XXX: Should this (also) inherit from Equilibrium?
 class EquilibriaFamily(IOAble, MutableSequence):

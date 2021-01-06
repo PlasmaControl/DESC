@@ -445,29 +445,30 @@ class Configuration(IOAble):
     def i_basis(self, i_basis:PowerSeries) -> None:
         self._i_basis = i_basis
 
-    def compute_toroidal_coords(self, grid:Grid) -> dict:
-        """Computes toroidal coordinates from polar coordinates.
+    def compute_polar_coords(self, grid:Grid) -> dict:
+        """Transforms spectral coefficients of polar coordinates to real space.
 
         Parameters
         ----------
         grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes at which to evaluate R and Z.
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
 
         Returns
         -------
         toroidal_coords : dict
-            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates
-            evaluated at grid nodes.
+            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
-    
+
         """
 
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
         r_transform  = Transform(grid, self._r_basis,  derivs=0)
         l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        polar_coords = compute_polar_coords(self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
-            R0_transform, Z0_transform, r_transform, l_transform)
+
+        polar_coords = compute_polar_coords(
+                R0_n, Z0_n, r_lmn, l_lmn, R0_transform, Z0_transform, r_transform, l_transform)
         toroidal_coords = compute_toroidal_coords(polar_coords)
         return toroidal_coords
 

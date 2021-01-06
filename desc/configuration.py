@@ -9,12 +9,11 @@ from desc.transform import Transform
 from desc.objective_funs import ObjectiveFunction
 from desc.equilibrium_io import IOAble
 
-from desc.compute_funs import compute_polar_coords, compute_toroidal_coords
-"""
-from desc.compute_funs import compute_covariant_basis, compute_contravariant_basis
-from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_plasma_current
-from desc.compute_funs import compute_magnetic_field_magnitude, compute_force_magnitude
-"""
+from desc.compute_funs import compute_polar_coords, compute_toroidal_coords, compute_cartesian_coords
+from desc.compute_funs import compute_profiles, compute_covariant_basis, compute_contravariant_basis
+from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_magnetic_field_magnitude
+from desc.compute_funs import compute_current_density, compute_force_error, compute_force_error_magnitude
+
 
 class Configuration(IOAble):
     """Configuration contains information about a plasma state, including the
@@ -127,7 +126,7 @@ class Configuration(IOAble):
         self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
 
         # format boundary
-        self._R1_n, self._Z1_n = format_boundary(
+        self._R1_mn, self._Z1_mn = format_boundary(
             boundary, self._R1_basis, self._Z1_basis, self._bdry_mode)
 
         # initial solution
@@ -202,8 +201,8 @@ class Configuration(IOAble):
         self._Z0_n  = copy_coeffs(self._Z0_n, old_modes_Z0, self._Z0_basis.modes)
         self._r_lmn = copy_coeffs(self._r_lmn, old_modes_r, self._r_basis.modes)
         self._l_lmn = copy_coeffs(self._l_lmn, old_modes_l, self._l_basis.modes)
-        self._R1_n  = copy_coeffs(self._R1_n, old_modes_R1, self._R1_basis.modes)
-        self._Z1_n  = copy_coeffs(self._Z1_n, old_modes_Z1, self._Z1_basis.modes)
+        self._R1_mn = copy_coeffs(self._R1_mn, old_modes_R1, self._R1_basis.modes)
+        self._Z1_mn = copy_coeffs(self._Z1_mn, old_modes_Z1, self._Z1_basis.modes)
 
         # state vector
         self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
@@ -264,22 +263,22 @@ class Configuration(IOAble):
         self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
-    def R1_n(self):
+    def R1_mn(self):
         """ spectral coefficients of R at the boundary"""
-        return self._R1_n
+        return self._R1_mn
 
-    @R1_n.setter
-    def R1_n(self, R1_n) -> None:
-        self._R1_n = R1_n
+    @R1_mn.setter
+    def R1_mn(self, R1_mn) -> None:
+        self._R1_mn = R1_mn
 
     @property
-    def Z1_n(self):
+    def Z1_mn(self):
         """ spectral coefficients of Z at the boundary"""
-        return self._Z1_n
+        return self._Z1_mn
 
-    @Z1_n.setter
-    def Z1_n(self, Z1_n) -> None:
-        self._Z1_n = Z1_n
+    @Z1_mn.setter
+    def Z1_mn(self, Z1_mn) -> None:
+        self._Z1_mn = Z1_mn
 
     @property
     def p_l(self):
@@ -456,23 +455,371 @@ class Configuration(IOAble):
 
         Returns
         -------
+        polar_coords : dict
+            dictionary of ndarray, shape(num_nodes,) of polar coordinates.
+            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=0)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        polar_coords = compute_polar_coords(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return polar_coords
+
+    def compute_toroidal_coords(self, grid:Grid) -> dict:
+        """Computes toroidal coordinates from polar coordinates.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
         toroidal_coords : dict
             dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
         r_transform  = Transform(grid, self._r_basis,  derivs=0)
         l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
-        polar_coords = compute_polar_coords(
-                R0_n, Z0_n, r_lmn, l_lmn, R0_transform, Z0_transform, r_transform, l_transform)
-        toroidal_coords = compute_toroidal_coords(polar_coords)
+        (toroidal_coords, polar_coords) = compute_toroidal_coords(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
         return toroidal_coords
 
-# TODO: add all other compute functions as Configuration methods
+    def compute_cartesian_coords(self, grid:Grid) -> dict:
+        """Computes cartesian coordinates from toroidal coordinates.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        toroidal_coords : dict
+            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=0)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (cartesian_coords, toroidal_coords,
+         polar_coords) = compute_cartesian_coords(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return cartesian_coords
+
+    def compute_profiles(self, grid:Grid) -> dict:
+        """Computes magnetic flux, pressure, and rotational transform profiles.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        profiles : dict
+            dictionary of ndarray, shape(num_nodes,) of profiles.
+            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=0)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (profiles, polar_coords) = compute_profiles(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return profiles
+
+    def compute_covariant_basis(self, grid:Grid) -> dict:
+        """Computes covariant basis vectors.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        cov_basis : dict
+            dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
+            Keys are of the form 'e_x_y', meaning the covariant basis vector in
+            the x direction, differentiated wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=1)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (cov_basis, toroidal_coords, polar_coords) = compute_covariant_basis(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return cov_basis
+
+    def compute_contravariant_basis(self, grid:Grid) -> dict:
+        """Computes contravariant basis vectors.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        con_basis : dict
+            dictionary of ndarray, shape(3,num_nodes), of contravariant basis vectors.
+            Keys are of the form 'e^x_y', meaning the contravariant basis vector
+            in the x direction, differentiated wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=1)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (con_basis, jacobian, cov_basis, toroidal_coords,
+         polar_coords) = compute_contravariant_basis(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return con_basis
+
+    def compute_jacobian(self, grid:Grid) -> dict:
+        """Computes coordinate system jacobian.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        jacobian : dict
+            dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
+            Keys are of the form 'g_x' meaning the x derivative of the coordinate
+            system jacobian g.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=1)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (jacobian, cov_basis, toroidal_coords, polar_coords) = compute_jacobian(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return jacobian
+
+    def compute_magnetic_field(self, grid:Grid) -> dict:
+        """Computes magnetic field components.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        magnetic_field: dict
+            dictionary of ndarray, shape(num_nodes,) of magnetic field components.
+            Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+            or contravariant (B^x) component of the magnetic field, with the
+            derivative wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=1)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=1)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
+         polar_coords) = compute_magnetic_field(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return magnetic_field
+
+    def compute_magnetic_field_magnitude(self, grid:Grid) -> dict:
+        """Computes magnetic field magnitude.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        magnetic_field: dict
+            dictionary of ndarray, shape(num_nodes,) of magnetic field components.
+            Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+            or contravariant (B^x) component of the magnetic field, with the
+            derivative wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=1)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=1)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+
+        (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
+         polar_coords) = compute_magnetic_field_magnitude(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return magnetic_field
+
+    def compute_current_density(self, grid:Grid) -> dict:
+        """Computes current density field components.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        current_density : dict
+            dictionary of ndarray, shape(num_nodes,), of current density components.
+            Keys are of the form 'J^x_y' meaning the contravariant (J^x)
+            component of the current, with the derivative wrt to y.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+
+        (current_density, magnetic_field, profiles, jacobian, cov_basis,
+         toroidal_coords, polar_coords) = compute_current_density(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return current_density
+
+    def compute_force_error(self, grid:Grid) -> dict:
+        """Computes force error components.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        force_error : dict
+            dictionary of ndarray, shape(num_nodes,), of force error components.
+            Keys are of the form 'F_x' meaning the covariant (F_x) component of the
+            force error.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=1)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+
+        (force_error, current_density, magnetic_field, profiles, jacobian,
+         cov_basis, toroidal_coords, polar_coords) = compute_force_error(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return force_error
+
+    def compute_force_error_magnitude(self, grid:Grid) -> dict:
+        """Computes force error magnitude.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        force_error : dict
+            dictionary of ndarray, shape(num_nodes,), of force error components.
+            Keys are of the form 'F_x' meaning the covariant (F_x) component of the
+            force error.
+
+        """
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=1)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+
+        (force_error, current_density, magnetic_field, profiles, con_basis,
+         jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
+            self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
+            self._p_l, self._i_l, R0_transform, Z0_transform,
+            r_transform, l_transform, p_transform, i_transform, self._zeta_ratio)
+
+        return force_error
 
 
 class Equilibrium(Configuration, IOAble):
@@ -550,9 +897,9 @@ class Equilibrium(Configuration, IOAble):
         Z0_modes = np.array([self._Z0_basis.modes[:, 2],
                              np.zeros_like(self._R0_n), self._Z0_n]).T
         R1_modes = np.array([self._R1_basis.modes[:, 1:2],
-                             self._R1_n, np.zeros_like(self._R1_n)]).T
+                             self._R1_mn, np.zeros_like(self._R1_mn)]).T
         Z1_modes = np.array([self._Z1_basis.modes[:, 1:2],
-                             np.zeros_like(self._R1_n), self._Z1_n]).T
+                             np.zeros_like(self._R1_mn), self._Z1_mn]).T
         inputs = {'sym': self._sym,
                   'NFP': self._NFP,
                   'Psi': self._Psi,
@@ -577,7 +924,7 @@ class Equilibrium(Configuration, IOAble):
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving.")
         # TODO: these args need to be updated
-        args = (self.R1_n, self.Z1_n, self.cP, self.cI, self.Psi,
+        args = (self.R1_mn, self.Z1_mn, self.cP, self.cI, self.Psi,
                 self.bdry_ratio, self.pres_ratio, self.zeta_ratio, self.errr_ratio)
 
         result = self._optimizer.optimize(self._objective, self.x, args=args)

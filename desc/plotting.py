@@ -12,11 +12,11 @@ from desc.vmec import vmec_interpolate
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.configuration import Configuration
-"""
-from desc.configuration import compute_coordinate_derivatives, compute_covariant_basis
-from desc.configuration import compute_contravariant_basis, compute_jacobian
-from desc.configuration import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
-"""
+
+from desc.compute_funs import compute_polar_coords, compute_toroidal_coords, compute_cartesian_coords
+from desc.compute_funs import compute_profiles, compute_covariant_basis, compute_contravariant_basis
+from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_magnetic_field_magnitude
+from desc.compute_funs import compute_current_density, compute_force_error, compute_force_error_magnitude
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
                      (0.8359, 0.3682, 0.0000),  # vermillion
@@ -160,7 +160,7 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'L':100})
+                kwargs.update({'L':100, 'NFP':eq.NFP})
             grid, plot_axes= self.get_grid(**kwargs)
         if len(plot_axes) != 1:
             return ValueError(TextColors.FAIL + "Grid must be 1D"
@@ -202,7 +202,7 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M':25, 'N':25})
+                kwargs.update({'M':25, 'N':25, 'NFP':eq.NFP})
             grid, plot_axes= self.get_grid(**kwargs)
         if len(plot_axes) != 2:
             return ValueError(TextColors.FAIL + "Grid must be 2D"
@@ -265,7 +265,7 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M':25, 'N':25})
+                kwargs.update({'M':46, 'N':46, 'NFP':eq.NFP})
             grid, plot_axes= self.get_grid(**kwargs)
         if len(plot_axes) != 2:
             return ValueError(TextColors.FAIL + "Grid must be 2D"
@@ -275,7 +275,7 @@ class Plot:
         data = self.compute(eq, name_dict, grid)
         fig, ax = self.format_ax(ax, is3d=True)
 
-        coords = eq.compute_coordinates(grid)
+        coords = eq.compute_cartesian_coords(grid)
         X = coords['X'].reshape((grid.L, grid.M, grid.N), order='F')
         Y = coords['Y'].reshape((grid.L, grid.M, grid.N), order='F')
         Z = coords['Z'].reshape((grid.L, grid.M, grid.N), order='F')
@@ -384,14 +384,16 @@ class Plot:
             name_dict = name
 
         # primary calculations
-        if name_dict['base'] == 'B':
+        if name_dict['base'] == 'g':
+            out = eq.compute_jacobian(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'B':
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'J':
-            out = eq.compute_plasma_current(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_current_density(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == '|B|':
             out = eq.compute_magnetic_field_magnitude(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == '|F|':
-            out = eq.compute_force_magnitude(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_force_error_magnitude(grid)[self.__name_key__(name_dict)]
         else:
             raise NotImplementedError("No output for base named '{}'.".format(name_dict['base']))
 
@@ -474,6 +476,7 @@ class Plot:
             base = '|' + re.sub('mag', '', name_dict['base']) + '|'
         else:
             base = name_dict['base']
+
         if name_dict['d'] != '':
             dstr0 = 'd'
             dstr1 = '/d' + name_dict['d']
@@ -485,8 +488,6 @@ class Plot:
         else:
             dstr0 = ''
             dstr1 = ''
-            #label = r'$' + name_dict['base'] + '^{' + esc + name_dict['sups'] +\
-            #        ' ' + power + '}_{' + esc + name_dict['subs'] + '}$'
 
         if name_dict['power'] != '':
             if name_dict['d'] != '':
@@ -502,19 +503,11 @@ class Plot:
             supstr = '^{' + pstr + '}'
         else:
             supstr = ''
+
         if name_dict['subs'] != '':
             substr = '_{' + esc + name_dict['subs'] + '}'
         else:
             substr = ''
-        #else:
-        #    if name_dict['power'] == '':
-        #        label = r'$d' + name_dict['base'] + '^{' + esc +\
-        #            name_dict['sups'] + '}_{' + esc + name_dict['subs'] + '}/d'
-        #            + name_dict['d'] + '$'
-        #    else:
-        #        label = r'$(d' + name_dict['base'] + '^{' + esc +\
-        #            name_dict['sups'] + '}_{' + esc + name_dict['subs'] +\
-        #            '})^{' + name_dict['power'] + '}$'
         label = r'$' + dstr0 + base + supstr + substr + dstr1 + '$'
         return label
 

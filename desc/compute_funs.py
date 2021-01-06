@@ -164,13 +164,13 @@ def compute_profiles(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     profiles = {}
 
     # toroidal flux
-    profiles['psi']   = Psi*polar_coords['rho']**2
+    profiles['psi'] = Psi*polar_coords['rho']**2
 
     # pressure
-    profiles['p']   = p_transform.transform(p_l, 0)
+    profiles['p'] = p_transform.transform(p_l, 0)
 
     # rotational transform
-    profiles['iota']   = i_transform.transform(i_l, 0)
+    profiles['iota'] = i_transform.transform(i_l, 0)
 
     return profiles, polar_coords
 
@@ -365,7 +365,7 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
 
     # polar coordinate 1st derivatives
     polar_coords['R0_z'] = R0_transform.transform(R0_n, 0, 0, 1)
-    polar_coords['Z0_z'] = R0_transform.transform(Z0_n, 0, 0, 1)
+    polar_coords['Z0_z'] = Z0_transform.transform(Z0_n, 0, 0, 1)
     polar_coords['r_r'] = r_transform.transform(r_lmn, 1, 0, 0)
     polar_coords['r_t'] = r_transform.transform(r_lmn, 0, 1, 0)
     polar_coords['r_z'] = r_transform.transform(r_lmn, 0, 0, 1)
@@ -373,8 +373,8 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     # toroidal coordinate 1st derivatives
     toroidal_coords['R_r'] = polar_coords['r_r']*jnp.cos(polar_coords['theta'])
     toroidal_coords['Z_r'] = polar_coords['r_r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['R_v'] = polar_coords['r_t']*jnp.cos(polar_coords['theta']) - polar_coords['r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['Z_v'] = polar_coords['r_t']*jnp.sin(polar_coords['theta']) + polar_coords['r']*jnp.cos(polar_coords['theta'])
+    toroidal_coords['R_t'] = polar_coords['r_t']*jnp.cos(polar_coords['theta']) - polar_coords['r']*jnp.sin(polar_coords['theta'])
+    toroidal_coords['Z_t'] = polar_coords['r_t']*jnp.sin(polar_coords['theta']) + polar_coords['r']*jnp.cos(polar_coords['theta'])
     toroidal_coords['R_z'] = polar_coords['R0_z'] + polar_coords['r_z']*jnp.cos(polar_coords['theta'])
     toroidal_coords['Z_z'] = polar_coords['Z0_z'] + polar_coords['r_z']*jnp.sin(polar_coords['theta'])
 
@@ -437,7 +437,7 @@ def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -510,7 +510,7 @@ def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -590,7 +590,7 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -623,6 +623,8 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     magnetic_field['B^rho']   = jnp.zeros_like(magnetic_field['B0'])
     magnetic_field['B^theta'] = magnetic_field['B0']*(profiles['iota'] - polar_coords['lambda_z'])
     magnetic_field['B^zeta']  = magnetic_field['B0']*(1                + polar_coords['lambda_t'])
+    magnetic_field['B_con']   = magnetic_field['B^theta']*cov_basis['e_theta'] \
+                              + magnetic_field['B^zeta']* cov_basis['e_zeta']
 
     # covariant components
     magnetic_field['B_rho']   = dot(magnetic_field['B_con'], cov_basis['e_rho'], 0)
@@ -684,7 +686,7 @@ def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -766,7 +768,7 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -787,7 +789,7 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
 
     # polar coordinate derivatives
     polar_coords['R0_zz'] = R0_transform.transform(R0_n, 0, 0, 2)
-    polar_coords['Z0_zz'] = R0_transform.transform(Z0_n, 0, 0, 2)
+    polar_coords['Z0_zz'] = Z0_transform.transform(Z0_n, 0, 0, 2)
     polar_coords['r_rr'] = r_transform.transform(r_lmn, 2, 0, 0)
     polar_coords['r_rt'] = r_transform.transform(r_lmn, 1, 1, 0)
     polar_coords['r_rz'] = r_transform.transform(r_lmn, 1, 0, 1)
@@ -879,10 +881,10 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
                       cross(cov_basis['e_theta'], cov_basis['e_zeta_z'], 0), 0)
 
     # B contravariant component derivatives
-    magnetic_field['B0_r'] = magnetic_field['psi_rr'] / (2*jnp.pi*jacobian['g']) \
-         - (magnetic_field['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
-    magnetic_field['B0_t'] = -(magnetic_field['psi_r']*jacobian['g_t']) / (2*jnp.pi*jacobian['g']**2)
-    magnetic_field['B0_z'] = -(magnetic_field['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
+    magnetic_field['B0_r'] = profiles['psi_rr'] / (2*jnp.pi*jacobian['g']) \
+         - (profiles['psi_r']*jacobian['g_r']) / (2*jnp.pi*jacobian['g']**2)
+    magnetic_field['B0_t'] = -(profiles['psi_r']*jacobian['g_t']) / (2*jnp.pi*jacobian['g']**2)
+    magnetic_field['B0_z'] = -(profiles['psi_r']*jacobian['g_z']) / (2*jnp.pi*jacobian['g']**2)
     magnetic_field['B^theta_r'] = magnetic_field['B0_r']*(profiles['iota'] - polar_coords['lambda_z']) \
                                 + magnetic_field['B0']*(profiles['iota_r'] - polar_coords['lambda_rz'])
     magnetic_field['B^theta_t'] = magnetic_field['B0_t']*(profiles['iota'] - polar_coords['lambda_z']) \
@@ -978,7 +980,8 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     -------
     force_error : dict
         dictionary of ndarray, shape(num_nodes,), of force error components.
-        Keys are of the form ''
+        Keys are of the form 'F_x' meaning the covariant (F_x) component of the
+        force error.
     current_density : dict
         dictionary of ndarray, shape(num_nodes,), of current density components.
         Keys are of the form 'J^x_y' meaning the contravariant (J^x)
@@ -994,7 +997,7 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -1012,8 +1015,10 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
         r_transform, l_transform, p_transform, i_transform, zeta_ratio)
 
-    force_error = {}
+    # profile derivatives
+    profiles['p_r'] = p_transform.transform(p_l, 1)
 
+    force_error = {}
     force_error['F_rho']   = -profiles['p_r'] + jacobian['g']*(
         current_density['J^theta']*magnetic_field['B^zeta'] - current_density['J^zeta']*magnetic_field['B^theta'])
     force_error['F_beta']  = jacobian['g']*current_density['J^rho']
@@ -1066,7 +1071,8 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     -------
     force_error : dict
         dictionary of ndarray, shape(num_nodes,), of force error components.
-        Keys are of the form ''
+        Keys are of the form 'F_x' meaning the covariant (F_x) component of the
+        force error.
     current_density : dict
         dictionary of ndarray, shape(num_nodes,), of current density components.
         Keys are of the form 'J^x_y' meaning the contravariant (J^x)
@@ -1086,7 +1092,7 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     jacobian : dict
         dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
         Keys are of the form 'g_x' meaning the x derivative of the coordinate
-        jacobian g.
+        system jacobian g.
     cov_basis : dict
         dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in
@@ -1106,6 +1112,9 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     force_error, current_density, magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords = compute_force_error(
         Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
         r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+
+    force_error['beta'] = magnetic_field['B^zeta']*con_basis['e^theta'] \
+                        - magnetic_field['B^theta']*con_basis['e^zeta']
 
     force_error['|grad(rho)|'] = jnp.sqrt(dot(con_basis['e^rho'], con_basis['e^rho'], 0))
     force_error['|grad(p)|'] = jnp.sqrt(profiles['p_r']**2*force_error['|grad(rho)|']**2)

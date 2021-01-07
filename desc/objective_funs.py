@@ -107,13 +107,39 @@ class ObjectiveFunction(IOAble, ABC):
         pass
 
     def grad_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Computes gradient vector of scalar form of the objective wrt to x"""
         return self._grad.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
 
     def hess_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Computes hessian matrix of scalar form of the objective wrt to x"""
         return self._hess.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
 
     def jac_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Computes jacobian matrx of vector form of the objective wrt to x"""
         return self._jac.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
+
+    def derivative(self, argnums, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Computes arbitrary derivatives of the objective
+
+        Parameters
+        ----------
+        argnums : int, tuple
+            integer or tuple of integers describing which argument numbers
+            of the objective should be differentiated. Passing a tuple with
+            multiple values will compute a higher order derivative. Eg,
+            argnums=(0,0) would compute the 2nd derivative with respect to the
+            zeroth argument, while argnums=(3,5) would compute a mixed second
+            derivative, first with respect to the third argument and then with
+            respect to the fifth.
+        """
+        if not isinstance(argnums, tuple):
+            argnums = tuple(argnums)
+
+        f = self.compute
+        for a in argnums:
+            f = Derivative(f, argnum=a)
+        y = f(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0)
+        return y
 
 
 class ForceErrorNodes(ObjectiveFunction):

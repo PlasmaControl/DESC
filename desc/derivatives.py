@@ -53,7 +53,7 @@ class _Derivative(ABC):
         return self._fun
 
     @fun.setter
-    def fun(self, fun:callable) -> None:
+    def fun(self, fun: callable) -> None:
         self._fun = fun
 
     @property
@@ -61,7 +61,7 @@ class _Derivative(ABC):
         return self._argnum
 
     @argnum.setter
-    def argnum(self, argnum:int) -> None:
+    def argnum(self, argnum: int) -> None:
         self._argnum = argnum
 
     def __call__(self, *args):
@@ -118,13 +118,19 @@ class AutoDiffDerivative(_Derivative):
         """
         return self._compute(*args)
 
+    def _compute_jvp(self, v, *args):
+        tangents = list(args)
+        tangents[self.argnum] = v
+        y = jax.jvp(self._fun, args, tangents)
+        return y
+
     @property
     def mode(self) -> str:
         return self._mode
 
     @mode.setter
     def mode(self, mode: str) -> None:
-        if mode not in ['fwd', 'rev', 'grad', 'hess']:
+        if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
             raise ValueError(TextColors.FAIL +
                              "invalid mode option for automatic differentiation"
                              + TextColors.ENDC)
@@ -137,6 +143,8 @@ class AutoDiffDerivative(_Derivative):
             self._compute = jax.grad(self._fun, self._argnum)
         elif self._mode == 'hess':
             self._compute = jax.hessian(self._fun, self._argnum)
+        elif self._mode == 'jvp':
+            self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):
@@ -251,13 +259,27 @@ class FiniteDiffDerivative(_Derivative):
             J = np.ravel(J)
         return J
 
+    def _compute_jvp(self, v, *args):
+
+        normv = np.linalg.norm(v)
+        vh = v/normv
+        x = args[self.argnum]
+
+        def f(x):
+            tempargs = args[0:self._argnum] + (x,) + args[self._argnum+1:]
+            return self._fun(*tempargs)
+
+        h = self.rel_step
+        df = (f(x + h*vh) - f(x - h*vh))/(2*h)
+        return df * normv
+
     @property
     def mode(self) -> str:
         return self._mode
 
     @mode.setter
     def mode(self, mode: str) -> None:
-        if mode not in ['fwd', 'rev', 'grad', 'hess']:
+        if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
             raise ValueError(TextColors.FAIL +
                              "invalid mode option for finite difference differentiation"
                              + TextColors.ENDC)
@@ -270,6 +292,8 @@ class FiniteDiffDerivative(_Derivative):
             self._compute = self._compute_grad_or_jac
         elif self._mode == 'hess':
             self._compute = self._compute_hessian
+        elif self._mode == 'jvp':
+            self._compute = self._compute_jvp
 
     def compute(self, *args):
         """Computes the derivative matrix

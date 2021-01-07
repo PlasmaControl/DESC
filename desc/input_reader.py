@@ -15,12 +15,12 @@ class InputReader:
     Reads command line arguments and parses input files.
 
     Arguments
-    _________
+    ---------
     cl_args (optional): list
         explicit command line arguments
 
     Attributes
-    __________
+    ----------
     args : Namespace
         parsed namespace of all command line arguments
     inputs: dict
@@ -31,7 +31,7 @@ class InputReader:
         path to output file
 
     Methods
-    _______
+    -------
     parse_args
     parse_inputs
     write_desc_input
@@ -41,12 +41,12 @@ class InputReader:
         """Initialize InputReader instance.
 
         Parameters
-        __________
+        ----------
         cl_args : None or list (Default = None)
             command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
 
         Returns
-        _______
+        -------
         None
 
         """
@@ -61,12 +61,12 @@ class InputReader:
         """Parse command line arguments.
 
         Parameters
-        __________
+        ----------
         cl_args : None or list (Default = None)
             command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
 
         Returns
-        _______
+        -------
         args : namespace
             parsed arguments
 
@@ -162,11 +162,11 @@ class InputReader:
         # default values
         inputs = {
             'sym': False,
-            'NFP': 1,
             'Psi': 1.0,
-            'L_rad': np.atleast_1d(None),
-            'M_pol': np.atleast_1d(0),
-            'N_tor': np.atleast_1d(0),
+            'NFP': 1,
+            'L': np.atleast_1d(None),
+            'M': np.atleast_1d(0),
+            'N': np.atleast_1d(0),
             'M_grid': np.atleast_1d(0),
             'N_grid': np.atleast_1d(0),
             'bdry_ratio': np.atleast_1d(1.0),
@@ -232,23 +232,23 @@ class InputReader:
             match = re.search(r'sym', argument, re.IGNORECASE)
             if match:
                 inputs['sym'] = int(numbers[0])
-            match = re.search(r'NFP', argument, re.IGNORECASE)
-            if match:
-                inputs['NFP'] = int(numbers[0])
             match = re.search(r'Psi', argument, re.IGNORECASE)
             if match:
                 inputs['Psi'] = numbers[0]
+            match = re.search(r'NFP', argument, re.IGNORECASE)
+            if match:
+                inputs['NFP'] = int(numbers[0])
 
             # spectral resolution
             match = re.search(r'L_rad', argument, re.IGNORECASE)
             if match:
-                inputs['L_rad'] = np.array(numbers).astype(int)
+                inputs['L'] = np.array(numbers).astype(int)
             match = re.search(r'M_pol', argument, re.IGNORECASE)
             if match:
-                inputs['M_pol'] = np.array(numbers).astype(int)
+                inputs['M'] = np.array(numbers).astype(int)
             match = re.search(r'N_tor', argument, re.IGNORECASE)
             if match:
-                inputs['N_tor'] = np.array(numbers).astype(int)
+                inputs['N'] = np.array(numbers).astype(int)
             match = re.search(r'M_grid', argument, re.IGNORECASE)
             if match:
                 inputs['M_grid'] = np.array(numbers).astype(int)

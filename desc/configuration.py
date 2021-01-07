@@ -40,8 +40,8 @@ class Configuration(IOAble):
         ----------
         inputs : dict
             Dictionary of inputs with the following required keys:
-                NFP : int, number of field periods
                 Psi : float, total toroidal flux (in Webers) within LCFS
+                NFP : int, number of field periods
                 L : int, radial resolution
                 M : int, poloidal resolution
                 N : int, toroidal resolution
@@ -78,8 +78,8 @@ class Configuration(IOAble):
     def _init_from_inputs_(self, inputs:dict=None) -> None:
         # required inputs
         try:
-            self._NFP = inputs['NFP']
             self._Psi = inputs['Psi']
+            self._NFP = inputs['NFP']
             self._L = inputs['L']
             self._M = inputs['M']
             self._N = inputs['N']

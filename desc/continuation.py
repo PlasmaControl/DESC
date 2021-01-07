@@ -8,7 +8,7 @@ from desc.utils import Timer
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.configuration import EquilibriaFamily
-from desc.objective_funs import is_nested, ObjectiveFunctionFactory
+from desc.objective_funs import ObjectiveFunctionFactory
 from desc.perturbations import perturb_continuation_params
 
 
@@ -46,9 +46,9 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
     sym = inputs['sym']
     NFP = inputs['NFP']
     Psi = inputs['Psi']
-    L = inputs['L_rad']                 # arr
-    M = inputs['M_pol']                 # arr
-    N = inputs['N_tor']                 # arr
+    L = inputs['L']                 # arr
+    M = inputs['M']                 # arr
+    N = inputs['N']                 # arr
     M_grid = inputs['M_grid']           # arr
     N_grid = inputs['N_grid']           # arr
     bdry_ratio = inputs['bdry_ratio']   # arr
@@ -102,8 +102,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
             inputs_ii = {
                 'sym': sym,
-                'NFP': NFP,
                 'Psi': Psi,
+                'NFP': NFP,
                 'L': L[ii],
                 'M': M[ii],
                 'N': N[ii],
@@ -211,8 +211,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 I_transform=I_transform)
             equil_obj = obj_fun.compute
             callback = obj_fun.callback
-            args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
-                    bdry_ratio[ii-1], pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1])
+            args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi, zeta_ratio[ii-1])
 
             # TODO: should probably perturb before expanding resolution
             # perturbations
@@ -240,8 +239,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         hess = obj_fun.hess
         jac = obj_fun.jac
         callback = obj_fun.callback
-        args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi,
-                bdry_ratio[ii-1], pres_ratio[ii-1], zeta_ratio[ii-1], errr_ratio[ii-1])
+        args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi, zeta_ratio[ii-1])
 
         if use_jax:
             if verbose > 0:
@@ -320,11 +318,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             if verbose > 0:
                 print('Saving latest iteration')
             equil_fam.save(file_name)
-
-        if not is_nested(equil.cR, equil.cZ, equil.R_basis, equil.Z_basis):
-            warnings.warn(TextColors.WARNING + 'WARNING: Flux surfaces are no longer nested, exiting early.'
-                          + 'Consider increasing errr_ratio or taking smaller perturbation steps' + TextColors.ENDC)
-            break
 
     timer.stop("Total time")
     print('====================')

@@ -33,12 +33,13 @@ class LinearEqualityConstraint():
         self.remove_duplicates()
 
         self._Z = scipy.linalg.null_space(self._A)
+        self._Ainv = np.linalg.pinv(self._A)
         self.m = self._A.shape[0]
         self.n = self._A.shape[1]
         self.k = self._Z.shape[1]
 
         if x0 is None:
-            self._x0 = np.linalg.lstsq(self._A, self._b, rcond=None)
+            self._x0 = self._Ainv.dot(self._b)
         elif not self.is_feasible(x0):
             raise ValueError("x0 is not feasible")
         else:
@@ -59,6 +60,34 @@ class LinearEqualityConstraint():
         temp = np.unique(temp, axis=0)
         self._A = np.atleast_2d(temp[:, :-1])
         self._b = temp[:, -1].reshape((-1, 1))
+
+    @property
+    def b(self):
+        return self._b
+
+    @b.setter
+    def b(self, b):
+        self._b = b
+        if not self.is_feasible(self._x0):
+            self._x0 = self._Ainv.dot(self._b)
+
+    @property
+    def A(self):
+        return self._A
+
+    @A.setter
+    def A(self, A):
+        self._A = A
+        self._Ainv = np.linalg.pinv(A)
+        self._Z = scipy.linalg.null_space(A)
+
+    @property
+    def Ainv(self):
+        return self._Ainv
+
+    @property
+    def Z(self):
+        return self._Z
 
     def compute_residual(self, x):
         """computes the residual of Ax=b"""

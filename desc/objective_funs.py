@@ -50,7 +50,8 @@ class ObjectiveFunction(IOAble, ABC):
                  R0_transform: Transform = None, Z0_transform: Transform = None,
                  r_transform: Transform = None,  l_transform: Transform = None,
                  R1_transform: Transform = None, Z1_transform: Transform = None,
-                 p_transform: Transform = None,  i_transform: Transform = None) -> None:
+                 p_transform: Transform = None,  i_transform: Transform = None,
+                 bc_constraint: BoundaryConstraint = None) -> None:
         """Initializes an ObjectiveFunction
 
         Parameters
@@ -71,6 +72,8 @@ class ObjectiveFunction(IOAble, ABC):
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
+        bc_constraint : BoundaryConstraint
+            linear constraint to enforce boundary conditions
 
         Returns
         -------
@@ -85,6 +88,7 @@ class ObjectiveFunction(IOAble, ABC):
         self.Z1_transform = Z1_transform
         self.p_transform = p_transform
         self.i_transform = i_transform
+        self.bc_constraint = bc_constraint
 
         self._grad = Derivative(self.compute_scalar, mode='grad')
         self._hess = Derivative(self.compute_scalar, mode='hess')
@@ -102,13 +106,13 @@ class ObjectiveFunction(IOAble, ABC):
     def callback(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         pass
 
-    def grad(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def grad_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         return self._grad.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
 
-    def hess(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def hess_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         return self._hess.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
 
-    def jac(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def jac_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         return self._jac.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
 
 
@@ -119,7 +123,8 @@ class ForceErrorNodes(ObjectiveFunction):
                  R0_transform: Transform = None, Z0_transform: Transform = None,
                  r_transform: Transform = None,  l_transform: Transform = None,
                  R1_transform: Transform = None, Z1_transform: Transform = None,
-                 p_transform: Transform = None,  i_transform: Transform = None) -> None:
+                 p_transform: Transform = None,  i_transform: Transform = None,
+                 bc_constraint: BoundaryConstraint) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters
@@ -140,6 +145,8 @@ class ForceErrorNodes(ObjectiveFunction):
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
+        bc_constraint : BoundaryConstraint
+            linear constraint to enforce boundary conditions
 
         Returns
         -------
@@ -147,18 +154,24 @@ class ForceErrorNodes(ObjectiveFunction):
 
         """
         super().__init__(R0_transform, Z0_transform, r_transform, l_transform,
-                         R1_transform, Z1_transform, p_transform, i_transform)
+                         R1_transform, Z1_transform, p_transform, i_transform,
+                         bc_constraint)
         self.scalar = False
 
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
 
+        b = self.bc_constraint.get_b(R1_mn, Z1_mn)
+        x0 = self.bc_constraint.Ainv.dot(b)
+        # input x is really "y", need to convert to full x
+        x = x0 + self.bc_constraint.Z.dot(x)
+
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-                x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
-                self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
+            x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
+            self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
-         jacobian, cov_basis, toroidal_coords, polar_coords) =  compute_force_error_magnitude(
+         jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
              Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, self.R0_transform,
              self.Z0_transform, self.r_transform, self.l_transform,
              self.p_transform, self.i_transform, zeta_ratio)
@@ -168,10 +181,10 @@ class ForceErrorNodes(ObjectiveFunction):
         dt = volumes[:, 1]
         dz = volumes[:, 2]
 
-        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz*\
+        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz *\
             jnp.sign(dot(con_basis['e^rho'], cov_basis['e_rho'], 0))
-        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz*\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0))*\
+        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz *\
+            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0)) *\
             jnp.sign(dot(force_error['beta'], cov_basis['e_zeta'], 0))
 
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
@@ -186,11 +199,11 @@ class ForceErrorNodes(ObjectiveFunction):
         """Prints the rms errors."""
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-                x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
-                self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
+            x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
+            self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
-         jacobian, cov_basis, toroidal_coords, polar_coords) =  compute_force_error_magnitude(
+         jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
              Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, self.R0_transform,
              self.Z0_transform, self.r_transform, self.l_transform,
              self.p_transform, self.i_transform, zeta_ratio)
@@ -200,13 +213,13 @@ class ForceErrorNodes(ObjectiveFunction):
         dt = volumes[:, 1]
         dz = volumes[:, 2]
 
-        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz*\
+        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz *\
             jnp.sign(dot(con_basis['e^rho'], cov_basis['e_rho'], 0))
-        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz*\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0))*\
+        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz *\
+            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0)) *\
             jnp.sign(dot(force_error['beta'], cov_basis['e_zeta'], 0))
 
-        f_rho_rms  = jnp.sqrt(jnp.sum(f_rho**2))
+        f_rho_rms = jnp.sqrt(jnp.sum(f_rho**2))
         f_beta_rms = jnp.sqrt(jnp.sum(f_beta**2))
 
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])

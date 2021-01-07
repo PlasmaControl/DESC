@@ -32,9 +32,9 @@ class BoundaryConstraint(LinearEqualityConstraint):
         Double Fourier basis for boundary R
     Zb_basis : Basis
         Double Fourier basis for boundary Z
-    cRb : ndarray
+    R1_mn : ndarray
         Array of spectral coefficients for boundary R
-    cZb : ndarray
+    Z1_mn : ndarray
         Array of spectral coefficients for boundary Z
     x0 : ndarray, optional
         particular solution for Ax=b. If not supplied it will
@@ -43,19 +43,35 @@ class BoundaryConstraint(LinearEqualityConstraint):
     """
 
     def __init__(self, R0_basis, Z0_basis, r_basis, l_basis,
-                 Rb_basis, Zb_basis, cRb, cZb, x0=None):
+                 Rb_basis, Zb_basis, R1_mn, Z1_mn, x0=None):
 
         Aaxis, baxis = get_axis_bc_matrices(
             R0_basis, Z0_basis, r_basis, l_basis)
         Alcfs, blcfs = get_lcfs_bc_matrices(
-            R0_basis, Z0_basis, r_basis, l_basis, Rb_basis, Zb_basis, cRb, cZb)
+            R0_basis, Z0_basis, r_basis, l_basis, Rb_basis, Zb_basis, R1_mn, Z1_mn)
         Agauge, bgauge = get_gauge_bc_matrices(
             R0_basis, Z0_basis, r_basis, l_basis)
 
         A = np.vstack([Aaxis, Alcfs, Agauge])
         b = np.vstack([baxis, blcfs, bgauge])
 
+        self._Aaxis = Aaxis
+        self._Alcfs = Alcfs
+        self._Agauge = Agauge
+
+        self._baxis = baxis
+        self._blcfs = blcfs
+        self._bgauge = bgauge
+
         super().__init__(A, b)
+
+    def get_b(self, R1_mn, Z1_mn):
+
+        z1 = jnp.zeros(self._baxis.size)
+        z2 = jnp.zeros(self._bgauge.size)
+
+        b = jnp.concatenate([z1, R1_mn.flatten(), Z1_mn.flatten(), z2])
+        return b
 
 
 def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
@@ -105,7 +121,7 @@ def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
 
 
 def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
-                         Rb_basis, Zb_basis, cRb, cZb):
+                         Rb_basis, Zb_basis, R1_mn, Z1_mn):
     """Compute constraint matrices for the shape of the last closed flux surface.
 
     enforces R0 + r(1,theta,zeta)*cos(theta) == Rb and
@@ -125,9 +141,9 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
         Double Fourier basis for boundary R
     Zb_basis : Basis
         Double Fourier basis for boundary Z
-    cRb : ndarray
+    R1_mn : ndarray
         Array of spectral coefficients for boundary R
-    cZb : ndarray
+    Z1_mn : ndarray
         Array of spectral coefficients for boundary Z
 
     Returns
@@ -154,8 +170,8 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
 
     AR = np.zeros((dim_Rb, dimx))
     AZ = np.zeros((dim_Zb, dimx))
-    bR = cRb.reshape((-1, 1))
-    bZ = cZb.reshape((-1, 1))
+    bR = R1_mn.reshape((-1, 1))
+    bZ = Z1_mn.reshape((-1, 1))
 
     for i, (l, m, n) in enumerate(Rb_modes):
         if m == 0:

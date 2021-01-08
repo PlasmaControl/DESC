@@ -7,3 +7,5 @@ numba
 nvidia-ml-py3
 h5py
 netcdf4
+colorama
+termcolor

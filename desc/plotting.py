@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import re
+from termcolor import colored
 
-from desc.backend import TextColors
 from desc.equilibrium_io import read_desc
 from desc.vmec import vmec_interpolate
 from desc.grid import Grid, LinearGrid
@@ -49,7 +49,7 @@ rcParams['lines.dash_capstyle'] = 'round'
 rcParams['lines.dash_joinstyle'] = 'round'
 rcParams['xtick.labelsize'] = 'x-small'
 rcParams['ytick.labelsize'] = 'x-small'
-# rcParams['text.usetex']=True
+rcParams['text.usetex'] = True
 color_cycle = cycler(color=colorblind_colors)
 dash_cycle = cycler(dashes=dashes)
 rcParams['axes.prop_cycle'] = color_cycle
@@ -93,7 +93,7 @@ class Plot:
         if ax is None:
             if is3d:
                 fig = plt.figure()
-                ax = fig.add_subplot(111,projection='3d')
+                ax = fig.add_subplot(111, projection='3d')
                 return fig, ax
             else:
                 fig, ax = plt.subplots()
@@ -103,9 +103,8 @@ class Plot:
         elif type(ax) is matplotlib.axes._subplots.AxesSubplot or matplotlib.axes._subplots.Axes3DSubplot:
             return plt.gcf(), ax
         else:
-            raise TypeError(TextColors.FAIL +
-                            "ax agument must be None or an axis instance"
-                           + TextColors.ENDC)
+            raise TypeError(
+                colored("ax agument must be None or an axis instance", 'red'))
 
     def get_grid(self, **kwargs):
         """Get grid for plotting.
@@ -120,8 +119,8 @@ class Plot:
         LinearGrid
 
         """
-        grid_args = {'L':1, 'M':1, 'N':1, 'NFP':1, 'sym':False,
-                     'endpoint':True, 'rho':None, 'theta':None, 'zeta':None}
+        grid_args = {'L': 1, 'M': 1, 'N': 1, 'NFP': 1, 'sym': False,
+                     'endpoint': True, 'rho': None, 'theta': None, 'zeta': None}
         for key in kwargs.keys():
             if key in grid_args.keys():
                 grid_args[key] = kwargs[key]
@@ -137,7 +136,7 @@ class Plot:
 
         return grid, tuple(plot_axes)
 
-    def plot_1d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
+    def plot_1d(self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 1D profiles.
 
         Parameters
@@ -160,11 +159,10 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'L':100, 'NFP':eq.NFP})
-            grid, plot_axes= self.get_grid(**kwargs)
+                kwargs.update({'L': 100, 'NFP': eq.NFP})
+            grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 1:
-            return ValueError(TextColors.FAIL + "Grid must be 1D"
-                            + TextColors.ENDC)
+            return ValueError(colored("Grid must be 1D", 'red'))
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
@@ -173,13 +171,13 @@ class Plot:
         # reshape data to 1D
         data = data[:, 0, 0]
 
-        ax.plot(grid.nodes[:,plot_axes[0]], data)
+        ax.plot(grid.nodes[:, plot_axes[0]], data)
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.name_label(name_dict))
         return ax
 
-    def plot_2d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
+    def plot_2d(self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 2D cross-sections.
 
         Parameters
@@ -202,11 +200,10 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M':25, 'N':25, 'NFP':eq.NFP})
-            grid, plot_axes= self.get_grid(**kwargs)
+                kwargs.update({'M': 25, 'N': 25, 'NFP': eq.NFP})
+            grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
-            return ValueError(TextColors.FAIL + "Grid must be 2D"
-                            + TextColors.ENDC)
+            return ValueError(colored("Grid must be 2D", 'red'))
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
@@ -222,19 +219,20 @@ class Plot:
         else:                       # theta & zeta
             data = data[0, :, :]
 
-        imshow_kwargs = {'origin'        : 'lower',
-                         'interpolation' : 'bilinear',
-                         'aspect'        : 'auto'}
-        imshow_kwargs['extent'] = [grid.nodes[0,plot_axes[0]],
-                grid.nodes[-1,plot_axes[0]], grid.nodes[0,plot_axes[1]],
-                grid.nodes[-1,plot_axes[1]]]
-        cax_kwargs = {'size' : '5%',
-                      'pad'  : 0.05}
+        imshow_kwargs = {'origin': 'lower',
+                         'interpolation': 'bilinear',
+                         'aspect': 'auto'}
+        imshow_kwargs['extent'] = [grid.nodes[0, plot_axes[0]],
+                                   grid.nodes[-1, plot_axes[0]
+                                              ], grid.nodes[0, plot_axes[1]],
+                                   grid.nodes[-1, plot_axes[1]]]
+        cax_kwargs = {'size': '5%',
+                      'pad': 0.05}
 
         im = ax.imshow(data.T, **imshow_kwargs)
         cax = divider.append_axes('right', **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
-        cbar.formatter.set_powerlimits((0,0))
+        cbar.formatter.set_powerlimits((0, 0))
         cbar.update_ticks()
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
@@ -242,7 +240,7 @@ class Plot:
         ax.set_title(self.name_label(name_dict))
         return ax
 
-    def plot_3d(self, eq:Configuration, name:str, grid:Grid=None, ax=None, **kwargs):
+    def plot_3d(self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 3D surfaces.
 
         Parameters
@@ -265,11 +263,10 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M':46, 'N':46, 'NFP':eq.NFP})
-            grid, plot_axes= self.get_grid(**kwargs)
+                kwargs.update({'M': 46, 'N': 46, 'NFP': eq.NFP})
+            grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
-            return ValueError(TextColors.FAIL + "Grid must be 2D"
-                            + TextColors.ENDC)
+            return ValueError(colored("Grid must be 2D", 'red'))
 
         name_dict = self.format_name(name)
         data = self.compute(eq, name_dict, grid)
@@ -313,7 +310,7 @@ class Plot:
         ax.set_title(self.name_label(name_dict))
         return ax
 
-    def plot_surfaces(self, eq:Configuration, grid:Grid=None, ax=None, **kwargs):
+    def plot_surfaces(self, eq: Configuration, grid: Grid = None, ax=None, **kwargs):
         """Plots flux surfaces.
 
         Parameters
@@ -336,14 +333,12 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'L':6, 'M':180})
-            grid, plot_axes= self.get_grid(**kwargs)
+                kwargs.update({'L': 6, 'M': 180})
+            grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
-            return ValueError(TextColors.FAIL + "Grid must be 2D"
-                            + TextColors.ENDC)
+            return ValueError(colored("Grid must be 2D", 'red'))
         if 2 in plot_axes:
-            return ValueError(TextColors.FAIL + "Grid must be in rho vs theta"
-                            + TextColors.ENDC)
+            return ValueError(colored("Grid must be in rho vs theta", 'red'))
 
         coords = eq.compute_toroidal_coords(grid)
         R = coords['R'].reshape((grid.L, grid.M, grid.N), order='F')[:, :, 0]
@@ -360,7 +355,7 @@ class Plot:
 
         return ax
 
-    def compute(self, eq:Configuration, name:str, grid:Grid):
+    def compute(self, eq: Configuration, name: str, grid: Grid):
         """Compute value specified by name on grid for equilibrium eq.
 
         Parameters
@@ -389,13 +384,17 @@ class Plot:
         elif name_dict['base'] == 'B':
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'J':
-            out = eq.compute_current_density(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_current_density(
+                grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == '|B|':
-            out = eq.compute_magnetic_field_magnitude(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_magnetic_field_magnitude(
+                grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == '|F|':
-            out = eq.compute_force_error_magnitude(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_force_error_magnitude(
+                grid)[self.__name_key__(name_dict)]
         else:
-            raise NotImplementedError("No output for base named '{}'.".format(name_dict['base']))
+            raise NotImplementedError(
+                "No output for base named '{}'.".format(name_dict['base']))
 
         # secondary calculations
         power = name_dict['power']
@@ -408,7 +407,8 @@ class Plot:
                     frac = power.split('/')
                     power = frac[0] / frac[1]
                 else:
-                    raise ValueError("Could not convert string to float: '{}'".format(power))
+                    raise ValueError(
+                        "Could not convert string to float: '{}'".format(power))
             out = out**power
 
         return out.reshape((grid.L, grid.M, grid.N), order='F')
@@ -425,11 +425,12 @@ class Plot:
         parsed name : dict
 
         """
-        name_dict = {'base':'', 'sups':'', 'subs':'', 'power':'', 'd':''}
+        name_dict = {'base': '', 'sups': '', 'subs': '', 'power': '', 'd': ''}
         if '**' in name:
             parsename, power = name.split('**')
             if '_' in power or '^' in power:
-                raise SyntaxError('Power operands must come after components and derivatives.')
+                raise SyntaxError(
+                    'Power operands must come after components and derivatives.')
         else:
             power = ''
             parsename = name
@@ -570,7 +571,7 @@ def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
         NFP = NFP0
     else:
         raise ValueError(
-            TextColors.FAIL + "NFP must be the same for both solutions" + TextColors.ENDC)
+            colored("NFP must be the same for both solutions", 'red'))
 
     if max(np.max(R_basis0.modes[:, 2]), np.max(R_basis1.modes[:, 2])) == 0:
         Nz = 1

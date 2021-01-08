@@ -1,9 +1,11 @@
 import numpy as np
 import functools
+from abc import ABC, abstractmethod
+from termcolor import colored
+
 from desc.backend import jnp, cho_factor, cho_solve, jit, use_jax
 from desc.utils import conditional_decorator
-from abc import ABC, abstractmethod
-from .utils import make_spd, chol_U_update
+from desc.optimize.utils import make_spd, chol_U_update
 
 
 class OptimizerDerivative(ABC):
@@ -64,7 +66,8 @@ class CholeskyHessian(OptimizerDerivative):
                 self._hessfun = hessfun
                 self._hessfun_args = hessfun_args
             else:
-                raise ValueError('hessfun should be callable or None')
+                raise ValueError(
+                    colored('hessfun should be callable or None', 'red'))
         else:
             self._hessfun = None
             self._hessfun_args = ()
@@ -80,8 +83,8 @@ class CholeskyHessian(OptimizerDerivative):
             else:
                 self.min_curvature = 0.2
         else:
-            raise ValueError("`exception_strategy` must be 'skip_update' "
-                             "or 'damp_update'.")
+            raise ValueError(colored("'exception_strategy' must be 'skip_update' "
+                                     "or 'damp_update'", 'red'))
         self.exception_strategy = exception_strategy
 
         if init_hess is None and hessfun is None:
@@ -97,7 +100,7 @@ class CholeskyHessian(OptimizerDerivative):
             self._initialized = False
             self._initialization = 'auto'
         elif isinstance(init_hess, str):
-            raise ValueError('unknown hessian initialization')
+            raise ValueError(colored('unknown hessian initialization', 'red'))
         else:
             init_hess = make_spd(init_hess, delta=self.min_curvature, tol=0.1)
             self._U = self._cholesky(init_hess).T

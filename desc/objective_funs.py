@@ -1,10 +1,10 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot
+from termcolor import colored
 
-from desc.backend import TextColors, jnp
+from desc.backend import jnp
 from desc.utils import unpack_state, dot
-
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.equilibrium_io import IOAble
@@ -304,8 +304,8 @@ class ObjectiveFunctionFactory():
 
         """
         if len(R0_transform.grid.axis):
-            raise ValueError(TextColors.FAIL + "Objective cannot be evaluated at the magnetic axis. " +
-                             "Yell at Daniel to implement this!" + TextColors.ENDC)
+            raise ValueError(colored("Objective cannot be evaluated at the magnetic axis. " +
+                                     "Yell at Daniel to implement this!", 'red'))
 
         if errr_mode == 'force':
             obj_fun = ForceErrorNodes(R0_transform=R0_transform, Z0_transform=Z0_transform,
@@ -313,7 +313,7 @@ class ObjectiveFunctionFactory():
                                       L_transform=L_transform, p_transform=p_transform,
                                       i_transform=i_transform)
         else:
-            raise ValueError(TextColors.FAIL + "Requested Objective Function is not implemented. " +
-                             "Available objective functions are: 'force'" + TextColors.ENDC)
+            raise ValueError(colored("Requested Objective Function is not implemented. " +
+                                     "Available objective functions are: 'force'", 'red'))
 
         return obj_fun

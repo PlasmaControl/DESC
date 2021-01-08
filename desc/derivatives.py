@@ -1,7 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
+from termcolor import colored
 
-from desc.backend import TextColors, use_jax, put
+from desc.backend import use_jax, put
 
 if use_jax:
     import jax
@@ -131,9 +132,9 @@ class AutoDiffDerivative(_Derivative):
     @mode.setter
     def mode(self, mode: str) -> None:
         if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
-            raise ValueError(TextColors.FAIL +
-                             "invalid mode option for automatic differentiation"
-                             + TextColors.ENDC)
+            raise ValueError(
+                colored("invalid mode option for automatic differentiation", 'red'))
+
         self._mode = mode
         if self._mode == 'fwd':
             self._compute = jax.jacfwd(self._fun, self._argnum)
@@ -280,9 +281,9 @@ class FiniteDiffDerivative(_Derivative):
     @mode.setter
     def mode(self, mode: str) -> None:
         if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
-            raise ValueError(TextColors.FAIL +
-                             "invalid mode option for finite difference differentiation"
-                             + TextColors.ENDC)
+            raise ValueError(
+                colored("invalid mode option for finite difference differentiation", 'red'))
+
         self._mode = mode
         if self._mode == 'fwd':
             self._compute = self._compute_grad_or_jac
@@ -464,8 +465,9 @@ class BlockJacobian():
         # to split blocks? Though we can't really split the jacobian columnwise without a lot
         # of surgery on the objective function
         if block_size is not None and num_blocks is not None:
-            raise ValueError(TextColors.FAIL +
-                             "can specify either block_size or num_blocks, not both" + TextColors.ENDC)
+            raise ValueError(
+                colored("can specify either block_size or num_blocks, not both", 'red'))
+
         elif block_size is None and num_blocks is None:
             self.block_size = N
             self.num_blocks = 1

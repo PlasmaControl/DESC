@@ -6,8 +6,7 @@ import os
 import re
 import numpy as np
 from datetime import datetime
-
-from desc.backend import TextColors
+from termcolor import colored
 
 
 class InputReader:
@@ -37,6 +36,7 @@ class InputReader:
     write_desc_input
 
     """
+
     def __init__(self, cl_args=None):
         """Initialize InputReader instance.
 
@@ -82,9 +82,10 @@ class InputReader:
         if len(args.input_file) == 0:
             raise NameError('Input file path must be specified')
             #print('Input file path must be specified')
-            #return None
+            # return None
 
-        self.input_path = pathlib.Path(args.input_file[0]).resolve()#''.join(args.input_file)).resolve()
+        # ''.join(args.input_file)).resolve()
+        self.input_path = pathlib.Path(args.input_file[0]).resolve()
         if self.input_path.is_file():
             self.input_path = str(self.input_path)
         else:
@@ -143,7 +144,6 @@ class InputReader:
                             help='Display version number and exit')
         return parser
 
-
     def parse_inputs(self):
         """Reads input from DESC input file, converts from VMEC input if necessary
 
@@ -195,7 +195,6 @@ class InputReader:
             inputs['verbose'] = 2
         else:
             inputs['verbose'] = 1
-
 
         file = open(self.input_path, 'r')
         num_form = r'[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
@@ -396,11 +395,10 @@ class InputReader:
 
         # error handling
         if np.any(inputs['M_pol'] == 0):
-            raise IOError(TextColors.FAIL +
-                          'M_pol is not assigned' + TextColors.ENDC)
+            raise IOError(colored('M_pol is not assigned', 'red'))
         if np.sum(inputs['boundary']) == 0:
             raise IOError(
-                TextColors.FAIL + 'Fixed-boundary surface is not assigned' + TextColors.ENDC)
+                colored('Fixed-boundary surface is not assigned', 'red'))
         arrs = ['L_rad', 'M_pol', 'N_tor', 'M_grid', 'N_grid', 'bdry_ratio',
                 'pres_ratio', 'zeta_ratio', 'pert_order',
                 'ftol', 'xtol', 'gtol', 'nfev']
@@ -409,10 +407,11 @@ class InputReader:
             arr_len = max(arr_len, len(inputs[a]))
         for a in arrs:
             if inputs[a].size == 1:
-                inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
+                inputs[a] = np.broadcast_to(
+                    inputs[a], arr_len, subok=True).copy()
             elif inputs[a].size != arr_len:
-                raise IOError(TextColors.FAIL +
-                              'Continuation parameter arrays are not proper lengths' + TextColors.ENDC)
+                raise IOError(colored(
+                              'Continuation parameter arrays are not proper lengths', 'red'))
 
         # unsupplied values
         if np.sum(inputs['M_grid']) == 0:
@@ -555,7 +554,7 @@ class InputReader:
             # global parameters
             if re.search(r'LRFP\s*=\s*T', command, re.IGNORECASE):
                 warnings.warn(
-                    TextColors.WARNING + 'Using poloidal flux instead of toroidal flux!' + TextColors.ENDC)
+                    colored('Using poloidal flux instead of toroidal flux!', 'yellow'))
             match = re.search('LASYM\s*=\s*[TF]', command, re.IGNORECASE)
             if match:
                 if re.search(r'T', match.group(0), re.IGNORECASE):
@@ -567,7 +566,8 @@ class InputReader:
                 numbers = [int(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 desc_file.write('NFP\t\t\t= {:3d}\n'.format(numbers[0]))
-            match = re.search(r'PHIEDGE\s*=\s*'+num_form, command, re.IGNORECASE)
+            match = re.search(r'PHIEDGE\s*=\s*'+num_form,
+                              command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
@@ -589,35 +589,34 @@ class InputReader:
             if match:
                 if not re.search(r'\bpower_series\b', match.group(0), re.IGNORECASE):
                     warnings.warn(
-                        TextColors.WARNING + 'Pressure is not a power series!' + TextColors.ENDC)
+                        colored('Pressure is not a power series!', 'yellow'))
             match = re.search(r'GAMMA\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 if numbers[0] != 0:
-                    warnings.warn(TextColors.WARNING +
-                                  'GAMMA is not 0.0' + TextColors.ENDC)
+                    warnings.warn(colored('GAMMA is not 0.0', 'yellow'))
             match = re.search(r'BLOAT\s*=\s*'+num_form, command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 if numbers[0] != 1:
-                    warnings.warn(TextColors.WARNING +
-                                  'BLOAT is not 1.0' + TextColors.ENDC)
-            match = re.search(r'SPRES_PED\s*=\s*'+num_form, command, re.IGNORECASE)
+                    warnings.warn(colored('BLOAT is not 1.0', 'yellow'))
+            match = re.search(r'SPRES_PED\s*=\s*'+num_form,
+                              command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 if numbers[0] != 1:
-                    warnings.warn(TextColors.WARNING +
-                                  'SPRES_PED is not 1.0' + TextColors.ENDC)
+                    warnings.warn(colored('SPRES_PED is not 1.0', 'yellow'))
             match = re.search(r'PRES_SCALE\s*=\s*'+num_form,
                               command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 pres_scale = numbers[0]
-            match = re.search(r'AM\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+            match = re.search(r'AM\s*=(\s*'+num_form+')*',
+                              command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
@@ -635,12 +634,13 @@ class InputReader:
                     num_form, match.group(0)) if re.search(r'\d', x)]
                 if numbers[0] != 0:
                     warnings.warn(
-                        TextColors.WARNING + 'Not using rotational transform!' + TextColors.ENDC)
+                        colored('Not using rotational transform!', 'yellow'))
             if re.search(r'\bPIOTA_TYPE\b', command, re.IGNORECASE):
                 if not re.search(r'\bpower_series\b', command, re.IGNORECASE):
-                    warnings.warn(TextColors.WARNING +
-                                  'Iota is not a power series!' + TextColors.ENDC)
-            match = re.search(r'AI\s*=(\s*'+num_form+')*', command, re.IGNORECASE)
+                    warnings.warn(
+                        colored('Iota is not a power series!', 'yellow'))
+            match = re.search(r'AI\s*=(\s*'+num_form+')*',
+                              command, re.IGNORECASE)
             if match:
                 numbers = [float(x) for x in re.findall(
                     num_form, match.group(0)) if re.search(r'\d', x)]
@@ -696,8 +696,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n *= n_sgn
                 if np.sign(m) < 0:
-                    warnings.warn(TextColors.WARNING +
-                                  'm is negative!' + TextColors.ENDC)
+                    warnings.warn(colored('m is negative!', 'yellow'))
                 RBS = numbers[2]
                 if m != 0:
                     m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -728,8 +727,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n *= n_sgn
                 if np.sign(m) < 0:
-                    warnings.warn(TextColors.WARNING +
-                                  'm is negative!' + TextColors.ENDC)
+                    warnings.warn(colored('m is negative!', 'yellow'))
                 RBS = numbers[2]
                 if m != 0:
                     m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -760,8 +758,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n *= n_sgn
                 if np.sign(m) < 0:
-                    warnings.warn(TextColors.WARNING +
-                                  'm is negative!' + TextColors.ENDC)
+                    warnings.warn(colored('m is negative!', 'yellow'))
                 ZBS = numbers[2]
                 if m != 0:
                     m_idx = np.where(bdry[:, 0] == -m)[0]
@@ -792,8 +789,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n *= n_sgn
                 if np.sign(m) < 0:
-                    warnings.warn(TextColors.WARNING +
-                                  'm is negative!' + TextColors.ENDC)
+                    warnings.warn(colored('m is negative!', 'yellow'))
                 ZBC = numbers[2]
                 m_idx = np.where(bdry[:, 0] == m)[0]
                 n_idx = np.where(bdry[:, 1] == n)[0]
@@ -820,7 +816,7 @@ class InputReader:
                     num_form, command) if re.search(r'\d', x)]
                 if len(numbers) > 0:
                     raise IOError(
-                        TextColors.FAIL + 'Cannot handle multi-line VMEC inputs!' + TextColors.ENDC)
+                        colored('Cannot handle multi-line VMEC inputs!', 'red'))
 
         p_l *= pres_scale
         desc_file.write('\n')
@@ -853,6 +849,7 @@ class InputReader:
         # close files
         vmec_file.close()
         desc_file.close()
+
 
 def get_parser():
     """Standalone function that gets parser for command line arguments.

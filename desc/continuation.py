@@ -2,8 +2,9 @@ import numpy as np
 import scipy.optimize
 import warnings
 import copy
+from termcolor import colored
 
-from desc.backend import TextColors, use_jax, jit
+from desc.backend import use_jax, jit
 from desc.utils import Timer
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.transform import Transform
@@ -117,7 +118,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             # apply pressure ratio
             inputs_ii['profiles'][:, 1] *= pres_ratio[ii]
             # apply boundary ratio
-            bdry_factor = np.where(inputs_ii['boundary'][:, 1] != 0, bdry_ratio[ii], 1)
+            bdry_factor = np.where(
+                inputs_ii['boundary'][:, 1] != 0, bdry_ratio[ii], 1)
             inputs_ii['boundary'][:, 2] *= bdry_factor
             inputs_ii['boundary'][:, 3] *= bdry_factor
 
@@ -211,7 +213,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 I_transform=I_transform)
             equil_obj = obj_fun.compute
             callback = obj_fun.callback
-            args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi, zeta_ratio[ii-1])
+            args = (equil.cRb, equil.cZb, equil.cP,
+                    equil.cI, equil.Psi, zeta_ratio[ii-1])
 
             # TODO: should probably perturb before expanding resolution
             # perturbations
@@ -239,7 +242,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         hess = obj_fun.hess
         jac = obj_fun.jac
         callback = obj_fun.callback
-        args = (equil.cRb, equil.cZb, equil.cP, equil.cI, equil.Psi, zeta_ratio[ii-1])
+        args = (equil.cRb, equil.cZb, equil.cP,
+                equil.cI, equil.Psi, zeta_ratio[ii-1])
 
         if use_jax:
             if verbose > 0:
@@ -297,7 +301,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                                                verbose=verbose)
         else:
             raise NotImplementedError(
-                TextColors.FAIL + "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogbox'" + TextColors.ENDC)
+                colored("optim_method must be one of 'bfgs', 'trf', 'lm', 'dogbox'", 'red'))
 
         timer.stop("Iteration {} solution".format(ii+1))
 

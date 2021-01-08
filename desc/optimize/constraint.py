@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg
+from termcolor import colored
 
 
 class LinearEqualityConstraint():
@@ -41,14 +42,14 @@ class LinearEqualityConstraint():
         if x0 is None:
             self._x0 = self._Ainv.dot(self._b)
         elif not self.is_feasible(x0):
-            raise ValueError("x0 is not feasible")
+            raise ValueError(colored("x0 is not feasible", 'red'))
         else:
             self._x0 = x0
 
     def __add__(self, other):
         if not isinstance(other, LinearEqualityConstraint):
-            raise ValueError(
-                "cannot combine LinearConstraint with object of type {}".format(type(other)))
+            raise ValueError(colored(
+                "cannot combine LinearConstraint with object of type {}".format(type(other)), 'red'))
 
         newA = np.vstack([self._A, other._A])
         newb = np.vstack([self._b, other._b])
@@ -116,7 +117,7 @@ class LinearEqualityConstraint():
     @x0.setter
     def x0(self, x0):
         if not self.is_feasible(x0):
-            raise ValueError("x0 is not feasible")
+            raise ValueError(colored("x0 is not feasible", 'red'))
         self._x0 = x0
 
     def recover(self, y):

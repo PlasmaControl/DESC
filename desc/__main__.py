@@ -1,7 +1,7 @@
 import pathlib
 import sys
 import warnings
-
+from termcolor import colored
 from desc.input_reader import InputReader
 
 
@@ -32,10 +32,9 @@ def get_device(gpuID=False):
         if isinstance(gpuID, int) and gpuID < len(gpus):
             return gpus[gpuID]
         if isinstance(gpuID, int):
-            from desc.backend import TextColors
             # ID was not valid
             warnings.warn(
-                TextColors.WARNING + 'gpuID did not match any found devices, trying default gpu option' + TextColors.ENDC)
+                colored('gpuID did not match any found devices, trying default gpu option', 'yellow'))
         # find all available options and see which has the most space
         import nvidia_smi
         nvidia_smi.nvmlInit()
@@ -52,9 +51,7 @@ def get_device(gpuID=False):
         return gpu
 
     except:
-        from desc.backend import TextColors
-        warnings.warn(TextColors.WARNING +
-                      'No GPU found, falling back to CPU' + TextColors.ENDC)
+        warnings.warn(colored('No GPU found, falling back to CPU', 'yellow'))
         return jax.devices('cpu')[0]
 
 
@@ -107,7 +104,8 @@ def main(cl_args=None):
             vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
             err = vmec_error(equil, vmec_data)
-            print("Average error relative to VMEC solution: {:.3f} meters".format(err))
+            print(
+                "Average error relative to VMEC solution: {:.3f} meters".format(err))
 
 
 if __name__ == '__main__':

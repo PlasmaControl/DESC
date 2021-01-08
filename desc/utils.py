@@ -1,8 +1,8 @@
 import numpy as np
 import functools
 import warnings
-
-from desc.backend import TextColors, jnp
+from termcolor import colored
+from desc.backend import jnp
 
 
 # Helper Classes -------------------------------------------------------------
@@ -41,10 +41,10 @@ class Timer():
             except AttributeError:
                 self.op = time.perf_counter
                 self._ns = False
-                warnings.warn(TextColors.WARNING +
+                warnings.warn(colored(
                               'nanosecond timing not available on this system,'
-                            + ' reverting to microsecond timing'
-                            + TextColors.ENDC)
+                              + ' reverting to microsecond timing', 'yellow'))
+
         else:
             self.op = time.perf_counter
 
@@ -85,7 +85,7 @@ class Timer():
             self._timers[name].append(self.op())
         except KeyError:
             raise ValueError(
-                TextColors.FAIL + "timer '{}' has not been started".format(name) + TextColors.ENDC) from None
+                colored("timer '{}' has not been started".format(name), 'red')) from None
         self._times[name] = np.diff(self._timers[name])[0]
         if self._ns:
             self._times[name] = self._times[name]/1e9
@@ -130,7 +130,7 @@ class Timer():
         else:
             out = '{:.3f}'.format(hrs)[:4] + ' hrs'
 
-        print(TextColors.TIMER + 'Timer: {} = {}'.format(name, out) + TextColors.ENDC)
+        print(colored('Timer: {} = {}'.format(name, out), 'green'))
 
     def disp(self, name):
         """Pretty prints elapsed time
@@ -163,7 +163,7 @@ class Timer():
                 time = float(now-start)/1e9 if self._ns else (now-start)
             except KeyError:
                 raise ValueError(
-                    TextColors.FAIL + "timer '{}' has not been started".format(name) + TextColors.ENDC) from None
+                    colored("timer '{}' has not been started".format(name), 'red')) from None
 
         self.pretty_print(name, time)
 
@@ -180,6 +180,8 @@ Tristate is used with Basis to determine type of stellarator symmetry:
     False for sin(m*t-n*z) symmetry
     None for no symmetry (Default)
 """
+
+
 class Tristate(object):
     """Tristate is used to represent logical values with 3 possible states:
        True, False, or None
@@ -187,20 +189,20 @@ class Tristate(object):
     """
 
     def __init__(self, value=None):
-       if any(value is v for v in (True, False, None)):
-          self.value = value
-       else:
-           raise ValueError("Tristate value must be True, False, or None")
+        if any(value is v for v in (True, False, None)):
+            self.value = value
+        else:
+            raise ValueError("Tristate value must be True, False, or None")
 
     def __eq__(self, other):
-       return (self.value is other.value if isinstance(other, Tristate)
-               else self.value is other)
+        return (self.value is other.value if isinstance(other, Tristate)
+                else self.value is other)
 
     def __ne__(self, other):
-       return not self == other
+        return not self == other
 
     def __bool__(self):
-       raise TypeError("Tristate object may not be used as a Boolean")
+        raise TypeError("Tristate object may not be used as a Boolean")
 
     def __str__(self):
         return str(self.value)
@@ -225,6 +227,7 @@ class _Indexable():
 
     def __getitem__(self, index):
         return index
+
 
 """
 Helper object for building indexes for indexed update functions.

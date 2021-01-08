@@ -1,7 +1,8 @@
 import numpy as np
 from collections.abc import MutableSequence
+from termcolor import colored
 
-from desc.backend import TextColors, put
+from desc.backend import put
 from desc.utils import Tristate, unpack_state
 from desc.basis import PowerSeries, FourierSeries, DoubleFourierSeries, FourierZernikeBasis
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -26,14 +27,14 @@ class Configuration(IOAble):
                   '_R0_basis', '_Z0_basis', '_r_basis', '_l_basis',
                   '_R1_basis', '_Z1_basis', '_p_basis', '_i_basis']
 
-    _object_lib_ = {'PowerSeries'         : PowerSeries,
-                    'DoubleFourierSeries' : DoubleFourierSeries,
-                    'FourierZernikeBasis' : FourierZernikeBasis,
-                    'LinearGrid'          : LinearGrid,
-                    'ConcentricGrid'      : ConcentricGrid}
+    _object_lib_ = {'PowerSeries': PowerSeries,
+                    'DoubleFourierSeries': DoubleFourierSeries,
+                    'FourierZernikeBasis': FourierZernikeBasis,
+                    'LinearGrid': LinearGrid,
+                    'ConcentricGrid': ConcentricGrid}
 
-    def __init__(self, inputs:dict=None, load_from=None,
-                 file_format:str='hdf5', obj_lib=None) -> None:
+    def __init__(self, inputs: dict = None, load_from=None,
+                 file_format: str = 'hdf5', obj_lib=None) -> None:
         """Initializes a Configuration
 
         Parameters
@@ -75,7 +76,7 @@ class Configuration(IOAble):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def _init_from_inputs_(self, inputs:dict=None) -> None:
+    def _init_from_inputs_(self, inputs: dict = None) -> None:
         # required inputs
         try:
             self._Psi = inputs['Psi']
@@ -86,9 +87,8 @@ class Configuration(IOAble):
             profiles = inputs['profiles']
             boundary = inputs['boundary']
         except:
-            raise ValueError(TextColors.FAIL +
-                             "input dict does not contain proper keys"
-                           + TextColors.ENDC)
+            raise ValueError(
+                colored("input dict does not contain proper keys", 'red'))
 
         # optional inputs
         self._sym = inputs.get('sym', False)
@@ -123,7 +123,8 @@ class Configuration(IOAble):
         self._i_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
 
         # format profiles
-        self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
+        self._p_l, self._i_l = format_profiles(
+            profiles, self._p_basis, self._i_basis)
 
         # format boundary
         self._R1_mn, self._Z1_mn = format_boundary(
@@ -141,18 +142,21 @@ class Configuration(IOAble):
                 self._Z0_n = inputs['Z0_n']
                 self._r_lmn = inputs['r_lmn']
                 self._l_lmn = inputs['l_lmn']
-            except: # create initial guess
-                axis = inputs.get('axis', boundary[np.where(boundary[:, 0] == 0)[0], 1:])
-                self._R0_n, self._Z0_n = format_axis(axis, self._R0_basis, self._Z0_basis)
+            except:  # create initial guess
+                axis = inputs.get(
+                    'axis', boundary[np.where(boundary[:, 0] == 0)[0], 1:])
+                self._R0_n, self._Z0_n = format_axis(
+                    axis, self._R0_basis, self._Z0_basis)
                 self._r_lmn = np.zeros((self._r_basis.num_modes,))
                 self._l_lmn = np.zeros((self._l_basis.num_modes,))
                 self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
-                    (self._r_basis.modes[:, 0]==0, self._r_basis.modes[:, 1]==0, self._r_basis.modes[:, 2]==0)))[0], 0.5)
+                    (self._r_basis.modes[:, 0] == 0, self._r_basis.modes[:, 1] == 0, self._r_basis.modes[:, 2] == 0)))[0], 0.5)
                 self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
-                    (self._r_basis.modes[:, 0]==2, self._r_basis.modes[:, 1]==0, self._r_basis.modes[:, 2]==0)))[0], 0.5)
-            self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+                    (self._r_basis.modes[:, 0] == 2, self._r_basis.modes[:, 1] == 0, self._r_basis.modes[:, 2] == 0)))[0], 0.5)
+            self._x = np.concatenate(
+                [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
-    def change_resolution(self, L:int=None, M:int=None, N:int=None) -> None:
+    def change_resolution(self, L: int = None, M: int = None, N: int = None) -> None:
         # TODO: check if resolution actually changes
 
         if L is not None:
@@ -197,15 +201,22 @@ class Configuration(IOAble):
                     c_new[i] = c_old[idx[0]]
             return c_new
 
-        self._R0_n  = copy_coeffs(self._R0_n, old_modes_R0, self._R0_basis.modes)
-        self._Z0_n  = copy_coeffs(self._Z0_n, old_modes_Z0, self._Z0_basis.modes)
-        self._r_lmn = copy_coeffs(self._r_lmn, old_modes_r, self._r_basis.modes)
-        self._l_lmn = copy_coeffs(self._l_lmn, old_modes_l, self._l_basis.modes)
-        self._R1_mn = copy_coeffs(self._R1_mn, old_modes_R1, self._R1_basis.modes)
-        self._Z1_mn = copy_coeffs(self._Z1_mn, old_modes_Z1, self._Z1_basis.modes)
+        self._R0_n = copy_coeffs(
+            self._R0_n, old_modes_R0, self._R0_basis.modes)
+        self._Z0_n = copy_coeffs(
+            self._Z0_n, old_modes_Z0, self._Z0_basis.modes)
+        self._r_lmn = copy_coeffs(
+            self._r_lmn, old_modes_r, self._r_basis.modes)
+        self._l_lmn = copy_coeffs(
+            self._l_lmn, old_modes_l, self._l_basis.modes)
+        self._R1_mn = copy_coeffs(
+            self._R1_mn, old_modes_R1, self._R1_basis.modes)
+        self._Z1_mn = copy_coeffs(
+            self._Z1_mn, old_modes_Z1, self._Z1_basis.modes)
 
         # state vector
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._x = np.concatenate(
+            [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def sym(self) -> bool:
@@ -219,8 +230,8 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn = unpack_state(
-                self._x, self._R0_basis.num_modes, self._Z0_basis.num_modes,
-                self._r_basis.num_modes, self._l_basis.num_modes)
+            self._x, self._R0_basis.num_modes, self._Z0_basis.num_modes,
+            self._r_basis.num_modes, self._l_basis.num_modes)
 
     @property
     def R0_n(self):
@@ -230,7 +241,8 @@ class Configuration(IOAble):
     @R0_n.setter
     def R0_n(self, R0_n) -> None:
         self._R0_n = R0_n
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._x = np.concatenate(
+            [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def Z0_n(self):
@@ -240,7 +252,8 @@ class Configuration(IOAble):
     @Z0_n.setter
     def Z0_n(self, Z0_n) -> None:
         self._Z0_n = Z0_n
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._x = np.concatenate(
+            [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def r_lmn(self):
@@ -250,7 +263,8 @@ class Configuration(IOAble):
     @r_lmn.setter
     def r_lmn(self, r_lmn) -> None:
         self._r_lmn = r_lmn
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._x = np.concatenate(
+            [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def l_lmn(self):
@@ -260,7 +274,8 @@ class Configuration(IOAble):
     @l_lmn.setter
     def l_lmn(self, l_lmn) -> None:
         self._l_lmn = l_lmn
-        self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._x = np.concatenate(
+            [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
     @property
     def R1_mn(self):
@@ -329,7 +344,7 @@ class Configuration(IOAble):
         return self._R0_basis
 
     @R0_basis.setter
-    def R0_basis(self, R0_basis:FourierSeries) -> None:
+    def R0_basis(self, R0_basis: FourierSeries) -> None:
         self._R0_basis = R0_basis
 
     @property
@@ -345,7 +360,7 @@ class Configuration(IOAble):
         return self._Z0_basis
 
     @Z0_basis.setter
-    def Z0_basis(self, Z0_basis:FourierSeries) -> None:
+    def Z0_basis(self, Z0_basis: FourierSeries) -> None:
         self._Z0_basis = Z0_basis
 
     @property
@@ -361,7 +376,7 @@ class Configuration(IOAble):
         return self._r_basis
 
     @r_basis.setter
-    def r_basis(self, r_basis:FourierZernikeBasis) -> None:
+    def r_basis(self, r_basis: FourierZernikeBasis) -> None:
         self._r_basis = r_basis
 
     @property
@@ -377,7 +392,7 @@ class Configuration(IOAble):
         return self._l_basis
 
     @l_basis.setter
-    def l_basis(self, l_basis:FourierZernikeBasis) -> None:
+    def l_basis(self, l_basis: FourierZernikeBasis) -> None:
         self._l_basis = l_basis
 
     @property
@@ -393,7 +408,7 @@ class Configuration(IOAble):
         return self._R1_basis
 
     @R1_basis.setter
-    def R1_basis(self, R1_basis:DoubleFourierSeries) -> None:
+    def R1_basis(self, R1_basis: DoubleFourierSeries) -> None:
         self._R1_basis = R1_basis
 
     @property
@@ -409,7 +424,7 @@ class Configuration(IOAble):
         return self._Z1_basis
 
     @Z1_basis.setter
-    def Z1_basis(self, Z1_basis:DoubleFourierSeries) -> None:
+    def Z1_basis(self, Z1_basis: DoubleFourierSeries) -> None:
         self._Z1_basis = Z1_basis
 
     @property
@@ -425,7 +440,7 @@ class Configuration(IOAble):
         return self._p_basis
 
     @p_basis.setter
-    def p_basis(self, p_basis:PowerSeries) -> None:
+    def p_basis(self, p_basis: PowerSeries) -> None:
         self._p_basis = p_basis
 
     @property
@@ -441,10 +456,10 @@ class Configuration(IOAble):
         return self._i_basis
 
     @i_basis.setter
-    def i_basis(self, i_basis:PowerSeries) -> None:
+    def i_basis(self, i_basis: PowerSeries) -> None:
         self._i_basis = i_basis
 
-    def compute_polar_coords(self, grid:Grid) -> dict:
+    def compute_polar_coords(self, grid: Grid) -> dict:
         """Transforms spectral coefficients of polar coordinates to real space.
 
         Parameters
@@ -462,10 +477,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform  = Transform(grid, self._r_basis,  derivs=0)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=0)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         polar_coords = compute_polar_coords(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -474,7 +489,7 @@ class Configuration(IOAble):
 
         return polar_coords
 
-    def compute_toroidal_coords(self, grid:Grid) -> dict:
+    def compute_toroidal_coords(self, grid: Grid) -> dict:
         """Computes toroidal coordinates from polar coordinates.
 
         Parameters
@@ -492,10 +507,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform  = Transform(grid, self._r_basis,  derivs=0)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=0)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (toroidal_coords, polar_coords) = compute_toroidal_coords(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -504,7 +519,7 @@ class Configuration(IOAble):
 
         return toroidal_coords
 
-    def compute_cartesian_coords(self, grid:Grid) -> dict:
+    def compute_cartesian_coords(self, grid: Grid) -> dict:
         """Computes cartesian coordinates from toroidal coordinates.
 
         Parameters
@@ -522,10 +537,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform  = Transform(grid, self._r_basis,  derivs=0)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=0)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (cartesian_coords, toroidal_coords,
          polar_coords) = compute_cartesian_coords(
@@ -535,7 +550,7 @@ class Configuration(IOAble):
 
         return cartesian_coords
 
-    def compute_profiles(self, grid:Grid) -> dict:
+    def compute_profiles(self, grid: Grid) -> dict:
         """Computes magnetic flux, pressure, and rotational transform profiles.
 
         Parameters
@@ -553,10 +568,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform  = Transform(grid, self._r_basis,  derivs=0)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=0)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (profiles, polar_coords) = compute_profiles(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -565,7 +580,7 @@ class Configuration(IOAble):
 
         return profiles
 
-    def compute_covariant_basis(self, grid:Grid) -> dict:
+    def compute_covariant_basis(self, grid: Grid) -> dict:
         """Computes covariant basis vectors.
 
         Parameters
@@ -584,10 +599,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform  = Transform(grid, self._r_basis,  derivs=1)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=1)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (cov_basis, toroidal_coords, polar_coords) = compute_covariant_basis(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -596,7 +611,7 @@ class Configuration(IOAble):
 
         return cov_basis
 
-    def compute_contravariant_basis(self, grid:Grid) -> dict:
+    def compute_contravariant_basis(self, grid: Grid) -> dict:
         """Computes contravariant basis vectors.
 
         Parameters
@@ -615,10 +630,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform  = Transform(grid, self._r_basis,  derivs=1)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=1)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (con_basis, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_contravariant_basis(
@@ -628,7 +643,7 @@ class Configuration(IOAble):
 
         return con_basis
 
-    def compute_jacobian(self, grid:Grid) -> dict:
+    def compute_jacobian(self, grid: Grid) -> dict:
         """Computes coordinate system jacobian.
 
         Parameters
@@ -647,10 +662,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform  = Transform(grid, self._r_basis,  derivs=1)
-        l_transform  = Transform(grid, self._l_basis,  derivs=0)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=1)
+        l_transform = Transform(grid, self._l_basis,  derivs=0)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (jacobian, cov_basis, toroidal_coords, polar_coords) = compute_jacobian(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -659,7 +674,7 @@ class Configuration(IOAble):
 
         return jacobian
 
-    def compute_magnetic_field(self, grid:Grid) -> dict:
+    def compute_magnetic_field(self, grid: Grid) -> dict:
         """Computes magnetic field components.
 
         Parameters
@@ -679,10 +694,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform  = Transform(grid, self._r_basis,  derivs=1)
-        l_transform  = Transform(grid, self._l_basis,  derivs=1)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=1)
+        l_transform = Transform(grid, self._l_basis,  derivs=1)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_magnetic_field(
@@ -692,7 +707,7 @@ class Configuration(IOAble):
 
         return magnetic_field
 
-    def compute_magnetic_field_magnitude(self, grid:Grid) -> dict:
+    def compute_magnetic_field_magnitude(self, grid: Grid) -> dict:
         """Computes magnetic field magnitude.
 
         Parameters
@@ -712,10 +727,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform  = Transform(grid, self._r_basis,  derivs=1)
-        l_transform  = Transform(grid, self._l_basis,  derivs=1)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=0)
+        r_transform = Transform(grid, self._r_basis,  derivs=1)
+        l_transform = Transform(grid, self._l_basis,  derivs=1)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=0)
 
         (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_magnetic_field_magnitude(
@@ -725,7 +740,7 @@ class Configuration(IOAble):
 
         return magnetic_field
 
-    def compute_current_density(self, grid:Grid) -> dict:
+    def compute_current_density(self, grid: Grid) -> dict:
         """Computes current density field components.
 
         Parameters
@@ -744,10 +759,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform  = Transform(grid, self._r_basis,  derivs=2)
-        l_transform  = Transform(grid, self._l_basis,  derivs=2)
-        p_transform  = Transform(grid, self._p_basis,  derivs=0)
-        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+        r_transform = Transform(grid, self._r_basis,  derivs=2)
+        l_transform = Transform(grid, self._l_basis,  derivs=2)
+        p_transform = Transform(grid, self._p_basis,  derivs=0)
+        i_transform = Transform(grid, self._i_basis,  derivs=1)
 
         (current_density, magnetic_field, profiles, jacobian, cov_basis,
          toroidal_coords, polar_coords) = compute_current_density(
@@ -757,7 +772,7 @@ class Configuration(IOAble):
 
         return current_density
 
-    def compute_force_error(self, grid:Grid) -> dict:
+    def compute_force_error(self, grid: Grid) -> dict:
         """Computes force error components.
 
         Parameters
@@ -776,10 +791,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform  = Transform(grid, self._r_basis,  derivs=2)
-        l_transform  = Transform(grid, self._l_basis,  derivs=2)
-        p_transform  = Transform(grid, self._p_basis,  derivs=1)
-        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+        r_transform = Transform(grid, self._r_basis,  derivs=2)
+        l_transform = Transform(grid, self._l_basis,  derivs=2)
+        p_transform = Transform(grid, self._p_basis,  derivs=1)
+        i_transform = Transform(grid, self._i_basis,  derivs=1)
 
         (force_error, current_density, magnetic_field, profiles, jacobian,
          cov_basis, toroidal_coords, polar_coords) = compute_force_error(
@@ -789,7 +804,7 @@ class Configuration(IOAble):
 
         return force_error
 
-    def compute_force_error_magnitude(self, grid:Grid) -> dict:
+    def compute_force_error_magnitude(self, grid: Grid) -> dict:
         """Computes force error magnitude.
 
         Parameters
@@ -808,10 +823,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform  = Transform(grid, self._r_basis,  derivs=2)
-        l_transform  = Transform(grid, self._l_basis,  derivs=2)
-        p_transform  = Transform(grid, self._p_basis,  derivs=1)
-        i_transform  = Transform(grid, self._i_basis,  derivs=1)
+        r_transform = Transform(grid, self._r_basis,  derivs=2)
+        l_transform = Transform(grid, self._l_basis,  derivs=2)
+        p_transform = Transform(grid, self._p_basis,  derivs=1)
+        i_transform = Transform(grid, self._i_basis,  derivs=1)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
@@ -827,16 +842,17 @@ class Equilibrium(Configuration, IOAble):
        It adds information about how the equilibrium configuration was solved.
     """
     _io_attrs_ = Configuration._io_attrs_ \
-               + ['_initial', '_objective', '_optimizer', '_solved']
+        + ['_initial', '_objective', '_optimizer', '_solved']
     _object_lib_ = Configuration._object_lib_
-    _object_lib_.update({'Configuration' : Configuration,
-                         'ObjectiveFunction' : ObjectiveFunction})
+    _object_lib_.update({'Configuration': Configuration,
+                         'ObjectiveFunction': ObjectiveFunction})
 
-    def __init__(self, inputs:dict=None, load_from=None,
-                 file_format:str='hdf5', obj_lib=None) -> None:
-        super().__init__(inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+    def __init__(self, inputs: dict = None, load_from=None,
+                 file_format: str = 'hdf5', obj_lib=None) -> None:
+        super().__init__(inputs=inputs, load_from=load_from,
+                         file_format=file_format, obj_lib=obj_lib)
 
-    def _init_from_inputs_(self, inputs:dict=None) -> None:
+    def _init_from_inputs_(self, inputs: dict = None) -> None:
         super()._init_from_inputs_(inputs=inputs)
         self._x0 = self._x
         self._objective = inputs.get('objective', None)
@@ -888,10 +904,10 @@ class Equilibrium(Configuration, IOAble):
         Configuration
 
         """
-        p_modes  = np.array([self._p_basis.modes[:, 0],
-                             self._p_l, np.zeros_like(self._p_l)]).T
-        i_modes  = np.array([self._i_basis.modes[:, 0],
-                             np.zeros_like(self._i_l), self._i_l]).T
+        p_modes = np.array([self._p_basis.modes[:, 0],
+                            self._p_l, np.zeros_like(self._p_l)]).T
+        i_modes = np.array([self._i_basis.modes[:, 0],
+                            np.zeros_like(self._i_l), self._i_l]).T
         R0_modes = np.array([self._R0_basis.modes[:, 2],
                              self._R0_n, np.zeros_like(self._R0_n)]).T
         Z0_modes = np.array([self._Z0_basis.modes[:, 2],
@@ -913,7 +929,7 @@ class Equilibrium(Configuration, IOAble):
                   'axis': np.vstack((R0_modes, Z0_modes)),
                   'bdry': np.vstack((R1_modes, Z1_modes)),
                   'x': self._x0
-                 }
+                  }
         return Configuration(inputs=inputs)
 
     def optimize(self):
@@ -1010,7 +1026,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
 # these functions are needed to format the input arrays
 
-def format_profiles(profiles, p_basis:PowerSeries, i_basis:PowerSeries):
+
+def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):
     """Formats profile input arrays
 
     Parameters
@@ -1042,8 +1059,8 @@ def format_profiles(profiles, p_basis:PowerSeries, i_basis:PowerSeries):
     return p_l, i_l
 
 
-def format_boundary(boundary, R1_basis:DoubleFourierSeries,
-                    Z1_basis:DoubleFourierSeries, mode:str='spectral'):
+def format_boundary(boundary, R1_basis: DoubleFourierSeries,
+                    Z1_basis: DoubleFourierSeries, mode: str = 'spectral'):
     """Formats boundary arrays and converts between real and fourier representations
 
     Parameters
@@ -1095,7 +1112,7 @@ def format_boundary(boundary, R1_basis:DoubleFourierSeries,
     return R1_mn, Z1_mn
 
 
-def format_axis(axis, R0_basis:FourierSeries, Z0_basis:FourierSeries):
+def format_axis(axis, R0_basis: FourierSeries, Z0_basis: FourierSeries):
     """Formats magnetic axis input arrays
 
     Parameters

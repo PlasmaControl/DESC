@@ -1,7 +1,8 @@
 import numpy as np
-from desc.backend import jit
-from desc.utils import TextColors
 from scipy.optimize import least_squares, minimize
+from termcolor import colored
+
+from desc.backend import jit
 from desc.optimize import fmin_scalar
 
 
@@ -19,8 +20,8 @@ class Optimizer():
             self._scipy_minimize_methods + self._desc_scalar_methods
 
         if self.method not in self._all_methods:
-            raise NotImplementedError(
-                TextColors.FAIL + "method must be one of {}".format('.'.join([self._all_methods])) + TextColors.ENDC)
+            raise NotImplementedError(colored(
+                "method must be one of {}".format('.'.join([self._all_methods])), 'red'))
 
     def optimize(self, objective,
                  x_init,

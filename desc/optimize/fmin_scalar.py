@@ -1,4 +1,5 @@
 import numpy as np
+from termcolor import colored
 from desc.backend import jnp
 from .derivative import CholeskyHessian
 from .utils import check_termination, OptimizeResult, evaluate_quadratic_form, print_header_nonlinear, print_iteration_nonlinear, status_messages
@@ -112,7 +113,8 @@ def fmin_scalar(fun, x0, grad,
     elif method == 'subspace':
         subproblem = solve_trust_region_2d_subspace
     else:
-        raise ValueError("method should be one of 'dogleg' or 'subspace'")
+        raise ValueError(
+            colored("method should be one of 'dogleg' or 'subspace'", 'red'))
 
     if maxiter is None:
         maxiter = N * 100
@@ -158,7 +160,8 @@ def fmin_scalar(fun, x0, grad,
                                min_curvature=hess_min_curvature,
                                damp_ratio=hess_damp_ratio)
     else:
-        raise ValueError("hess should either be a callable or 'bfgs'")
+        raise ValueError(
+            colored("hess should either be a callable or 'bfgs'", 'red'))
 
     hess_scale = isinstance(x_scale, str) and x_scale == 'hess'
     if hess_scale:
@@ -181,8 +184,8 @@ def fmin_scalar(fun, x0, grad,
     if trust_radius == 0:
         trust_radius = 1.0
     if len(options) > 0:
-        raise ValueError("Unknown options: {}".format(
-            [key for key in options]))
+        raise ValueError(colored("Unknown options: {}".format(
+            [key for key in options]), 'red'))
 
     success = None
     step_norm = np.inf

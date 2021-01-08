@@ -1,6 +1,6 @@
 import numpy as np
+from termcolor import colored
 
-from desc.backend import TextColors
 from desc.utils import equals
 from desc.equilibrium_io import IOAble
 
@@ -178,10 +178,9 @@ class LinearGrid(Grid):
        spaced in each coordinate.
     """
 
-    def __init__(self, L:int=1, M:int=1, N:int=1, NFP:int=1, sym:bool=False,
-                 endpoint:bool=False, rho=None, theta=None, zeta=None,
+    def __init__(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1, sym: bool = False,
+                 endpoint: bool = False, rho=None, theta=None, zeta=None,
                  load_from=None, file_format=None, obj_lib=None) -> None:
-
         """Initializes a LinearGrid
 
         Parameters
@@ -225,9 +224,9 @@ class LinearGrid(Grid):
             self._zeta = zeta
 
             self._nodes, self._volumes = self.create_nodes(
-                            L=self._L, M=self._M, N=self._N,
-                            NFP=self._NFP, endpoint=self._endpoint,
-                            rho=self._rho, theta=self._theta, zeta=self._zeta)
+                L=self._L, M=self._M, N=self._N,
+                NFP=self._NFP, endpoint=self._endpoint,
+                rho=self._rho, theta=self._theta, zeta=self._zeta)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -237,8 +236,8 @@ class LinearGrid(Grid):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def create_nodes(self, L:int=1, M:int=1, N:int=1, NFP:int=1,
-                     endpoint:bool=False, rho=None, theta=None, zeta=None):
+    def create_nodes(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1,
+                     endpoint: bool = False, rho=None, theta=None, zeta=None):
         """
 
         Parameters
@@ -309,7 +308,7 @@ class LinearGrid(Grid):
 
         return nodes, volumes
 
-    def change_resolution(self, L:int, M:int, N:int) -> None:
+    def change_resolution(self, L: int, M: int, N: int) -> None:
         """
 
         Parameters
@@ -331,8 +330,8 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._volumes = self.create_nodes(L=L, M=M, N=N,
-                                 NFP=self._NFP, sym=self._sym,
-                                 endpoint=self._endpoint, surfs=self._surfs)
+                                                           NFP=self._NFP, sym=self._sym,
+                                                           endpoint=self._endpoint, surfs=self._surfs)
             self.sort_nodes()
 
 
@@ -341,7 +340,7 @@ class ConcentricGrid(Grid):
        in concentric circles within each toroidal cross-section.
     """
 
-    def __init__(self, M:int, N:int, NFP:int=1, sym:bool=False, axis:bool=True,
+    def __init__(self, M: int, N: int, NFP: int = 1, sym: bool = False, axis: bool = True,
                  index='ansi', surfs='cheb1', load_from=None, file_format=None,
                  obj_lib=None) -> None:
         """Initializes a ConcentricGrid
@@ -385,8 +384,8 @@ class ConcentricGrid(Grid):
             self._surfs = surfs
 
             self._nodes, self._volumes = self.create_nodes(
-                        M=self._M, N=self._N, NFP=self._NFP,
-                        axis=self._axis, index=self._index, surfs=self._surfs)
+                M=self._M, N=self._N, NFP=self._NFP,
+                axis=self._axis, index=self._index, surfs=self._surfs)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -396,7 +395,7 @@ class ConcentricGrid(Grid):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def create_nodes(self, M:int, N:int, NFP:int=1, axis:bool=True,
+    def create_nodes(self, M: int, N: int, NFP: int = 1, axis: bool = True,
                      index='ansi', surfs='cheb1'):
         """
 
@@ -435,8 +434,8 @@ class ConcentricGrid(Grid):
             dim_zernike = int((M+1)**2)
             a = 2
         else:
-            raise ValueError(TextColors.FAIL +
-                             "Invalid index input." + TextColors.ENDC)
+            raise ValueError(colored(
+                             "Zernike indexing must be one of 'ansi', 'fringe', 'chevron', 'house'", 'red'))
 
         pattern = {
             'cheb1': (np.cos(np.arange(M, -1, -1)*np.pi/M)+1)/2,
@@ -489,7 +488,7 @@ class ConcentricGrid(Grid):
 
         return nodes, volumes
 
-    def change_resolution(self, M:int, N:int) -> None:
+    def change_resolution(self, M: int, N: int) -> None:
         """
 
         Parameters
@@ -509,7 +508,7 @@ class ConcentricGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._volumes = self.create_nodes(M=M, N=N,
-                         NFP=self._NFP, sym=self._sym, surfs=self._surfs)
+                                                           NFP=self._NFP, sym=self._sym, surfs=self._surfs)
             self.sort_nodes()
 
 

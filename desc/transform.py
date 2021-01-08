@@ -1,8 +1,9 @@
 import numpy as np
 import functools
 from itertools import permutations, combinations_with_replacement
+from termcolor import colored
 
-from desc.backend import TextColors, use_jax, jnp, jit
+from desc.backend import use_jax, jnp, jit
 from desc.utils import conditional_decorator, equals
 from desc.grid import Grid
 from desc.basis import Basis
@@ -32,8 +33,8 @@ class Transform(IOAble):
     """
     _io_attrs_ = ['_grid', '_basis', '_derives', '_matrices']
 
-    def __init__(self, grid:Grid=None, basis:Basis=None, derivs=0, rcond=1e-6,
-            load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(self, grid: Grid = None, basis: Basis = None, derivs=0, rcond=1e-6,
+                 load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a Transform
 
         Parameters
@@ -67,7 +68,7 @@ class Transform(IOAble):
             self._rcond = rcond
 
             self._matrices = {i: {j: {k: {}
-                     for k in range(4)} for j in range(4)} for i in range(4)}
+                                      for k in range(4)} for j in range(4)} for i in range(4)}
             self._derivatives = self._get_derivatives_(self._derivs)
 
             self._sort_derivatives_()
@@ -77,7 +78,6 @@ class Transform(IOAble):
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
-
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -146,9 +146,9 @@ class Transform(IOAble):
                                     [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
                                     [2, 2, 0]])
         else:
-            raise NotImplementedError(TextColors.FAIL +
-                  "order options are 'force', 'qs', or a non-negative int"
-                  + TextColors.ENDC)
+            raise NotImplementedError(
+                colored("order options are 'force', 'qs', or a non-negative int", 'red'))
+
         return derivatives
 
     def _sort_derivatives_(self) -> None:
@@ -160,7 +160,7 @@ class Transform(IOAble):
 
         """
         sort_idx = np.lexsort((self._derivatives[:, 0],
-                       self._derivatives[:, 1], self._derivatives[:, 2]))
+                               self._derivatives[:, 1], self._derivatives[:, 2]))
         self._derivatives = self._derivatives[sort_idx]
 
     def _build_(self) -> None:
@@ -168,7 +168,7 @@ class Transform(IOAble):
         """
         for d in self._derivatives:
             self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                                                        self._grid.nodes, d)
+                self._grid.nodes, d)
 
     def _build_pinv_(self) -> None:
         """Builds the transform matrices for each derivative order
@@ -202,13 +202,11 @@ class Transform(IOAble):
         """
         A = self._matrices[dr][dt][dz]
         if type(A) is dict:
-            raise ValueError(TextColors.FAIL +
-                 "Derivative orders are out of initialized bounds" +
-                             TextColors.ENDC)
+            raise ValueError(
+                colored("Derivative orders are out of initialized bounds", 'red'))
         if A.shape[1] != c.size:
-            raise ValueError(TextColors.FAIL +
-                 "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(c.size, A.shape[1]) +
-                             TextColors.ENDC)
+            raise ValueError(colored("Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
+                c.size, A.shape[1]), 'red'))
 
         return jnp.matmul(A, c)
 
@@ -229,7 +227,7 @@ class Transform(IOAble):
         """
         return jnp.matmul(self._pinv, x)
 
-    def change_resolution(self, grid:Grid=None, basis:Basis=None) -> None:
+    def change_resolution(self, grid: Grid = None, basis: Basis = None) -> None:
         """Re-builds the matrices with a new grid and basis
 
         Parameters
@@ -260,7 +258,7 @@ class Transform(IOAble):
         return self._grid
 
     @grid.setter
-    def grid(self, grid:Grid) -> None:
+    def grid(self, grid: Grid) -> None:
         """Changes the grid and updates the matrices accordingly
 
         Parameters
@@ -283,7 +281,7 @@ class Transform(IOAble):
         return self._basis
 
     @basis.setter
-    def basis(self, basis:Basis) -> None:
+    def basis(self, basis: Basis) -> None:
         """Changes the basis and updates the matrices accordingly
 
         Parameters
@@ -343,7 +341,7 @@ class Transform(IOAble):
 
             for d in derivs_to_add:
                 self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                                                        self._grid.nodes, d)
+                    self._grid.nodes, d)
 
     @property
     def matrices(self):

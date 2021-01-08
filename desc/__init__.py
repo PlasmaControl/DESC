@@ -1,6 +1,10 @@
+from termcolor import colored
+import colorama
+colorama.init()
+
 __version__ = '0.2.0'
 
-BANNER = """\033[95m
+_BANNER = """
  ____  ____  _____   ___ 
 |  _ \| ___|/  ___|/ ___|
 | | \ | |_  | (__ | |
@@ -8,4 +12,6 @@ BANNER = """\033[95m
 | |_/ | |__  ___) | |___ 
 |____/|____||____/ \____|
                          
-\033[0m"""
+"""
+
+BANNER = colored(_BANNER, 'magenta')

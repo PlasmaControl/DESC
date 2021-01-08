@@ -2,16 +2,7 @@ import numpy as np
 import warnings
 import desc
 import os
-
-
-class TextColors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    TIMER = '\033[32m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
+from termcolor import colored
 
 
 os.environ['JAX_PLATFORM_NAME'] = 'cpu'
@@ -40,8 +31,7 @@ else:
         x = jnp.linspace(0, 5)
         y = jnp.exp(x)
         use_jax = False
-        warnings.warn(TextColors.WARNING +
-                      'Failed to load JAX' + TextColors.ENDC)
+        warnings.warn(colored('Failed to load JAX', 'red'))
         print('DESC version {}, using NumPy backend, version={}, dtype={}'.format(
             desc.__version__, np.__version__, y.dtype))
 
@@ -50,7 +40,7 @@ if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
     from jax.scipy.linalg import cho_factor, cho_solve, qr
-    
+
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
 
@@ -98,7 +88,7 @@ else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial
     from scipy.linalg import cho_factor, cho_solve, qr
-    
+
     # we divide by zero in a few places but then overwrite with the
     # correct asmptotic values, so lets suppress annoying warnings about that
     np.seterr(divide='ignore', invalid='ignore')

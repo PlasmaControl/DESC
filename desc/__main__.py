@@ -1,143 +1,111 @@
-import argparse
 import pathlib
 import sys
 import warnings
-import os
+from termcolor import colored
+from desc.input_reader import InputReader
 
 
-def get_device(use_gpu=False, gpuID=None):
-    """Checks available GPUs and selects the one with the most available memory"""
+def get_device(gpuID=False):
+    """Checks available GPUs and selects the one with the most available memory
+
+    Parameters
+    ----------
+    gpuID: bool or int
+        whether to use GPU, or the device ID of a specific GPU to use. If False,
+        use only CPU. If True, attempts to find the GPU with most available memory.
+
+    Returns
+    -------
+    device : jax.device
+        handle to gpu or cpu device selected
+
+    """
 
     import jax
-    import nvidia_smi
 
-    if not use_gpu:
+    if gpuID is False:
         return jax.devices('cpu')[0]
 
     try:
         gpus = jax.devices('gpu')
         # did the user request a specific GPU?
-        if gpuID is not None and gpuID < len(gpus):
+        if isinstance(gpuID, int) and gpuID < len(gpus):
             return gpus[gpuID]
+        if isinstance(gpuID, int):
+            # ID was not valid
+            warnings.warn(
+                colored('gpuID did not match any found devices, trying default gpu option', 'yellow'))
         # find all available options and see which has the most space
-        else:
-            nvidia_smi.nvmlInit()
-            maxmem = 0
-            gpu = gpus[0]
-            for i in range(len(gpus)):
-                handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
-                info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-                if info.free > maxmem:
-                    maxmem = info.free
-                    gpu = gpus[i]
+        import nvidia_smi
+        nvidia_smi.nvmlInit()
+        maxmem = 0
+        gpu = gpus[0]
+        for i in range(len(gpus)):
+            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
+            info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+            if info.free > maxmem:
+                maxmem = info.free
+                gpu = gpus[i]
 
-            nvidia_smi.nvmlShutdown()
-            return gpu
+        nvidia_smi.nvmlShutdown()
+        return gpu
 
     except:
-        from desc.backend import TextColors
-        warnings.warn(TextColors.WARNING +
-                      'No GPU found, falling back to CPU' + TextColors.ENDC)
+        warnings.warn(colored('No GPU found, falling back to CPU', 'yellow'))
         return jax.devices('cpu')[0]
 
 
-def parse_args(args):
-    """Parses command line arguments
-    Args:
-        args (list): List of arguments to parse, ie sys.argv
-    Returns:
-        parsed_args (argparse object): argparse object containing parsed arguments.
-    """
-
-    parser = argparse.ArgumentParser(prog='DESC',
-                                     description='DESC computes equilibria by solving the force balance equations. '
-                                     + 'It can also be used for perturbation analysis and sensitivity studies '
-                                     + 'to see how the equilibria change as input parameters are varied.')
-    parser.add_argument('input_file', help='Path to input file')
-    parser.add_argument('-o', '--output',
-                        help='Path to output file. If not specified, defaults to <input_name>.output')
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help='Plot results after solver finishes')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Do not display any progress information')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Display detailed progress information')
-    parser.add_argument('--vmec', help='Path to VMEC data for comparison plot')
-    parser.add_argument('--gpu', '-g', action='store_true',
-                        help='Use GPU if available. Note that not all of the computation will be done '
-                        + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
-    parser.add_argument('--gpuID', action='store', default=None,
-                        help='device ID of GPU to use (usually 0,1,2 etc). Can be obtained by running '
-                        + '`nvidia-smi`. Default is to select the GPU with most available memory.')
-    parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
-                        + " and autodiff won't work but may be useful for debugging")
-    return parser.parse_args(args)
-
-
-def main(args=sys.argv[1:]):
+def main(cl_args=None):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.
     """
-    args = parse_args(args)
-    if args.numpy:
-        os.environ['DESC_USE_NUMPY'] = 'True'
-    else:
-        os.environ['DESC_USE_NUMPY'] = ''
+
+    ir = InputReader(cl_args=cl_args)
+
+    if ir.args.version:
+        import desc
+        print(desc.__version__)
+        return
 
     import desc
 
     print(desc.BANNER)
 
     from desc.continuation import solve_eq_continuation
-    from desc.plotting import plot_comparison, plot_vmec_comparison, plot_fb_err
-    from desc.input_output import read_input, output_to_file, read_vmec_output
+    from desc.plotting import plot_comparison, plot_vmec_comparison
+    #from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
+    from desc.vmec import read_vmec_output, vmec_error
 
     if use_jax:
-        device = get_device(args.gpu, args.gpuID)
+        device = get_device(ir.args.gpu)
         print("Using device: " + str(device))
     else:
         device = None
 
-    in_fname = str(pathlib.Path(args.input_file).resolve())
-    out_fname = args.output if args.output else in_fname+'.output'
-
-    print('Reading input from {}'.format(in_fname))
-    inputs = read_input(in_fname)
-    print('Output will be written to {}'.format(out_fname))
-
-    if args.quiet:
-        inputs['verbose'] = 0
-    elif args.verbose:
-        inputs['verbose'] = 2
-    else:
-        inputs['verbose'] = 1
-
     # solve equilibrium
-    iterations, timer = solve_eq_continuation(
-        inputs, checkpoint_filename=out_fname, device=device)
+    equil_fam, timer = solve_eq_continuation(
+        ir.inputs, file_name=ir.output_path, device=device)
 
-    # output
-#     print('Writing output to {}'.format(out_fname))
-#     output_to_file(out_fname, equil)
+    if ir.args.plot:
 
-    if args.plot:
+        equil_fam.save(ir.output_path)
 
-        equil_init = iterations['init']
-        equil = iterations['final']
-
+        equil_init = equil_fam[0].initial
+        equil = equil_fam[-1]
+        print('Plotting flux surfaces, this may take a few moments...')
         # plot comparison to initial guess
         plot_comparison(equil_init, equil, 'Initial', 'Solution')
 
         # plot comparison to VMEC
-        if args.vmec:
-            vmec_data = read_vmec_output(pathlib.Path(args.vmec).resolve())
+        if ir.args.vmec:
+            print('Plotting comparison to VMEC, this may take a few moments...')
+            vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
-
-        # plot force balance error
-        plot_fb_err(equil, domain='real', normalize='global',
-                    log=True, cmap='plasma')
+            err = vmec_error(equil, vmec_data)
+            print(
+                "Average error relative to VMEC solution: {:.3f} meters".format(err))
 
 
 if __name__ == '__main__':

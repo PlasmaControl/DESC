@@ -8,7 +8,14 @@ Backend
 .. automodule:: desc.backend
     :members:
     :undoc-members:
-    
+
+Basis
+*****
+
+.. automodule:: desc.basis
+    :members:
+    :undoc-members:
+
 Boundary Conditions
 *******************
 
@@ -16,17 +23,31 @@ Boundary Conditions
     :members:
     :undoc-members:
     
+Configuration
+*************
+
+.. automodule:: desc.configuration
+    :members:
+    :undoc-members:  
+
 Continuation
 ************
 
 .. automodule:: desc.continuation
     :members:
     :undoc-members:
-    
-Field Components
-****************
 
-.. automodule:: desc.field_components
+Equilibrium IO
+**************
+
+.. automodule:: desc.equilibrium_io
+    :members:
+    :undoc-members:
+
+Grid
+****
+
+.. automodule:: desc.grid
     :members:
     :undoc-members:
     
@@ -37,27 +58,28 @@ Initial Guess
     :members:
     :undoc-members:
     
-Input/Output
+Input Reader
 ************
 
-.. automodule:: desc.input_output
+.. automodule:: desc.input_reader
     :members:
     :undoc-members:
     
-Nodes
-*****
 
-.. automodule:: desc.nodes
-    :members:
-    :undoc-members:
-    
 Objective Functions
 *******************
 
 .. automodule:: desc.objective_funs
     :members:
     :undoc-members:
-    
+
+Perturbations
+*************
+
+.. automodule:: desc.perturbations
+    :members:
+    :undoc-members:
+
 Plotting
 ********
 
@@ -65,9 +87,17 @@ Plotting
     :members:
     :undoc-members:
     
-Zernike
-*******
 
-.. automodule:: desc.zernike
+Transform
+*********
+
+.. automodule:: desc.transform
+    :members:
+    :undoc-members:
+
+VMEC
+****
+
+.. automodule:: desc.vmec
     :members:
     :undoc-members:

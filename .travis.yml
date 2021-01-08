@@ -4,6 +4,14 @@ python:
   - "3.7"
   - "3.8"
 
+# safelist
+branches:
+  only:
+  - master
+  - dev
+  - v1.0
+  - dev1.0
+
 # command to install dependencies
 install:
   - pip install -r requirements.txt
@@ -25,3 +33,4 @@ notifications:
     recipients: 
       - ddudt@pppl.gov
       - wconlin@princeton.edu
+      - dpanici@princeton.edu

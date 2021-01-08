@@ -1,9 +1,12 @@
-
+import colorama
+from termcolor import colored
 from ._version import get_versions
 __version__ = get_versions()['version']
 del get_versions
 
-BANNER = """\033[95m
+colorama.init()
+
+_BANNER = """
  ____  ____  _____   ___ 
 |  _ \| ___|/  ___|/ ___|
 | | \ | |_  | (__ | |
@@ -11,4 +14,6 @@ BANNER = """\033[95m
 | |_/ | |__  ___) | |___ 
 |____/|____||____/ \____|
                          
-\033[0m"""
+"""
+
+BANNER = colored(_BANNER, 'magenta')

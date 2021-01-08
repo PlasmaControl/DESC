@@ -224,5 +224,5 @@ Documentation Styleguide
 ************************
 
 -  Use `SphinxDoc <https://www.sphinx-doc.org/en/master/index.html>`__.
--  Use `Google Style Docstrings <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html>`__.
+-  Use `Numpy Style Docstrings <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html#example-numpy>`__.
 -  Use `reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html>`__.

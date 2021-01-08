@@ -4,15 +4,31 @@
   :start-after: inclusion-marker-do-not-remove
 		
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Theory
 
-   theory
+   theory_general
+   theory_zernike
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+	     
    installation
-   usage
+   command_line
    input
    output
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+	     
    examples
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Public API
+	     
    api
 
 Indices and tables

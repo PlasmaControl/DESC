@@ -88,9 +88,10 @@ class VMECIO():
 
         # profiles
         preset = file.dimensions['preset'].size
+        p0 = file.variables['presf'][0] / file.variables['am'][0]
         inputs['profiles'] = np.zeros((preset,3))
         inputs['profiles'][:, 0] = np.arange(0, 2*preset, 2)
-        inputs['profiles'][:, 1] = file.variables['am'][:]
+        inputs['profiles'][:, 1] = file.variables['am'][:]*p0
         inputs['profiles'][:, 2] = file.variables['ai'][:]
 
         file.close
@@ -164,8 +165,6 @@ class VMECIO():
         Z = null_space(A_r)
         r0_lmn = np.linalg.lstsq(A_r, b, rcond=None)[0].flatten()
         eq.r_lmn = r0_lmn + Z.dot(Z.T.dot(eq.r_lmn - r0_lmn))
-
-        print(np.sum((np.matmul(A, eq.x) - b)**2)/b.size)
 
         return eq
 

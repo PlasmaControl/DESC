@@ -216,10 +216,10 @@ class Plot:
         imshow_kwargs = {'origin': 'lower',
                          'interpolation': 'bilinear',
                          'aspect': 'auto'}
-        imshow_kwargs['extent'] = [grid.nodes[0, plot_axes[0]],
-                                   grid.nodes[-1, plot_axes[0]
-                                              ], grid.nodes[0, plot_axes[1]],
-                                   grid.nodes[-1, plot_axes[1]]]
+        imshow_kwargs['extent'] = [grid.nodes[0, plot_axes[1]],
+                                   grid.nodes[-1, plot_axes[1]
+                                              ], grid.nodes[0, plot_axes[0]],
+                                   grid.nodes[-1, plot_axes[0]]]
         cax_kwargs = {'size': '5%',
                       'pad': 0.05}
 

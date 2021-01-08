@@ -64,8 +64,6 @@ def main(cl_args=None):
     ir = InputReader(cl_args=cl_args)
 
     if ir.args.version:
-        import desc
-        print(desc.__version__)
         return
 
     import desc

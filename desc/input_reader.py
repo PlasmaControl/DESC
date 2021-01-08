@@ -52,10 +52,11 @@ class InputReader:
         """
         self.args = self.parse_args(cl_args=cl_args)
 
-        print("Reading input from {}".format(self.input_path))
-        print("Outputs will be written to {}".format(self.output_path))
+        if not self.args.version:
+            print("Reading input from {}".format(self.input_path))
+            print("Outputs will be written to {}".format(self.output_path))
 
-        self.inputs = self.parse_inputs()
+            self.inputs = self.parse_inputs()
 
     def parse_args(self, cl_args=None):
         """Parse command line arguments.
@@ -78,6 +79,11 @@ class InputReader:
         else:
             pass
         args = self.parser.parse_args(cl_args)
+
+        if args.version:
+            import desc
+            print(desc.__version__)
+            return args
 
         if len(args.input_file) == 0:
             raise NameError('Input file path must be specified')

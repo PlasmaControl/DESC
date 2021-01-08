@@ -10,6 +10,7 @@ from desc.transform import Transform
 from desc.equilibrium_io import IOAble
 from desc.derivatives import Derivative
 from desc.compute_funs import compute_force_error_magnitude
+from desc.boundary_conditions import BoundaryConstraint
 
 
 class ObjectiveFunction(IOAble, ABC):
@@ -150,7 +151,7 @@ class ForceErrorNodes(ObjectiveFunction):
                  r_transform: Transform = None,  l_transform: Transform = None,
                  R1_transform: Transform = None, Z1_transform: Transform = None,
                  p_transform: Transform = None,  i_transform: Transform = None,
-                 bc_constraint: BoundaryConstraint) -> None:
+                 bc_constraint: BoundaryConstraint = None) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters

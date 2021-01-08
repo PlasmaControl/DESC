@@ -1,11 +1,8 @@
-import numpy as np
 from abc import ABC, abstractmethod
-import matplotlib.pyplot
 from termcolor import colored
 
 from desc.backend import jnp
 from desc.utils import unpack_state, dot
-from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.equilibrium_io import IOAble
 from desc.derivatives import Derivative

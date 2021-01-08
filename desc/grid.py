@@ -268,31 +268,36 @@ class LinearGrid(Grid):
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+
         # rho
         if rho is not None:
             r = np.asarray(rho)
-            L = r.size
-        elif L == 1:
+            self._L = r.size
+        elif self._L == 1:
             r = np.array([1.0])
         else:
-            r = np.linspace(0, 1, L)
-        dr = 1/L
+            r = np.linspace(0, 1, self._L)
+        dr = 1/self._L
 
         # theta/vartheta
         if theta is not None:
             t = np.asarray(theta)
-            M = t.size
+            self._M = t.size
         else:
-            t = np.linspace(0, 2*np.pi, M, endpoint=endpoint)
-        dt = 2*np.pi/M
+            t = np.linspace(0, 2*np.pi, self._M, endpoint=endpoint)
+        dt = 2*np.pi/self._M
 
         # zeta/phi
         if zeta is not None:
             z = np.asarray(zeta)
-            N = z.size
+            self._N = z.size
         else:
-            z = np.linspace(0, 2*np.pi/NFP, N, endpoint=endpoint)
-        dz = 2*np.pi/NFP/N
+            z = np.linspace(0, 2*np.pi/self._NFP, self._N, endpoint=endpoint)
+        dz = 2*np.pi/self._NFP/self._N
 
         r, t, z = np.meshgrid(r, t, z, indexing='ij')
         r = r.flatten()

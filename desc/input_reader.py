@@ -400,12 +400,12 @@ class InputReader:
                 inputs['axis'][axis_idx[0], 2] = Z0_n
 
         # error handling
-        if np.any(inputs['M_pol'] == 0):
+        if np.any(inputs['M'] == 0):
             raise IOError(colored('M_pol is not assigned', 'red'))
         if np.sum(inputs['boundary']) == 0:
             raise IOError(
                 colored('Fixed-boundary surface is not assigned', 'red'))
-        arrs = ['L_rad', 'M_pol', 'N_tor', 'M_grid', 'N_grid', 'bdry_ratio',
+        arrs = ['L', 'M', 'N', 'M_grid', 'N_grid', 'bdry_ratio',
                 'pres_ratio', 'zeta_ratio', 'pert_order',
                 'ftol', 'xtol', 'gtol', 'nfev']
         arr_len = 0
@@ -421,18 +421,18 @@ class InputReader:
 
         # unsupplied values
         if np.sum(inputs['M_grid']) == 0:
-            inputs['M_grid'] = np.rint(1.5*inputs['M_pol']).astype(int)
+            inputs['M_grid'] = np.rint(1.5*inputs['M']).astype(int)
         if np.sum(inputs['N_grid']) == 0:
-            inputs['N_grid'] = np.rint(1.5*inputs['N_tor']).astype(int)
+            inputs['N_grid'] = np.rint(1.5*inputs['N']).astype(int)
         if np.sum(inputs['axis']) == 0:
             axis_idx = np.where(inputs['boundary'][:, 0] == 0)[0]
             inputs['axis'] = inputs['boundary'][axis_idx, 1:]
-        if None in inputs['L_rad']:
-            default_L_rad = {'fringe': 2*inputs['M_pol'],
-                             'ansi': inputs['M_pol'],
-                             'chevron': inputs['M_pol'],
-                             'house': 2*inputs['M_pol']}
-            inputs['L_rad'] = default_L_rad[inputs['zern_mode']]
+        if None in inputs['L']:
+            default_L = {'fringe': 2*inputs['M'],
+                         'ansi': inputs['M'],
+                         'chevron': inputs['M'],
+                         'house': 2*inputs['M']}
+            inputs['L'] = default_L[inputs['zern_mode']]
 
         return inputs
 

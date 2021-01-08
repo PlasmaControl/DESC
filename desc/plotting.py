@@ -379,7 +379,11 @@ class Plot:
             name_dict = name
 
         # primary calculations
-        if name_dict['base'] == 'g':
+        if name_dict['base'] in ['r','lambda']:
+            out = eq.compute_polar_coords(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] in ['R', 'Z']:
+            out = eq.compute_toroidal_coords(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'g':
             out = eq.compute_jacobian(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'B':
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]

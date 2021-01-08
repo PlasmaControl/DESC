@@ -74,7 +74,7 @@ def main(cl_args=None):
     from desc.plotting import plot_comparison, plot_vmec_comparison
     #from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
-    from desc.vmec import read_vmec_output, vmec_error
+    from desc.vmec import read_vmec_output
 
     if use_jax:
         device = get_device(ir.args.gpu)
@@ -101,9 +101,6 @@ def main(cl_args=None):
             print('Plotting comparison to VMEC, this may take a few moments...')
             vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
             plot_vmec_comparison(vmec_data, equil)
-            err = vmec_error(equil, vmec_data)
-            print(
-                "Average error relative to VMEC solution: {:.3f} meters".format(err))
 
 
 if __name__ == '__main__':

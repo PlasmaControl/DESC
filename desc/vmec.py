@@ -1,60 +1,176 @@
+import math
 import numpy as np
 from netCDF4 import Dataset, stringtochar
-from scipy.optimize import fsolve
+from scipy.linalg import null_space
 
-from desc.utils import sign
+from desc.backend import put
+from desc.utils import Tristate, sign
 from desc.grid import LinearGrid
+from desc.basis import FourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.configuration import Configuration
+from desc.boundary_conditions import get_lcfs_bc_matrices
 
 
 class VMECIO():
     """Performs input from VMEC netCDF files to DESC Configurations and vice-versa."""
 
-    @staticmethod
-    def load(path:str, L:int=None, index:str='ansi') -> Configuration:
+    @classmethod
+    def load(cls, path:str, L:int=-1, M:int=-1, N:int=-1,
+             index:str='ansi') -> Configuration:
         """Loads a VMEC netCDF file as a Configuration.
 
         Parameters
         ----------
         path : str
             File path of input data.
+        L : int, optional
+            Radial resolution. Default determined by index.
+        M : int, optional
+            Poloidal resolution. Default = MPOL-1 from VMEC solution.
+        N : int, optional
+            Toroidal resolution. Default = NTOR from VMEC solution.
+        index : str, optional
+            Type of Zernike indexing scheme to use. (Default = 'ansi')
 
         Returns
         -------
-        config: Configuration
+        eq: Configuration
             Configuration that resembles the VMEC data.
 
         """
         file = Dataset(path, mode='r')
         inputs = {}
 
-        inputs['sym'] = not bool(file.variables['lasym'][:])
-        inputs['Psi'] = file.variables['phi'][:] # toroidal flux is saved as 'phi'
-        inputs['NFP'] = file.variables['nfp'][:]
-        inputs['M'] = file.variables['mpol'][:] - 1
-        inputs['N'] = file.variables['ntor'][:]
+        # parameters
+        inputs['Psi'] = file.variables['phi'][-1]
+        inputs['NFP'] = int(file.variables['nfp'][0])
+        inputs['M'] = M if M >  0 else int(file.variables['mpol'][0] - 1)
+        inputs['N'] = N if N >= 0 else int(file.variables['ntor'][0])
         inputs['index'] = index
-        if L is None:
-            default_L = {'fringe': 2*inputs['M'],
-                         'ansi': inputs['M'],
-                         'chevron': inputs['M'],
-                         'house': 2*inputs['M']}
-            inputs['L'] = default_L[inputs['index']]
+        default_L = {'ansi': inputs['M'],
+                     'fringe': 2*inputs['M'],
+                     'chevron': inputs['M'],
+                     'house': 2*inputs['M']}
+        inputs['L'] = L if L >= 0 else default_L[inputs['index']]
 
-        # TODO: add profiles, boundary, and x
+        # data
+        xm = file.variables['xm'][:].filled()
+        xn = file.variables['xn'][:].filled() / inputs['NFP']
+        rmnc = file.variables['rmnc'][:].filled()
+        zmns = file.variables['zmns'][:].filled()
+        lmns = file.variables['lmns'][:].filled()
+        try:
+            rmns = file.variables['rmns'][:].filled()
+            zmnc = file.variables['zmnc'][:].filled()
+            lmnc = file.variables['lmnc'][:].filled()
+            inputs['sym'] = False
+        except:
+            rmns = np.zeros_like(rmnc)
+            zmnc = np.zeros_like(zmns)
+            lmnc = np.zeros_like(lmns)
+            inputs['sym'] = True
+
+        # basis symmetry
+        if inputs['sym']:
+            R_sym = Tristate(True)
+            Z_sym = Tristate(False)
+        else:
+            R_sym = Tristate(None)
+            Z_sym = Tristate(None)
+
+        # collocation grid
+        surfs = file.dimensions['radius'].size
+        rho = np.sqrt(np.linspace(0, 1, surfs))
+        grid = LinearGrid(
+            M=2*math.ceil(1.5*inputs['M'])+1, N=2*math.ceil(1.5*inputs['N'])+1,
+            NFP=inputs['NFP'], sym=inputs['sym'], rho=rho)
+
+        # profiles
+        preset = file.dimensions['preset'].size
+        inputs['profiles'] = np.zeros((preset,3))
+        inputs['profiles'][:, 0] = np.arange(0, 2*preset, 2)
+        inputs['profiles'][:, 1] = file.variables['am'][:]
+        inputs['profiles'][:, 2] = file.variables['ai'][:]
 
         file.close
 
-        return Configuration(inputs=inputs)
+        # boundary
+        m, n, R1_mn = cls._ptolemy_identity(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
+        m, n, Z1_mn = cls._ptolemy_identity(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
+        inputs['boundary'] = np.vstack((m, n, R1_mn, Z1_mn)).T
 
-    @staticmethod
-    def save(config:Configuration, path:str, surfs:int=128) -> None:
+        # axis
+        m, n, R0_mn = cls._ptolemy_identity(xm, xn, s=rmns[0, :], c=rmnc[0, :])
+        m, n, Z0_mn = cls._ptolemy_identity(xm, xn, s=zmns[0, :], c=zmnc[0, :])
+        R0_basis = FourierSeries(N=inputs['N'], NFP=inputs['NFP'], sym=R_sym)
+        Z0_basis = FourierSeries(N=inputs['N'], NFP=inputs['NFP'], sym=Z_sym)
+        inputs['R0_n'] = np.zeros((R0_basis.num_modes,))
+        inputs['Z0_n'] = np.zeros((Z0_basis.num_modes,))
+        for m, n, R0, Z0 in np.vstack((m, n, R0_mn, Z0_mn)).T:
+            idx_R = np.where(np.logical_and(R0_basis.modes[:, 1] == m,
+                                            R0_basis.modes[:, 2] == n))[0]
+            idx_Z = np.where(np.logical_and(Z0_basis.modes[:, 1] == m,
+                                            Z0_basis.modes[:, 2] == n))[0]
+            inputs['R0_n'] = put(inputs['R0_n'], idx_R, R0)
+            inputs['Z0_n'] = put(inputs['Z0_n'], idx_Z, Z0)
+
+        # lambda
+        m, n, l_mn = cls._ptolemy_identity(xm, xn, s=lmns, c=lmnc)
+        inputs['l_lmn'], l_basis = cls._fourier_to_zernike(m, n, l_mn,
+            NFP=inputs['NFP'], L=inputs['L'], M=inputs['M'], N=inputs['N'],
+            index=inputs['index'])
+
+        # evaluate flux surface shapes
+        m, n, R_mn = cls._ptolemy_identity(xm, xn, s=rmns, c=rmnc)
+        m, n, Z_mn = cls._ptolemy_identity(xm, xn, s=zmns, c=zmnc)
+        R_lmn, R_basis = cls._fourier_to_zernike(m, n, R_mn,
+            NFP=inputs['NFP'], L=inputs['L'], M=inputs['M'], N=inputs['N'],
+            index=inputs['index'])
+        Z_lmn, Z_basis = cls._fourier_to_zernike(m, n, Z_mn,
+            NFP=inputs['NFP'], L=inputs['L'], M=inputs['M'], N=inputs['N'],
+            index=inputs['index'])
+        R0_transform = Transform(grid=grid, basis=R0_basis)
+        Z0_transform = Transform(grid=grid, basis=Z0_basis)
+        R_transform = Transform(grid=grid, basis=R_basis)
+        Z_transform = Transform(grid=grid, basis=Z_basis)
+        R0 = R0_transform.transform(inputs['R0_n'])
+        Z0 = Z0_transform.transform(inputs['Z0_n'])
+        R = R_transform.transform(R_lmn)
+        Z = Z_transform.transform(Z_lmn)
+
+        # r
+        r = np.zeros_like(R)
+        theta = grid.nodes[:, 1]
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
+        cos_idx = np.where(np.abs(cos_t) >= 1/np.sqrt(2))[0]
+        sin_idx = np.where(np.abs(sin_t) >= 1/np.sqrt(2))[0]
+        r = put(r, cos_idx, ((R-R0)/cos_t)[cos_idx])
+        r = put(r, sin_idx, ((Z-Z0)/sin_t)[sin_idx])
+        inputs['r_lmn'] = R_transform.fit(r)
+
+        # initialize Configuration
+        eq = Configuration(inputs=inputs)
+
+        """
+        # enforce LCFS BC on r
+        A, b = get_lcfs_bc_matrices(eq.R0_basis, eq.Z0_basis, eq.r_basis,
+            eq.l_basis, eq.R1_basis, eq.Z1_basis, eq.R1_mn, eq.Z1_mn)
+        Z = null_space(A)
+        r0 = np.linalg.lstsq(A, eq.r_lmn)
+        eq.r_lmn = r0 + Z.dot(Z.T.dot(eq.r_lmn - r0))
+        """
+
+        return eq
+
+    @classmethod
+    def save(cls, eq:Configuration, path:str, surfs:int=128) -> None:
         """Saves a Configuration as a netCDF file in the VMEC format.
 
         Parameters
         ----------
-        config : Configuration
+        eq : Configuration
             Configuration to save.
         path : str
             File path of output data.
@@ -66,13 +182,18 @@ class VMECIO():
         None
 
         """
+        file = Dataset(path, mode='w')
 
-        p_l = config.p_l
-        i_l = config.i_l
-        Psi = config.Psi
-        NFP = config.NFP
-        M = config.M
-        N = config.N
+        """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
+            see lines 300+ for full list of included variables
+        """
+
+        Psi = eq.Psi
+        NFP = eq.NFP
+        M = eq.M
+        N = eq.N
+        p_l = eq.p_l
+        i_l = eq.i_l
 
         s_full = np.linspace(0, 1, surfs)
         s_half = s_full[0:-1] + 0.5/(surfs-1)
@@ -81,16 +202,10 @@ class VMECIO():
         full_grid = LinearGrid(rho=r_full)
         half_grid = LinearGrid(rho=r_half)
 
-        p_transform_full = Transform(full_grid, config.p_basis)
-        p_transform_half = Transform(half_grid, config.p_basis)
-        i_transform_full = Transform(full_grid, config.i_basis)
-        i_transform_half = Transform(half_grid, config.i_basis)
-
-        """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
-            see lines 300+ for full list of included variables
-        """
-
-        file = Dataset(path, mode='w')
+        p_transform_full = Transform(full_grid, eq.p_basis)
+        p_transform_half = Transform(half_grid, eq.p_basis)
+        i_transform_full = Transform(full_grid, eq.i_basis)
+        i_transform_half = Transform(half_grid, eq.i_basis)
 
         # dimensions
         file.createDimension('radius', surfs)   # number of flux surfaces
@@ -107,13 +222,17 @@ class VMECIO():
 
         # variables
 
-        lasym = file.createVariable('lasym', np.int32, ('dim_00001',))
-        lasym.long_name = 'asymmetry logical (0 = stellarator symmetry)'
-        lasym[:] = int(not config.sym)
-
         lfreeb = file.createVariable('lfreeb', np.int32, ('dim_00001',))
         lfreeb.long_name = 'free boundary logical (0 = fixed boundary)'
         lfreeb[:] = 0
+
+        lasym = file.createVariable('lasym', np.int32, ('dim_00001',))
+        lasym.long_name = 'asymmetry logical (0 = stellarator symmetry)'
+        lasym[:] = int(not eq.sym)
+
+        nfp = file.createVariable('nfp', np.int32, ('dim_00001',))
+        nfp.long_name = 'number of field periods'
+        nfp[:] = NFP
 
         ns = file.createVariable('ns', np.int32, ('dim_00001',))
         ns.long_name = 'number of flux surfaces'
@@ -126,14 +245,6 @@ class VMECIO():
         ntor = file.createVariable('ntor', np.int32, ('dim_00001',))
         ntor.long_name = 'number of positive toroidal Fourier modes'
         ntor[:] = N
-
-        nfp = file.createVariable('nfp', np.int32, ('dim_00001',))
-        nfp.long_name = 'number of field periods'
-        nfp[:] = NFP
-
-        signgs = file.createVariable('signgs', np.float64, ('dim_00001',))
-        signgs.long_name = 'sign of coordinate system jacobian'
-        signgs[:] = 1   # TODO: don't hard-code this
 
         mnmax = file.createVariable('mnmax', np.int32, ('dim_00001',))
         mnmax.long_name = 'total number of Fourier modes'
@@ -150,6 +261,10 @@ class VMECIO():
         gamma = file.createVariable('gamma', np.float64, ('dim_00001',))
         gamma.long_name = 'compressibility index (0 = pressure prescribed)'
         gamma[:] = 0
+
+        signgs = file.createVariable('signgs', np.float64, ('dim_00001',))
+        signgs.long_name = 'sign of coordinate system jacobian'
+        signgs[:] = 1   # TODO: don't hard-code this
 
         am = file.createVariable('am', np.float64, ('preset',))
         am.long_name = 'pressure coefficients'
@@ -231,236 +346,132 @@ class VMECIO():
 
         file.close
 
+    def _ptolemy_identity(m, n, s, c):
+        """Converts from a double Fourier series of the form:
+            s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
+        to the form:
+            ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
+            cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
+        using Ptolemy's sum and difference formulas.
 
-def convert_vmec_to_desc(vmec_data, zern_idx, lambda_idx, Npol=None, Ntor=None):
-    """Computes error in SFL coordinates compared to VMEC solution
-    Parameters
-    ----------
-    vmec_data : dict
-        dictionary of VMEC equilibrium parameters
-    zern_idx : ndarray, shape(N_coeffs,3)
-        indices for R,Z spectral basis,
-        ie an array of [l,m,n] for each spectral coefficient
-    lambda_idx : ndarray, shape(2M+1)*(2N+1)
-        indices for lambda spectral basis,
-        ie an array of [m,n] for each spectral coefficient
-    Npol : int
-        number of poloidal angles to sample per surface (Default value = M)
-    Ntor : int
-        number of toroidal angles to sample per surface (Default value = N)
-    Returns
-    -------
-    equil : dict
-        dictionary of DESC equilibrium parameters
-    """
-    if Npol is None:
-        Npol = 2*np.max(zern_idx[:,1]) + 1
-    if Ntor is None:
-        Ntor = 2*np.max(zern_idx[:,2]) + 1
+        Parameters
+        ----------
+        m : ndarray
+            Poloidal mode numbers.
+        n : ndarray
+            Toroidal mode numbers.
+        s : ndarray, optional
+            Coefficients of sin(m*theta-n*phi) terms.
+            Each row is a separate flux surface.
+        c : ndarray, optional
+            Coefficients of cos(m*theta-n*phi) terms.
+            Each row is a separate flux surface.
 
-    ns = np.size(vmec_data['psi'])
-    vartheta = np.linspace(0, 2*np.pi, Npol, endpoint=False)
-    zeta = np.linspace(0, 2*np.pi/vmec_data['NFP'], Ntor, endpoint=False)
-    phi = zeta
+        Returns
+        -------
+        m_new : ndarray, shape(num_modes,)
+            Poloidal mode numbers of the double Fourier basis.
+        n_new : ndarray, shape(num_modes,)
+            Toroidal mode numbers of the double Fourier basis.
+        x_mn : ndarray, shape(num_modes,)
+            Spectral coefficients in the double Fourier basis.
 
-    r = np.tile(np.sqrt(vmec_data['psi'])[..., np.newaxis, np.newaxis], (1, Npol, Ntor))
-    v = np.tile(vartheta[np.newaxis, ..., np.newaxis], (ns, 1, Ntor))
-    z = np.tile(zeta[np.newaxis, np.newaxis, ...], (ns, Npol, 1))
+        """
+        s = np.atleast_2d(s)
+        c = np.atleast_2d(c)
 
-    nodes = np.stack([r.flatten(), v.flatten(), z.flatten()])
-    zernike_transform = ZernikeTransform(
-        nodes, zern_idx, vmec_data['NFP'], method='fft')
-    four_bdry_interp = double_fourier_basis(v[0,:,:].flatten(), z[0,:,:].flatten(), lambda_idx[:,0], lambda_idx[:,1], vmec_data['NFP'])
-    four_bdry_interp_pinv = np.linalg.pinv(four_bdry_interp, rcond=1e-6)
+        M = int(np.max(np.abs(m)))
+        N = int(np.max(np.abs(n)))
 
-    print('Interpolating VMEC solution to sfl coordinates')
-    R = np.zeros((ns, Npol, Ntor))
-    Z = np.zeros((ns, Npol, Ntor))
-    L = np.zeros((Npol, Ntor))
-    for k in range(Ntor):           # toroidal angle
-        for i in range(ns):         # flux surface
-            theta = np.zeros((Npol,))
-            for j in range(Npol):   # poloidal angle
-                f0 = sfl_err(np.array([0]), vartheta[j], zeta[k], vmec_data, i)
-                f2pi = sfl_err(np.array([2*np.pi]),
-                               vartheta[j], zeta[k], vmec_data, i)
-                flag = (sign(f0) + sign(f2pi)) / 2
-                args = (vartheta[j], zeta[k], vmec_data, i, flag)
-                t = fsolve(sfl_err, vartheta[j], args=args)
-                if flag != 0:
-                    t = np.remainder(t+np.pi, 2*np.pi)
-                theta[j] = t   # theta angle that corresponds to vartheta[j]
-            R[i, :, k] = vmec_transf(
-                vmec_data['rmnc'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-            Z[i, :, k] = vmec_transf(
-                vmec_data['zmns'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='sin').flatten()
-            if i == ns-1:
-                L[:, k] = vmec_transf(
-                    vmec_data['lmns'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='sin').flatten()
-            if not vmec_data['sym']:
-                R[i, :, k] += vmec_transf(vmec_data['rmns'][i, :], vmec_data['xm'],
-                                          vmec_data['xn'], theta, phi[k], trig='sin').flatten()
-                Z[i, :, k] += vmec_transf(vmec_data['zmnc'][i, :], vmec_data['xm'],
-                                          vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-                if i == ns-1:
-                    L[:, k] += vmec_transf(vmec_data['lmnc'][i, :], vmec_data['xm'],
-                                           vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-        print('{}%'.format((k+1)/Ntor*100))
+        mn_new = np.array([[m-M, n-N, 0] for m in range(2*M+1) for n in range(2*N+1)])
+        m_new = mn_new[:, 0]
+        n_new = mn_new[:, 1]
+        x_mn = np.zeros((s.shape[0], m_new.size))
 
-    cR = zernike_transform.fit(R.flatten())
-    cZ = zernike_transform.fit(Z.flatten())
-    cL = np.matmul(four_bdry_interp_pinv, L.flatten())
-    equil = {
-        'cR': cR,
-        'cZ': cZ,
-        'cL': cL,
-        'bdryR': None,
-        'bdryZ': None,
-        'cP': None,
-        'cI': None,
-        'Psi_lcfs': vmec_data['psi'],
-        'NFP': vmec_data['NFP'],
-        'zern_idx': zern_idx,
-        'lambda_idx': lambda_idx,
-        'bdry_idx': None
-    }
-    return equil
+        for i in range(len(m)):
+            sin_mn_1 = np.where(np.logical_and(m_new == -np.abs(m[i]),
+                                               n_new ==  np.abs(n[i])))[0][0]
+            sin_mn_2 = np.where(np.logical_and(m_new ==  np.abs(m[i]),
+                                               n_new == -np.abs(n[i])))[0][0]
+            cos_mn_1 = np.where(np.logical_and(m_new ==  np.abs(m[i]),
+                                               n_new ==  np.abs(n[i])))[0][0]
+            cos_mn_2 = np.where(np.logical_and(m_new == -np.abs(m[i]),
+                                               n_new == -np.abs(n[i])))[0][0]
 
+            if np.sign(m[i]) != 0:
+                x_mn[:, sin_mn_1] += s[:, i]
+            x_mn[:, cos_mn_1] += c[:, i]
+            if np.sign(n[i]) > 0:
+                x_mn[:, sin_mn_2] -= s[:, i]
+                if np.sign(m[i]) != 0:
+                    x_mn[:, cos_mn_2] += c[:, i]
+            elif np.sign(n[i]) < 0:
+                x_mn[:, sin_mn_2] += s[:, i]
+                if np.sign(m[i]) != 0:
+                    x_mn[:, cos_mn_2] -= c[:, i]
 
-# TODO: add other fields including B, rmns, zmnc, lmnc, etc
-def read_vmec_output(fname):
-    """Reads VMEC data from wout nc file
+        return m_new, n_new, x_mn
 
-    Parameters
-    ----------
-    fname : str or path-like
-        filename of VMEC output file
+    def _fourier_to_zernike(m, n, x_mn, NFP:int=1, L:int=-1, M:int=-1, N:int=-1,
+                            index:str='ansi'):
+        """Converts from a double Fourier series at each flux surface to a
+        Fourier-Zernike basis.
 
-    Returns
-    -------
-    vmec_data : dict
-        the VMEC data fields
+        Parameters
+        ----------
+        m : ndarray, shape(num_modes,)
+            Poloidal mode numbers.
+        n : ndarray, shape(num_modes,)
+            Toroidal mode numbers.
+        x_mn : ndarray, shape(num_modes,)
+            Spectral coefficients in the double Fourier basis.
+            Each row is a separate flux surface, increasing from the magnetic
+            axis to the boundary.
+        NFP : int, optional
+            Number of toroidal field periods.
+        L : int, optional
+            Radial resolution. Default determined by index.
+        M : int, optional
+            Poloidal resolution. Default = MPOL-1 from VMEC solution.
+        N : int, optional
+            Toroidal resolution. Default = NTOR from VMEC solution.
+        index : str, optional
+            Type of Zernike indexing scheme to use. (Default = 'ansi')
 
-    """
+        Returns
+        -------
+        x_lmn : ndarray, shape(num_modes,)
+            Fourier-Zernike spectral coefficients.
+        basis : FourierZernikeBasis
+            Basis set for x_lmn
 
-    file = Dataset(fname, mode='r')
+        """
+        M = M if M >  0 else int(np.max(np.abs(m)))
+        N = N if N >= 0 else int(np.max(np.abs(n)))
 
-    vmec_data = {
-        'NFP': file.variables['nfp'][:],
-        'psi': file.variables['phi'][:],  # toroidal flux is saved as 'phi'
-        'xm': file.variables['xm'][:],
-        'xn': file.variables['xn'][:],
-        'rmnc': file.variables['rmnc'][:],
-        'zmns': file.variables['zmns'][:],
-        'lmns': file.variables['lmns'][:]
-    }
-    try:
-        vmec_data['rmns'] = file.variables['rmns'][:]
-        vmec_data['zmnc'] = file.variables['zmnc'][:]
-        vmec_data['lmnc'] = file.variables['lmnc'][:]
-        vmec_data['sym'] = False
-    except:
-        vmec_data['sym'] = True
+        if not np.any(x_mn[:, np.where(sign(m)*sign(n) == -1)[0]]):
+            sym = Tristate(True)
+        elif not np.any(x_mn[:, np.where(sign(m)*sign(n) == 1)[0]]):
+            sym = Tristate(False)
+        else:
+            sym = Tristate(None)
 
-    return vmec_data
+        basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym, index=index)
+        x_lmn = np.zeros((basis.num_modes,))
 
+        surfs = x_mn.shape[0]
+        rho = np.sqrt(np.linspace(0, 1, surfs))
 
-def vmec_error(equil, vmec_data, Nt=8, Nz=4):
-    """Computes error in SFL coordinates compared to VMEC solution
+        for i in range(len(m)):
+            idx = np.where(np.logical_and(basis.modes[:, 1] == m[i],
+                                          basis.modes[:, 2] == n[i]))[0]
+            if len(idx):
+                A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
+                c = np.linalg.lstsq(A, x_mn[:, i], rcond=None)[0]
+                x_lmn = put(x_lmn, idx, c)
 
-    Parameters
-    ----------
-    equil : dict
-        dictionary of DESC equilibrium parameters
-    vmec_data : dict
-        dictionary of VMEC equilibrium parameters
-    Nt : int
-        number of poloidal angles to sample (Default value = 8)
-    Nz : int
-        number of toroidal angles to sample (Default value = 8)
+        return x_lmn, basis
 
-    Returns
-    -------
-    err : float
-        average Euclidean distance between VMEC and DESC sample points
-
-    """
-    ns = np.size(vmec_data['psi'])
-    rho = np.sqrt(vmec_data['psi'])
-    grid = LinearGrid(L=ns, M=Nt, N=Nz, NFP=equil.NFP, rho=rho)
-    R_basis = equil.R_basis
-    Z_basis = equil.Z_basis
-    R_transf = Transform(grid, R_basis)
-    Z_transf = Transform(grid, Z_basis)
-    vartheta = np.unique(grid.nodes[:, 1])
-    phi = np.unique(grid.nodes[:, 2])
-
-    R_desc = R_transf.transform(equil.cR).reshape((ns, Nt, Nz), order='F')
-    Z_desc = Z_transf.transform(equil.cZ).reshape((ns, Nt, Nz), order='F')
-
-    print('Interpolating VMEC solution to sfl coordinates')
-    R_vmec = np.zeros((ns, Nt, Nz))
-    Z_vmec = np.zeros((ns, Nt, Nz))
-    for k in range(Nz):         # toroidal angle
-        for i in range(ns):     # flux surface
-            theta = np.zeros((Nt,))
-            for j in range(Nt): # poloidal angle
-                f0 = sfl_err(np.array([0]), vartheta[j], phi[k], vmec_data, i)
-                f2pi = sfl_err(np.array([2*np.pi]),
-                               vartheta[j], phi[k], vmec_data, i)
-                flag = (sign(f0) + sign(f2pi)) / 2
-                args = (vartheta[j], phi[k], vmec_data, i, flag)
-                t = fsolve(sfl_err, vartheta[j], args=args)
-                if flag != 0:
-                    t = np.remainder(t+np.pi, 2*np.pi)
-                theta[j] = t   # theta angle that corresponds to vartheta[j]
-            R_vmec[i, :, k] = vmec_transf(
-                vmec_data['rmnc'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-            Z_vmec[i, :, k] = vmec_transf(
-                vmec_data['zmns'][i, :], vmec_data['xm'], vmec_data['xn'], theta, phi[k], trig='sin').flatten()
-            if not vmec_data['sym']:
-                R_vmec[i, :, k] += vmec_transf(vmec_data['rmns'][i, :], vmec_data['xm'],
-                                               vmec_data['xn'], theta, phi[k], trig='sin').flatten()
-                Z_vmec[i, :, k] += vmec_transf(vmec_data['zmnc'][i, :], vmec_data['xm'],
-                                               vmec_data['xn'], theta, phi[k], trig='cos').flatten()
-        print('{}%'.format((k+1)/Nz*100))
-
-    return np.mean(np.sqrt((R_vmec - R_desc)**2 + (Z_vmec - Z_desc)**2))
-
-
-def sfl_err(theta, vartheta, zeta, vmec_data, s, flag=0):
-    """f(theta) = vartheta - theta - lambda(theta)
-
-    Parameters
-    ----------
-    theta : float
-        VMEC poloidal angle
-    vartheta : float
-        sfl poloidal angle
-    zeta : float
-        VMEC/sfl toroidal angle
-    vmec_data : dict
-        dictionary of VMEC equilibrium parameters
-    flag : int
-        offsets theta to ensure f(theta) has one zero (Default value = 0)
-    s :
-
-
-    Returns
-    -------
-    err : float
-        vartheta - theta - lambda
-
-    """
-
-    theta = theta[0] + np.pi*flag
-    phi = zeta
-    l = vmec_transf(vmec_data['lmns'][s, :], vmec_data['xm'],
-                    vmec_data['xn'], theta, phi, trig='sin')
-    if not vmec_data['sym']:
-        l += vmec_transf(vmec_data['lmnc'][s, :], vmec_data['xm'],
-                         vmec_data['xn'], theta, phi, trig='cos')
-    return vartheta - theta - l[0][0][0]
 
 
 def vmec_transf(xmna, xm, xn, theta, phi, trig='sin'):
@@ -512,58 +523,3 @@ def vmec_transf(xmna, xm, xn, theta, phi, trig='sin'):
             f[k, :, :] = np.tensordot(
                 (xmn*cosmt).T, cosnp, axes=1) - np.tensordot((xmn*sinmt).T, sinnp, axes=1)
     return f
-
-
-# TODO: replace this function with vmec_transf
-def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, sym=True):
-    """Interpolates VMEC data on a flux surface
-
-    Parameters
-    ----------
-    Cmn : ndarray
-        cos(mt-np) Fourier coefficients
-    Smn : ndarray
-        sin(mt-np) Fourier coefficients
-    xm : ndarray
-        poloidal mode numbers
-    xn : ndarray
-        toroidal mode numbers
-    theta : ndarray
-        poloidal angles
-    phi : ndarray
-        toroidal angles
-    sym : bool
-        stellarator symmetry (Default value = True)
-
-    Returns
-    -------
-    if sym = True
-        C, S (tuple of ndarray): VMEC data interpolated at the angles (theta,phi)
-        where C has cosine symmetry and S has sine symmetry
-    if sym = False
-        X (ndarray): non-symmetric VMEC data interpolated at the angles (theta,phi)
-
-    """
-
-    C_arr = []
-    S_arr = []
-    dim = Cmn.shape
-
-    for j in range(dim[1]):
-
-        m = xm[j]
-        n = xn[j]
-
-        C = [[[Cmn[s, j]*np.cos(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        S = [[[Smn[s, j]*np.sin(m*t - n*p) for p in phi]
-              for t in theta] for s in range(dim[0])]
-        C_arr.append(C)
-        S_arr.append(S)
-
-    C = np.sum(C_arr, axis=0)
-    S = np.sum(S_arr, axis=0)
-    if sym:
-        return C, S
-    else:
-        return C + S

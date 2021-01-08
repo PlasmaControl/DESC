@@ -149,6 +149,7 @@ class Configuration(IOAble):
                     axis, self._R0_basis, self._Z0_basis)
                 self._r_lmn = np.zeros((self._r_basis.num_modes,))
                 self._l_lmn = np.zeros((self._l_basis.num_modes,))
+                # TODO: change this to satisfy the BCs!
                 self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
                     (self._r_basis.modes[:, 0] == 0, self._r_basis.modes[:, 1] == 0, self._r_basis.modes[:, 2] == 0)))[0], 0.5)
                 self._r_lmn = put(self._r_lmn, np.where(np.logical_and.reduce(
@@ -332,6 +333,18 @@ class Configuration(IOAble):
         self._NFP = NFP
 
     @property
+    def L(self) -> int:
+        return self._L
+
+    @property
+    def M(self) -> int:
+        return self._M
+
+    @property
+    def N(self) -> int:
+        return self._N
+
+    @property
     def R0_basis(self) -> FourierSeries:
         """
         Spectral basis for R0
@@ -477,10 +490,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis,  derivs=0)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         polar_coords = compute_polar_coords(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -507,10 +520,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis,  derivs=0)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (toroidal_coords, polar_coords) = compute_toroidal_coords(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -537,10 +550,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis,  derivs=0)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (cartesian_coords, toroidal_coords,
          polar_coords) = compute_cartesian_coords(
@@ -568,10 +581,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=0)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis,  derivs=0)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=0)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (profiles, polar_coords) = compute_profiles(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -599,10 +612,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis,  derivs=1)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (cov_basis, toroidal_coords, polar_coords) = compute_covariant_basis(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -630,10 +643,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis,  derivs=1)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (con_basis, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_contravariant_basis(
@@ -662,10 +675,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis,  derivs=1)
-        l_transform = Transform(grid, self._l_basis,  derivs=0)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=0)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (jacobian, cov_basis, toroidal_coords, polar_coords) = compute_jacobian(
             self._Psi, self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn,
@@ -694,10 +707,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis,  derivs=1)
-        l_transform = Transform(grid, self._l_basis,  derivs=1)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=1)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_magnetic_field(
@@ -727,10 +740,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis,  derivs=1)
-        l_transform = Transform(grid, self._l_basis,  derivs=1)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=0)
+        r_transform  = Transform(grid, self._r_basis,  derivs=1)
+        l_transform  = Transform(grid, self._l_basis,  derivs=1)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=0)
 
         (magnetic_field, profiles, jacobian, cov_basis, toroidal_coords,
          polar_coords) = compute_magnetic_field_magnitude(
@@ -759,10 +772,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform = Transform(grid, self._r_basis,  derivs=2)
-        l_transform = Transform(grid, self._l_basis,  derivs=2)
-        p_transform = Transform(grid, self._p_basis,  derivs=0)
-        i_transform = Transform(grid, self._i_basis,  derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=0)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
 
         (current_density, magnetic_field, profiles, jacobian, cov_basis,
          toroidal_coords, polar_coords) = compute_current_density(
@@ -791,10 +804,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform = Transform(grid, self._r_basis,  derivs=2)
-        l_transform = Transform(grid, self._l_basis,  derivs=2)
-        p_transform = Transform(grid, self._p_basis,  derivs=1)
-        i_transform = Transform(grid, self._i_basis,  derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=1)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
 
         (force_error, current_density, magnetic_field, profiles, jacobian,
          cov_basis, toroidal_coords, polar_coords) = compute_force_error(
@@ -823,10 +836,10 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=2)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform = Transform(grid, self._r_basis,  derivs=2)
-        l_transform = Transform(grid, self._l_basis,  derivs=2)
-        p_transform = Transform(grid, self._p_basis,  derivs=1)
-        i_transform = Transform(grid, self._i_basis,  derivs=1)
+        r_transform  = Transform(grid, self._r_basis,  derivs=2)
+        l_transform  = Transform(grid, self._l_basis,  derivs=2)
+        p_transform  = Transform(grid, self._p_basis,  derivs=1)
+        i_transform  = Transform(grid, self._i_basis,  derivs=1)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(

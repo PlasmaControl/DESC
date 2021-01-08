@@ -148,19 +148,24 @@ class VMECIO():
         sin_idx = np.where(np.abs(sin_t) >= 1/np.sqrt(2))[0]
         r = put(r, cos_idx, ((R-R0)/cos_t)[cos_idx])
         r = put(r, sin_idx, ((Z-Z0)/sin_t)[sin_idx])
-        inputs['r_lmn'] = R_transform.fit(r)
+        r_basis = FourierZernikeBasis(
+            L=inputs['L'], M=inputs['M'], N=inputs['N'], NFP=inputs['NFP'],
+            sym=R_sym, index=inputs['index'])
+        r_transform = Transform(grid=grid, basis=r_basis)
+        inputs['r_lmn'] = r_transform.fit(r)
 
         # initialize Configuration
         eq = Configuration(inputs=inputs)
 
-        """
         # enforce LCFS BC on r
         A, b = get_lcfs_bc_matrices(eq.R0_basis, eq.Z0_basis, eq.r_basis,
             eq.l_basis, eq.R1_basis, eq.Z1_basis, eq.R1_mn, eq.Z1_mn)
-        Z = null_space(A)
-        r0 = np.linalg.lstsq(A, eq.r_lmn)
-        eq.r_lmn = r0 + Z.dot(Z.T.dot(eq.r_lmn - r0))
-        """
+        A_r = A[:, eq.R0_basis.num_modes+eq.Z0_basis.num_modes:-eq.l_basis.num_modes]
+        Z = null_space(A_r)
+        r0_lmn = np.linalg.lstsq(A_r, b, rcond=None)[0].flatten()
+        eq.r_lmn = r0_lmn + Z.dot(Z.T.dot(eq.r_lmn - r0_lmn))
+
+        print(np.sum((np.matmul(A, eq.x) - b)**2)/b.size)
 
         return eq
 

@@ -8,15 +8,9 @@ import re
 from termcolor import colored
 
 from desc.equilibrium_io import read_desc
-from desc.vmec import vmec_interpolate
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.configuration import Configuration
-
-from desc.compute_funs import compute_polar_coords, compute_toroidal_coords, compute_cartesian_coords
-from desc.compute_funs import compute_profiles, compute_covariant_basis, compute_contravariant_basis
-from desc.compute_funs import compute_jacobian, compute_magnetic_field, compute_magnetic_field_magnitude
-from desc.compute_funs import compute_current_density, compute_force_error, compute_force_error_magnitude
 
 colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
                      (0.8359, 0.3682, 0.0000),  # vermillion
@@ -200,7 +194,7 @@ class Plot:
         """
         if grid is None:
             if kwargs == {}:
-                kwargs.update({'M': 25, 'N': 25, 'NFP': eq.NFP})
+                kwargs.update({'L': 25, 'M': 25, 'NFP': eq.NFP})
             grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", 'red'))
@@ -229,14 +223,14 @@ class Plot:
         cax_kwargs = {'size': '5%',
                       'pad': 0.05}
 
-        im = ax.imshow(data.T, **imshow_kwargs)
+        im = ax.imshow(data, **imshow_kwargs)
         cax = divider.append_axes('right', **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
         cbar.formatter.set_powerlimits((0, 0))
         cbar.update_ticks()
 
-        ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
-        ax.set_ylabel(self.axis_labels_rtz[plot_axes[1]])
+        ax.set_xlabel(self.axis_labels_rtz[plot_axes[1]])
+        ax.set_ylabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_title(self.name_label(name_dict))
         return ax
 
@@ -383,6 +377,8 @@ class Plot:
             out = eq.compute_polar_coords(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] in ['R', 'Z']:
             out = eq.compute_toroidal_coords(grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] in ['p', 'iota', 'psi', 'chi']:
+            out = eq.compute_profiles(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'g':
             out = eq.compute_jacobian(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'B':
@@ -537,168 +533,6 @@ class Plot:
         if name_dict['d'] != '':
             out += '_' + name_dict['d']
         return out
-
-
-# TODO: all of these other plotting routines should be re-written inside the Plot class
-
-
-def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
-    """Plots force balance error
-
-    Parameters
-    ----------
-    equil0, equil1 : dict
-        dictionary of two equilibrium solution quantities
-    label0, label1 : str
-        labels for each equilibria
-    **kwargs :
-        additional plot formatting parameters
-
-    Returns
-    -------
-
-    """
-
-    cR0 = equil0.cR
-    cZ0 = equil0.cZ
-    NFP0 = equil0.NFP
-    R_basis0 = equil0.R_basis
-    Z_basis0 = equil0.Z_basis
-
-    cR1 = equil1.cR
-    cZ1 = equil1.cZ
-    NFP1 = equil1.NFP
-    R_basis1 = equil1.R_basis
-    Z_basis1 = equil1.Z_basis
-
-    if NFP0 == NFP1:
-        NFP = NFP0
-    else:
-        raise ValueError(
-            colored("NFP must be the same for both solutions", 'red'))
-
-    if max(np.max(R_basis0.modes[:, 2]), np.max(R_basis1.modes[:, 2])) == 0:
-        Nz = 1
-        rows = 1
-    else:
-        Nz = 6
-        rows = 2
-
-    Nr = kwargs.get('Nr', 8)
-    Nt = kwargs.get('Nt', 13)
-
-    NNr = 100
-    NNt = 360
-
-    # constant rho surfaces
-    grid_r = LinearGrid(L=Nr, M=NNt, N=Nz, NFP=NFP, endpoint=True)
-    R_transf_0r = Transform(grid_r, R_basis0)
-    Z_transf_0r = Transform(grid_r, Z_basis0)
-    R_transf_1r = Transform(grid_r, R_basis1)
-    Z_transf_1r = Transform(grid_r, Z_basis1)
-
-    # constant theta surfaces
-    grid_t = LinearGrid(L=NNr, M=Nt, N=Nz, NFP=NFP, endpoint=True)
-    R_transf_0t = Transform(grid_t, R_basis0)
-    Z_transf_0t = Transform(grid_t, Z_basis0)
-    R_transf_1t = Transform(grid_t, R_basis1)
-    Z_transf_1t = Transform(grid_t, Z_basis1)
-
-    R0r = R_transf_0r.transform(cR0).reshape((Nr, NNt, Nz), order='F')
-    Z0r = Z_transf_0r.transform(cZ0).reshape((Nr, NNt, Nz), order='F')
-    R1r = R_transf_1r.transform(cR1).reshape((Nr, NNt, Nz), order='F')
-    Z1r = Z_transf_1r.transform(cZ1).reshape((Nr, NNt, Nz), order='F')
-
-    R0v = R_transf_0t.transform(cR0).reshape((NNr, Nt, Nz), order='F')
-    Z0v = Z_transf_0t.transform(cZ0).reshape((NNr, Nt, Nz), order='F')
-    R1v = R_transf_1t.transform(cR1).reshape((NNr, Nt, Nz), order='F')
-    Z1v = Z_transf_1t.transform(cZ1).reshape((NNr, Nt, Nz), order='F')
-
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-
-        ax.plot(R0r[0, 0, k], Z0r[0, 0, k], 'bo')
-        s0 = ax.plot(R0r[:, :, k].T, Z0r[:, :, k].T, 'b-')
-        ax.plot(R0v[:, :, k], Z0v[:, :, k], 'b:')
-
-        ax.plot(R1r[0, 0, k], Z1r[0, 0, k], 'ro')
-        s1 = ax.plot(R1r[:, :, k].T, Z1r[:, :, k].T, 'r-')
-        ax.plot(R1v[:, :, k], Z1v[:, :, k], 'r:')
-
-        ax.axis('equal')
-        ax.set_xlabel('R')
-        ax.set_ylabel('Z')
-        if k == 0:
-            s0[0].set_label(label0)
-            s1[0].set_label(label1)
-            ax.legend(fontsize='xx-small')
-    plt.show()
-
-
-def plot_vmec_comparison(vmec_data, equil):
-    """Plots comparison of VMEC and DESC solutions
-
-    Parameters
-    ----------
-    vmec_data : dict
-        dictionary of VMEC solution quantities.
-    equil : dict
-        dictionary of DESC equilibrium solution quantities.
-
-    Returns
-    -------
-
-    """
-
-    cR = equil.cR
-    cZ = equil.cZ
-    NFP = equil.NFP
-    R_basis = equil.R_basis
-    Z_basis = equil.Z_basis
-
-    Nr = 8
-    Nt = 360
-    if np.max(R_basis.modes[:, 2]) == 0:
-        Nz = 1
-        rows = 1
-    else:
-        Nz = 6
-        rows = 2
-
-    Nr_vmec = vmec_data['rmnc'].shape[0]-1
-    s_idx = Nr_vmec % np.floor(Nr_vmec/(Nr-1))
-    idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
-    if s_idx != 0:
-        idxes = np.pad(idxes, (1, 0), mode='constant')
-        Nr += 1
-    rho = np.sqrt(idxes/Nr_vmec)
-    grid = LinearGrid(L=Nr, M=Nt, N=Nz, NFP=NFP, rho=rho, endpoint=True)
-    R_transf = Transform(grid, R_basis)
-    Z_transf = Transform(grid, Z_basis)
-
-    R_desc = R_transf.transform(cR).reshape((Nr, Nt, Nz), order='F')
-    Z_desc = Z_transf.transform(cZ).reshape((Nr, Nt, Nz), order='F')
-
-    R_vmec, Z_vmec = vmec_interpolate(
-        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'],
-        np.unique(grid.nodes[:, 1]), np.unique(grid.nodes[:, 2]))
-
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-        ax.plot(R_vmec[0, 0, k], Z_vmec[0, 0, k], 'bo')
-        s_vmec = ax.plot(R_vmec[:, :, k].T, Z_vmec[:, :, k].T, 'b-')
-        ax.plot(R_desc[0, 0, k], Z_desc[0, 0, k], 'ro')
-        s_desc = ax.plot(R_desc[:, :, k].T, Z_desc[:, :, k].T, 'r--')
-        ax.axis('equal')
-        ax.set_xlabel('R')
-        ax.set_ylabel('Z')
-        if k == 0:
-            s_vmec[0].set_label('VMEC')
-            s_desc[0].set_label('DESC')
-            ax.legend(fontsize='xx-small')
-    plt.show()
 
 
 def plot_logo(savepath=None, **kwargs):

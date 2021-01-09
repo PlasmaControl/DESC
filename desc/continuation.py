@@ -253,7 +253,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         callback = obj_fun.callback
         args = (equil.R1_mn, equil.Z1_mn, equil.p_l,
                 equil.i_l, equil.Psi, zeta_ratio[ii-1])
-
+        x_init = obj_fun.bc_constraint.project(equil.x)
         if use_jax:
             if verbose > 0:
                 print("Compiling objective function")
@@ -266,14 +266,14 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 equil_obj_jit = jit(
                     equil_obj_scalar, static_argnums=(), device=device)
                 grad_obj_jit = jit(grad, device=device)
-                f0 = equil_obj_jit(equil.x, *args)
-                g0 = grad_obj_jit(equil.x, *args)
+                f0 = equil_obj_jit(x_init, *args)
+                g0 = grad_obj_jit(x_iniit, *args)
             else:
                 equil_obj_jit = jit(
                     equil_obj, static_argnums=(), device=device)
                 jac_obj_jit = jit(jac, device=device)
-                f0 = equil_obj_jit(equil.x, *args)
-                j0 = jac_obj_jit(equil.x, *args)
+                f0 = equil_obj_jit(x_init, *args)
+                j0 = jac_obj_jit(x_init, *args)
 
             timer.stop("Iteration {} compilation".format(ii+1))
             if verbose > 1:
@@ -284,7 +284,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         if verbose > 0:
             print("Starting optimization")
 
-        x_init = obj_fun.bc_constraint.project(equil.x)
+
         timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,

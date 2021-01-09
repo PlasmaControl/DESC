@@ -1,4 +1,5 @@
 import numpy as np
+from desc.backend import jnp
 import scipy.linalg
 from termcolor import colored
 
@@ -122,11 +123,11 @@ class LinearEqualityConstraint():
 
     def recover(self, y):
         """Recover the full solution x from the optimization variable y"""
-        x = self._x0 + self._Z.dot(y)
-        return x.flatten()
+        x = self._x0 + jnp.dot(self._Z, y)
+        return jnp.squeeze(x)
 
     def project(self, x):
         """Project a full solution x to the optimization variable y"""
         dx = x - self._x0
-        y = self._Z.T.dot(dx)
-        return y.flatten()
+        y = jnp.dot(self._Z.T, dx)
+        return jnp.squeeze(y)

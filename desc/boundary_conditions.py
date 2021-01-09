@@ -39,13 +39,12 @@ class BoundaryConstraint(LinearEqualityConstraint):
 
     """
 
-    def __init__(self, R0_basis, Z0_basis, r_basis, l_basis,
-                 R1_basis, Z1_basis, R1_mn, Z1_mn, x0=None):
+    def __init__(self, R0_basis, Z0_basis, r_basis, l_basis, x0=None):
 
         Aaxis, baxis = get_axis_bc_matrices(
             R0_basis, Z0_basis, r_basis, l_basis)
         Alcfs, blcfs = get_lcfs_bc_matrices(
-            R0_basis, Z0_basis, r_basis, l_basis, R1_basis, Z1_basis, R1_mn, Z1_mn)
+            R0_basis, Z0_basis, r_basis, l_basis)
         Agauge, bgauge = get_gauge_bc_matrices(
             R0_basis, Z0_basis, r_basis, l_basis)
 
@@ -61,14 +60,6 @@ class BoundaryConstraint(LinearEqualityConstraint):
         self._bgauge = bgauge
 
         super().__init__(A, b)
-
-    def get_b(self, R1_mn, Z1_mn):
-
-        z1 = jnp.zeros(self._baxis.size)
-        z2 = jnp.zeros(self._bgauge.size)
-
-        b = jnp.concatenate([z1, R1_mn.flatten(), Z1_mn.flatten(), z2])
-        return b
 
 
 def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
@@ -117,12 +108,10 @@ def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     return A, b
 
 
-def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
-                         R1_basis, Z1_basis, R1_mn, Z1_mn):
+def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     """Compute constraint matrices for the shape of the last closed flux surface.
 
-    enforces R0 + r(1,theta,zeta)*cos(theta) == R1 and
-    Z0 + r(1,theta,zeta)*sin(theta) == Z1
+    enforces r(1,theta,zeta) == 1
 
     Parameters
     ----------
@@ -134,14 +123,6 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
         Fourier-Zernike basis for r
     l_basis : Basis
         Fourier-Zernike basis for lambda
-    R1_basis : Basis
-        Double Fourier basis for boundary R
-    Z1_basis : Basis
-        Double Fourier basis for boundary Z
-    R1_mn : ndarray
-        Array of spectral coefficients for boundary R
-    Z1_mn : ndarray
-        Array of spectral coefficients for boundary Z
 
     Returns
     -------
@@ -154,68 +135,27 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis,
     Z0_modes = Z0_basis.modes
     r_modes = r_basis.modes
     l_modes = l_basis.modes
-    R1_modes = R1_basis.modes
-    Z1_modes = Z1_basis.modes
 
     dim_R0 = len(R0_modes)
     dim_Z0 = len(Z0_modes)
     dim_r = len(r_modes)
     dim_l = len(l_modes)
     dimx = dim_R0 + dim_Z0 + dim_r + dim_l
-    dim_R1 = len(R1_modes)
-    dim_Z1 = len(Z1_modes)
 
-    AR = np.zeros((dim_R1, dimx))
-    AZ = np.zeros((dim_Z1, dimx))
-    bR = R1_mn.reshape((-1, 1))
-    bZ = Z1_mn.reshape((-1, 1))
+    MN = np.unique(r_modes[:, 1:], axis=0)
+    numMN = len(MN)
 
-    for i, (l, m, n) in enumerate(R1_modes):
-        if m == 0:
-            j = np.argwhere(R0_modes == n)
-            AR[i, j] = 1
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == 1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AR[i, j] = 1/2
-        elif abs(m) == 1:
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == 0, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AR[i, j] = 1
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == 1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AR[i, j] = 1/2
+    A = np.zeros((numMN, dimx))
+    b = np.zeros((numMN, 1))
+
+    for i, (m, n) in enumerate(MN):
+        j = np.argwhere(np.logical_and(r_modes[:, 1] == m, r_modes[:, 2] == n))
+        A[i, dim_R0 + dim_Z0 + j] = 1
+        if m == 0 and n == 0:
+            b[i] = 1
         else:
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == m+1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AR[i, j] = 1/2
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == m-1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AR[i, j] = -1/2
+            b[i] = 0
 
-    for i, (l, m, n) in enumerate(Z1_modes):
-        if m == 0:
-            j = np.argwhere(Z0_modes == n) + dim_R0
-            AZ[i, j] = 1
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == -1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AZ[i, j] = 1/2
-        elif abs(m) == 1:
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == 0, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AZ[i, j] = 1
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == 1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AZ[i, j] = -1/2
-        else:
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == -m-1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AZ[i, j] = 1/2
-            j = np.argwhere(np.logical_and(
-                r_modes[:, 1] == -m+1, r_modes[:, 2] == n)) + dim_R0 + dim_Z0
-            AZ[i, j] = -1/2
-
-    A = np.vstack([AR, AZ])
-    b = np.vstack([bR, bZ])
     return A, b
 
 

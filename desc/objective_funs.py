@@ -80,17 +80,17 @@ class ObjectiveFunction(IOAble, ABC):
         """
         self.R0_transform = R0_transform
         self.Z0_transform = Z0_transform
-        self.r_transform  = r_transform
-        self.l_transform  = l_transform
+        self.r_transform = r_transform
+        self.l_transform = l_transform
         self.R1_transform = R1_transform
         self.Z1_transform = Z1_transform
-        self.p_transform  = p_transform
-        self.i_transform  = i_transform
+        self.p_transform = p_transform
+        self.i_transform = i_transform
         self.bc_constraint = bc_constraint
 
         self._grad = Derivative(self.compute_scalar, mode='grad')
         self._hess = Derivative(self.compute_scalar, mode='hess')
-        self._jac  = Derivative(self.compute, mode='fwd')
+        self._jac = Derivative(self.compute, mode='fwd')
 
     @abstractmethod
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -185,10 +185,8 @@ class ForceErrorNodes(ObjectiveFunction):
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
 
-        b = self.bc_constraint.get_b(R1_mn, Z1_mn)
-        x0 = self.bc_constraint.Ainv.dot(b)
         # input x is really "y", need to convert to full x
-        x = x0 + self.bc_constraint.Z.dot(x)
+        x = self.bc_constraint.recover(x)
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
             x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,

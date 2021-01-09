@@ -22,6 +22,10 @@ r_lmn : ndarray
     spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
 l_lmn : ndarray
     spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+R1_mn : ndarray
+    spectral coefficients of R1(theta,zeta) -- last closed flux surface
+Z1_mn : ndarray
+    spectral coefficients of Z1(theta,zeta) -- last closed flux surface
 p_l : ndarray
     spectral coefficients of p(rho) -- pressure profile
 i_l : ndarray
@@ -34,6 +38,10 @@ r_transform : Transform
     transforms r_lmn coefficients to real space
 l_transform : Transform
     transforms l_lmn coefficients to real space
+R1_transform : Transform
+    transforms R1_mn coefficients to real space
+Z1_transform : Transform
+    transforms Z1_mn coefficients to real space
 p_transform : Transform
     transforms p_l coefficients to real space
 i_transform : Transform
@@ -46,10 +54,11 @@ zeta_ratio : float
 """
 
 
-def compute_polar_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_polar_coords(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Transforms spectral coefficients of polar coordinates to real space.
 
     Parameters
@@ -64,6 +73,10 @@ def compute_polar_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -76,6 +89,10 @@ def compute_polar_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -101,16 +118,19 @@ def compute_polar_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
 
     polar_coords['R0'] = R0_transform.transform(R0_n)
     polar_coords['Z0'] = Z0_transform.transform(Z0_n)
-    polar_coords['r'] = r_transform.transform(r_lmn)
+    polar_coords['r']  = r_transform.transform(r_lmn)
     polar_coords['lambda'] = l_transform.transform(l_lmn)
+    polar_coords['R1'] = R1_transform.transform(R1_mn)
+    polar_coords['Z1'] = Z1_transform.transform(Z1_mn)
 
     return polar_coords
 
 
-def compute_profiles(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_profiles(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes magnetic flux, pressure, and rotational transform profiles.
 
     Parameters
@@ -125,6 +145,10 @@ def compute_profiles(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -137,6 +161,10 @@ def compute_profiles(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -175,10 +203,11 @@ def compute_profiles(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return profiles, polar_coords
 
 
-def compute_toroidal_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_toroidal_coords(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes toroidal coordinates from polar coordinates.
 
     Parameters
@@ -193,6 +222,10 @@ def compute_toroidal_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -205,6 +238,10 @@ def compute_toroidal_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -226,22 +263,26 @@ def compute_toroidal_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     polar_coords = compute_polar_coords(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     toroidal_coords = {}
-    toroidal_coords['R'] = polar_coords['R0'] + polar_coords['r']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z'] = polar_coords['Z0'] + polar_coords['r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['phi'] = polar_coords['zeta']   # phi = zeta
     toroidal_coords['0'] = polar_coords['0']
+    toroidal_coords['R'] = polar_coords['R0'] + polar_coords['r']*(
+        polar_coords['R1']-polar_coords['R0'])
+    toroidal_coords['Z'] = polar_coords['Z0'] + polar_coords['r']*(
+        polar_coords['Z1']-polar_coords['Z0'])
+    toroidal_coords['phi'] = polar_coords['zeta'] # phi = zeta
 
     return toroidal_coords, polar_coords
 
 
-def compute_cartesian_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_cartesian_coords(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes cartesian coordinates from toroidal coordinates.
 
     Parameters
@@ -256,6 +297,10 @@ def compute_cartesian_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -268,6 +313,10 @@ def compute_cartesian_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -293,8 +342,9 @@ def compute_cartesian_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     toroidal_coords, polar_coords = compute_toroidal_coords(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     cartesian_coords = {}
     cartesian_coords['X'] = toroidal_coords['R']*np.cos(toroidal_coords['phi'])
@@ -305,10 +355,11 @@ def compute_cartesian_coords(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return cartesian_coords, toroidal_coords, polar_coords
 
 
-def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_covariant_basis(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes covariant basis vectors.
 
     Parameters
@@ -323,6 +374,10 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -335,6 +390,10 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -360,27 +419,34 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     toroidal_coords, polar_coords = compute_toroidal_coords(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     # polar coordinate 1st derivatives
-    polar_coords['R0_z'] = R0_transform.transform(R0_n, 0, 0, 1)
-    polar_coords['Z0_z'] = Z0_transform.transform(Z0_n, 0, 0, 1)
-    polar_coords['r_r'] = r_transform.transform(r_lmn, 1, 0, 0)
-    polar_coords['r_t'] = r_transform.transform(r_lmn, 0, 1, 0)
-    polar_coords['r_z'] = r_transform.transform(r_lmn, 0, 0, 1)
+    polar_coords['R0_z'] = R0_transform.transform(R0_n, 0, 0, 1) *zeta_ratio
+    polar_coords['Z0_z'] = Z0_transform.transform(Z0_n, 0, 0, 1) *zeta_ratio
+    polar_coords['r_r']  = r_transform.transform(r_lmn, 1, 0, 0)
+    polar_coords['r_t']  = r_transform.transform(r_lmn, 0, 1, 0)
+    polar_coords['r_z']  = r_transform.transform(r_lmn, 0, 0, 1) *zeta_ratio
+    polar_coords['R1_t'] = R1_transform.transform(R1_mn, 0, 1, 0)
+    polar_coords['Z1_t'] = Z1_transform.transform(Z1_mn, 0, 1, 0)
+    polar_coords['R1_z'] = R1_transform.transform(R1_mn, 0, 0, 1)*zeta_ratio
+    polar_coords['Z1_z'] = Z1_transform.transform(Z1_mn, 0, 0, 1)*zeta_ratio
 
     # toroidal coordinate 1st derivatives
-    toroidal_coords['R_r'] = polar_coords['r_r']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_r'] = polar_coords['r_r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['R_t'] = polar_coords['r_t']*jnp.cos(polar_coords['theta']) - polar_coords['r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['Z_t'] = polar_coords['r_t']*jnp.sin(polar_coords['theta']) + polar_coords['r']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['R_z'] = polar_coords['R0_z'] + polar_coords['r_z']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_z'] = polar_coords['Z0_z'] + polar_coords['r_z']*jnp.sin(polar_coords['theta'])
-
-    # apply zeta ratio
-    toroidal_coords['R_z'] *= zeta_ratio
-    toroidal_coords['Z_z'] *= zeta_ratio
+    toroidal_coords['R_r'] = polar_coords['r_r']*(polar_coords['R1']-polar_coords['R0'])
+    toroidal_coords['Z_r'] = polar_coords['r_r']*(polar_coords['Z1']-polar_coords['Z0'])
+    toroidal_coords['R_t'] = polar_coords['r_t']*(polar_coords['R1']-polar_coords['R0']) \
+                           + polar_coords['r']*polar_coords['R1_t']
+    toroidal_coords['Z_t'] = polar_coords['r_t']*(polar_coords['Z1']-polar_coords['Z0']) \
+                           + polar_coords['r']*polar_coords['Z1_t']
+    toroidal_coords['R_z'] = polar_coords['R0_z'] + \
+                           + polar_coords['r_z']*(polar_coords['R1']-polar_coords['R0']) \
+                           + polar_coords['r']*(polar_coords['R1_z']-polar_coords['R0_z'])
+    toroidal_coords['Z_z'] = polar_coords['Z0_z'] + \
+                           + polar_coords['r_z']*(polar_coords['Z1']-polar_coords['Z0']) \
+                           + polar_coords['r']*(polar_coords['Z1_z']-polar_coords['Z0_z'])
 
     cov_basis = {}
     cov_basis['e_rho'] = jnp.array(
@@ -393,10 +459,11 @@ def compute_covariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return cov_basis, toroidal_coords, polar_coords
 
 
-def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_jacobian(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes coordinate system jacobian.
 
     Parameters
@@ -411,6 +478,10 @@ def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -423,6 +494,10 @@ def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -452,8 +527,9 @@ def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     cov_basis, toroidal_coords, polar_coords = compute_covariant_basis(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     jacobian = {}
     jacobian['g'] = dot(cov_basis['e_rho'],
@@ -462,10 +538,11 @@ def compute_jacobian(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_contravariant_basis(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes contravariant basis vectors.
 
     Parameters
@@ -480,6 +557,10 @@ def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -492,6 +573,10 @@ def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -524,8 +609,9 @@ def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     jacobian, cov_basis, toroidal_coords, polar_coords = compute_jacobian(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     con_basis = {}
     con_basis['e^rho'] = cross(
@@ -538,10 +624,11 @@ def compute_contravariant_basis(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return con_basis, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_magnetic_field(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes magnetic field components.
 
     Parameters
@@ -556,6 +643,10 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -568,6 +659,10 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -604,17 +699,20 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
 
     """
     # prerequisites
-    profiles, polar_coords = compute_profiles(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
     jacobian, cov_basis, toroidal_coords, polar_coords = compute_jacobian(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
+
+    # profiles
+    profiles = {}
+    profiles['iota']  = i_transform.transform(i_l, 0)
+    profiles['psi']   = Psi*polar_coords['rho']**2
     profiles['psi_r'] = 2*Psi*polar_coords['rho']
 
     # lambda derivatives
     polar_coords['lambda_t'] = l_transform.transform(l_lmn, 0, 1, 0)
-    polar_coords['lambda_z'] = l_transform.transform(l_lmn, 0, 0, 1)
+    polar_coords['lambda_z'] = l_transform.transform(l_lmn, 0, 0, 1)*zeta_ratio
 
     magnetic_field = {}
     magnetic_field['B0'] = profiles['psi_r'] / (2*jnp.pi*jacobian['g'])
@@ -634,10 +732,11 @@ def compute_magnetic_field(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_magnetic_field_magnitude(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes magnetic field magnitude.
 
     Parameters
@@ -652,6 +751,10 @@ def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -664,6 +767,10 @@ def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -701,8 +808,9 @@ def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords = compute_magnetic_field(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     magnetic_field['|B|'] = jnp.sqrt(
         magnetic_field['B^theta']**2*dot(cov_basis['e_theta'], cov_basis['e_theta'], 0) + \
@@ -712,10 +820,11 @@ def compute_magnetic_field_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_current_density(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes current density field components.
 
     Parameters
@@ -730,6 +839,10 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -742,6 +855,10 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -783,60 +900,71 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords = compute_magnetic_field(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
     mu0 = 4*jnp.pi*1e-7
 
     # polar coordinate derivatives
-    polar_coords['R0_zz'] = R0_transform.transform(R0_n, 0, 0, 2)
-    polar_coords['Z0_zz'] = Z0_transform.transform(Z0_n, 0, 0, 2)
-    polar_coords['r_rr'] = r_transform.transform(r_lmn, 2, 0, 0)
-    polar_coords['r_rt'] = r_transform.transform(r_lmn, 1, 1, 0)
-    polar_coords['r_rz'] = r_transform.transform(r_lmn, 1, 0, 1)
-    polar_coords['r_tt'] = r_transform.transform(r_lmn, 0, 2, 0)
-    polar_coords['r_tz'] = r_transform.transform(r_lmn, 0, 1, 1)
-    polar_coords['r_zz'] = r_transform.transform(r_lmn, 0, 0, 2)
+    polar_coords['R0_zz'] = R0_transform.transform(R0_n, 0, 0, 2) *zeta_ratio
+    polar_coords['Z0_zz'] = Z0_transform.transform(Z0_n, 0, 0, 2) *zeta_ratio
+    polar_coords['r_rr']  = r_transform.transform(r_lmn, 2, 0, 0)
+    polar_coords['r_rt']  = r_transform.transform(r_lmn, 1, 1, 0)
+    polar_coords['r_rz']  = r_transform.transform(r_lmn, 1, 0, 1) *zeta_ratio
+    polar_coords['r_tt']  = r_transform.transform(r_lmn, 0, 2, 0)
+    polar_coords['r_tz']  = r_transform.transform(r_lmn, 0, 1, 1) *zeta_ratio
+    polar_coords['r_zz']  = r_transform.transform(r_lmn, 0, 0, 2) *zeta_ratio
+    polar_coords['R1_tt'] = R1_transform.transform(R1_mn, 0, 2, 0)
+    polar_coords['Z1_tt'] = Z1_transform.transform(Z1_mn, 0, 2, 0)
+    polar_coords['R1_tz'] = R1_transform.transform(R1_mn, 0, 1, 1)*zeta_ratio
+    polar_coords['Z1_tz'] = Z1_transform.transform(Z1_mn, 0, 1, 1)*zeta_ratio
+    polar_coords['R1_zz'] = R1_transform.transform(R1_mn, 0, 0, 2)*zeta_ratio
+    polar_coords['Z1_zz'] = Z1_transform.transform(Z1_mn, 0, 0, 2)*zeta_ratio
 
     # lambda derivatives
     polar_coords['lambda_rt'] = l_transform.transform(l_lmn, 1, 1, 0)
-    polar_coords['lambda_rz'] = l_transform.transform(l_lmn, 1, 0, 1)
+    polar_coords['lambda_rz'] = l_transform.transform(l_lmn, 1, 0, 1)*zeta_ratio
     polar_coords['lambda_tt'] = l_transform.transform(l_lmn, 0, 2, 0)
-    polar_coords['lambda_tz'] = l_transform.transform(l_lmn, 0, 1, 1)
-    polar_coords['lambda_zz'] = l_transform.transform(l_lmn, 0, 0, 2)
+    polar_coords['lambda_tz'] = l_transform.transform(l_lmn, 0, 1, 1)*zeta_ratio
+    polar_coords['lambda_zz'] = l_transform.transform(l_lmn, 0, 0, 2)*zeta_ratio
 
     # profile derivatives
     profiles['iota_r'] = i_transform.transform(i_l, 1)
     profiles['psi_rr'] = 2*Psi*jnp.ones_like(profiles['psi'])
 
     # toroidal coordinate 2nd derivatives
-    toroidal_coords['R_rr'] = polar_coords['r_rr']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_rr'] = polar_coords['r_rr']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['R_rt'] = polar_coords['r_rt']*jnp.cos(polar_coords['theta']) \
-                            - polar_coords['r_r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['Z_rt'] = polar_coords['r_rt']*jnp.sin(polar_coords['theta']) \
-                            + polar_coords['r_r']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['R_rz'] = polar_coords['r_rz']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_rz'] = polar_coords['r_rz']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['R_tt'] = polar_coords['r_tt']*jnp.cos(polar_coords['theta']) \
-                            - 2*polar_coords['r_t']*jnp.sin(polar_coords['theta']) \
-                            - polar_coords['r']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_tt'] = polar_coords['r_tt']*jnp.sin(polar_coords['theta']) \
-                            + 2*polar_coords['r_t']*jnp.cos(polar_coords['theta']) \
-                            - polar_coords['r']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['R_tz'] = polar_coords['r_tz']*jnp.cos(polar_coords['theta']) \
-                            - polar_coords['r_z']*jnp.sin(polar_coords['theta'])
-    toroidal_coords['Z_tz'] = polar_coords['r_tz']*jnp.sin(polar_coords['theta']) \
-                            + polar_coords['r_z']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['R_zz'] = polar_coords['R0_zz'] + polar_coords['r_zz']*jnp.cos(polar_coords['theta'])
-    toroidal_coords['Z_zz'] = polar_coords['Z0_zz'] + polar_coords['r_zz']*jnp.sin(polar_coords['theta'])
-
-    # apply zeta ratio
-    toroidal_coords['R_rz'] *= zeta_ratio
-    toroidal_coords['Z_rz'] *= zeta_ratio
-    toroidal_coords['R_tz'] *= zeta_ratio
-    toroidal_coords['Z_tz'] *= zeta_ratio
-    toroidal_coords['R_zz'] *= zeta_ratio
-    toroidal_coords['Z_zz'] *= zeta_ratio
+    toroidal_coords['R_rr'] = polar_coords['r_rr']*(polar_coords['R1']-polar_coords['R0'])
+    toroidal_coords['Z_rr'] = polar_coords['r_rr']*(polar_coords['Z1']-polar_coords['Z0'])
+    toroidal_coords['R_rt'] = polar_coords['r_rt']*(polar_coords['R1']-polar_coords['R0']) \
+                            + polar_coords['r_r']*polar_coords['R1_t']
+    toroidal_coords['Z_rt'] = polar_coords['r_rt']*(polar_coords['Z1']-polar_coords['Z0']) \
+                            + polar_coords['r_r']*polar_coords['Z1_t']
+    toroidal_coords['R_rz'] = polar_coords['r_rz']*(polar_coords['R1']-polar_coords['R0']) \
+                            + polar_coords['r_r']*(polar_coords['R1_z']-polar_coords['R0_z'])
+    toroidal_coords['Z_rz'] = polar_coords['r_rz']*(polar_coords['Z1']-polar_coords['Z0']) \
+                            + polar_coords['r_r']*(polar_coords['Z1_z']-polar_coords['Z0_z'])
+    toroidal_coords['R_tt'] = polar_coords['r_tt']*(polar_coords['R1']-polar_coords['R0']) \
+                            + 2*polar_coords['r_t']*polar_coords['R1_t'] \
+                            + polar_coords['r']*polar_coords['R1_tt']
+    toroidal_coords['Z_tt'] = polar_coords['r_tt']*(polar_coords['Z1']-polar_coords['Z0']) \
+                            + 2*polar_coords['r_t']*polar_coords['Z1_t'] \
+                            + polar_coords['r']*polar_coords['Z1_tt']
+    toroidal_coords['R_tz'] = polar_coords['r_tz']*(polar_coords['R1']-polar_coords['R0']) \
+                            + polar_coords['r_z']*polar_coords['R1_t'] \
+                            + polar_coords['r_t']*(polar_coords['R1_z']-polar_coords['R0_z']) \
+                            + polar_coords['r']*polar_coords['R1_tz']
+    toroidal_coords['Z_tz'] = polar_coords['r_tz']*(polar_coords['Z1']-polar_coords['Z0']) \
+                            + polar_coords['r_z']*polar_coords['Z1_t'] \
+                            + polar_coords['r_t']*(polar_coords['Z1_z']-polar_coords['Z0_z']) \
+                            + polar_coords['r']*polar_coords['Z1_tz']
+    toroidal_coords['R_zz'] = polar_coords['R0_zz'] \
+                            + polar_coords['r_zz']*(polar_coords['R1']-polar_coords['R0']) \
+                            + 2*polar_coords['r_z']*(polar_coords['R1_z']-polar_coords['R0_z']) \
+                            + polar_coords['r']*(polar_coords['R1_zz']-polar_coords['R0_zz'])
+    toroidal_coords['Z_zz'] = polar_coords['Z0_zz'] \
+                            + polar_coords['r_zz']*(polar_coords['Z1']-polar_coords['Z0']) \
+                            + 2*polar_coords['r_z']*(polar_coords['Z1_z']-polar_coords['Z0_z']) \
+                            + polar_coords['r']*(polar_coords['Z1_zz']-polar_coords['Z0_zz'])
 
     # covariant basis derivatives
     cov_basis['e_rho_r'] = jnp.array(
@@ -937,10 +1065,11 @@ def compute_current_density(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return current_density, magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_force_error(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes force error components.
 
     Parameters
@@ -955,6 +1084,10 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -967,6 +1100,10 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1012,8 +1149,9 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     """
     # prerequisites
     current_density, magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords = compute_current_density(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
 
     # profile derivatives
     profiles['p_r'] = p_transform.transform(p_l, 1)
@@ -1028,10 +1166,11 @@ def compute_force_error(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
     return force_error, current_density, magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
-def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
+def compute_force_error_magnitude(
+    Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
     R0_transform:Transform, Z0_transform:Transform, r_transform:Transform,
-    l_transform:Transform, p_transform:Transform, i_transform:Transform,
-    zeta_ratio=1.0):
+    l_transform:Transform, R1_transform:Transform, Z1_transform:Transform,
+    p_transform:Transform, i_transform:Transform, zeta_ratio=1.0):
     """Computes force error magnitude.
 
     Parameters
@@ -1046,6 +1185,10 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
     l_lmn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
     i_l : ndarray
@@ -1058,6 +1201,10 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
         transforms r_lmn coefficients to real space
     l_transform : Transform
         transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1106,12 +1253,19 @@ def compute_force_error_magnitude(Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l,
 
     """
     # prerequisites
-    con_basis, jacobian, cov_basis, toroidal_coords, polar_coords = compute_contravariant_basis(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
     force_error, current_density, magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords = compute_force_error(
-        Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, R0_transform, Z0_transform,
-        r_transform, l_transform, p_transform, i_transform, zeta_ratio)
+        Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l, R0_transform,
+        Z0_transform, r_transform, l_transform, R1_transform, Z1_transform,
+        p_transform, i_transform, zeta_ratio)
+
+    # contravariant basis vectors
+    con_basis = {}
+    con_basis['e^rho'] = cross(
+        cov_basis['e_theta'], cov_basis['e_zeta'], 0) / jacobian['g']
+    con_basis['e^theta'] = cross(
+        cov_basis['e_zeta'], cov_basis['e_rho'], 0) / jacobian['g']
+    con_basis['e^zeta'] = jnp.array(
+        [toroidal_coords['0'], 1/toroidal_coords['R'], toroidal_coords['0']])
 
     force_error['beta'] = magnetic_field['B^zeta']*con_basis['e^theta'] \
                         - magnetic_field['B^theta']*con_basis['e^zeta']

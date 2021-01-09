@@ -122,7 +122,11 @@ class VMECIO():
             NFP=inputs['NFP'], L=inputs['L'], M=inputs['M'], N=inputs['N'],
             index=inputs['index'])
 
-        # evaluate flux surface shapes
+        # initialize Configuration before setting r
+        eq = Configuration(inputs=inputs)
+        polar_coords = eq.compute_polar_coords(grid)
+
+        # r
         m, n, R_mn = cls._ptolemy_identity(xm, xn, s=rmns, c=rmnc)
         m, n, Z_mn = cls._ptolemy_identity(xm, xn, s=zmns, c=zmnc)
         R_lmn, R_basis = cls._fourier_to_zernike(m, n, R_mn,
@@ -131,40 +135,25 @@ class VMECIO():
         Z_lmn, Z_basis = cls._fourier_to_zernike(m, n, Z_mn,
             NFP=inputs['NFP'], L=inputs['L'], M=inputs['M'], N=inputs['N'],
             index=inputs['index'])
-        R0_transform = Transform(grid=grid, basis=R0_basis)
-        Z0_transform = Transform(grid=grid, basis=Z0_basis)
         R_transform = Transform(grid=grid, basis=R_basis)
         Z_transform = Transform(grid=grid, basis=Z_basis)
-        R0 = R0_transform.transform(inputs['R0_n'])
-        Z0 = Z0_transform.transform(inputs['Z0_n'])
         R = R_transform.transform(R_lmn)
         Z = Z_transform.transform(Z_lmn)
+        r_R = (R-polar_coords['R0']) / (polar_coords['R1']-polar_coords['R0'])
+        r_Z = (Z-polar_coords['Z0']) / (polar_coords['Z1']-polar_coords['Z0'])
+        r = np.where(r_Z <= 1, r_Z, r_R)
+        r_transform = Transform(grid=grid, basis=eq.r_basis)
+        eq.r_lmn = r_transform.fit(r)
 
-        # r
-        r = np.zeros_like(R)
-        theta = grid.nodes[:, 1]
-        cos_t = np.cos(theta)
-        sin_t = np.sin(theta)
-        cos_idx = np.where(np.abs(cos_t) >= 1/np.sqrt(2))[0]
-        sin_idx = np.where(np.abs(sin_t) >= 1/np.sqrt(2))[0]
-        r = put(r, cos_idx, ((R-R0)/cos_t)[cos_idx])
-        r = put(r, sin_idx, ((Z-Z0)/sin_t)[sin_idx])
-        r_basis = FourierZernikeBasis(
-            L=inputs['L'], M=inputs['M'], N=inputs['N'], NFP=inputs['NFP'],
-            sym=R_sym, index=inputs['index'])
-        r_transform = Transform(grid=grid, basis=r_basis)
-        inputs['r_lmn'] = r_transform.fit(r)
-
-        # initialize Configuration
-        eq = Configuration(inputs=inputs)
-
-        # enforce LCFS BC on r
+        # TODO: enforce BCs on r
+        """
         A, b = get_lcfs_bc_matrices(eq.R0_basis, eq.Z0_basis, eq.r_basis,
             eq.l_basis, eq.R1_basis, eq.Z1_basis, eq.R1_mn, eq.Z1_mn)
         A_r = A[:, eq.R0_basis.num_modes+eq.Z0_basis.num_modes:-eq.l_basis.num_modes]
         Z = null_space(A_r)
         r0_lmn = np.linalg.lstsq(A_r, b, rcond=None)[0].flatten()
         eq.r_lmn = r0_lmn + Z.dot(Z.T.dot(eq.r_lmn - r0_lmn))
+        """
 
         return eq
 

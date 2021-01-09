@@ -80,17 +80,17 @@ class ObjectiveFunction(IOAble, ABC):
         """
         self.R0_transform = R0_transform
         self.Z0_transform = Z0_transform
-        self.r_transform = r_transform
-        self.l_transform = l_transform
+        self.r_transform  = r_transform
+        self.l_transform  = l_transform
         self.R1_transform = R1_transform
         self.Z1_transform = Z1_transform
-        self.p_transform = p_transform
-        self.i_transform = i_transform
+        self.p_transform  = p_transform
+        self.i_transform  = i_transform
         self.bc_constraint = bc_constraint
 
         self._grad = Derivative(self.compute_scalar, mode='grad')
         self._hess = Derivative(self.compute_scalar, mode='hess')
-        self._jac = Derivative(self.compute, mode='fwd')
+        self._jac  = Derivative(self.compute, mode='fwd')
 
     @abstractmethod
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -196,8 +196,9 @@ class ForceErrorNodes(ObjectiveFunction):
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
-             Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, self.R0_transform,
-             self.Z0_transform, self.r_transform, self.l_transform,
+             Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
+             self.R0_transform, self.Z0_transform, self.r_transform,
+             self.l_transform, self.R1_transform, self.Z1_transform,
              self.p_transform, self.i_transform, zeta_ratio)
 
         volumes = self.R0_transform.grid.volumes
@@ -228,8 +229,9 @@ class ForceErrorNodes(ObjectiveFunction):
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
-             Psi, R0_n, Z0_n, r_lmn, l_lmn, p_l, i_l, self.R0_transform,
-             self.Z0_transform, self.r_transform, self.l_transform,
+             Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
+             self.R0_transform, self.Z0_transform, self.r_transform,
+             self.l_transform, self.R1_transform, self.Z1_transform,
              self.p_transform, self.i_transform, zeta_ratio)
 
         volumes = self.R0_transform.grid.volumes
@@ -259,20 +261,15 @@ class ObjectiveFunctionFactory():
 
     Methods
     -------
-    get_equil_obj_fxn(errr_mode, RZ_transform:Transform=None,
-                 RZb_transform:Transform=None, L_transform:Transform=None,
-                 pres_transform:Transform=None, iota_transform:Transform=None,
-                 stell_sym:bool=True, scalar:bool=False)
-
-        Takes type of objective function and attributes of an equilibrium and uses it to compute and return the corresponding objective function
+    get_equil_obj_fun()
 
     """
 
     def get_equil_obj_fun(errr_mode,
                           R0_transform: Transform = None, Z0_transform: Transform = None,
+                          r_transform: Transform = None, l_transform: Transform = None,
                           R1_transform: Transform = None, Z1_transform: Transform = None,
-                          L_transform: Transform = None, p_transform: Transform = None,
-                          i_transform: Transform = None) -> ObjectiveFunction:
+                          p_transform: Transform = None, i_transform: Transform = None) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
 
         Parameters
@@ -280,20 +277,22 @@ class ObjectiveFunctionFactory():
         errr_mode : str
             error mode of the objective function
             one of 'force', 'accel'
-        R0_transform : Transform, optional
-            transforms R coefficients to real space in the volume
-        Z0_transform : Transform, optional
-            transforms Z coefficients to real space in the volume
-        R1_transform : Transform, optional
-            transforms R coefficients to real space on the surface
-        Z1_transform : Transform, optional
-            transforms Z coefficients to real space on the surface
-        L_transform : Transform, optional
-            transforms lambda coefficients to real space
-        p_transform : Transform, optional
-            transforms pressure coefficients to real space
-        i_transform : Transform, optional
-            transforms rotational transform coefficients to real space
+        R0_transform : Transform
+            transforms R0_n coefficients to real space
+        Z0_transform : Transform
+            transforms Z0_n coefficients to real space
+        r_transform : Transform
+            transforms r_lmn coefficients to real space
+        l_transform : Transform
+            transforms l_lmn coefficients to real space
+        R1_transform : Transform
+            transforms R1_mn coefficients to real space
+        Z1_transform : Transform
+            transforms Z1_mn coefficients to real space
+        p_transform : Transform
+            transforms p_l coefficients to real space
+        i_transform : Transform
+            transforms i_l coefficients to real space
 
         Returns
         -------
@@ -306,10 +305,11 @@ class ObjectiveFunctionFactory():
                                      "Yell at Daniel to implement this!", 'red'))
 
         if errr_mode == 'force':
-            obj_fun = ForceErrorNodes(R0_transform=R0_transform, Z0_transform=Z0_transform,
-                                      R1_transform=R1_transform, Z1_transform=Z1_transform,
-                                      L_transform=L_transform, p_transform=p_transform,
-                                      i_transform=i_transform)
+            obj_fun = ForceErrorNodes(
+                R0_transform=R0_transform, Z0_transform=Z0_transform,
+                r_transform=r_transform, l_transform=l_transform,
+                R1_transform=R1_transform, Z1_transform=Z1_transform,
+                p_transform=p_transform, i_transform=i_transform)
         else:
             raise ValueError(colored("Requested Objective Function is not implemented. " +
                                      "Available objective functions are: 'force'", 'red'))

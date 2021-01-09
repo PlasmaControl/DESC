@@ -30,7 +30,7 @@ class LinearEqualityConstraint():
     def __init__(self, A, b, x0=None):
 
         self._A = np.atleast_2d(A)
-        self._b = b.reshape((-1, 1))
+        self._b = np.atleast_1d(b)
         self.remove_duplicates()
 
         self._Z = scipy.linalg.null_space(self._A)
@@ -52,15 +52,15 @@ class LinearEqualityConstraint():
                 "cannot combine LinearConstraint with object of type {}".format(type(other)), 'red'))
 
         newA = np.vstack([self._A, other._A])
-        newb = np.vstack([self._b, other._b])
+        newb = np.concatenate([self._b, other._b])
         return LinearEqualityConstraint(newA, newb)
 
     def remove_duplicates(self):
         """Delete duplicate constraints (ie duplicate rows in A,b)"""
-        temp = np.hstack([self._A, self._b])
+        temp = np.hstack([self._A, self._b.reshape((-1, 1))])
         temp = np.unique(temp, axis=0)
         self._A = np.atleast_2d(temp[:, :-1])
-        self._b = temp[:, -1].reshape((-1, 1))
+        self._b = temp[:, -1].flatten()
 
     @property
     def b(self):
@@ -123,10 +123,10 @@ class LinearEqualityConstraint():
     def recover(self, y):
         """Recover the full solution x from the optimization variable y"""
         x = self._x0 + self._Z.dot(y)
-        return x
+        return x.flatten()
 
     def project(self, x):
         """Project a full solution x to the optimization variable y"""
         dx = x - self._x0
         y = self._Z.T.dot(dx)
-        return y
+        return y.flatten()

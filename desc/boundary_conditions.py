@@ -49,7 +49,7 @@ class BoundaryConstraint(LinearEqualityConstraint):
             R0_basis, Z0_basis, r_basis, l_basis)
 
         A = np.vstack([Aaxis, Alcfs, Agauge])
-        b = np.vstack([baxis, blcfs, bgauge])
+        b = np.concatenate([baxis, blcfs, bgauge])
 
         self._Aaxis = Aaxis
         self._Alcfs = Alcfs
@@ -103,7 +103,7 @@ def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
 
     A = np.zeros((c.shape[1], dimx))
     A[:, mnpos+dim_R0 + dim_Z0 + dim_r] = c.T
-    b = np.zeros((c.shape[1], 1))
+    b = np.zeros((c.shape[1]))
 
     return A, b
 
@@ -146,7 +146,7 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     numMN = len(MN)
 
     A = np.zeros((numMN, dimx))
-    b = np.zeros((numMN, 1))
+    b = np.zeros((numMN))
 
     for i, (m, n) in enumerate(MN):
         j = np.argwhere(np.logical_and(r_modes[:, 1] == m, r_modes[:, 2] == n))
@@ -191,7 +191,7 @@ def get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     N = max(r_basis.N, l_basis.N)
     ns = np.arange(-N, N+1)
     A = np.zeros((len(ns)*2, dimx))
-    b = np.zeros((len(ns)*2, 1))
+    b = np.zeros((len(ns)*2))
 
     # r(0,t,z) = 0
     lmn = r_basis.modes

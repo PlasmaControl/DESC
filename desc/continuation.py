@@ -131,26 +131,28 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                 print("Precomputing Transforms")
 
             # bases (extracted from Equilibrium)
-            R_basis, Z_basis, L_basis, P_basis, I_basis = equil.R_basis, \
-                equil.Z_basis, \
-                equil.L_basis, \
-                equil.P_basis, \
-                equil.I_basis
+            R0_basis = equil.R0_basis
+            Z0_basis = equil.Z0_basis
+            r_basis = equil.r_basis
+            l_basis = equil.l_basis
+            p_basis = equil.p_basis
+            i_basis = equil.i_basis
+            R1_basis = equil.R1_basis
+            Z1_basis = equil.Z1_basis
 
-            # grids
+            # grid
             RZ_grid = ConcentricGrid(M_grid[ii], N_grid[ii], NFP=NFP, sym=sym,
                                      axis=False, index=zern_mode, surfs=node_mode)
-            L_grid = LinearGrid(
-                M=M_grid[ii], N=2*N_grid[ii]+1, NFP=NFP, sym=sym)
 
             # transforms
-            R_transform = Transform(RZ_grid, R_basis, derivs=3)
-            Z_transform = Transform(RZ_grid, Z_basis, derivs=3)
-            R1_transform = Transform(L_grid, R_basis)
-            Z1_transform = Transform(L_grid, Z_basis)
-            L_transform = Transform(L_grid,  L_basis, derivs=0)
-            P_transform = Transform(RZ_grid, P_basis, derivs=1)
-            I_transform = Transform(RZ_grid, I_basis, derivs=1)
+            R0_transform = Transform(RZ_grid, R0_basis, derivs=2)
+            Z0_transform = Transform(RZ_grid, Z0_basis, derivs=2)
+            R1_transform = Transform(RZ_grid, R1_basis, derivs='force')
+            Z1_transform = Transform(RZ_grid, Z1_basis, derivs='force')
+            r_transform = Transform(RZ_grid, r_basis, derivs='force')
+            l_transform = Transform(RZ_grid, l_basis, derivs='force')
+            p_transform = Transform(RZ_grid, p_basis, derivs=1)
+            i_transform = Transform(RZ_grid, i_basis, derivs=1)
 
             timer.stop("Transform precomputation")
             if verbose > 1:
@@ -163,35 +165,42 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             equil.x0 = equil.x  # new initial guess is previous solution
             equil.solved = False
 
+            timer.start(
+                "Iteration {} changing resolution".format(ii+1))
             # change grids
             if M_grid[ii] != M_grid[ii-1] or N_grid[ii] != N_grid[ii-1]:
                 RZ_grid = ConcentricGrid(M_grid[ii], N_grid[ii], NFP=NFP, sym=sym,
                                          axis=False, index=zern_mode, surfs=node_mode)
-                L_grid = LinearGrid(
-                    M=M_grid[ii], N=2*N_grid[ii]+1, NFP=NFP, sym=sym)
+                if verbose:
+                    print("Changing node resolution from (M_grid,N_grid) = ({},{}) to ({},{})".format(
+                        M_grid[ii-1], N_grid[ii-1], M_grid[ii], N_grid[ii]))
 
             # change bases
             if M[ii] != M[ii-1] or N[ii] != N[ii-1] or L[ii] != L[ii-1]:
                 # update equilibrium bases to the new resolutions
+                if verbose > 0:
+                    print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
+                        L[ii-1], M[ii-1], N[ii-1], L[ii], M[ii], N[ii]))
+
                 equil.change_resolution(L=L[ii], M=M[ii], N=N[ii])
-                R_basis, Z_basis, L_basis = equil.R_basis, equil.Z_basis, equil.L_basis
-
+                R0_basis = equil.R0_basis
+                Z0_basis = equil.Z0_basis
+                r_basis = equil.r_basis
+                l_basis = equil.l_basis
+                p_basis = equil.p_basis
+                i_basis = equil.i_basis
+                R1_basis = equil.R1_basis
+                Z1_basis = equil.Z1_basis
             # change transform matrices
-            timer.start(
-                "Iteration {} changing resolution".format(ii+1))
-            if verbose > 0:
-                print("Changing node resolution from (M_grid,N_grid) = ({},{}) to ({},{})".format(
-                    M_grid[ii-1], N_grid[ii-1], M_grid[ii], N_grid[ii]))
-                print("Changing spectral resolution from (L,M,N) = ({},{},{}) to ({},{},{})".format(
-                    L[ii-1], M[ii-1], N[ii-1], L[ii], M[ii], N[ii]))
 
-            R_transform.change_resolution(grid=RZ_grid, basis=R_basis)
-            Z_transform.change_resolution(grid=RZ_grid, basis=Z_basis)
-            R1_transform.change_resolution(grid=L_grid, basis=R_basis)
-            Z1_transform.change_resolution(grid=L_grid, basis=Z_basis)
-            L_transform.change_resolution(grid=L_grid, basis=L_basis)
-            P_transform.change_resolution(grid=RZ_grid)
-            I_transform.change_resolution(grid=RZ_grid)
+            R0_transform.change_resolution(grid=RZ_grid, basis=R0_basis)
+            Z0_transform.change_resolution(grid=RZ_grid, basis=Z0_basis)
+            r_transform.change_resolution(grid=RZ_grid, basis=r_basis)
+            l_transform.change_resolution(grid=RZ_grid, basis=l_basis)
+            p_transform.change_resolution(grid=RZ_grid)
+            i_transform.change_resolution(grid=RZ_grid)
+            R1_transform.change_resolution(grid=RZ_grid, basis=R1_basis)
+            Z1_transform.change_resolution(grid=RZ_grid, basis=Z1_basis)
             timer.stop(
                 "Iteration {} changing resolution".format(ii+1))
             if verbose > 1:
@@ -205,16 +214,15 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             deltas = np.array([delta_bdry, delta_pres, delta_zeta])
 
             # need a non-scalar objective function to do the perturbations
-            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
-                errr_mode,
-                R_transform=R_transform, Z_transform=Z_transform,
-                R1_transform=R1_transform, Z1_transform=Z1_transform,
-                L_transform=L_transform, P_transform=P_transform,
-                I_transform=I_transform)
+            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
+                                                                 R0_transform=R0_transform, Z0_transform=Z0_transform,
+                                                                 r_transform=r_transform, l_transform=l_transform,
+                                                                 R1_transform=R1_transform, Z1_transform=Z1_transform,
+                                                                 p_transform=p_transform, i_transform=i_transform)
             equil_obj = obj_fun.compute
             callback = obj_fun.callback
-            args = (equil.cRb, equil.cZb, equil.cP,
-                    equil.cI, equil.Psi, zeta_ratio[ii-1])
+            args = (equil.R1_mn, equil.Z1_mn, equil.p_l,
+                    equil.i_l, equil.Psi, zeta_ratio[ii-1])
 
             # TODO: should probably perturb before expanding resolution
             # perturbations
@@ -230,20 +238,21 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             scalar = True
         else:
             scalar = False
-        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
-            errr_mode,
-            R_transform=R_transform, Z_transform=Z_transform,
-            R1_transform=R1_transform, Z1_transform=Z1_transform,
-            L_transform=L_transform, P_transform=P_transform,
-            I_transform=I_transform)
+
+        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(errr_mode,
+                                                             R0_transform=R0_transform, Z0_transform=Z0_transform,
+                                                             r_transform=r_transform, l_transform=l_transform,
+                                                             R1_transform=R1_transform, Z1_transform=Z1_transform,
+                                                             p_transform=p_transform, i_transform=i_transform)
+
         equil_obj = obj_fun.compute
         equil_obj_scalar = obj_fun.compute_scalar
-        grad = obj_fun.grad
-        hess = obj_fun.hess
-        jac = obj_fun.jac
+        grad = obj_fun.grad_x
+        hess = obj_fun.hess_x
+        jac = obj_fun.jac_x
         callback = obj_fun.callback
-        args = (equil.cRb, equil.cZb, equil.cP,
-                equil.cI, equil.Psi, zeta_ratio[ii-1])
+        args = (equil.R1_mn, equil.Z1_mn, equil.p_l,
+                equil.i_l, equil.Psi, zeta_ratio[ii-1])
 
         if use_jax:
             if verbose > 0:
@@ -275,7 +284,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         if verbose > 0:
             print("Starting optimization")
 
-        x_init = equil.x
+        x_init = obj_fun.bc_constraint.project(equil.x)
         timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
@@ -305,9 +314,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
 
         timer.stop("Iteration {} solution".format(ii+1))
 
-        equil.x = out['x']
-        equil.solved = True
-
         if verbose > 1:
             timer.disp("Iteration {} solution".format(ii+1))
             timer.pretty_print("Iteration {} avg time per step".format(ii+1),
@@ -316,7 +322,10 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             print("Start of Step {}:".format(ii+1))
             callback(x_init, *args)
             print("End of Step {}:".format(ii+1))
-            callback(equil.x, *args)
+            callback(out['x'], *args)
+
+        equil.x = obj_fun.bc_constraint.recover(out['x'])
+        equil.solved = True
 
         if checkpoint:
             if verbose > 0:

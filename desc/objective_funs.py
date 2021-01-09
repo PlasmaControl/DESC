@@ -192,8 +192,8 @@ class ForceErrorNodes(ObjectiveFunction):
         x = self.bc_constraint.recover(x)
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
-            self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
+            x, self.R0_transform.basis.num_modes, self.Z0_transform.basis.num_modes,
+            self.r_transform.basis.num_modes, self.l_transform.basis.num_modes)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
@@ -228,8 +228,8 @@ class ForceErrorNodes(ObjectiveFunction):
         x = self.bc_constraint.recover(x)
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
-            self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
+            x, self.R0_transform.basis.num_modes, self.Z0_transform.basis.num_modes,
+            self.r_transform.basis.num_modes, self.l_transform.basis.num_modes)
 
         (force_error, current_density, magnetic_field, profiles, con_basis,
          jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(

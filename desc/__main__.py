@@ -71,10 +71,9 @@ def main(cl_args=None):
     print(desc.BANNER)
 
     from desc.continuation import solve_eq_continuation
-    from desc.plotting import plot_comparison, plot_vmec_comparison
-    #from desc.input_output import read_input, output_to_file
     from desc.backend import use_jax
-    from desc.vmec import read_vmec_output
+    from desc.plotting import Plot
+    import matplotlib.pyplot as plt
 
     if use_jax:
         device = get_device(ir.args.gpu)
@@ -87,20 +86,9 @@ def main(cl_args=None):
         ir.inputs, file_name=ir.output_path, device=device)
 
     if ir.args.plot:
-
-        equil_fam.save(ir.output_path)
-
-        equil_init = equil_fam[0].initial
-        equil = equil_fam[-1]
-        print('Plotting flux surfaces, this may take a few moments...')
-        # plot comparison to initial guess
-        plot_comparison(equil_init, equil, 'Initial', 'Solution')
-
-        # plot comparison to VMEC
-        if ir.args.vmec:
-            print('Plotting comparison to VMEC, this may take a few moments...')
-            vmec_data = read_vmec_output(pathlib.Path(ir.args.vmec).resolve())
-            plot_vmec_comparison(vmec_data, equil)
+        print('plotting flux surfaces')
+        ax = Plot().plot_surfaces(equil_fam[-1])
+        plt.show()
 
 
 if __name__ == '__main__':

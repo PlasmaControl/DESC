@@ -43,7 +43,7 @@ rcParams['lines.dash_capstyle'] = 'round'
 rcParams['lines.dash_joinstyle'] = 'round'
 rcParams['xtick.labelsize'] = 'x-small'
 rcParams['ytick.labelsize'] = 'x-small'
-rcParams['text.usetex'] = True
+# rcParams['text.usetex'] = True
 color_cycle = cycler(color=colorblind_colors)
 dash_cycle = cycler(dashes=dashes)
 rcParams['axes.prop_cycle'] = color_cycle
@@ -373,10 +373,11 @@ class Plot:
             name_dict = name
 
         # primary calculations
-        if name_dict['base'] in ['r','lambda']:
+        if name_dict['base'] in ['r', 'lambda']:
             out = eq.compute_polar_coords(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] in ['R', 'Z']:
-            out = eq.compute_toroidal_coords(grid)[self.__name_key__(name_dict)]
+            out = eq.compute_toroidal_coords(
+                grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] in ['p', 'iota', 'psi', 'chi']:
             out = eq.compute_profiles(grid)[self.__name_key__(name_dict)]
         elif name_dict['base'] == 'g':

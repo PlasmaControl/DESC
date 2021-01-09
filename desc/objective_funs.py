@@ -86,6 +86,9 @@ class ObjectiveFunction(IOAble, ABC):
         self.Z1_transform = Z1_transform
         self.p_transform = p_transform
         self.i_transform = i_transform
+        if bc_constraint is None:
+            bc_constraint = BoundaryConstraint(R0_transform.basis, Z0_transform.basis,
+                                               r_transform.basis, l_transform.basis)
         self.bc_constraint = bc_constraint
 
         self._grad = Derivative(self.compute_scalar, mode='grad')
@@ -221,6 +224,9 @@ class ForceErrorNodes(ObjectiveFunction):
     def callback(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         """Prints the rms errors."""
 
+        # input x is really "y", need to convert to full x
+        x = self.bc_constraint.recover(x)
+
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
             x, self._R0_transform.basis.num_modes, self._Z0_transform.basis.num_modes,
             self._r_transform.basis.num_modes, self._l_transform.basis.num_modes)
@@ -251,7 +257,8 @@ class ForceErrorNodes(ObjectiveFunction):
 
         print('Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}'.format(
             resid_rms, f_rho_rms, f_beta_rms))
-        return False
+
+        return None
 
 
 class ObjectiveFunctionFactory():
@@ -267,7 +274,8 @@ class ObjectiveFunctionFactory():
                           R0_transform: Transform = None, Z0_transform: Transform = None,
                           r_transform: Transform = None, l_transform: Transform = None,
                           R1_transform: Transform = None, Z1_transform: Transform = None,
-                          p_transform: Transform = None, i_transform: Transform = None) -> ObjectiveFunction:
+                          p_transform: Transform = None, i_transform: Transform = None,
+                          bc_constraint: BoundaryConstraint = None) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
 
         Parameters
@@ -291,7 +299,8 @@ class ObjectiveFunctionFactory():
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
-
+        bc_constraint : BoundaryConstraint
+            linear constraint to enforce BC
         Returns
         -------
         obj_fun : ObjectiveFunction
@@ -307,7 +316,8 @@ class ObjectiveFunctionFactory():
                 R0_transform=R0_transform, Z0_transform=Z0_transform,
                 r_transform=r_transform, l_transform=l_transform,
                 R1_transform=R1_transform, Z1_transform=Z1_transform,
-                p_transform=p_transform, i_transform=i_transform)
+                p_transform=p_transform, i_transform=i_transform,
+                bc_constraint=bc_constraint)
         else:
             raise ValueError(colored("Requested Objective Function is not implemented. " +
                                      "Available objective functions are: 'force'", 'red'))

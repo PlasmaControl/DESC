@@ -26,13 +26,13 @@ class TestInputReader(unittest.TestCase):
         ir = InputReader(cl_args=self.argv2)
         #self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
         self.assertEqual(ir.args.input_file[0], self.argv2[0],
-                'Input file name does not match')
-        #self.assertEqual(ir.output_path, self.argv2[0] + '.output',
+                         'Input file name does not match')
+        # self.assertEqual(ir.output_path, self.argv2[0] + '.output',
         #        'Default output file does not match.')
         self.assertEqual(ir.input_path,
-                str(pathlib.Path('./'+self.argv2[0]).resolve()),
-                'Path to input file is incorrect.')
-        #Test defaults
+                         str(pathlib.Path('./'+self.argv2[0]).resolve()),
+                         'Path to input file is incorrect.')
+        # Test defaults
         self.assertFalse(ir.args.plot, 'plot is not default False')
         self.assertFalse(ir.args.quiet, 'quiet is not default False')
         self.assertFalse(ir.args.verbose, 'verbose is not default False')
@@ -40,30 +40,30 @@ class TestInputReader(unittest.TestCase):
         #self.assertFalse(ir.args.gpuID, 'gpu argument was given')
         self.assertFalse(ir.args.numpy, 'numpy is not default False')
         self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment '
-            'variable incorrect with default argument')
+                         'variable incorrect with default argument')
         self.assertFalse(ir.args.version, 'version is not default False')
-        self.assertEqual(len(ir.inputs), 28, 'number of inputs does not match '
-            'number expected in MIN_INPUT')
+        self.assertEqual(len(ir.inputs), 26, 'number of inputs does not match '
+                         'number expected in MIN_INPUT')
         # test equality of arguments
 
     def test_np_environ(self):
         argv = self.argv2 + ['--numpy']
         InputReader(cl_args=argv)
         self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy '
-            'environment variable incorrect on use')
+                         'environment variable incorrect on use')
 
     def test_quiet_verbose(self):
         ir = InputReader(self.argv2)
         self.assertEqual(ir.inputs['verbose'], 1, "value of inputs['verbose'] "
-            "incorrect on no arguments")
+                         "incorrect on no arguments")
         argv = self.argv2 + ['-v']
         ir = InputReader(argv)
         self.assertEqual(ir.inputs['verbose'], 2, "value of inputs['verbose'] "
-            "incorrect on verbose argument")
+                         "incorrect on verbose argument")
         argv.append('-q')
         ir = InputReader(argv)
         self.assertEqual(ir.inputs['verbose'], 0, "value of inputs['verbose'] "
-            "incorrect on quiet argument")
+                         "incorrect on quiet argument")
 
     def test_vmec_to_desc_input(self):
         pass
@@ -95,7 +95,7 @@ class Testhdf5Writer(unittest.TestCase):
         self.assertTrue(writer.check_type(writer.target))
         self.assertTrue(writer.check_type(writer.base))
         self.assertFalse(writer._close_base_)
-        #with self.assertWarns(RuntimeWarning):
+        # with self.assertWarns(RuntimeWarning):
         #    writer.close()
         self.assertFalse(writer._close_base_)
         f.close()
@@ -109,7 +109,7 @@ class Testhdf5Writer(unittest.TestCase):
         del newwriter
 
     def test_write_dict(self):
-        thedict = {'1':1, '2':2, '3':3}
+        thedict = {'1': 1, '2': 2, '3': 3}
         writer = hdf5Writer(self.filename, self.file_mode)
         writer.write_dict(thedict)
         writer.write_dict(thedict, where=writer.sub('subgroup'))
@@ -126,7 +126,7 @@ class Testhdf5Writer(unittest.TestCase):
     def test_write_obj(self):
         mo = MockObject()
         writer = hdf5Writer(self.filename, self.file_mode)
-        #writer should throw runtime warning if any save_attrs are undefined
+        # writer should throw runtime warning if any save_attrs are undefined
         with self.assertWarns(RuntimeWarning):
             writer.write_obj(mo)
         writer.close()
@@ -152,7 +152,7 @@ class Testhdf5Reader(unittest.TestCase):
     def setUp(self):
         self.filename = 'reader_test_file'
         self.file_mode = 'r'
-        self.thedict = {'a':'a', 'b':'b', 'c':'c'}
+        self.thedict = {'a': 'a', 'b': 'b', 'c': 'c'}
         f = h5py.File(self.filename, 'w')
         self.subgroup = 'subgroup'
         g = f.create_group(self.subgroup)
@@ -175,12 +175,12 @@ class Testhdf5Reader(unittest.TestCase):
         self.assertTrue(reader.check_type(reader.target))
         self.assertTrue(reader.check_type(reader.base))
         self.assertFalse(reader._close_base_)
-        #with self.assertWarns(RuntimeWarning):
+        # with self.assertWarns(RuntimeWarning):
         #    reader.close()
         self.assertFalse(reader._close_base_)
         f.close()
 
-    #def test_close_on_delete(self):
+    # def test_close_on_delete(self):
     #    reader = hdf5Reader(self.filename)
     #    with self.assertRaises(OSError):
     #        newreader = hdf5Reader(self.filename)
@@ -210,7 +210,7 @@ class Testhdf5Reader(unittest.TestCase):
         mo = MockObject()
         reader = hdf5Reader(self.filename)
         reader.read_obj(mo)
-        mo._io_attrs_  += '4'
+        mo._io_attrs_ += '4'
         with self.assertWarns(RuntimeWarning):
             reader.read_obj(mo)
         del mo._io_attrs_[-1]

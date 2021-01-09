@@ -13,7 +13,7 @@ class TestGrid(unittest.TestCase):
         N = 3
         NFP = 1
 
-        grid = LinearGrid(L, M, N, NFP, sym=False, endpoint=False)
+        grid = LinearGrid(L, M, N, NFP, sym=False, axis=True, endpoint=False)
 
         nodes = np.stack([np.array([0, 0.5, 1, 0, 0.5, 1, 0, 0.5, 1,
                                     0, 0.5, 1, 0, 0.5, 1, 0, 0.5, 1,
@@ -22,13 +22,14 @@ class TestGrid(unittest.TestCase):
                                     0, 0, 0, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3,
                                     0, 0, 0, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3]),
                           np.array([0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                    2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3,
+                                    2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi /
+                                    3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3, 2*np.pi/3,
                                     4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3, 4*np.pi/3])]).T
 
         np.testing.assert_allclose(grid.nodes, nodes, atol=1e-8)
 
-        self.assertAlmostEqual(np.sum(grid.volumes[:, 0]*
-                                      grid.volumes[:, 1]*
+        self.assertAlmostEqual(np.sum(grid.volumes[:, 0] *
+                                      grid.volumes[:, 1] *
                                       grid.volumes[:, 2]),
                                (2*np.pi)**2/NFP)
 
@@ -44,7 +45,8 @@ class TestGrid(unittest.TestCase):
                                      index='fringe', surfs='linear')
 
         ansi_nodes = np.stack([np.array([0, 0.5, 1, 1, 0.5, 1]),
-                               np.array([0, 0, 0, 2*np.pi/3, np.pi, 4*np.pi/3]),
+                               np.array(
+                                   [0, 0, 0, 2*np.pi/3, np.pi, 4*np.pi/3]),
                                np.zeros((int((M+1)*(M+2)/2),))]).T
         fringe_nodes = np.stack([np.array([0, 0.5, 1, 1, 0.5, 1, 1, 0.5, 1]),
                                  np.array([0, 0, 0, 2*np.pi/5, 2*np.pi/3, 4*np.pi/5,
@@ -54,11 +56,11 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, atol=1e-8)
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
-        self.assertAlmostEqual(np.sum(grid_ansi.volumes[:, 0]*
-                                      grid_ansi.volumes[:, 1]*
+        self.assertAlmostEqual(np.sum(grid_ansi.volumes[:, 0] *
+                                      grid_ansi.volumes[:, 1] *
                                       grid_ansi.volumes[:, 2]),
                                (2*np.pi)**2/NFP)
-        self.assertAlmostEqual(np.sum(grid_fringe.volumes[:, 0]*
-                                      grid_fringe.volumes[:, 1]*
+        self.assertAlmostEqual(np.sum(grid_fringe.volumes[:, 0] *
+                                      grid_fringe.volumes[:, 1] *
                                       grid_fringe.volumes[:, 2]),
                                (2*np.pi)**2/NFP)

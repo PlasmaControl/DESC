@@ -179,7 +179,7 @@ class LinearGrid(Grid):
     """
 
     def __init__(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1, sym: bool = False,
-                 endpoint: bool = False, rho=None, theta=None, zeta=None,
+                 axis: bool = False, endpoint: bool = False, rho=None, theta=None, zeta=None,
                  load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a LinearGrid
 
@@ -195,6 +195,8 @@ class LinearGrid(Grid):
             number of field periods (Default = 1)
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False)
+        axis : bool
+            True to include a point at rh0==0, False to include points at rho==1e-4.
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
@@ -217,6 +219,7 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._NFP = NFP
+            self._axis = axis
             self._sym = sym
             self._endpoint = endpoint
             self._rho = rho
@@ -225,7 +228,7 @@ class LinearGrid(Grid):
 
             self._nodes, self._volumes = self.create_nodes(
                 L=self._L, M=self._M, N=self._N,
-                NFP=self._NFP, endpoint=self._endpoint,
+                NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
                 rho=self._rho, theta=self._theta, zeta=self._zeta)
 
             self._enforce_symmetry_()
@@ -237,7 +240,7 @@ class LinearGrid(Grid):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
     def create_nodes(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1,
-                     endpoint: bool = False, rho=None, theta=None, zeta=None):
+                     axis: bool = False, endpoint: bool = False, rho=None, theta=None, zeta=None):
         """
 
         Parameters
@@ -250,6 +253,8 @@ class LinearGrid(Grid):
             toroidal grid resolution (N toroidal nodes, Default = 1)
         NFP : int
             number of field periods (Default = 1)
+        axis : bool
+            True to include a point at rh0==0, False to include points at rho==1e-4.
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)
@@ -276,12 +281,18 @@ class LinearGrid(Grid):
         # rho
         if rho is not None:
             r = np.asarray(rho)
+            r0 = r[0]
             self._L = r.size
         elif self._L == 1:
             r = np.array([1.0])
+            r0 = 0
         else:
-            r = np.linspace(0, 1, self._L)
-        dr = 1/self._L
+            if axis:
+                r0 = 0
+            else:
+                r0 = 1e-4
+            r = np.linspace(r0, 1, self._L)
+        dr = (1-r0)/self._L
 
         # theta/vartheta
         if theta is not None:
@@ -345,7 +356,7 @@ class ConcentricGrid(Grid):
        in concentric circles within each toroidal cross-section.
     """
 
-    def __init__(self, M: int, N: int, NFP: int = 1, sym: bool = False, axis: bool = True,
+    def __init__(self, M: int, N: int, NFP: int = 1, sym: bool = False, axis: bool = False,
                  index='ansi', surfs='cheb1', load_from=None, file_format=None,
                  obj_lib=None) -> None:
         """Initializes a ConcentricGrid
@@ -361,7 +372,7 @@ class ConcentricGrid(Grid):
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False)
         axis : bool
-            True to include the magnetic axis, False otherwise (Default = True)
+            True to include the magnetic axis, False otherwise (Default = False)
         index : string
             Zernike indexing scheme
                 ansi (Default), chevron, fringe, house
@@ -400,7 +411,7 @@ class ConcentricGrid(Grid):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def create_nodes(self, M: int, N: int, NFP: int = 1, axis: bool = True,
+    def create_nodes(self, M: int, N: int, NFP: int = 1, axis: bool = False,
                      index='ansi', surfs='cheb1'):
         """
 
@@ -413,7 +424,7 @@ class ConcentricGrid(Grid):
         NFP : int
             number of field periods (Default = 1)
         axis : bool
-            True to include the magnetic axis, False otherwise (Default = True)
+            True to include the magnetic axis, False otherwise (Default = False)
         index : string
             Zernike indexing scheme
                 ansi (Default), chevron, fringe, house

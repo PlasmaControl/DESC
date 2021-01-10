@@ -972,10 +972,12 @@ class Equilibrium(Configuration, IOAble):
                              self._R0_n, np.zeros_like(self._R0_n)]).T
         Z0_modes = np.array([self._Z0_basis.modes[:, 2],
                              np.zeros_like(self._R0_n), self._Z0_n]).T
-        R1_modes = np.array([self._R1_basis.modes[:, 1:2],
-                             self._R1_mn, np.zeros_like(self._R1_mn)]).T
-        Z1_modes = np.array([self._Z1_basis.modes[:, 1:2],
-                             np.zeros_like(self._R1_mn), self._Z1_mn]).T
+        R1_mn = self._R1_mn.reshape((-1, 1))
+        Z1_mn = self._Z1_mn.reshape((-1, 1))
+        R1_modes = np.hstack([self._R1_basis.modes[:, 1:],
+                              R1_mn, np.zeros_like(R1_mn)])
+        Z1_modes = np.hstack([self._Z1_basis.modes[:, 1:],
+                              np.zeros_like(Z1_mn), Z1_mn])
         inputs = {'sym': self._sym,
                   'NFP': self._NFP,
                   'Psi': self._Psi,
@@ -987,7 +989,7 @@ class Equilibrium(Configuration, IOAble):
                   'zeta_ratio': self._zeta_ratio,
                   'profiles': np.vstack((p_modes, i_modes)),
                   'axis': np.vstack((R0_modes, Z0_modes)),
-                  'bdry': np.vstack((R1_modes, Z1_modes)),
+                  'boundary': np.vstack((R1_modes, Z1_modes)),
                   'x': self._x0
                   }
         return Configuration(inputs=inputs)

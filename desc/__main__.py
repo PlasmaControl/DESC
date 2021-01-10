@@ -86,8 +86,15 @@ def main(cl_args=None):
         ir.inputs, file_name=ir.output_path, device=device)
 
     if ir.args.plot:
-        print('plotting flux surfaces')
-        for eq in equil_fam:
+        print('plotting initial guess')
+        ax = Plot().plot_surfaces(equil_fam[0].initial)
+        plt.show()
+        ax = Plot().plot_2d(equil_fam[0].initial, 'r')
+        plt.show()
+        ax = Plot().plot_2d(equil_fam[0].initial, 'log(|F|)')
+        plt.show()
+        for i, eq in enumerate(equil_fam):
+            print('Plotting solution at step {}'.format(i+1))
             ax = Plot().plot_surfaces(eq)
             plt.show()
             ax = Plot().plot_2d(eq, 'r')

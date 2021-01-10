@@ -2,6 +2,7 @@ import unittest
 import os
 import pathlib
 import h5py
+import argparse
 
 from desc.input_reader import InputReader
 from desc.equilibrium_io import hdf5Writer, hdf5Reader
@@ -35,7 +36,7 @@ class TestInputReader(unittest.TestCase):
         # Test defaults
         self.assertFalse(ir.args.plot, 'plot is not default False')
         self.assertFalse(ir.args.quiet, 'quiet is not default False')
-        self.assertFalse(ir.args.verbose, 'verbose is not default False')
+        self.assertEqual(ir.args.verbose, 1, 'verbose is not default 1')
         #self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
         #self.assertFalse(ir.args.gpuID, 'gpu argument was given')
         self.assertFalse(ir.args.numpy, 'numpy is not default False')
@@ -60,7 +61,11 @@ class TestInputReader(unittest.TestCase):
         ir = InputReader(argv)
         self.assertEqual(ir.inputs['verbose'], 2, "value of inputs['verbose'] "
                          "incorrect on verbose argument")
-        argv.append('-q')
+        argv = self.argv2 + ['-vv']
+        ir = InputReader(argv)
+        self.assertEqual(ir.inputs['verbose'], 3, "value of inputs['verbose'] "
+                         "incorrect on double verbose argument")
+        argv = self.argv2 + ['-q']
         ir = InputReader(argv)
         self.assertEqual(ir.inputs['verbose'], 0, "value of inputs['verbose'] "
                          "incorrect on quiet argument")

@@ -52,10 +52,10 @@ class InputReader:
         """
         self.args = self.parse_args(cl_args=cl_args)
 
-        if not self.args.version:
+        if not self.args.version and not self.args.quiet:
             print("Reading input from {}".format(self.input_path))
             print("Outputs will be written to {}".format(self.output_path))
-
+        if not self.args.version:
             self.inputs = self.parse_inputs()
 
     def parse_args(self, cl_args=None):
@@ -122,33 +122,7 @@ class InputReader:
             argument parser
 
         """
-
-        parser = argparse.ArgumentParser(prog='DESC',
-                                         description='DESC computes equilibria by solving the force balance equations. '
-                                         + 'It can also be used for perturbation analysis and sensitivity studies '
-                                         + 'to see how the equilibria change as input parameters are varied.')
-        parser.add_argument('input_file', nargs='*',
-                            help='Path to input file')
-        parser.add_argument('-o', '--output', metavar='output_file',
-                            help='Path to output file. If not specified, defaults to <input_name>.output')
-        parser.add_argument('-p', '--plot', action='store_true',
-                            help='Plot results after solver finishes')
-        parser.add_argument('-q', '--quiet', action='store_true',
-                            help='Do not display any progress information')
-        parser.add_argument('-v', '--verbose', action='store_true',
-                            help='Display detailed progress information')
-        parser.add_argument('--vmec', metavar='vmec_path',
-                            help='Path to VMEC data for comparison plot')
-        parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
-                            help='Use GPU if available, and an optional device ID to use a specific GPU.'
-                            + ' If no ID is given, default is to select the GPU with most available memory.'
-                            + ' Note that not all of the computation will be done '
-                            + 'on the gpu, only the most expensive parts where the I/O efficiency is worth it.')
-        parser.add_argument('--numpy', action='store_true', help="Use numpy backend.Performance will be much slower,"
-                            + " and autodiff won't work but may be useful for debugging")
-        parser.add_argument('--version', action='store_true',
-                            help='Display version number and exit')
-        return parser
+        return get_parser()
 
     def parse_inputs(self):
         """Reads input from DESC input file, converts from VMEC input if necessary
@@ -197,10 +171,8 @@ class InputReader:
 
         if self.args.quiet:
             inputs['verbose'] = 0
-        elif self.args.verbose:
-            inputs['verbose'] = 2
         else:
-            inputs['verbose'] = 1
+            inputs['verbose'] = self.args.verbose
 
         file = open(self.input_path, 'r')
         num_form = r'[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?'
@@ -856,9 +828,11 @@ class InputReader:
         vmec_file.close()
         desc_file.close()
 
+# NOTEL this has to be outside the class to work with autodoc
+
 
 def get_parser():
-    """Standalone function that gets parser for command line arguments.
+    """Gets parser for command line arguments.
 
     Parameters
     ----------
@@ -870,7 +844,7 @@ def get_parser():
 
     """
 
-    parser = argparse.ArgumentParser(prog='DESC',
+    parser = argparse.ArgumentParser(prog='desc', allow_abbrev=True,
                                      description='DESC computes equilibria by solving the force balance equations. '
                                      + 'It can also be used for perturbation analysis and sensitivity studies '
                                      + 'to see how the equilibria change as input parameters are varied.')
@@ -878,12 +852,9 @@ def get_parser():
                         help='Path to input file')
     parser.add_argument('-o', '--output', metavar='output_file',
                         help='Path to output file. If not specified, defaults to <input_name>.output')
-    parser.add_argument('-p', '--plot', action='store_true',
-                        help='Plot results after solver finishes')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Do not display any progress information')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Display detailed progress information')
+    parser.add_argument('-p', '--plot', action='count', default=0,
+                        help='Plot results after solver finishes. Give once to show only final solution, '
+                        + 'twice (eg -pp) to plot both initial and final, and three times (-ppp) to show all iterations')
     parser.add_argument('--vmec', metavar='vmec_path',
                         help='Path to VMEC data for comparison plot')
     parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
@@ -895,4 +866,9 @@ def get_parser():
                         + " and autodiff won't work but may be useful for debugging")
     parser.add_argument('--version', action='store_true',
                         help='Display version number and exit')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-q', '--quiet', action='store_true',
+                       help='Do not display any progress information')
+    group.add_argument('-v', '--verbose', action='count', default=1,
+                       help='Display detailed progress information. Once to include timing, twice to also show individual iterations')
     return parser

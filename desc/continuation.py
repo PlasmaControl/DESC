@@ -284,7 +284,6 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         if verbose > 0:
             print("Starting optimization")
 
-
         timer.start("Iteration {} solution".format(ii+1))
         if optim_method in ['bfgs']:
             out = scipy.optimize.minimize(equil_obj_jit,
@@ -294,7 +293,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                                           jac=grad_obj_jit,
                                           tol=gtol[ii],
                                           options={'maxiter': nfev[ii],
-                                                   'disp': verbose})
+                                                   'disp': max(verbose-1, 0)})
 
         elif optim_method in ['trf', 'lm', 'dogbox']:
             out = scipy.optimize.least_squares(equil_obj_jit,
@@ -307,7 +306,7 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
                                                xtol=xtol[ii],
                                                gtol=gtol[ii],
                                                max_nfev=nfev[ii],
-                                               verbose=verbose)
+                                               verbose=max(verbose-1, 0))
         else:
             raise NotImplementedError(
                 colored("optim_method must be one of 'bfgs', 'trf', 'lm', 'dogbox'", 'red'))

@@ -77,23 +77,20 @@ class RadialConstraint():
         spectral basis for r
     L : integer, optional
         how many flux surfaces to test (default 10)
-    w : float, optional
-        weight for the penalty (ie, overall scale)
     a : float, optional
         strength of softmin function. (default 10*L)
     scalar : bool, optional
         whether to compute a scalar or vector loss
     """
 
-    def __init__(self, r_basis: Basis, L: int = 10, w: float = 1e12, a: float = None,
+    def __init__(self, r_basis: Basis, L: int = 25, a: float = None,
                  scalar: bool = False):
 
         self._r_basis = r_basis
         self._L = L
-        self._M = r_basis.M
-        self._N = max(1, r_basis.N)
+        self._M = 2*r_basis.M + 1
+        self._N = 2*r_basis.N + 1
         self._a = a or self._L*10
-        self._w = w
         self._scalar = scalar
         self._grid = LinearGrid(
             L=self._L, M=self._M, N=self._N)
@@ -105,7 +102,7 @@ class RadialConstraint():
             r.reshape((self._L, self._M, self._N), order='F'), axis=0).flatten()
         if self._scalar:
             dr = softmax(dr, -self._a)
-        return self._w*jnp.exp(-dr*self._a)
+        return -jnp.log(dr)/self._a
 
 
 def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):

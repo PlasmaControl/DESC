@@ -113,6 +113,9 @@ class Grid(IOAble):
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3))
         volumes = np.zeros_like(nodes)
+        self._L = len(np.unique(nodes[:, 0]))
+        self._M = len(np.unique(nodes[:, 1]))
+        self._N = len(np.unique(nodes[:, 2]))
         return nodes, volumes
 
     def change_resolution(self) -> None:

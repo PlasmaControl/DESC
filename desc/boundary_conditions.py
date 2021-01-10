@@ -1,8 +1,11 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.basis import jacobi_coeffs
+from desc.basis import jacobi_coeffs, Basis
 from desc.optimize.constraint import LinearEqualityConstraint
+from desc.grid import LinearGrid
+from desc.transform import Transform
+from desc.utils import softmax
 
 
 class BoundaryConstraint(LinearEqualityConstraint):
@@ -60,6 +63,49 @@ class BoundaryConstraint(LinearEqualityConstraint):
         self._bgauge = bgauge
 
         super().__init__(A, b)
+
+
+class RadialConstraint():
+    """Penalty term to enforce nested flux surfaces
+
+    Penalizes the spacing between flux surfaces to ensure that r is a positive monotonic
+    function of rho.
+
+    Parameters
+    ----------
+    r_basis : Basis
+        spectral basis for r
+    L : integer, optional
+        how many flux surfaces to test (default 10)
+    w : float, optional
+        weight for the penalty (ie, overall scale)
+    a : float, optional
+        strength of softmin function. (default 10*L)
+    scalar : bool, optional
+        whether to compute a scalar or vector loss
+    """
+
+    def __init__(self, r_basis: Basis, L: int = 10, w: float = 1e12, a: float = None,
+                 scalar: bool = False):
+
+        self._r_basis = r_basis
+        self._L = L
+        self._M = r_basis.M
+        self._N = max(1, r_basis.N)
+        self._a = a or self._L*10
+        self._w = w
+        self._scalar = scalar
+        self._grid = LinearGrid(
+            L=self._L, M=self._M, N=self._N)
+        self._transform = Transform(self._grid, self._r_basis)
+
+    def compute(self, r_lmn):
+        r = self._transform.transform(r_lmn)
+        dr = jnp.diff(
+            r.reshape((self._L, self._M, self._N), order='F'), axis=0).flatten()
+        if self._scalar:
+            dr = softmax(dr, -self._a)
+        return self._w*jnp.exp(-dr*self._a)
 
 
 def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):

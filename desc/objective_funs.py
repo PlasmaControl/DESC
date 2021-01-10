@@ -7,7 +7,7 @@ from desc.transform import Transform
 from desc.equilibrium_io import IOAble
 from desc.derivatives import Derivative
 from desc.compute_funs import compute_force_error_magnitude
-from desc.boundary_conditions import BoundaryConstraint
+from desc.boundary_conditions import BoundaryConstraint, RadialConstraint
 
 
 class ObjectiveFunction(IOAble, ABC):
@@ -184,6 +184,8 @@ class ForceErrorNodes(ObjectiveFunction):
                          R1_transform, Z1_transform, p_transform, i_transform,
                          bc_constraint)
         self.scalar = False
+        self.radial_constraint = RadialConstraint(
+            r_transform.basis, scalar=self.scalar)
 
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
@@ -213,7 +215,10 @@ class ForceErrorNodes(ObjectiveFunction):
             jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0)) *\
             jnp.sign(dot(force_error['beta'], cov_basis['e_zeta'], 0))
 
-        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
+        dr_penalty = self.radial_constraint.compute(r_lmn)
+
+        residual = jnp.concatenate(
+            [f_rho.flatten(), f_beta.flatten(), dr_penalty.flatten()])
         return residual
 
     def compute_scalar(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):

@@ -480,3 +480,27 @@ def rms(x):
 
     """
     return jnp.sqrt(jnp.mean(x**2))
+
+
+def softmax(x, a=1):
+    """Softmax function (or softmin for a<0)
+
+    Smooth approximation to max/min of array
+
+    Parameters
+    ----------
+    x : array-like
+        input array
+    a : float
+        strength of approximation.
+        Softmax -> max as a-> infty
+        Softmin -> min as a -> -infty
+
+    Returns
+    -------
+    y : float
+        soft max/min of x
+    """
+    num = jnp.sum(x*jnp.exp(a*x))
+    den = jnp.sum(jnp.exp(a*x))
+    return num/den

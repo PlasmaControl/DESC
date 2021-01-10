@@ -87,8 +87,13 @@ def main(cl_args=None):
 
     if ir.args.plot:
         print('plotting flux surfaces')
-        ax = Plot().plot_surfaces(equil_fam[-1])
-        plt.show()
+        for eq in equil_fam:
+            ax = Plot().plot_surfaces(eq)
+            plt.show()
+            ax = Plot().plot_2d(eq, 'r')
+            plt.show()
+            ax = Plot().plot_2d(eq, 'log(|F|)')
+            plt.show()
 
 
 if __name__ == '__main__':

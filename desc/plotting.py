@@ -7,6 +7,8 @@ import numpy as np
 import re
 from termcolor import colored
 
+from desc.backend import put
+from desc.utils import opsindex
 from desc.equilibrium_io import read_desc
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
@@ -304,7 +306,8 @@ class Plot:
         ax.set_title(self.name_label(name_dict))
         return ax
 
-    def plot_surfaces(self, eq: Configuration, grid: Grid = None, ax=None, **kwargs):
+    def plot_surfaces(self, eq: Configuration, r_grid: Grid = None, t_grid: Grid = None,
+                      ax=None, **kwargs):
         """Plots flux surfaces.
 
         Parameters
@@ -313,8 +316,10 @@ class Plot:
             object from which to plot
         name : str
             name of variable to plot
-        grid : Grid, optional
-            grid of coordinates to plot at
+        r_grid : Grid, optional
+            grid of coordinates to plot rho contours at
+        t_grid : Grid, optional
+            grid of coordinates to plot theta coordinates at
         ax : matplotlib AxesSubplot, optional
             axis to plot on
         kwargs
@@ -325,23 +330,49 @@ class Plot:
         axis
 
         """
-        if grid is None:
+        if r_grid is None:
             if kwargs == {}:
                 kwargs.update({'L': 6, 'M': 180})
-            grid, plot_axes = self.get_grid(**kwargs)
+            r_grid, plot_axes = self.get_grid(**kwargs)
+        if t_grid is None:
+            kwargs.update({'L': 50, 'M': 6})
+            t_grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", 'red'))
         if 2 in plot_axes:
             return ValueError(colored("Grid must be in rho vs theta", 'red'))
 
-        coords = eq.compute_toroidal_coords(grid)
-        R = coords['R'].reshape((grid.L, grid.M, grid.N), order='F')[:, :, 0]
-        Z = coords['Z'].reshape((grid.L, grid.M, grid.N), order='F')[:, :, 0]
+        r_coords = eq.compute_toroidal_coords(r_grid)
+        t_coords = eq.compute_polar_coords(t_grid)
+        v_nodes = put(
+            t_grid.nodes, opsindex[:, 1], t_grid.nodes[:, 1] + t_coords['lambda'])
+        v_grid = Grid(v_nodes)
+        v_coords = eq.compute_toroidal_coords(v_grid)
+
+        # rho contours
+        R = r_coords['R'].reshape(
+            (r_grid.L, r_grid.M, r_grid.N), order='F')[:-1, :, 0]
+        Z = r_coords['Z'].reshape(
+            (r_grid.L, r_grid.M, r_grid.N), order='F')[:-1, :, 0]
+
+        R1 = r_coords['R'].reshape(
+            (r_grid.L, r_grid.M, r_grid.N), order='F')[-1, :, 0]
+        Z1 = r_coords['Z'].reshape(
+            (r_grid.L, r_grid.M, r_grid.N), order='F')[-1, :, 0]
 
         fig, ax = self.format_ax(ax)
 
-        ax.plot(R[0, 0], Z[0, 0], 'bo')
-        ax.plot(R.T, Z.T, 'b-')
+        ax.scatter(R[0, 0], Z[0, 0], color=colorblind_colors[3])
+        ax.plot(R.T, Z.T, color=colorblind_colors[0])
+        ax.plot(R1, Z1,  color=colorblind_colors[1])
+
+        # vartheta contours - not working yet
+        # R = v_coords['R'].reshape(
+        #     (t_grid.L, t_grid.M, t_grid.N), order='F')[:, :, 0]
+        # Z = v_coords['Z'].reshape(
+        #     (t_grid.L, t_grid.M, t_grid.N), order='F')[:, :, 0]
+
+        # ax.plot(R.T, Z.T, 'b--')
 
         ax.axis('equal')
         ax.set_xlabel(self.axis_labels_RPZ[0])
@@ -393,6 +424,11 @@ class Plot:
         elif name_dict['base'] == '|F|':
             out = eq.compute_force_error_magnitude(
                 grid)[self.__name_key__(name_dict)]
+        elif name_dict['base'] == 'log(|F|)':
+            out = eq.compute_force_error_magnitude(
+                grid)['|F|']
+            out = np.log10(np.asarray(out))
+
         else:
             raise NotImplementedError(
                 "No output for base named '{}'.".format(name_dict['base']))

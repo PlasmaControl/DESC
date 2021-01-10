@@ -74,7 +74,6 @@ class Transform(IOAble):
             self._sort_derivatives_()
             self._build_()
             self._build_pinv_()
-
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
@@ -178,7 +177,10 @@ class Transform(IOAble):
             A = self._matrices[0][0][0]
         else:
             A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
-        self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
+        if A.size:
+            self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
+        else:
+            self._pinv = jnp.zeros_like(A.T)
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical

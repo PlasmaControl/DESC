@@ -9,7 +9,7 @@ from desc.grid import LinearGrid
 from desc.basis import FourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.configuration import Configuration
-from desc.boundary_conditions import get_lcfs_bc_matrices
+from desc.boundary_conditions import BoundaryConstraint
 
 
 class VMECIO():
@@ -145,15 +145,9 @@ class VMECIO():
         r_transform = Transform(grid=grid, basis=eq.r_basis)
         eq.r_lmn = r_transform.fit(r)
 
-        # TODO: enforce BCs on r
-        """
-        A, b = get_lcfs_bc_matrices(eq.R0_basis, eq.Z0_basis, eq.r_basis,
-            eq.l_basis, eq.R1_basis, eq.Z1_basis, eq.R1_mn, eq.Z1_mn)
-        A_r = A[:, eq.R0_basis.num_modes+eq.Z0_basis.num_modes:-eq.l_basis.num_modes]
-        Z = null_space(A_r)
-        r0_lmn = np.linalg.lstsq(A_r, b, rcond=None)[0].flatten()
-        eq.r_lmn = r0_lmn + Z.dot(Z.T.dot(eq.r_lmn - r0_lmn))
-        """
+        # apply boundary conditions
+        BC = BoundaryConstraint(eq.R0_basis, eq.Z0_basis, eq.r_basis, eq.l_basis)
+        eq.x = BC.make_feasible(eq.x)
 
         return eq
 

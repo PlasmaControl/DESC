@@ -1,19 +1,19 @@
 import numpy as np
 import scipy.optimize
-import warnings
 import copy
 from termcolor import colored
 
 from desc.backend import use_jax, jit
 from desc.utils import Timer
-from desc.grid import LinearGrid, ConcentricGrid
+from desc.grid import ConcentricGrid
 from desc.transform import Transform
 from desc.configuration import EquilibriaFamily
 from desc.objective_funs import ObjectiveFunctionFactory
 from desc.perturbations import perturb_continuation_params
+from desc.vmec import VMECIO
 
 
-def solve_eq_continuation(inputs, file_name=None, device=None):
+def solve_eq_continuation(inputs, file_name=None, vmec_path=None, device=None):
     """Solves for an equilibrium by continuation method
 
     Follows this procedure to solve the equilibrium:
@@ -29,6 +29,8 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
         dictionary with input parameters defining problem setup and solver options
     file_name : str or path-like
         file to save checkpoint data (Default value = None)
+    vmec_path : str or path-like
+        VMEC netCDF file to load initial guess from (Default value = None)
     device : jax.device or None
         device handle to JIT compile to (Default value = None)
 
@@ -124,6 +126,9 @@ def solve_eq_continuation(inputs, file_name=None, device=None):
             inputs_ii['boundary'][:, 3] *= bdry_factor
 
             equil_fam = EquilibriaFamily(inputs=inputs_ii)
+            if vmec_path is not None:
+                equil_fam[ii] = VMECIO.load(
+                    vmec_path, L=L[ii], M=M[ii], N=N[ii], index=zern_mode)
             equil = equil_fam[ii]
 
             timer.start("Transform precomputation")

@@ -1,4 +1,3 @@
-import pathlib
 import sys
 import warnings
 from termcolor import colored
@@ -82,9 +81,16 @@ def main(cl_args=None):
     else:
         device = None
 
+    # check vmec path input
+    try:
+        vmec_path = ir.args.vmec_path
+    except:
+        vmec_path = None
+
     # solve equilibrium
     equil_fam, timer = solve_eq_continuation(
-        ir.inputs, file_name=ir.output_path, device=device)
+        ir.inputs, file_name=ir.output_path, vmec_path=vmec_path,
+        device=device)
 
     if ir.args.plot > 1:
         print('Plotting initial guess')

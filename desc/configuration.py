@@ -28,6 +28,7 @@ class Configuration(IOAble):
                   '_R1_basis', '_Z1_basis', '_p_basis', '_i_basis']
 
     _object_lib_ = {'PowerSeries': PowerSeries,
+                    'FourierSeries': FourierSeries,
                     'DoubleFourierSeries': DoubleFourierSeries,
                     'FourierZernikeBasis': FourierZernikeBasis,
                     'LinearGrid': LinearGrid,
@@ -902,7 +903,7 @@ class Equilibrium(Configuration, IOAble):
        It adds information about how the equilibrium configuration was solved.
     """
     _io_attrs_ = Configuration._io_attrs_ \
-        + ['_initial', '_objective', '_optimizer', '_solved']
+        + ['_objective', '_optimizer', '_solved']
     _object_lib_ = Configuration._object_lib_
     _object_lib_.update({'Configuration': Configuration,
                          'ObjectiveFunction': ObjectiveFunction})

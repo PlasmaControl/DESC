@@ -828,8 +828,8 @@ class InputReader:
         vmec_file.close()
         desc_file.close()
 
-# NOTEL this has to be outside the class to work with autodoc
 
+# NOTE: this has to be outside the class to work with autodoc
 
 def get_parser():
     """Gets parser for command line arguments.
@@ -843,7 +843,6 @@ def get_parser():
         argument parser
 
     """
-
     parser = argparse.ArgumentParser(prog='desc', allow_abbrev=True,
                                      description='DESC computes equilibria by solving the force balance equations. '
                                      + 'It can also be used for perturbation analysis and sensitivity studies '
@@ -856,7 +855,7 @@ def get_parser():
                         help='Plot results after solver finishes. Give once to show only final solution, '
                         + 'twice (eg -pp) to plot both initial and final, and three times (-ppp) to show all iterations')
     parser.add_argument('--vmec', metavar='vmec_path',
-                        help='Path to VMEC data for comparison plot')
+                        help='Path to VMEC data for initial guess')
     parser.add_argument('--gpu', '-g', action='store', nargs='?', default=False, const=True, metavar='gpuID',
                         help='Use GPU if available, and an optional device ID to use a specific GPU.'
                         + ' If no ID is given, default is to select the GPU with most available memory.'

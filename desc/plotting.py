@@ -11,7 +11,6 @@ from desc.backend import put
 from desc.utils import opsindex
 from desc.io import read_ascii
 from desc.grid import Grid, LinearGrid
-from desc.transform import Transform
 from desc.configuration import Configuration
 
 colorblind_colors = [
@@ -129,6 +128,7 @@ class Plot:
             "N": 1,
             "NFP": 1,
             "sym": False,
+            "axis": True,
             "endpoint": True,
             "rho": None,
             "theta": None,
@@ -249,7 +249,7 @@ class Plot:
         ]
         cax_kwargs = {"size": "5%", "pad": 0.05}
 
-        im = ax.imshow(data, **imshow_kwargs)
+        im = ax.imshow(data, cmap="jet", **imshow_kwargs)
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
         cbar.formatter.set_powerlimits((0, 0))
@@ -317,19 +317,91 @@ class Plot:
             Y = Y[0, :, :]
             Z = Z[0, :, :]
 
-        minn, maxx = data.min(), data.max()
-        m = plt.cm.ScalarMappable()
+        minn, maxx = data.min().min(), data.max().max()
+        norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
+        m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
         m.set_array([])
-        fcolors = m.to_rgba(data)
 
         ax.plot_surface(
-            X, Y, Z, rstride=1, cstride=1, facecolors=fcolors, vmin=minn, vmax=maxx
+            X,
+            Y,
+            Z,
+            cmap="jet",
+            facecolors=plt.cm.jet(norm(data)),
+            vmin=minn,
+            vmax=maxx,
         )
         fig.colorbar(m)
 
         ax.set_xlabel(self.axis_labels_XYZ[0])
         ax.set_ylabel(self.axis_labels_XYZ[1])
         ax.set_zlabel(self.axis_labels_XYZ[2])
+        ax.set_title(self.name_label(name_dict))
+        return ax
+
+    def plot_section(
+        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
+    ):
+        """Plots Poincare sections.
+
+        Parameters
+        ----------
+        eq : Configuration
+            object from which to plot
+        name : str
+            name of variable to plot
+        grid : Grid, optional
+            grid of coordinates to plot at
+        ax : matplotlib AxesSubplot, optional
+            axis to plot on
+        kwargs
+            any arguments taken by LinearGrid
+
+        Returns
+        -------
+        axis
+
+        """
+        if grid is None:
+            if kwargs == {}:
+                kwargs.update({"L": 20, "M": 91, "NFP": eq.NFP, "axis": False})
+            grid, plot_axes = self.get_grid(**kwargs)
+        if len(plot_axes) != 2:
+            return ValueError(colored("Grid must be 2D", "red"))
+        if 2 in plot_axes:
+            return ValueError(colored("Grid must be in rho vs theta", "red"))
+
+        name_dict = self.format_name(name)
+        data = self.compute(eq, name_dict, grid).flatten()
+        fig, ax = self.format_ax(ax)
+        divider = make_axes_locatable(ax)
+
+        coords = eq.compute_toroidal_coords(grid)
+        R = coords["R"].reshape((grid.L, grid.M, grid.N), order="F")[:, :, 0].flatten()
+        Z = coords["Z"].reshape((grid.L, grid.M, grid.N), order="F")[:, :, 0].flatten()
+
+        imshow_kwargs = {
+            "origin": "lower",
+            "interpolation": "bilinear",
+            "aspect": "auto",
+        }
+        imshow_kwargs["extent"] = [
+            grid.nodes[0, plot_axes[1]],
+            grid.nodes[-1, plot_axes[1]],
+            grid.nodes[0, plot_axes[0]],
+            grid.nodes[-1, plot_axes[0]],
+        ]
+        cax_kwargs = {"size": "5%", "pad": 0.05}
+
+        cntr = ax.tricontourf(R, Z, data, levels=100, cmap="jet")
+        cax = divider.append_axes("right", **cax_kwargs)
+        cbar = fig.colorbar(cntr, cax=cax)
+        cbar.formatter.set_powerlimits((0, 0))
+        cbar.update_ticks()
+
+        ax.axis("equal")
+        ax.set_xlabel(self.axis_labels_RPZ[0])
+        ax.set_ylabel(self.axis_labels_RPZ[2])
         ax.set_title(self.name_label(name_dict))
         return ax
 
@@ -365,10 +437,10 @@ class Plot:
         """
         if r_grid is None:
             if kwargs == {}:
-                kwargs.update({"L": 6, "M": 180})
+                kwargs.update({"L": 8, "M": 180})
             r_grid, plot_axes = self.get_grid(**kwargs)
         if t_grid is None:
-            kwargs.update({"L": 50, "M": 6})
+            kwargs.update({"L": 50, "M": 8, "endpoint": False})
             t_grid, plot_axes = self.get_grid(**kwargs)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", "red"))
@@ -377,32 +449,32 @@ class Plot:
 
         r_coords = eq.compute_toroidal_coords(r_grid)
         t_coords = eq.compute_polar_coords(t_grid)
+
+        # theta coordinates cooresponding to linearly spaced vartheta angles
         v_nodes = put(
-            t_grid.nodes, opsindex[:, 1], t_grid.nodes[:, 1] + t_coords["lambda"]
+            t_grid.nodes, opsindex[:, 1], t_coords["theta"] - t_coords["lambda"]
         )
         v_grid = Grid(v_nodes)
         v_coords = eq.compute_toroidal_coords(v_grid)
 
         # rho contours
-        R = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
-        Z = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
+        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
+        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
 
+        # theta contours
+        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
+        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
+
+        # boundary
         R1 = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[-1, :, 0]
         Z1 = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[-1, :, 0]
 
         fig, ax = self.format_ax(ax)
 
-        ax.scatter(R[0, 0], Z[0, 0], color=colorblind_colors[3])
-        ax.plot(R.T, Z.T, color=colorblind_colors[0])
+        ax.plot(Rv, Zv, color=colorblind_colors[2], linestyle=":")
+        ax.plot(Rr.T, Zr.T, color=colorblind_colors[0])
         ax.plot(R1, Z1, color=colorblind_colors[1])
-
-        # vartheta contours - not working yet
-        # R = v_coords['R'].reshape(
-        #     (t_grid.L, t_grid.M, t_grid.N), order='F')[:, :, 0]
-        # Z = v_coords['Z'].reshape(
-        #     (t_grid.L, t_grid.M, t_grid.N), order='F')[:, :, 0]
-
-        # ax.plot(R.T, Z.T, 'b--')
+        ax.scatter(Rr[0, 0], Zr[0, 0], color=colorblind_colors[3])
 
         ax.axis("equal")
         ax.set_xlabel(self.axis_labels_RPZ[0])

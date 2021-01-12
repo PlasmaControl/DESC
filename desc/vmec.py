@@ -4,7 +4,7 @@ from netCDF4 import Dataset, stringtochar
 
 from desc.backend import put
 from desc.utils import Tristate, sign
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, ConcentricGrid
 from desc.basis import FourierSeries, DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.configuration import Configuration
@@ -81,17 +81,6 @@ class VMECIO:
             R_sym = Tristate(None)
             Z_sym = Tristate(None)
 
-        # collocation grid
-        surfs = file.dimensions["radius"].size
-        rho = np.sqrt(np.linspace(0, 1, surfs))
-        grid = LinearGrid(
-            M=2 * math.ceil(1.5 * inputs["M"]) + 1,
-            N=2 * math.ceil(1.5 * inputs["N"]) + 1,
-            NFP=inputs["NFP"],
-            sym=inputs["sym"],
-            rho=rho,
-        )
-
         # profiles
         preset = file.dimensions["preset"].size
         p0 = file.variables["presf"][0] / file.variables["am"][0]
@@ -135,6 +124,17 @@ class VMECIO:
             M=inputs["M"],
             N=inputs["N"],
             index=inputs["index"],
+        )
+
+        # grid for fitting r
+        grid = ConcentricGrid(
+            M=2 * math.ceil(1.5 * inputs["M"]) + 1,
+            N=2 * math.ceil(1.5 * inputs["N"]) + 1,
+            NFP=inputs["NFP"],
+            sym=inputs["sym"],
+            axis=True,
+            index=inputs["index"],
+            surfs="cheb1",
         )
 
         # initialize Configuration before setting r

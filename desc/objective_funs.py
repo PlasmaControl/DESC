@@ -49,7 +49,8 @@ class ObjectiveFunction(IOAble, ABC):
                  r_transform: Transform = None,  l_transform: Transform = None,
                  R1_transform: Transform = None, Z1_transform: Transform = None,
                  p_transform: Transform = None,  i_transform: Transform = None,
-                 bc_constraint: BoundaryConstraint = None) -> None:
+                 bc_constraint: BoundaryConstraint = None,
+                 radial_constraint: RadialConstraint = None) -> None:
         """Initializes an ObjectiveFunction
 
         Parameters
@@ -90,6 +91,10 @@ class ObjectiveFunction(IOAble, ABC):
             bc_constraint = BoundaryConstraint(R0_transform.basis, Z0_transform.basis,
                                                r_transform.basis, l_transform.basis)
         self.bc_constraint = bc_constraint
+        if radial_constraint is None:
+            radial_constraint = RadialConstraint(
+                r_transform.basis)
+        self.radial_constraint = radial_constraint
 
         self._grad = Derivative(self.compute_scalar, mode='grad')
         self._hess = Derivative(self.compute_scalar, mode='hess')
@@ -151,7 +156,8 @@ class ForceErrorNodes(ObjectiveFunction):
                  r_transform: Transform = None,  l_transform: Transform = None,
                  R1_transform: Transform = None, Z1_transform: Transform = None,
                  p_transform: Transform = None,  i_transform: Transform = None,
-                 bc_constraint: BoundaryConstraint = None) -> None:
+                 bc_constraint: BoundaryConstraint = None,
+                 radial_constraint: RadialConstraint = None) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters
@@ -182,10 +188,8 @@ class ForceErrorNodes(ObjectiveFunction):
         """
         super().__init__(R0_transform, Z0_transform, r_transform, l_transform,
                          R1_transform, Z1_transform, p_transform, i_transform,
-                         bc_constraint)
+                         bc_constraint, radial_constraint)
         self.scalar = False
-        self.radial_constraint = RadialConstraint(
-            r_transform.basis, scalar=self.scalar)
 
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
@@ -280,7 +284,8 @@ class ObjectiveFunctionFactory():
                           r_transform: Transform = None, l_transform: Transform = None,
                           R1_transform: Transform = None, Z1_transform: Transform = None,
                           p_transform: Transform = None, i_transform: Transform = None,
-                          bc_constraint: BoundaryConstraint = None) -> ObjectiveFunction:
+                          bc_constraint: BoundaryConstraint = None,
+                          radial_constraint: RadialConstraint = None) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
 
         Parameters

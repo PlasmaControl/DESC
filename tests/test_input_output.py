@@ -4,8 +4,8 @@ import pathlib
 import h5py
 import argparse
 
-from desc.input_reader import InputReader
-from desc.equilibrium_io import hdf5Writer, hdf5Reader
+from desc.io import InputReader
+from desc.io import hdf5Writer, hdf5Reader
 
 
 class TestInputReader(unittest.TestCase):

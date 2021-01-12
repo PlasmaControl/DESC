@@ -7,7 +7,7 @@ from desc.backend import use_jax, jnp, jit
 from desc.utils import conditional_decorator, equals
 from desc.grid import Grid
 from desc.basis import Basis
-from desc.equilibrium_io import IOAble
+from desc.io import IOAble
 
 
 class Transform(IOAble):

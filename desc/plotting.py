@@ -9,7 +9,7 @@ from termcolor import colored
 
 from desc.backend import put
 from desc.utils import opsindex
-from desc.equilibrium_io import read_desc
+from desc.io.equilibrium_io import read_desc
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.configuration import Configuration

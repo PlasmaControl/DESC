@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 
 from desc.backend import jnp, fori_loop, factorial
 from desc.utils import Tristate, sign, flatten_list, equals
-from desc.equilibrium_io import IOAble
+from desc.io import IOAble
 
 
-class Basis(IOAble,ABC):
+class Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets
     """
     _io_attrs_ = ['_L', '_M', '_N', '_NFP', '_modes']
@@ -74,7 +74,7 @@ class Basis(IOAble,ABC):
     @abstractmethod
     def change_resolution(self) -> None:
         """Change resolution of the basis to the given resolutions.
-        
+
 
         Returns
         -------
@@ -131,7 +131,7 @@ class PowerSeries(Basis):
        Power series in the radial coordinate.
     """
 
-    def __init__(self, L:int=0, load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(self, L: int = 0, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a PowerSeries
 
         Parameters
@@ -162,7 +162,7 @@ class PowerSeries(Basis):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def get_modes(self, L:int=0):
+    def get_modes(self, L: int = 0):
         """Gets mode numbers for power series
 
         Parameters
@@ -197,7 +197,7 @@ class PowerSeries(Basis):
         """
         return powers(nodes[:, 0], self._modes[:, 0], dr=derivatives[0])
 
-    def change_resolution(self, L:int) -> None:
+    def change_resolution(self, L: int) -> None:
         """Change resolution of the basis to the given resolution. Overrides parent Basis object's change_resolution method.
 
         Parameters
@@ -221,9 +221,8 @@ class FourierSeries(Basis):
        Fourier series in the toroidal coordinate.
     """
 
-    def __init__(self, N:int=0, NFP:int=1, sym:Tristate=None,
-            load_from=None, file_format=None, obj_lib=None) -> None:
-
+    def __init__(self, N: int = 0, NFP: int = 1, sym: Tristate = None,
+                 load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -259,7 +258,7 @@ class FourierSeries(Basis):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def get_modes(self, N:int=0) -> None:
+    def get_modes(self, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -295,7 +294,7 @@ class FourierSeries(Basis):
         """
         return fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
-    def change_resolution(self, N:int) -> None:
+    def change_resolution(self, N: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
 
         Parameters
@@ -319,9 +318,8 @@ class DoubleFourierSeries(Basis):
        Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M:int=0, N:int=0, NFP:int=1, sym:Tristate=None,
-            load_from=None, file_format=None, obj_lib=None) -> None:
-
+    def __init__(self, M: int = 0, N: int = 0, NFP: int = 1, sym: Tristate = None,
+                 load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -359,7 +357,7 @@ class DoubleFourierSeries(Basis):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-    def get_modes(self, M:int=0, N:int=0) -> None:
+    def get_modes(self, M: int = 0, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -397,10 +395,11 @@ class DoubleFourierSeries(Basis):
 
         """
         poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        toroidal = fourier(nodes[:, 2], self._modes[:, 2],
+                           NFP=self._NFP, dt=derivatives[2])
         return poloidal*toroidal
 
-    def change_resolution(self, M:int, N:int) -> None:
+    def change_resolution(self, M: int, N: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
 
         Parameters
@@ -428,10 +427,9 @@ class FourierZernikeBasis(Basis):
        series in the toroidal coordinate.
     """
 
-    def __init__(self, L:int=-1, M:int=0, N:int=0, NFP:int=1,
-                 sym:Tristate=None, index:str='ansi',
+    def __init__(self, L: int = -1, M: int = 0, N: int = 0, NFP: int = 1,
+                 sym: Tristate = None, index: str = 'ansi',
                  load_from=None, file_format=None, obj_lib=None) -> None:
-
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -491,7 +489,7 @@ class FourierZernikeBasis(Basis):
             self._index = index
 
             self._modes = self.get_modes(L=self._L, M=self._M,
-                                            N=self._N, index=self._index)
+                                         N=self._N, index=self._index)
 
             self._enforce_symmetry_()
             self._sort_modes_()
@@ -500,8 +498,7 @@ class FourierZernikeBasis(Basis):
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
 
-
-    def get_modes(self, L:int=-1, M:int=0, N:int=0, index:str='ansi'):
+    def get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = 'ansi'):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -594,12 +591,14 @@ class FourierZernikeBasis(Basis):
             basis functions evaluated at nodes
 
         """
-        radial = jacobi(nodes[:, 0], self._modes[:, 0], self._modes[:, 1], dr=derivatives[0])
+        radial = jacobi(nodes[:, 0], self._modes[:, 0],
+                        self._modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        toroidal = fourier(nodes[:, 2], self._modes[:, 2],
+                           NFP=self._NFP, dt=derivatives[2])
         return radial*poloidal*toroidal
 
-    def change_resolution(self, M:int, N:int, delta_lm:int) -> None:
+    def change_resolution(self, M: int, N: int, delta_lm: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
 
         Parameters
@@ -623,7 +622,7 @@ class FourierZernikeBasis(Basis):
             self._N = N
             self._delta_lm = delta_lm
             self._modes = self.get_modes(self._M, self._N,
-                          delta_lm=self._delta_lm, indexing=self._indexing)
+                                         delta_lm=self._delta_lm, indexing=self._indexing)
             self.sort_nodes()
 
 

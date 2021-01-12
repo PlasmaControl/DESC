@@ -1,7 +1,7 @@
 import sys
 import warnings
 from termcolor import colored
-from desc.input_reader import InputReader
+from desc.io import InputReader
 
 
 def get_device(gpuID=False):

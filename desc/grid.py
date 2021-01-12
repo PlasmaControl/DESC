@@ -2,7 +2,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.utils import equals
-from desc.equilibrium_io import IOAble
+from desc.io import IOAble
 
 
 class Grid(IOAble):

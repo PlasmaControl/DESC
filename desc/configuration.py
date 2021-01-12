@@ -8,7 +8,7 @@ from desc.basis import PowerSeries, FourierSeries, DoubleFourierSeries, FourierZ
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.objective_funs import ObjectiveFunction
-from desc.equilibrium_io import IOAble
+from desc.io import IOAble
 
 from desc.compute_funs import compute_polar_coords, compute_toroidal_coords, compute_cartesian_coords
 from desc.compute_funs import compute_profiles, compute_covariant_basis, compute_contravariant_basis

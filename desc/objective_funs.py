@@ -4,7 +4,7 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.utils import unpack_state, dot
 from desc.transform import Transform
-from desc.equilibrium_io import IOAble
+from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute_funs import compute_force_error_magnitude
 from desc.boundary_conditions import BoundaryConstraint, RadialConstraint

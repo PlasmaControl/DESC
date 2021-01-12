@@ -44,12 +44,9 @@ class BoundaryConstraint(LinearEqualityConstraint):
 
     def __init__(self, R0_basis, Z0_basis, r_basis, l_basis, x0=None):
 
-        Aaxis, baxis = get_axis_bc_matrices(
-            R0_basis, Z0_basis, r_basis, l_basis)
-        Alcfs, blcfs = get_lcfs_bc_matrices(
-            R0_basis, Z0_basis, r_basis, l_basis)
-        Agauge, bgauge = get_gauge_bc_matrices(
-            R0_basis, Z0_basis, r_basis, l_basis)
+        Aaxis, baxis = get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
+        Alcfs, blcfs = get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
+        Agauge, bgauge = get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
 
         A = np.vstack([Aaxis, Alcfs, Agauge])
         b = np.concatenate([baxis, blcfs, bgauge])
@@ -65,7 +62,7 @@ class BoundaryConstraint(LinearEqualityConstraint):
         super().__init__(A, b)
 
 
-class RadialConstraint():
+class RadialConstraint:
     """Penalty term to enforce nested flux surfaces
 
     Penalizes the spacing between flux surfaces to ensure that r is a positive monotonic
@@ -83,26 +80,27 @@ class RadialConstraint():
         whether to compute a scalar or vector loss
     """
 
-    def __init__(self, r_basis: Basis, L: int = 25, a: float = None,
-                 scalar: bool = False):
+    def __init__(
+        self, r_basis: Basis, L: int = 25, a: float = None, scalar: bool = False
+    ):
 
         self._r_basis = r_basis
         self._L = L
-        self._M = 2*r_basis.M + 1
-        self._N = 2*r_basis.N + 1
-        self._a = a or self._L*10
+        self._M = 2 * r_basis.M + 1
+        self._N = 2 * r_basis.N + 1
+        self._a = a or self._L * 10
         self._scalar = scalar
-        self._grid = LinearGrid(
-            L=self._L, M=self._M, N=self._N)
+        self._grid = LinearGrid(L=self._L, M=self._M, N=self._N)
         self._transform = Transform(self._grid, self._r_basis)
 
     def compute(self, r_lmn):
         r = self._transform.transform(r_lmn)
         dr = jnp.diff(
-            r.reshape((self._L, self._M, self._N), order='F'), axis=0).flatten()
+            r.reshape((self._L, self._M, self._N), order="F"), axis=0
+        ).flatten()
         if self._scalar:
             dr = softmax(dr, -self._a)
-        return -jnp.log(dr)/self._a
+        return -jnp.log(dr) / self._a
 
 
 def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
@@ -145,7 +143,7 @@ def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
         c = np.zeros((0, 0))
 
     A = np.zeros((c.shape[1], dimx))
-    A[:, mnpos+dim_R0 + dim_Z0 + dim_r] = c.T
+    A[:, mnpos + dim_R0 + dim_Z0 + dim_r] = c.T
     b = np.zeros((c.shape[1]))
 
     return A, b
@@ -232,16 +230,16 @@ def get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     dimx = dim_R0 + dim_Z0 + dim_r + dim_l
 
     N = max(r_basis.N, l_basis.N)
-    ns = np.arange(-N, N+1)
-    A = np.zeros((len(ns)*2, dimx))
-    b = np.zeros((len(ns)*2))
+    ns = np.arange(-N, N + 1)
+    A = np.zeros((len(ns) * 2, dimx))
+    b = np.zeros((len(ns) * 2))
 
     # r(0,t,z) = 0
     lmn = r_basis.modes
     for i, (l, m, n) in enumerate(lmn):
         if m != 0:
             continue
-        if (l//2) % 2 == 0:
+        if (l // 2) % 2 == 0:
             j = np.argwhere(n == ns)
             A[j, i + dim_R0 + dim_Z0] = 1
         else:
@@ -253,7 +251,7 @@ def get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
     for i, (l, m, n) in enumerate(lmn):
         if m != 0:
             continue
-        if (l//2) % 2 == 0:
+        if (l // 2) % 2 == 0:
             j = np.argwhere(n == ns) + len(ns)
             A[j, i + dim_R0 + dim_Z0 + dim_r] = 1
         else:

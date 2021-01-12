@@ -9,6 +9,7 @@ from desc.optimize.utils import make_spd, chol_U_update
 
 class OptimizerDerivative(ABC):
     """Abstract base class for hessians and jacobians used in the optimizer"""
+
     shape = None
     min_eig = None
     is_pos_def = None
@@ -51,8 +52,16 @@ class OptimizerDerivative(ABC):
 
 
 class CholeskyHessian(OptimizerDerivative):
-
-    def __init__(self, n, init_hess='auto', hessfun=None, hessfun_args=(), exception_strategy='damp_update', min_curvature=None, damp_ratio=0.2):
+    def __init__(
+        self,
+        n,
+        init_hess="auto",
+        hessfun=None,
+        hessfun_args=(),
+        exception_strategy="damp_update",
+        min_curvature=None,
+        damp_ratio=0.2,
+    ):
         self._n = n
         self.shape = (n, n)
         self.is_pos_def = True
@@ -65,46 +74,49 @@ class CholeskyHessian(OptimizerDerivative):
                 self._hessfun = hessfun
                 self._hessfun_args = hessfun_args
             else:
-                raise ValueError(
-                    colored('hessfun should be callable or None', 'red'))
+                raise ValueError(colored("hessfun should be callable or None", "red"))
         else:
             self._hessfun = None
             self._hessfun_args = ()
 
-        if exception_strategy == 'skip_update':
+        if exception_strategy == "skip_update":
             if min_curvature is not None:
                 self.min_curvature = min_curvature
             else:
                 self.min_curvature = 1e-8
-        elif exception_strategy == 'damp_update':
+        elif exception_strategy == "damp_update":
             if min_curvature is not None:
                 self.min_curvature = min_curvature
             else:
                 self.min_curvature = 0.2
         else:
-            raise ValueError(colored("'exception_strategy' must be 'skip_update' "
-                                     "or 'damp_update'", 'red'))
+            raise ValueError(
+                colored(
+                    "'exception_strategy' must be 'skip_update' " "or 'damp_update'",
+                    "red",
+                )
+            )
         self.exception_strategy = exception_strategy
 
         if init_hess is None and hessfun is None:
             self._U = np.eye(n)
             self._initialized = True
-            self._initialization = 'eye'
+            self._initialization = "eye"
         elif init_hess is None and hessfun is not None:
             self._U = np.eye(n)
             self._initialized = False
-            self._initialization = 'hessfun'
-        elif isinstance(init_hess, str) and init_hess == 'auto':
+            self._initialization = "hessfun"
+        elif isinstance(init_hess, str) and init_hess == "auto":
             self._U = np.eye(n)
             self._initialized = False
-            self._initialization = 'auto'
+            self._initialization = "auto"
         elif isinstance(init_hess, str):
-            raise ValueError(colored('unknown hessian initialization', 'red'))
+            raise ValueError(colored("unknown hessian initialization", "red"))
         else:
             init_hess = make_spd(init_hess, delta=self.min_curvature, tol=0.1)
             self._U = self._cholesky(init_hess).T
             self._initialized = True
-            self._initialization = 'init_hess'
+            self._initialization = "init_hess"
 
     def _auto_scale_init(self, delta_x, delta_grad):
         # Heuristic to scale matrix at first iteration.
@@ -152,9 +164,9 @@ class CholeskyHessian(OptimizerDerivative):
         if np.all(delta_grad == 0.0):
             return
         if not self._initialized:
-            if self._initialization == 'auto':
+            if self._initialization == "auto":
                 self._auto_scale_init(delta_x, delta_grad)
-            elif self._initialization == 'hessfun':
+            elif self._initialization == "hessfun":
                 self.recompute(x_new)
 
         self._bfgs_update(delta_x, delta_grad)
@@ -177,19 +189,19 @@ class CholeskyHessian(OptimizerDerivative):
         # Check if curvature condition is violated
         if sy <= self.min_curvature * sBs:
 
-            if self.exception_strategy == 'skip_update':
+            if self.exception_strategy == "skip_update":
                 return
             # interpolate between the actual BFGS
             # result and the unmodified matrix.
-            elif self.exception_strategy == 'damp_update':
-                update_factor = (1-self.min_curvature) / (1 - sy/sBs)
-                y = update_factor*y + (1-update_factor)*Bs
+            elif self.exception_strategy == "damp_update":
+                update_factor = (1 - self.min_curvature) / (1 - sy / sBs)
+                y = update_factor * y + (1 - update_factor) * Bs
                 sy = np.dot(s, y)
 
         u = np.asarray(y)
         v = np.asarray(Bs)
-        alpha = np.asarray(1/sy)
-        beta = np.asarray(-1/sBs)
+        alpha = np.asarray(1 / sy)
+        beta = np.asarray(-1 / sBs)
 
         self._U = chol_U_update(np.asarray(self._U), u, alpha)
         self._U = chol_U_update(np.asarray(self._U), v, beta)
@@ -224,9 +236,9 @@ class CholeskyHessian(OptimizerDerivative):
 
 
 def compute_jac_scale(A, prev_scale_inv=None):
-    scale_inv = jnp.sum(A**2, axis=0)**0.5
+    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
-    return 1/scale_inv, scale_inv
+    return 1 / scale_inv, scale_inv

@@ -31,32 +31,41 @@ class Transform(IOAble):
         DESCRIPTION
 
     """
-    _io_attrs_ = ['_grid', '_basis', '_derives', '_matrices']
 
-    def __init__(self, grid: Grid = None, basis: Basis = None, derivs=0, rcond=1e-6,
-                 load_from=None, file_format=None, obj_lib=None) -> None:
+    _io_attrs_ = ["_grid", "_basis", "_derives", "_matrices"]
+
+    def __init__(
+        self,
+        grid: Grid = None,
+        basis: Basis = None,
+        derivs=0,
+        rcond=1e-6,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a Transform
 
-        Parameters
-        ----------
-        grid : Grid
-            DESCRIPTION
-        basis : Basis
-            DESCRIPTION
-        derivs : int or string
-            order of derivatives needed, if an int (Default = 0)
-            OR
-            type of calculation being performed, if a string
-            ``'force'``: all of the derivatives needed to calculate an
-            equilibrium from the force balance equations
-            ``'qs'``: all of the derivatives needed to calculate quasi-
-            symmetry from the triple-product equation
-       rcond : float
-            relative cutoff for singular values in least squares fit
+         Parameters
+         ----------
+         grid : Grid
+             DESCRIPTION
+         basis : Basis
+             DESCRIPTION
+         derivs : int or string
+             order of derivatives needed, if an int (Default = 0)
+             OR
+             type of calculation being performed, if a string
+             ``'force'``: all of the derivatives needed to calculate an
+             equilibrium from the force balance equations
+             ``'qs'``: all of the derivatives needed to calculate quasi-
+             symmetry from the triple-product equation
+        rcond : float
+             relative cutoff for singular values in least squares fit
 
-        Returns
-        -------
-        None
+         Returns
+         -------
+         None
 
         """
         self._file_format_ = file_format
@@ -67,8 +76,9 @@ class Transform(IOAble):
             self._derivs = derivs
             self._rcond = rcond
 
-            self._matrices = {i: {j: {k: {}
-                                      for k in range(4)} for j in range(4)} for i in range(4)}
+            self._matrices = {
+                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+            }
             self._derivatives = self._get_derivatives_(self._derivs)
 
             self._sort_derivatives_()
@@ -76,7 +86,8 @@ class Transform(IOAble):
             self._build_pinv_()
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -121,7 +132,7 @@ class Transform(IOAble):
         """
         if isinstance(derivs, int) and derivs >= 0:
             derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(derivs+1), 3)
+            combos = combinations_with_replacement(range(derivs + 1), 3)
             for combo in list(combos):
                 perms = set(permutations(combo))
                 for perm in list(perms):
@@ -129,24 +140,55 @@ class Transform(IOAble):
                         derivatives = np.vstack([derivatives, np.array(perm)])
                     else:
                         derivatives = np.array([perm])
-        elif derivs.lower() == 'force':
-            derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                                    [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                                    [0, 1, 1], [0, 0, 2]])
+        elif derivs.lower() == "force":
+            derivatives = np.array(
+                [
+                    [0, 0, 0],
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1],
+                    [2, 0, 0],
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [0, 2, 0],
+                    [0, 1, 1],
+                    [0, 0, 2],
+                ]
+            )
             # FIXME: this assumes the Grid is sorted (which it should be)
             if np.all(self._grid.nodes[:, 0] == np.array([0, 0, 0])):
                 axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
                 derivatives = np.vstack([derivatives, axis])
-        elif derivs.lower() == 'qs':
-            derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],
-                                    [2, 0, 0], [1, 1, 0], [1, 0, 1], [0, 2, 0],
-                                    [0, 1, 1], [0, 0, 2], [3, 0, 0], [2, 1, 0],
-                                    [2, 0, 1], [1, 2, 0], [1, 1, 1], [1, 0, 2],
-                                    [0, 3, 0], [0, 2, 1], [0, 1, 2], [0, 0, 3],
-                                    [2, 2, 0]])
+        elif derivs.lower() == "qs":
+            derivatives = np.array(
+                [
+                    [0, 0, 0],
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1],
+                    [2, 0, 0],
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [0, 2, 0],
+                    [0, 1, 1],
+                    [0, 0, 2],
+                    [3, 0, 0],
+                    [2, 1, 0],
+                    [2, 0, 1],
+                    [1, 2, 0],
+                    [1, 1, 1],
+                    [1, 0, 2],
+                    [0, 3, 0],
+                    [0, 2, 1],
+                    [0, 1, 2],
+                    [0, 0, 3],
+                    [2, 2, 0],
+                ]
+            )
         else:
             raise NotImplementedError(
-                colored("order options are 'force', 'qs', or a non-negative int", 'red'))
+                colored("order options are 'force', 'qs', or a non-negative int", "red")
+            )
 
         return derivatives
 
@@ -158,20 +200,18 @@ class Transform(IOAble):
         None
 
         """
-        sort_idx = np.lexsort((self._derivatives[:, 0],
-                               self._derivatives[:, 1], self._derivatives[:, 2]))
+        sort_idx = np.lexsort(
+            (self._derivatives[:, 0], self._derivatives[:, 1], self._derivatives[:, 2])
+        )
         self._derivatives = self._derivatives[sort_idx]
 
     def _build_(self) -> None:
-        """Builds the transform matrices for each derivative order
-        """
+        """Builds the transform matrices for each derivative order"""
         for d in self._derivatives:
-            self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                self._grid.nodes, d)
+            self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(self._grid.nodes, d)
 
     def _build_pinv_(self) -> None:
-        """Builds the transform matrices for each derivative order
-        """
+        """Builds the transform matrices for each derivative order"""
         # FIXME: this assumes the derivatives are sorted (which they should be)
         if np.all(self._derivatives[0, :] == np.array([0, 0, 0])):
             A = self._matrices[0][0][0]
@@ -205,10 +245,17 @@ class Transform(IOAble):
         A = self._matrices[dr][dt][dz]
         if type(A) is dict:
             raise ValueError(
-                colored("Derivative orders are out of initialized bounds", 'red'))
+                colored("Derivative orders are out of initialized bounds", "red")
+            )
         if A.shape[1] != c.size:
-            raise ValueError(colored("Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
-                c.size, A.shape[1]), 'red'))
+            raise ValueError(
+                colored(
+                    "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
+                        c.size, A.shape[1]
+                    ),
+                    "red",
+                )
+            )
 
         return jnp.matmul(A, c)
 
@@ -337,12 +384,14 @@ class Transform(IOAble):
             new_derivatives = self._derivatives
 
             new_not_in_old = (
-                new_derivatives[:, None] == old_derivatives).all(-1).any(-1)
+                (new_derivatives[:, None] == old_derivatives).all(-1).any(-1)
+            )
             derivs_to_add = new_derivatives[~new_not_in_old]
 
             for d in derivs_to_add:
                 self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self._grid.nodes, d)
+                    self._grid.nodes, d
+                )
 
     @property
     def matrices(self):

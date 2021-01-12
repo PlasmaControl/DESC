@@ -9,8 +9,7 @@ if use_jax:
 
 
 class _Derivative(ABC):
-    """_Derivative is an abstract base class for derivative matrix calculations
-    """
+    """_Derivative is an abstract base class for derivative matrix calculations"""
 
     @abstractmethod
     def __init__(self, fun: callable, argnum: int = 0, **kwargs) -> None:
@@ -70,10 +69,9 @@ class _Derivative(ABC):
 
 
 class AutoDiffDerivative(_Derivative):
-    """Computes derivatives using automatic differentiation with JAX
-    """
+    """Computes derivatives using automatic differentiation with JAX"""
 
-    def __init__(self, fun: callable, argnum: int = 0, mode: str = 'fwd') -> None:
+    def __init__(self, fun: callable, argnum: int = 0, mode: str = "fwd") -> None:
         """Initializes an AutoDiffDerivative
 
         Parameters
@@ -131,29 +129,30 @@ class AutoDiffDerivative(_Derivative):
 
     @mode.setter
     def mode(self, mode: str) -> None:
-        if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
-                colored("invalid mode option for automatic differentiation", 'red'))
+                colored("invalid mode option for automatic differentiation", "red")
+            )
 
         self._mode = mode
-        if self._mode == 'fwd':
+        if self._mode == "fwd":
             self._compute = jax.jacfwd(self._fun, self._argnum)
-        elif self._mode == 'rev':
+        elif self._mode == "rev":
             self._compute = jax.jacrev(self._fun, self._argnum)
-        elif self._mode == 'grad':
+        elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
-        elif self._mode == 'hess':
+        elif self._mode == "hess":
             self._compute = jax.hessian(self._fun, self._argnum)
-        elif self._mode == 'jvp':
+        elif self._mode == "jvp":
             self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):
-    """Computes derivatives using 2nd order centered finite differences
-    """
+    """Computes derivatives using 2nd order centered finite differences"""
 
-    def __init__(self, fun: callable, argnum: int = 0, mode: str = 'fwd',
-                 rel_step: float = 1e-3) -> None:
+    def __init__(
+        self, fun: callable, argnum: int = 0, mode: str = "fwd", rel_step: float = 1e-3
+    ) -> None:
         """Initializes a FiniteDiffDerivative
 
         Parameters
@@ -194,28 +193,28 @@ class FiniteDiffDerivative(_Derivative):
         """
 
         def f(x):
-            tempargs = args[0:self._argnum] + \
-                (x,) + args[self._argnum+1:]
+            tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
             return self._fun(*tempargs)
 
         x = np.atleast_1d(args[self._argnum])
         n = len(x)
         fx = f(x)
-        h = np.maximum(1.0, np.abs(x))*self.rel_step
+        h = np.maximum(1.0, np.abs(x)) * self.rel_step
         ee = np.diag(h)
         dtype = fx.dtype
         hess = np.outer(h, h)
 
         for i in range(n):
             eei = ee[i, :]
-            hess[i, i] = (f(x + 2 * eei) - 2 * fx +
-                          f(x - 2 * eei)) / (4. * hess[i, i])
+            hess[i, i] = (f(x + 2 * eei) - 2 * fx + f(x - 2 * eei)) / (4.0 * hess[i, i])
             for j in range(i + 1, n):
                 eej = ee[j, :]
-                hess[i, j] = (f(x + eei + eej)
-                              - f(x + eei - eej)
-                              - f(x - eei + eej)
-                              + f(x - eei - eej)) / (4. * hess[j, i])
+                hess[i, j] = (
+                    f(x + eei + eej)
+                    - f(x + eei - eej)
+                    - f(x - eei + eej)
+                    + f(x - eei - eej)
+                ) / (4.0 * hess[j, i])
                 hess[j, i] = hess[i, j]
 
         return hess
@@ -236,8 +235,9 @@ class FiniteDiffDerivative(_Derivative):
             argument at position argnum.
 
         """
+
         def f(x):
-            tempargs = args[0:self._argnum] + (x,) + args[self._argnum+1:]
+            tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
             return self._fun(*tempargs)
 
         x0 = np.atleast_1d(args[self._argnum])
@@ -245,7 +245,7 @@ class FiniteDiffDerivative(_Derivative):
         m = f0.size
         n = x0.size
         J = np.zeros((m, n))
-        h = np.maximum(1.0, np.abs(x0))*self.rel_step
+        h = np.maximum(1.0, np.abs(x0)) * self.rel_step
         h_vecs = np.diag(np.atleast_1d(h))
         for i in range(n):
             x1 = x0 - h_vecs[i]
@@ -263,15 +263,15 @@ class FiniteDiffDerivative(_Derivative):
     def _compute_jvp(self, v, *args):
 
         normv = np.linalg.norm(v)
-        vh = v/normv
+        vh = v / normv
         x = args[self.argnum]
 
         def f(x):
-            tempargs = args[0:self._argnum] + (x,) + args[self._argnum+1:]
+            tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
             return self._fun(*tempargs)
 
         h = self.rel_step
-        df = (f(x + h*vh) - f(x - h*vh))/(2*h)
+        df = (f(x + h * vh) - f(x - h * vh)) / (2 * h)
         return df * normv
 
     @property
@@ -280,20 +280,23 @@ class FiniteDiffDerivative(_Derivative):
 
     @mode.setter
     def mode(self, mode: str) -> None:
-        if mode not in ['fwd', 'rev', 'grad', 'hess', 'jvp']:
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
-                colored("invalid mode option for finite difference differentiation", 'red'))
+                colored(
+                    "invalid mode option for finite difference differentiation", "red"
+                )
+            )
 
         self._mode = mode
-        if self._mode == 'fwd':
+        if self._mode == "fwd":
             self._compute = self._compute_grad_or_jac
-        elif self._mode == 'rev':
+        elif self._mode == "rev":
             self._compute = self._compute_grad_or_jac
-        elif self._mode == 'grad':
+        elif self._mode == "grad":
             self._compute = self._compute_grad_or_jac
-        elif self._mode == 'hess':
+        elif self._mode == "hess":
             self._compute = self._compute_hessian
-        elif self._mode == 'jvp':
+        elif self._mode == "jvp":
             self._compute = self._compute_jvp
 
     def compute(self, *args):
@@ -323,7 +326,8 @@ else:
 
 # TODO: make this thing an option for autodiff, probably just by adding a dict of kwargs?
 
-class BlockJacobian():
+
+class BlockJacobian:
     """Computes a jacobian matrix in smaller blocks.
     Takes a large jacobian and splits it into smaller blocks
     (row-wise) for easier computation, possibly allowing each
@@ -356,8 +360,9 @@ class BlockJacobian():
         object that computes the jacobian of fun.
     """
 
-    def __init__(self, fun, N, M, block_size=None, num_blocks=None,
-                 devices=None, usejit=False):
+    def __init__(
+        self, fun, N, M, block_size=None, num_blocks=None, devices=None, usejit=False
+    ):
 
         self.fun = fun
         self.N = N
@@ -368,17 +373,18 @@ class BlockJacobian():
         # of surgery on the objective function
         if block_size is not None and num_blocks is not None:
             raise ValueError(
-                colored("can specify either block_size or num_blocks, not both", 'red'))
+                colored("can specify either block_size or num_blocks, not both", "red")
+            )
 
         elif block_size is None and num_blocks is None:
             self.block_size = N
             self.num_blocks = 1
         elif block_size is not None:
             self.block_size = block_size
-            self.num_blocks = np.ceil(N/block_size).astype(int)
+            self.num_blocks = np.ceil(N / block_size).astype(int)
         else:
             self.num_blocks = num_blocks
-            self.block_size = np.ceil(N/num_blocks).astype(int)
+            self.block_size = np.ceil(N / num_blocks).astype(int)
 
         if type(devices) in [list, tuple]:
             self.devices = devices
@@ -393,12 +399,19 @@ class BlockJacobian():
             # need the i=i in the lambda signature, otherwise i is scoped to
             # the loop and get overwritten, making each function compute the same subset
             self.f_blocks.append(
-                lambda x, *args, i=i: self.fun(x, *args)[i*self.block_size:(i+1)*self.block_size])
+                lambda x, *args, i=i: self.fun(x, *args)[
+                    i * self.block_size : (i + 1) * self.block_size
+                ]
+            )
             # need to use jacrev here to actually get memory savings
             # (plus, these blocks should be wide and short)
             if self.usejit:
                 self.jac_blocks.append(
-                    jit(jacrev(self.f_blocks[i]), device=self.devices[i % len(self.devices)]))
+                    jit(
+                        jacrev(self.f_blocks[i]),
+                        device=self.devices[i % len(self.devices)],
+                    )
+                )
             else:
                 self.jac_blocks.append(jacrev(self.f_blocks[i]))
 

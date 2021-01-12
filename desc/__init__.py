@@ -1,7 +1,8 @@
 import colorama
 from termcolor import colored
 from ._version import get_versions
-__version__ = get_versions()['version']
+
+__version__ = get_versions()["version"]
 del get_versions
 
 colorama.init()
@@ -16,4 +17,4 @@ _BANNER = """
                          
 """
 
-BANNER = colored(_BANNER, 'magenta')
+BANNER = colored(_BANNER, "magenta")

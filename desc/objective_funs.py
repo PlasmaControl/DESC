@@ -40,17 +40,32 @@ class ObjectiveFunction(IOAble, ABC):
     callback(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0)
         function that prints equilibrium errors
     """
-    _io_attrs_ = ['scalar', 'R0_transform', 'Z0_transform', 'r_transform',
-                  'l_transform', 'R1_transform', 'Z1_transform',
-                  'p_transform', 'i_transform']
 
-    def __init__(self,
-                 R0_transform: Transform = None, Z0_transform: Transform = None,
-                 r_transform: Transform = None,  l_transform: Transform = None,
-                 R1_transform: Transform = None, Z1_transform: Transform = None,
-                 p_transform: Transform = None,  i_transform: Transform = None,
-                 bc_constraint: BoundaryConstraint = None,
-                 radial_constraint: RadialConstraint = None) -> None:
+    _io_attrs_ = [
+        "scalar",
+        "R0_transform",
+        "Z0_transform",
+        "r_transform",
+        "l_transform",
+        "R1_transform",
+        "Z1_transform",
+        "p_transform",
+        "i_transform",
+    ]
+
+    def __init__(
+        self,
+        R0_transform: Transform = None,
+        Z0_transform: Transform = None,
+        r_transform: Transform = None,
+        l_transform: Transform = None,
+        R1_transform: Transform = None,
+        Z1_transform: Transform = None,
+        p_transform: Transform = None,
+        i_transform: Transform = None,
+        bc_constraint: BoundaryConstraint = None,
+        radial_constraint: RadialConstraint = None,
+    ) -> None:
         """Initializes an ObjectiveFunction
 
         Parameters
@@ -88,17 +103,20 @@ class ObjectiveFunction(IOAble, ABC):
         self.p_transform = p_transform
         self.i_transform = i_transform
         if bc_constraint is None:
-            bc_constraint = BoundaryConstraint(R0_transform.basis, Z0_transform.basis,
-                                               r_transform.basis, l_transform.basis)
+            bc_constraint = BoundaryConstraint(
+                R0_transform.basis,
+                Z0_transform.basis,
+                r_transform.basis,
+                l_transform.basis,
+            )
         self.bc_constraint = bc_constraint
         if radial_constraint is None:
-            radial_constraint = RadialConstraint(
-                r_transform.basis)
+            radial_constraint = RadialConstraint(r_transform.basis)
         self.radial_constraint = radial_constraint
 
-        self._grad = Derivative(self.compute_scalar, mode='grad')
-        self._hess = Derivative(self.compute_scalar, mode='hess')
-        self._jac = Derivative(self.compute, mode='fwd')
+        self._grad = Derivative(self.compute_scalar, mode="grad")
+        self._hess = Derivative(self.compute_scalar, mode="hess")
+        self._jac = Derivative(self.compute, mode="fwd")
 
     @abstractmethod
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -151,13 +169,19 @@ class ObjectiveFunction(IOAble, ABC):
 class ForceErrorNodes(ObjectiveFunction):
     """Minimizes equilibrium force balance error in physical space"""
 
-    def __init__(self,
-                 R0_transform: Transform = None, Z0_transform: Transform = None,
-                 r_transform: Transform = None,  l_transform: Transform = None,
-                 R1_transform: Transform = None, Z1_transform: Transform = None,
-                 p_transform: Transform = None,  i_transform: Transform = None,
-                 bc_constraint: BoundaryConstraint = None,
-                 radial_constraint: RadialConstraint = None) -> None:
+    def __init__(
+        self,
+        R0_transform: Transform = None,
+        Z0_transform: Transform = None,
+        r_transform: Transform = None,
+        l_transform: Transform = None,
+        R1_transform: Transform = None,
+        Z1_transform: Transform = None,
+        p_transform: Transform = None,
+        i_transform: Transform = None,
+        bc_constraint: BoundaryConstraint = None,
+        radial_constraint: RadialConstraint = None,
+    ) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters
@@ -186,9 +210,18 @@ class ForceErrorNodes(ObjectiveFunction):
         None
 
         """
-        super().__init__(R0_transform, Z0_transform, r_transform, l_transform,
-                         R1_transform, Z1_transform, p_transform, i_transform,
-                         bc_constraint, radial_constraint)
+        super().__init__(
+            R0_transform,
+            Z0_transform,
+            r_transform,
+            l_transform,
+            R1_transform,
+            Z1_transform,
+            p_transform,
+            i_transform,
+            bc_constraint,
+            radial_constraint,
+        )
         self.scalar = False
 
     def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -198,36 +231,79 @@ class ForceErrorNodes(ObjectiveFunction):
         x = self.bc_constraint.recover(x)
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x, self.R0_transform.basis.num_modes, self.Z0_transform.basis.num_modes,
-            self.r_transform.basis.num_modes, self.l_transform.basis.num_modes)
+            x,
+            self.R0_transform.basis.num_modes,
+            self.Z0_transform.basis.num_modes,
+            self.r_transform.basis.num_modes,
+            self.l_transform.basis.num_modes,
+        )
 
-        (force_error, current_density, magnetic_field, profiles, con_basis,
-         jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
-             Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
-             self.R0_transform, self.Z0_transform, self.r_transform,
-             self.l_transform, self.R1_transform, self.Z1_transform,
-             self.p_transform, self.i_transform, zeta_ratio)
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            profiles,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            polar_coords,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R0_n,
+            Z0_n,
+            r_lmn,
+            l_lmn,
+            R1_mn,
+            Z1_mn,
+            p_l,
+            i_l,
+            self.R0_transform,
+            self.Z0_transform,
+            self.r_transform,
+            self.l_transform,
+            self.R1_transform,
+            self.Z1_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
 
         volumes = self.R0_transform.grid.volumes
         dr = volumes[:, 0]
         dt = volumes[:, 1]
         dz = volumes[:, 2]
 
-        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz *\
-            jnp.sign(dot(con_basis['e^rho'], cov_basis['e_rho'], 0))
-        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz *\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0)) *\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_zeta'], 0))
+        f_rho = (
+            force_error["F_rho"]
+            * force_error["|grad(rho)|"]
+            * jacobian["g"]
+            * dr
+            * dt
+            * dz
+            * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
+        )
+        f_beta = (
+            force_error["F_beta"]
+            * force_error["|beta|"]
+            * jacobian["g"]
+            * dr
+            * dt
+            * dz
+            * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
+            * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
+        )
 
         dr_penalty = self.radial_constraint.compute(r_lmn)
 
         residual = jnp.concatenate(
-            [f_rho.flatten(), f_beta.flatten(), dr_penalty.flatten()])
+            [f_rho.flatten(), f_beta.flatten(), dr_penalty.flatten()]
+        )
         return residual
 
     def compute_scalar(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         residual = self.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
-        residual = jnp.sum(residual**2)
+        residual = jnp.sum(residual ** 2)
         return residual
 
     def callback(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
@@ -237,40 +313,85 @@ class ForceErrorNodes(ObjectiveFunction):
         x = self.bc_constraint.recover(x)
 
         R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x, self.R0_transform.basis.num_modes, self.Z0_transform.basis.num_modes,
-            self.r_transform.basis.num_modes, self.l_transform.basis.num_modes)
+            x,
+            self.R0_transform.basis.num_modes,
+            self.Z0_transform.basis.num_modes,
+            self.r_transform.basis.num_modes,
+            self.l_transform.basis.num_modes,
+        )
 
-        (force_error, current_density, magnetic_field, profiles, con_basis,
-         jacobian, cov_basis, toroidal_coords, polar_coords) = compute_force_error_magnitude(
-             Psi, R0_n, Z0_n, r_lmn, l_lmn, R1_mn, Z1_mn, p_l, i_l,
-             self.R0_transform, self.Z0_transform, self.r_transform,
-             self.l_transform, self.R1_transform, self.Z1_transform,
-             self.p_transform, self.i_transform, zeta_ratio)
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            profiles,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            polar_coords,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R0_n,
+            Z0_n,
+            r_lmn,
+            l_lmn,
+            R1_mn,
+            Z1_mn,
+            p_l,
+            i_l,
+            self.R0_transform,
+            self.Z0_transform,
+            self.r_transform,
+            self.l_transform,
+            self.R1_transform,
+            self.Z1_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
 
         volumes = self.R0_transform.grid.volumes
         dr = volumes[:, 0]
         dt = volumes[:, 1]
         dz = volumes[:, 2]
 
-        f_rho = force_error['F_rho']*force_error['|grad(rho)|']*jacobian['g']*dr*dt*dz *\
-            jnp.sign(dot(con_basis['e^rho'], cov_basis['e_rho'], 0))
-        f_beta = force_error['F_beta']*force_error['|beta|']*jacobian['g']*dr*dt*dz *\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_theta'], 0)) *\
-            jnp.sign(dot(force_error['beta'], cov_basis['e_zeta'], 0))
+        f_rho = (
+            force_error["F_rho"]
+            * force_error["|grad(rho)|"]
+            * jacobian["g"]
+            * dr
+            * dt
+            * dz
+            * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
+        )
+        f_beta = (
+            force_error["F_beta"]
+            * force_error["|beta|"]
+            * jacobian["g"]
+            * dr
+            * dt
+            * dz
+            * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
+            * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
+        )
 
-        f_rho_rms = jnp.sqrt(jnp.sum(f_rho**2))
-        f_beta_rms = jnp.sqrt(jnp.sum(f_beta**2))
+        f_rho_rms = jnp.sqrt(jnp.sum(f_rho ** 2))
+        f_beta_rms = jnp.sqrt(jnp.sum(f_beta ** 2))
 
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
-        resid_rms = 1/2*jnp.sum(residual**2)
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
 
-        print('Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}'.format(
-            resid_rms, f_rho_rms, f_beta_rms))
+        print(
+            "Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}".format(
+                resid_rms, f_rho_rms, f_beta_rms
+            )
+        )
 
         return None
 
 
-class ObjectiveFunctionFactory():
+class ObjectiveFunctionFactory:
     """Factory Class for Objective Functions
 
     Methods
@@ -279,13 +400,19 @@ class ObjectiveFunctionFactory():
 
     """
 
-    def get_equil_obj_fun(errr_mode,
-                          R0_transform: Transform = None, Z0_transform: Transform = None,
-                          r_transform: Transform = None, l_transform: Transform = None,
-                          R1_transform: Transform = None, Z1_transform: Transform = None,
-                          p_transform: Transform = None, i_transform: Transform = None,
-                          bc_constraint: BoundaryConstraint = None,
-                          radial_constraint: RadialConstraint = None) -> ObjectiveFunction:
+    def get_equil_obj_fun(
+        errr_mode,
+        R0_transform: Transform = None,
+        Z0_transform: Transform = None,
+        r_transform: Transform = None,
+        l_transform: Transform = None,
+        R1_transform: Transform = None,
+        Z1_transform: Transform = None,
+        p_transform: Transform = None,
+        i_transform: Transform = None,
+        bc_constraint: BoundaryConstraint = None,
+        radial_constraint: RadialConstraint = None,
+    ) -> ObjectiveFunction:
         """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
 
         Parameters
@@ -318,18 +445,33 @@ class ObjectiveFunctionFactory():
 
         """
         if len(R0_transform.grid.axis):
-            raise ValueError(colored("Objective cannot be evaluated at the magnetic axis. " +
-                                     "Yell at Daniel to implement this!", 'red'))
+            raise ValueError(
+                colored(
+                    "Objective cannot be evaluated at the magnetic axis. "
+                    + "Yell at Daniel to implement this!",
+                    "red",
+                )
+            )
 
-        if errr_mode == 'force':
+        if errr_mode == "force":
             obj_fun = ForceErrorNodes(
-                R0_transform=R0_transform, Z0_transform=Z0_transform,
-                r_transform=r_transform, l_transform=l_transform,
-                R1_transform=R1_transform, Z1_transform=Z1_transform,
-                p_transform=p_transform, i_transform=i_transform,
-                bc_constraint=bc_constraint)
+                R0_transform=R0_transform,
+                Z0_transform=Z0_transform,
+                r_transform=r_transform,
+                l_transform=l_transform,
+                R1_transform=R1_transform,
+                Z1_transform=Z1_transform,
+                p_transform=p_transform,
+                i_transform=i_transform,
+                bc_constraint=bc_constraint,
+            )
         else:
-            raise ValueError(colored("Requested Objective Function is not implemented. " +
-                                     "Available objective functions are: 'force'", 'red'))
+            raise ValueError(
+                colored(
+                    "Requested Objective Function is not implemented. "
+                    + "Available objective functions are: 'force'",
+                    "red",
+                )
+            )
 
         return obj_fun

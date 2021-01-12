@@ -11,9 +11,8 @@ class TestDerivative(unittest.TestCase):
     """Tests Grid classes"""
 
     def test_finite_diff_vec(self):
-
         def test_fun(x, y, a):
-            return x*y + a
+            return x * y + a
 
         x = np.array([1, 5, 0.01, 200])
         y = np.array([60, 1, 100, 0.02])
@@ -26,7 +25,6 @@ class TestDerivative(unittest.TestCase):
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
     def test_finite_diff_scalar(self):
-
         def test_fun(x, y, a):
             return np.dot(x, y) + a
 
@@ -45,9 +43,8 @@ class TestDerivative(unittest.TestCase):
         np.testing.assert_allclose(J, x, atol=1e-8)
 
     def test_auto_diff(self):
-
         def test_fun(x, y, a):
-            return jnp.cos(x) + x*y + a
+            return jnp.cos(x) + x * y + a
 
         x = np.array([1, 5, 0.01, 200])
         y = np.array([60, 1, 100, 0.02])
@@ -60,9 +57,8 @@ class TestDerivative(unittest.TestCase):
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
     def test_compare_AD_FD(self):
-
         def test_fun(x, y, a):
-            return jnp.cos(x) + x*y + a
+            return jnp.cos(x) + x * y + a
 
         x = np.array([1, 5, 0.01, 200])
         y = np.array([60, 1, 100, 0.02])
@@ -85,9 +81,9 @@ class TestDerivative(unittest.TestCase):
         g = rando.random(n)
 
         def f(x):
-            return 5 + g.dot(x) + x.dot(1/2*A.dot(x))
+            return 5 + g.dot(x) + x.dot(1 / 2 * A.dot(x))
 
-        hess = FiniteDiffDerivative(f, argnum=0, mode='hess')
+        hess = FiniteDiffDerivative(f, argnum=0, mode="hess")
 
         y = rando.random(n)
         A1 = hess(y)

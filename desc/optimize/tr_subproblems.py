@@ -32,15 +32,16 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
 
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
-    p_newton = -1/scale*hess.solve(g)
+    p_newton = -1 / scale * hess.solve(g)
     if jnp.linalg.norm(p_newton) < trust_radius:
         hits_boundary = False
         return p_newton, hits_boundary
 
     # This is the predicted optimum along the direction of steepest descent.
-    Bg = hess.dot(scale**2 * g)
-    p_cauchy = -(jnp.dot(scale*g, scale*g) /
-                 jnp.dot(scale*g, scale*Bg)) * scale * g
+    Bg = hess.dot(scale ** 2 * g)
+    p_cauchy = (
+        -(jnp.dot(scale * g, scale * g) / jnp.dot(scale * g, scale * Bg)) * scale * g
+    )
 
     # If the Cauchy point is outside the trust region,
     # then return the point where the path intersects the boundary.
@@ -56,8 +57,7 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
     # ||p_u + t*(p_best - p_u)||**2 == trust_radius**2
     # Solve this for positive time t using the quadratic formula.
     delta = p_newton - p_cauchy
-    _, tb = get_boundaries_intersections(p_cauchy, delta,
-                                         trust_radius)
+    _, tb = get_boundaries_intersections(p_cauchy, delta, trust_radius)
     p_boundary = p_cauchy + tb * delta
     hits_boundary = True
 
@@ -88,11 +88,11 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
 
     """
     if hess.is_pos_def:
-        p_newton = -1/scale*hess.solve(grad)
+        p_newton = -1 / scale * hess.solve(grad)
     else:
         p_newton = hess.negative_curvature_direction
     S = np.vstack([grad, p_newton]).T
-    S, _ = qr(S, mode='economic')
+    S, _ = qr(S, mode="economic")
     g = S.T.dot(scale * grad)
     B = S.T.dot(scale[:, jnp.newaxis] * hess.dot(scale[:, jnp.newaxis] * S))
 
@@ -103,7 +103,7 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
     try:
         R, lower = cho_factor(B)
         q = -cho_solve((R, lower), g)
-        if np.dot(q, q) <= trust_radius**2:
+        if np.dot(q, q) <= trust_radius ** 2:
             return S.dot(q), True
     except np.linalg.linalg.LinAlgError:
         pass
@@ -115,12 +115,11 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
     d = g[0] * trust_radius
     f = g[1] * trust_radius
 
-    coeffs = np.array([-b + d, 2 * (a - c + f), 6 *
-                       b, 2 * (-a + c + f), -b - d])
+    coeffs = np.array([-b + d, 2 * (a - c + f), 6 * b, 2 * (-a + c + f), -b - d])
     t = np.roots(coeffs)  # Can handle leading zeros.
     t = np.real(t[np.isreal(t)])
 
-    q = trust_radius * np.vstack((2 * t / (1 + t**2), (1 - t**2) / (1 + t**2)))
+    q = trust_radius * np.vstack((2 * t / (1 + t ** 2), (1 - t ** 2) / (1 + t ** 2)))
     value = 0.5 * np.sum(q * B.dot(q), axis=0) + np.dot(g, q)
     i = np.argmin(value)
     q = q[:, i]
@@ -128,12 +127,14 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
 
     return p, False
 
+
 # not used yet, need to get some other stuff working first
 # TODO: give this the same signature as the others?
 
 
-def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
-                           rtol=0.01, max_iter=10):  # pragma: no cover
+def solve_lsq_trust_region(
+    n, m, uf, s, V, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+):  # pragma: no cover
     """Solve a trust-region problem arising in least-squares minimization.
     This function implements a method described by J. J. More [1]_ and used
     in MINPACK, but it relies on a single SVD of Jacobian instead of series
@@ -177,15 +178,16 @@ def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
            and Theory," Numerical Analysis, ed. G. A. Watson, Lecture Notes
            in Mathematics 630, Springer Verlag, pp. 105-116, 1977.
     """
+
     def phi_and_derivative(alpha, suf, s, trust_radius):
         """Function of which to find zero.
         It is defined as "norm of regularized (by alpha) least-squares
         solution minus `trust_radius`". Refer to [1]_.
         """
-        denom = s**2 + alpha
+        denom = s ** 2 + alpha
         p_norm = np.linalg.norm(suf / denom)
         phi = p_norm - trust_radius
-        phi_prime = -np.sum(suf ** 2 / denom**3) / p_norm
+        phi_prime = -np.sum(suf ** 2 / denom ** 3) / p_norm
         return phi, phi_prime
 
     suf = s * uf
@@ -207,13 +209,13 @@ def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
         alpha_lower = 0.0
 
     if initial_alpha is None or not full_rank and initial_alpha == 0:
-        alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper)**0.5)
+        alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
     else:
         alpha = initial_alpha
 
     for it in range(max_iter):
         if alpha < alpha_lower or alpha > alpha_upper:
-            alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper)**0.5)
+            alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
 
         phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
 
@@ -227,7 +229,7 @@ def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
         if np.abs(phi) < rtol * trust_radius:
             break
 
-    p = -V.dot(suf / (s**2 + alpha))
+    p = -V.dot(suf / (s ** 2 + alpha))
 
     # Make the norm of p equal to trust_radius, p is changed only slightly during
     # this. It is done to prevent p lie outside the trust region (which can
@@ -237,11 +239,21 @@ def solve_lsq_trust_region(n, m, uf, s, V, trust_radius, initial_alpha=None,
     return p, alpha, it + 1
 
 
-def update_tr_radius(trust_radius, actual_reduction, predicted_reduction,
-                     step_norm, bound_hit, max_tr=np.inf, min_tr=0,
-                     increase_threshold=0.75, increase_ratio=2,
-                     decrease_threshold=0.25, decrease_ratio=0.25,
-                     ga_ratio=0, ga_accept_threshold=1):
+def update_tr_radius(
+    trust_radius,
+    actual_reduction,
+    predicted_reduction,
+    step_norm,
+    bound_hit,
+    max_tr=np.inf,
+    min_tr=0,
+    increase_threshold=0.75,
+    increase_ratio=2,
+    decrease_threshold=0.25,
+    decrease_ratio=0.25,
+    ga_ratio=0,
+    ga_accept_threshold=1,
+):
     """Update the radius of a trust region based on the cost reduction.
 
     Parameters
@@ -302,8 +314,8 @@ def get_boundaries_intersections(z, d, trust_radius):
     """
     a = jnp.dot(d, d)
     b = 2 * jnp.dot(z, d)
-    c = jnp.dot(z, z) - trust_radius**2
-    sqrt_discriminant = jnp.sqrt(b*b - 4*a*c)
+    c = jnp.dot(z, z) - trust_radius ** 2
+    sqrt_discriminant = jnp.sqrt(b * b - 4 * a * c)
 
     # The following calculation is mathematically
     # equivalent to:
@@ -313,6 +325,6 @@ def get_boundaries_intersections(z, d, trust_radius):
     # Look at Matrix Computation p.97
     # for a better justification.
     aux = b + jnp.copysign(sqrt_discriminant, b)
-    ta = -aux / (2*a)
-    tb = -2*c / aux
+    ta = -aux / (2 * a)
+    tb = -2 * c / aux
     return np.sort(np.array([ta, tb]))

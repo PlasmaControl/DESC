@@ -71,8 +71,10 @@ class IO(ABC):
             self.base = self.open_file(self.target, self.file_mode)
             self._close_base_ = True
         else:
-            raise SyntaxError('file_name of type {} is not a filename or file '
-                              'instance.'.format(type(self.target)))
+            raise SyntaxError(
+                "file_name of type {} is not a filename or file "
+                "instance.".format(type(self.target))
+            )
 
     def resolve_where(self, where):
         """Find where 'where' points and check if it's a readable type.
@@ -94,8 +96,7 @@ class IO(ABC):
         elif self.check_type(where):
             loc = where
         else:
-            raise SyntaxError(
-                "where '{}' is not a readable type.".format(where))
+            raise SyntaxError("where '{}' is not a readable type.".format(where))
         return loc
 
     @abstractmethod
@@ -111,6 +112,7 @@ class IO(ABC):
 
 class Reader(ABC):
     """ABC for all readers."""
+
     @abstractmethod
     def read_obj(self, obj, where=None):
         pass
@@ -122,6 +124,7 @@ class Reader(ABC):
 
 class Writer(ABC):
     """ABC for all writers."""
+
     @abstractmethod
     def write_obj(self, obj, where=None):
         pass

@@ -5,35 +5,45 @@ import os
 from termcolor import colored
 
 
-os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
-if os.environ.get('DESC_USE_NUMPY'):
+if os.environ.get("DESC_USE_NUMPY"):
     jnp = np
     use_jax = False
-    print('DESC version {}, using numpy backend, version={}, dtype={}'.format(
-        desc.__version__, np.__version__, np.linspace(0, 1).dtype))
+    print(
+        "DESC version {}, using numpy backend, version={}, dtype={}".format(
+            desc.__version__, np.__version__, np.linspace(0, 1).dtype
+        )
+    )
 else:
     try:
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
+            warnings.simplefilter("ignore")
             import jax
             import jaxlib
             import jax.numpy as jnp
             from jax.config import config
-            config.update('jax_enable_x64', True)
+
+            config.update("jax_enable_x64", True)
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print('DESC version {}, using JAX backend, jax version={}, jaxlib version={}, dtype={}'.format(
-            desc.__version__, jax.__version__, jaxlib.__version__, y.dtype))
+        print(
+            "DESC version {}, using JAX backend, jax version={}, jaxlib version={}, dtype={}".format(
+                desc.__version__, jax.__version__, jaxlib.__version__, y.dtype
+            )
+        )
     except:
         jnp = np
         x = jnp.linspace(0, 5)
         y = jnp.exp(x)
         use_jax = False
-        warnings.warn(colored('Failed to load JAX', 'red'))
-        print('DESC version {}, using NumPy backend, version={}, dtype={}'.format(
-            desc.__version__, np.__version__, y.dtype))
+        warnings.warn(colored("Failed to load JAX", "red"))
+        print(
+            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
+                desc.__version__, np.__version__, y.dtype
+            )
+        )
 
 
 if use_jax:
@@ -79,10 +89,11 @@ if use_jax:
             factorial of n
 
         """
-        x = jnp.asarray(n+1)
+        x = jnp.asarray(n + 1)
         y = jnp.exp(jax.scipy.special.gammaln(x))
         y = jnp.where(x < 1, 0, y)
         return y
+
 
 else:
     jit = lambda func, *args, **kwargs: func
@@ -91,7 +102,7 @@ else:
 
     # we divide by zero in a few places but then overwrite with the
     # correct asmptotic values, so lets suppress annoying warnings about that
-    np.seterr(divide='ignore', invalid='ignore')
+    np.seterr(divide="ignore", invalid="ignore")
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"

@@ -4,7 +4,7 @@ import scipy.linalg
 from termcolor import colored
 
 
-class LinearEqualityConstraint():
+class LinearEqualityConstraint:
     """Linear constraint for optimization
 
     solution vector x must satisfy Ax = b
@@ -12,7 +12,7 @@ class LinearEqualityConstraint():
 
     The method is to find a particular solution x0 that satisfies
     A x0 = b, and then to define x = x0 + dx where dx = Zy where Z
-    is a representation for the nullspace of A. The optimization is 
+    is a representation for the nullspace of A. The optimization is
     then done over y instead of x.
 
     Parameters
@@ -43,14 +43,20 @@ class LinearEqualityConstraint():
         if x0 is None:
             self._x0 = self._Ainv.dot(self._b)
         elif not self.is_feasible(x0):
-            raise ValueError(colored("x0 is not feasible", 'red'))
+            raise ValueError(colored("x0 is not feasible", "red"))
         else:
             self._x0 = x0
 
     def __add__(self, other):
         if not isinstance(other, LinearEqualityConstraint):
-            raise ValueError(colored(
-                "cannot combine LinearConstraint with object of type {}".format(type(other)), 'red'))
+            raise ValueError(
+                colored(
+                    "cannot combine LinearConstraint with object of type {}".format(
+                        type(other)
+                    ),
+                    "red",
+                )
+            )
 
         newA = np.vstack([self._A, other._A])
         newb = np.concatenate([self._b, other._b])
@@ -118,7 +124,7 @@ class LinearEqualityConstraint():
     @x0.setter
     def x0(self, x0):
         if not self.is_feasible(x0):
-            raise ValueError(colored("x0 is not feasible", 'red'))
+            raise ValueError(colored("x0 is not feasible", "red"))
         self._x0 = x0
 
     def recover(self, y):

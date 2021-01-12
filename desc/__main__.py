@@ -23,19 +23,24 @@ def get_device(gpuID=False):
     import jax
 
     if gpuID is False:
-        return jax.devices('cpu')[0]
+        return jax.devices("cpu")[0]
 
     try:
-        gpus = jax.devices('gpu')
+        gpus = jax.devices("gpu")
         # did the user request a specific GPU?
         if isinstance(gpuID, int) and gpuID < len(gpus):
             return gpus[gpuID]
         if isinstance(gpuID, int):
             # ID was not valid
             warnings.warn(
-                colored('gpuID did not match any found devices, trying default gpu option', 'yellow'))
+                colored(
+                    "gpuID did not match any found devices, trying default gpu option",
+                    "yellow",
+                )
+            )
         # find all available options and see which has the most space
         import nvidia_smi
+
         nvidia_smi.nvmlInit()
         maxmem = 0
         gpu = gpus[0]
@@ -50,8 +55,8 @@ def get_device(gpuID=False):
         return gpu
 
     except:
-        warnings.warn(colored('No GPU found, falling back to CPU', 'yellow'))
-        return jax.devices('cpu')[0]
+        warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
+        return jax.devices("cpu")[0]
 
 
 def main(cl_args=None):
@@ -66,6 +71,7 @@ def main(cl_args=None):
         return
 
     import desc
+
     if ir.args.verbose:
         print(desc.BANNER)
 
@@ -89,35 +95,35 @@ def main(cl_args=None):
 
     # solve equilibrium
     equil_fam, timer = solve_eq_continuation(
-        ir.inputs, file_name=ir.output_path, vmec_path=vmec_path,
-        device=device)
+        ir.inputs, file_name=ir.output_path, vmec_path=vmec_path, device=device
+    )
 
     if ir.args.plot > 1:
-        print('Plotting initial guess')
+        print("Plotting initial guess")
         ax = Plot().plot_surfaces(equil_fam[0].initial)
         plt.show()
-        ax = Plot().plot_2d(equil_fam[0].initial, 'r')
+        ax = Plot().plot_2d(equil_fam[0].initial, "r")
         plt.show()
-        ax = Plot().plot_2d(equil_fam[0].initial, 'log(|F|)')
+        ax = Plot().plot_2d(equil_fam[0].initial, "log(|F|)")
         plt.show()
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
-            print('Plotting solution at step {}'.format(i+1))
+            print("Plotting solution at step {}".format(i + 1))
             ax = Plot().plot_surfaces(eq)
             plt.show()
-            ax = Plot().plot_2d(eq, 'r')
+            ax = Plot().plot_2d(eq, "r")
             plt.show()
-            ax = Plot().plot_2d(eq, 'log(|F|)')
+            ax = Plot().plot_2d(eq, "log(|F|)")
             plt.show()
     if ir.args.plot > 0:
-        print('Plotting final solution')
+        print("Plotting final solution")
         ax = Plot().plot_surfaces(equil_fam[-1])
         plt.show()
-        ax = Plot().plot_2d(equil_fam[-1], 'r')
+        ax = Plot().plot_2d(equil_fam[-1], "r")
         plt.show()
-        ax = Plot().plot_2d(equil_fam[-1], 'log(|F|)')
+        ax = Plot().plot_2d(equil_fam[-1], "log(|F|)")
         plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv[1:])

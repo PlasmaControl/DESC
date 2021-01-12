@@ -18,7 +18,7 @@ class PickleIO(IO):
 
         """
         self._file_types_ = [io.BufferedWriter]
-        self._file_format_ = 'pickle'
+        self._file_format_ = "pickle"
         super().__init__()
 
     def open_file(self, file_name, file_mode):
@@ -36,8 +36,8 @@ class PickleIO(IO):
         binary file instance
 
         """
-        if file_mode[-1] != 'b':
-            file_mode += 'b'
+        if file_mode[-1] != "b":
+            file_mode += "b"
         return open(file_name, file_mode)
 
 
@@ -58,7 +58,7 @@ class PickleReader(PickleIO, Reader):
 
         """
         self.target = target
-        self.file_mode = 'r'
+        self.file_mode = "r"
         super().__init__()
 
     def read_obj(self, obj=None, where=None):
@@ -105,7 +105,7 @@ class PickleReader(PickleIO, Reader):
 class PickleWriter(PickleIO, Writer):
     """Class specifying a writer with PickleIO."""
 
-    def __init__(self, target, file_mode='w'):
+    def __init__(self, target, file_mode="w"):
         """Initializes PickleWriter class.
 
         Parameters
@@ -159,6 +159,6 @@ class PickleWriter(PickleIO, Writer):
 
         """
         if type(thedict) is not dict:
-            raise TypeError('Object provided is not a dictionary.')
+            raise TypeError("Object provided is not a dictionary.")
         self.write_object(thedict, where=where)
         return None

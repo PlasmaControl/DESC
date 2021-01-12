@@ -7,7 +7,8 @@ from desc.backend import jnp
 
 # Helper Classes -------------------------------------------------------------
 
-class Timer():
+
+class Timer:
     """Simple object for organizing timing info
 
     Create a Timer object, which can then keep track of
@@ -32,6 +33,7 @@ class Timer():
 
     def __init__(self, ns=True):
         import time
+
         self._times = {}
         self._timers = {}
         self._ns = ns
@@ -41,9 +43,13 @@ class Timer():
             except AttributeError:
                 self.op = time.perf_counter
                 self._ns = False
-                warnings.warn(colored(
-                              'nanosecond timing not available on this system,'
-                              + ' reverting to microsecond timing', 'yellow'))
+                warnings.warn(
+                    colored(
+                        "nanosecond timing not available on this system,"
+                        + " reverting to microsecond timing",
+                        "yellow",
+                    )
+                )
 
         else:
             self.op = time.perf_counter
@@ -85,10 +91,11 @@ class Timer():
             self._timers[name].append(self.op())
         except KeyError:
             raise ValueError(
-                colored("timer '{}' has not been started".format(name), 'red')) from None
+                colored("timer '{}' has not been started".format(name), "red")
+            ) from None
         self._times[name] = np.diff(self._timers[name])[0]
         if self._ns:
-            self._times[name] = self._times[name]/1e9
+            self._times[name] = self._times[name] / 1e9
         del self._timers[name]
 
     @staticmethod
@@ -109,28 +116,28 @@ class Timer():
         -------
 
         """
-        us = time*1e6
+        us = time * 1e6
         ms = us / 1000
         sec = ms / 1000
         mins = sec / 60
         hrs = mins / 60
 
         if us < 100:
-            out = '{:.3f}'.format(us)[:4] + ' us'
+            out = "{:.3f}".format(us)[:4] + " us"
         elif us < 1000:
-            out = '{:.3f}'.format(us)[:3] + ' us'
+            out = "{:.3f}".format(us)[:3] + " us"
         elif ms < 100:
-            out = '{:.3f}'.format(ms)[:4] + ' ms'
+            out = "{:.3f}".format(ms)[:4] + " ms"
         elif ms < 1000:
-            out = '{:.3f}'.format(ms)[:3] + ' ms'
+            out = "{:.3f}".format(ms)[:3] + " ms"
         elif sec < 60:
-            out = '{:.3f}'.format(sec)[:4] + ' sec'
+            out = "{:.3f}".format(sec)[:4] + " sec"
         elif mins < 60:
-            out = '{:.3f}'.format(mins)[:4] + ' min'
+            out = "{:.3f}".format(mins)[:4] + " min"
         else:
-            out = '{:.3f}'.format(hrs)[:4] + ' hrs'
+            out = "{:.3f}".format(hrs)[:4] + " hrs"
 
-        print(colored('Timer: {} = {}'.format(name, out), 'green'))
+        print(colored("Timer: {} = {}".format(name, out), "green"))
 
     def disp(self, name):
         """Pretty prints elapsed time
@@ -154,16 +161,17 @@ class Timer():
 
         """
 
-        try:     # has the timer been stopped?
+        try:  # has the timer been stopped?
             time = self._times[name]
         except KeyError:  # might still be running, let's check
             try:
                 start = self._timers[name][0]
-                now = self.op()   # don't stop it, just report current elapsed time
-                time = float(now-start)/1e9 if self._ns else (now-start)
+                now = self.op()  # don't stop it, just report current elapsed time
+                time = float(now - start) / 1e9 if self._ns else (now - start)
             except KeyError:
                 raise ValueError(
-                    colored("timer '{}' has not been started".format(name), 'red')) from None
+                    colored("timer '{}' has not been started".format(name), "red")
+                ) from None
 
         self.pretty_print(name, time)
 
@@ -184,7 +192,7 @@ Tristate is used with Basis to determine type of stellarator symmetry:
 
 class Tristate(object):
     """Tristate is used to represent logical values with 3 possible states:
-       True, False, or None
+    True, False, or None
 
     """
 
@@ -195,8 +203,11 @@ class Tristate(object):
             raise ValueError("Tristate value must be True, False, or None")
 
     def __eq__(self, other):
-        return (self.value is other.value if isinstance(other, Tristate)
-                else self.value is other)
+        return (
+            self.value is other.value
+            if isinstance(other, Tristate)
+            else self.value is other
+        )
 
     def __ne__(self, other):
         return not self == other
@@ -211,7 +222,7 @@ class Tristate(object):
         return "Tristate(%s)" % self.value
 
 
-class _Indexable():
+class _Indexable:
     """Helper object for building indexes for indexed update functions.
     This is a singleton object that overrides the ``__getitem__`` method
     to return the index it is passed.
@@ -223,6 +234,7 @@ class _Indexable():
     Returns
     -------
     """
+
     __slots__ = ()
 
     def __getitem__(self, index):
@@ -241,6 +253,7 @@ opsindex = _Indexable()
 
 
 # Helper Functions -----------------------------------------------------------
+
 
 def unpack_state(x, nR0, nZ0, nr, nl):
     """Unpacks the state vector x into R0_n, Z0_n, r_lmn, l_lmn components
@@ -272,9 +285,9 @@ def unpack_state(x, nR0, nZ0, nr, nl):
     """
 
     R0_n = x[:nR0]
-    Z0_n = x[nR0:nR0+nZ0]
-    r_lmn = x[nR0+nZ0:nR0+nZ0+nr]
-    l_lmn = x[nR0+nZ0+nr:nR0+nZ0+nr+nl]
+    Z0_n = x[nR0 : nR0 + nZ0]
+    r_lmn = x[nR0 + nZ0 : nR0 + nZ0 + nr]
+    l_lmn = x[nR0 + nZ0 + nr : nR0 + nZ0 + nr + nl]
     return R0_n, Z0_n, r_lmn, l_lmn
 
 
@@ -296,10 +309,14 @@ def equals(a, b) -> bool:
     """
     if a.keys() != b.keys():
         return False
-    return all(equals(a[key], b[key]) if isinstance(a[key], dict)
-               else jnp.allclose(a[key], b[key]) if isinstance(a[key], jnp.ndarray)
-               else (a[key] == b[key])
-               for key in a)
+    return all(
+        equals(a[key], b[key])
+        if isinstance(a[key], dict)
+        else jnp.allclose(a[key], b[key])
+        if isinstance(a[key], jnp.ndarray)
+        else (a[key] == b[key])
+        for key in a
+    )
 
 
 def flatten_list(x):
@@ -371,7 +388,7 @@ def isalmostequal(x, axis=-1, tol=1e-12):
     if axis is None:
         x = x.flatten()
         axis = 0
-    return np.all(x.std(axis=axis)*x.shape[axis] < tol)
+    return np.all(x.std(axis=axis) * x.shape[axis] < tol)
 
 
 def sign(x):
@@ -411,7 +428,7 @@ def dot(a, b, axis):
         y = sum(a*b, axis=axis)
 
     """
-    return jnp.sum(a*b, axis=axis, keepdims=False)
+    return jnp.sum(a * b, axis=axis, keepdims=False)
 
 
 def cross(a, b, axis):
@@ -449,7 +466,7 @@ def rms(x):
         rms value of x, eg sqrt(sum(x**2))
 
     """
-    return jnp.sqrt(jnp.mean(x**2))
+    return jnp.sqrt(jnp.mean(x ** 2))
 
 
 def softmax(x, a=1):
@@ -471,6 +488,6 @@ def softmax(x, a=1):
     y : float
         soft max/min of x
     """
-    num = jnp.sum(x*jnp.exp(a*x))
-    den = jnp.sum(jnp.exp(a*x))
-    return num/den
+    num = jnp.sum(x * jnp.exp(a * x))
+    den = jnp.sum(jnp.exp(a * x))
+    return num / den

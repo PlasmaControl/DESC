@@ -5,8 +5,7 @@ from desc.vmec import VMECIO
 
 
 def test_VMECIO(SOLOVEV):
-    """Tests if loading and then saving a VMEC equilibrium gives the original file.
-    """
+    """Tests if loading and then saving a VMEC equilibrium gives the original file."""
 
     input_path = "examples//VMEC//wout_SOLOVEV.nc"
     output_path = SOLOVEV["output_path"] + "_vmec.nc"

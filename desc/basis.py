@@ -6,9 +6,9 @@ from desc.io import IOAble
 
 
 class Basis(IOAble, ABC):
-    """Basis is an abstract base class for spectral basis sets
-    """
-    _io_attrs_ = ['_L', '_M', '_N', '_NFP', '_modes']
+    """Basis is an abstract base class for spectral basis sets"""
+
+    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes"]
 
     @abstractmethod
     def __init__(self) -> None:
@@ -41,13 +41,11 @@ class Basis(IOAble, ABC):
         None
 
         """
-        if self._sym == True:     # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self._modes[:, 1]) !=
-                                   sign(self._modes[:, 2]))
+        if self._sym == True:  # cos(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self._modes[:, 1]) != sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
         elif self._sym == False:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self._modes[:, 1]) ==
-                                   sign(self._modes[:, 2]))
+            non_sym_idx = np.where(sign(self._modes[:, 1]) == sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
     def _sort_modes_(self) -> None:
@@ -58,8 +56,7 @@ class Basis(IOAble, ABC):
         None
 
         """
-        sort_idx = np.lexsort((self._modes[:, 0], self._modes[:, 1],
-                               self._modes[:, 2]))
+        sort_idx = np.lexsort((self._modes[:, 0], self._modes[:, 1], self._modes[:, 2]))
         self._modes = self._modes[sort_idx]
 
     @abstractmethod
@@ -104,14 +101,14 @@ class Basis(IOAble, ABC):
 
     @property
     def sym(self) -> Tristate:
-        """ Tristate: 
+        """Tristate:
         True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
         None for no symmetry (Default)"""
         return self._sym
 
     @property
     def modes(self):
-        """ndarray:  arrauy of int, shape(Nmodes,3): 
+        """ndarray:  arrauy of int, shape(Nmodes,3):
         array of mode numbers [l,m,n],
         each row is one basis function with modes (l,m,n)"""
         return self._modes
@@ -127,10 +124,12 @@ class Basis(IOAble, ABC):
 
 class PowerSeries(Basis):
     """1D basis set for flux surface quantities.
-       Power series in the radial coordinate.
+    Power series in the radial coordinate.
     """
 
-    def __init__(self, L: int = 0, load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(
+        self, L: int = 0, load_from=None, file_format=None, obj_lib=None
+    ) -> None:
         """Initializes a PowerSeries
 
         Parameters
@@ -159,7 +158,8 @@ class PowerSeries(Basis):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def get_modes(self, L: int = 0):
         """Gets mode numbers for power series
@@ -176,7 +176,7 @@ class PowerSeries(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        return np.array([[l, 0, 0] for l in range(L+1)])
+        return np.array([[l, 0, 0] for l in range(L + 1)])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -217,11 +217,18 @@ class PowerSeries(Basis):
 
 class FourierSeries(Basis):
     """1D basis set for use with the magnetic axis.
-       Fourier series in the toroidal coordinate.
+    Fourier series in the toroidal coordinate.
     """
 
-    def __init__(self, N: int = 0, NFP: int = 1, sym: Tristate = None,
-                 load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(
+        self,
+        N: int = 0,
+        NFP: int = 1,
+        sym: Tristate = None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -255,7 +262,8 @@ class FourierSeries(Basis):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def get_modes(self, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
@@ -272,8 +280,8 @@ class FourierSeries(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        dim_tor = 2*N+1
-        return np.array([[0, 0, n-N] for n in range(dim_tor)])
+        dim_tor = 2 * N + 1
+        return np.array([[0, 0, n - N] for n in range(dim_tor)])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -314,11 +322,19 @@ class FourierSeries(Basis):
 
 class DoubleFourierSeries(Basis):
     """2D basis set for use on a single flux surface.
-       Fourier series in both the poloidal and toroidal coordinates.
+    Fourier series in both the poloidal and toroidal coordinates.
     """
 
-    def __init__(self, M: int = 0, N: int = 0, NFP: int = 1, sym: Tristate = None,
-                 load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(
+        self,
+        M: int = 0,
+        N: int = 0,
+        NFP: int = 1,
+        sym: Tristate = None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a DoubleFourierSeries
 
         Parameters
@@ -354,7 +370,8 @@ class DoubleFourierSeries(Basis):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def get_modes(self, M: int = 0, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
@@ -373,9 +390,11 @@ class DoubleFourierSeries(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        dim_pol = 2*M+1
-        dim_tor = 2*N+1
-        return np.array([[0, m-M, n-N] for m in range(dim_pol) for n in range(dim_tor)])
+        dim_pol = 2 * M + 1
+        dim_tor = 2 * N + 1
+        return np.array(
+            [[0, m - M, n - N] for m in range(dim_pol) for n in range(dim_tor)]
+        )
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -394,9 +413,10 @@ class DoubleFourierSeries(Basis):
 
         """
         poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._modes[:, 2],
-                           NFP=self._NFP, dt=derivatives[2])
-        return poloidal*toroidal
+        toroidal = fourier(
+            nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2]
+        )
+        return poloidal * toroidal
 
     def change_resolution(self, M: int, N: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
@@ -422,13 +442,22 @@ class DoubleFourierSeries(Basis):
 
 class FourierZernikeBasis(Basis):
     """3D basis set for analytic functions in a toroidal volume.
-       Zernike polynomials in the radial & poloidal coordinates, and a Fourier
-       series in the toroidal coordinate.
+    Zernike polynomials in the radial & poloidal coordinates, and a Fourier
+    series in the toroidal coordinate.
     """
 
-    def __init__(self, L: int = -1, M: int = 0, N: int = 0, NFP: int = 1,
-                 sym: Tristate = None, index: str = 'ansi',
-                 load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(
+        self,
+        L: int = -1,
+        M: int = 0,
+        N: int = 0,
+        NFP: int = 1,
+        sym: Tristate = None,
+        index: str = "ansi",
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a FourierZernikeBasis
 
         Parameters
@@ -487,17 +516,19 @@ class FourierZernikeBasis(Basis):
             self._sym = sym
             self._index = index
 
-            self._modes = self.get_modes(L=self._L, M=self._M,
-                                         N=self._N, index=self._index)
+            self._modes = self.get_modes(
+                L=self._L, M=self._M, N=self._N, index=self._index
+            )
 
             self._enforce_symmetry_()
             self._sort_modes_()
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
-    def get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = 'ansi'):
+    def get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = "ansi"):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -541,37 +572,41 @@ class FourierZernikeBasis(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        default_L = {'ansi': M,
-                     'fringe': 2*M,
-                     'chevron': M,
-                     'house': 2*M}
+        default_L = {"ansi": M, "fringe": 2 * M, "chevron": M, "house": 2 * M}
         L = L if L >= 0 else default_L[index]
 
-        if index == 'ansi':
-            pol_posm = [[(m+d, m) for m in range(0, M+1) if m+d < M+1]
-                        for d in range(0, L+1, 2)]
+        if index == "ansi":
+            pol_posm = [
+                [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
+                for d in range(0, L + 1, 2)
+            ]
 
-        elif index == 'fringe':
-            pol_posm = [[(m+d//2, m-d//2) for m in range(0, M+1) if m-d//2 >= 0]
-                        for d in range(0, L+1, 2)]
+        elif index == "fringe":
+            pol_posm = [
+                [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
+                for d in range(0, L + 1, 2)
+            ]
 
-        elif index == 'chevron':
-            pol_posm = [(m+d, m) for m in range(0, M+1)
-                        for d in range(0, L+1, 2)]
+        elif index == "chevron":
+            pol_posm = [(m + d, m) for m in range(0, M + 1) for d in range(0, L + 1, 2)]
 
-        elif index == 'house':
-            pol_posm = [[(l, m) for m in range(0, M+1) if l >= m and (l-m) % 2 == 0]
-                        for l in range(0, L+1)] + [(m, m) for m in range(M+1)]
+        elif index == "house":
+            pol_posm = [
+                [(l, m) for m in range(0, M + 1) if l >= m and (l - m) % 2 == 0]
+                for l in range(0, L + 1)
+            ] + [(m, m) for m in range(M + 1)]
             pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
 
-        pol = [[(l, m), (l, -m)] if m != 0 else [(l, m)]
-               for l, m in flatten_list(pol_posm)]
+        pol = [
+            [(l, m), (l, -m)] if m != 0 else [(l, m)] for l, m in flatten_list(pol_posm)
+        ]
         pol = np.array(flatten_list(pol))
         num_pol = len(pol)
 
-        pol = np.tile(pol, (2*N+1, 1))
+        pol = np.tile(pol, (2 * N + 1, 1))
         tor = np.atleast_2d(
-            np.tile(np.arange(-N, N+1), (num_pol, 1)).flatten(order='f')).T
+            np.tile(np.arange(-N, N + 1), (num_pol, 1)).flatten(order="f")
+        ).T
         return np.hstack([pol, tor])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
@@ -590,12 +625,14 @@ class FourierZernikeBasis(Basis):
             basis functions evaluated at nodes
 
         """
-        radial = jacobi(nodes[:, 0], self._modes[:, 0],
-                        self._modes[:, 1], dr=derivatives[0])
+        radial = jacobi(
+            nodes[:, 0], self._modes[:, 0], self._modes[:, 1], dr=derivatives[0]
+        )
         poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], self._modes[:, 2],
-                           NFP=self._NFP, dt=derivatives[2])
-        return radial*poloidal*toroidal
+        toroidal = fourier(
+            nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2]
+        )
+        return radial * poloidal * toroidal
 
     def change_resolution(self, M: int, N: int, delta_lm: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
@@ -620,8 +657,9 @@ class FourierZernikeBasis(Basis):
             self._M = M
             self._N = N
             self._delta_lm = delta_lm
-            self._modes = self.get_modes(self._M, self._N,
-                                         delta_lm=self._delta_lm, indexing=self._indexing)
+            self._modes = self.get_modes(
+                self._M, self._N, delta_lm=self._delta_lm, indexing=self._indexing
+            )
             self.sort_nodes()
 
 
@@ -645,12 +683,12 @@ def polyder_vec(p, m):
     """
     m = jnp.asarray(m, dtype=int)  # order of derivative
     p = jnp.atleast_2d(p)
-    n = p.shape[1] - 1             # order of polynomials
+    n = p.shape[1] - 1  # order of polynomials
 
     D = jnp.arange(n, -1, -1)
-    D = factorial(D) / factorial(D-m)
+    D = factorial(D) / factorial(D - m)
 
-    p = jnp.roll(D*p, m, axis=1)
+    p = jnp.roll(D * p, m, axis=1)
     idx = jnp.arange(p.shape[1])
     p = jnp.where(idx < m, 0, p)
 
@@ -687,11 +725,11 @@ def polyval_vec(p, x):
     x = jnp.atleast_1d(x).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
-    nx = len(x)         # number of coordinates
+    nx = len(x)  # number of coordinates
     y = jnp.zeros((npoly, nx))
 
     def body_fun(k, y):
-        return y*x + jnp.atleast_2d(p[:, k]).T
+        return y * x + jnp.atleast_2d(p[:, k]).T
 
     return fori_loop(0, order, body_fun, y)
 
@@ -711,9 +749,9 @@ def power_coeffs(l):
 
     """
     l = np.atleast_1d(l).astype(int)
-    npoly = len(l)      # number of polynomials
-    order = np.max(l)   # order of polynomials
-    coeffs = np.zeros((npoly, order+1))
+    npoly = len(l)  # number of polynomials
+    order = np.max(l)  # order of polynomials
+    coeffs = np.zeros((npoly, order + 1))
     coeffs[range(npoly), l] = 1
     return coeffs
 
@@ -762,14 +800,21 @@ def jacobi_coeffs(l, m):
     m = np.atleast_1d(np.abs(m)).astype(int)
     npoly = len(l)
     lmax = np.max(l)
-    coeffs = np.zeros((npoly, lmax+1))
-    lm_even = ((l-m) % 2 == 0)[:, np.newaxis]
+    coeffs = np.zeros((npoly, lmax + 1))
+    lm_even = ((l - m) % 2 == 0)[:, np.newaxis]
     for ii in range(npoly):
         ll = l[ii]
         mm = m[ii]
-        for s in range(mm, ll+1, 2):
-            coeffs[ii, s] = (-1)**((ll-s)/2)*factorial((ll+s)/2)/(
-                factorial((ll-s)/2)*factorial((s+mm)/2)*factorial((s-mm)/2))
+        for s in range(mm, ll + 1, 2):
+            coeffs[ii, s] = (
+                (-1) ** ((ll - s) / 2)
+                * factorial((ll + s) / 2)
+                / (
+                    factorial((ll - s) / 2)
+                    * factorial((s + mm) / 2)
+                    * factorial((s - mm) / 2)
+                )
+            )
     return np.fliplr(np.where(lm_even, coeffs, 0))
 
 
@@ -822,11 +867,11 @@ def fourier(theta, m, NFP=1, dt=0):
     m_2d = jnp.atleast_2d(m)
     m_pos = (m_2d >= 0).astype(int)
     m_neg = (m_2d < 0).astype(int)
-    m_abs = jnp.abs(m_2d)*NFP
+    m_abs = jnp.abs(m_2d) * NFP
     if dt == 0:
-        return m_pos*jnp.cos(m_abs*theta_2d) + m_neg*jnp.sin(m_abs*theta_2d)
+        return m_pos * jnp.cos(m_abs * theta_2d) + m_neg * jnp.sin(m_abs * theta_2d)
     else:
-        return m_abs*(m_neg-m_pos)*fourier(theta, -m, NFP=NFP, dt=dt-1)
+        return m_abs * (m_neg - m_pos) * fourier(theta, -m, NFP=NFP, dt=dt - 1)
 
 
 def zernike_norm(l, m):
@@ -844,4 +889,4 @@ def zernike_norm(l, m):
         norm of Zernike polynomial over unit disk.
 
     """
-    return np.sqrt((2 * (l + 1)) / (np.pi*(1 + int(m == 0))))
+    return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))

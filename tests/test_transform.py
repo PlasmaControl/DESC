@@ -10,8 +10,7 @@ class TestTransform(unittest.TestCase):
     """Tests Transform classes"""
 
     def test_eq(self):
-        """Tests equals operator overload method
-        """
+        """Tests equals operator overload method"""
         grid_1 = LinearGrid(L=11, endpoint=True)
         grid_2 = LinearGrid(M=5, N=5)
         grid_3 = ConcentricGrid(M=2, N=2)
@@ -30,8 +29,7 @@ class TestTransform(unittest.TestCase):
         self.assertTrue(transf_32 == transf_32b)
 
     def test_transform_order_error(self):
-        """Tests error handling with transform method
-        """
+        """Tests error handling with transform method"""
         grid = LinearGrid(L=11, endpoint=True)
         basis = PowerSeries(L=2)
         transf = Transform(grid, basis, derivs=0)
@@ -47,8 +45,7 @@ class TestTransform(unittest.TestCase):
             transf.transform(c, 0, 0, 0)
 
     def test_profile(self):
-        """Tests transform of power series on a radial profile
-        """
+        """Tests transform of power series on a radial profile"""
         grid = LinearGrid(L=11, endpoint=True)
         basis = PowerSeries(L=2)
         transf = Transform(grid, basis, derivs=1)
@@ -59,35 +56,67 @@ class TestTransform(unittest.TestCase):
         values = transf.transform(c, 0, 0, 0)
         derivs = transf.transform(c, 1, 0, 0)
 
-        correct_vals = c[0] + c[1]*x + c[2]*x**2
-        correct_ders = c[1] + c[2]*2*x
+        correct_vals = c[0] + c[1] * x + c[2] * x ** 2
+        correct_ders = c[1] + c[2] * 2 * x
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_surface(self):
-        """Tests transform of double Fourier series on a flux surface
-        """
+        """Tests transform of double Fourier series on a flux surface"""
         grid = LinearGrid(M=5, N=5)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
 
-        t = grid.nodes[:, 1]    # theta coordinates
-        z = grid.nodes[:, 2]    # zeta coordinates
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
 
-        correct_d0 = np.sin(t-z) + 2*np.cos(t-z)
-        correct_dt = np.cos(t-z) - 2*np.sin(t-z)
-        correct_dz = -np.cos(t-z) + 2*np.sin(t-z)
-        correct_dtz = np.sin(t-z) + 2*np.cos(t-z)
+        correct_d0 = np.sin(t - z) + 2 * np.cos(t - z)
+        correct_dt = np.cos(t - z) - 2 * np.sin(t - z)
+        correct_dz = -np.cos(t - z) + 2 * np.sin(t - z)
+        correct_dtz = np.sin(t - z) + 2 * np.cos(t - z)
 
-        sin_idx_1 = np.where(np.all(np.array([np.array(basis.modes[:,1] == -1),
-                                  np.array(basis.modes[:,2] == 1)]), axis=0))[0]
-        sin_idx_2 = np.where(np.all(np.array([np.array(basis.modes[:,1] == 1),
-                                  np.array(basis.modes[:,2] == -1)]), axis=0))[0]
-        cos_idx_1 = np.where(np.all(np.array([np.array(basis.modes[:,1] == -1),
-                                  np.array(basis.modes[:,2] == -1)]), axis=0))[0]
-        cos_idx_2 = np.where(np.all(np.array([np.array(basis.modes[:,1] == 1),
-                                  np.array(basis.modes[:,2] == 1)]), axis=0))[0]
+        sin_idx_1 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 1] == -1),
+                        np.array(basis.modes[:, 2] == 1),
+                    ]
+                ),
+                axis=0,
+            )
+        )[0]
+        sin_idx_2 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 1] == 1),
+                        np.array(basis.modes[:, 2] == -1),
+                    ]
+                ),
+                axis=0,
+            )
+        )[0]
+        cos_idx_1 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 1] == -1),
+                        np.array(basis.modes[:, 2] == -1),
+                    ]
+                ),
+                axis=0,
+            )
+        )[0]
+        cos_idx_2 = np.where(
+            np.all(
+                np.array(
+                    [np.array(basis.modes[:, 1] == 1), np.array(basis.modes[:, 2] == 1)]
+                ),
+                axis=0,
+            )
+        )[0]
 
         c = np.zeros((basis.modes.shape[0],))
         c[sin_idx_1] = 1
@@ -95,9 +124,9 @@ class TestTransform(unittest.TestCase):
         c[cos_idx_1] = 2
         c[cos_idx_2] = 2
 
-        d0 = transf.transform(c, 0, 0, 0)   # original transform
-        dt = transf.transform(c, 0, 1, 0)   # theta derivative
-        dz = transf.transform(c, 0, 0, 1)   # zeta derivative
+        d0 = transf.transform(c, 0, 0, 0)  # original transform
+        dt = transf.transform(c, 0, 1, 0)  # theta derivative
+        dz = transf.transform(c, 0, 0, 1)  # zeta derivative
         dtz = transf.transform(c, 0, 1, 1)  # mixed derivative
 
         np.testing.assert_allclose(d0, correct_d0, atol=1e-8)
@@ -106,27 +135,53 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
     def test_volume(self):
-        """Tests transform of Fourier-Zernike basis in a toroidal volume
-        """
+        """Tests transform of Fourier-Zernike basis in a toroidal volume"""
         grid = ConcentricGrid(M=2, N=2)
         basis = FourierZernikeBasis(M=1, N=1)
         transf = Transform(grid, basis)
 
-        r = grid.nodes[:, 0]    # rho coordiantes
-        t = grid.nodes[:, 1]    # theta coordinates
-        z = grid.nodes[:, 2]    # zeta coordinates
+        r = grid.nodes[:, 0]  # rho coordiantes
+        t = grid.nodes[:, 1]  # theta coordinates
+        z = grid.nodes[:, 2]  # zeta coordinates
 
-        correct_vals = 2*r*np.sin(t)*np.cos(z) - 0.5*r*np.cos(t) + np.sin(z)
+        correct_vals = 2 * r * np.sin(t) * np.cos(z) - 0.5 * r * np.cos(t) + np.sin(z)
 
-        idx_0 = np.where(np.all(np.array([np.array(basis.modes[:,0] == 1),
-                                          np.array(basis.modes[:,1] == -1),
-                                          np.array(basis.modes[:,2] == 1)]), axis=0))
-        idx_1 = np.where(np.all(np.array([np.array(basis.modes[:,0] == 1),
-                                          np.array(basis.modes[:,1] == 1),
-                                          np.array(basis.modes[:,2] == 0)]), axis=0))
-        idx_2 = np.where(np.all(np.array([np.array(basis.modes[:,0] == 0),
-                                          np.array(basis.modes[:,1] == 0),
-                                          np.array(basis.modes[:,2] == -1)]), axis=0))
+        idx_0 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 0] == 1),
+                        np.array(basis.modes[:, 1] == -1),
+                        np.array(basis.modes[:, 2] == 1),
+                    ]
+                ),
+                axis=0,
+            )
+        )
+        idx_1 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 0] == 1),
+                        np.array(basis.modes[:, 1] == 1),
+                        np.array(basis.modes[:, 2] == 0),
+                    ]
+                ),
+                axis=0,
+            )
+        )
+        idx_2 = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(basis.modes[:, 0] == 0),
+                        np.array(basis.modes[:, 1] == 0),
+                        np.array(basis.modes[:, 2] == -1),
+                    ]
+                ),
+                axis=0,
+            )
+        )
 
         c = np.zeros((basis.modes.shape[0],))
         c[idx_0] = 2
@@ -138,8 +193,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_set_grid(self):
-        """Tests the grid setter method
-        """
+        """Tests the grid setter method"""
         basis = FourierZernikeBasis(M=1, N=1)
 
         grid_1 = LinearGrid(L=1, M=1, N=1)
@@ -157,8 +211,7 @@ class TestTransform(unittest.TestCase):
         self.assertTrue(transf_3 == transf_1)
 
     def test_set_basis(self):
-        """Tests the basis setter method
-        """
+        """Tests the basis setter method"""
         grid = ConcentricGrid(M=2, N=1)
 
         basis_20 = FourierZernikeBasis(M=2, N=0)

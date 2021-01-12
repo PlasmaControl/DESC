@@ -6,9 +6,9 @@ from desc.io import IOAble
 
 
 class Grid(IOAble):
-    """Grid is a base class for collocation grids
-    """
-    _io_attrs_ = ['_L', '_M', '_N', '_NFP', '_sym', '_nodes', '_volumes']
+    """Grid is a base class for collocation grids"""
+
+    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_sym", "_nodes", "_volumes"]
 
     def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a custom grid without a pre-defined pattern
@@ -40,7 +40,8 @@ class Grid(IOAble):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def __eq__(self, other) -> bool:
         """Overloads the == operator
@@ -77,13 +78,12 @@ class Grid(IOAble):
     def _sort_nodes_(self) -> None:
         """Sorts nodes for use with FFT
 
-            Returns
-            -------
-            None
+        Returns
+        -------
+        None
 
         """
-        sort_idx = np.lexsort((self._nodes[:, 0], self._nodes[:, 1],
-                               self._nodes[:, 2]))
+        sort_idx = np.lexsort((self._nodes[:, 0], self._nodes[:, 1], self._nodes[:, 2]))
         self._nodes = self._nodes[sort_idx]
         self._volumes = self._volumes[sort_idx]
 
@@ -148,7 +148,7 @@ class Grid(IOAble):
 
     @property
     def nodes(self):
-        """ndarray: array of float, size(3,Nnodes): 
+        """ndarray: array of float, size(3,Nnodes):
         node coordinates, in (rho,theta,zeta)"""
         return self._nodes
 
@@ -158,7 +158,7 @@ class Grid(IOAble):
 
     @property
     def volumes(self):
-        """ ndarray: array of float, size(3,Nnodes): 
+        """ndarray: array of float, size(3,Nnodes):
         node spacing (drho,dtheta,dzeta) at each node coordinate"""
         return self._volumes
 
@@ -178,12 +178,25 @@ class Grid(IOAble):
 
 class LinearGrid(Grid):
     """LinearGrid is a collocation grid in which the nodes are linearly
-       spaced in each coordinate.
+    spaced in each coordinate.
     """
 
-    def __init__(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1, sym: bool = False,
-                 axis: bool = False, endpoint: bool = False, rho=None, theta=None, zeta=None,
-                 load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(
+        self,
+        L: int = 1,
+        M: int = 1,
+        N: int = 1,
+        NFP: int = 1,
+        sym: bool = False,
+        axis: bool = False,
+        endpoint: bool = False,
+        rho=None,
+        theta=None,
+        zeta=None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a LinearGrid
 
         Parameters
@@ -230,9 +243,16 @@ class LinearGrid(Grid):
             self._zeta = zeta
 
             self._nodes, self._volumes = self.create_nodes(
-                L=self._L, M=self._M, N=self._N,
-                NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
-                rho=self._rho, theta=self._theta, zeta=self._zeta)
+                L=self._L,
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
+                axis=self._axis,
+                endpoint=self._endpoint,
+                rho=self._rho,
+                theta=self._theta,
+                zeta=self._zeta,
+            )
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -240,10 +260,21 @@ class LinearGrid(Grid):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
-    def create_nodes(self, L: int = 1, M: int = 1, N: int = 1, NFP: int = 1,
-                     axis: bool = False, endpoint: bool = False, rho=None, theta=None, zeta=None):
+    def create_nodes(
+        self,
+        L: int = 1,
+        M: int = 1,
+        N: int = 1,
+        NFP: int = 1,
+        axis: bool = False,
+        endpoint: bool = False,
+        rho=None,
+        theta=None,
+        zeta=None,
+    ):
         """
 
         Parameters
@@ -295,32 +326,32 @@ class LinearGrid(Grid):
             else:
                 r0 = 1e-4
             r = np.linspace(r0, 1, self._L)
-        dr = (1-r0)/self._L
+        dr = (1 - r0) / self._L
 
         # theta/vartheta
         if theta is not None:
             t = np.asarray(theta)
             self._M = t.size
         else:
-            t = np.linspace(0, 2*np.pi, self._M, endpoint=endpoint)
-        dt = 2*np.pi/self._M
+            t = np.linspace(0, 2 * np.pi, self._M, endpoint=endpoint)
+        dt = 2 * np.pi / self._M
 
         # zeta/phi
         if zeta is not None:
             z = np.asarray(zeta)
             self._N = z.size
         else:
-            z = np.linspace(0, 2*np.pi/self._NFP, self._N, endpoint=endpoint)
-        dz = 2*np.pi/self._NFP/self._N
+            z = np.linspace(0, 2 * np.pi / self._NFP, self._N, endpoint=endpoint)
+        dz = 2 * np.pi / self._NFP / self._N
 
-        r, t, z = np.meshgrid(r, t, z, indexing='ij')
+        r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
         t = t.flatten()
         z = z.flatten()
 
-        dr = dr*np.ones_like(r)
-        dt = dt*np.ones_like(t)
-        dz = dz*np.ones_like(z)
+        dr = dr * np.ones_like(r)
+        dt = dt * np.ones_like(t)
+        dz = dz * np.ones_like(z)
 
         nodes = np.stack([r, t, z]).T
         volumes = np.stack([dr, dt, dz]).T
@@ -348,20 +379,36 @@ class LinearGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._volumes = self.create_nodes(L=L, M=M, N=N,
-                                                           NFP=self._NFP, sym=self._sym,
-                                                           endpoint=self._endpoint, surfs=self._surfs)
+            self._nodes, self._volumes = self.create_nodes(
+                L=L,
+                M=M,
+                N=N,
+                NFP=self._NFP,
+                sym=self._sym,
+                endpoint=self._endpoint,
+                surfs=self._surfs,
+            )
             self.sort_nodes()
 
 
 class ConcentricGrid(Grid):
     """ConcentricGrid is a collocation grid in which the nodes are arranged
-       in concentric circles within each toroidal cross-section.
+    in concentric circles within each toroidal cross-section.
     """
 
-    def __init__(self, M: int, N: int, NFP: int = 1, sym: bool = False, axis: bool = False,
-                 index='ansi', surfs='cheb1', load_from=None, file_format=None,
-                 obj_lib=None) -> None:
+    def __init__(
+        self,
+        M: int,
+        N: int,
+        NFP: int = 1,
+        sym: bool = False,
+        axis: bool = False,
+        index="ansi",
+        surfs="cheb1",
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ) -> None:
         """Initializes a ConcentricGrid
 
         Parameters
@@ -393,7 +440,7 @@ class ConcentricGrid(Grid):
         self._file_format_ = file_format
 
         if load_from is None:
-            self._L = M+1
+            self._L = M + 1
             self._M = M
             self._N = N
             self._NFP = NFP
@@ -403,8 +450,13 @@ class ConcentricGrid(Grid):
             self._surfs = surfs
 
             self._nodes, self._volumes = self.create_nodes(
-                M=self._M, N=self._N, NFP=self._NFP,
-                axis=self._axis, index=self._index, surfs=self._surfs)
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
+                axis=self._axis,
+                index=self._index,
+                surfs=self._surfs,
+            )
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -412,10 +464,18 @@ class ConcentricGrid(Grid):
 
         else:
             self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
-    def create_nodes(self, M: int, N: int, NFP: int = 1, axis: bool = False,
-                     index='ansi', surfs='cheb1'):
+    def create_nodes(
+        self,
+        M: int,
+        N: int,
+        NFP: int = 1,
+        axis: bool = False,
+        index="ansi",
+        surfs="cheb1",
+    ):
         """
 
         Parameters
@@ -445,36 +505,40 @@ class ConcentricGrid(Grid):
             node spacing (drho,dtheta,dzeta) at each node coordinate
 
         """
-        dim_fourier = 2*N+1
-        if index in ['ansi', 'chevron']:
-            dim_zernike = int((M+1)*(M+2)/2)
+        dim_fourier = 2 * N + 1
+        if index in ["ansi", "chevron"]:
+            dim_zernike = int((M + 1) * (M + 2) / 2)
             a = 1
-        elif index in ['fringe', 'house']:
-            dim_zernike = int((M+1)**2)
+        elif index in ["fringe", "house"]:
+            dim_zernike = int((M + 1) ** 2)
             a = 2
         else:
-            raise ValueError(colored(
-                             "Zernike indexing must be one of 'ansi', 'fringe', 'chevron', 'house'", 'red'))
+            raise ValueError(
+                colored(
+                    "Zernike indexing must be one of 'ansi', 'fringe', 'chevron', 'house'",
+                    "red",
+                )
+            )
 
         pattern = {
-            'cheb1': (np.cos(np.arange(M, -1, -1)*np.pi/M)+1)/2,
-            'cheb2': -np.cos(np.arange(M, 2*M+1, 1)*np.pi/(2*M))
+            "cheb1": (np.cos(np.arange(M, -1, -1) * np.pi / M) + 1) / 2,
+            "cheb2": -np.cos(np.arange(M, 2 * M + 1, 1) * np.pi / (2 * M)),
         }
-        rho = pattern.get(surfs, np.linspace(0, 1, num=M+1))
+        rho = pattern.get(surfs, np.linspace(0, 1, num=M + 1))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0
         else:
-            rho[0] = rho[1]/4
+            rho[0] = rho[1] / 4
 
         drho = np.zeros_like(rho)
         for i in range(rho.size):
             if i == 0:
-                drho[i] = (rho[0]+rho[1])/2
-            elif i == rho.size-1:
-                drho[i] = 1-(rho[-2]+rho[-1])/2
+                drho[i] = (rho[0] + rho[1]) / 2
+            elif i == rho.size - 1:
+                drho[i] = 1 - (rho[-2] + rho[-1]) / 2
             else:
-                drho[i] = (rho[i+1]-rho[i-1])/2
+                drho[i] = (rho[i + 1] - rho[i - 1]) / 2
 
         r = np.zeros(dim_zernike)
         t = np.zeros(dim_zernike)
@@ -482,25 +546,25 @@ class ConcentricGrid(Grid):
         dt = np.zeros(dim_zernike)
 
         i = 0
-        for m in range(M+1):
-            dtheta = 2*np.pi/(a*m+1)
-            theta = np.arange(0, 2*np.pi, dtheta)
-            for j in range(a*m+1):
+        for m in range(M + 1):
+            dtheta = 2 * np.pi / (a * m + 1)
+            theta = np.arange(0, 2 * np.pi, dtheta)
+            for j in range(a * m + 1):
                 r[i] = rho[m]
                 t[i] = theta[j]
                 dr[i] = drho[m]
                 dt[i] = dtheta
                 i += 1
 
-        dz = 2*np.pi/(NFP*dim_fourier)
-        z = np.arange(0, 2*np.pi/NFP, dz)
+        dz = 2 * np.pi / (NFP * dim_fourier)
+        z = np.arange(0, 2 * np.pi / NFP, dz)
 
         r = np.tile(r, dim_fourier)
         t = np.tile(t, dim_fourier)
-        z = np.tile(z[np.newaxis], (dim_zernike, 1)).flatten(order='F')
+        z = np.tile(z[np.newaxis], (dim_zernike, 1)).flatten(order="F")
         dr = np.tile(dr, dim_fourier)
         dt = np.tile(dt, dim_fourier)
-        dz = np.ones_like(z)*dz
+        dz = np.ones_like(z) * dz
 
         nodes = np.stack([r, t, z]).T
         volumes = np.stack([dr, dt, dz]).T
@@ -523,17 +587,19 @@ class ConcentricGrid(Grid):
 
         """
         if M != self._M or N != self._N:
-            self._L = M+1
+            self._L = M + 1
             self._M = M
             self._N = N
-            self._nodes, self._volumes = self.create_nodes(M=M, N=N,
-                                                           NFP=self._NFP, sym=self._sym, surfs=self._surfs)
+            self._nodes, self._volumes = self.create_nodes(
+                M=M, N=N, NFP=self._NFP, sym=self._sym, surfs=self._surfs
+            )
             self.sort_nodes()
 
 
 # these functions are currently unused ---------------------------------------
 
 # TODO: finish option for placing nodes at irrational surfaces
+
 
 def dec_to_cf(x, dmax=6):
     """Compute continued fraction form of a number.
@@ -581,7 +647,7 @@ def cf_to_dec(cf):
     if len(cf) == 1:
         return cf[0]
     else:
-        return cf[0] + 1/cf_to_dec(cf[1:])
+        return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
 def most_rational(a, b):
@@ -607,7 +673,7 @@ def most_rational(a, b):
         a = b
         b = c
     # return 0 if in range
-    if np.sign(a*b) <= 0:
+    if np.sign(a * b) <= 0:
         return 0
     # handle negative ranges
     elif np.sign(a) < 0:
@@ -628,5 +694,5 @@ def most_rational(a, b):
     while True:
         dec = cf_to_dec(np.append(a_cf[0:idx], f))
         if dec >= a and dec <= b:
-            return dec*s
+            return dec * s
         f += 1

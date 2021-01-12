@@ -18,7 +18,7 @@ class hdf5IO(IO):
 
         """
         self._file_types_ = [h5py._hl.group.Group, h5py._hl.files.File]
-        self._file_format_ = 'hdf5'
+        self._file_format_ = "hdf5"
         super().__init__()
 
     def open_file(self, file_name, file_mode):
@@ -56,7 +56,7 @@ class hdf5IO(IO):
         except ValueError:
             return self.base[name]
         except KeyError:
-            raise RuntimeError('Cannot create sub in reader.')
+            raise RuntimeError("Cannot create sub in reader.")
 
     def groups(self, where=None):
         """Finds groups in location given by 'where'.
@@ -91,7 +91,7 @@ class hdf5Reader(hdf5IO, Reader):
 
         """
         self.target = target
-        self.file_mode = 'r'
+        self.file_mode = "r"
         super().__init__()
 
     def read_obj(self, obj, where=None, obj_lib=None):
@@ -111,9 +111,9 @@ class hdf5Reader(hdf5IO, Reader):
         """
         if obj_lib is not None:
             self.obj_lib = obj_lib
-        elif hasattr(self, 'obj_lib'):
+        elif hasattr(self, "obj_lib"):
             pass
-        elif hasattr(obj, '_object_lib_'):
+        elif hasattr(obj, "_object_lib_"):
             self.obj_lib = obj._object_lib_
         else:
             pass
@@ -122,31 +122,43 @@ class hdf5Reader(hdf5IO, Reader):
             try:
                 setattr(obj, attr, loc[attr][()])
             except KeyError:
-                warnings.warn("Save attribute '{}' was not loaded.".format(attr),
-                              RuntimeWarning)
+                warnings.warn(
+                    "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
+                )
             except AttributeError:
                 try:
-                    if 'name' in loc[attr].keys():
-                        theattr = loc[attr]['name'][()]
-                        if theattr == 'list':
+                    if "name" in loc[attr].keys():
+                        theattr = loc[attr]["name"][()]
+                        if theattr == "list":
                             setattr(obj, attr, self.read_list(where=loc[attr]))
-                        elif theattr == 'dict':
+                        elif theattr == "dict":
                             setattr(obj, attr, self.read_dict(where=loc[attr]))
                         else:
                             try:
                                 # initialized an object from object_lib
-                                #print('setting attribute', attr, 'as an ', theattr)
-                                setattr(obj, attr, self.obj_lib[theattr](load_from=loc[attr],
-                                                                         file_format=self._file_format_, obj_lib=self.obj_lib))
+                                # print('setting attribute', attr, 'as an ', theattr)
+                                setattr(
+                                    obj,
+                                    attr,
+                                    self.obj_lib[theattr](
+                                        load_from=loc[attr],
+                                        file_format=self._file_format_,
+                                        obj_lib=self.obj_lib,
+                                    ),
+                                )
                             except KeyError:
-                                warnings.warn("No object_lib '{}'.".format(attr),
-                                              RuntimeWarning)
+                                warnings.warn(
+                                    "No object_lib '{}'.".format(attr), RuntimeWarning
+                                )
                     else:
-                        warnings.warn("Could not load attribute '{}'.".format(attr),
-                                      RuntimeWarning)
+                        warnings.warn(
+                            "Could not load attribute '{}'.".format(attr),
+                            RuntimeWarning,
+                        )
                 except AttributeError:
-                    warnings.warn("Could not set attribute '{}'.".format(attr),
-                                  RuntimeWarning)
+                    warnings.warn(
+                        "Could not set attribute '{}'.".format(attr), RuntimeWarning
+                    )
         return None
 
     def read_dict(self, thedict=None, where=None):
@@ -173,23 +185,29 @@ class hdf5Reader(hdf5IO, Reader):
             try:
                 thedict[key] = loc[key][()]
             except AttributeError:
-                if 'name' in loc[key].keys():
-                    theattr = loc[key]['name'][()]
-                    if theattr == 'list':
+                if "name" in loc[key].keys():
+                    theattr = loc[key]["name"][()]
+                    if theattr == "list":
                         thedict[theattr] = self.read_list(where=loc[key])
-                    elif theattr == 'dict':
+                    elif theattr == "dict":
                         thedict[theattr] = self.read_dict(where=loc[key])
                     else:
                         try:
                             # initialized an object from object_lib
-                            thedict[theattr] = self.obj_lib[theattr](load_from=loc[key],
-                                                                     file_format=self._file_format_, obj_lib=self.obj_lib)
+                            thedict[theattr] = self.obj_lib[theattr](
+                                load_from=loc[key],
+                                file_format=self._file_format_,
+                                obj_lib=self.obj_lib,
+                            )
                         except KeyError:
-                            warnings.warn("Could not load attribute '{}'.".format(key),
-                                          RuntimeWarning)
+                            warnings.warn(
+                                "Could not load attribute '{}'.".format(key),
+                                RuntimeWarning,
+                            )
                 else:
-                    warnings.warn("Could not load attribute '{}'.".format(key),
-                                  RuntimeWarning)
+                    warnings.warn(
+                        "Could not load attribute '{}'.".format(key), RuntimeWarning
+                    )
         if ret:
             return thedict
         else:
@@ -220,24 +238,32 @@ class hdf5Reader(hdf5IO, Reader):
             try:
                 thelist.append(loc[str(i)][()])
             except AttributeError:
-                if 'name' in loc[str(i)].keys():
-                    theattr = loc[str(i)]['name'][()]
+                if "name" in loc[str(i)].keys():
+                    theattr = loc[str(i)]["name"][()]
                     # print('loading a ', theattr, 'from list') #debug
-                    if theattr == 'list':
+                    if theattr == "list":
                         thelist.append(self.read_list(where=theattr))
-                    elif theattr == 'dict':
+                    elif theattr == "dict":
                         thelist.append(self.read_dict(where=theattr))
                     else:
                         try:
                             # initialized an object from object_lib
-                            thelist.append(self.obj_lib[theattr](load_from=loc[str(i)],
-                                                                 file_format=self._file_format_, obj_lib=self.obj_lib))
+                            thelist.append(
+                                self.obj_lib[theattr](
+                                    load_from=loc[str(i)],
+                                    file_format=self._file_format_,
+                                    obj_lib=self.obj_lib,
+                                )
+                            )
                         except KeyError:
-                            warnings.warn("Could not load list index '{}'.".format(i),
-                                          RuntimeWarning)
+                            warnings.warn(
+                                "Could not load list index '{}'.".format(i),
+                                RuntimeWarning,
+                            )
                 else:
-                    warnings.warn("Could not load list index '{}'.".format(i),
-                                  RuntimeWarning)
+                    warnings.warn(
+                        "Could not load list index '{}'.".format(i), RuntimeWarning
+                    )
             i += 1
         if ret:
             return thelist
@@ -248,7 +274,7 @@ class hdf5Reader(hdf5IO, Reader):
 class hdf5Writer(hdf5IO, Writer):
     """Class specifying a writer with hdf5IO."""
 
-    def __init__(self, target, file_mode='w'):
+    def __init__(self, target, file_mode="w"):
         """Initializes hdf5Writer class.
 
         Parameters
@@ -284,13 +310,16 @@ class hdf5Writer(hdf5IO, Writer):
         """
         loc = self.resolve_where(where)
         # save name of object class
-        loc.create_dataset('name', data=type(obj).__name__)
+        loc.create_dataset("name", data=type(obj).__name__)
         for attr in obj._io_attrs_:
             try:
                 loc.create_dataset(attr, data=getattr(obj, attr))
             except AttributeError:
-                warnings.warn("Save attribute '{}' was not saved as it does "
-                              "not exist.".format(attr), RuntimeWarning)
+                warnings.warn(
+                    "Save attribute '{}' was not saved as it does "
+                    "not exist.".format(attr),
+                    RuntimeWarning,
+                )
             except TypeError:
                 theattr = getattr(obj, attr)
                 if type(theattr) is dict:
@@ -303,8 +332,9 @@ class hdf5Writer(hdf5IO, Writer):
                         sub_obj = getattr(obj, attr)
                         sub_obj.save(group)
                     except AttributeError:
-                        warnings.warn("Could not save object '{}'.".format(attr),
-                                      RuntimeWarning)
+                        warnings.warn(
+                            "Could not save object '{}'.".format(attr), RuntimeWarning
+                        )
         return None
 
     def write_dict(self, thedict, where=None):
@@ -323,7 +353,7 @@ class hdf5Writer(hdf5IO, Writer):
 
         """
         loc = self.resolve_where(where)
-        loc.create_dataset('name', data='dict')
+        loc.create_dataset("name", data="dict")
         for key in thedict.keys():
             try:
                 loc.create_dataset(key, data=thedict[key])
@@ -347,7 +377,7 @@ class hdf5Writer(hdf5IO, Writer):
 
         """
         loc = self.resolve_where(where)
-        loc.create_dataset('name', data='list')
+        loc.create_dataset("name", data="list")
         for i in range(len(thelist)):
             try:
                 loc.create_dataset(str(i), data=thelist[i])

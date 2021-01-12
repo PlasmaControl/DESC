@@ -7,7 +7,9 @@ from .hdf5_io import hdf5Reader, hdf5Writer
 class IOAble(ABC):
     """Abstract Base Class for savable and loadable objects."""
 
-    def _init_from_file_(self, load_from=None, file_format: str = None, obj_lib=None) -> None:
+    def _init_from_file_(
+        self, load_from=None, file_format: str = None, obj_lib=None
+    ) -> None:
         """Initialize from file.
 
         Parameters
@@ -23,18 +25,26 @@ class IOAble(ABC):
 
         """
         if load_from is None:
-            raise RuntimeError(colored(
-                "_init_from_file_ should only be called when load_from is given", 'red'))
+            raise RuntimeError(
+                colored(
+                    "_init_from_file_ should only be called when load_from is given",
+                    "red",
+                )
+            )
 
         if file_format is None:
-            raise RuntimeError(colored(
-                "file_format argument must be included when loading from file", 'red'))
+            raise RuntimeError(
+                colored(
+                    "file_format argument must be included when loading from file",
+                    "red",
+                )
+            )
 
         reader = reader_factory(load_from, file_format)
         reader.read_obj(self, obj_lib=obj_lib)
         return None
 
-    def save(self, file_name, file_format='hdf5', file_mode='w'):
+    def save(self, file_name, file_format="hdf5", file_mode="w"):
         """Save the object.
 
         Parameters
@@ -51,8 +61,7 @@ class IOAble(ABC):
         None
 
         """
-        writer = writer_factory(file_name, file_format=file_format,
-                                file_mode=file_mode)
+        writer = writer_factory(file_name, file_format=file_format, file_mode=file_mode)
         writer.write_obj(self)
         writer.close()
 
@@ -72,17 +81,18 @@ def reader_factory(load_from, file_format):
     Reader instance
 
     """
-    if file_format == 'hdf5':
+    if file_format == "hdf5":
         reader = hdf5Reader(load_from)
-    elif file_format == 'pickle':
+    elif file_format == "pickle":
         reader = PickleReader(load_from)
     else:
         raise NotImplementedError(
-            "Format '{}' has not been implemented.".format(file_format))
+            "Format '{}' has not been implemented.".format(file_format)
+        )
     return reader
 
 
-def writer_factory(file_name, file_format, file_mode='w'):
+def writer_factory(file_name, file_format, file_mode="w"):
     """Select and return instance of appropriate reader class for given file format.
 
     Parameters
@@ -97,11 +107,12 @@ def writer_factory(file_name, file_format, file_mode='w'):
     Reader instance
 
     """
-    if file_format == 'hdf5':
+    if file_format == "hdf5":
         writer = hdf5Writer(file_name, file_mode)
-    elif file_format == 'pickle':
+    elif file_format == "pickle":
         writer = PickleWriter(file_name, file_mode)
     else:
         raise NotImplementedError(
-            "Format '{}' has not been implemented.".format(file_format))
+            "Format '{}' has not been implemented.".format(file_format)
+        )
     return writer

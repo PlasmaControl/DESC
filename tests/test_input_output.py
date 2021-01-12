@@ -1,19 +1,18 @@
 import unittest
+import tempfile
 import os
 import pathlib
 import h5py
-import argparse
 
 from desc.input_reader import InputReader
 from desc.equilibrium_io import hdf5Writer, hdf5Reader
 
 
 class TestInputReader(unittest.TestCase):
-
     def setUp(self):
         self.argv0 = []
-        self.argv1 = ['nonexistant_input_file']
-        self.argv2 = ['./tests/MIN_INPUT']
+        self.argv1 = ["nonexistant_input_file"]
+        self.argv2 = ["./tests/MIN_INPUT"]
 
     def test_no_input_file(self):
         with self.assertRaises(NameError):
@@ -25,66 +24,88 @@ class TestInputReader(unittest.TestCase):
 
     def test_min_input(self):
         ir = InputReader(cl_args=self.argv2)
-        #self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
-        self.assertEqual(ir.args.input_file[0], self.argv2[0],
-                         'Input file name does not match')
+        # self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
+        self.assertEqual(
+            ir.args.input_file[0], self.argv2[0], "Input file name does not match"
+        )
         # self.assertEqual(ir.output_path, self.argv2[0] + '.output',
         #        'Default output file does not match.')
-        self.assertEqual(ir.input_path,
-                         str(pathlib.Path('./'+self.argv2[0]).resolve()),
-                         'Path to input file is incorrect.')
+        self.assertEqual(
+            ir.input_path,
+            str(pathlib.Path("./" + self.argv2[0]).resolve()),
+            "Path to input file is incorrect.",
+        )
         # Test defaults
-        self.assertFalse(ir.args.plot, 'plot is not default False')
-        self.assertFalse(ir.args.quiet, 'quiet is not default False')
-        self.assertEqual(ir.args.verbose, 1, 'verbose is not default 1')
-        #self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
-        #self.assertFalse(ir.args.gpuID, 'gpu argument was given')
-        self.assertFalse(ir.args.numpy, 'numpy is not default False')
-        self.assertEqual(os.environ['DESC_USE_NUMPY'], '', 'numpy environment '
-                         'variable incorrect with default argument')
-        self.assertFalse(ir.args.version, 'version is not default False')
-        self.assertEqual(len(ir.inputs), 26, 'number of inputs does not match '
-                         'number expected in MIN_INPUT')
+        self.assertFalse(ir.args.plot, "plot is not default False")
+        self.assertFalse(ir.args.quiet, "quiet is not default False")
+        self.assertEqual(ir.args.verbose, 1, "verbose is not default 1")
+        # self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
+        # self.assertFalse(ir.args.gpuID, 'gpu argument was given')
+        self.assertFalse(ir.args.numpy, "numpy is not default False")
+        self.assertEqual(
+            os.environ["DESC_USE_NUMPY"],
+            "",
+            "numpy environment " "variable incorrect with default argument",
+        )
+        self.assertFalse(ir.args.version, "version is not default False")
+        self.assertEqual(
+            len(ir.inputs),
+            26,
+            "number of inputs does not match " "number expected in MIN_INPUT",
+        )
         # test equality of arguments
 
     def test_np_environ(self):
-        argv = self.argv2 + ['--numpy']
+        argv = self.argv2 + ["--numpy"]
         InputReader(cl_args=argv)
-        self.assertEqual(os.environ['DESC_USE_NUMPY'], 'True', 'numpy '
-                         'environment variable incorrect on use')
+        self.assertEqual(
+            os.environ["DESC_USE_NUMPY"],
+            "True",
+            "numpy " "environment variable incorrect on use",
+        )
 
     def test_quiet_verbose(self):
         ir = InputReader(self.argv2)
-        self.assertEqual(ir.inputs['verbose'], 1, "value of inputs['verbose'] "
-                         "incorrect on no arguments")
-        argv = self.argv2 + ['-v']
+        self.assertEqual(
+            ir.inputs["verbose"],
+            1,
+            "value of inputs['verbose'] " "incorrect on no arguments",
+        )
+        argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
-        self.assertEqual(ir.inputs['verbose'], 2, "value of inputs['verbose'] "
-                         "incorrect on verbose argument")
-        argv = self.argv2 + ['-vv']
+        self.assertEqual(
+            ir.inputs["verbose"],
+            2,
+            "value of inputs['verbose'] " "incorrect on verbose argument",
+        )
+        argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
-        self.assertEqual(ir.inputs['verbose'], 3, "value of inputs['verbose'] "
-                         "incorrect on double verbose argument")
-        argv = self.argv2 + ['-q']
+        self.assertEqual(
+            ir.inputs["verbose"],
+            3,
+            "value of inputs['verbose'] " "incorrect on double verbose argument",
+        )
+        argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
-        self.assertEqual(ir.inputs['verbose'], 0, "value of inputs['verbose'] "
-                         "incorrect on quiet argument")
+        self.assertEqual(
+            ir.inputs["verbose"],
+            0,
+            "value of inputs['verbose'] " "incorrect on quiet argument",
+        )
 
     def test_vmec_to_desc_input(self):
         pass
 
 
 class MockObject:
-
     def __init__(self):
-        self._io_attrs_ = ['a', 'b', 'c']
+        self._io_attrs_ = ["a", "b", "c"]
 
 
 class Testhdf5Writer(unittest.TestCase):
-
     def setUp(self):
-        self.filename = 'writer_test_file'
-        self.file_mode = 'w'
+        self.filename = "writer_test_file"
+        self.file_mode = "w"
 
     def test_given_filename(self):
         writer = hdf5Writer(self.filename, self.file_mode)
@@ -114,15 +135,15 @@ class Testhdf5Writer(unittest.TestCase):
         del newwriter
 
     def test_write_dict(self):
-        thedict = {'1': 1, '2': 2, '3': 3}
+        thedict = {"1": 1, "2": 2, "3": 3}
         writer = hdf5Writer(self.filename, self.file_mode)
         writer.write_dict(thedict)
-        writer.write_dict(thedict, where=writer.sub('subgroup'))
+        writer.write_dict(thedict, where=writer.sub("subgroup"))
         with self.assertRaises(SyntaxError):
-            writer.write_dict(thedict, where='not a writable type')
+            writer.write_dict(thedict, where="not a writable type")
         writer.close()
-        f = h5py.File(self.filename, 'r')
-        g = f['subgroup']
+        f = h5py.File(self.filename, "r")
+        g = f["subgroup"]
         for key in thedict.keys():
             self.assertTrue(key in f.keys())
             self.assertTrue(key in g.keys())
@@ -139,10 +160,10 @@ class Testhdf5Writer(unittest.TestCase):
         for name in mo._io_attrs_:
             setattr(mo, name, name)
         writer.write_obj(mo)
-        groupname = 'initial'
+        groupname = "initial"
         writer.write_obj(mo, where=writer.sub(groupname))
         writer.close()
-        f = h5py.File(self.filename, 'r')
+        f = h5py.File(self.filename, "r")
         for key in mo._io_attrs_:
             self.assertTrue(key in f.keys())
         self.assertTrue(groupname in f.keys())
@@ -153,13 +174,12 @@ class Testhdf5Writer(unittest.TestCase):
 
 
 class Testhdf5Reader(unittest.TestCase):
-
     def setUp(self):
-        self.filename = 'reader_test_file'
-        self.file_mode = 'r'
-        self.thedict = {'a': 'a', 'b': 'b', 'c': 'c'}
-        f = h5py.File(self.filename, 'w')
-        self.subgroup = 'subgroup'
+        self.filename = "reader_test_file"
+        self.file_mode = "r"
+        self.thedict = {"a": "a", "b": "b", "c": "c"}
+        f = h5py.File(self.filename, "w")
+        self.subgroup = "subgroup"
         g = f.create_group(self.subgroup)
         for key in self.thedict.keys():
             f.create_dataset(key, data=self.thedict[key])
@@ -201,13 +221,13 @@ class Testhdf5Reader(unittest.TestCase):
         reader.read_dict(newdict)
         reader.read_dict(newsubdict, where=reader.sub(self.subgroup))
         with self.assertRaises(SyntaxError):
-            reader.read_dict(otherdict, where='not a readable type')
+            reader.read_dict(otherdict, where="not a readable type")
         reader.close()
-        if type(newdict['a']) is bytes:
+        if type(newdict["a"]) is bytes:
             for key in newdict.keys():
-                newdict[key] = newdict[key].decode('ascii')
+                newdict[key] = newdict[key].decode("ascii")
             for key in newsubdict.keys():
-                newsubdict[key] = newsubdict[key].decode('ascii')
+                newsubdict[key] = newsubdict[key].decode("ascii")
         self.assertTrue(self.thedict == newdict)
         self.assertTrue(self.thedict == newsubdict)
 
@@ -215,7 +235,7 @@ class Testhdf5Reader(unittest.TestCase):
         mo = MockObject()
         reader = hdf5Reader(self.filename)
         reader.read_obj(mo)
-        mo._io_attrs_ += '4'
+        mo._io_attrs_ += "4"
         with self.assertWarns(RuntimeWarning):
             reader.read_obj(mo)
         del mo._io_attrs_[-1]

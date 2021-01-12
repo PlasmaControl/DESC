@@ -1,7 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
-
-from desc.backend import jnp, fori_loop, factorial
+from desc.backend import jnp, use_jax, jit, fori_loop, factorial
 from desc.utils import Tristate, sign, flatten_list, equals
 from desc.io import IOAble
 
@@ -626,6 +625,7 @@ class FourierZernikeBasis(Basis):
             self.sort_nodes()
 
 
+@jit
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
@@ -657,6 +657,7 @@ def polyder_vec(p, m):
     return p
 
 
+@jit
 def polyval_vec(p, x):
     """Evaluate a polynomial at specific values,
     vectorized for evaluating multiple polynomials of the same degree.
@@ -826,3 +827,21 @@ def fourier(theta, m, NFP=1, dt=0):
         return m_pos*jnp.cos(m_abs*theta_2d) + m_neg*jnp.sin(m_abs*theta_2d)
     else:
         return m_abs*(m_neg-m_pos)*fourier(theta, -m, NFP=NFP, dt=dt-1)
+
+
+def zernike_norm(l, m):
+    """Norm of a Zernike polynomial with l, m indexing.
+    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
+
+    Parameters
+    ----------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    Returns
+    -------
+    norm : float
+        norm of Zernike polynomial over unit disk.
+
+    """
+    return np.sqrt((2 * (l + 1)) / (np.pi*(1 + int(m == 0))))

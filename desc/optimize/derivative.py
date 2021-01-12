@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from termcolor import colored
 
 from desc.backend import jnp, cho_factor, cho_solve, jit, use_jax
-from desc.utils import conditional_decorator
 from desc.optimize.utils import make_spd, chol_U_update
 
 
@@ -207,15 +206,15 @@ class CholeskyHessian(OptimizerDerivative):
     def solve(self, x):
         return self._cho_solve(self._U, x)
 
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
+    @functools.partial(jit, static_argnums=(0,))
     def _dot(self, A, b):
         return jnp.dot(A, b)
 
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
+    @functools.partial(jit, static_argnums=(0,))
     def _cho_solve(self, U, x):
         return cho_solve((U, False), x)
 
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
+    @functools.partial(jit, static_argnums=(0,))
     def _cholesky(self, A):
         return jnp.linalg.cholesky(A).T
 

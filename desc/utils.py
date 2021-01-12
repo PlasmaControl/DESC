@@ -242,36 +242,6 @@ opsindex = _Indexable()
 
 # Helper Functions -----------------------------------------------------------
 
-def conditional_decorator(dec, condition, *args, **kwargs):
-    """Apply arbitrary decorator to a function if condition is met
-
-    Parameters
-    ----------
-    dec : decorator
-        Decorator to apply
-    condition : bool
-        condition that must be met for decorator to be applied
-    args : tuple, optional
-        Arguments to pass to decorator
-    kwargs : dict, optional
-        Keyword arguments to pass to decorator
-
-
-    Returns
-    -------
-    cond_dec : decorator
-        Decorator that acts like ``dec`` if ``condition``,
-
-    """
-    @functools.wraps(dec)
-    def decorator(func):
-        if not condition:
-            # Return the function unchanged, not decorated.
-            return func
-        return dec(func, *args, **kwargs)
-    return decorator
-
-
 def unpack_state(x, nR0, nZ0, nr, nl):
     """Unpacks the state vector x into R0_n, Z0_n, r_lmn, l_lmn components
 

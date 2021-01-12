@@ -4,7 +4,7 @@ from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 
 from desc.backend import use_jax, jnp, jit
-from desc.utils import conditional_decorator, equals
+from desc.utils import equals
 from desc.grid import Grid
 from desc.basis import Basis
 from desc.io import IOAble
@@ -212,7 +212,6 @@ class Transform(IOAble):
 
         return jnp.matmul(A, c)
 
-    @conditional_decorator(functools.partial(jit, static_argnums=(0,)), use_jax)
     def fit(self, x):
         """Transform from physical domain to spectral using least squares fit
 
@@ -356,97 +355,3 @@ class Transform(IOAble):
     @property
     def num_modes(self):
         return self._basis.num_modes
-
-
-# these functions are currently unused ---------------------------------------
-
-def zernike_norm(l, m):
-    """Norm of a Zernike polynomial with l, m indexing.
-    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    norm : float
-        norm of Zernike polynomial over unit disk.
-
-    """
-    return jnp.sqrt((2 * (l + 1)) / (jnp.pi*(1 + jnp.kronecker(m, 0))))
-
-
-def lm_to_fringe(l, m):
-    """Convert Zernike (l,m) double index to single Fringe index.
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    idx : int
-        Fringe index for l,m
-
-    """
-    M = (l + np.abs(m)) / 2
-    return int(M**2 + M + m)
-
-
-def fringe_to_lm(idx):
-    """Convert single Zernike Fringe index to (l,m) double index.
-
-    Parameters
-    ----------
-    idx : int
-        Fringe index
-
-    Returns
-    -------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    """
-    M = (np.ceil(np.sqrt(idx+1)) - 1)
-    m = idx - M**2 - M
-    l = 2*M - np.abs(m)
-    return int(l), int(m)
-
-
-def lm_to_ansi(l, m):
-    """Convert Zernike (l,m) two term index to ANSI single term index.
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    idx : int
-        ANSI index for l,m
-
-    """
-    return int((l * (l + 2) + m) / 2)
-
-
-def ansi_to_lm(idx):
-    """Convert Zernike ANSI single term to (l,m) two-term index.
-
-    Parameters
-    ----------
-    idx : int
-        ANSI index
-
-    Returns
-    -------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    """
-    l = int(np.ceil((-3 + np.sqrt(9 + 8*idx))/2))
-    m = 2 * idx - l * (l + 2)
-    return l, m

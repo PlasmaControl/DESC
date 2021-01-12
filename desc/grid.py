@@ -283,7 +283,7 @@ class LinearGrid(Grid):
 
         # rho
         if rho is not None:
-            r = np.asarray(rho)
+            r = np.atleast_1d(rho)
             r0 = r[0]
             self._L = r.size
         elif self._L == 1:

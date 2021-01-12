@@ -514,16 +514,12 @@ class Plot:
             out = eq.compute_profiles(grid)[self.__name_key__(name_dict)]
         elif name_dict["base"] == "g":
             out = eq.compute_jacobian(grid)[self.__name_key__(name_dict)]
-        elif name_dict["base"] == "B":
+        elif name_dict["base"] in ["B", "|B|"]:
             out = eq.compute_magnetic_field(grid)[self.__name_key__(name_dict)]
         elif name_dict["base"] == "J":
             out = eq.compute_current_density(grid)[self.__name_key__(name_dict)]
-        elif name_dict["base"] == "|B|":
-            out = eq.compute_magnetic_field_magnitude(grid)[
-                self.__name_key__(name_dict)
-            ]
-        elif name_dict["base"] == "|F|":
-            out = eq.compute_force_error_magnitude(grid)[self.__name_key__(name_dict)]
+        elif name_dict["base"] in ["F", "|F|"]:
+            out = eq.compute_force_error(grid)[self.__name_key__(name_dict)]
         elif name_dict["base"] == "log(|F|)":
             out = eq.compute_force_error_magnitude(grid)["|F|"]
             out = np.log10(np.asarray(out))

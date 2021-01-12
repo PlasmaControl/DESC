@@ -406,9 +406,9 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
-        rmnc[i, :] = c
+        rmnc[:] = c
         if not eq.sym:
-            rmns[i, :] = s
+            rmns[:] = s
 
         zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
         zmns.long_name = "sin(m*t-n*p) component of cylindrical Z on full mesh"
@@ -430,9 +430,9 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
-        zmns = s
+        zmns[:] = s
         if not eq.sym:
-            zmnc = c
+            zmnc[:] = c
 
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
         lmns.long_name = "sin(m*t-n*p) component of lambda on full mesh"
@@ -454,9 +454,9 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
-        lmns[i, :] = s
+        lmns[:] = s
         if not eq.sym:
-            lmnc[i, :] = c
+            lmnc[:] = c
 
         file.close
 

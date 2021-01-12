@@ -21,6 +21,9 @@ def test_VMECIO(SOLOVEV):
     rmnc2 = file2.variables["rmnc"][:]
     zmns1 = file1.variables["zmns"][:]
     zmns2 = file2.variables["zmns"][:]
+    lmns1 = file1.variables["lmns"][:]
+    lmns2 = file2.variables["lmns"][:]
 
-    np.testing.assert_allclose(rmnc2[(0, -1), :], rmnc1[(0, -1), :], atol=1e-6)
-    np.testing.assert_allclose(zmns2[(0, -1), :], zmns1[(0, -1), :], atol=1e-6)
+    np.testing.assert_allclose(rmnc2[-3:, :], rmnc1[-3:, :], atol=1e-2)
+    np.testing.assert_allclose(zmns2[-3:, :], zmns1[-3:, :], atol=1e-2)
+    np.testing.assert_allclose(lmns2[-3:, :], lmns1[-3:, :], atol=1e-2)

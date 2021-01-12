@@ -76,6 +76,7 @@ class Configuration(IOAble):
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib)
+        self._make_labels()
 
     def _init_from_inputs_(self, inputs: dict = None) -> None:
         # required inputs
@@ -230,6 +231,7 @@ class Configuration(IOAble):
         # state vector
         self._x = np.concatenate(
             [self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+        self._makes_labels()
 
     @property
     def sym(self) -> bool:
@@ -371,6 +373,7 @@ class Configuration(IOAble):
     @R0_basis.setter
     def R0_basis(self, R0_basis: FourierSeries) -> None:
         self._R0_basis = R0_basis
+        self._make_labels()
 
     @property
     def Z0_basis(self) -> FourierSeries:
@@ -387,6 +390,7 @@ class Configuration(IOAble):
     @Z0_basis.setter
     def Z0_basis(self, Z0_basis: FourierSeries) -> None:
         self._Z0_basis = Z0_basis
+        self._make_labels()
 
     @property
     def r_basis(self) -> FourierZernikeBasis:
@@ -403,6 +407,7 @@ class Configuration(IOAble):
     @r_basis.setter
     def r_basis(self, r_basis: FourierZernikeBasis) -> None:
         self._r_basis = r_basis
+        self._make_labels()
 
     @property
     def l_basis(self) -> FourierZernikeBasis:
@@ -419,6 +424,7 @@ class Configuration(IOAble):
     @l_basis.setter
     def l_basis(self, l_basis: FourierZernikeBasis) -> None:
         self._l_basis = l_basis
+        self._make_labels()
 
     @property
     def R1_basis(self) -> DoubleFourierSeries:
@@ -483,6 +489,34 @@ class Configuration(IOAble):
     @i_basis.setter
     def i_basis(self, i_basis: PowerSeries) -> None:
         self._i_basis = i_basis
+
+    def _make_labels(self):
+        R0_label = ['R0_{}'.format(n) for n in self._R0_basis.modes[:, 2]]
+        Z0_label = ['Z0_{}'.format(n) for n in self._Z0_basis.modes[:, 2]]
+        r_label = ['r_{},{},{}'.format(l, m, n)
+                   for l, m, n in self._r_basis.modes]
+        l_label = ['l_{},{},{}'.format(l, m, n)
+                   for l, m, n in self._l_basis.modes]
+
+        x_label = R0_label + Z0_label + r_label + l_label
+
+        self.xlabel = {i: val for i, val in enumerate(x_label)}
+        self.rev_xlabel = {val: i for i, val in self.xlabel.items()}
+
+    def get_xlabel_by_idx(self, idx):
+        """Find which mode corresponds to a given entry in x"""
+
+        idx = np.atleast_1d(idx)
+        labels = [self.xlabel.get(i, None) for i in idx]
+        return labels
+
+    def get_idx_by_xlabel(self, labels):
+        """Find which index of x corresponds to a given mode"""
+
+        if not isinstance(labels, (list, tuple)):
+            labels = list(labels)
+        idx = [self.rev_xlabel.get(label, None) for label in labels]
+        return np.array(idx)
 
     def compute_polar_coords(self, grid: Grid) -> dict:
         """Transforms spectral coefficients of polar coordinates to real space.

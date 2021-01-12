@@ -9,7 +9,7 @@ from termcolor import colored
 
 from desc.backend import put
 from desc.utils import opsindex
-from desc.io.equilibrium_io import read_desc
+from desc.io import read_ascii
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.configuration import Configuration
@@ -617,7 +617,7 @@ def plot_logo(savepath=None, **kwargs):
         transparent = True
 
     path = os.path.dirname(os.path.abspath(__file__))
-    equil = read_desc(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
+    equil = read_ascii(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
 
     if onlyD:
         fig_width = fig_width/2

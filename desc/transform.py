@@ -1,9 +1,8 @@
 import numpy as np
-import functools
 from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 
-from desc.backend import use_jax, jnp, jit
+from desc.backend import jnp
 from desc.utils import equals
 from desc.grid import Grid
 from desc.basis import Basis

@@ -5,6 +5,7 @@ from termcolor import colored
 from desc.backend import put
 from desc.utils import Tristate, unpack_state
 from desc.basis import (
+    jacobi,
     PowerSeries,
     FourierSeries,
     DoubleFourierSeries,
@@ -219,34 +220,32 @@ class Configuration(IOAble):
             try:
                 self._r_lmn = inputs["r_lmn"]
             except:
-                # XXX: is there a better initial guess?
                 self._r_lmn = np.zeros((self._r_basis.num_modes,))
-                self._r_lmn = put(
-                    self._r_lmn,
-                    np.where(
+                try:
+                    # index of m = n = 0 modes with l <= 4
+                    idx = np.where(
                         np.logical_and.reduce(
                             (
-                                self._r_basis.modes[:, 0] == 0,
+                                self._r_basis.modes[:, 0] <= 4,
                                 self._r_basis.modes[:, 1] == 0,
                                 self._r_basis.modes[:, 2] == 0,
                             )
                         )
-                    )[0],
-                    0.5,
-                )
-                self._r_lmn = put(
-                    self._r_lmn,
-                    np.where(
+                    )[0]
+                    self._r_lmn = put(self._r_lmn, idx, np.array([0.65, 0.5, -0.15]))
+                except:
+                    # index of m = n = 0 modes with l <= 2
+                    idx = np.where(
                         np.logical_and.reduce(
                             (
-                                self._r_basis.modes[:, 0] == 2,
+                                self._r_basis.modes[:, 0] <= 2,
                                 self._r_basis.modes[:, 1] == 0,
                                 self._r_basis.modes[:, 2] == 0,
                             )
                         )
-                    )[0],
-                    0.5,
-                )
+                    )[0]
+                    self._r_lmn = put(self._r_lmn, idx, np.array([0.5, 0.5]))
+
             # check if lambda is provided
             try:
                 self._l_lmn = inputs["l_lmn"]
@@ -628,16 +627,24 @@ class Configuration(IOAble):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R0_transform = Transform(grid, self._R0_basis, derivs=0)
-        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis, derivs=0)
-        l_transform = Transform(grid, self._l_basis, derivs=0)
-        R1_transform = Transform(grid, self._R1_basis, derivs=0)
-        Z1_transform = Transform(grid, self._Z1_basis, derivs=0)
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform = Transform(grid, self._r_basis, derivs=2)
+        l_transform = Transform(grid, self._l_basis, derivs=2)
+        R1_transform = Transform(grid, self._R1_basis, derivs=2)
+        Z1_transform = Transform(grid, self._Z1_basis, derivs=2)
         p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        i_transform = Transform(grid, self._i_basis, derivs=1)
 
-        polar_coords = compute_polar_coords(
+        (
+            current_density,
+            magnetic_field,
+            profiles,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            polar_coords,
+        ) = compute_current_density(
             self._Psi,
             self._R0_n,
             self._Z0_n,
@@ -676,16 +683,24 @@ class Configuration(IOAble):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R0_transform = Transform(grid, self._R0_basis, derivs=0)
-        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis, derivs=0)
-        l_transform = Transform(grid, self._l_basis, derivs=0)
-        R1_transform = Transform(grid, self._R1_basis, derivs=0)
-        Z1_transform = Transform(grid, self._Z1_basis, derivs=0)
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform = Transform(grid, self._r_basis, derivs=2)
+        l_transform = Transform(grid, self._l_basis, derivs=2)
+        R1_transform = Transform(grid, self._R1_basis, derivs=2)
+        Z1_transform = Transform(grid, self._Z1_basis, derivs=2)
         p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        i_transform = Transform(grid, self._i_basis, derivs=1)
 
-        (toroidal_coords, polar_coords) = compute_toroidal_coords(
+        (
+            current_density,
+            magnetic_field,
+            profiles,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            polar_coords,
+        ) = compute_current_density(
             self._Psi,
             self._R0_n,
             self._Z0_n,
@@ -772,16 +787,25 @@ class Configuration(IOAble):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R0_transform = Transform(grid, self._R0_basis, derivs=0)
-        Z0_transform = Transform(grid, self._Z0_basis, derivs=0)
-        r_transform = Transform(grid, self._r_basis, derivs=0)
-        l_transform = Transform(grid, self._l_basis, derivs=0)
-        R1_transform = Transform(grid, self._R1_basis, derivs=0)
-        Z1_transform = Transform(grid, self._Z1_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R0_transform = Transform(grid, self._R0_basis, derivs=2)
+        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
+        r_transform = Transform(grid, self._r_basis, derivs=2)
+        l_transform = Transform(grid, self._l_basis, derivs=2)
+        R1_transform = Transform(grid, self._R1_basis, derivs=2)
+        Z1_transform = Transform(grid, self._Z1_basis, derivs=2)
+        p_transform = Transform(grid, self._p_basis, derivs=1)
+        i_transform = Transform(grid, self._i_basis, derivs=1)
 
-        (profiles, polar_coords) = compute_profiles(
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            profiles,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            polar_coords,
+        ) = compute_force_error(
             self._Psi,
             self._R0_n,
             self._Z0_n,

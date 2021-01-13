@@ -107,6 +107,7 @@ class Configuration(IOAble):
         """
         self._file_format_ = file_format
         if load_from is None:
+            self.inputs = inputs
             self._init_from_inputs_(inputs=inputs)
         else:
             self._init_from_file_(
@@ -243,15 +244,23 @@ class Configuration(IOAble):
                 self._l_lmn = np.zeros((self._l_basis.num_modes,))
             self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
 
-    def change_resolution(self, L: int = None, M: int = None, N: int = None) -> None:
-        # TODO: check if resolution actually changes
+    def change_resolution(
+        self, L: int = None, M: int = None, N: int = None, *args, **kwargs
+    ) -> None:
 
-        if L is not None:
+        L_change = M_change = N_change = False
+        if L is not None and L != self._L:
+            L_change = True
             self._L = L
-        if M is not None:
+        if M is not None and M != self._M:
+            M_change = True
             self._M = M
-        if N is not None:
+        if N is not None and N != self._N:
+            N_change = True
             self._N = N
+
+        if not np.any([L_change, M_change, N_change]):
+            return
 
         old_modes_R0 = self._R0_basis.modes
         old_modes_Z0 = self._Z0_basis.modes
@@ -316,7 +325,7 @@ class Configuration(IOAble):
 
         # state vector
         self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
-        self._makes_labels()
+        self._make_labels()
 
     @property
     def sym(self) -> bool:

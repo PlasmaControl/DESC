@@ -1,19 +1,22 @@
 import numpy as np
 from collections import MutableSequence
-
+import copy
 from desc.utils import Timer
 from desc.configuration import Configuration
 from desc.io import IOAble
 from desc.objective_funs import ObjectiveFunction, ObjectiveFunctionFactory
 from desc.optimize import Optimizer
-
+from desc.grid import ConcentricGrid, Grid
+from desc.transform import Transform
 
 
 class Equilibrium(Configuration, IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
     It adds information about how the equilibrium configuration was solved.
     """
-    # TODO: add optimizer and objective to io_attrs and figure out why it wont save
+
+    # TODO: add optimizer, objective, grid, transform to io_attrs
+    # and figure out why it wont save
     _io_attrs_ = Configuration._io_attrs_ + ["_solved"]
     _object_lib_ = Configuration._object_lib_
     _object_lib_.update(
@@ -36,9 +39,36 @@ class Equilibrium(Configuration, IOAble):
         self._x0 = self._x
         self.objective = inputs.get("objective", None)
         self.optimizer = inputs.get("optimizer", None)
+        self._M_grid = inputs.get("M_grid", self._M)
+        self._N_grid = inputs.get("N_grid", self._N)
+        self._zern_mode = inputs.get("zern_mode", "ansi")
+        self._node_mode = inputs.get("node_mode", "cheb1")
         self.optimizer_results = {}
         self._solved = False
+        self._transforms = None
         self.timer = Timer()
+        self._set_grid()
+        self._set_transforms()
+        self._continued_from = None
+
+    @classmethod
+    def from_configuration(cls, configuration):
+        """Create an Equilibrium from a Configuration"""
+        return cls(configuration.inputs)
+
+    @property
+    def continued_from(self):
+        """Pointer to a base equilibrium"""
+        return self._continued_from
+
+    def copy(self, deepcopy=True):
+        """Return a (deep)copy of this equilibrium"""
+        if deepcopy:
+            new = copy.deepcopy(self)
+        else:
+            new = copy.copy(self)
+        new._continued_from = self
+        return new
 
     @property
     def x0(self):
@@ -47,6 +77,130 @@ class Equilibrium(Configuration, IOAble):
     @x0.setter
     def x0(self, x0) -> None:
         self._x0 = x0
+
+    @property
+    def M_grid(self):
+        return self._M_grid
+
+    @M_grid.setter
+    def M_grid(self, new):
+        self._M_grid = new
+        self._set_grid()
+        self._set_transforms()
+
+    @property
+    def N_grid(self):
+        return self._N_grid
+
+    @N_grid.setter
+    def N_grid(self, new):
+        self._N_grid = new
+        self._set_grid()
+        self._set_transforms()
+
+    def _set_grid(self):
+        self._grid = ConcentricGrid(
+            M=self.M_grid,
+            N=self.N_grid,
+            NFP=self.NFP,
+            sym=self.sym,
+            axis=False,
+            index=self._zern_mode,
+            surfs=self._node_mode,
+        )
+
+    def _set_transforms(self):
+
+        # TODO: what derivs should these use? get it from objective?
+        if self._transforms is None:
+            self._transforms = {}
+            self._transforms["R0"] = Transform(
+                self.grid, self.R0_basis, derivs=2, build=False
+            )
+            self._transforms["Z0"] = Transform(
+                self.grid, self.Z0_basis, derivs=2, build=False
+            )
+            self._transforms["R1"] = Transform(
+                self.grid, self.R1_basis, derivs="force", build=False
+            )
+            self._transforms["Z1"] = Transform(
+                self.grid, self.Z1_basis, derivs="force", build=False
+            )
+            self._transforms["r"] = Transform(
+                self.grid, self.r_basis, derivs="force", build=False
+            )
+            self._transforms["l"] = Transform(
+                self.grid, self.l_basis, derivs="force", build=False
+            )
+            self._transforms["p"] = Transform(
+                self.grid, self.p_basis, derivs=1, build=False
+            )
+            self._transforms["i"] = Transform(
+                self.grid, self.i_basis, derivs=1, build=False
+            )
+
+        else:
+            self._transforms["R0"].change_resolution(
+                self.grid, self.R0_basis, build=False
+            )
+            self._transforms["Z0"].change_resolution(
+                self.grid, self.Z0_basis, build=False
+            )
+            self._transforms["R1"].change_resolution(
+                self.grid, self.R1_basis, build=False
+            )
+            self._transforms["Z1"].change_resolution(
+                self.grid, self.Z1_basis, build=False
+            )
+            self._transforms["r"].change_resolution(
+                self.grid, self.r_basis, build=False
+            )
+            self._transforms["l"].change_resolution(
+                self.grid, self.l_basis, build=False
+            )
+            self._transforms["p"].change_resolution(
+                self.grid, self.p_basis, build=False
+            )
+            self._transforms["i"].change_resolution(
+                self.grid, self.i_basis, build=False
+            )
+
+    def precompute_transforms(self, verbose=1):
+        """Builds transform matrices"""
+
+        self.timer.start("Transform precomputation")
+        if verbose > 0:
+            print("Precomputing Transforms")
+        self._set_transforms()
+        for tr in self._transforms.values():
+            tr.build()
+
+        self.timer.stop("Transform precomputation")
+        if verbose > 1:
+            self.timer.disp("Transform precomputation")
+
+    def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
+        super().change_resolution(L, M, N)
+        if M_grid is not None:
+            self.M_grid = M_grid
+        if N_grid is not None:
+            self.N_grid = N_grid
+        self._set_transforms()
+
+    @property
+    def built(self):
+        return np.all([tr.built for tr in self._transforms.values()])
+
+    @property
+    def grid(self):
+        return self._grid
+
+    @grid.setter
+    def grid(self, grid):
+        if not isinstance(grid, Grid):
+            raise ValueError("grid attribute must be of type 'Grid' or a subclass")
+        self._grid = grid
+        self._set_transforms()
 
     @property
     def solved(self) -> bool:
@@ -65,10 +219,21 @@ class Equilibrium(Configuration, IOAble):
         if isinstance(objective, ObjectiveFunction) or objective is None:
             self._objective = objective
         elif isinstance(objective, str):
-            # TODO: have equilibrium know about transforms etc.
-            self._objective = ObjectiveFunctionFactory(objective)
+            self._objective = ObjectiveFunctionFactory.get_equil_obj_fun(
+                objective,
+                R0_transform=self._transforms["R0"],
+                Z0_transform=self._transforms["Z0"],
+                R1_transform=self._transforms["R1"],
+                Z1_transform=self._transforms["Z1"],
+                r_transform=self._transforms["r"],
+                l_transform=self._transforms["l"],
+                p_transform=self._transforms["p"],
+                i_transform=self._transforms["i"],
+            )
         else:
-            raise ValueError("Invalid objective {}".format(objective))
+            raise ValueError(
+                "objective should be of type 'ObjectiveFunction' or string"
+            )
         self.solved = False
 
     @property
@@ -219,12 +384,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):
-        if isinstance(new_item, Configuration):
-            self._equilibria[i] = new_item
-        else:
+        # TODO: should they be forced to be Equilibrium?
+        # could possibly create equilibrium from configuration
+        if not isinstance(new_item, Configuration):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Configuration or a subclass"
             )
+        self._equilibria[i] = new_item
 
     def __delitem__(self, i):
         del self._equilibria[i]
@@ -233,6 +399,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return len(self._equilibria)
 
     def insert(self, i, new_item):
+        if not isinstance(new_item, Configuration):
+            raise ValueError(
+                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+            )
         self._equilibria.insert(i, new_item)
 
     @property
@@ -248,8 +418,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return self._equilibria
 
     @equilibria.setter
-    def equilibria(self, eq):
-        self._equilibria = eq
+    def equilibria(self, equil):
+        if not isinstance(equil, (list, tuple, np.ndarray)):
+            equil = list(equil)
+        if not np.all([isinstance(eq, Configuration) for eq in equil]):
+            raise ValueError(
+                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+            )
+        self._equilibria = list(equil)
 
     def __slice__(self, idx):
         if idx is None:
@@ -267,4 +443,3 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
 
 # TODO: overwrite all Equilibrium methods and default to self._equilibria[-1]
-

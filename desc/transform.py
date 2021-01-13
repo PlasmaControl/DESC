@@ -77,7 +77,7 @@ class Transform(IOAble):
             self._basis = basis
             self._derivs = derivs
             self._rcond = rcond
-
+            self._built = False
             self._matrices = {
                 i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
             }
@@ -86,9 +86,6 @@ class Transform(IOAble):
             self._sort_derivatives_()
             if build:
                 self.build()
-                self._built = True
-            else:
-                self._built = False
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
@@ -212,6 +209,9 @@ class Transform(IOAble):
 
     def build(self) -> None:
         """Builds the transform matrices for each derivative order"""
+        if self._built:
+            return
+
         for d in self._derivatives:
             self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(self._grid.nodes, d)
 
@@ -285,7 +285,7 @@ class Transform(IOAble):
         return jnp.matmul(self._pinv, x)
 
     def change_resolution(
-        self, grid: Grid = None, basis: Basis = None, rebuild: bool = True
+        self, grid: Grid = None, basis: Basis = None, build: bool = True
     ) -> None:
         """Re-builds the matrices with a new grid and basise
 
@@ -295,7 +295,7 @@ class Transform(IOAble):
             DESCRIPTION
         basis : Basis, optional
             DESCRIPTION
-        rebuild : bool
+        build : bool
             whether to recompute matrices now or wait until requested
 
         Returns
@@ -308,9 +308,13 @@ class Transform(IOAble):
         if basis is None:
             basis = self._basis
 
-        if (self._grid != grid or self._basis != basis) and rebuild:
+        if self._grid != grid:
             self._grid = grid
+            self._built = False
+        if self._basis != basis:
             self._basis = basis
+            self._built = False
+        if build:
             self.build()
 
     @property
@@ -333,6 +337,7 @@ class Transform(IOAble):
         """
         if self._grid != grid:
             self._grid = grid
+            self._built = False
             self.build()
 
     @property
@@ -355,6 +360,7 @@ class Transform(IOAble):
         """
         if self._basis != basis:
             self._basis = basis
+            self._built = False
             self.build()
 
     @property

@@ -5,7 +5,6 @@ from termcolor import colored
 from desc.backend import put
 from desc.utils import Tristate, unpack_state
 from desc.basis import (
-    jacobi,
     PowerSeries,
     FourierSeries,
     DoubleFourierSeries,
@@ -28,8 +27,7 @@ from desc.compute_funs import (
 )
 from desc.compute_funs import (
     compute_jacobian,
-    compute_magnetic_field,
-    compute_magnetic_field_magnitude,
+    compute_magnetic_field_magnitude_axis,
 )
 from desc.compute_funs import (
     compute_current_density,
@@ -1001,7 +999,7 @@ class Configuration(IOAble):
         """
         R0_transform = Transform(grid, self._R0_basis, derivs=1)
         Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis, derivs=1)
+        r_transform = Transform(grid, self._r_basis, derivs=2)
         l_transform = Transform(grid, self._l_basis, derivs=1)
         R1_transform = Transform(grid, self._R1_basis, derivs=1)
         Z1_transform = Transform(grid, self._Z1_basis, derivs=1)
@@ -1015,64 +1013,7 @@ class Configuration(IOAble):
             cov_basis,
             toroidal_coords,
             polar_coords,
-        ) = compute_magnetic_field(
-            self._Psi,
-            self._R0_n,
-            self._Z0_n,
-            self._r_lmn,
-            self._l_lmn,
-            self._R1_mn,
-            self._Z1_mn,
-            self._p_l,
-            self._i_l,
-            R0_transform,
-            Z0_transform,
-            r_transform,
-            l_transform,
-            R1_transform,
-            Z1_transform,
-            p_transform,
-            i_transform,
-            self._zeta_ratio,
-        )
-
-        return magnetic_field
-
-    def compute_magnetic_field_magnitude(self, grid: Grid) -> dict:
-        """Computes magnetic field magnitude.
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        magnetic_field: dict
-            dictionary of ndarray, shape(num_nodes,) of magnetic field components.
-            Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
-            or contravariant (B^x) component of the magnetic field, with the
-            derivative wrt to y.
-
-        """
-        R0_transform = Transform(grid, self._R0_basis, derivs=1)
-        Z0_transform = Transform(grid, self._Z0_basis, derivs=1)
-        r_transform = Transform(grid, self._r_basis, derivs=1)
-        l_transform = Transform(grid, self._l_basis, derivs=1)
-        R1_transform = Transform(grid, self._R1_basis, derivs=1)
-        Z1_transform = Transform(grid, self._Z1_basis, derivs=1)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
-
-        (
-            magnetic_field,
-            profiles,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            polar_coords,
-        ) = compute_magnetic_field_magnitude(
+        ) = compute_magnetic_field_magnitude_axis(
             self._Psi,
             self._R0_n,
             self._Z0_n,
@@ -1153,65 +1094,7 @@ class Configuration(IOAble):
         return current_density
 
     def compute_force_error(self, grid: Grid) -> dict:
-        """Computes force error components.
-
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        force_error : dict
-            dictionary of ndarray, shape(num_nodes,), of force error components.
-            Keys are of the form 'F_x' meaning the covariant (F_x) component of the
-            force error.
-
-        """
-        R0_transform = Transform(grid, self._R0_basis, derivs=2)
-        Z0_transform = Transform(grid, self._Z0_basis, derivs=2)
-        r_transform = Transform(grid, self._r_basis, derivs=2)
-        l_transform = Transform(grid, self._l_basis, derivs=2)
-        R1_transform = Transform(grid, self._R1_basis, derivs=2)
-        Z1_transform = Transform(grid, self._Z1_basis, derivs=2)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            profiles,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            polar_coords,
-        ) = compute_force_error(
-            self._Psi,
-            self._R0_n,
-            self._Z0_n,
-            self._r_lmn,
-            self._l_lmn,
-            self._R1_mn,
-            self._Z1_mn,
-            self._p_l,
-            self._i_l,
-            R0_transform,
-            Z0_transform,
-            r_transform,
-            l_transform,
-            R1_transform,
-            Z1_transform,
-            p_transform,
-            i_transform,
-            self._zeta_ratio,
-        )
-
-        return force_error
-
-    def compute_force_error_magnitude(self, grid: Grid) -> dict:
-        """Computes force error magnitude.
+        """Computes force errors and magnitude.
 
         Parameters
         ----------

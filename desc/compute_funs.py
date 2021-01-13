@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.utils import dot, cross
 from desc.transform import Transform
 
@@ -990,6 +990,208 @@ def compute_magnetic_field(
     return magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
 
 
+def compute_magnetic_field_axis(
+    Psi,
+    R0_n,
+    Z0_n,
+    r_lmn,
+    l_lmn,
+    R1_mn,
+    Z1_mn,
+    p_l,
+    i_l,
+    R0_transform: Transform,
+    Z0_transform: Transform,
+    r_transform: Transform,
+    l_transform: Transform,
+    R1_transform: Transform,
+    Z1_transform: Transform,
+    p_transform: Transform,
+    i_transform: Transform,
+    zeta_ratio=1.0,
+):
+    """Computes magnetic field components; can handle nodes at the magnetic axis.
+
+    Parameters
+    ----------
+    Psi : float
+        total toroidal flux (in Webers) within the last closed flux surface
+    R0_n : ndarray
+        spectral coefficients of R0(zeta) -- magnetic axis
+    Z0_n : ndarray
+        spectral coefficients of Z0(zeta) -- magnetic axis
+    r_lmn : ndarray
+        spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
+    l_lmn : ndarray
+        spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
+    p_l : ndarray
+        spectral coefficients of p(rho) -- pressure profile
+    i_l : ndarray
+        spectral coefficients of iota(rho) -- rotational transform profile
+    R0_transform : Transform
+        transforms R0_n coefficients to real space
+    Z0_transform : Transform
+        transforms Z0_n coefficients to real space
+    r_transform : Transform
+        transforms r_lmn coefficients to real space
+    l_transform : Transform
+        transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    zeta_ratio : float
+        scale factor for zeta derivatives. Setting to zero effectively solves
+        for individual tokamak solutions at each toroidal plane,
+        setting to 1 solves for a stellarator. (Default value = 1.0)
+
+    Returns
+    -------
+    magnetic_field: dict
+        dictionary of ndarray, shape(num_nodes,) of magnetic field components.
+        Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+        or contravariant (B^x) component of the magnetic field, with the
+        derivative wrt to y.
+    profiles : dict
+        dictionary of ndarray, shape(num_nodes,) of profiles.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    jacobian : dict
+        dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
+        Keys are of the form 'g_x' meaning the x derivative of the coordinate
+        system jacobian g.
+    cov_basis : dict
+        dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
+        Keys are of the form 'e_x_y', meaning the covariant basis vector in
+        the x direction, differentiated wrt to y.
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    # prerequisites
+    jacobian, cov_basis, toroidal_coords, polar_coords = compute_jacobian(
+        Psi,
+        R0_n,
+        Z0_n,
+        r_lmn,
+        l_lmn,
+        R1_mn,
+        Z1_mn,
+        p_l,
+        i_l,
+        R0_transform,
+        Z0_transform,
+        r_transform,
+        l_transform,
+        R1_transform,
+        Z1_transform,
+        p_transform,
+        i_transform,
+        zeta_ratio,
+    )
+
+    axis = r_transform.grid.axis
+
+    # profiles
+    profiles = {}
+    profiles["iota"] = i_transform.transform(i_l, 0)
+    profiles["psi"] = Psi * polar_coords["rho"] ** 2
+    profiles["psi_r"] = 2 * Psi * polar_coords["rho"]
+    profiles["psi_rr"] = 2 * Psi * np.ones_like(profiles["psi"])
+
+    # polar coordinate derivatives
+    polar_coords["r_rr"] = r_transform.transform(r_lmn, 2, 0, 0)
+    polar_coords["r_rt"] = r_transform.transform(r_lmn, 1, 1, 0)
+    polar_coords["r_rz"] = r_transform.transform(r_lmn, 1, 0, 1) * zeta_ratio
+
+    # lambda derivatives
+    polar_coords["lambda_t"] = l_transform.transform(l_lmn, 0, 1, 0)
+    polar_coords["lambda_z"] = l_transform.transform(l_lmn, 0, 0, 1) * zeta_ratio
+
+    # toroidal coordinate 2nd derivatives
+    toroidal_coords["R_rr"] = polar_coords["r_rr"] * (
+        polar_coords["R1"] - polar_coords["R0"]
+    )
+    toroidal_coords["Z_rr"] = polar_coords["r_rr"] * (
+        polar_coords["Z1"] - polar_coords["Z0"]
+    )
+    toroidal_coords["R_rt"] = (
+        polar_coords["r_rt"] * (polar_coords["R1"] - polar_coords["R0"])
+        + polar_coords["r_r"] * polar_coords["R1_t"]
+    )
+    toroidal_coords["Z_rt"] = (
+        polar_coords["r_rt"] * (polar_coords["Z1"] - polar_coords["Z0"])
+        + polar_coords["r_r"] * polar_coords["Z1_t"]
+    )
+    toroidal_coords["R_rz"] = polar_coords["r_rz"] * (
+        polar_coords["R1"] - polar_coords["R0"]
+    ) + polar_coords["r_r"] * (polar_coords["R1_z"] - polar_coords["R0_z"])
+    toroidal_coords["Z_rz"] = polar_coords["r_rz"] * (
+        polar_coords["Z1"] - polar_coords["Z0"]
+    ) + polar_coords["r_r"] * (polar_coords["Z1_z"] - polar_coords["Z0_z"])
+
+    # covariant basis derivatives
+    cov_basis["e_rho_r"] = jnp.array(
+        [toroidal_coords["R_rr"], toroidal_coords["0"], toroidal_coords["Z_rr"]]
+    )
+    cov_basis["e_theta_r"] = jnp.array(
+        [toroidal_coords["R_rt"], toroidal_coords["0"], toroidal_coords["Z_rt"]]
+    )
+    cov_basis["e_zeta_r"] = jnp.array(
+        [toroidal_coords["R_rz"], toroidal_coords["R_r"], toroidal_coords["Z_rz"]]
+    )
+
+    # jacobian derivatives
+    jacobian["g_r"] = (
+        dot(
+            cov_basis["e_rho_r"], cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0), 0
+        )
+        + dot(
+            cov_basis["e_rho"], cross(cov_basis["e_theta_r"], cov_basis["e_zeta"], 0), 0
+        )
+        + dot(
+            cov_basis["e_rho"], cross(cov_basis["e_theta"], cov_basis["e_zeta_r"], 0), 0
+        )
+    )
+
+    magnetic_field = {}
+    magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
+    magnetic_field["B0"] = put(
+        magnetic_field["B0"],
+        axis,
+        profiles["psi_rr"][axis] / (2 * jnp.pi * jacobian["g_r"][axis]),
+    )
+
+    # contravariant components
+    magnetic_field["B^rho"] = jnp.zeros_like(magnetic_field["B0"])
+    magnetic_field["B^theta"] = magnetic_field["B0"] * (
+        profiles["iota"] - polar_coords["lambda_z"]
+    )
+    magnetic_field["B^zeta"] = magnetic_field["B0"] * (1 + polar_coords["lambda_t"])
+    magnetic_field["B_con"] = (
+        magnetic_field["B^theta"] * cov_basis["e_theta"]
+        + magnetic_field["B^zeta"] * cov_basis["e_zeta"]
+    )
+
+    # covariant components
+    magnetic_field["B_rho"] = dot(magnetic_field["B_con"], cov_basis["e_rho"], 0)
+    magnetic_field["B_theta"] = dot(magnetic_field["B_con"], cov_basis["e_theta"], 0)
+    magnetic_field["B_zeta"] = dot(magnetic_field["B_con"], cov_basis["e_zeta"], 0)
+
+    return magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
+
+
 def compute_magnetic_field_magnitude(
     Psi,
     R0_n,
@@ -1088,6 +1290,138 @@ def compute_magnetic_field_magnitude(
         toroidal_coords,
         polar_coords,
     ) = compute_magnetic_field(
+        Psi,
+        R0_n,
+        Z0_n,
+        r_lmn,
+        l_lmn,
+        R1_mn,
+        Z1_mn,
+        p_l,
+        i_l,
+        R0_transform,
+        Z0_transform,
+        r_transform,
+        l_transform,
+        R1_transform,
+        Z1_transform,
+        p_transform,
+        i_transform,
+        zeta_ratio,
+    )
+
+    magnetic_field["|B|"] = jnp.sqrt(
+        magnetic_field["B^theta"] ** 2
+        * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+        + magnetic_field["B^zeta"] ** 2
+        * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+        + 2
+        * magnetic_field["B^theta"]
+        * magnetic_field["B^zeta"]
+        * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+    )
+
+    return magnetic_field, profiles, jacobian, cov_basis, toroidal_coords, polar_coords
+
+
+def compute_magnetic_field_magnitude_axis(
+    Psi,
+    R0_n,
+    Z0_n,
+    r_lmn,
+    l_lmn,
+    R1_mn,
+    Z1_mn,
+    p_l,
+    i_l,
+    R0_transform: Transform,
+    Z0_transform: Transform,
+    r_transform: Transform,
+    l_transform: Transform,
+    R1_transform: Transform,
+    Z1_transform: Transform,
+    p_transform: Transform,
+    i_transform: Transform,
+    zeta_ratio=1.0,
+):
+    """Computes magnetic field magnitude; can handle nodes at the magnetic axis.
+
+    Parameters
+    ----------
+    Psi : float
+        total toroidal flux (in Webers) within the last closed flux surface
+    R0_n : ndarray
+        spectral coefficients of R0(zeta) -- magnetic axis
+    Z0_n : ndarray
+        spectral coefficients of Z0(zeta) -- magnetic axis
+    r_lmn : ndarray
+        spectral coefficients of r(rho,theta,zeta) -- flux surface shapes
+    l_lmn : ndarray
+        spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    R1_mn : ndarray
+        spectral coefficients of R1(theta,zeta) -- last closed flux surface
+    Z1_mn : ndarray
+        spectral coefficients of Z1(theta,zeta) -- last closed flux surface
+    p_l : ndarray
+        spectral coefficients of p(rho) -- pressure profile
+    i_l : ndarray
+        spectral coefficients of iota(rho) -- rotational transform profile
+    R0_transform : Transform
+        transforms R0_n coefficients to real space
+    Z0_transform : Transform
+        transforms Z0_n coefficients to real space
+    r_transform : Transform
+        transforms r_lmn coefficients to real space
+    l_transform : Transform
+        transforms l_lmn coefficients to real space
+    R1_transform : Transform
+        transforms R1_mn coefficients to real space
+    Z1_transform : Transform
+        transforms Z1_mn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    zeta_ratio : float
+        scale factor for zeta derivatives. Setting to zero effectively solves
+        for individual tokamak solutions at each toroidal plane,
+        setting to 1 solves for a stellarator. (Default value = 1.0)
+
+    Returns
+    -------
+    magnetic_field: dict
+        dictionary of ndarray, shape(num_nodes,) of magnetic field components.
+        Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+        or contravariant (B^x) component of the magnetic field, with the
+        derivative wrt to y.
+    profiles : dict
+        dictionary of ndarray, shape(num_nodes,) of profiles.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    jacobian : dict
+        dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
+        Keys are of the form 'g_x' meaning the x derivative of the coordinate
+        system jacobian g.
+    cov_basis : dict
+        dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
+        Keys are of the form 'e_x_y', meaning the covariant basis vector in
+        the x direction, differentiated wrt to y.
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    polar_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of polar coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    # prerequisites
+    (
+        magnetic_field,
+        profiles,
+        jacobian,
+        cov_basis,
+        toroidal_coords,
+        polar_coords,
+    ) = compute_magnetic_field_axis(
         Psi,
         R0_n,
         Z0_n,

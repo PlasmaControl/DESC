@@ -62,6 +62,9 @@ class TestFmin(unittest.TestCase):
             verbose=1,
             method="dogleg",
             x_scale="hess",
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
             options={"ga_accept_threshold": 1},
         )
 
@@ -80,6 +83,9 @@ class TestFmin(unittest.TestCase):
             verbose=1,
             method="subspace",
             x_scale="hess",
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
             options={"ga_accept_threshold": 1},
         )
 
@@ -98,6 +104,9 @@ class TestFmin(unittest.TestCase):
             verbose=1,
             method="dogleg",
             x_scale="hess",
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
             options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
@@ -115,6 +124,9 @@ class TestFmin(unittest.TestCase):
             verbose=1,
             method="subspace",
             x_scale="hess",
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
             options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)

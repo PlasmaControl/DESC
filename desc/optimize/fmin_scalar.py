@@ -26,10 +26,9 @@ def fmin_scalar(
     args=(),
     method="dogleg",
     x_scale=1,
-    ftol=1e-8,
-    xtol=1e-8,
-    agtol=1e-8,
-    rgtol=1e-8,
+    ftol=1e-6,
+    xtol=1e-6,
+    gtol=1e-6,
     verbose=1,
     maxiter=None,
     callback=None,
@@ -74,14 +73,9 @@ def fmin_scalar(
          Default is 1e-8. Optimization is stopped when
          ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
          this condition is disabled.
-     agtol : float or None, optional
+     gtol : float or None, optional
          Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-         Optimizer teriminates when ``norm(g) < agtol``, where
-         If None, the termination by this condition is disabled.
-     rgtol : float or None, optional
-         Relative tolerance for termination by the norm of the change in the gradient.
-         Default is 1e-8. Optimizer teriminates when
-         ``norm(dg) < rgtol * (rgtol * norm(g))``,
+         Optimizer teriminates when ``norm(g) < gtol``, where
          If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
          Level of algorithm's verbosity:
@@ -240,8 +234,7 @@ def fmin_scalar(
             ratio,
             ftol,
             xtol,
-            rgtol,
-            agtol,
+            gtol,
             iteration,
             maxiter,
             nfev,

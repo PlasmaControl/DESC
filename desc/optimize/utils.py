@@ -169,8 +169,7 @@ status_messages = {
     "success": "Optimization terminated successfully.",
     "xtol": "`xtol` condition satisfied.",
     "ftol": "`ftol` condition satisfied.",
-    "rgtol": "`rgol` condition satisfied.",
-    "agtol": "`agol` condition satisfied.",
+    "gtol": "`agol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has " "been exceeded.",
     "max_ngev": "Maximum number of gradient evaluations has " "been exceeded.",
     "max_nhev": "Maximum number of hessian evaluations has " "been exceeded.",
@@ -195,8 +194,7 @@ def check_termination(
     ratio,
     ftol,
     xtol,
-    rgtol,
-    agtol,
+    gtol,
     iteration,
     maxiter,
     nfev,
@@ -209,20 +207,17 @@ def check_termination(
     """Check termination condition and get message."""
     ftol_satisfied = dF < abs(ftol * F) and ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
-    rgtol_satisfied = dg_norm < rgtol * (rgtol + g_norm)
-    agtol_satisfied = g_norm < agtol
+    gtol_satisfied = g_norm < gtol
 
-    if any([ftol_satisfied, xtol_satisfied, rgtol_satisfied, agtol_satisfied]):
+    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
         message = status_messages["success"]
         success = True
         if ftol_satisfied:
             message += "\n" + status_messages["ftol"]
         if xtol_satisfied:
             message += "\n" + status_messages["xtol"]
-        if rgtol_satisfied:
-            message += "\n" + status_messages["rgtol"]
-        if agtol_satisfied:
-            message += "\n" + status_messages["agtol"]
+        if gtol_satisfied:
+            message += "\n" + status_messages["gtol"]
     elif iteration >= maxiter:
         success = False
         message = status_messages["maxiter"]

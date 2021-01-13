@@ -159,7 +159,7 @@ class InputReader:
             "xtol": np.atleast_1d(1e-6),
             "gtol": np.atleast_1d(1e-6),
             "nfev": np.atleast_1d(None),
-            "optim_method": "trf",
+            "optim_method": "scipy-trf",
             "errr_mode": "force",
             "bdry_mode": "spectral",
             "zern_mode": "fringe",

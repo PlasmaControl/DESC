@@ -23,10 +23,10 @@ pert_order = 1
 ftol = 1e-6
 xtol = 1e-6
 gtol = 1e-6
-nfev = 1000
+nfev = 100
 
 # solver methods
-optim_method = trf
+optim_method = scipy-trf
 errr_mode = force
 bdry_mode = spectral
 zern_mode = ansi

@@ -39,6 +39,7 @@ class Transform(IOAble):
         basis: Basis = None,
         derivs=0,
         rcond=1e-6,
+        build=True,
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -61,6 +62,8 @@ class Transform(IOAble):
              symmetry from the triple-product equation
         rcond : float
              relative cutoff for singular values in least squares fit
+        build : bool
+            whether to precompute the transforms now or do it later
 
          Returns
          -------
@@ -81,8 +84,11 @@ class Transform(IOAble):
             self._derivatives = self._get_derivatives_(self._derivs)
 
             self._sort_derivatives_()
-            self._build_()
-            self._build_pinv_()
+            if build:
+                self.build()
+                self._built = True
+            else:
+                self._built = False
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
@@ -204,14 +210,12 @@ class Transform(IOAble):
         )
         self._derivatives = self._derivatives[sort_idx]
 
-    def _build_(self) -> None:
+    def build(self) -> None:
         """Builds the transform matrices for each derivative order"""
         for d in self._derivatives:
             self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(self._grid.nodes, d)
 
-    def _build_pinv_(self) -> None:
-        """Builds the transform matrices for each derivative order"""
-        # FIXME: this assumes the derivatives are sorted (which they should be)
+        # build pinv for fitting
         if np.all(self._derivatives[0, :] == np.array([0, 0, 0])):
             A = self._matrices[0][0][0]
         else:
@@ -220,6 +224,7 @@ class Transform(IOAble):
             self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
         else:
             self._pinv = jnp.zeros_like(A.T)
+        self._built = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical
@@ -241,6 +246,9 @@ class Transform(IOAble):
             array of values of function at node locations
 
         """
+        if not self._built:
+            raise AttributeError("Transform must be built before it can be used")
+
         A = self._matrices[dr][dt][dz]
         if type(A) is dict:
             raise ValueError(
@@ -272,10 +280,14 @@ class Transform(IOAble):
             spectral coefficients in self.basis
 
         """
+        if not self._built:
+            raise AttributeError("Transform must be built before it can be used")
         return jnp.matmul(self._pinv, x)
 
-    def change_resolution(self, grid: Grid = None, basis: Basis = None) -> None:
-        """Re-builds the matrices with a new grid and basis
+    def change_resolution(
+        self, grid: Grid = None, basis: Basis = None, rebuild: bool = True
+    ) -> None:
+        """Re-builds the matrices with a new grid and basise
 
         Parameters
         ----------
@@ -283,6 +295,8 @@ class Transform(IOAble):
             DESCRIPTION
         basis : Basis, optional
             DESCRIPTION
+        rebuild : bool
+            whether to recompute matrices now or wait until requested
 
         Returns
         -------
@@ -294,11 +308,10 @@ class Transform(IOAble):
         if basis is None:
             basis = self._basis
 
-        if self._grid != grid or self._basis != basis:
+        if (self._grid != grid or self._basis != basis) and rebuild:
             self._grid = grid
             self._basis = basis
-            self._build_()
-            self._build_pinv_()
+            self.build()
 
     @property
     def grid(self):
@@ -320,8 +333,7 @@ class Transform(IOAble):
         """
         if self._grid != grid:
             self._grid = grid
-            self._build_()
-            self._build_pinv_()
+            self.build()
 
     @property
     def basis(self):
@@ -343,8 +355,7 @@ class Transform(IOAble):
         """
         if self._basis != basis:
             self._basis = basis
-            self._build_()
-            self._build_pinv_()
+            self.build()
 
     @property
     def derivs(self):

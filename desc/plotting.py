@@ -521,7 +521,7 @@ class Plot:
         elif name_dict["base"] in ["F", "|F|"]:
             out = eq.compute_force_error(grid)[self.__name_key__(name_dict)]
         elif name_dict["base"] == "log(|F|)":
-            out = eq.compute_force_error_magnitude(grid)["|F|"]
+            out = eq.compute_force_error(grid)["|F|"]
             out = np.log10(np.asarray(out))
 
         else:

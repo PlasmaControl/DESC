@@ -1,35 +1,27 @@
 import numpy as np
-from collections.abc import MutableSequence
 from termcolor import colored
 
 from desc.backend import put
+from desc.io import IOAble
 from desc.utils import Tristate, unpack_state
+from desc.grid import Grid, LinearGrid, ConcentricGrid
+from desc.transform import Transform
 from desc.basis import (
     PowerSeries,
     FourierSeries,
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
-from desc.grid import Grid, LinearGrid, ConcentricGrid
-from desc.transform import Transform
-from desc.objective_funs import ObjectiveFunction
-from desc.io import IOAble
 
 from desc.compute_funs import (
     compute_polar_coords,
     compute_toroidal_coords,
     compute_cartesian_coords,
-)
-from desc.compute_funs import (
     compute_profiles,
     compute_covariant_basis,
     compute_contravariant_basis,
-)
-from desc.compute_funs import (
     compute_jacobian,
     compute_magnetic_field_magnitude_axis,
-)
-from desc.compute_funs import (
     compute_current_density,
     compute_force_error,
     compute_force_error_magnitude,
@@ -1152,221 +1144,6 @@ class Configuration(IOAble):
 
         return force_error
 
-
-class Equilibrium(Configuration, IOAble):
-    """Equilibrium is a decorator design pattern on top of Configuration.
-    It adds information about how the equilibrium configuration was solved.
-    """
-
-    _io_attrs_ = Configuration._io_attrs_ + ["_objective", "_optimizer", "_solved"]
-    _object_lib_ = Configuration._object_lib_
-    _object_lib_.update(
-        {"Configuration": Configuration, "ObjectiveFunction": ObjectiveFunction}
-    )
-
-    def __init__(
-        self,
-        inputs: dict = None,
-        load_from=None,
-        file_format: str = "hdf5",
-        obj_lib=None,
-    ) -> None:
-        super().__init__(
-            inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
-        )
-
-    def _init_from_inputs_(self, inputs: dict = None) -> None:
-        super()._init_from_inputs_(inputs=inputs)
-        self._x0 = self._x
-        self._objective = inputs.get("objective", None)
-        self._optimizer = inputs.get("optimizer", None)
-        self.optimizer_results = {}
-        self._solved = False
-
-    @property
-    def x0(self):
-        return self._x0
-
-    @x0.setter
-    def x0(self, x0) -> None:
-        self._x0 = x0
-
-    @property
-    def solved(self) -> bool:
-        return self._solved
-
-    @solved.setter
-    def solved(self, solved) -> None:
-        self._solved = solved
-
-    @property
-    def objective(self):
-        return self._objective
-
-    @objective.setter
-    def objective(self, objective):
-        self._objective = objective
-        self.solved = False
-
-    @property
-    def optimizer(self):
-        return self._optimizer
-
-    @optimizer.setter
-    def optimizer(self, optimizer):
-        self._optimizer = optimizer
-        self.solved = False
-
-    @property
-    def initial(self) -> Configuration:
-        """
-        Initial Configuration from which the Equilibrium was solved
-
-        Returns
-        -------
-        Configuration
-
-        """
-        p_modes = np.array(
-            [self._p_basis.modes[:, 0], self._p_l, np.zeros_like(self._p_l)]
-        ).T
-        i_modes = np.array(
-            [self._i_basis.modes[:, 0], np.zeros_like(self._i_l), self._i_l]
-        ).T
-        R0_modes = np.array(
-            [self._R0_basis.modes[:, 2], self._R0_n, np.zeros_like(self._R0_n)]
-        ).T
-        Z0_modes = np.array(
-            [self._Z0_basis.modes[:, 2], np.zeros_like(self._R0_n), self._Z0_n]
-        ).T
-        R1_mn = self._R1_mn.reshape((-1, 1))
-        Z1_mn = self._Z1_mn.reshape((-1, 1))
-        R1_modes = np.hstack([self._R1_basis.modes[:, 1:], R1_mn, np.zeros_like(R1_mn)])
-        Z1_modes = np.hstack([self._Z1_basis.modes[:, 1:], np.zeros_like(Z1_mn), Z1_mn])
-        inputs = {
-            "sym": self._sym,
-            "NFP": self._NFP,
-            "Psi": self._Psi,
-            "L": self._L,
-            "M": self._M,
-            "N": self._N,
-            "index": self._index,
-            "bdry_mode": self._bdry_mode,
-            "zeta_ratio": self._zeta_ratio,
-            "profiles": np.vstack((p_modes, i_modes)),
-            "axis": np.vstack((R0_modes, Z0_modes)),
-            "boundary": np.vstack((R1_modes, Z1_modes)),
-            "x": self._x0,
-        }
-        return Configuration(inputs=inputs)
-
-    def optimize(self):
-        pass
-
-    def solve(self):
-        if self._optimizer is None or self._objective is None:
-            raise AttributeError(
-                "Equilibrium must have objective and optimizer defined before solving."
-            )
-        # TODO: these args need to be updated
-        args = (
-            self.R1_mn,
-            self.Z1_mn,
-            self.cP,
-            self.cI,
-            self.Psi,
-            self.bdry_ratio,
-            self.pres_ratio,
-            self.zeta_ratio,
-            self.errr_ratio,
-        )
-
-        result = self._optimizer.optimize(self._objective, self.x, args=args)
-        self.optimizer_results = result
-        self.x = result["x"]
-        self.solved = (
-            True  # TODO: do we still call it solved if the solver exited early?
-        )
-        return result
-
-
-# XXX: Should this (also) inherit from Equilibrium?
-class EquilibriaFamily(IOAble, MutableSequence):
-    """EquilibriaFamily stores a list of Equilibria"""
-
-    _io_attrs_ = ["equilibria"]
-    _object_lib_ = Equilibrium._object_lib_
-    _object_lib_.update({"Equilibrium": Equilibrium})
-
-    def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None
-    ) -> None:
-        self._file_format_ = file_format
-        if load_from is None:
-            self._init_from_inputs_(inputs=inputs)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
-
-    def _init_from_inputs_(self, inputs=None):
-        self._equilibria = []
-        self.append(Equilibrium(inputs=inputs))
-        return None
-
-    # dunder methods required by MutableSequence
-    def __getitem__(self, i):
-        return self._equilibria[i]
-
-    def __setitem__(self, i, new_item):
-        if isinstance(new_item, Configuration):
-            self._equilibria[i] = new_item
-        else:
-            raise ValueError(
-                "Members of EquilibriaFamily should be of type Configuration or a subclass"
-            )
-
-    def __delitem__(self, i):
-        del self._equilibria[i]
-
-    def __len__(self):
-        return len(self._equilibria)
-
-    def insert(self, i, new_item):
-        self._equilibria.insert(i, new_item)
-
-    @property
-    def solver(self):
-        return self._solver
-
-    @solver.setter
-    def solver(self, solver):
-        self._solver = solver
-
-    @property
-    def equilibria(self):
-        return self._equilibria
-
-    @equilibria.setter
-    def equilibria(self, eq):
-        self._equilibria = eq
-
-    def __slice__(self, idx):
-        if idx is None:
-            theslice = slice(None, None)
-        elif type(idx) is int:
-            theslice = idx
-        elif type(idx) is list:
-            try:
-                theslice = slice(idx[0], idx[1], idx[2])
-            except IndexError:
-                theslice = slice(idx[0], idx[1])
-        else:
-            raise TypeError("index is not a valid type.")
-        return theslice
-
-
-# TODO: overwrite all Equilibrium methods and default to self._equilibria[-1]
 
 # these functions are needed to format the input arrays
 

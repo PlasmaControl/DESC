@@ -284,99 +284,15 @@ def solve_eq_continuation(inputs, file_name=None, vmec_path=None, device=None):
             i_transform=i_transform,
         )
 
-        equil_obj = obj_fun.compute
-        equil_obj_scalar = obj_fun.compute_scalar
-        grad = obj_fun.grad_x
-        hess = obj_fun.hess_x
-        jac = obj_fun.jac_x
-        callback = obj_fun.callback
-        args = (
-            equil.R1_mn,
-            equil.Z1_mn,
-            equil.p_l,
-            equil.i_l,
-            equil.Psi,
-            zeta_ratio[ii - 1],
+        equil.objective = obj_fun
+        equil.optimizer = "scipy-trf"
+        equil.solve(
+            ftol=ftol[ii],
+            xtol=xtol[ii],
+            gtol=gtol[ii],
+            verbose=verbose,
+            maxiter=nfev[ii],
         )
-        x_init = obj_fun.bc_constraint.project(equil.x)
-        if use_jax:
-            if verbose > 0:
-                print("Compiling objective function")
-            if device is None:
-                import jax
-
-                device = jax.devices()[0]
-            timer.start("Iteration {} compilation".format(ii + 1))
-
-            if optim_method in ["bfgs"]:
-                equil_obj_jit = jit(equil_obj_scalar, static_argnums=(), device=device)
-                grad_obj_jit = jit(grad, device=device)
-                f0 = equil_obj_jit(x_init, *args)
-                g0 = grad_obj_jit(x_iniit, *args)
-            else:
-                equil_obj_jit = jit(equil_obj, static_argnums=(), device=device)
-                jac_obj_jit = jit(jac, device=device)
-                f0 = equil_obj_jit(x_init, *args)
-                j0 = jac_obj_jit(x_init, *args)
-
-            timer.stop("Iteration {} compilation".format(ii + 1))
-            if verbose > 1:
-                timer.disp("Iteration {} compilation".format(ii + 1))
-        else:
-            equil_obj_jit = equil_obj
-            jac_obj_jit = "2-point"
-        if verbose > 0:
-            print("Starting optimization")
-
-        timer.start("Iteration {} solution".format(ii + 1))
-        if optim_method in ["bfgs"]:
-            out = scipy.optimize.minimize(
-                equil_obj_jit,
-                x0=x_init,
-                args=args,
-                method=optim_method,
-                jac=grad_obj_jit,
-                tol=gtol[ii],
-                options={"maxiter": nfev[ii], "disp": max(verbose - 1, 0)},
-            )
-
-        elif optim_method in ["trf", "lm", "dogbox"]:
-            out = scipy.optimize.least_squares(
-                equil_obj_jit,
-                x0=x_init,
-                args=args,
-                jac=jac_obj_jit,
-                method=optim_method,
-                x_scale="jac",
-                ftol=ftol[ii],
-                xtol=xtol[ii],
-                gtol=gtol[ii],
-                max_nfev=nfev[ii],
-                verbose=max(verbose - 1, 0),
-            )
-        else:
-            raise NotImplementedError(
-                colored(
-                    "optim_method must be one of 'bfgs', 'trf', 'lm', 'dogbox'", "red"
-                )
-            )
-
-        timer.stop("Iteration {} solution".format(ii + 1))
-
-        if verbose > 1:
-            timer.disp("Iteration {} solution".format(ii + 1))
-            timer.pretty_print(
-                "Iteration {} avg time per step".format(ii + 1),
-                timer["Iteration {} solution".format(ii + 1)] / out["nfev"],
-            )
-        if verbose > 0:
-            print("Start of Step {}:".format(ii + 1))
-            callback(x_init, *args)
-            print("End of Step {}:".format(ii + 1))
-            callback(out["x"], *args)
-
-        equil.x = obj_fun.bc_constraint.recover(out["x"])
-        equil.solved = True
 
         if checkpoint:
             if verbose > 0:

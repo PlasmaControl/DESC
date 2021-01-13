@@ -6,29 +6,24 @@ from desc.backend import jit
 from desc.optimize import fmin_scalar
 
 
-class Optimizer():
+class Optimizer:
 
-    _scipy_least_squares_methods = ["scipy-trf",
-                                    "scipy-lm",
-                                    "scipy-dogbox"]
+    _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_minimize_methods = [
-    "scipy-bfgs",
+        "scipy-bfgs",
         "scipy-dogleg",
         "scipy-trust-exact",
         "scipy-trust-ncg",
         "scipy-trust-krylov",
     ]
     _desc_scalar_methods = ["dogleg", "subspace"]
-    _hessian_free_methods = ['scipy-bfgs']
+    _hessian_free_methods = ["scipy-bfgs"]
     _scalar_methods = _desc_scalar_methods + _scipy_minimize_methods
     _least_squares_methods = _scipy_least_squares_methods
     _all_methods = (
-        _scipy_least_squares_methods
-        + _scipy_minimize_methods
-        + _desc_scalar_methods
+        _scipy_least_squares_methods + _scipy_minimize_methods + _desc_scalar_methods
     )
 
-    
     def __init__(self, method, objective, use_jit=True, device=None):
 
         self._check_method_objective(method, objective)
@@ -37,24 +32,29 @@ class Optimizer():
         self.use_jit = use_jit
         self._device = device
         self.timer = Timer()
+        self._set_compute_funs()
         self.compiled = False
 
-    def _check_method_objective(self, method, optimizer):
+    def _check_method_objective(self, method, objective):
         if method not in Optimizer._all_methods:
             raise NotImplementedError(
                 colored(
-                    "method must be one of {}".format(".".join([Optimizer._all_methods])),
+                    "method must be one of {}".format(
+                        ".".join([Optimizer._all_methods])
+                    ),
                     "red",
                 )
             )
         if objective.scalar and (method in Optimizer._least_squares_methods):
             raise ValueError(
                 colored(
-                    "method {} is incompatible with scalar objective function".format(".".join([method])),
+                    "method {} is incompatible with scalar objective function".format(
+                        ".".join([method])
+                    ),
                     "red",
                 )
-            )        
-        
+            )
+
     @property
     def method(self):
         return self._method
@@ -62,20 +62,25 @@ class Optimizer():
     @method.setter
     def method(self, method):
         self._check_method_objective(method, self.objective)
-        if (method in Optimizer._scalar_methods and self.method in Optimizer._least_squares_methods) or (method in Optimizer._least_squares_methods and self.method in Optimizer._scalar_methods):
+        if (
+            method in Optimizer._scalar_methods
+            and self.method in Optimizer._least_squares_methods
+        ) or (
+            method in Optimizer._least_squares_methods
+            and self.method in Optimizer._scalar_methods
+        ):
             self.compiled = False
 
         self._method = method
         self._set_compute_funs()
 
-        
     @property
     def objective(self):
         return self._objective
 
     @objective.setter
     def objective(self, objective):
-        self._check_method_objective(self.method, objective)        
+        self._check_method_objective(self.method, objective)
         self._objective = objective
         self.method = self.method
         self._set_compute_funs()
@@ -90,9 +95,9 @@ class Optimizer():
         self._device = device
         self._set_compute_funs()
         self.compiled = False
-        
+
     def _set_compute_funs(self):
-        
+
         if self.use_jit:
             if self.method in Optimizer._scalar_methods:
                 self._fun = jit(self.objective.compute_scalar, device=self.device)
@@ -125,21 +130,20 @@ class Optimizer():
         self.timer.start("Compilation time")
 
         if self.method in Optimizer._scalar_methods:
-            f0 = self._fun(x,*args)
-            g0 = self._grad(x,*args)
+            f0 = self._fun(x, *args)
+            g0 = self._grad(x, *args)
             if self.method not in Optimizer._hessian_free_methods:
-                H0 = self._hess(x,*args)
+                H0 = self._hess(x, *args)
         else:
-            f0 = self._fun(x,*args)
-            J0 = self._jac(x,*args)
+            f0 = self._fun(x, *args)
+            J0 = self._jac(x, *args)
         self.timer.stop("Compilation time")
         if verbose > 1:
             self.timer.disp("Compilation time")
         self.compiled = True
-                
+
     def optimize(
         self,
-        objective,
         x_init,
         args=(),
         x_scale="auto",
@@ -152,10 +156,14 @@ class Optimizer():
     ):
         if self.use_jit and not self.compiled:
             self.compile(x_init, args, verbose)
-        
+
+        # need some weird logic because scipy optimizers expect disp={0,1,2}
+        # while we use verbose={0,1,2,3}
+        disp = verbose - 1 if verbose > 1 else verbose
+
         if verbose > 0:
             print("Starting optimization")
-        
+
         if self.method in Optimizer._scipy_minimize_methods:
 
             out = minimize(
@@ -166,7 +174,7 @@ class Optimizer():
                 jac=self._grad,
                 hess=self._hess,
                 tol=gtol,
-                options={"maxiter": maxiter, "disp": verbose, **options},
+                options={"maxiter": maxiter, "disp": disp, **options},
             )
 
         elif self.method in Optimizer._scipy_least_squares_methods:
@@ -184,7 +192,7 @@ class Optimizer():
                 xtol=xtol,
                 gtol=gtol,
                 max_nfev=maxiter,
-                verbose=verbose,
+                verbose=disp,
             )
 
         elif self.method in Optimizer._desc_scalar_methods:
@@ -203,7 +211,7 @@ class Optimizer():
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=verbose,
+                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,

@@ -400,6 +400,7 @@ class ObjectiveFunctionFactory:
 
     """
 
+    @staticmethod
     def get_equil_obj_fun(
         errr_mode,
         R0_transform: Transform = None,
@@ -464,6 +465,7 @@ class ObjectiveFunctionFactory:
                 p_transform=p_transform,
                 i_transform=i_transform,
                 bc_constraint=bc_constraint,
+                radial_constraint=radial_constraint,
             )
         else:
             raise ValueError(

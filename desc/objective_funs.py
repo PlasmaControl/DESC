@@ -110,8 +110,10 @@ class ObjectiveFunction(IOAble, ABC):
                 l_transform.basis,
             )
         self.bc_constraint = bc_constraint
-        if radial_constraint is None:
+        if radial_constraint is True:
             radial_constraint = RadialConstraint(r_transform.basis)
+        elif radial_constraint is False:
+            radial_constraint = None
         self.radial_constraint = radial_constraint
 
         self._grad = Derivative(self.compute_scalar, mode="grad")
@@ -293,12 +295,12 @@ class ForceErrorNodes(ObjectiveFunction):
             * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
             * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
         )
+        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
 
-        dr_penalty = self.radial_constraint.compute(r_lmn)
+        if self.radial_constraint is not None:
+            dr_penalty = self.radial_constraint.compute(r_lmn).flatten()
+            residual = jnp.concatenate([residual, dr_penalty])
 
-        residual = jnp.concatenate(
-            [f_rho.flatten(), f_beta.flatten(), dr_penalty.flatten()]
-        )
         return residual
 
     def compute_scalar(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):

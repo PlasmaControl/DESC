@@ -75,7 +75,8 @@ def main(cl_args=None):
     if ir.args.verbose:
         print(desc.BANNER)
 
-    from desc.continuation import solve_eq_continuation
+    from desc.equilibrium import EquilibriaFamily, Equilibrium
+    from desc.vmec import VMECIO
     from desc.backend import use_jax
     from desc.plotting import Plot
     import matplotlib.pyplot as plt
@@ -87,15 +88,23 @@ def main(cl_args=None):
     else:
         device = None
 
+    # initialize
+    equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input
-    try:
-        vmec_path = ir.args.vmec_path
-    except:
-        vmec_path = None
+    if ir.args.vmec is not None:
+        equil_fam[0] = Equilibrium.from_configuration(
+            VMECIO.load(
+                ir.args.vmec,
+                L=ir.inputs[0]["L"],
+                M=ir.inputs[0]["M"],
+                N=ir.inputs[0]["N"],
+                index=ir.inputs[0]["zern_mode"],
+            )
+        )
 
     # solve equilibrium
-    equil_fam, timer = solve_eq_continuation(
-        ir.inputs, file_name=ir.output_path, vmec_path=vmec_path, device=device
+    equil_fam.solve_continuation(
+        verbose=ir.args.verbose, checkpoint_path=ir.output_path, device=device
     )
 
     if ir.args.plot > 1:

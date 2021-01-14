@@ -458,7 +458,24 @@ class InputReader:
             }
             inputs["L"] = default_L[inputs["zern_mode"]]
 
-        return inputs
+        # split into list of dicts
+        inputs_list = []
+        for ii in range(arr_len):
+            inputs_ii = {key: val for key, val in inputs.items() if key not in arrs}
+            inputs_ii.update(
+                {key: val[ii] for key, val in inputs.items() if key in arrs}
+            )
+            # apply pressure ratio
+            inputs_ii["profiles"][:, 1] *= inputs_ii["pres_ratio"]
+            # apply boundary ratio
+            bdry_factor = np.where(
+                inputs_ii["boundary"][:, 1] != 0, inputs_ii["bdry_ratio"], 1
+            )
+            inputs_ii["boundary"][:, 2] *= bdry_factor
+            inputs_ii["boundary"][:, 3] *= bdry_factor
+            inputs_list.append(inputs_ii)
+
+        return inputs_list
 
     def write_desc_input(self, filename, inputs=None):
         """Generates a DESC input file from a dictionary of parameters
@@ -1051,7 +1068,10 @@ def get_parser():
         + "twice (eg -pp) to plot both initial and final, and three times (-ppp) to show all iterations",
     )
     parser.add_argument(
-        "--vmec", metavar="vmec_path", help="Path to VMEC data for initial guess"
+        "--vmec",
+        metavar="vmec_path",
+        default=None,
+        help="Path to VMEC data for initial guess",
     )
     parser.add_argument(
         "--gpu",

@@ -515,3 +515,42 @@ def softmax(x, a=1):
     num = jnp.sum(x * jnp.exp(a * x))
     den = jnp.sum(jnp.exp(a * x))
     return num / den
+
+
+def copy_coeffs(c_old, modes_old, modes_new):
+    """copy coefficients from one resolution to another"""
+
+    num_modes = modes_new.shape[0]
+    c_new = np.zeros((num_modes,))
+
+    for i in range(num_modes):
+        idx = np.where(
+            np.all(
+                np.array(
+                    [
+                        np.array(modes_old[:, 0] == modes_new[i, 0]),
+                        np.array(modes_old[:, 1] == modes_new[i, 1]),
+                        np.array(modes_old[:, 2] == modes_new[i, 2]),
+                    ]
+                ),
+                axis=0,
+            )
+        )[0]
+        if len(idx):
+            c_new[i] = c_old[idx[0]]
+    return c_new
+
+
+def expand_state(x, old_R0, new_R0, old_Z0, new_Z0, old_r, new_r, old_l, new_l):
+    """copies a state vector from one resolution to another"""
+
+    R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
+        x, len(old_R0), len(old_Z0), len(old_r), len(old_l)
+    )
+    R0_n = copy_coeffs(R0_n, old_R0, new_R0)
+    Z0_n = copy_coeffs(Z0_n, old_Z0, new_Z0)
+    r_lmn = copy_coeffs(r_lmn, old_r, new_r)
+    l_lmn = copy_coeffs(l_lmn, old_l, new_l)
+
+    x = np.concatenate([R0_n, Z0_n, r_lmn, l_lmn])
+    return x

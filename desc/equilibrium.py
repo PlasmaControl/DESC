@@ -1,7 +1,7 @@
 import numpy as np
 from collections import MutableSequence
 import copy
-from desc.utils import Timer
+from desc.utils import Timer, expand_state
 from desc.configuration import Configuration
 from desc.io import IOAble
 from desc.objective_funs import ObjectiveFunction, ObjectiveFunctionFactory
@@ -37,8 +37,6 @@ class Equilibrium(Configuration, IOAble):
     def _init_from_inputs_(self, inputs: dict = None) -> None:
         super()._init_from_inputs_(inputs=inputs)
         self._x0 = self._x
-        self.objective = inputs.get("objective", None)
-        self.optimizer = inputs.get("optimizer", None)
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
         self._zern_mode = inputs.get("zern_mode", "ansi")
@@ -49,6 +47,8 @@ class Equilibrium(Configuration, IOAble):
         self.timer = Timer()
         self._set_grid()
         self._set_transforms()
+        self.objective = inputs.get("errr_mode", None)
+        self.optimizer = inputs.get("optim_method", None)
 
     @classmethod
     def from_configuration(cls, configuration):
@@ -340,7 +340,6 @@ class Equilibrium(Configuration, IOAble):
         return result
 
 
-# XXX: Should this (also) inherit from Equilibrium?
 class EquilibriaFamily(IOAble, MutableSequence):
     """EquilibriaFamily stores a list of Equilibria"""
 
@@ -360,9 +359,151 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
     def _init_from_inputs_(self, inputs=None):
-        self._equilibria = []
-        self.append(Equilibrium(inputs=inputs))
-        return None
+        # did we get 1 set of inputs or several?
+        if isinstance(inputs, (list, tuple)):
+            self._equilibria = [Equilibrium(inp) for inp in inputs]
+        else:
+            self._equilibria = [Equilibrium(inputs=inputs)]
+        self.inputs = inputs
+
+    def solve_continuation(
+        self, start_from=0, verbose=None, checkpoint_path=None, device=None
+    ):
+        """Solves for an equilibrium by continuation method
+
+        Follows this procedure to solve the equilibrium:
+            1. Creates an initial guess from the given inputs
+            2. Optimizes the equilibrium's flux surfaces by minimizing
+                the given objective function.
+            3. Step up to higher resolution and perturb the previous solution
+            4. Repeat 2 and 3 until at desired resolution
+
+        Parameters
+        ----------
+        start_from : integer
+            start solution from the given index
+        verbose : integer
+            how much progress information to display
+                0: no output
+                1: summary of each iteration
+                2: as above plus timing information
+                3: as above plus detailed solver output
+        checkpoint_path : str or path-like
+            file to save checkpoint data (Default value = None)
+        device : jax.device or None
+            device handle to JIT compile to (Default value = None)
+        """
+        if verbose is None:
+            verbose = self._inputs[0]["verbose"]
+        self.timer = Timer()
+        self.timer.start("Total time")
+
+        for ii in range(start_from, len(self)):
+            self.timer.start("Iteration {} total".format(ii + 1))
+            equil = self[ii]
+            if verbose > 0:
+                print("================")
+                print("Step {}/{}".format(ii + 1, len(self)))
+                print("================")
+                print(
+                    "Spectral resolution (L,M,N)=({},{},{})".format(
+                        equil.L, equil.M, equil.N
+                    )
+                )
+                print(
+                    "Node resolution (M,N)=({},{})".format(equil.M_grid, equil.N_grid)
+                )
+                print("Boundary ratio = {}".format(equil.inputs["bdry_ratio"]))
+                print("Pressure ratio = {}".format(equil.inputs["pres_ratio"]))
+                print("Zeta ratio = {}".format(equil.inputs["zeta_ratio"]))
+                print("Perturbation Order = {}".format(equil.inputs["pert_order"]))
+                print("Function tolerance = {}".format(equil.inputs["ftol"]))
+                print("Gradient tolerance = {}".format(equil.inputs["gtol"]))
+                print("State vector tolerance = {}".format(equil.inputs["xtol"]))
+                print("Max function evaluations = {}".format(equil.inputs["nfev"]))
+                print("================")
+
+            if ii > start_from:
+                # new initial guess is previous solution
+                new_x = expand_state(
+                    self[ii - 1].x,
+                    self[ii - 1].R0_basis.modes,
+                    equil.R0_basis.modes,
+                    self[ii - 1].Z0_basis.modes,
+                    equil.Z0_basis.modes,
+                    self[ii - 1].r_basis.modes,
+                    equil.r_basis.modes,
+                    self[ii - 1].l_basis.modes,
+                    equil.l_basis.modes,
+                )
+
+                equil.x0 = equil.x = new_x
+            # TODO: updating transforms instead of recomputing
+            # TODO: check if params changed and do perturbations
+            equil.precompute_transforms(verbose)
+            if equil.objective is None:
+                equil.objective = self.objective
+            if equil.optimizer is None:
+                equil.optimizer = self.objective
+
+            equil.solve(
+                ftol=equil.inputs["ftol"],
+                xtol=equil.inputs["xtol"],
+                gtol=equil.inputs["gtol"],
+                verbose=verbose,
+                maxiter=equil.inputs["nfev"],
+            )
+
+            if checkpoint_path is not None:
+                if verbose > 0:
+                    print("Saving latest iteration")
+                self.save(checkpoint_path)
+            self.timer.stop("Iteration {} total".format(ii + 1))
+            if verbose > 1:
+                self.timer.disp("Iteration {} total".format(ii + 1))
+
+        self.timer.stop("Total time")
+        print("====================")
+        print("Done")
+        if verbose > 1:
+            self.timer.disp("Total time")
+        if checkpoint_path is not None:
+            print("Output written to {}".format(checkpoint_path))
+        print("====================")
+
+    @property
+    def solver(self):
+        return self._solver
+
+    @solver.setter
+    def solver(self, solver):
+        self._solver = solver
+        for eq in self._equilibria:
+            eq.optimizer = solver
+
+    @property
+    def objective(self):
+        return self._objective
+
+    @objective.setter
+    def objective(self, objective):
+        self._objective = objective
+        for eq in self._equilibria:
+            eq.objective = objective
+
+    @property
+    def equilibria(self):
+        return self._equilibria
+
+    @equilibria.setter
+    def equilibria(self, equil):
+        if not isinstance(equil, (list, tuple, np.ndarray)):
+            equil = list(equil)
+        if not np.all([isinstance(eq, Configuration) for eq in equil]):
+            raise ValueError(
+                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+            )
+        self._equilibria = list(equil)
 
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
@@ -390,28 +531,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
         self._equilibria.insert(i, new_item)
 
-    @property
-    def solver(self):
-        return self._solver
-
-    @solver.setter
-    def solver(self, solver):
-        self._solver = solver
-
-    @property
-    def equilibria(self):
-        return self._equilibria
-
-    @equilibria.setter
-    def equilibria(self, equil):
-        if not isinstance(equil, (list, tuple, np.ndarray)):
-            equil = list(equil)
-        if not np.all([isinstance(eq, Configuration) for eq in equil]):
-            raise ValueError(
-                "Members of EquilibriaFamily should be of type Configuration or a subclass"
-            )
-        self._equilibria = list(equil)
-
     def __slice__(self, idx):
         if idx is None:
             theslice = slice(None, None)
@@ -425,6 +544,3 @@ class EquilibriaFamily(IOAble, MutableSequence):
         else:
             raise TypeError("index is not a valid type.")
         return theslice
-
-
-# TODO: overwrite all Equilibrium methods and default to self._equilibria[-1]

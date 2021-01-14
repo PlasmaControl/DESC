@@ -3,7 +3,7 @@ from termcolor import colored
 
 from desc.backend import put
 from desc.io import IOAble
-from desc.utils import Tristate, unpack_state
+from desc.utils import Tristate, unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.basis import (
@@ -318,27 +318,6 @@ class Configuration(IOAble):
         self._Z1_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym
         )
-
-        def copy_coeffs(c_old, modes_old, modes_new):
-            num_modes = modes_new.shape[0]
-            c_new = np.zeros((num_modes,))
-
-            for i in range(num_modes):
-                idx = np.where(
-                    np.all(
-                        np.array(
-                            [
-                                np.array(modes_old[:, 0] == modes_new[i, 0]),
-                                np.array(modes_old[:, 1] == modes_new[i, 1]),
-                                np.array(modes_old[:, 2] == modes_new[i, 2]),
-                            ]
-                        ),
-                        axis=0,
-                    )
-                )[0]
-                if len(idx):
-                    c_new[i] = c_old[idx[0]]
-            return c_new
 
         self._R0_n = copy_coeffs(self._R0_n, old_modes_R0, self._R0_basis.modes)
         self._Z0_n = copy_coeffs(self._Z0_n, old_modes_Z0, self._Z0_basis.modes)

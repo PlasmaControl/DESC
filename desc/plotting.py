@@ -448,11 +448,11 @@ class Plot:
             return ValueError(colored("Grid must be in rho vs theta", "red"))
 
         r_coords = eq.compute_toroidal_coords(r_grid)
-        t_coords = eq.compute_polar_coords(t_grid)
+        t_coords = eq.compute_toroidal_coords(t_grid)
 
         # theta coordinates cooresponding to linearly spaced vartheta angles
         v_nodes = put(
-            t_grid.nodes, opsindex[:, 1], t_coords["theta"] - t_coords["lambda"]
+            t_grid.nodes, opsindex[:, 1], t_grid.nodes[:, 1] - t_coords["lambda"]
         )
         v_grid = Grid(v_nodes)
         v_coords = eq.compute_toroidal_coords(v_grid)
@@ -465,15 +465,11 @@ class Plot:
         Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
         Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
 
-        # boundary
-        R1 = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[-1, :, 0]
-        Z1 = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[-1, :, 0]
-
         fig, ax = self.format_ax(ax)
 
         ax.plot(Rv, Zv, color=colorblind_colors[2], linestyle=":")
         ax.plot(Rr.T, Zr.T, color=colorblind_colors[0])
-        ax.plot(R1, Z1, color=colorblind_colors[1])
+        ax.plot(Rr[-1, :], Zr[-1, :], color=colorblind_colors[1])
         ax.scatter(Rr[0, 0], Zr[0, 0], color=colorblind_colors[3])
 
         ax.axis("equal")

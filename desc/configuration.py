@@ -195,22 +195,28 @@ class Configuration(IOAble):
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
                 self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
+        # default initial guess
         except:
+            axis = inputs.get("axis", boundary[np.where(boundary[:, 0] == 0)[0], 1:])
             # check if R is provided
             try:
                 self._R_lmn = inputs["R_lmn"]
             except:
-                pass
+                self._R_lmn = initial_guess(
+                    self._R_basis, self._Rb_mn, self._Rb_basis, axis
+                )
             # check if Z is provided
             try:
                 self._Z_lmn = inputs["Z_lmn"]
             except:
-                pass
+                self._Z_lmn = initial_guess(
+                    self._Z_basis, self._Zb_mn, self._Zb_basis, axis
+                )
             # check if lambda is provided
             try:
-                self._Z_lmn = inputs["Z_lmn"]
+                self._L_lmn = inputs["L_lmn"]
             except:
-                self._Z_lmn = np.zeros((self._Z_basis.num_modes,))
+                self._L_lmn = np.zeros((self._L_basis.num_modes,))
             self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
@@ -1020,34 +1026,38 @@ def format_boundary(
     return Rb_mn, Zb_mn
 
 
-# XXX: is this still needed for the initial guess?
-def format_axis(axis, R0_basis: FourierSeries, Z0_basis: FourierSeries):
-    """Formats magnetic axis input arrays
+def initial_guess(
+    x_basis: FourierZernikeBasis, b_mn, b_basis: DoubleFourierSeries, axis
+):
+    """creates the coefficients x_lmn based on the boundary coefficients b_mn"""
 
-    Parameters
-    ----------
-    axis : ndarray, shape(Naxis,3)
-        array of fourier coeffs [n, R_n, Z_n]
-    R0_basis : FourierSeries
-        spectral basis for R0_n coefficients
-    Z0_basis : PowerSeries
-        spectral basis for Z0_n coefficients
+    x_lmn = np.zeros((x_basis.num_modes,))
+    for k in range(b_basis.num_modes):
+        m = b_basis.modes[k, 1]
+        n = b_basis.modes[k, 2]
+        idx = np.where(
+            np.logical_and.reduce(
+                (
+                    x_basis.modes[:, 0] == np.abs(m),
+                    x_basis.modes[:, 1] == m,
+                    x_basis.modes[:, 2] == n,
+                )
+            ),
+        )[0]
+        if m == 0:
+            idx2 = np.where(
+                np.logical_and.reduce(
+                    (
+                        x_basis.modes[:, 0] == np.abs(m) + 2,
+                        x_basis.modes[:, 1] == m,
+                        x_basis.modes[:, 2] == n,
+                    )
+                )
+            )[0]
+            x0 = np.where(axis[:, 0] == n, axis[:, 1], None)
+            x_lmn = put(x_lmn, idx, x0)
+            x_lmn = put(x_lmn, idx2, b_mn[k] - x0)
+        else:
+            x_lmn = put(x_lmn, idx, b_mn[k])
 
-    Returns
-    -------
-    R0_n : ndarray
-        spectral coefficients for magnetic axis R coordinate
-    Z0_n : ndarray
-        spectral coefficients for magnetic axis Z coordinate
-
-    """
-    R0_n = np.zeros((R0_basis.num_modes,))
-    Z0_n = np.zeros((Z0_basis.num_modes,))
-
-    for n, R0, Z0 in axis:
-        idx_R0 = np.where(R0_basis.modes[:, 2] == int(n))[0]
-        idx_Z0 = np.where(Z0_basis.modes[:, 2] == int(n))[0]
-        R0_n = put(R0_n, idx_R0, R0)
-        Z0_n = put(Z0_n, idx_Z0, Z0)
-
-    return R0_n, Z0_n
+    return x_lmn

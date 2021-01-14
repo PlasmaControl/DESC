@@ -4,8 +4,8 @@ from netCDF4 import Dataset, stringtochar
 
 from desc.backend import put
 from desc.utils import Tristate, sign
-from desc.grid import LinearGrid, ConcentricGrid
-from desc.basis import FourierSeries, DoubleFourierSeries, FourierZernikeBasis, jacobi
+from desc.grid import LinearGrid
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.configuration import Configuration
 from desc.boundary_conditions import BoundaryConstraint
@@ -73,14 +73,6 @@ class VMECIO:
             lmnc = np.zeros_like(lmns)
             inputs["sym"] = True
 
-        # basis symmetry
-        if inputs["sym"]:
-            R_sym = Tristate(True)
-            Z_sym = Tristate(False)
-        else:
-            R_sym = Tristate(None)
-            Z_sym = Tristate(None)
-
         # profiles
         preset = file.dimensions["preset"].size
         p0 = file.variables["presf"][0] / file.variables["am"][0]
@@ -92,63 +84,27 @@ class VMECIO:
         file.close
 
         # boundary
-        m, n, R1_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
-        m, n, Z1_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((m, n, R1_mn, Z1_mn)).T
-
-        # axis
-        m, n, R0_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[0, :], c=rmnc[0, :])
-        m, n, Z0_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[0, :], c=zmnc[0, :])
-        R0_basis = FourierSeries(N=inputs["N"], NFP=inputs["NFP"], sym=R_sym)
-        Z0_basis = FourierSeries(N=inputs["N"], NFP=inputs["NFP"], sym=Z_sym)
-        inputs["R0_n"] = np.zeros((R0_basis.num_modes,))
-        inputs["Z0_n"] = np.zeros((Z0_basis.num_modes,))
-        for m, n, R0, Z0 in np.vstack((m, n, R0_mn, Z0_mn)).T:
-            idx_R = np.where(
-                np.logical_and(R0_basis.modes[:, 1] == m, R0_basis.modes[:, 2] == n)
-            )[0]
-            idx_Z = np.where(
-                np.logical_and(Z0_basis.modes[:, 1] == m, Z0_basis.modes[:, 2] == n)
-            )[0]
-            inputs["R0_n"] = put(inputs["R0_n"], idx_R, R0)
-            inputs["Z0_n"] = put(inputs["Z0_n"], idx_Z, Z0)
+        m, n, Rb_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
+        m, n, Zb_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
+        inputs["boundary"] = np.vstack((m, n, Rb_mn, Zb_mn)).T
 
         # initialize Configuration
         eq = Configuration(inputs=inputs)
 
-        # lambda
-        m, n, l_mn = cls._ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.l_lmn = cls._fourier_to_zernike(m, n, l_mn, eq.l_basis)
-
-        # grid for fitting r
-        grid = ConcentricGrid(
-            M=2 * math.ceil(1.5 * inputs["M"]) + 1,
-            N=2 * math.ceil(1.5 * inputs["N"]) + 1,
-            NFP=inputs["NFP"],
-            sym=inputs["sym"],
-            axis=True,
-            index=inputs["index"],
-            surfs="cheb1",
-        )
-        polar_coords = eq.compute_polar_coords(grid)
-
-        # r
+        # R
         m, n, R_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
+        eq.R_lmn = cls._fourier_to_zernike(m, n, R_mn, eq.R_basis)
+
+        # Z
         m, n, Z_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns, c=zmnc)
-        R_lmn = cls._fourier_to_zernike(m, n, R_mn, basis=eq.R_basis)
-        Z_lmn = cls._fourier_to_zernike(m, n, Z_mn, basis=eq.Z_basis)
-        R_transform = Transform(grid=grid, basis=eq.R_basis)
-        Z_transform = Transform(grid=grid, basis=eq.Z_basis)
-        R = R_transform.transform(R_lmn)
-        Z = Z_transform.transform(Z_lmn)
-        r_R = (R - polar_coords["R0"]) / (polar_coords["R1"] - polar_coords["R0"])
-        r_Z = (Z - polar_coords["Z0"]) / (polar_coords["Z1"] - polar_coords["Z0"])
-        r = np.where(r_Z <= 1, r_Z, r_R)
-        r_transform = Transform(grid=grid, basis=eq.r_basis)
-        eq.r_lmn = r_transform.fit(r)
+        eq.Z_lmn = cls._fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
+
+        # lambda
+        m, n, L_mn = cls._ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
+        eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = BoundaryConstraint(eq.R0_basis, eq.Z0_basis, eq.r_basis, eq.l_basis)
+        BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
         eq.x = BC.make_feasible(eq.x)
 
         return eq

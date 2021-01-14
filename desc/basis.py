@@ -56,7 +56,7 @@ class Basis(IOAble, ABC):
         None
 
         """
-        sort_idx = np.lexsort((self._modes[:, 0], self._modes[:, 1], self._modes[:, 2]))
+        sort_idx = np.lexsort((self._modes[:, 1], self._modes[:, 0], self._modes[:, 2]))
         self._modes = self._modes[sort_idx]
 
     @abstractmethod

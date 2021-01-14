@@ -83,7 +83,8 @@ class Grid(IOAble):
         None
 
         """
-        sort_idx = np.lexsort((self._nodes[:, 0], self._nodes[:, 1], self._nodes[:, 2]))
+
+        sort_idx = np.lexsort((self._nodes[:, 1], self._nodes[:, 0], self._nodes[:, 2]))
         self._nodes = self._nodes[sort_idx]
         self._volumes = self._volumes[sort_idx]
 

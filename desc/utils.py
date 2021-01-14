@@ -391,6 +391,30 @@ def isalmostequal(x, axis=-1, tol=1e-12):
     return np.all(x.std(axis=axis) * x.shape[axis] < tol)
 
 
+def islinspaced(x, axis=-1, tol=1e-12):
+    """Checks if all values of an array are linearly spaced, to within a given tolerance
+
+    Parameters
+    ----------
+    x : array-like
+        input values
+    axis : int
+        axis along which to make comparison. If None, the flattened array is used (Default value = -1)
+    tol : float
+        tolerance for comparison. Array is considered linearly spaced if std(diff(x)) < tol along axis (Default value = 1e-12)
+
+    Returns
+    -------
+    islinspaced : bool
+        whether the array is linearly spaced along specified axis
+
+    """
+    if axis is None:
+        x = x.flatten()
+        axis = 0
+    return np.all(np.diff(x, axis=axis).std() < tol)
+
+
 def sign(x):
     """Sign function, but returns 1 for x==0
 

@@ -458,12 +458,12 @@ class Plot:
         v_coords = eq.compute_toroidal_coords(v_grid)
 
         # rho contours
-        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
-        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N), order="F")[:-1, :, 0]
+        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
 
         # theta contours
-        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
-        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N), order="F")[:, :, 0]
+        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
 
         fig, ax = self.format_ax(ax)
 

@@ -255,40 +255,32 @@ opsindex = _Indexable()
 # Helper Functions -----------------------------------------------------------
 
 
-def unpack_state(x, nR0, nZ0, nr, nl):
-    """Unpacks the state vector x into R0_n, Z0_n, r_lmn, l_lmn components
+def unpack_state(x, nR, nZ):
+    """Unpacks the state vector x into R_lmn, Z_lmn, L_lmn components
 
     Parameters
     ----------
     x : ndarray
         vector to unpack: x = [cR, cZ, cL]
-    nR0 : int
-        number of R0_n coefficients
-    nZ0 : int
-        number of Z0_n coefficients
-    nr : int
-        number of r_lmn coefficients
-    nl : int
-        number of l_lmn coefficients
+    nR : int
+        number of R_lmn coefficients
+    nZ : int
+        number of Z_lmn coefficients
 
     Returns
     -------
-    R0_n : ndarray
-        spectral coefficients of R0
-    Z0_n : ndarray
-        spectral coefficients of Z0
-    r_lmn : ndarray
-        spectral coefficients of r
-    l_lmn : ndarray
+    R_lmn : ndarray
+        spectral coefficients of R
+    Z_lmn : ndarray
+        spectral coefficients of Z
+    L_lmn : ndarray
         spectral coefficients of lambda
 
     """
-
-    R0_n = x[:nR0]
-    Z0_n = x[nR0 : nR0 + nZ0]
-    r_lmn = x[nR0 + nZ0 : nR0 + nZ0 + nr]
-    l_lmn = x[nR0 + nZ0 + nr : nR0 + nZ0 + nr + nl]
-    return R0_n, Z0_n, r_lmn, l_lmn
+    R_lmn = x[:nR]
+    Z_lmn = x[nR : nR + nZ]
+    L_lmn = x[nR + nZ :]
+    return R_lmn, Z_lmn, L_lmn
 
 
 def equals(a, b) -> bool:
@@ -541,16 +533,13 @@ def copy_coeffs(c_old, modes_old, modes_new):
     return c_new
 
 
-def expand_state(x, old_R0, new_R0, old_Z0, new_Z0, old_r, new_r, old_l, new_l):
+def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
     """copies a state vector from one resolution to another"""
 
-    R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-        x, len(old_R0), len(old_Z0), len(old_r), len(old_l)
-    )
-    R0_n = copy_coeffs(R0_n, old_R0, new_R0)
-    Z0_n = copy_coeffs(Z0_n, old_Z0, new_Z0)
-    r_lmn = copy_coeffs(r_lmn, old_r, new_r)
-    l_lmn = copy_coeffs(l_lmn, old_l, new_l)
+    R_lmn, Z_lmn, L_lmn = unpack_state(x, len(old_R), len(old_Z))
+    R_lmn = copy_coeffs(R_lmn, old_R, new_R)
+    Z_lmn = copy_coeffs(Z_lmn, old_Z, new_Z)
+    L_lmn = copy_coeffs(L_lmn, old_L, new_L)
 
-    x = np.concatenate([R0_n, Z0_n, r_lmn, l_lmn])
+    x = np.concatenate([R_lmn, Z_lmn, L_lmn])
     return x

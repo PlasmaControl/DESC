@@ -98,23 +98,20 @@ class Equilibrium(Configuration, IOAble):
         # TODO: what derivs should these use? get it from objective?
         if self._transforms is None:
             self._transforms = {}
-            self._transforms["R0"] = Transform(
-                self.grid, self.R0_basis, derivs=2, build=False
+            self._transforms["R"] = Transform(
+                self.grid, self.R_basis, derivs="force", build=False
             )
-            self._transforms["Z0"] = Transform(
-                self.grid, self.Z0_basis, derivs=2, build=False
+            self._transforms["Z"] = Transform(
+                self.grid, self.Z_basis, derivs="force", build=False
             )
-            self._transforms["R1"] = Transform(
-                self.grid, self.R1_basis, derivs="force", build=False
+            self._transforms["L"] = Transform(
+                self.grid, self.L_basis, derivs="force", build=False
             )
-            self._transforms["Z1"] = Transform(
-                self.grid, self.Z1_basis, derivs="force", build=False
+            self._transforms["Rb"] = Transform(
+                self.grid, self.Rb_basis, derivs="force", build=False
             )
-            self._transforms["r"] = Transform(
-                self.grid, self.r_basis, derivs="force", build=False
-            )
-            self._transforms["l"] = Transform(
-                self.grid, self.l_basis, derivs="force", build=False
+            self._transforms["Zb"] = Transform(
+                self.grid, self.Zb_basis, derivs="force", build=False
             )
             self._transforms["p"] = Transform(
                 self.grid, self.p_basis, derivs=1, build=False
@@ -124,23 +121,20 @@ class Equilibrium(Configuration, IOAble):
             )
 
         else:
-            self._transforms["R0"].change_resolution(
-                self.grid, self.R0_basis, build=False
+            self._transforms["R"].change_resolution(
+                self.grid, self.R_basis, build=False
             )
-            self._transforms["Z0"].change_resolution(
-                self.grid, self.Z0_basis, build=False
+            self._transforms["Z"].change_resolution(
+                self.grid, self.Z_basis, build=False
             )
-            self._transforms["R1"].change_resolution(
-                self.grid, self.R1_basis, build=False
+            self._transforms["L"].change_resolution(
+                self.grid, self.L_basis, build=False
             )
-            self._transforms["Z1"].change_resolution(
-                self.grid, self.Z1_basis, build=False
+            self._transforms["Rb"].change_resolution(
+                self.grid, self.Rb_basis, build=False
             )
-            self._transforms["r"].change_resolution(
-                self.grid, self.r_basis, build=False
-            )
-            self._transforms["l"].change_resolution(
-                self.grid, self.l_basis, build=False
+            self._transforms["Zb"].change_resolution(
+                self.grid, self.Zb_basis, build=False
             )
             self._transforms["p"].change_resolution(
                 self.grid, self.p_basis, build=False
@@ -205,12 +199,11 @@ class Equilibrium(Configuration, IOAble):
         elif isinstance(objective, str):
             self._objective = ObjectiveFunctionFactory.get_equil_obj_fun(
                 objective,
-                R0_transform=self._transforms["R0"],
-                Z0_transform=self._transforms["Z0"],
-                R1_transform=self._transforms["R1"],
-                Z1_transform=self._transforms["Z1"],
-                r_transform=self._transforms["r"],
-                l_transform=self._transforms["l"],
+                R_transform=self._transforms["R"],
+                Z_transform=self._transforms["Z"],
+                L_transform=self._transforms["L"],
+                Rb_transform=self._transforms["Rb"],
+                Zb_transform=self._transforms["Zb"],
                 p_transform=self._transforms["p"],
                 i_transform=self._transforms["i"],
             )
@@ -249,16 +242,10 @@ class Equilibrium(Configuration, IOAble):
         i_modes = np.array(
             [self._i_basis.modes[:, 0], np.zeros_like(self._i_l), self._i_l]
         ).T
-        R0_modes = np.array(
-            [self._R0_basis.modes[:, 2], self._R0_n, np.zeros_like(self._R0_n)]
-        ).T
-        Z0_modes = np.array(
-            [self._Z0_basis.modes[:, 2], np.zeros_like(self._R0_n), self._Z0_n]
-        ).T
-        R1_mn = self._R1_mn.reshape((-1, 1))
-        Z1_mn = self._Z1_mn.reshape((-1, 1))
-        R1_modes = np.hstack([self._R1_basis.modes[:, 1:], R1_mn, np.zeros_like(R1_mn)])
-        Z1_modes = np.hstack([self._Z1_basis.modes[:, 1:], np.zeros_like(Z1_mn), Z1_mn])
+        Rb_mn = self._Rb_mn.reshape((-1, 1))
+        Zb_mn = self._Zb_mn.reshape((-1, 1))
+        Rb_modes = np.hstack([self._Rb_basis.modes[:, 1:], Rb_mn, np.zeros_like(Rb_mn)])
+        Zb_modes = np.hstack([self._Zb_basis.modes[:, 1:], np.zeros_like(Zb_mn), Zb_mn])
         inputs = {
             "sym": self._sym,
             "NFP": self._NFP,
@@ -270,8 +257,7 @@ class Equilibrium(Configuration, IOAble):
             "bdry_mode": self._bdry_mode,
             "zeta_ratio": self._zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),
-            "axis": np.vstack((R0_modes, Z0_modes)),
-            "boundary": np.vstack((R1_modes, Z1_modes)),
+            "boundary": np.vstack((Rb_modes, Zb_modes)),
             "x": self._x0,
         }
         return Configuration(inputs=inputs)
@@ -295,8 +281,8 @@ class Equilibrium(Configuration, IOAble):
             )
 
         args = (
-            self.R1_mn,
-            self.Z1_mn,
+            self.Rb_mn,
+            self.Zb_mn,
             self.p_l,
             self.i_l,
             self.Psi,
@@ -425,14 +411,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 # new initial guess is previous solution
                 new_x = expand_state(
                     self[ii - 1].x,
-                    self[ii - 1].R0_basis.modes,
-                    equil.R0_basis.modes,
-                    self[ii - 1].Z0_basis.modes,
-                    equil.Z0_basis.modes,
-                    self[ii - 1].r_basis.modes,
-                    equil.r_basis.modes,
-                    self[ii - 1].l_basis.modes,
-                    equil.l_basis.modes,
+                    self[ii - 1].R_basis.modes,
+                    equil.R_basis.modes,
+                    self[ii - 1].Z_basis.modes,
+                    equil.Z_basis.modes,
+                    self[ii - 1].L_basis.modes,
+                    equil.L_basis.modes,
                 )
 
                 equil.x0 = equil.x = new_x

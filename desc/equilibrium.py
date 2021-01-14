@@ -438,6 +438,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 )
 
                 equil.x0 = equil.x = new_x
+                equil._parent = self[ii - 1]
+                self[ii - 1]._children.append(equil)
             # TODO: updating transforms instead of recomputing
             # TODO: check if params changed and do perturbations
             equil.precompute_transforms(verbose)

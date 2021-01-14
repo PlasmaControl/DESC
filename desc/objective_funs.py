@@ -16,77 +16,73 @@ class ObjectiveFunction(IOAble, ABC):
 
     Attributes
     ----------
-    R0_transform : Transform
-        transforms R0_n coefficients to real space
-    Z0_transform : Transform
-        transforms Z0_n coefficients to real space
-    r_transform : Transform
-        transforms r_lmn coefficients to real space
-    l_transform : Transform
-        transforms l_lmn coefficients to real space
-    R1_transform : Transform
-        transforms R1_mn coefficients to real space
-    Z1_transform : Transform
-        transforms Z1_mn coefficients to real space
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_mn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
+    BC_constraint : BoundaryConstraint
+            linear constraint to enforce boundary conditions
 
     Methods
     -------
-    compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0)
+    compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
         compute the equilibrium objective function
-    callback(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0)
+    callback(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
         function that prints equilibrium errors
     """
 
     _io_attrs_ = [
         "scalar",
-        "R0_transform",
-        "Z0_transform",
-        "r_transform",
-        "l_transform",
-        "R1_transform",
-        "Z1_transform",
+        "R_transform",
+        "Z_transform",
+        "L_transform",
+        "Rb_transform",
+        "Zb_transform",
         "p_transform",
         "i_transform",
+        "BC_constraint",
     ]
 
     def __init__(
         self,
-        R0_transform: Transform = None,
-        Z0_transform: Transform = None,
-        r_transform: Transform = None,
-        l_transform: Transform = None,
-        R1_transform: Transform = None,
-        Z1_transform: Transform = None,
+        R_transform: Transform = None,
+        Z_transform: Transform = None,
+        L_transform: Transform = None,
+        Rb_transform: Transform = None,
+        Zb_transform: Transform = None,
         p_transform: Transform = None,
         i_transform: Transform = None,
-        bc_constraint: BoundaryConstraint = None,
-        radial_constraint: RadialConstraint = None,
+        BC_constraint: BoundaryConstraint = None,
     ) -> None:
         """Initializes an ObjectiveFunction
 
         Parameters
         ----------
-        R0_transform : Transform
-            transforms R0_n coefficients to real space
-        Z0_transform : Transform
-            transforms Z0_n coefficients to real space
-        r_transform : Transform
-            transforms r_lmn coefficients to real space
-        l_transform : Transform
-            transforms l_lmn coefficients to real space
-        R1_transform : Transform
-            transforms R1_mn coefficients to real space
-        Z1_transform : Transform
-            transforms Z1_mn coefficients to real space
+        R_transform : Transform
+            transforms R_lmn coefficients to real space
+        Z_transform : Transform
+            transforms Z_lmn coefficients to real space
+        L_transform : Transform
+            transforms L_lmn coefficients to real space
+        Rb_transform : Transform
+            transforms Rb_mn coefficients to real space
+        Zb_transform : Transform
+            transforms Zb_mn coefficients to real space
         p_transform : Transform
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
-        bc_constraint : BoundaryConstraint
+        BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
 
         Returns
@@ -94,57 +90,48 @@ class ObjectiveFunction(IOAble, ABC):
         None
 
         """
-        self.R0_transform = R0_transform
-        self.Z0_transform = Z0_transform
-        self.r_transform = r_transform
-        self.l_transform = l_transform
-        self.R1_transform = R1_transform
-        self.Z1_transform = Z1_transform
+        self.R_transform = R_transform
+        self.Z_transform = Z_transform
+        self.L_transform = L_transform
+        self.Rb_transform = Rb_transform
+        self.Zb_transform = Zb_transform
         self.p_transform = p_transform
         self.i_transform = i_transform
-        if bc_constraint is None:
-            bc_constraint = BoundaryConstraint(
-                R0_transform.basis,
-                Z0_transform.basis,
-                r_transform.basis,
-                l_transform.basis,
+        if BC_constraint is None:
+            BC_constraint = BoundaryConstraint(
+                R_transform.basis, Z_transform.basis, L_transform.basis,
             )
-        self.bc_constraint = bc_constraint
-        if radial_constraint is True:
-            radial_constraint = RadialConstraint(r_transform.basis)
-        elif radial_constraint is False:
-            radial_constraint = None
-        self.radial_constraint = radial_constraint
+        self.BC_constraint = BC_constraint
 
         self._grad = Derivative(self.compute_scalar, mode="grad")
         self._hess = Derivative(self.compute_scalar, mode="hess")
         self._jac = Derivative(self.compute, mode="fwd")
 
     @abstractmethod
-    def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         pass
 
     @abstractmethod
-    def compute_scalar(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         pass
 
     @abstractmethod
-    def callback(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         pass
 
-    def grad_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def grad_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes gradient vector of scalar form of the objective wrt to x"""
-        return self._grad.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._grad.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
-    def hess_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def hess_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes hessian matrix of scalar form of the objective wrt to x"""
-        return self._hess.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._hess.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
-    def jac_x(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def jac_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes jacobian matrx of vector form of the objective wrt to x"""
-        return self._jac.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._jac.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
-    def derivative(self, argnums, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def derivative(self, argnums, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes arbitrary derivatives of the objective
 
         Parameters
@@ -164,7 +151,7 @@ class ObjectiveFunction(IOAble, ABC):
         f = self.compute
         for a in argnums:
             f = Derivative(f, argnum=a)
-        y = f(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0)
+        y = f(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
         return y
 
 
@@ -173,38 +160,34 @@ class ForceErrorNodes(ObjectiveFunction):
 
     def __init__(
         self,
-        R0_transform: Transform = None,
-        Z0_transform: Transform = None,
-        r_transform: Transform = None,
-        l_transform: Transform = None,
-        R1_transform: Transform = None,
-        Z1_transform: Transform = None,
+        R_transform: Transform = None,
+        Z_transform: Transform = None,
+        L_transform: Transform = None,
+        Rb_transform: Transform = None,
+        Zb_transform: Transform = None,
         p_transform: Transform = None,
         i_transform: Transform = None,
-        bc_constraint: BoundaryConstraint = None,
-        radial_constraint: RadialConstraint = None,
+        BC_constraint: BoundaryConstraint = None,
     ) -> None:
         """Initializes a ForceErrorNodes object
 
         Parameters
         ----------
-        R0_transform : Transform
-            transforms R0_n coefficients to real space
-        Z0_transform : Transform
-            transforms Z0_n coefficients to real space
-        r_transform : Transform
-            transforms r_lmn coefficients to real space
-        l_transform : Transform
-            transforms l_lmn coefficients to real space
-        R1_transform : Transform
-            transforms R1_mn coefficients to real space
-        Z1_transform : Transform
-            transforms Z1_mn coefficients to real space
+        R_transform : Transform
+            transforms R_lmn coefficients to real space
+        Z_transform : Transform
+            transforms Z_lmn coefficients to real space
+        L_transform : Transform
+            transforms L_lmn coefficients to real space
+        Rb_transform : Transform
+            transforms Rb_mn coefficients to real space
+        Zb_transform : Transform
+            transforms Zb_mn coefficients to real space
         p_transform : Transform
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
-        bc_constraint : BoundaryConstraint
+        BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
 
         Returns
@@ -213,65 +196,52 @@ class ForceErrorNodes(ObjectiveFunction):
 
         """
         super().__init__(
-            R0_transform,
-            Z0_transform,
-            r_transform,
-            l_transform,
-            R1_transform,
-            Z1_transform,
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
             p_transform,
             i_transform,
-            bc_constraint,
-            radial_constraint,
+            BC_constraint,
         )
         self.scalar = False
 
-    def compute(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
 
         # input x is really "y", need to convert to full x
-        x = self.bc_constraint.recover(x)
+        x = self.BC_constraint.recover(x)
 
-        R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x,
-            self.R0_transform.basis.num_modes,
-            self.Z0_transform.basis.num_modes,
-            self.r_transform.basis.num_modes,
-            self.l_transform.basis.num_modes,
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
             force_error,
             current_density,
             magnetic_field,
-            profiles,
             con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
-            polar_coords,
+            profiles,
         ) = compute_force_error_magnitude(
             Psi,
-            R0_n,
-            Z0_n,
-            r_lmn,
-            l_lmn,
-            R1_mn,
-            Z1_mn,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
             p_l,
             i_l,
-            self.R0_transform,
-            self.Z0_transform,
-            self.r_transform,
-            self.l_transform,
-            self.R1_transform,
-            self.Z1_transform,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
             self.p_transform,
             self.i_transform,
             zeta_ratio,
         )
 
-        volumes = self.R0_transform.grid.volumes
+        volumes = self.R_transform.grid.volumes
         dr = volumes[:, 0]
         dt = volumes[:, 1]
         dz = volumes[:, 2]
@@ -297,63 +267,48 @@ class ForceErrorNodes(ObjectiveFunction):
         )
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
 
-        if self.radial_constraint is not None:
-            dr_penalty = self.radial_constraint.compute(r_lmn).flatten()
-            residual = jnp.concatenate([residual, dr_penalty])
-
         return residual
 
-    def compute_scalar(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        residual = self.compute(x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio)
+    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        residual = self.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
         residual = jnp.sum(residual ** 2)
         return residual
 
-    def callback(self, x, R1_mn, Z1_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         """Prints the rms errors."""
 
         # input x is really "y", need to convert to full x
-        x = self.bc_constraint.recover(x)
+        x = self.BC_constraint.recover(x)
 
-        R0_n, Z0_n, r_lmn, l_lmn = unpack_state(
-            x,
-            self.R0_transform.basis.num_modes,
-            self.Z0_transform.basis.num_modes,
-            self.r_transform.basis.num_modes,
-            self.l_transform.basis.num_modes,
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
             force_error,
             current_density,
             magnetic_field,
-            profiles,
             con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
-            polar_coords,
+            profiles,
         ) = compute_force_error_magnitude(
             Psi,
-            R0_n,
-            Z0_n,
-            r_lmn,
-            l_lmn,
-            R1_mn,
-            Z1_mn,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
             p_l,
             i_l,
-            self.R0_transform,
-            self.Z0_transform,
-            self.r_transform,
-            self.l_transform,
-            self.R1_transform,
-            self.Z1_transform,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
             self.p_transform,
             self.i_transform,
             zeta_ratio,
         )
 
-        volumes = self.R0_transform.grid.volumes
+        volumes = self.R_transform.grid.volumes
         dr = volumes[:, 0]
         dt = volumes[:, 1]
         dz = volumes[:, 2]
@@ -405,49 +360,45 @@ class ObjectiveFunctionFactory:
     @staticmethod
     def get_equil_obj_fun(
         errr_mode,
-        R0_transform: Transform = None,
-        Z0_transform: Transform = None,
-        r_transform: Transform = None,
-        l_transform: Transform = None,
-        R1_transform: Transform = None,
-        Z1_transform: Transform = None,
+        R_transform: Transform = None,
+        Z_transform: Transform = None,
+        L_transform: Transform = None,
+        Rb_transform: Transform = None,
+        Zb_transform: Transform = None,
         p_transform: Transform = None,
         i_transform: Transform = None,
-        bc_constraint: BoundaryConstraint = None,
-        radial_constraint: RadialConstraint = None,
+        BC_constraint: BoundaryConstraint = None,
     ) -> ObjectiveFunction:
-        """Accepts parameters necessary to create an objective function, and returns the corresponding ObjectiveFunction object
+        """Accepts parameters necessary to create an objective function,
+        and returns the corresponding ObjectiveFunction object
 
         Parameters
         ----------
-        errr_mode : str
-            error mode of the objective function
-            one of 'force', 'accel'
-        R0_transform : Transform
-            transforms R0_n coefficients to real space
-        Z0_transform : Transform
-            transforms Z0_n coefficients to real space
-        r_transform : Transform
-            transforms r_lmn coefficients to real space
-        l_transform : Transform
-            transforms l_lmn coefficients to real space
-        R1_transform : Transform
-            transforms R1_mn coefficients to real space
-        Z1_transform : Transform
-            transforms Z1_mn coefficients to real space
+        R_transform : Transform
+            transforms R_lmn coefficients to real space
+        Z_transform : Transform
+            transforms Z_lmn coefficients to real space
+        L_transform : Transform
+            transforms L_lmn coefficients to real space
+        Rb_transform : Transform
+            transforms Rb_mn coefficients to real space
+        Zb_transform : Transform
+            transforms Zb_mn coefficients to real space
         p_transform : Transform
             transforms p_l coefficients to real space
         i_transform : Transform
             transforms i_l coefficients to real space
-        bc_constraint : BoundaryConstraint
-            linear constraint to enforce BC
+        BC_constraint : BoundaryConstraint
+            linear constraint to enforce boundary conditions
+
         Returns
         -------
         obj_fun : ObjectiveFunction
-            equilibrium objective function object, containing the compute and callback method for the objective function
+            equilibrium objective function object, containing the compute and callback
+            method for the objective function
 
         """
-        if len(R0_transform.grid.axis):
+        if len(R_transform.grid.axis):
             raise ValueError(
                 colored(
                     "Objective cannot be evaluated at the magnetic axis. "
@@ -458,16 +409,14 @@ class ObjectiveFunctionFactory:
 
         if errr_mode == "force":
             obj_fun = ForceErrorNodes(
-                R0_transform=R0_transform,
-                Z0_transform=Z0_transform,
-                r_transform=r_transform,
-                l_transform=l_transform,
-                R1_transform=R1_transform,
-                Z1_transform=Z1_transform,
+                R_transform=R_transform,
+                Z_transform=Z_transform,
+                L_transform=L_transform,
+                Rb_transform=Rb_transform,
+                Zb_transform=Zb_transform,
                 p_transform=p_transform,
                 i_transform=i_transform,
-                bc_constraint=bc_constraint,
-                radial_constraint=radial_constraint,
+                BC_constraint=BC_constraint,
             )
         else:
             raise ValueError(

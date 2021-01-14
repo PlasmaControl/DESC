@@ -113,18 +113,12 @@ class VMECIO:
             inputs["R0_n"] = put(inputs["R0_n"], idx_R, R0)
             inputs["Z0_n"] = put(inputs["Z0_n"], idx_Z, Z0)
 
+        # initialize Configuration
+        eq = Configuration(inputs=inputs)
+
         # lambda
         m, n, l_mn = cls._ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        inputs["l_lmn"], l_basis = cls._fourier_to_zernike(
-            m,
-            n,
-            l_mn,
-            NFP=inputs["NFP"],
-            L=inputs["L"],
-            M=inputs["M"],
-            N=inputs["N"],
-            index=inputs["index"],
-        )
+        eq.l_lmn = cls._fourier_to_zernike(m, n, l_mn, eq.l_basis)
 
         # grid for fitting r
         grid = ConcentricGrid(
@@ -136,36 +130,15 @@ class VMECIO:
             index=inputs["index"],
             surfs="cheb1",
         )
-
-        # initialize Configuration before setting r
-        eq = Configuration(inputs=inputs)
         polar_coords = eq.compute_polar_coords(grid)
 
         # r
         m, n, R_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
         m, n, Z_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns, c=zmnc)
-        R_lmn, R_basis = cls._fourier_to_zernike(
-            m,
-            n,
-            R_mn,
-            NFP=inputs["NFP"],
-            L=inputs["L"],
-            M=inputs["M"],
-            N=inputs["N"],
-            index=inputs["index"],
-        )
-        Z_lmn, Z_basis = cls._fourier_to_zernike(
-            m,
-            n,
-            Z_mn,
-            NFP=inputs["NFP"],
-            L=inputs["L"],
-            M=inputs["M"],
-            N=inputs["N"],
-            index=inputs["index"],
-        )
-        R_transform = Transform(grid=grid, basis=R_basis)
-        Z_transform = Transform(grid=grid, basis=Z_basis)
+        R_lmn = cls._fourier_to_zernike(m, n, R_mn, basis=eq.R_basis)
+        Z_lmn = cls._fourier_to_zernike(m, n, Z_mn, basis=eq.Z_basis)
+        R_transform = Transform(grid=grid, basis=eq.R_basis)
+        Z_transform = Transform(grid=grid, basis=eq.Z_basis)
         R = R_transform.transform(R_lmn)
         Z = Z_transform.transform(Z_lmn)
         r_R = (R - polar_coords["R0"]) / (polar_coords["R1"] - polar_coords["R0"])
@@ -434,25 +407,15 @@ class VMECIO:
         if not eq.sym:
             zmnc[:] = c
 
+        # lambda
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
         lmns.long_name = "sin(m*t-n*p) component of lambda on full mesh"
-        lmns.units = "m"
-        m = sin_basis.modes[:, 1]
-        n = sin_basis.modes[:, 2]
+        lmns.units = "rad"
         if not eq.sym:
-            lmnc = file.createVariable("zmnc", np.float64, ("radius", "mn_mode"))
+            lmnc = file.createVariable("lmnc", np.float64, ("radius", "mn_mode"))
             lmnc.long_name = "cos(m*t-n*p) component of lambda on full mesh"
-            lmnc.units = "m"
-            m = full_basis.modes[:, 1]
-            n = full_basis.modes[:, 2]
-        x_mn = np.zeros((surfs, m.size))
-        for i in range(surfs):
-            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_full[i])
-            data = eq.compute_polar_coords(grid)["lambda"]
-            if eq.sym:
-                x_mn[i, :] = sin_transform.fit(data)
-            else:
-                x_mn[i, :] = full_transform.fit(data)
+            lmnc.units = "rad"
+        m, n, x_mn = cls._zernike_to_fourier(eq.l_lmn, basis=eq.l_basis)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
         lmns[:] = s
         if not eq.sym:
@@ -474,10 +437,10 @@ class VMECIO:
             Poloidal mode numbers of the double-angle Fourier basis.
         n_0 : ndarray
             Toroidal mode numbers of the double-angle Fourier basis.
-        s : ndarray, optional
+        s : ndarray, shape(surfs,num_modes), optional
             Coefficients of sin(m*theta-n*phi) terms.
             Each row is a separate flux surface.
-        c : ndarray, optional
+        c : ndarray, shape(surfs,num_modes), optional
             Coefficients of cos(m*theta-n*phi) terms.
             Each row is a separate flux surface.
 
@@ -487,7 +450,7 @@ class VMECIO:
             Poloidal mode numbers of the double Fourier basis.
         n_1 : ndarray, shape(num_modes,)
             Toroidal mode numbers of the double Fourier basis.
-        x : ndarray, shape(num_modes,)
+        x : ndarray, shape(surfs,num_modes,)
             Spectral coefficients in the double Fourier basis.
 
         """
@@ -554,7 +517,7 @@ class VMECIO:
             Poloidal mode numbers of the double Fourier basis.
         n_1 : ndarray, shape(num_modes,)
             Toroidal mode numbers of the double Fourier basis.
-        x : ndarray, shape(num_modes,)
+        x : ndarray, shape(surfs,num_modes,)
             Spectral coefficients in the double Fourier basis.
 
         Returns
@@ -563,10 +526,10 @@ class VMECIO:
             Poloidal mode numbers of the double-angle Fourier basis.
         n_0 : ndarray
             Toroidal mode numbers of the double-angle Fourier basis.
-        s : ndarray, optional
+        s : ndarray, shape(surfs,num_modes)
             Coefficients of sin(m*theta-n*phi) terms.
             Each row is a separate flux surface.
-        c : ndarray, optional
+        c : ndarray, shape(surfs,num_modes)
             Coefficients of cos(m*theta-n*phi) terms.
             Each row is a separate flux surface.
 
@@ -611,16 +574,7 @@ class VMECIO:
 
         return m_0, n_0, s, c
 
-    def _fourier_to_zernike(
-        m,
-        n,
-        x_mn,
-        NFP: int = 1,
-        L: int = -1,
-        M: int = -1,
-        N: int = -1,
-        index: str = "ansi",
-    ):
+    def _fourier_to_zernike(m, n, x_mn, basis: FourierZernikeBasis):
         """Converts from a double Fourier series at each flux surface to a
         Fourier-Zernike basis.
 
@@ -630,42 +584,20 @@ class VMECIO:
             Poloidal mode numbers.
         n : ndarray, shape(num_modes,)
             Toroidal mode numbers.
-        x_mn : ndarray, shape(num_modes,)
+        x_mn : ndarray, shape(surfs,num_modes)
             Spectral coefficients in the double Fourier basis.
             Each row is a separate flux surface, increasing from the magnetic
             axis to the boundary.
-        NFP : int, optional
-            Number of toroidal field periods.
-        L : int, optional
-            Radial resolution. Default determined by index.
-        M : int, optional
-            Poloidal resolution. Default = MPOL-1 from VMEC solution.
-        N : int, optional
-            Toroidal resolution. Default = NTOR from VMEC solution.
-        index : str, optional
-            Type of Zernike indexing scheme to use. (Default = 'ansi')
+        basis : FourierZernikeBasis
+            Basis set for x_lmn
 
         Returns
         -------
         x_lmn : ndarray, shape(num_modes,)
             Fourier-Zernike spectral coefficients.
-        basis : FourierZernikeBasis
-            Basis set for x_lmn
 
         """
-        M = M if M > 0 else int(np.max(np.abs(m)))
-        N = N if N >= 0 else int(np.max(np.abs(n)))
-
-        if not np.any(x_mn[:, np.where(sign(m) * sign(n) == -1)[0]]):
-            sym = Tristate(True)
-        elif not np.any(x_mn[:, np.where(sign(m) * sign(n) == 1)[0]]):
-            sym = Tristate(False)
-        else:
-            sym = Tristate(None)
-
-        basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym, index=index)
         x_lmn = np.zeros((basis.num_modes,))
-
         surfs = x_mn.shape[0]
         rho = np.sqrt(np.linspace(0, 1, surfs))
 
@@ -678,57 +610,52 @@ class VMECIO:
                 c = np.linalg.lstsq(A, x_mn[:, i], rcond=None)[0]
                 x_lmn = put(x_lmn, idx, c)
 
-        return x_lmn, basis
+        return x_lmn
 
+    def _zernike_to_fourier(x_lmn, basis: FourierZernikeBasis, surfs):
+        """Converts from a Fourier-Zernike basis to a double Fourier series at each
+        flux surface.
 
-def vmec_transf(xmna, xm, xn, theta, phi, trig="sin"):
-    """Compute Fourier transform of VMEC data
+        Parameters
+        ----------
+        x_lmn : ndarray, shape(num_modes,)
+            Fourier-Zernike spectral coefficients.
+        basis : FourierZernikeBasis
+            Basis set for x_lmn.
+        surfs : int
+            Number of flux surfaces.
 
-    Parameters
-    ----------
-    xmns : 2d float array
-        xmnc[:,i] are the sin coefficients at flux surface i
-    xm : 1d int array
-        poloidal mode numbers
-    xn : 1d int array
-        toroidal mode numbers
-    theta : 1d float array
-        poloidal angles
-    phi : 1d float array
-        toroidal angles
-    trig : string
-        type of transform, options are 'sin' or 'cos' (Default value = 'sin')
-    xmna :
+        Returns
+        -------
+        m : ndarray, shape(num_modes,)
+            Poloidal mode numbers.
+        n : ndarray, shape(num_modes,)
+            Toroidal mode numbers.
+        x_mn : ndarray, shape(surfs,num_modes)
+            Spectral coefficients in the double Fourier basis.
+            Each row is a separate flux surface, increasing from the magnetic
+            axis to the boundary.
 
+        """
+        m = np.abs(basis.modes[:, 1]).flatten()
+        n = basis.modes[:, 2].flatten()
+        sort_idx = np.lexsort((n, m))
+        m = m[sort_idx]
+        n = n[sort_idx]
+        if m[0] != 0 or n[0] != 0:
+            m = np.insert(m, 0, 0)
+            n = np.insert(n, 0, 0)
+        n = np.where(m == 0, np.abs(n), n)
 
-    Returns
-    -------
-    f : ndarray
-        f[i,j,k] is the transformed data at flux surface i, theta[j], phi[k]
+        x_mn = np.zeros((surfs, m.size))
+        rho = np.sqrt(np.linspace(0, 1, surfs))
 
-    """
+        for i in range(basis.num_modes):
+            idx = np.where(
+                np.logical_and(basis.modes[:, 1] == m[i], basis.modes[:, 2] == n[i])
+            )[0]
+            if len(idx):
+                A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
+                x_mn[:, i] = np.matmul(A, x_lmn)
 
-    ns = np.shape(np.atleast_2d(xmna))[0]
-    lt = np.size(theta)
-    lp = np.size(phi)
-    # Create mode x angle arrays
-    mtheta = np.atleast_2d(xm).T @ np.atleast_2d(theta)
-    nphi = np.atleast_2d(xn).T @ np.atleast_2d(phi)
-    # Create trig arrays
-    cosmt = np.cos(mtheta)
-    sinmt = np.sin(mtheta)
-    cosnp = np.cos(nphi)
-    sinnp = np.sin(nphi)
-    # Calcualte the transform
-    f = np.zeros((ns, lt, lp))
-    for k in range(ns):
-        xmn = np.tile(np.atleast_2d(np.atleast_2d(xmna)[k, :]).T, (1, lt))
-        if trig == "sin":
-            f[k, :, :] = np.tensordot((xmn * sinmt).T, cosnp, axes=1) + np.tensordot(
-                (xmn * cosmt).T, sinnp, axes=1
-            )
-        elif trig == "cos":
-            f[k, :, :] = np.tensordot((xmn * cosmt).T, cosnp, axes=1) - np.tensordot(
-                (xmn * sinmt).T, sinnp, axes=1
-            )
-    return f
+        return m, n, x_mn

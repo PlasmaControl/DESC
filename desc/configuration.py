@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 from termcolor import colored
 
 from desc.backend import put

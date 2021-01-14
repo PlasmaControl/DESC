@@ -1,6 +1,5 @@
 import numpy as np
 from collections import MutableSequence
-import copy
 from desc.utils import Timer, expand_state
 from desc.configuration import Configuration
 from desc.io import IOAble
@@ -325,8 +324,7 @@ class Equilibrium(Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

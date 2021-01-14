@@ -134,6 +134,10 @@ class Configuration(IOAble):
         self._bdry_mode = inputs.get("bdry_mode", "spectral")
         self._zeta_ratio = inputs.get("zeta_ratio", 1.0)
 
+        # keep track of where it came from
+        self._parent = None
+        self._children = []
+
         # stellarator symmetry for bases
         if self._sym:
             self._R_sym = Tristate(True)
@@ -243,6 +247,26 @@ class Configuration(IOAble):
             except:
                 self._l_lmn = np.zeros((self._l_basis.num_modes,))
             self._x = np.concatenate([self._R0_n, self._Z0_n, self._r_lmn, self._l_lmn])
+
+    @property
+    def parent(self):
+        """Pointer to the configuration this was derived from"""
+        return self._parent
+
+    @property
+    def children(self):
+        """List of configurations that were derived from this one"""
+        return self._children
+
+    def copy(self, deepcopy=True):
+        """Return a (deep)copy of this equilibrium"""
+        if deepcopy:
+            new = copy.deepcopy(self)
+        else:
+            new = copy.copy(self)
+        new._parent = self
+        self._children.append(new)
+        return new
 
     def change_resolution(
         self, L: int = None, M: int = None, N: int = None, *args, **kwargs

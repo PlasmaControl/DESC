@@ -49,26 +49,11 @@ class Equilibrium(Configuration, IOAble):
         self.timer = Timer()
         self._set_grid()
         self._set_transforms()
-        self._continued_from = None
 
     @classmethod
     def from_configuration(cls, configuration):
         """Create an Equilibrium from a Configuration"""
         return cls(configuration.inputs)
-
-    @property
-    def continued_from(self):
-        """Pointer to a base equilibrium"""
-        return self._continued_from
-
-    def copy(self, deepcopy=True):
-        """Return a (deep)copy of this equilibrium"""
-        if deepcopy:
-            new = copy.deepcopy(self)
-        else:
-            new = copy.copy(self)
-        new._continued_from = self
-        return new
 
     @property
     def x0(self):
@@ -293,7 +278,7 @@ class Equilibrium(Configuration, IOAble):
         return Configuration(inputs=inputs)
 
     def optimize(self):
-        pass
+        raise NotImplementedError("optimizing equilibria has not yet been implemented")
 
     def solve(
         self,

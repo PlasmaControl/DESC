@@ -38,7 +38,8 @@ class Configuration(IOAble):
         "_NFP",
         "_R_lmn",
         "_Z_lmn",
-        "_L_lmn" "_Rb_mn",
+        "_L_lmn",
+        "_Rb_mn",
         "_Zb_mn",
         "_p_l",
         "_i_l",
@@ -167,14 +168,14 @@ class Configuration(IOAble):
             index=self._index,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=int(np.max(np.abs(boundary[:, 0]))),
-            N=int(np.max(np.abs(boundary[:, 1]))),
+            M=self._M,
+            N=self._N,
             NFP=self._NFP,
             sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=int(np.max(np.abs(boundary[:, 0]))),
-            N=int(np.max(np.abs(boundary[:, 1]))),
+            M=self._M,
+            N=self._N,
             NFP=self._NFP,
             sym=self._Z_sym,
         )
@@ -193,7 +194,9 @@ class Configuration(IOAble):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -337,7 +340,9 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+            self._x,
+            self._R_basis.num_modes,
+            self._Z_basis.num_modes,
         )
 
     @property
@@ -904,6 +909,7 @@ class Configuration(IOAble):
             force_error,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,

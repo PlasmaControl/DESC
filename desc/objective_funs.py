@@ -7,7 +7,7 @@ from desc.transform import Transform
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute_funs import compute_force_error_magnitude
-from desc.boundary_conditions import BoundaryConstraint, RadialConstraint
+from desc.boundary_conditions import BoundaryConstraint
 
 
 class ObjectiveFunction(IOAble, ABC):
@@ -97,10 +97,6 @@ class ObjectiveFunction(IOAble, ABC):
         self.Zb_transform = Zb_transform
         self.p_transform = p_transform
         self.i_transform = i_transform
-        if BC_constraint is None:
-            BC_constraint = BoundaryConstraint(
-                R_transform.basis, Z_transform.basis, L_transform.basis,
-            )
         self.BC_constraint = BC_constraint
 
         self._grad = Derivative(self.compute_scalar, mode="grad")
@@ -210,11 +206,14 @@ class ForceErrorNodes(ObjectiveFunction):
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
 
-        # input x is really "y", need to convert to full x
-        x = self.BC_constraint.recover(x)
+        if self.BC_constraint is not None:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -277,11 +276,14 @@ class ForceErrorNodes(ObjectiveFunction):
     def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         """Prints the rms errors."""
 
-        # input x is really "y", need to convert to full x
-        x = self.BC_constraint.recover(x)
+        if self.BC_constraint is not None:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (

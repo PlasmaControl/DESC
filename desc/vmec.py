@@ -104,8 +104,8 @@ class VMECIO:
         eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
-        eq.x = BC.make_feasible(eq.x)
+        #   BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
+        #   eq.x = BC.make_feasible(eq.x)
 
         return eq
 
@@ -172,7 +172,7 @@ class VMECIO:
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"
         lfreeb[:] = 0
 
-        lasym = file.createVariable("lasym", np.int32, ("dim_00001",))
+        lasym = file.createVariable("lasym__logical__", np.int32, ("dim_00001",))
         lasym.long_name = "asymmetry logical (0 = stellarator symmetry)"
         lasym[:] = int(not eq.sym)
 
@@ -301,63 +301,31 @@ class VMECIO:
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
         chipf[:] = phipf[:] * iotaf[:]
 
-        # spectral data
+        # indepentent variables (exact conversion)
 
-        MM = 2 * math.ceil(1.5 * M) + 1
-        NN = 2 * math.ceil(1.5 * N) + 1
-        grid = LinearGrid(M=MM, N=NN, NFP=NFP)
-
-        sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(False))
-        cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(True))
-        full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(None))
-
-        sin_transform = Transform(grid=grid, basis=sin_basis)
-        cos_transform = Transform(grid=grid, basis=cos_basis)
-        full_transform = Transform(grid=grid, basis=full_basis)
-
+        # R
         rmnc = file.createVariable("rmnc", np.float64, ("radius", "mn_mode"))
-        rmnc.long_name = "cos(m*t-n*p) component of cylindrical R on full mesh"
+        rmnc.long_name = "cos(m*t-n*p) component of cylindrical R, on full mesh"
         rmnc.units = "m"
-        m = cos_basis.modes[:, 1]
-        n = cos_basis.modes[:, 2]
         if not eq.sym:
             rmns = file.createVariable("rmns", np.float64, ("radius", "mn_mode"))
-            rmns.long_name = "sin(m*t-n*p) component of cylindrical R on full mesh"
+            rmns.long_name = "sin(m*t-n*p) component of cylindrical R, on full mesh"
             rmns.units = "m"
-            m = full_basis.modes[:, 1]
-            n = full_basis.modes[:, 2]
-        x_mn = np.zeros((surfs, m.size))
-        for i in range(surfs):
-            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_full[i])
-            data = eq.compute_toroidal_coords(grid)["R"]
-            if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data)
-            else:
-                x_mn[i, :] = full_transform.fit(data)
+        m, n, x_mn = cls._zernike_to_fourier(eq.R_lmn, basis=eq.R_basis, rho=r_full)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
         rmnc[:] = c
         if not eq.sym:
             rmns[:] = s
 
+        # Z
         zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
-        zmns.long_name = "sin(m*t-n*p) component of cylindrical Z on full mesh"
+        zmns.long_name = "sin(m*t-n*p) component of cylindrical Z, on full mesh"
         zmns.units = "m"
-        m = sin_basis.modes[:, 1]
-        n = sin_basis.modes[:, 2]
         if not eq.sym:
             zmnc = file.createVariable("zmnc", np.float64, ("radius", "mn_mode"))
-            zmnc.long_name = "cos(m*t-n*p) component of cylindrical Z on full mesh"
+            zmnc.long_name = "cos(m*t-n*p) component of cylindrical Z, on full mesh"
             zmnc.units = "m"
-            m = full_basis.modes[:, 1]
-            n = full_basis.modes[:, 2]
-        x_mn = np.zeros((surfs, m.size))
-        for i in range(surfs):
-            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_full[i])
-            data = eq.compute_toroidal_coords(grid)["Z"]
-            if eq.sym:
-                x_mn[i, :] = sin_transform.fit(data)
-            else:
-                x_mn[i, :] = full_transform.fit(data)
+        m, n, x_mn = cls._zernike_to_fourier(eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
         zmns[:] = s
         if not eq.sym:
@@ -365,20 +333,86 @@ class VMECIO:
 
         # lambda
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
-        lmns.long_name = "sin(m*t-n*p) component of lambda on full mesh"
+        lmns.long_name = "sin(m*t-n*p) component of lambda, on half mesh"
         lmns.units = "rad"
         if not eq.sym:
             lmnc = file.createVariable("lmnc", np.float64, ("radius", "mn_mode"))
-            lmnc.long_name = "cos(m*t-n*p) component of lambda on full mesh"
+            lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
-        m, n, x_mn = cls._zernike_to_fourier(eq.l_lmn, basis=eq.l_basis)
+        m, n, x_mn = cls._zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
-        lmns[:] = s
+        lmns[1:, :] = s
         if not eq.sym:
-            lmnc[:] = c
+            lmnc[1:, :] = c
+
+        # derived quantities (approximate conversion)
+
+        MM = 2 * math.ceil(1.5 * M) + 1
+        NN = 2 * math.ceil(1.5 * N) + 1
+        grid = LinearGrid(M=MM, N=NN, NFP=NFP)
+
+        if eq.sym:
+            sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(False))
+            cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(True))
+            sin_transform = Transform(grid=grid, basis=sin_basis)
+            cos_transform = Transform(grid=grid, basis=cos_basis)
+        else:
+            full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(None))
+            full_transform = Transform(grid=grid, basis=full_basis)
+
+        # g
+        gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
+        gmnc.long_name = "cos(m*t-n*p) component of jacobian, on half mesh"
+        gmnc.units = "m"
+        m = cos_basis.modes[:, 1]
+        n = cos_basis.modes[:, 2]
+        if not eq.sym:
+            gmns = file.createVariable("gmns", np.float64, ("radius", "mn_mode_nyq"))
+            gmns.long_name = "sin(m*t-n*p) component of jacobian, on half mesh"
+            gmns.units = "m"
+            m = full_basis.modes[:, 1]
+            n = full_basis.modes[:, 2]
+        x_mn = np.zeros((surfs - 1, m.size))
+        for k in range(surfs - 1):
+            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_half[k])
+            data = eq.compute_jacobian(grid)["g"]
+            if eq.sym:
+                x_mn[k, :] = cos_transform.fit(data)
+            else:
+                x_mn[k, :] = full_transform.fit(data)
+        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        gmnc[1:, :] = c
+        if not eq.sym:
+            gmns[1:, :] = s
+
+        # |B|
+        bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
+        bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
+        bmnc.units = "m"
+        m = cos_basis.modes[:, 1]
+        n = cos_basis.modes[:, 2]
+        if not eq.sym:
+            bmns = file.createVariable("bmns", np.float64, ("radius", "mn_mode_nyq"))
+            bmns.long_name = "sin(m*t-n*p) component of |B|, on half mesh"
+            bmns.units = "m"
+            m = full_basis.modes[:, 1]
+            n = full_basis.modes[:, 2]
+        x_mn = np.zeros((surfs - 1, m.size))
+        for k in range(surfs - 1):
+            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_half[k])
+            data = eq.compute_magnetic_field(grid)["|B|"]
+            if eq.sym:
+                x_mn[k, :] = cos_transform.fit(data)
+            else:
+                x_mn[k, :] = full_transform.fit(data)
+        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        bmnc[1:, :] = c
+        if not eq.sym:
+            bmns[1:, :] = s
 
         file.close
 
+    @staticmethod
     def _ptolemy_identity_fwd(m_0, n_0, s, c):
         """Converts from double-angle form:
             s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
@@ -417,48 +451,45 @@ class VMECIO:
         N = int(np.max(np.abs(n_0)))
 
         mn_1 = np.array(
-            [
-                [m_0 - M, n_0 - N, 0]
-                for m_0 in range(2 * M + 1)
-                for n_0 in range(2 * N + 1)
-            ]
+            [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
         )
         m_1 = mn_1[:, 0]
         n_1 = mn_1[:, 1]
         x = np.zeros((s.shape[0], m_1.size))
 
-        for i in range(len(m_0)):
+        for k in range(len(m_0)):
             # sin(m*theta)*cos(n*phi)
             sin_mn_1 = np.where(
-                np.logical_and(m_1 == -np.abs(m_0[i]), n_1 == np.abs(n_0[i]))
+                np.logical_and.reduce((m_1 == -np.abs(m_0[k]), n_1 == np.abs(n_0[k])))
             )[0][0]
             # cos(m*theta)*sin(n*phi)
             sin_mn_2 = np.where(
-                np.logical_and(m_1 == np.abs(m_0[i]), n_1 == -np.abs(n_0[i]))
+                np.logical_and.reduce((m_1 == np.abs(m_0[k]), n_1 == -np.abs(n_0[k])))
             )[0][0]
             # cos(m*theta)*cos(n*phi)
             cos_mn_1 = np.where(
-                np.logical_and(m_1 == np.abs(m_0[i]), n_1 == np.abs(n_0[i]))
+                np.logical_and.reduce((m_1 == np.abs(m_0[k]), n_1 == np.abs(n_0[k])))
             )[0][0]
             # sin(m*theta)*sin(n*phi)
             cos_mn_2 = np.where(
-                np.logical_and(m_1 == -np.abs(m_0[i]), n_1 == -np.abs(n_0[i]))
+                np.logical_and.reduce((m_1 == -np.abs(m_0[k]), n_1 == -np.abs(n_0[k])))
             )[0][0]
 
-            if np.sign(m_0[i]) != 0:
-                x[:, sin_mn_1] += s[:, i]
-            x[:, cos_mn_1] += c[:, i]
-            if np.sign(n_0[i]) > 0:
-                x[:, sin_mn_2] -= s[:, i]
-                if np.sign(m_0[i]) != 0:
-                    x[:, cos_mn_2] += c[:, i]
-            elif np.sign(n_0[i]) < 0:
-                x[:, sin_mn_2] += s[:, i]
-                if np.sign(m_0[i]) != 0:
-                    x[:, cos_mn_2] -= c[:, i]
+            if np.sign(m_0[k]) != 0:
+                x[:, sin_mn_1] += s[:, k]
+            x[:, cos_mn_1] += c[:, k]
+            if np.sign(n_0[k]) > 0:
+                x[:, sin_mn_2] -= s[:, k]
+                if np.sign(m_0[k]) != 0:
+                    x[:, cos_mn_2] += c[:, k]
+            elif np.sign(n_0[k]) < 0:
+                x[:, sin_mn_2] += s[:, k]
+                if np.sign(m_0[k]) != 0:
+                    x[:, cos_mn_2] -= c[:, k]
 
         return m_1, n_1, x
 
+    @staticmethod
     def _ptolemy_identity_rev(m_1, n_1, x):
         """Converts from a double Fourier series of the form:
             ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
@@ -492,44 +523,45 @@ class VMECIO:
         """
         x = np.atleast_2d(x)
 
-        m_0 = np.abs(m_1).flatten()
-        n_0 = n_1.flatten()
-        sort_idx = np.lexsort((n_0, m_0))
-        m_0 = m_0[sort_idx]
-        n_0 = n_0[sort_idx]
-        if m_0[0] != 0 or n_0[0] != 0:
-            m_0 = np.insert(m_0, 0, 0)
-            n_0 = np.insert(n_0, 0, 0)
-        n_0 = np.where(m_0 == 0, np.abs(n_0), n_0)
+        M = int(np.max(np.abs(m_1)))
+        N = int(np.max(np.abs(n_1)))
+
+        mn_0 = np.array([[m, n - N] for m in range(M + 1) for n in range(2 * N + 1)])
+        m_0 = mn_0[N:, 0]
+        n_0 = mn_0[N:, 1]
 
         s = np.zeros((x.shape[0], m_0.size))
         c = np.zeros_like(s)
 
-        for i in range(len(m_1)):
+        for k in range(len(m_1)):
             # (|m|*theta + |n|*phi)
             idx_pos = np.where(
-                np.logical_and(m_0 == np.abs(m_1[i]), n_0 == -np.abs(n_1[i]))
+                np.logical_and.reduce((m_0 == np.abs(m_1[k]), n_0 == -np.abs(n_1[k])))
             )[0]
             # (|m|*theta - |n|*phi)
             idx_neg = np.where(
-                np.logical_and(m_0 == np.abs(m_1[i]), n_0 == np.abs(n_1[i]))
+                np.logical_and.reduce((m_0 == np.abs(m_1[k]), n_0 == np.abs(n_1[k])))
             )[0]
 
-            if sign(m_1[i]) * sign(n_1[i]) < 0:
+            # if m == 0 and n != 0, p = 0; otherwise p = 1
+            p = int(bool(m_1[k])) ** int(bool(n_1[k]))
+
+            if sign(m_1[k]) * sign(n_1[k]) < 0:
                 # sin_mn terms
                 if idx_pos.size:
-                    s[:, idx_pos[0]] += x[:, i] / 2
+                    s[:, idx_pos[0]] += x[:, k] / (2 ** p)
                 if idx_neg.size:
-                    s[:, idx_neg[0]] += x[:, i] / 2 * sign(n_1[i])
+                    s[:, idx_neg[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
             else:
                 # cos_mn terms
                 if idx_pos.size:
-                    c[:, idx_pos[0]] += x[:, i] / 2 * sign(n_1[i])
+                    c[:, idx_pos[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
                 if idx_neg.size:
-                    c[:, idx_neg[0]] += x[:, i] / 2
+                    c[:, idx_neg[0]] += x[:, k] / (2 ** p)
 
         return m_0, n_0, s, c
 
+    @staticmethod
     def _fourier_to_zernike(m, n, x_mn, basis: FourierZernikeBasis):
         """Converts from a double Fourier series at each flux surface to a
         Fourier-Zernike basis.
@@ -557,18 +589,21 @@ class VMECIO:
         surfs = x_mn.shape[0]
         rho = np.sqrt(np.linspace(0, 1, surfs))
 
-        for i in range(len(m)):
+        for k in range(len(m)):
             idx = np.where(
-                np.logical_and(basis.modes[:, 1] == m[i], basis.modes[:, 2] == n[i])
+                np.logical_and.reduce(
+                    (basis.modes[:, 1] == m[k], basis.modes[:, 2] == n[k])
+                )
             )[0]
             if len(idx):
                 A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
-                c = np.linalg.lstsq(A, x_mn[:, i], rcond=None)[0]
+                c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
                 x_lmn = put(x_lmn, idx, c)
 
         return x_lmn
 
-    def _zernike_to_fourier(x_lmn, basis: FourierZernikeBasis, surfs):
+    @staticmethod
+    def _zernike_to_fourier(x_lmn, basis: FourierZernikeBasis, rho):
         """Converts from a Fourier-Zernike basis to a double Fourier series at each
         flux surface.
 
@@ -578,8 +613,8 @@ class VMECIO:
             Fourier-Zernike spectral coefficients.
         basis : FourierZernikeBasis
             Basis set for x_lmn.
-        surfs : int
-            Number of flux surfaces.
+        rho : ndarray
+            Radial coordinates of flux surfaces, rho = sqrt(psi).
 
         Returns
         -------
@@ -593,25 +628,24 @@ class VMECIO:
             axis to the boundary.
 
         """
-        m = np.abs(basis.modes[:, 1]).flatten()
-        n = basis.modes[:, 2].flatten()
-        sort_idx = np.lexsort((n, m))
-        m = m[sort_idx]
-        n = n[sort_idx]
-        if m[0] != 0 or n[0] != 0:
-            m = np.insert(m, 0, 0)
-            n = np.insert(n, 0, 0)
-        n = np.where(m == 0, np.abs(n), n)
+        M = basis.M
+        N = basis.N
 
-        x_mn = np.zeros((surfs, m.size))
-        rho = np.sqrt(np.linspace(0, 1, surfs))
+        mn = np.array(
+            [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
+        )
+        m = mn[:, 0]
+        n = mn[:, 1]
 
-        for i in range(basis.num_modes):
+        x_mn = np.zeros((rho.size, m.size))
+        for k in range(len(m)):
             idx = np.where(
-                np.logical_and(basis.modes[:, 1] == m[i], basis.modes[:, 2] == n[i])
+                np.logical_and.reduce(
+                    (basis.modes[:, 1] == m[k], basis.modes[:, 2] == n[k])
+                )
             )[0]
             if len(idx):
                 A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
-                x_mn[:, i] = np.matmul(A, x_lmn)
+                x_mn[:, k] = np.matmul(A, x_lmn[idx])
 
         return m, n, x_mn

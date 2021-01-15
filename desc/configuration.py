@@ -801,8 +801,8 @@ class Configuration(IOAble):
             derivative wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=1)
-        Z_transform = Transform(grid, self._Z_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=2)
+        Z_transform = Transform(grid, self._Z_basis, derivs=2)
         L_transform = Transform(grid, self._L_basis, derivs=1)
         p_transform = Transform(grid, self._p_basis, derivs=1)
         i_transform = Transform(grid, self._i_basis, derivs=1)
@@ -1009,13 +1009,13 @@ def format_boundary(
 
         for m, n, R1, Z1 in boundary:
             idx_R = np.where(
-                np.logical_and(
-                    Rb_basis.modes[:, 1] == int(m), Rb_basis.modes[:, 2] == int(n)
+                np.logical_and.reduce(
+                    (Rb_basis.modes[:, 1] == int(m), Rb_basis.modes[:, 2] == int(n))
                 )
             )[0]
             idx_Z = np.where(
-                np.logical_and(
-                    Zb_basis.modes[:, 1] == int(m), Zb_basis.modes[:, 2] == int(n)
+                np.logical_and.reduce(
+                    (Zb_basis.modes[:, 1] == int(m), Zb_basis.modes[:, 2] == int(n))
                 )
             )[0]
             Rb_mn = put(Rb_mn, idx_R, R1)
@@ -1052,7 +1052,7 @@ def initial_guess(
                     )
                 )
             )[0]
-            x0 = np.where(axis[:, 0] == n, axis[:, 1], None)
+            x0 = np.where(axis[:, 0] == n, axis[:, 1], b_mn[k])[0]
             x_lmn = put(x_lmn, idx, x0)
             x_lmn = put(x_lmn, idx2, b_mn[k] - x0)
         else:

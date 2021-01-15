@@ -1,40 +1,34 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.basis import jacobi_coeffs, Basis
+from desc.basis import jacobi_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
-from desc.grid import LinearGrid
-from desc.transform import Transform
-from desc.utils import softmax
 
 
 class BoundaryConstraint(LinearEqualityConstraint):
     """Linear equality constraint for boundary conditions and gauge freedom
 
     enforces:
-    r(0,theta,zeta) == 0
+    R(1,theta,zeta) = Rb(theta,zeta)
+    Z(1,theta,zeta) = Zb(theta,zeta)
     lambda(0,theta,zeta) == 0
-    R0 + r(1,theta,zeta)*cos(theta) == R1
-    Z0 + r(1,theta,zeta)*sin(theta) == Z1
     lambda(rho,0,0) == 0
 
     Parameters
     ----------
-    R0_basis : Basis
-        Fourier basis for R0
-    Z0_basis : Basis
-        Fourier basis for Z0
-    r_basis : Basis
-        Fourier-Zernike basis for r
-    l_basis : Basis
+    R_basis : Basis
+        Fourier-Zernike basis for R
+    Z_basis : Basis
+        Fourier-Zernike basis for Z
+    L_basis : Basis
         Fourier-Zernike basis for lambda
-    R1_basis : Basis
+    Rb_basis : Basis
         Double Fourier basis for boundary R
-    Z1_basis : Basis
+    Zb_basis : Basis
         Double Fourier basis for boundary Z
-    R1_mn : ndarray
+    Rb_mn : ndarray
         Array of spectral coefficients for boundary R
-    Z1_mn : ndarray
+    Zb_mn : ndarray
         Array of spectral coefficients for boundary Z
     x0 : ndarray, optional
         particular solution for Ax=b. If not supplied it will
@@ -42,14 +36,18 @@ class BoundaryConstraint(LinearEqualityConstraint):
 
     """
 
-    def __init__(self, R0_basis, Z0_basis, r_basis, l_basis, x0=None):
+    def __init__(
+        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn, x0=None
+    ):
 
-        Aaxis, baxis = get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
-        Alcfs, blcfs = get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
-        Agauge, bgauge = get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis)
+        Alcfs, blcfs = get_lcfs_bc_matrices(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn
+        )
+        Aaxis, baxis = get_axis_bc_matrices(R_basis, Z_basis, L_basis)
+        Agauge, bgauge = get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
 
-        A = np.vstack([Aaxis, Alcfs, Agauge])
-        b = np.concatenate([baxis, blcfs, bgauge])
+        A = np.vstack([Alcfs, Aaxis, Agauge])
+        b = np.concatenate([blcfs, baxis, bgauge])
 
         self._Aaxis = Aaxis
         self._Alcfs = Alcfs
@@ -59,64 +57,40 @@ class BoundaryConstraint(LinearEqualityConstraint):
         self._blcfs = blcfs
         self._bgauge = bgauge
 
-        super().__init__(A, b)
+        super().__init__(A, b, x0)
+
+    def recover_from_bdry(self, y, Rb_mn=None, Zb_mn=None):
+
+        if Rb_mn is not None and Zb_mn is not None:
+            b = self._get_b(Rb_mn, Zb_mn)
+        else:
+            b = self.b
+
+        x0 = jnp.dot(self.Ainv, b)
+        x = x0 + jnp.dot(self.Z, y)
+        return x
+
+    def _get_b(self, Rb_mn, Zb_mn):
+
+        z1 = jnp.zeros(self._baxis.size)
+        z2 = jnp.zeros(self._bgauge.size)
+
+        b = jnp.concatenate([Rb_mn.flatten(), Zb_mn.flatten(), z1, z2])
+        return b
 
 
-class RadialConstraint:
-    """Penalty term to enforce nested flux surfaces
-
-    Penalizes the spacing between flux surfaces to ensure that r is a positive monotonic
-    function of rho.
-
-    Parameters
-    ----------
-    r_basis : Basis
-        spectral basis for r
-    L : integer, optional
-        how many flux surfaces to test (default 10)
-    a : float, optional
-        strength of softmin function. (default 10*L)
-    scalar : bool, optional
-        whether to compute a scalar or vector loss
-    """
-
-    def __init__(
-        self, r_basis: Basis, L: int = 25, a: float = None, scalar: bool = False
-    ):
-
-        self._r_basis = r_basis
-        self._L = L
-        self._M = 2 * r_basis.M + 1
-        self._N = 2 * r_basis.N + 1
-        self._a = a or self._L * 10
-        self._scalar = scalar
-        self._grid = LinearGrid(L=self._L, M=self._M, N=self._N)
-        self._transform = Transform(self._grid, self._r_basis)
-
-    def compute(self, r_lmn):
-        r = self._transform.transform(r_lmn)
-        dr = jnp.diff(
-            r.reshape((self._L, self._M, self._N), order="F"), axis=0
-        ).flatten()
-        if self._scalar:
-            dr = softmax(dr, -self._a)
-        return -jnp.log(dr) / self._a
-
-
-def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
+def get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
     """Compute constraint matrices for gauge freedom of lambda
 
     enforces lambda(rho,0,0) == 0
 
     Parameters
     ----------
-    R0_basis : Basis
-        Fourier basis for R0
-    Z0_basis : Basis
-        Fourier basis for Z0
-    r_basis : Basis
-        Fourier-Zernike basis for r
-    l_basis : Basis
+    R_basis : Basis
+        Fourier-Zernike basis for R
+    Z_basis : Basis
+        Fourier-Zernike basis for Z
+    L_basis : Basis
         Fourier-Zernike basis for lambda
 
     Returns
@@ -125,45 +99,49 @@ def get_gauge_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
         Constraint matrix and vector such that the constraint is satisfied
         if and only if Ax=b
     """
-    R0_modes = R0_basis.modes
-    Z0_modes = Z0_basis.modes
-    r_modes = r_basis.modes
-    l_modes = l_basis.modes
-    dim_R0 = len(R0_modes)
-    dim_Z0 = len(Z0_modes)
-    dim_r = len(r_modes)
-    dim_l = len(l_modes)
-    dimx = dim_R0 + dim_Z0 + dim_r + dim_l
 
-    mnpos = np.where(np.logical_and(l_modes[:, 1] >= 0, l_modes[:, 2] >= 0))[0]
-    l_lmn = l_modes[mnpos, :]
+    dim_R = R_basis.num_modes
+    dim_Z = Z_basis.num_modes
+    dim_L = L_basis.num_modes
+
+    dimx = dim_R + dim_Z + dim_L
+
+    L_modes = L_basis.modes
+    mnpos = np.where(np.logical_and(L_modes[:, 1] >= 0, L_modes[:, 2] >= 0))[0]
+    l_lmn = L_modes[mnpos, :]
     if len(l_lmn) > 0:
         c = jacobi_coeffs(l_lmn[:, 0], l_lmn[:, 1])
     else:
         c = np.zeros((0, 0))
 
     A = np.zeros((c.shape[1], dimx))
-    A[:, mnpos + dim_R0 + dim_Z0 + dim_r] = c.T
+    A[:, mnpos + dim_R + dim_Z] = c.T
     b = np.zeros((c.shape[1]))
 
     return A, b
 
 
-def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
+def get_lcfs_bc_matrices(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn):
     """Compute constraint matrices for the shape of the last closed flux surface.
 
     enforces r(1,theta,zeta) == 1
 
     Parameters
     ----------
-    R0_basis : Basis
-        Fourier basis for R0
-    Z0_basis : Basis
-        Fourier basis for Z0
-    r_basis : Basis
-        Fourier-Zernike basis for r
-    l_basis : Basis
+    R_basis : Basis
+        Fourier-Zernike basis for R
+    Z_basis : Basis
+        Fourier-Zernike basis for Z
+    L_basis : Basis
         Fourier-Zernike basis for lambda
+    Rb_basis : Basis
+        Double Fourier basis for boundary R
+    Zb_basis : Basis
+        Double Fourier basis for boundary Z
+    Rb_mn : ndarray
+        Array of spectral coefficients for boundary R
+    Zb_mn : ndarray
+        Array of spectral coefficients for boundary Z
 
     Returns
     -------
@@ -172,48 +150,50 @@ def get_lcfs_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
         if and only if Ax=b
     """
 
-    R0_modes = R0_basis.modes
-    Z0_modes = Z0_basis.modes
-    r_modes = r_basis.modes
-    l_modes = l_basis.modes
+    R_modes = R_basis.modes
+    Z_modes = Z_basis.modes
+    Rb_modes = Rb_basis.modes
+    Zb_modes = Zb_basis.modes
 
-    dim_R0 = len(R0_modes)
-    dim_Z0 = len(Z0_modes)
-    dim_r = len(r_modes)
-    dim_l = len(l_modes)
-    dimx = dim_R0 + dim_Z0 + dim_r + dim_l
+    dim_R = R_basis.num_modes
+    dim_Z = Z_basis.num_modes
+    dim_L = L_basis.num_modes
+    dim_Rb = Rb_basis.num_modes
+    dim_Zb = Zb_basis.num_modes
 
-    MN = np.unique(r_modes[:, 1:], axis=0)
-    numMN = len(MN)
+    dimx = dim_R + dim_Z + dim_L
 
-    A = np.zeros((numMN, dimx))
-    b = np.zeros((numMN))
+    AR = np.zeros((dim_Rb, dimx))
+    AZ = np.zeros((dim_Zb, dimx))
+    bR = Rb_mn
+    bZ = Zb_mn
 
-    for i, (m, n) in enumerate(MN):
-        j = np.argwhere(np.logical_and(r_modes[:, 1] == m, r_modes[:, 2] == n))
-        A[i, dim_R0 + dim_Z0 + j] = 1
-        if m == 0 and n == 0:
-            b[i] = 1
-        else:
-            b[i] = 0
+    for i, (l, m, n) in enumerate(Rb_modes):
+        j = np.argwhere(np.logical_and(R_modes[:, 1] == m, R_modes[:, 2] == n))
+        AR[i, j] = 1
+
+    for i, (l, m, n) in enumerate(Zb_modes):
+        j = np.argwhere(np.logical_and(Z_modes[:, 1] == m, Z_modes[:, 2] == n))
+        AZ[i, dim_R + j] = 1
+
+    A = np.vstack([AR, AZ])
+    b = np.concatenate([bR, bZ])
 
     return A, b
 
 
-def get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
+def get_axis_bc_matrices(R_basis, Z_basis, L_basis):
     """Compute constraint matrices for the magnetic axis
 
-    enforces r(0,theta,zeta) == 0 and lambda(0,theta,zeta) == 0
+    lambda(0,theta,zeta) == 0
 
     Parameters
     ----------
-    R0_basis : Basis
-        Fourier basis for R0
-    Z0_basis : Basis
-        Fourier basis for Z0
-    r_basis : Basis
-        Fourier-Zernike basis for r
-    l_basis : Basis
+    R_basis : Basis
+        Fourier-Zernike basis for R
+    Z_basis : Basis
+        Fourier-Zernike basis for Z
+    L_basis : Basis
         Fourier-Zernike basis for lambda
 
     Returns
@@ -223,39 +203,27 @@ def get_axis_bc_matrices(R0_basis, Z0_basis, r_basis, l_basis):
         if and only if Ax=b
     """
 
-    dim_R0 = len(R0_basis.modes)
-    dim_Z0 = len(Z0_basis.modes)
-    dim_r = len(r_basis.modes)
-    dim_l = len(l_basis.modes)
-    dimx = dim_R0 + dim_Z0 + dim_r + dim_l
+    dim_R = R_basis.num_modes
+    dim_Z = Z_basis.num_modes
+    dim_L = L_basis.num_modes
 
-    N = max(r_basis.N, l_basis.N)
+    dimx = dim_R + dim_Z + dim_L
+
+    N = L_basis.N
     ns = np.arange(-N, N + 1)
-    A = np.zeros((len(ns) * 2, dimx))
-    b = np.zeros((len(ns) * 2))
-
-    # r(0,t,z) = 0
-    lmn = r_basis.modes
-    for i, (l, m, n) in enumerate(lmn):
-        if m != 0:
-            continue
-        if (l // 2) % 2 == 0:
-            j = np.argwhere(n == ns)
-            A[j, i + dim_R0 + dim_Z0] = 1
-        else:
-            j = np.argwhere(n == ns)
-            A[j, i + dim_R0 + dim_Z0] = -1
+    A = np.zeros((len(ns), dimx))
+    b = np.zeros((len(ns)))
 
     # l(0,t,z) = 0
-    lmn = l_basis.modes
+    lmn = L_basis.modes
     for i, (l, m, n) in enumerate(lmn):
         if m != 0:
             continue
         if (l // 2) % 2 == 0:
             j = np.argwhere(n == ns) + len(ns)
-            A[j, i + dim_R0 + dim_Z0 + dim_r] = 1
+            A[j, i + dim_R + dim_Z] = 1
         else:
             j = np.argwhere(n == ns) + len(ns)
-            A[j, i + dim_R0 + dim_Z0 + dim_r] = -1
+            A[j, i + dim_R + dim_Z] = -1
 
     return A, b

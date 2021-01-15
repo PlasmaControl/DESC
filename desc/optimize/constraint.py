@@ -32,7 +32,6 @@ class LinearEqualityConstraint:
 
         self._A = np.atleast_2d(A)
         self._b = np.atleast_1d(b)
-        self.remove_duplicates()
 
         self._Z = scipy.linalg.null_space(self._A)
         self._Ainv = np.linalg.pinv(self._A)

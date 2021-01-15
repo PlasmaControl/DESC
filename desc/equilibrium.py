@@ -3,6 +3,7 @@ from collections import MutableSequence
 from desc.utils import Timer, expand_state
 from desc.configuration import Configuration
 from desc.io import IOAble
+from desc.boundary_conditions import BoundaryConstraint
 from desc.objective_funs import ObjectiveFunction, ObjectiveFunctionFactory
 from desc.optimize import Optimizer
 from desc.grid import ConcentricGrid, Grid
@@ -206,6 +207,15 @@ class Equilibrium(Configuration, IOAble):
                 Zb_transform=self._transforms["Zb"],
                 p_transform=self._transforms["p"],
                 i_transform=self._transforms["i"],
+                BC_constraint=BoundaryConstraint(
+                    self.R_basis,
+                    self.Z_basis,
+                    self.L_basis,
+                    self.Rb_basis,
+                    self.Zb_basis,
+                    self.Rb_mn,
+                    self.Zb_mn,
+                ),
             )
         else:
             raise ValueError(
@@ -291,7 +301,7 @@ class Equilibrium(Configuration, IOAble):
         if verbose > 0:
             print("Starting optimization")
 
-        x_init = self._optimizer.objective.bc_constraint.project(self.x)
+        x_init = self._optimizer.objective.BC_constraint.project(self.x)
         self.timer.start("Solution time")
 
         result = self._optimizer.optimize(
@@ -310,7 +320,8 @@ class Equilibrium(Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")
@@ -319,7 +330,7 @@ class Equilibrium(Configuration, IOAble):
             self._objective.callback(result["x"], *args)
 
         self.optimizer_results = result
-        self.x = self._optimizer.objective.bc_constraint.recover(result["x"])
+        self.x = self._optimizer.objective.BC_constraint.recover(result["x"])
         self.solved = result["success"]
         return result
 

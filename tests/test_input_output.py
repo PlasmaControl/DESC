@@ -49,7 +49,7 @@ class TestInputReader(unittest.TestCase):
         )
         self.assertFalse(ir.args.version, "version is not default False")
         self.assertEqual(
-            len(ir.inputs),
+            len(ir.inputs[0]),
             26,
             "number of inputs does not match " "number expected in MIN_INPUT",
         )
@@ -67,28 +67,28 @@ class TestInputReader(unittest.TestCase):
     def test_quiet_verbose(self):
         ir = InputReader(self.argv2)
         self.assertEqual(
-            ir.inputs["verbose"],
+            ir.inputs[0]["verbose"],
             1,
             "value of inputs['verbose'] " "incorrect on no arguments",
         )
         argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
         self.assertEqual(
-            ir.inputs["verbose"],
+            ir.inputs[0]["verbose"],
             2,
             "value of inputs['verbose'] " "incorrect on verbose argument",
         )
         argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
         self.assertEqual(
-            ir.inputs["verbose"],
+            ir.inputs[0]["verbose"],
             3,
             "value of inputs['verbose'] " "incorrect on double verbose argument",
         )
         argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
         self.assertEqual(
-            ir.inputs["verbose"],
+            ir.inputs[0]["verbose"],
             0,
             "value of inputs['verbose'] " "incorrect on quiet argument",
         )

@@ -142,28 +142,29 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(n, n_correct, atol=1e-8)
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
-    def test_load_then_save(self, SOLOVEV):
-        """Tests if loading and then saving gives the original result."""
 
-        input_path = "examples//VMEC//wout_SOLOVEV.nc"
-        output_path = SOLOVEV["output_path"] + "_vmec.nc"
+def test_load_then_save(TmpDir):
+    """Tests if loading and then saving gives the original result."""
 
-        eq = VMECIO.load(input_path)
-        VMECIO.save(eq, output_path)
+    input_path = "examples//VMEC//wout_SOLOVEV.nc"
+    output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-        file1 = Dataset(input_path, mode="r")
-        file2 = Dataset(output_path, mode="r")
+    eq = VMECIO.load(input_path)
+    VMECIO.save(eq, output_path)
 
-        rmnc1 = file1.variables["rmnc"][:]
-        rmnc2 = file2.variables["rmnc"][:]
-        zmns1 = file1.variables["zmns"][:]
-        zmns2 = file2.variables["zmns"][:]
-        lmns1 = file1.variables["lmns"][:]
-        lmns2 = file2.variables["lmns"][:]
+    file1 = Dataset(input_path, mode="r")
+    file2 = Dataset(output_path, mode="r")
 
-        np.testing.assert_allclose(rmnc2, rmnc1, atol=1e-1)
-        np.testing.assert_allclose(zmns2, zmns1, atol=1e-1)
-        np.testing.assert_allclose(lmns2, lmns1, atol=1e-1)
+    rmnc1 = file1.variables["rmnc"][:]
+    rmnc2 = file2.variables["rmnc"][:]
+    zmns1 = file1.variables["zmns"][:]
+    zmns2 = file2.variables["zmns"][:]
+    lmns1 = file1.variables["lmns"][:]
+    lmns2 = file2.variables["lmns"][:]
 
-        file1.close
-        file2.close
+    np.testing.assert_allclose(rmnc2, rmnc1, atol=1e-1)
+    np.testing.assert_allclose(zmns2, zmns1, atol=1e-1)
+    np.testing.assert_allclose(lmns2, lmns1, atol=1e-1)
+
+    file1.close
+    file2.close

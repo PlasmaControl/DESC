@@ -34,8 +34,13 @@ class Configuration(IOAble):
     """
 
     _io_attrs_ = [
+        "_sym",
         "_Psi",
         "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_x",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -50,6 +55,9 @@ class Configuration(IOAble):
         "_Zb_basis",
         "_p_basis",
         "_i_basis",
+        "_index",
+        "_bdry_mode",
+        "_zeta_ratio",
     ]
 
     _object_lib_ = {
@@ -168,16 +176,10 @@ class Configuration(IOAble):
             index=self._index,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
         self._p_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
         self._i_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
@@ -194,9 +196,7 @@ class Configuration(IOAble):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -340,9 +340,7 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
     @property

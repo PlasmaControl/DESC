@@ -220,10 +220,10 @@ def get_axis_bc_matrices(R_basis, Z_basis, L_basis):
         if m != 0:
             continue
         if (l // 2) % 2 == 0:
-            j = np.argwhere(n == ns) + len(ns)
+            j = np.argwhere(n == ns)
             A[j, i + dim_R + dim_Z] = 1
         else:
-            j = np.argwhere(n == ns) + len(ns)
+            j = np.argwhere(n == ns)
             A[j, i + dim_R + dim_Z] = -1
 
     return A, b

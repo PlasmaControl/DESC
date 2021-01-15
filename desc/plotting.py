@@ -249,7 +249,7 @@ class Plot:
         ]
         cax_kwargs = {"size": "5%", "pad": 0.05}
 
-        im = ax.imshow(data, cmap="jet", **imshow_kwargs)
+        im = ax.imshow(data.T, cmap="jet", **imshow_kwargs)
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
         cbar.formatter.set_powerlimits((0, 0))

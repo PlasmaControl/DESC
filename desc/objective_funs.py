@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.utils import unpack_state, dot
+from desc.utils import unpack_state
 from desc.transform import Transform
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.compute_funs import compute_force_error_magnitude
+from desc.compute_funs import compute_force_error_magnitude, dot
 from desc.boundary_conditions import BoundaryConstraint
 
 

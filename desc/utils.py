@@ -421,92 +421,9 @@ def sign(x):
         1 where x>=0, -1 where x<0
 
     """
-    x = jnp.atleast_1d(x)
-    y = jnp.where(x == 0, 1, jnp.sign(x))
+    x = np.atleast_1d(x)
+    y = np.where(x == 0, 1, np.sign(x))
     return y
-
-
-def dot(a, b, axis):
-    """Batched vector dot product
-
-    Parameters
-    ----------
-    a : array-like
-        first array of vectors
-    b : array-like
-        second array of vectors
-    axis : int
-        axis along which vectors are stored
-
-    Returns
-    -------
-    y : array-like
-        y = sum(a*b, axis=axis)
-
-    """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
-
-
-def cross(a, b, axis):
-    """Batched vector cross product
-
-    Parameters
-    ----------
-    a : array-like
-        first array of vectors
-    b : array-like
-        second array of vectors
-    axis : int
-        axis along which vectors are stored
-
-    Returns
-    -------
-    y : array-like
-        y = a x b
-
-    """
-    return jnp.cross(a, b, axis=axis)
-
-
-def rms(x):
-    """Compute rms value of an array
-
-    Parameters
-    ----------
-    x : array-like
-        input array
-
-    Returns
-    -------
-    y : float
-        rms value of x, eg sqrt(sum(x**2))
-
-    """
-    return jnp.sqrt(jnp.mean(x ** 2))
-
-
-def softmax(x, a=1):
-    """Softmax function (or softmin for a<0)
-
-    Smooth approximation to max/min of array
-
-    Parameters
-    ----------
-    x : array-like
-        input array
-    a : float
-        strength of approximation.
-        Softmax -> max as a-> infty
-        Softmin -> min as a -> -infty
-
-    Returns
-    -------
-    y : float
-        soft max/min of x
-    """
-    num = jnp.sum(x * jnp.exp(a * x))
-    den = jnp.sum(jnp.exp(a * x))
-    return num / den
 
 
 def copy_coeffs(c_old, modes_old, modes_new):

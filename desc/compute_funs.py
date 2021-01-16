@@ -1,7 +1,6 @@
 import numpy as np
 
 from desc.backend import jnp, put
-from desc.utils import dot, cross
 from desc.transform import Transform
 
 
@@ -40,6 +39,48 @@ zeta_ratio : float
     setting to 1 solves for a stellarator. (Default value = 1.0)
 
 """
+
+
+def dot(a, b, axis):
+    """Batched vector dot product
+
+    Parameters
+    ----------
+    a : array-like
+        first array of vectors
+    b : array-like
+        second array of vectors
+    axis : int
+        axis along which vectors are stored
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)
+
+
+def cross(a, b, axis):
+    """Batched vector cross product
+
+    Parameters
+    ----------
+    a : array-like
+        first array of vectors
+    b : array-like
+        second array of vectors
+    axis : int
+        axis along which vectors are stored
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
 
 
 def compute_profiles(

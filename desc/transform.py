@@ -557,12 +557,14 @@ class Transform(IOAble):
         """
         if self._grid != grid:
             self._grid = grid
-            self._built = False
-            self._built_pinv = False
             if self.method == "fft":
                 self._check_inputs_fft(self._grid, self._basis)
-            self.build()
-            self.build_pinv()
+            if self._built:
+                self._built = False
+                self.build()
+            if self._built_pinv:
+                self._built_pinv = False
+                self.build_pinv()
 
     @property
     def basis(self):
@@ -584,12 +586,14 @@ class Transform(IOAble):
         """
         if self._basis != basis:
             self._basis = basis
-            self._built = False
-            self._built_pinv = False
             if self.method == "fft":
                 self._check_inputs_fft(self._grid, self._basis)
-            self.build()
-            self.build_pinv()
+            if self._built:
+                self._built = False
+                self.build()
+            if self._built_pinv:
+                self._built_pinv = False
+                self.build_pinv()
 
     @property
     def derivs(self):

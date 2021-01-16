@@ -4,6 +4,10 @@ import desc
 import os
 from termcolor import colored
 
+# we divide by zero in a few places but then overwrite with the
+# correct values, so lets suppress annoying warnings about that
+np.seterr(divide="ignore", invalid="ignore")
+
 
 os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
@@ -99,10 +103,6 @@ else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial
     from scipy.linalg import cho_factor, cho_solve, qr
-
-    # we divide by zero in a few places but then overwrite with the
-    # correct asmptotic values, so lets suppress annoying warnings about that
-    np.seterr(divide="ignore", invalid="ignore")
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"

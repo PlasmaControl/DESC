@@ -354,11 +354,11 @@ class VMECIO:
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin")
             cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos")
-            sin_transform = Transform(grid=grid, basis=sin_basis)
-            cos_transform = Transform(grid=grid, basis=cos_basis)
+            sin_transform = Transform(grid=grid, basis=sin_basis, build_pinv=True)
+            cos_transform = Transform(grid=grid, basis=cos_basis, build_pinv=True)
         else:
             full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=None)
-            full_transform = Transform(grid=grid, basis=full_basis)
+            full_transform = Transform(grid=grid, basis=full_basis, build_pinv=True)
 
         # g
         gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))

@@ -182,46 +182,6 @@ class Timer:
         self._times[key] = val
 
 
-"""
-Tristate is used with Basis to determine type of stellarator symmetry:
-    True for cos(m*t-n*z) symmetry
-    False for sin(m*t-n*z) symmetry
-    None for no symmetry (Default)
-"""
-
-
-class Tristate(object):
-    """Tristate is used to represent logical values with 3 possible states:
-    True, False, or None
-
-    """
-
-    def __init__(self, value=None):
-        if any(value is v for v in (True, False, None)):
-            self.value = value
-        else:
-            raise ValueError("Tristate value must be True, False, or None")
-
-    def __eq__(self, other):
-        return (
-            self.value is other.value
-            if isinstance(other, Tristate)
-            else self.value is other
-        )
-
-    def __ne__(self, other):
-        return not self == other
-
-    def __bool__(self):
-        raise TypeError("Tristate object may not be used as a Boolean")
-
-    def __str__(self):
-        return str(self.value)
-
-    def __repr__(self):
-        return "Tristate(%s)" % self.value
-
-
 class _Indexable:
     """Helper object for building indexes for indexed update functions.
     This is a singleton object that overrides the ``__getitem__`` method

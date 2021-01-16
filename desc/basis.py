@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from desc.backend import jnp, use_jax, jit, fori_loop, factorial
-from desc.utils import Tristate, sign, flatten_list, equals
+from desc.utils import sign, flatten_list, equals
 from desc.io import IOAble
 
 
@@ -41,10 +41,10 @@ class Basis(IOAble, ABC):
         None
 
         """
-        if self._sym == True:  # cos(m*t-n*z) symmetry
+        if self._sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self._modes[:, 1]) != sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
-        elif self._sym == False:  # sin(m*t-n*z) symmetry
+        elif self._sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self._modes[:, 1]) == sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
@@ -100,9 +100,9 @@ class Basis(IOAble, ABC):
         return self._NFP
 
     @property
-    def sym(self) -> Tristate:
-        """Tristate:
-        True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+    def sym(self) -> str:
+        """str:
+        'cos' for cos(m*t-n*z) symmetry, 'sin for sin(m*t-n*z) symmetry,
         None for no symmetry (Default)"""
         return self._sym
 
@@ -224,7 +224,7 @@ class FourierSeries(Basis):
         self,
         N: int = 0,
         NFP: int = 1,
-        sym: Tristate = None,
+        sym: str = None,
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -237,8 +237,8 @@ class FourierSeries(Basis):
             maximum toroidal resolution
         NFP : int
             number of field periods
-        sym : Tristate
-            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        sym : str
+            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
             None for no symmetry (Default)
 
         Returns
@@ -330,7 +330,7 @@ class DoubleFourierSeries(Basis):
         M: int = 0,
         N: int = 0,
         NFP: int = 1,
-        sym: Tristate = None,
+        sym: str = None,
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -345,8 +345,8 @@ class DoubleFourierSeries(Basis):
             maximum toroidal resolution
         NFP : int
             number of field periods
-        sym : Tristate
-            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        sym : str
+            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
             None for no symmetry (Default)
 
         Returns
@@ -452,7 +452,7 @@ class FourierZernikeBasis(Basis):
         M: int = 0,
         N: int = 0,
         NFP: int = 1,
-        sym: Tristate = None,
+        sym: str = None,
         index: str = "ansi",
         load_from=None,
         file_format=None,
@@ -470,8 +470,8 @@ class FourierZernikeBasis(Basis):
             maximum toroidal resolution
         NFP : int
             number of field periods
-        sym : Tristate
-            True for cos(m*t-n*z) symmetry, False for sin(m*t-n*z) symmetry,
+        sym : str
+            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
             None for no symmetry (Default)
         index : str
             Indexing method, one of the following options:

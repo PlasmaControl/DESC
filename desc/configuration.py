@@ -4,7 +4,7 @@ from termcolor import colored
 
 from desc.backend import put
 from desc.io import IOAble
-from desc.utils import Tristate, unpack_state, copy_coeffs
+from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.basis import (
@@ -144,11 +144,11 @@ class Configuration(IOAble):
 
         # stellarator symmetry for bases
         if self._sym:
-            self._R_sym = Tristate(True)
-            self._Z_sym = Tristate(False)
+            self._R_sym = "cos"
+            self._Z_sym = "sin"
         else:
-            self._R_sym = Tristate(None)
-            self._Z_sym = Tristate(None)
+            self._R_sym = None
+            self._Z_sym = None
 
         # create bases
         self._R_basis = FourierZernikeBasis(
@@ -176,10 +176,16 @@ class Configuration(IOAble):
             index=self._index,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._Z_sym,
         )
         self._p_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
         self._i_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
@@ -196,7 +202,9 @@ class Configuration(IOAble):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -340,7 +348,9 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+            self._x,
+            self._R_basis.num_modes,
+            self._Z_basis.num_modes,
         )
 
     @property

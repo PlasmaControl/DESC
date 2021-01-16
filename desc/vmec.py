@@ -3,7 +3,7 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 
 from desc.backend import put
-from desc.utils import Tristate, sign
+from desc.utils import sign
 from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
@@ -352,12 +352,12 @@ class VMECIO:
         grid = LinearGrid(M=MM, N=NN, NFP=NFP)
 
         if eq.sym:
-            sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(False))
-            cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(True))
+            sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin")
+            cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos")
             sin_transform = Transform(grid=grid, basis=sin_basis)
             cos_transform = Transform(grid=grid, basis=cos_basis)
         else:
-            full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=Tristate(None))
+            full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=None)
             full_transform = Transform(grid=grid, basis=full_basis)
 
         # g

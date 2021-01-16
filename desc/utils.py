@@ -2,7 +2,6 @@ import numpy as np
 import functools
 import warnings
 from termcolor import colored
-from desc.backend import jnp
 
 
 # Helper Classes -------------------------------------------------------------
@@ -264,8 +263,8 @@ def equals(a, b) -> bool:
     return all(
         equals(a[key], b[key])
         if isinstance(a[key], dict)
-        else jnp.allclose(a[key], b[key])
-        if isinstance(a[key], jnp.ndarray)
+        else np.allclose(a[key], b[key])
+        if isinstance(a[key], np.ndarray)
         else (a[key] == b[key])
         for key in a
     )

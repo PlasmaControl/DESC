@@ -1,6 +1,5 @@
 import numpy as np
 from termcolor import colored
-
 from desc.utils import equals
 from desc.io import IOAble
 

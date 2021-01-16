@@ -1,6 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from desc.backend import jnp, use_jax, jit, fori_loop, factorial
+from scipy.special import factorial
 from desc.utils import sign, flatten_list, equals
 from desc.io import IOAble
 
@@ -48,7 +48,7 @@ class Basis(IOAble, ABC):
             non_sym_idx = np.where(sign(self._modes[:, 1]) == sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
-    def _sort_modes_(self) -> None:
+    def _sort_modes(self) -> None:
         """Sorts modes for use with FFT
 
         Returns
@@ -154,7 +154,7 @@ class PowerSeries(Basis):
             self._modes = self.get_modes(L=self._L)
 
             self._enforce_symmetry_()
-            self._sort_modes_()
+            self._sort_modes()
 
         else:
             self._init_from_file_(
@@ -176,7 +176,9 @@ class PowerSeries(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        return np.array([[l, 0, 0] for l in range(L + 1)])
+        l = np.arange(L + 1).reshape((-1, 1))
+        z = np.zeros((L + 1, 2))
+        return np.hstack([l, z])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -212,7 +214,7 @@ class PowerSeries(Basis):
         if L != self._L:
             self._L = L
             self._modes = self.get_modes(self._L)
-            self.sort_nodes()
+            self._sort_modes()
 
 
 class FourierSeries(Basis):
@@ -229,7 +231,7 @@ class FourierSeries(Basis):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a DoubleFourierSeries
+        """Initializes a FourierSeries
 
         Parameters
         ----------
@@ -258,7 +260,7 @@ class FourierSeries(Basis):
             self._modes = self.get_modes(N=self._N)
 
             self._enforce_symmetry_()
-            self._sort_modes_()
+            self._sort_modes()
 
         else:
             self._init_from_file_(
@@ -281,7 +283,9 @@ class FourierSeries(Basis):
 
         """
         dim_tor = 2 * N + 1
-        return np.array([[0, 0, n - N] for n in range(dim_tor)])
+        n = np.arange(dim_tor).reshape((-1, 1)) - N
+        z = np.zeros((dim_tor, 2))
+        return np.hstack([z, n])
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -317,7 +321,7 @@ class FourierSeries(Basis):
         if N != self._N:
             self._N = N
             self._modes = self.get_modes(self._N)
-            self.sort_nodes()
+            self._sort_modes()
 
 
 class DoubleFourierSeries(Basis):
@@ -366,7 +370,7 @@ class DoubleFourierSeries(Basis):
             self._modes = self.get_modes(M=self._M, N=self._N)
 
             self._enforce_symmetry_()
-            self._sort_modes_()
+            self._sort_modes()
 
         else:
             self._init_from_file_(
@@ -392,9 +396,14 @@ class DoubleFourierSeries(Basis):
         """
         dim_pol = 2 * M + 1
         dim_tor = 2 * N + 1
-        return np.array(
-            [[0, m - M, n - N] for m in range(dim_pol) for n in range(dim_tor)]
-        )
+        m = np.arange(dim_pol) - M
+        n = np.arange(dim_tor) - N
+        mm, nn = np.meshgrid(m, n)
+        mm = mm.reshape((-1, 1), order="F")
+        nn = nn.reshape((-1, 1), order="F")
+        z = np.zeros_like(mm)
+        y = np.hstack([z, mm, nn])
+        return y
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
         """Evaluates basis functions at specified nodes
@@ -437,7 +446,7 @@ class DoubleFourierSeries(Basis):
             self._M = M
             self._N = N
             self._modes = self.get_modes(self._M, self._N)
-            self.sort_nodes()
+            self._sort_modes()
 
 
 class FourierZernikeBasis(Basis):
@@ -521,7 +530,7 @@ class FourierZernikeBasis(Basis):
             )
 
             self._enforce_symmetry_()
-            self._sort_modes_()
+            self._sort_modes()
 
         else:
             self._init_from_file_(
@@ -660,10 +669,9 @@ class FourierZernikeBasis(Basis):
             self._modes = self.get_modes(
                 self._M, self._N, delta_lm=self._delta_lm, indexing=self._indexing
             )
-            self.sort_nodes()
+            self._sort_modes()
 
 
-@jit
 def polyder_vec(p, m):
     """Vectorized version of polyder for differentiating multiple polynomials of the same degree
 
@@ -681,21 +689,20 @@ def polyder_vec(p, m):
         polynomial coefficients for derivative in descending order
 
     """
-    m = jnp.asarray(m, dtype=int)  # order of derivative
-    p = jnp.atleast_2d(p)
+    m = np.asarray(m, dtype=int)  # order of derivative
+    p = np.atleast_2d(p)
     n = p.shape[1] - 1  # order of polynomials
 
-    D = jnp.arange(n, -1, -1)
+    D = np.arange(n, -1, -1)
     D = factorial(D) / factorial(D - m)
 
-    p = jnp.roll(D * p, m, axis=1)
-    idx = jnp.arange(p.shape[1])
-    p = jnp.where(idx < m, 0, p)
+    p = np.roll(D * p, m, axis=1)
+    idx = np.arange(p.shape[1])
+    p = np.where(idx < m, 0, p)
 
     return p
 
 
-@jit
 def polyval_vec(p, x):
     """Evaluate a polynomial at specific values,
     vectorized for evaluating multiple polynomials of the same degree.
@@ -721,17 +728,17 @@ def polyval_vec(p, x):
         rounding errors. Use carefully.
 
     """
-    p = jnp.atleast_2d(p)
-    x = jnp.atleast_1d(x).flatten()
+    p = np.atleast_2d(p)
+    x = np.atleast_1d(x).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates
-    y = jnp.zeros((npoly, nx))
+    y = np.zeros((npoly, nx))
 
-    def body_fun(k, y):
-        return y * x + jnp.atleast_2d(p[:, k]).T
+    for k in range(order):
+        y = y * x + np.atleast_2d(p[:, k]).T
 
-    return fori_loop(0, order, body_fun, y)
+    return y
 
 
 def power_coeffs(l):
@@ -775,7 +782,7 @@ def powers(rho, l, dr=0):
 
     """
     coeffs = power_coeffs(l)
-    coeffs = polyder_vec(jnp.fliplr(coeffs), dr)
+    coeffs = polyder_vec(np.fliplr(coeffs), dr)
     return polyval_vec(coeffs, rho).T
 
 
@@ -863,13 +870,13 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta_2d = jnp.atleast_2d(theta).T
-    m_2d = jnp.atleast_2d(m)
+    theta_2d = np.atleast_2d(theta).T
+    m_2d = np.atleast_2d(m)
     m_pos = (m_2d >= 0).astype(int)
     m_neg = (m_2d < 0).astype(int)
-    m_abs = jnp.abs(m_2d) * NFP
+    m_abs = np.abs(m_2d) * NFP
     if dt == 0:
-        return m_pos * jnp.cos(m_abs * theta_2d) + m_neg * jnp.sin(m_abs * theta_2d)
+        return m_pos * np.cos(m_abs * theta_2d) + m_neg * np.sin(m_abs * theta_2d)
     else:
         return m_abs * (m_neg - m_pos) * fourier(theta, -m, NFP=NFP, dt=dt - 1)
 

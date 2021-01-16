@@ -237,13 +237,13 @@ class Equilibrium(Configuration, IOAble):
             raise ValueError("Invalid optimizer {}".format(optimizer))
 
     @property
-    def initial(self) -> Configuration:
+    def initial(self):
         """
-        Initial Configuration from which the Equilibrium was solved
+        Initial Equilibrium from which the Equilibrium was solved
 
         Returns
         -------
-        Configuration
+        Equilibrium
 
         """
         p_modes = np.array(
@@ -270,7 +270,7 @@ class Equilibrium(Configuration, IOAble):
             "boundary": np.vstack((Rb_modes, Zb_modes)),
             "x": self._x0,
         }
-        return Configuration(inputs=inputs)
+        return Equilibrium(inputs=inputs)
 
     def optimize(self):
         raise NotImplementedError("optimizing equilibria has not yet been implemented")
@@ -494,9 +494,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def equilibria(self, equil):
         if not isinstance(equil, (list, tuple, np.ndarray)):
             equil = list(equil)
-        if not np.all([isinstance(eq, Configuration) for eq in equil]):
+        if not np.all([isinstance(eq, Equilibrium) for eq in equil]):
             raise ValueError(
-                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+                "Members of EquilibriaFamily should be of type Equilibrium or a subclass"
             )
         self._equilibria = list(equil)
 
@@ -505,11 +505,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):
-        # TODO: should they be forced to be Equilibrium?
-        # could possibly create equilibrium from configuration
-        if not isinstance(new_item, Configuration):
+        if not isinstance(new_item, Equilibrium):
             raise ValueError(
-                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+                "Members of EquilibriaFamily should be of type Equilibrium or a subclass"
             )
         self._equilibria[i] = new_item
 
@@ -520,9 +518,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return len(self._equilibria)
 
     def insert(self, i, new_item):
-        if not isinstance(new_item, Configuration):
+        if not isinstance(new_item, Equilibrium):
             raise ValueError(
-                "Members of EquilibriaFamily should be of type Configuration or a subclass"
+                "Members of EquilibriaFamily should be of type Equilibrium or a subclass"
             )
         self._equilibria.insert(i, new_item)
 

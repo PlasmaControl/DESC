@@ -40,6 +40,7 @@ class Transform(IOAble):
         derivs=0,
         rcond=1e-6,
         build=True,
+        build_pinv=False,
         method="fft",
         load_from=None,
         file_format=None,
@@ -65,6 +66,8 @@ class Transform(IOAble):
              relative cutoff for singular values in least squares fit
         build : bool
             whether to precompute the transforms now or do it later
+        build_pinv : bool
+            whether to precompute the pseudoinverse now or do it later
         method : str
             one of 'direct', or 'fft'. 'direct' uses full matrices and can handle arbitrary
             node patterns and spectral basis. 'fft' uses fast fourier transforms in the zeta direction,
@@ -83,6 +86,7 @@ class Transform(IOAble):
             self._derivs = derivs
             self._rcond = rcond
             self._built = False
+            self._built_pinv = False
             self._matrices = {
                 i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
             }
@@ -99,6 +103,8 @@ class Transform(IOAble):
                 self._check_inputs_fft(self._grid, self._basis)
             if build:
                 self.build()
+            if build_pinv:
+                self.build_pinv()
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
@@ -369,13 +375,18 @@ class Transform(IOAble):
                     self.pol_grid.nodes, d
                 )[:, n0]
 
+        self._built = True
+
+    def build_pinv(self):
         # build pinv for fitting
+        if self._built_pinv:
+            return
         A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
         if A.size:
-            self._pinv = jnp.linalg.pinv(A, rcond=self._rcond)
+            self._pinv = np.linalg.pinv(A, rcond=self._rcond)
         else:
-            self._pinv = jnp.zeros_like(A.T)
-        self._built = True
+            self._pinv = np.zeros_like(A.T)
+        self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical
@@ -398,7 +409,9 @@ class Transform(IOAble):
 
         """
         if not self._built:
-            raise AttributeError("Transform must be built before it can be used")
+            raise AttributeError(
+                "Transform must be built with Transform.build() before it can be used"
+            )
 
         if self.method == "direct":
             A = self._matrices[dr][dt][dz]
@@ -475,12 +488,18 @@ class Transform(IOAble):
             spectral coefficients in self.basis
 
         """
-        if not self._built:
-            raise AttributeError("Transform must be built before it can be used")
+        if not self._built_pinv:
+            raise AttributeError(
+                "inverse transform must be built with Transform.build_pinv() before it can be used"
+            )
         return jnp.matmul(self._pinv, x)
 
     def change_resolution(
-        self, grid: Grid = None, basis: Basis = None, build: bool = True
+        self,
+        grid: Grid = None,
+        basis: Basis = None,
+        build: bool = True,
+        build_pinv: bool = False,
     ) -> None:
         """Re-builds the matrices with a new grid and basise
 
@@ -506,13 +525,17 @@ class Transform(IOAble):
         if self._grid != grid:
             self._grid = grid
             self._built = False
+            self._built_pinv = False
         if self._basis != basis:
             self._basis = basis
             self._built = False
+            self._built_pinv = False
         if self.method == "fft":
             self._check_inputs_fft(self._grid, self._basis)
         if build:
             self.build()
+        if build_pinv:
+            self.build_pinv()
 
     @property
     def grid(self):
@@ -535,9 +558,11 @@ class Transform(IOAble):
         if self._grid != grid:
             self._grid = grid
             self._built = False
+            self._built_pinv = False
             if self.method == "fft":
                 self._check_inputs_fft(self._grid, self._basis)
             self.build()
+            self.build_pinv()
 
     @property
     def basis(self):
@@ -560,9 +585,11 @@ class Transform(IOAble):
         if self._basis != basis:
             self._basis = basis
             self._built = False
+            self._built_pinv = False
             if self.method == "fft":
                 self._check_inputs_fft(self._grid, self._basis)
             self.build()
+            self.build_pinv()
 
     @property
     def derivs(self):
@@ -621,3 +648,11 @@ class Transform(IOAble):
     @property
     def num_modes(self):
         return self._basis.num_modes
+
+    @property
+    def built(self):
+        return self._built
+
+    @property
+    def built_pinv(self):
+        return self._built_pinv

@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 
-from desc.backend import use_jax, put
+from desc.backend import use_jax, put, jnp
 
 if use_jax:
     import jax
@@ -71,7 +71,9 @@ class _Derivative(ABC):
 class AutoDiffDerivative(_Derivative):
     """Computes derivatives using automatic differentiation with JAX"""
 
-    def __init__(self, fun: callable, argnum: int = 0, mode: str = "fwd") -> None:
+    def __init__(
+        self, fun: callable, argnum: int = 0, mode: str = "fwd", **kwargs
+    ) -> None:
         """Initializes an AutoDiffDerivative
 
         Parameters
@@ -83,12 +85,13 @@ class AutoDiffDerivative(_Derivative):
         mode : str, optional
             Automatic differentiation mode.
             One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-            'grad' (gradient of a scalar function), or 'hess' (hessian of a scalar function)
+            'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
+            or 'jvp' (jacobian vector product)
             Default = 'fwd'
 
         Raises
         ------
-        ValueError
+        ValueError, if mode is not supported
 
         Returns
         -------
@@ -97,7 +100,85 @@ class AutoDiffDerivative(_Derivative):
         """
         self._fun = fun
         self._argnum = argnum
-        self.mode = mode
+
+        if ("block_size" in kwargs or "num_blocks" in kwargs) and mode in [
+            "fwd",
+            "rev",
+            "hess",
+        ]:
+            self._init_blocks(mode, kwargs)
+        else:
+            self.mode = mode
+
+    def _init_blocks(self, mode, kwargs):
+
+        if mode in ["fwd", "rev"]:
+            self._block_fun = self._fun
+            self._mode = "blocked-rev"
+        elif mode in ["hess"]:
+            self._block_fun = jax.grad(self._fun, self._argnum)
+            self._mode = "blocked-hess"
+
+        try:
+            self.shape = kwargs["shape"]
+        except KeyError as e:
+            raise ValueError(
+                "Block derivative requires the shape of the derivative matrix to be specified with the 'shape' keyword argument"
+            ) from e
+
+        N, M = self.shape
+        block_size = kwargs.get("block_size", None)
+        num_blocks = kwargs.get("num_blocks", None)
+        # TODO: some sort of "auto" sizing option by checking available memory
+        if block_size is not None and num_blocks is not None:
+            raise ValueError(
+                colored("can specify either block_size or num_blocks, not both", "red")
+            )
+
+        elif block_size is None and num_blocks is None:
+            self._block_size = N
+            self._num_blocks = 1
+        elif block_size is not None:
+            self._block_size = block_size
+            self._num_blocks = np.ceil(N / block_size).astype(int)
+        else:
+            self._num_blocks = num_blocks
+            self._block_size = np.ceil(N / num_blocks).astype(int)
+
+        devices = kwargs.get("devices", None)
+        if type(devices) in [list, tuple]:
+            self._devices = devices
+        else:
+            self._devices = [devices]
+
+        self._use_jit = kwargs.get("use_jit", True)
+        self._f_blocks = []
+        self._jac_blocks = []
+
+        for i in range(self._num_blocks):
+            # need the i=i in the lambda signature, otherwise i is scoped to
+            # the loop and get overwritten, making each function compute the same subset
+            self._f_blocks.append(
+                lambda *args, i=i: self._block_fun(*args)[
+                    i * self._block_size : (i + 1) * self._block_size
+                ]
+            )
+            # need to use jacrev here to actually get memory savings
+            # (plus, these blocks should be wide and short)
+            if self._use_jit:
+                self._jac_blocks.append(
+                    jax.jit(
+                        jax.jacrev(self._f_blocks[i], self._argnum),
+                        device=self._devices[i % len(self._devices)],
+                    )
+                )
+            else:
+                self._jac_blocks.append(jax.jacrev(self._f_blocks[i], self._argnum))
+
+        self._compute = self._compute_blocks
+
+    def _compute_blocks(self, *args):
+        return jnp.vstack([jac(*args) for jac in self._jac_blocks])
 
     def compute(self, *args):
         """Computes the derivative matrix

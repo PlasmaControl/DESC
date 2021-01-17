@@ -7,7 +7,7 @@ from desc.utils import sign
 from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
-from desc.configuration import Configuration
+from desc.equilibrium import Equilibrium
 from desc.boundary_conditions import BoundaryConstraint
 
 
@@ -17,7 +17,7 @@ class VMECIO:
     @classmethod
     def load(
         cls, path: str, L: int = -1, M: int = -1, N: int = -1, index: str = "ansi"
-    ) -> Configuration:
+    ) -> Equilibrium:
         """Loads a VMEC netCDF file as a Configuration.
 
         Parameters
@@ -35,8 +35,8 @@ class VMECIO:
 
         Returns
         -------
-        eq: Configuration
-            Configuration that resembles the VMEC data.
+        eq: Equilibrium
+            Equilibrium that resembles the VMEC data.
 
         """
         file = Dataset(path, mode="r")
@@ -88,8 +88,8 @@ class VMECIO:
         m, n, Zb_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
         inputs["boundary"] = np.vstack((m, n, Rb_mn, Zb_mn)).T
 
-        # initialize Configuration
-        eq = Configuration(inputs=inputs)
+        # initialize Equilibrium
+        eq = Equilibrium(inputs=inputs)
 
         # R
         m, n, R_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -104,19 +104,19 @@ class VMECIO:
         eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        #   BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
-        #   eq.x = BC.make_feasible(eq.x)
+        BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
+        eq.x = BC.make_feasible(eq.x)
 
         return eq
 
     @classmethod
-    def save(cls, eq: Configuration, path: str, surfs: int = 128) -> None:
-        """Saves a Configuration as a netCDF file in the VMEC format.
+    def save(cls, eq: Equilibrium, path: str, surfs: int = 128) -> None:
+        """Saves an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
         ----------
-        eq : Configuration
-            Configuration to save.
+        eq : Equilibrium
+            Equilibrium to save.
         path : str
             File path of output data.
         surfs: int (Default = 128)

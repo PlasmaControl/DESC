@@ -1709,14 +1709,16 @@ def compute_energy(
     mu0 = 4 * jnp.pi * 1e-7
 
     pressure = profiles["p"]
+    N = R_transform.grid._N
     rho = p_transform.grid.nodes[:, 0]
     theta = p_transform.grid.nodes[:, 1]
     zeta = p_transform.grid.nodes[:, 2]
-    N_radial_roots = len(np.unique(rho))
-    if R_transform.grid._N == 0:
-        ang_factor = 1
-    else:
-        ang_factor = 2
+    N_radial_roots = len(jnp.unique(rho))
+    N_theta = len(jnp.unique(theta)) # should be 2 * N_radial_roots
+    N_zeta = len(jnp.unique(zeta)) # should be 2 * N + 1
+    theta_weight = 2*jnp.pi / (N_theta) 
+    zeta_weight = 2*jnp.pi / (N_zeta)
+    
     roots, weights = special.js_roots(N_radial_roots, 2, 2)
         
 
@@ -1724,20 +1726,19 @@ def compute_energy(
     W_p = 0
 
     g_abs = jnp.abs(jacobian["g"])
-    dim_angle = (2 * N_radial_roots) ** ang_factor  # dim_poloidal * dim_toroidal
+    dim_angle = N_theta * N_zeta  # dim_poloidal * dim_toroidal
     i = 0
     for j in range(len(rho)):
         W_p += (
             pressure[j]
             * weights[i]
-            * (jnp.pi / N_radial_roots) ** ang_factor
+            * theta_weight
+            * zeta_weight
             * g_abs[j]
             / rho[j]
         )
         if j % (dim_angle) == 0 and j != 0:
             i += 1  # use the weight for the next radial quadrature node
-    if R_transform.grid._N == 0:
-        W_p = 2 * jnp.pi * W_p
     energy["W_p"] = -W_p
 
     W_B = 0
@@ -1747,15 +1748,14 @@ def compute_energy(
         W_B += (
             mag_B_sq[j]
             * weights[i]
-            * (jnp.pi / N_radial_roots) ** ang_factor
+            * theta_weight
+            * zeta_weight
             * g_abs[j]
             / rho[j]
         )
         if j % (dim_angle) == 0 and j != 0:
             i += 1  # use the weight for the next radial quadrature node
     W_B = W_B / 2 / mu0
-    if R_transform.grid._N == 0:
-        W_B = W_B * 2 * jnp.pi
     energy["W_B"] = W_B
     W = W_B - W_p
     energy["W"] = W

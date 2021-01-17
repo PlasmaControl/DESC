@@ -620,10 +620,8 @@ def get_nodes_quad(M, N, NFP, weights=False):
 
     nr = M+1
     nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
-    if N == 0:
-        nz = 1
-    else:
-        nz = 2 * nr
+    nz = 2 * N + 1
+    
     r, ws = special.js_roots(
         nr, 2, 2
     )  # quadrature roots for the Shifted Jacobi Polynomials

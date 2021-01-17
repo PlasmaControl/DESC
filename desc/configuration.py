@@ -1,8 +1,8 @@
 import numpy as np
 import copy
+import warnings
 from termcolor import colored
 
-from desc.backend import put
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -187,8 +187,32 @@ class Configuration(IOAble):
             NFP=self._NFP,
             sym=self._Z_sym,
         )
-        self._p_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
-        self._i_basis = PowerSeries(L=int(np.max(profiles[:, 0])))
+        if self._M < np.max(abs(boundary[:, 0])) or self._N < np.max(
+            abs(boundary[:, 1])
+        ):
+            warnings.warn(
+                colored(
+                    "Configuration resolution does not fully resolve boundary inputs, Configuration M,N={},{},  boundary resolution M,N={},{}".format(
+                        self._M,
+                        self._N,
+                        np.max(abs(boundary[:, 0])),
+                        np.max(abs(boundary[:, 1])),
+                    ),
+                    "yellow",
+                )
+            )
+
+        self._p_basis = PowerSeries(L=self._L)
+        self._i_basis = PowerSeries(L=self._L)
+        if self._L < np.max(profiles[:, 0]):
+            warnings.warn(
+                colored(
+                    "Configuration radial resolution does not fully resolve profile inputs, radial resolution L={}, profile resolution L={}".format(
+                        self._L, np.max(profiles[:, 0])
+                    ),
+                    "yellow",
+                )
+            )
 
         # format profiles
         self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
@@ -431,11 +455,6 @@ class Configuration(IOAble):
         """
         return self._R_basis
 
-    @R_basis.setter
-    def R_basis(self, R_basis: FourierZernikeBasis) -> None:
-        self._R_basis = R_basis
-        self._make_labels()
-
     @property
     def Z_basis(self) -> FourierZernikeBasis:
         """
@@ -447,11 +466,6 @@ class Configuration(IOAble):
 
         """
         return self._Z_basis
-
-    @Z_basis.setter
-    def Z_basis(self, Z_basis: FourierZernikeBasis) -> None:
-        self._Z_basis = Z_basis
-        self._make_labels()
 
     @property
     def L_basis(self) -> FourierZernikeBasis:
@@ -465,11 +479,6 @@ class Configuration(IOAble):
         """
         return self._L_basis
 
-    @L_basis.setter
-    def L_basis(self, L_basis: FourierZernikeBasis) -> None:
-        self._L_basis = L_basis
-        self._make_labels()
-
     @property
     def Rb_basis(self) -> DoubleFourierSeries:
         """
@@ -481,10 +490,6 @@ class Configuration(IOAble):
 
         """
         return self._Rb_basis
-
-    @Rb_basis.setter
-    def Rb_basis(self, Rb_basis: DoubleFourierSeries) -> None:
-        self._Rb_basis = Rb_basis
 
     @property
     def Zb_basis(self) -> DoubleFourierSeries:
@@ -498,10 +503,6 @@ class Configuration(IOAble):
         """
         return self._Zb_basis
 
-    @Zb_basis.setter
-    def Zb_basis(self, Zb_basis: DoubleFourierSeries) -> None:
-        self._Zb_basis = Zb_basis
-
     @property
     def p_basis(self) -> PowerSeries:
         """
@@ -514,10 +515,6 @@ class Configuration(IOAble):
         """
         return self._p_basis
 
-    @p_basis.setter
-    def p_basis(self, p_basis: PowerSeries) -> None:
-        self._p_basis = p_basis
-
     @property
     def i_basis(self) -> PowerSeries:
         """
@@ -529,10 +526,6 @@ class Configuration(IOAble):
 
         """
         return self._i_basis
-
-    @i_basis.setter
-    def i_basis(self, i_basis: PowerSeries) -> None:
-        self._i_basis = i_basis
 
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self._R_basis.modes]
@@ -969,8 +962,8 @@ def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):
     for l, p, i in profiles:
         idx_p = np.where(p_basis.modes[:, 0] == int(l))[0]
         idx_i = np.where(i_basis.modes[:, 0] == int(l))[0]
-        p_l = put(p_l, idx_p, p)
-        i_l = put(i_l, idx_i, i)
+        p_l[idx_p] = p
+        i_l[idx_i] = i
 
     return p_l, i_l
 
@@ -1010,8 +1003,8 @@ def format_boundary(
 
         nodes = np.array([rho, theta, phi]).T
         grid = Grid(nodes)
-        R1_tform = Transform(grid, Rb_basis)
-        Z1_tform = Transform(grid, Zb_basis)
+        R1_tform = Transform(grid, Rb_basis, build=True, build_pinv=True)
+        Z1_tform = Transform(grid, Zb_basis, build=True, build_pinv=True)
 
         # fit real data to spectral coefficients
         Rb_mn = R1_tform.fit(boundary[:, 2])
@@ -1032,8 +1025,8 @@ def format_boundary(
                     (Zb_basis.modes[:, 1] == int(m), Zb_basis.modes[:, 2] == int(n))
                 )
             )[0]
-            Rb_mn = put(Rb_mn, idx_R, R1)
-            Zb_mn = put(Zb_mn, idx_Z, Z1)
+            Rb_mn[idx_R] = R1
+            Zb_mn[idx_Z] = Z1
 
     return Rb_mn, Zb_mn
 
@@ -1067,9 +1060,9 @@ def initial_guess(
                 )
             )[0]
             x0 = np.where(axis[:, 0] == n, axis[:, 1], b_mn[k])[0]
-            x_lmn = put(x_lmn, idx, x0)
-            x_lmn = put(x_lmn, idx2, b_mn[k] - x0)
+            x_lmn[idx] = x0
+            x_lmn[idx2] = b_mn[k] - x0
         else:
-            x_lmn = put(x_lmn, idx, b_mn[k])
+            x_lmn[idx] = b_mn[k]
 
     return x_lmn

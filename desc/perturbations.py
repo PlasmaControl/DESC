@@ -1,88 +1,69 @@
 import numpy as np
 import time
 
-from desc.backend import use_jax
 from desc.utils import Timer
-from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
 
 
-def perturb_continuation_params(
-    x, equil_obj, deltas, args, pert_order=1, verbose=False, timer=None
-):
-    """perturbs an equilibrium wrt the continuation parameters
+def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equilibrium:
+    """Perturbs an Equilibrium wrt input parameters.
 
     Parameters
     ----------
-    x : ndarray
-        state vector
-    equil_obj : function
-        equilibrium objective function
-    deltas : ndarray
-        changes in the continuation parameters
-    args : tuple
-        additional arguments passed to equil_obj
-    pert_order : int
-         order of perturbation (1=linear, 2=quadratic) (Default value = 1)
-    verbose : int or bool
-         level of output to display (Default value = False)
-    timer : Timer
-         Timer object (Default value = None)
+    eq : Equilibrium
+        equilibrium to perturb
+    deltas : dict
+        dictionary of ndarray of objective function parameters to perturb.
+        Allowed keys are: 'Rb_mn', 'Zb_mn', 'p_l', 'i_l', 'Psi', 'zeta_ratio'
+    order : int, optional
+        order of perturbation (0=none, 1=linear, 2=quadratic)
+    Jx : ndarray, optional
+        jacobian matrix df/dx
+    verbose : int
+        level of output to display
 
     Returns
     -------
-    x : ndarray
-        perturbed state vector
-    timer : Timer
-        Timer object with timing data
+    eq_new : Equilibrium
+        perturbed equilibrium
 
     """
-
-    delta_strings = (
-        ["boundary", "pressure", "zeta"] if len(deltas) == 3 else [None] * len(deltas)
-    )
-    f = equil_obj(x, *args)
-    dimF = len(f)
-    dimX = len(x)
-    dimC = 1
-    if timer is None:
-        timer = Timer()
+    timer = Timer()
     timer.start("Total perturbation")
 
+    arg_idx = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    args = (eq.x, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+
     # 1st order
-    if pert_order >= 1:
+    if order > 0:
 
-        # partial derivatives wrt x
-        timer.start("df/dx computation")
-        obj_jac_x = Derivative(equil_obj, argnum=0).compute
-        Jx = obj_jac_x(x, *args).reshape((dimF, dimX))
-        timer.stop("df/dx computation")
-        RHS = f
-        if verbose > 1:
-            timer.disp("df/dx computation")
+        # partial derivatives wrt state vector (x)
+        if Jx is None:
+            timer.start("df/dx computation")
+            Jx = eq.objective.derivative(0, *args)
+            timer.stop("df/dx computation")
+            RHS = eq.objective.compute(*args)
+            if verbose > 1:
+                timer.disp("df/dx computation")
 
-        # partial derivatives wrt c
-        for i in range(deltas.size):
-            if deltas[i] != 0:
-                if verbose > 1:
-                    print("Perturbing {}".format(delta_strings[i]))
-                timer.start("df/dc computation ({})".format(delta_strings[i]))
-                obj_jac_c = Derivative(equil_obj, argnum=6 + i).compute
-                Jc = obj_jac_c(x, *args).reshape((dimF, dimC))
-                timer.stop("df/dc computation ({})".format(delta_strings[i]))
-                RHS += np.tensordot(Jc, np.atleast_1d(deltas[i]), axes=1)
-                if verbose > 1:
-                    timer.disp("df/dc computation ({})".format(delta_strings[i]))
+        # partial derivatives wrt input parameters (c)
+        for key, dc in deltas.items():
+            if verbose > 0:
+                print("Perturbing {}".format(key))
+            timer.start("df/dc computation ({})".format(key))
+            Jc = eq.objective.derivative(arg_idx[key], *args)
+            timer.stop("df/dc computation ({})".format(key))
+            RHS += np.tensordot(Jc, dc, axes=1)
+            if verbose > 1:
+                timer.disp("df/dc computation ({})".format(key))
 
     # 2nd order
-    if pert_order >= 2:
+    if order > 1:
 
-        # partial derivatives wrt x
+        # partial derivatives wrt state vector (x)
         Jxi = np.linalg.pinv(Jx, rcond=1e-6)
         timer.start("df/dxx computation")
-        obj_jac_xx = Derivative(
-            Derivative(equil_obj, argnum=0).compute, argnum=0
-        ).compute
-        Jxx = obj_jac_xx(x, *args).reshape((dimF, dimX, dimX))
+        Jxx = eq.objective.derivative((0, 0), *args)
         timer.stop("df/dxx computation")
         RHS += 0.5 * np.tensordot(
             Jxx,
@@ -96,52 +77,38 @@ def perturb_continuation_params(
         if verbose > 1:
             timer.disp("df/dxx computation")
 
-        # partial derivatives wrt c
-        for i in range(deltas.size):
-            if deltas[i] != 0:
-                if verbose > 1:
-                    print("Perturbing {}".format(delta_strings[i]))
-                timer.start("df/dcc computation ({})".format(delta_strings[i]))
-                obj_jac_cc = Derivative(
-                    Derivative(equil_obj, argnum=6 + i).compute, argnum=6 + i
-                ).compute
-                Jcc = obj_jac_cc(x, *args).reshape((dimF, dimC, dimC))
-                timer.stop("df/dcc computation ({})".format(delta_strings[i]))
-                RHS += 0.5 * np.tensordot(
-                    Jcc,
-                    np.tensordot(
-                        np.atleast_1d(deltas[i]), np.atleast_1d(deltas[i]), axes=0
-                    ),
-                    axes=2,
-                )
-                if verbose > 1:
-                    timer.disp("df/dcc computation ({})".format(delta_strings[i]))
+        # partial derivatives wrt input parameters (c)
+        for key, dc in deltas.items():
 
-                timer.start("df/dxc computation ({})".format(delta_strings[i]))
-                obj_jac_xc = Derivative(
-                    Derivative(equil_obj, argnum=0).compute, argnum=6 + i
-                ).compute
-                Jxc = obj_jac_xc(x, *args).reshape((dimF, dimX, dimC))
-                timer.stop("df/dxc computation ({})".format(delta_strings[i]))
-                RHS -= np.tensordot(
-                    Jxc,
-                    np.tensordot(
-                        Jxi, np.tensordot(RHS, np.atleast_1d(deltas[i]), axes=0), axes=1
-                    ),
-                    axes=2,
-                )
-                if verbose > 1:
-                    timer.disp("df/dxc computation ({})".format(delta_strings[i]))
+            if verbose > 0:
+                print("Perturbing {}".format(key))
+            timer.start("df/dcc computation ({})".format(key))
+            Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
+            timer.stop("df/dcc computation ({})".format(key))
+            RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
+            if verbose > 1:
+                timer.disp("df/dcc computation ({})".format(key))
+
+            timer.start("df/dxc computation ({})".format(key))
+            Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
+            timer.stop("df/dxc computation ({})".format(key))
+            RHS -= np.tensordot(
+                Jxc, np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1), axes=2,
+            )
+            if verbose > 1:
+                timer.disp("df/dxc computation ({})".format(key))
 
     # perturbation
-    if pert_order > 0:
+    eq_new = eq.copy
+    if order > 0:
         dx = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
-    else:
-        dx = np.zeros_like(x)
+        eq_new.x = eq.x + dx
+
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
-    return x + dx, timer
+
+    return eq_new
 
 
 def get_system_derivatives(equil_obj, args, arg_dict, pert_order=1, verbose=False):

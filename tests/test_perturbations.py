@@ -1,14 +1,14 @@
+"""
 import unittest
 import numpy as np
 from desc.backend import jnp
-from desc.perturbations import perturb_continuation_params
-
+from desc.perturbations import perturb
 
 class TestPerturbations(unittest.TestCase):
-    """tests for pertubations functions"""
+    ""tests for pertubations functions""
 
-    def test_perturb_continuation_params_1D(self):
-        """1D test function where linear perturb is exact"""
+    def test_perturb_1D(self):
+        ""1D test function where linear perturb is exact""
 
         def test_fun(x, a0, a1, a2, a3, a4, c0, c1, c2, c3):
             return jnp.array([(x[0] - a0) * (x[0] - c0)])
@@ -23,12 +23,8 @@ class TestPerturbations(unittest.TestCase):
         err = np.zeros((2, n))
         for i in range(n):
             deltas = np.array([dc[i], 0, 0, 0])
-            y1, timer = perturb_continuation_params(
-                x, test_fun, deltas, args, pert_order=1, verbose=0
-            )
-            y2, timer = perturb_continuation_params(
-                x, test_fun, deltas, args, pert_order=2, verbose=0
-            )
+            y1, timer = perturb(x, test_fun, deltas, args, pert_order=1, verbose=0)
+            y2, timer = perturb(x, test_fun, deltas, args, pert_order=2, verbose=0)
             # correct answer
             z = np.array([c0 - (a0 - c0) / (2 * c0 - a0 - c0) * dc[i]])
             err[0, i] = np.abs(y1 - z)[0]  # 1st order error
@@ -39,8 +35,8 @@ class TestPerturbations(unittest.TestCase):
             np.argsort(err[1, :]), np.linspace(0, n - 1, n), atol=1e-8
         )
 
-    def test_perturb_continuation_params_2D(self):
-        """2D test function to check convergence rates"""
+    def test_perturb_2D(self):
+        "2D test function to check convergence rates""
 
         def test_fun(x, a0, a1, a2, a3, a4, c0, c1, c2, c3):
             return jnp.array(
@@ -77,10 +73,10 @@ class TestPerturbations(unittest.TestCase):
         n = deltas.shape[0]
         err = np.zeros((2, n))
         for i in range(n):
-            y1, timer = perturb_continuation_params(
+            y1, timer = perturb(
                 x, test_fun, deltas[i, :], args, pert_order=1, verbose=0
             )
-            y2, timer = perturb_continuation_params(
+            y2, timer = perturb(
                 x, test_fun, deltas[i, :], args, pert_order=2, verbose=0
             )
             err[0, i] = np.linalg.norm(y1 - z[i, :])  # 1st order error
@@ -92,3 +88,4 @@ class TestPerturbations(unittest.TestCase):
         np.testing.assert_allclose(
             np.argsort(err[1, :]), np.linspace(0, n - 1, n), atol=1e-8
         )
+"""

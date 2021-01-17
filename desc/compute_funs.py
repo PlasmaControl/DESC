@@ -1614,7 +1614,6 @@ def compute_force_error_magnitude(
         profiles,
     )
 
-
 def compute_energy(
     Psi,
     R_lmn,
@@ -1629,7 +1628,7 @@ def compute_energy(
     i_transform: Transform,
     zeta_ratio=1.0,
 ):
-    """Computes MHD energy.
+    """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results** **Does not work with symmetry**
 
     Parameters
     ----------
@@ -1710,18 +1709,19 @@ def compute_energy(
     mu0 = 4 * jnp.pi * 1e-7
 
     pressure = profiles["p"]
-    N_radial_roots = R_transform.grid._M + 1
+    rho = p_transform.grid.nodes[:, 0]
+    theta = p_transform.grid.nodes[:, 1]
+    zeta = p_transform.grid.nodes[:, 2]
+    N_radial_roots = len(np.unique(rho))
     if R_transform.grid._N == 0:
         ang_factor = 1
     else:
         ang_factor = 2
-    _, weights = special.js_roots(N_radial_roots, 2, 2)
+    roots, weights = special.js_roots(N_radial_roots, 2, 2)
+        
 
     energy = {}
     W_p = 0
-    rho = p_transform.grid.nodes[:, 0]
-    theta = p_transform.grid.nodes[:, 1]
-    zeta = p_transform.grid.nodes[:, 2]
 
     g_abs = jnp.abs(jacobian["g"])
     dim_angle = (2 * N_radial_roots) ** ang_factor  # dim_poloidal * dim_toroidal

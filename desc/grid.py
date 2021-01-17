@@ -522,7 +522,7 @@ class ConcentricGrid(Grid):
                 )
             )
         if surfs == "quad":
-            nodes, volumes = get_nodes_quad(M + 1, N, NFP)
+            nodes, volumes = get_nodes_quad(M, N, NFP)
             return nodes, volumes
 
         pattern = {
@@ -618,7 +618,7 @@ def get_nodes_quad(M, N, NFP, weights=False):
         volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
     """
 
-    nr = M
+    nr = M+1
     nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
     if N == 0:
         nz = 1

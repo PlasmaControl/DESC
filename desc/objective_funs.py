@@ -336,13 +336,40 @@ class ForceErrorNodes(ObjectiveFunction):
 
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
         resid_rms = 1 / 2 * jnp.sum(residual ** 2)
-
+        
         print(
             "Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}".format(
                 resid_rms, f_rho_rms, f_beta_rms
             )
         )
+#FIXME: below call to energy only for debugging purposes, to see energy calc when minimizing force
+        ##############################################
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
 
+        residual = energy["W"]
+
+        print("Total MHD energy: {:10.3e}".format(residual))
+        #################################################################
         return None
 
 

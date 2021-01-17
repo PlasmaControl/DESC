@@ -9,11 +9,11 @@ from desc.basis import (
     FourierSeries,
 )
 from desc.transform import Transform
-from desc.objective_funs import ObjectiveFunctionFactory, ForceErrorNodes
+from desc.objective_funs import get_objective_function, ForceErrorNodes
 
 
 class TestObjectiveFunctionFactory(unittest.TestCase):
-    """Test basic functionality of ObjectiveFunctionFactory"""
+    """Test basic functionality of objective function getter"""
 
     def test_obj_fxn_types(self):
         """test the correct objective function is returned for 'force', 'accel', and unimplemented"""
@@ -31,7 +31,7 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
         PI_transform = Transform(RZ_grid, PI_basis)
 
         errr_mode = "force"
-        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
+        obj_fun = get_objective_function(
             errr_mode,
             R_transform=R_transform,
             Z_transform=Z_transform,
@@ -46,7 +46,7 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
         # test unimplemented errr_mode
         with self.assertRaises(ValueError):
             errr_mode = "not implemented"
-            obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
+            obj_fun = get_objective_function(
                 errr_mode,
                 R_transform=R_transform,
                 Z_transform=Z_transform,

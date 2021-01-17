@@ -54,14 +54,11 @@ class Transform(IOAble):
              DESCRIPTION
          basis : Basis
              DESCRIPTION
-         derivs : int or string
+         derivs : int or array-like
              order of derivatives needed, if an int (Default = 0)
              OR
-             type of calculation being performed, if a string
-             ``'force'``: all of the derivatives needed to calculate an
-             equilibrium from the force balance equations
-             ``'qs'``: all of the derivatives needed to calculate quasi-
-             symmetry from the triple-product equation
+             array of derivative orders, shape (N,3)
+             [dr, dt, dz]
         rcond : float
              relative cutoff for singular values in least squares fit
         build : bool
@@ -83,16 +80,15 @@ class Transform(IOAble):
         if load_from is None:
             self._grid = grid
             self._basis = basis
-            self._derivs = derivs
             self._rcond = rcond
             self._built = False
             self._built_pinv = False
             self._matrices = {
                 i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
             }
-            self._derivatives = self._get_derivatives_(self._derivs)
+            self._derivatives = self._get_derivatives(derivs)
 
-            self._sort_derivatives_()
+            self._sort_derivatives()
             if method in ["direct", "fft"]:
                 self.method = method
             else:
@@ -129,7 +125,7 @@ class Transform(IOAble):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def _get_derivatives_(self, derivs):
+    def _get_derivatives(self, derivs):
         """Get array of derivatives needed for calculating objective function
 
         Parameters
@@ -161,59 +157,22 @@ class Transform(IOAble):
                         derivatives = np.vstack([derivatives, np.array(perm)])
                     else:
                         derivatives = np.array([perm])
-        elif derivs.lower() == "force":
-            derivatives = np.array(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                    [2, 0, 0],
-                    [1, 1, 0],
-                    [1, 0, 1],
-                    [0, 2, 0],
-                    [0, 1, 1],
-                    [0, 0, 2],
-                ]
-            )
-            # FIXME: this assumes the Grid is sorted (which it should be)
-            if np.all(self._grid.nodes[:, 0] == np.array([0, 0, 0])):
-                axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-                derivatives = np.vstack([derivatives, axis])
-        elif derivs.lower() == "qs":
-            derivatives = np.array(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                    [2, 0, 0],
-                    [1, 1, 0],
-                    [1, 0, 1],
-                    [0, 2, 0],
-                    [0, 1, 1],
-                    [0, 0, 2],
-                    [3, 0, 0],
-                    [2, 1, 0],
-                    [2, 0, 1],
-                    [1, 2, 0],
-                    [1, 1, 1],
-                    [1, 0, 2],
-                    [0, 3, 0],
-                    [0, 2, 1],
-                    [0, 1, 2],
-                    [0, 0, 3],
-                    [2, 2, 0],
-                ]
-            )
+
+        elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
+            derivatives = np.asarray(derivs).reshape((1, 3))
+        elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
+            derivatives = np.atleast_2d(derivs)
         else:
             raise NotImplementedError(
-                colored("order options are 'force', 'qs', or a non-negative int", "red")
+                colored(
+                    "derivs should be array-like with 3 columns, or a non-negative int",
+                    "red",
+                )
             )
 
         return derivatives
 
-    def _sort_derivatives_(self) -> None:
+    def _sort_derivatives(self) -> None:
         """Sorts derivatives
 
         Returns
@@ -378,7 +337,7 @@ class Transform(IOAble):
         self._built = True
 
     def build_pinv(self):
-        # build pinv for fitting
+        """build pseudoinverse for fitting"""
         if self._built_pinv:
             return
         A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
@@ -596,50 +555,45 @@ class Transform(IOAble):
                 self.build_pinv()
 
     @property
-    def derivs(self):
-        return self._derivs
-
-    @property
     def derivatives(self):
         return self._derivatives
 
-    @derivatives.setter
-    def derivatives(self, derivs) -> None:
+    def change_derivatives(self, derivs, build=True) -> None:
         """Changes the order and updates the matrices accordingly
+
+        Doesn't delete any old orders, only adds new ones if not already there
 
         Parameters
         ----------
-        derivs : int or string
-            order of derivatives needed, if an int (Default = 0)
-            OR
-            type of calculation being performed, if a string
-            ``'force'``: all of the derivatives needed to calculate an
-            equilibrium from the force balance equations
-            ``'qs'``: all of the derivatives needed to calculate quasi-
-            symmetry from the triple-product equation
+         derivs : int or array-like
+             order of derivatives needed, if an int (Default = 0)
+             OR
+             array of derivative orders, shape (N,3)
+             [dr, dt, dz]
+        build : bool
+            whether to build transforms immediately or wait
 
         Returns
         -------
         None
 
         """
-        if derivs != self._derivs:
-            self._derivs = derivs
+        new_derivatives = self._get_derivatives(derivs)
+        new_not_in_old = (new_derivatives[:, None] == self.derivatives).all(-1).any(-1)
+        derivs_to_add = new_derivatives[~new_not_in_old]
+        self._derivatives = np.vstack([self.derivatives, derivs_to_add])
+        self._sort_derivatives()
 
-            old_derivatives = self._derivatives
-            self._derivatives = self.get_derivatives(self._derivs)
-            self.sort_derivatives()
-            new_derivatives = self._derivatives
-
-            new_not_in_old = (
-                (new_derivatives[:, None] == old_derivatives).all(-1).any(-1)
-            )
-            derivs_to_add = new_derivatives[~new_not_in_old]
-
+        if build:
+            # we don't update self._built here because if it was built before it still is
+            # but if it wasn't it still might have unbuilt matrices
             for d in derivs_to_add:
                 self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
                     self._grid.nodes, d
                 )
+        elif len(derivs_to_add):
+            # if we actually added derivatives and didn't build them, then its not built
+            self._built = False
 
     @property
     def matrices(self):

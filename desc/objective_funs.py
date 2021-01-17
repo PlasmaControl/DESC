@@ -1,3 +1,4 @@
+import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 
@@ -53,6 +54,8 @@ class ObjectiveFunction(IOAble, ABC):
         "BC_constraint",
     ]
 
+    arg_names = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ration": 6}
+
     def __init__(
         self,
         R_transform: Transform = None,
@@ -103,12 +106,26 @@ class ObjectiveFunction(IOAble, ABC):
         self._hess = Derivative(self.compute_scalar, mode="hess")
         self._jac = Derivative(self.compute, mode="fwd")
 
+    @property
+    @abstractmethod
+    def name(self):
+        """return a string indicator of the type of objective function"""
+        return "abc"
+
+    @property
+    @abstractmethod
+    def derivatives(cls):
+        """return arrays indicating which derivatives are needed to compute"""
+        pass
+
     @abstractmethod
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """compute the objective function"""
         pass
 
     @abstractmethod
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """compute the scalar form of the objective"""
         pass
 
     @abstractmethod
@@ -132,11 +149,11 @@ class ObjectiveFunction(IOAble, ABC):
 
         Parameters
         ----------
-        argnums : int, tuple
-            integer or tuple of integers describing which argument numbers
-            of the objective should be differentiated. Passing a tuple with
-            multiple values will compute a higher order derivative. Eg,
-            argnums=(0,0) would compute the 2nd derivative with respect to the
+        argnums : int, str, tuple
+            integer or str or tuple of integers/strings describing which arguments
+            of the objective should be differentiated.
+            Passing a tuple with multiple values will compute a higher order derivative.
+            Eg, argnums=(0,0) would compute the 2nd derivative with respect to the
             zeroth argument, while argnums=(3,5) would compute a mixed second
             derivative, first with respect to the third argument and then with
             respect to the fifth.
@@ -146,7 +163,18 @@ class ObjectiveFunction(IOAble, ABC):
 
         f = self.compute
         for a in argnums:
-            f = Derivative(f, argnum=a)
+            if isinstance(a, int) and a < 7:
+                f = Derivative(f, argnum=a)
+            elif isinstance(a, str) and a in ObjectiveFunction.arg_names:
+                a = ObjectiveFunction.arg_names.get(a)
+                f = Derivative(f, argnum=a)
+            else:
+                raise ValueError(
+                    "argnums should be integers between 0 and 6 or one of {}, got {}".format(
+                        ObjectiveFunction.arg_names, a
+                    )
+                )
+
         y = f(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
         return y
 
@@ -202,6 +230,31 @@ class ForceErrorNodes(ObjectiveFunction):
             BC_constraint,
         )
         self.scalar = False
+
+    @property
+    def name(self):
+        return "force"
+
+    @property
+    def derivatives(self):
+        # TODO: different derivatives for R,Z,L,p,i ?
+        # old axis derivatives
+        axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 2, 0],
+                [0, 1, 1],
+                [0, 0, 2],
+            ]
+        )
+        return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute force balance error."""
@@ -350,83 +403,103 @@ class ForceErrorNodes(ObjectiveFunction):
         return None
 
 
-class ObjectiveFunctionFactory:
-    """Factory Class for Objective Functions
+def get_objective_function(
+    errr_mode,
+    R_transform: Transform = None,
+    Z_transform: Transform = None,
+    L_transform: Transform = None,
+    Rb_transform: Transform = None,
+    Zb_transform: Transform = None,
+    p_transform: Transform = None,
+    i_transform: Transform = None,
+    BC_constraint: BoundaryConstraint = None,
+) -> ObjectiveFunction:
+    """Accepts parameters necessary to create an objective function,
+    and returns the corresponding ObjectiveFunction object
 
-    Methods
+    Parameters
+    ----------
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_mn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_mn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryConstraint
+        linear constraint to enforce boundary conditions
+
+    Returns
     -------
-    get_equil_obj_fun()
+    obj_fun : ObjectiveFunction
+        equilibrium objective function object, containing the compute and callback
+        method for the objective function
 
     """
-
-    @staticmethod
-    def get_equil_obj_fun(
-        errr_mode,
-        R_transform: Transform = None,
-        Z_transform: Transform = None,
-        L_transform: Transform = None,
-        Rb_transform: Transform = None,
-        Zb_transform: Transform = None,
-        p_transform: Transform = None,
-        i_transform: Transform = None,
-        BC_constraint: BoundaryConstraint = None,
-    ) -> ObjectiveFunction:
-        """Accepts parameters necessary to create an objective function,
-        and returns the corresponding ObjectiveFunction object
-
-        Parameters
-        ----------
-        R_transform : Transform
-            transforms R_lmn coefficients to real space
-        Z_transform : Transform
-            transforms Z_lmn coefficients to real space
-        L_transform : Transform
-            transforms L_lmn coefficients to real space
-        Rb_transform : Transform
-            transforms Rb_mn coefficients to real space
-        Zb_transform : Transform
-            transforms Zb_mn coefficients to real space
-        p_transform : Transform
-            transforms p_l coefficients to real space
-        i_transform : Transform
-            transforms i_l coefficients to real space
-        BC_constraint : BoundaryConstraint
-            linear constraint to enforce boundary conditions
-
-        Returns
-        -------
-        obj_fun : ObjectiveFunction
-            equilibrium objective function object, containing the compute and callback
-            method for the objective function
-
-        """
-        if len(R_transform.grid.axis):
-            raise ValueError(
-                colored(
-                    "Objective cannot be evaluated at the magnetic axis. "
-                    + "Yell at Daniel to implement this!",
-                    "red",
-                )
+    if len(R_transform.grid.axis):
+        raise ValueError(
+            colored(
+                "Objective cannot be evaluated at the magnetic axis. "
+                + "Yell at Daniel to implement this!",
+                "red",
             )
+        )
 
-        if errr_mode == "force":
-            obj_fun = ForceErrorNodes(
-                R_transform=R_transform,
-                Z_transform=Z_transform,
-                L_transform=L_transform,
-                Rb_transform=Rb_transform,
-                Zb_transform=Zb_transform,
-                p_transform=p_transform,
-                i_transform=i_transform,
-                BC_constraint=BC_constraint,
+    if errr_mode == "force":
+        obj_fun = ForceErrorNodes(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+        )
+    else:
+        raise ValueError(
+            colored(
+                "Requested Objective Function is not implemented. "
+                + "Available objective functions are: 'force'",
+                "red",
             )
-        else:
-            raise ValueError(
-                colored(
-                    "Requested Objective Function is not implemented. "
-                    + "Available objective functions are: 'force'",
-                    "red",
-                )
-            )
+        )
 
-        return obj_fun
+    return obj_fun
+
+
+"""
+QS derivatives (just here so we don't loose them)
+            derivatives = np.array(
+                [
+                    [0, 0, 0],
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1],
+                    [2, 0, 0],
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [0, 2, 0],
+                    [0, 1, 1],
+                    [0, 0, 2],
+                    [3, 0, 0],
+                    [2, 1, 0],
+                    [2, 0, 1],
+                    [1, 2, 0],
+                    [1, 1, 1],
+                    [1, 0, 2],
+                    [0, 3, 0],
+                    [0, 2, 1],
+                    [0, 1, 2],
+                    [0, 0, 3],
+                    [2, 2, 0],
+                ]
+            )
+"""

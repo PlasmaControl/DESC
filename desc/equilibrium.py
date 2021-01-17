@@ -4,7 +4,7 @@ from desc.utils import Timer, expand_state
 from desc.configuration import Configuration
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
-from desc.objective_funs import ObjectiveFunction, ObjectiveFunctionFactory
+from desc.objective_funs import ObjectiveFunction, get_objective_function
 from desc.optimize import Optimizer
 from desc.grid import ConcentricGrid, Grid
 from desc.transform import Transform
@@ -43,7 +43,9 @@ class Equilibrium(Configuration, IOAble):
         self._node_mode = inputs.get("node_mode", "cheb1")
         self.optimizer_results = {}
         self._solved = False
-        self._transforms = None
+        self._transforms = {}
+        self._objective = None
+        self._optimizer = None
         self.timer = Timer()
         self._set_grid()
         self._set_transforms()
@@ -96,23 +98,21 @@ class Equilibrium(Configuration, IOAble):
 
     def _set_transforms(self):
 
-        # TODO: what derivs should these use? get it from objective?
-        if self._transforms is None:
-            self._transforms = {}
+        if len(self._transforms) == 0:
             self._transforms["R"] = Transform(
-                self.grid, self.R_basis, derivs="force", build=False
+                self.grid, self.R_basis, derivs=0, build=False
             )
             self._transforms["Z"] = Transform(
-                self.grid, self.Z_basis, derivs="force", build=False
+                self.grid, self.Z_basis, derivs=0, build=False
             )
             self._transforms["L"] = Transform(
-                self.grid, self.L_basis, derivs="force", build=False
+                self.grid, self.L_basis, derivs=0, build=False
             )
             self._transforms["Rb"] = Transform(
-                self.grid, self.Rb_basis, derivs="force", build=False
+                self.grid, self.Rb_basis, derivs=0, build=False
             )
             self._transforms["Zb"] = Transform(
-                self.grid, self.Zb_basis, derivs="force", build=False
+                self.grid, self.Zb_basis, derivs=0, build=False
             )
             self._transforms["p"] = Transform(
                 self.grid, self.p_basis, derivs=1, build=False
@@ -143,6 +143,11 @@ class Equilibrium(Configuration, IOAble):
             self._transforms["i"].change_resolution(
                 self.grid, self.i_basis, build=False
             )
+        if self.objective is not None:
+            derivs = self.objective.derivatives
+            self._transforms["R"].change_derivatives(derivs, build=False)
+            self._transforms["Z"].change_derivatives(derivs, build=False)
+            self._transforms["L"].change_derivatives(derivs, build=False)
 
     def build(self, verbose=1):
         """Builds transform matrices"""
@@ -212,7 +217,7 @@ class Equilibrium(Configuration, IOAble):
         if isinstance(objective, ObjectiveFunction) or objective is None:
             self._objective = objective
         elif isinstance(objective, str):
-            self._objective = ObjectiveFunctionFactory.get_equil_obj_fun(
+            self._objective = get_objective_function(
                 objective,
                 R_transform=self._transforms["R"],
                 Z_transform=self._transforms["Z"],

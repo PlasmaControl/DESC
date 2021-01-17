@@ -144,19 +144,28 @@ class Equilibrium(Configuration, IOAble):
                 self.grid, self.i_basis, build=False
             )
 
-    def precompute_transforms(self, verbose=1):
+    def build(self, verbose=1):
         """Builds transform matrices"""
 
-        self.timer.start("Transform precomputation")
+        self.timer.start("Transform computation")
         if verbose > 0:
             print("Precomputing Transforms")
         self._set_transforms()
         for tr in self._transforms.values():
             tr.build()
 
-        self.timer.stop("Transform precomputation")
+        self.timer.stop("Transform computation")
         if verbose > 1:
-            self.timer.disp("Transform precomputation")
+            self.timer.disp("Transform computation")
+
+        self.timer.start("Boundary constraint factorization")
+        if verbose > 0:
+            print("Factorizing boundary constraint")
+        if self.objective is not None and self.objective.BC_constraint is not None:
+            self.objective.BC_constraint.build()
+        self.timer.stop("Boundary constraint factorization")
+        if verbose > 1:
+            self.timer.disp("Boundary constraint factorization")
 
     def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
         super().change_resolution(L, M, N)
@@ -168,7 +177,12 @@ class Equilibrium(Configuration, IOAble):
 
     @property
     def built(self):
-        return np.all([tr.built for tr in self._transforms.values()])
+        tr = np.all([tr.built for tr in self._transforms.values()])
+        if self.objective is not None and self.objective.BC_constraint is not None:
+            bc = self.objective.BC_constraint.built
+        else:
+            bc = True
+        return tr and bc
 
     @property
     def grid(self):
@@ -215,6 +229,7 @@ class Equilibrium(Configuration, IOAble):
                     self.Zb_basis,
                     self.Rb_mn,
                     self.Zb_mn,
+                    build=False,
                 ),
             )
         else:
@@ -435,7 +450,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 self[ii - 1]._children.append(equil)
             # TODO: updating transforms instead of recomputing
             # TODO: check if params changed and do perturbations
-            equil.precompute_transforms(verbose)
+            equil.build(verbose)
             if equil.objective is None:
                 equil.objective = self.objective
             if equil.optimizer is None:

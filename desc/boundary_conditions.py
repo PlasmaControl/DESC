@@ -33,11 +33,21 @@ class BoundaryConstraint(LinearEqualityConstraint):
     x0 : ndarray, optional
         particular solution for Ax=b. If not supplied it will
         be calculated using the least norm solution of the constraint.
-
+    build : bool
+        whether to compute null space and pseudoinverse now or wait until needed.
     """
 
     def __init__(
-        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn, x0=None
+        self,
+        R_basis,
+        Z_basis,
+        L_basis,
+        Rb_basis,
+        Zb_basis,
+        Rb_mn,
+        Zb_mn,
+        x0=None,
+        build=True,
     ):
 
         Alcfs, blcfs = get_lcfs_bc_matrices(
@@ -57,7 +67,7 @@ class BoundaryConstraint(LinearEqualityConstraint):
         self._blcfs = blcfs
         self._bgauge = bgauge
 
-        super().__init__(A, b, x0)
+        super().__init__(A, b, x0, build)
 
     def recover_from_bdry(self, y, Rb_mn=None, Zb_mn=None):
 

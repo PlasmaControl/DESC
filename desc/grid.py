@@ -2,6 +2,7 @@ import numpy as np
 from termcolor import colored
 from desc.utils import equals
 from desc.io import IOAble
+from scipy import special
 
 
 class Grid(IOAble):
@@ -495,6 +496,7 @@ class ConcentricGrid(Grid):
             pattern for radial coordinates
                 cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+                quad  = Radial nodes are roots of Shifted Jacobi polynomial of degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
                 anything else defaults to linear spacing in r=[0,1]
 
         Returns
@@ -519,6 +521,9 @@ class ConcentricGrid(Grid):
                     "red",
                 )
             )
+        if surfs == "quad":
+            nodes, volumes = get_nodes_quad(M + 1, N, NFP)
+            return nodes, volumes
 
         pattern = {
             "cheb1": (np.cos(np.arange(M, -1, -1) * np.pi / M) + 1) / 2,
@@ -594,6 +599,67 @@ class ConcentricGrid(Grid):
                 M=M, N=N, NFP=self._NFP, sym=self._sym, surfs=self._surfs
             )
             self.sort_nodes()
+
+
+def get_nodes_quad(M, N, NFP, weights=False):
+    """Compute interpolation nodes for Zernike quadrature, uses (M+1) radial nodes and 2*(M+1) equispaced angular nodes
+        if N=0, no toroidal nodes included
+    
+    Args:
+        M (int): maximum poloidal mode number
+        N (int): maximum toroidal mode number
+        NFP (int): number of field periods
+        sym (bool): False for nodes to fill the full domain,
+                    True for nodes in the stellarator symmetry (half) domain
+
+
+    Returns:
+        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
+        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+    """
+
+    nr = M
+    nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
+    if N == 0:
+        nz = 1
+    else:
+        nz = 2 * nr
+    r, ws = special.js_roots(
+        nr, 2, 2
+    )  # quadrature roots for the Shifted Jacobi Polynomials
+
+    dr = np.zeros_like(r)
+    for i in range(r.size):
+        if i == 0:
+            dr[i] = (r[0] + r[1]) / 2
+        elif i == r.size - 1:
+            dr[i] = 1 - (r[-2] + r[-1]) / 2
+        else:
+            dr[i] = (r[i + 1] - r[i - 1]) / 2
+
+    t = np.arange(0, 2 * np.pi, step=2 * np.pi / nt)
+    dt = 2 * np.pi / nt
+
+    # z = np.linspace(0, 2 * np.pi / NFP, nz)
+    dz = 2 * np.pi / NFP / nz
+    z = np.arange(0, 2 * np.pi / NFP, dz)
+
+    r, t, z = np.meshgrid(r, t, z, indexing="ij")
+    r = r.flatten()
+    t = t.flatten()
+    z = z.flatten()
+
+    dr = np.tile(dr, nt * nz)
+    dt = dt * np.ones_like(t)
+    dz = dz * np.ones_like(z)
+
+    nodes = np.stack([r, t, z]).T
+    volumes = np.stack([dr, dt, dz]).T
+
+    if weights:
+        return nodes, volumes, ws
+    else:
+        return nodes, volumes
 
 
 # these functions are currently unused ---------------------------------------

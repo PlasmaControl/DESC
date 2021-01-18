@@ -24,6 +24,7 @@ from desc.compute_funs import (
     compute_magnetic_field_magnitude_axis,
     compute_current_density,
     compute_force_error_magnitude,
+    compute_energy,
 )
 
 
@@ -938,6 +939,52 @@ class Configuration(IOAble):
         )
 
         return force_error
+    def compute_energy(self, grid: Grid) -> dict:
+        """Computes total MHD energy, and the two components that it is sum of, magnetic and pressure energy.
+
+        Parameters
+        ----------
+        grid : Grid
+            Quadrature grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        energy : dict
+            dictionary of floats, of energy.
+            Keys are 'W_B' for magnetic energy (|B|^2 / 2mu0 integrated over volume), 
+            'W_p' for pressure energy (-p integrated over volume), and 'W' for total MHD energy (W_B + W_p)
+
+        """
+        R_transform = Transform(grid, self._R_basis, derivs=2)
+        Z_transform = Transform(grid, self._Z_basis, derivs=2)
+        L_transform = Transform(grid, self._L_basis, derivs=2)
+        p_transform = Transform(grid, self._p_basis, derivs=1)
+        i_transform = Transform(grid, self._i_basis, derivs=1)
+
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            self._Psi,
+            self._R_lmn,
+            self._Z_lmn,
+            self._L_lmn,
+            self._p_l,
+            self._i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+            self._zeta_ratio,
+        )
+
+        return energy
 
 
 # these functions are needed to format the input arrays

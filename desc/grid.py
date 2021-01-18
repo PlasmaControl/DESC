@@ -601,7 +601,7 @@ class ConcentricGrid(Grid):
             self.sort_nodes()
 
 
-def get_nodes_quad(M, N, NFP, weights=False):
+def get_nodes_quad(M, N, NFP, weights=False, sym=False):
     """Compute interpolation nodes for Zernike quadrature, uses (M+1) radial nodes and 2*(M+1) equispaced angular nodes
         if N=0, no toroidal nodes included
     
@@ -619,7 +619,11 @@ def get_nodes_quad(M, N, NFP, weights=False):
     """
 
     nr = M+1
-    nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
+    if not sym:
+        nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
+    if sym:
+        nt =  nr  # use twice as many angular nodes as radial nodes for quadrature
+
     nz = 2 * N + 1
     
     r, ws = special.js_roots(
@@ -634,9 +638,12 @@ def get_nodes_quad(M, N, NFP, weights=False):
             dr[i] = 1 - (r[-2] + r[-1]) / 2
         else:
             dr[i] = (r[i + 1] - r[i - 1]) / 2
-
-    t = np.arange(0, 2 * np.pi, step=2 * np.pi / nt)
-    dt = 2 * np.pi / nt
+    if not sym:
+        t = np.arange(0, 2 * np.pi, step=2 * np.pi / nt)
+        dt = 2 * np.pi / nt
+    elif sym:
+        t = np.arange(0, np.pi, step=np.pi / nt)
+        dt = np.pi / nt
 
     # z = np.linspace(0, 2 * np.pi / NFP, nz)
     dz = 2 * np.pi / NFP / nz

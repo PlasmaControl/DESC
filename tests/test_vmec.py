@@ -87,16 +87,8 @@ class TestVMECIO(unittest.TestCase):
 
         x_lmn_correct = np.zeros((basis.num_modes,))
         for k in range(basis.num_modes):
-            idx = np.where(
-                np.logical_and.reduce(
-                    (
-                        basis.modes[:, 0] == np.abs(m[k]),
-                        basis.modes[:, 1] == m[k],
-                        basis.modes[:, 2] == n[k],
-                    )
-                )
-            )[0]
-            x_lmn_correct = put(x_lmn_correct, idx, x[k])
+            idx = np.where((basis.modes == [np.abs(m[k]), m[k], n[k]]).all(axis=1))[0]
+            x_lmn_correct[idx] = x[k]
 
         np.testing.assert_allclose(x_lmn, x_lmn_correct, atol=1e-8)
 
@@ -126,15 +118,11 @@ class TestVMECIO(unittest.TestCase):
         x_lmn = np.zeros((basis.num_modes,))
         for k in range(basis.num_modes):
             idx = np.where(
-                np.logical_and.reduce(
-                    (
-                        basis.modes[:, 0] == np.abs(m_correct[k]),
-                        basis.modes[:, 1] == m_correct[k],
-                        basis.modes[:, 2] == n_correct[k],
-                    )
+                (basis.modes == [np.abs(m_correct[k]), m_correct[k], n_correct[k]]).all(
+                    axis=1
                 )
             )[0]
-            x_lmn = put(x_lmn, idx, x[k])
+            x_lmn[idx] = x[k]
 
         m, n, x_mn = VMECIO._zernike_to_fourier(x_lmn, basis, rho)
 

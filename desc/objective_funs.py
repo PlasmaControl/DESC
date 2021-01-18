@@ -108,6 +108,12 @@ class ObjectiveFunction(IOAble, ABC):
 
     @property
     @abstractmethod
+    def scalar(self):
+        """boolean of whether default "compute" method is a scalar or vector"""
+        pass
+
+    @property
+    @abstractmethod
     def name(self):
         """return a string indicator of the type of objective function"""
         return "abc"
@@ -146,7 +152,7 @@ class ObjectiveFunction(IOAble, ABC):
 
     def jvp(self, argnum, v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes jacobian-vector product of the objective function
-        
+
         Parameters
         ----------
         argnum : int
@@ -241,7 +247,10 @@ class ForceErrorNodes(ObjectiveFunction):
             i_transform,
             BC_constraint,
         )
-        self.scalar = False
+
+    @property
+    def scalar(self):
+        return False
 
     @property
     def name(self):
@@ -276,7 +285,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -333,7 +344,7 @@ class ForceErrorNodes(ObjectiveFunction):
 
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         residual = self.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
-        residual = jnp.sum(residual ** 2)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
     def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
@@ -344,7 +355,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (

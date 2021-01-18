@@ -17,7 +17,7 @@ R_lmn : ndarray
     spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
 Z_lmn : ndarray
     spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-L_lmn : ndarray
+L_mn : ndarray
     spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
 p_l : ndarray
     spectral coefficients of p(rho) -- pressure profile
@@ -28,7 +28,7 @@ R_transform : Transform
 Z_transform : Transform
     transforms Z_lmn coefficients to real space
 L_transform : Transform
-    transforms L_lmn coefficients to real space
+    transforms L_mn coefficients to real space
 p_transform : Transform
     transforms p_l coefficients to real space
 i_transform : Transform
@@ -87,7 +87,7 @@ def compute_profiles(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -107,7 +107,7 @@ def compute_profiles(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -118,7 +118,7 @@ def compute_profiles(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -136,12 +136,12 @@ def compute_profiles(
 
     """
     profiles = {}
+    profiles["rho"] = i_transform.grid.nodes[:, 0]
 
     # toroidal flux
-    rho = p_transform.grid.nodes[:, 0]
-    profiles["psi"] = Psi * rho ** 2
-    profiles["psi_r"] = 2 * Psi * rho
-    profiles["psi_rr"] = 2 * Psi * np.ones_like(rho)
+    profiles["psi"] = Psi * profiles["rho"] ** 2
+    profiles["psi_r"] = 2 * Psi * profiles["rho"]
+    profiles["psi_rr"] = 2 * Psi * np.ones_like(profiles["rho"])
 
     # pressure
     profiles["p"] = p_transform.transform(p_l, 0)
@@ -158,7 +158,7 @@ def compute_toroidal_coords(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -178,7 +178,7 @@ def compute_toroidal_coords(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -189,7 +189,7 @@ def compute_toroidal_coords(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -206,10 +206,11 @@ def compute_toroidal_coords(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
+    rho = i_transform.grid.nodes[:, 0]
     toroidal_coords = {}
     toroidal_coords["R"] = R_transform.transform(R_lmn)
     toroidal_coords["Z"] = Z_transform.transform(Z_lmn)
-    toroidal_coords["lambda"] = L_transform.transform(L_lmn)
+    toroidal_coords["lambda"] = L_transform.transform(L_mn) * rho ** 2
     toroidal_coords["0"] = jnp.zeros_like(toroidal_coords["R"])
 
     return toroidal_coords
@@ -219,7 +220,7 @@ def compute_cartesian_coords(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -239,7 +240,7 @@ def compute_cartesian_coords(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -250,7 +251,7 @@ def compute_cartesian_coords(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -276,7 +277,7 @@ def compute_cartesian_coords(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -300,7 +301,7 @@ def compute_covariant_basis(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -320,7 +321,7 @@ def compute_covariant_basis(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -331,7 +332,7 @@ def compute_covariant_basis(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -357,7 +358,7 @@ def compute_covariant_basis(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -394,7 +395,7 @@ def compute_jacobian(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -414,7 +415,7 @@ def compute_jacobian(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -425,7 +426,7 @@ def compute_jacobian(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -455,7 +456,7 @@ def compute_jacobian(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -478,7 +479,7 @@ def compute_contravariant_basis(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -498,7 +499,7 @@ def compute_contravariant_basis(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -509,7 +510,7 @@ def compute_contravariant_basis(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -543,7 +544,7 @@ def compute_contravariant_basis(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -572,7 +573,7 @@ def compute_magnetic_field(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -592,7 +593,7 @@ def compute_magnetic_field(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -603,7 +604,7 @@ def compute_magnetic_field(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -641,7 +642,7 @@ def compute_magnetic_field(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -655,7 +656,7 @@ def compute_magnetic_field(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -667,8 +668,12 @@ def compute_magnetic_field(
     )
 
     # lambda derivatives
-    toroidal_coords["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
-    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1) * zeta_ratio
+    toroidal_coords["lambda_t"] = (
+        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** 2
+    )
+    toroidal_coords["lambda_z"] = (
+        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** 2 * zeta_ratio
+    )
 
     magnetic_field = {}
     magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
@@ -696,7 +701,7 @@ def compute_magnetic_field_axis(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -716,7 +721,7 @@ def compute_magnetic_field_axis(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -727,7 +732,7 @@ def compute_magnetic_field_axis(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -765,7 +770,7 @@ def compute_magnetic_field_axis(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -779,7 +784,7 @@ def compute_magnetic_field_axis(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -793,8 +798,12 @@ def compute_magnetic_field_axis(
     axis = i_transform.grid.axis
 
     # lambda derivatives
-    toroidal_coords["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
-    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1) * zeta_ratio
+    toroidal_coords["lambda_t"] = (
+        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** 2
+    )
+    toroidal_coords["lambda_z"] = (
+        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** 2 * zeta_ratio
+    )
 
     # toroidal coordinate 2nd derivatives
     toroidal_coords["R_rr"] = R_transform.transform(R_lmn, 2, 0, 0)
@@ -859,7 +868,7 @@ def compute_magnetic_field_magnitude(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -879,7 +888,7 @@ def compute_magnetic_field_magnitude(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -890,7 +899,7 @@ def compute_magnetic_field_magnitude(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -934,7 +943,7 @@ def compute_magnetic_field_magnitude(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -963,7 +972,7 @@ def compute_magnetic_field_magnitude_axis(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -983,7 +992,7 @@ def compute_magnetic_field_magnitude_axis(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -994,7 +1003,7 @@ def compute_magnetic_field_magnitude_axis(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1038,7 +1047,7 @@ def compute_magnetic_field_magnitude_axis(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -1067,7 +1076,7 @@ def compute_current_density(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -1087,7 +1096,7 @@ def compute_current_density(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -1098,7 +1107,7 @@ def compute_current_density(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1146,7 +1155,7 @@ def compute_current_density(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -1173,11 +1182,21 @@ def compute_current_density(
     toroidal_coords["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2) * zeta_ratio
 
     # lambda derivatives
-    toroidal_coords["lambda_rt"] = L_transform.transform(L_lmn, 1, 1, 0)
-    toroidal_coords["lambda_rz"] = L_transform.transform(L_lmn, 1, 0, 1) * zeta_ratio
-    toroidal_coords["lambda_tt"] = L_transform.transform(L_lmn, 0, 2, 0)
-    toroidal_coords["lambda_tz"] = L_transform.transform(L_lmn, 0, 1, 1) * zeta_ratio
-    toroidal_coords["lambda_zz"] = L_transform.transform(L_lmn, 0, 0, 2) * zeta_ratio
+    toroidal_coords["lambda_rt"] = (
+        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] * 2
+    )
+    toroidal_coords["lambda_rz"] = (
+        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] * 2 * zeta_ratio
+    )
+    toroidal_coords["lambda_tt"] = (
+        L_transform.transform(L_mn, 0, 2, 0) * profiles["rho"] ** 2
+    )
+    toroidal_coords["lambda_tz"] = (
+        L_transform.transform(L_mn, 0, 1, 1) * profiles["rho"] ** 2 * zeta_ratio
+    )
+    toroidal_coords["lambda_zz"] = (
+        L_transform.transform(L_mn, 0, 0, 2) * profiles["rho"] ** 2 * zeta_ratio
+    )
 
     # covariant basis derivatives
     cov_basis["e_rho_r"] = jnp.array(
@@ -1344,7 +1363,7 @@ def compute_force_error(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -1364,7 +1383,7 @@ def compute_force_error(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -1375,7 +1394,7 @@ def compute_force_error(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1428,7 +1447,7 @@ def compute_force_error(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,
@@ -1463,7 +1482,7 @@ def compute_force_error_magnitude(
     Psi,
     R_lmn,
     Z_lmn,
-    L_lmn,
+    L_mn,
     p_l,
     i_l,
     R_transform: Transform,
@@ -1483,7 +1502,7 @@ def compute_force_error_magnitude(
         spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
     Z_lmn : ndarray
         spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
     p_l : ndarray
         spectral coefficients of p(rho) -- pressure profile
@@ -1494,7 +1513,7 @@ def compute_force_error_magnitude(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     p_transform : Transform
         transforms p_l coefficients to real space
     i_transform : Transform
@@ -1552,7 +1571,7 @@ def compute_force_error_magnitude(
         Psi,
         R_lmn,
         Z_lmn,
-        L_lmn,
+        L_mn,
         p_l,
         i_l,
         R_transform,

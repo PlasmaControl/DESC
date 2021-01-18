@@ -43,7 +43,7 @@ class Configuration(IOAble):
         "_x",
         "_R_lmn",
         "_Z_lmn",
-        "_L_lmn",
+        "_L_mn",
         "_Rb_mn",
         "_Zb_mn",
         "_p_l",
@@ -95,10 +95,10 @@ class Configuration(IOAble):
                 bdry_mode : str, how to calculate error at bdry, default is 'spectral'
                 zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-                x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
+                x : ndarray, state vector [R_lmn, Z_lmn, L_mn]
                 R_lmn : ndarray, spectral coefficients of R
                 Z_lmn : ndarray, spectral coefficients of Z
-                L_lmn : ndarray, spectral coefficients of lambda
+                L_mn : ndarray, spectral coefficients of lambda
         load_from : str file path OR file instance
             file to initialize from
         file_format : str
@@ -167,13 +167,8 @@ class Configuration(IOAble):
             sym=self._Z_sym,
             index=self._index,
         )
-        self._L_basis = FourierZernikeBasis(
-            L=self._L,
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
-            index=self._index,
+        self._L_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
         self._Rb_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
@@ -219,7 +214,7 @@ class Configuration(IOAble):
         # check if state vector is provided
         try:
             self._x = inputs["x"]
-            self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
+            self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
                 self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
@@ -241,10 +236,10 @@ class Configuration(IOAble):
                 )
             # check if lambda is provided
             try:
-                self._L_lmn = inputs["L_lmn"]
+                self._L_mn = inputs["L_mn"]
             except:
-                self._L_lmn = np.zeros((self._L_basis.num_modes,))
-            self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+                self._L_mn = np.zeros((self._L_basis.num_modes,))
+            self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_mn])
 
     @property
     def parent(self):
@@ -305,21 +300,16 @@ class Configuration(IOAble):
             sym=self._Z_sym,
             index=self._index,
         )
-        self._L_basis = FourierZernikeBasis(
-            L=self._L,
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
-            index=self._index,
+        self._L_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
 
         self._R_lmn = copy_coeffs(self._R_lmn, old_modes_R, self._R_basis.modes)
         self._Z_lmn = copy_coeffs(self._Z_lmn, old_modes_Z, self._Z_basis.modes)
-        self._L_lmn = copy_coeffs(self._L_lmn, old_modes_L, self._L_basis.modes)
+        self._L_mn = copy_coeffs(self._L_mn, old_modes_L, self._L_basis.modes)
 
         # state vector
-        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_mn])
         self._make_labels()
 
     @property
@@ -363,7 +353,7 @@ class Configuration(IOAble):
     @x.setter
     def x(self, x) -> None:
         self._x = x
-        self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
+        self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
             self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
@@ -375,7 +365,7 @@ class Configuration(IOAble):
     @R_lmn.setter
     def R_lmn(self, R_lmn) -> None:
         self._R_lmn = R_lmn
-        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_mn])
 
     @property
     def Z_lmn(self):
@@ -385,17 +375,17 @@ class Configuration(IOAble):
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn) -> None:
         self._Z_lmn = Z_lmn
-        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_mn])
 
     @property
-    def L_lmn(self):
+    def L_mn(self):
         """ spectral coefficients of lambda """
-        return self._L_lmn
+        return self._L_mn
 
-    @L_lmn.setter
-    def L_lmn(self, L_lmn) -> None:
-        self._L_lmn = L_lmn
-        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+    @L_mn.setter
+    def L_mn(self, L_mn) -> None:
+        self._L_mn = L_mn
+        self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_mn])
 
     @property
     def Rb_mn(self):
@@ -611,7 +601,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -650,7 +640,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -690,7 +680,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -730,7 +720,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -770,7 +760,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -817,7 +807,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -864,7 +854,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,
@@ -913,7 +903,7 @@ class Configuration(IOAble):
             self._Psi,
             self._R_lmn,
             self._Z_lmn,
-            self._L_lmn,
+            self._L_mn,
             self._p_l,
             self._i_l,
             R_transform,

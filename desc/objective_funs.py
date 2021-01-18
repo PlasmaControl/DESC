@@ -22,7 +22,7 @@ class ObjectiveFunction(IOAble, ABC):
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     Rb_transform : Transform
         transforms Rb_mn coefficients to real space
     Zb_transform : Transform
@@ -76,7 +76,7 @@ class ObjectiveFunction(IOAble, ABC):
         Z_transform : Transform
             transforms Z_lmn coefficients to real space
         L_transform : Transform
-            transforms L_lmn coefficients to real space
+            transforms L_mn coefficients to real space
         Rb_transform : Transform
             transforms Rb_mn coefficients to real space
         Zb_transform : Transform
@@ -214,7 +214,7 @@ class ForceErrorNodes(ObjectiveFunction):
         Z_transform : Transform
             transforms Z_lmn coefficients to real space
         L_transform : Transform
-            transforms L_lmn coefficients to real space
+            transforms L_mn coefficients to real space
         Rb_transform : Transform
             transforms Rb_mn coefficients to real space
         Zb_transform : Transform
@@ -275,7 +275,7 @@ class ForceErrorNodes(ObjectiveFunction):
             # x is really 'y', need to recover full state vector
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
+        R_lmn, Z_lmn, L_mn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
@@ -292,7 +292,7 @@ class ForceErrorNodes(ObjectiveFunction):
             Psi,
             R_lmn,
             Z_lmn,
-            L_lmn,
+            L_mn,
             p_l,
             i_l,
             self.R_transform,
@@ -343,7 +343,7 @@ class ForceErrorNodes(ObjectiveFunction):
             # x is really 'y', need to recover full state vector
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
+        R_lmn, Z_lmn, L_mn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
@@ -360,7 +360,7 @@ class ForceErrorNodes(ObjectiveFunction):
             Psi,
             R_lmn,
             Z_lmn,
-            L_lmn,
+            L_mn,
             p_l,
             i_l,
             self.R_transform,
@@ -432,7 +432,7 @@ def get_objective_function(
     Z_transform : Transform
         transforms Z_lmn coefficients to real space
     L_transform : Transform
-        transforms L_lmn coefficients to real space
+        transforms L_mn coefficients to real space
     Rb_transform : Transform
         transforms Rb_mn coefficients to real space
     Zb_transform : Transform

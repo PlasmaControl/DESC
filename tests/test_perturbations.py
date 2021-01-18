@@ -28,7 +28,7 @@ class TestFunLinear(ObjectiveFunction):
         if self.BC_constraint is not None:
             x = self.BC_constraint.recover_from_bdry(y, Rb_mn, Zb_mn)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
+        R_lmn, Z_lmn, L_mn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
@@ -36,7 +36,7 @@ class TestFunLinear(ObjectiveFunction):
             Psi,
             R_lmn,
             Z_lmn,
-            L_lmn,
+            L_mn,
             p_l,
             i_l,
             self.R_transform,

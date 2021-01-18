@@ -53,17 +53,14 @@ class BoundaryConstraint(LinearEqualityConstraint):
         Alcfs, blcfs = get_lcfs_bc_matrices(
             R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn
         )
-        Aaxis, baxis = get_axis_bc_matrices(R_basis, Z_basis, L_basis)
         Agauge, bgauge = get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
 
-        A = np.vstack([Alcfs, Aaxis, Agauge])
-        b = np.concatenate([blcfs, baxis, bgauge])
+        A = np.vstack([Alcfs, Agauge])
+        b = np.concatenate([blcfs, bgauge])
 
-        self._Aaxis = Aaxis
         self._Alcfs = Alcfs
         self._Agauge = Agauge
 
-        self._baxis = baxis
         self._blcfs = blcfs
         self._bgauge = bgauge
 
@@ -82,10 +79,9 @@ class BoundaryConstraint(LinearEqualityConstraint):
 
     def _get_b(self, Rb_mn, Zb_mn):
 
-        z1 = jnp.zeros(self._baxis.size)
-        z2 = jnp.zeros(self._bgauge.size)
+        z = jnp.zeros(self._bgauge.size)
 
-        b = jnp.concatenate([Rb_mn.flatten(), Zb_mn.flatten(), z1, z2])
+        b = jnp.concatenate([Rb_mn.flatten(), Zb_mn.flatten(), z])
         return b
 
 
@@ -118,9 +114,9 @@ def get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
 
     L_modes = L_basis.modes
     mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-    l_lmn = L_modes[mnpos, :]
-    if len(l_lmn) > 0:
-        c = jacobi_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+    l_mn = L_modes[mnpos, :]
+    if len(l_mn) > 0:
+        c = jacobi_coeffs(l_mn[:, 0], l_mn[:, 1])
     else:
         c = np.zeros((0, 0))
 
@@ -188,52 +184,5 @@ def get_lcfs_bc_matrices(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Z
 
     A = np.vstack([AR, AZ])
     b = np.concatenate([bR, bZ])
-
-    return A, b
-
-
-def get_axis_bc_matrices(R_basis, Z_basis, L_basis):
-    """Compute constraint matrices for the magnetic axis
-
-    lambda(0,theta,zeta) == 0
-
-    Parameters
-    ----------
-    R_basis : Basis
-        Fourier-Zernike basis for R
-    Z_basis : Basis
-        Fourier-Zernike basis for Z
-    L_basis : Basis
-        Fourier-Zernike basis for lambda
-
-    Returns
-    -------
-    A, b : ndarray
-        Constraint matrix and vector such that the constraint is satisfied
-        if and only if Ax=b
-    """
-
-    dim_R = R_basis.num_modes
-    dim_Z = Z_basis.num_modes
-    dim_L = L_basis.num_modes
-
-    dimx = dim_R + dim_Z + dim_L
-
-    N = L_basis.N
-    ns = np.arange(-N, N + 1)
-    A = np.zeros((len(ns), dimx))
-    b = np.zeros((len(ns)))
-
-    # l(0,t,z) = 0
-    lmn = L_basis.modes
-    for i, (l, m, n) in enumerate(lmn):
-        if m != 0:
-            continue
-        if (l // 2) % 2 == 0:
-            j = np.argwhere(n == ns)
-            A[j, i + dim_R + dim_Z] = 1
-        else:
-            j = np.argwhere(n == ns)
-            A[j, i + dim_R + dim_Z] = -1
 
     return A, b

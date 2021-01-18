@@ -101,7 +101,7 @@ class VMECIO:
 
         # lambda
         m, n, L_mn = cls._ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
+        eq.L_mn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
         BC = BoundaryConstraint(
@@ -347,7 +347,7 @@ class VMECIO:
             lmnc = file.createVariable("lmnc", np.float64, ("radius", "mn_mode"))
             lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
-        m, n, x_mn = cls._zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
+        m, n, x_mn = cls._zernike_to_fourier(eq.L_mn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
         lmns[1:, :] = s
         if not eq.sym:

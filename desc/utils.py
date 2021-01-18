@@ -215,7 +215,7 @@ opsindex = _Indexable()
 
 
 def unpack_state(x, nR, nZ):
-    """Unpacks the state vector x into R_lmn, Z_lmn, L_lmn components
+    """Unpacks the state vector x into R_lmn, Z_lmn, L_mn components
 
     Parameters
     ----------
@@ -232,14 +232,14 @@ def unpack_state(x, nR, nZ):
         spectral coefficients of R
     Z_lmn : ndarray
         spectral coefficients of Z
-    L_lmn : ndarray
+    L_mn : ndarray
         spectral coefficients of lambda
 
     """
     R_lmn = x[:nR]
     Z_lmn = x[nR : nR + nZ]
-    L_lmn = x[nR + nZ :]
-    return R_lmn, Z_lmn, L_lmn
+    L_mn = x[nR + nZ :]
+    return R_lmn, Z_lmn, L_mn
 
 
 def equals(a, b) -> bool:
@@ -401,10 +401,10 @@ def copy_coeffs(c_old, modes_old, modes_new):
 def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
     """copies a state vector from one resolution to another"""
 
-    R_lmn, Z_lmn, L_lmn = unpack_state(x, len(old_R), len(old_Z))
+    R_lmn, Z_lmn, L_mn = unpack_state(x, len(old_R), len(old_Z))
     R_lmn = copy_coeffs(R_lmn, old_R, new_R)
     Z_lmn = copy_coeffs(Z_lmn, old_Z, new_Z)
-    L_lmn = copy_coeffs(L_lmn, old_L, new_L)
+    L_mn = copy_coeffs(L_mn, old_L, new_L)
 
-    x = np.concatenate([R_lmn, Z_lmn, L_lmn])
+    x = np.concatenate([R_lmn, Z_lmn, L_mn])
     return x

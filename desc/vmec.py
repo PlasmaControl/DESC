@@ -104,7 +104,15 @@ class VMECIO:
         eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = BoundaryConstraint(eq.R_basis, eq.Z_basis, eq.L_basis)
+        BC = BoundaryConstraint(
+            eq.R_basis,
+            eq.Z_basis,
+            eq.L_basis,
+            eq.Rb_basis,
+            eq.Zb_basis,
+            eq.Rb_mn,
+            eq.Zb_mn,
+        )
         eq.x = BC.make_feasible(eq.x)
 
         return eq
@@ -460,19 +468,19 @@ class VMECIO:
         for k in range(len(m_0)):
             # sin(m*theta)*cos(n*phi)
             sin_mn_1 = np.where(
-                np.logical_and.reduce((m_1 == -np.abs(m_0[k]), n_1 == np.abs(n_0[k])))
+                (mn_1 == [-np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1)
             )[0][0]
             # cos(m*theta)*sin(n*phi)
             sin_mn_2 = np.where(
-                np.logical_and.reduce((m_1 == np.abs(m_0[k]), n_1 == -np.abs(n_0[k])))
+                (mn_1 == [np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1)
             )[0][0]
             # cos(m*theta)*cos(n*phi)
-            cos_mn_1 = np.where(
-                np.logical_and.reduce((m_1 == np.abs(m_0[k]), n_1 == np.abs(n_0[k])))
-            )[0][0]
+            cos_mn_1 = np.where((mn_1 == [np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[
+                0
+            ][0]
             # sin(m*theta)*sin(n*phi)
             cos_mn_2 = np.where(
-                np.logical_and.reduce((m_1 == -np.abs(m_0[k]), n_1 == -np.abs(n_0[k])))
+                (mn_1 == [-np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1)
             )[0][0]
 
             if np.sign(m_0[k]) != 0:
@@ -527,21 +535,22 @@ class VMECIO:
         N = int(np.max(np.abs(n_1)))
 
         mn_0 = np.array([[m, n - N] for m in range(M + 1) for n in range(2 * N + 1)])
-        m_0 = mn_0[N:, 0]
-        n_0 = mn_0[N:, 1]
+        mn_0 = mn_0[N:, :]
+        m_0 = mn_0[:, 0]
+        n_0 = mn_0[:, 1]
 
         s = np.zeros((x.shape[0], m_0.size))
         c = np.zeros_like(s)
 
         for k in range(len(m_1)):
             # (|m|*theta + |n|*phi)
-            idx_pos = np.where(
-                np.logical_and.reduce((m_0 == np.abs(m_1[k]), n_0 == -np.abs(n_1[k])))
-            )[0]
+            idx_pos = np.where((mn_0 == [np.abs(m_1[k]), -np.abs(n_1[k])]).all(axis=1))[
+                0
+            ]
             # (|m|*theta - |n|*phi)
-            idx_neg = np.where(
-                np.logical_and.reduce((m_0 == np.abs(m_1[k]), n_0 == np.abs(n_1[k])))
-            )[0]
+            idx_neg = np.where((mn_0 == [np.abs(m_1[k]), np.abs(n_1[k])]).all(axis=1))[
+                0
+            ]
 
             # if m == 0 and n != 0, p = 0; otherwise p = 1
             p = int(bool(m_1[k])) ** int(bool(n_1[k]))
@@ -590,11 +599,7 @@ class VMECIO:
         rho = np.sqrt(np.linspace(0, 1, surfs))
 
         for k in range(len(m)):
-            idx = np.where(
-                np.logical_and.reduce(
-                    (basis.modes[:, 1] == m[k], basis.modes[:, 2] == n[k])
-                )
-            )[0]
+            idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
             if len(idx):
                 A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
                 c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
@@ -639,11 +644,7 @@ class VMECIO:
 
         x_mn = np.zeros((rho.size, m.size))
         for k in range(len(m)):
-            idx = np.where(
-                np.logical_and.reduce(
-                    (basis.modes[:, 1] == m[k], basis.modes[:, 2] == n[k])
-                )
-            )[0]
+            idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
             if len(idx):
                 A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
                 x_mn[:, k] = np.matmul(A, x_lmn[idx])

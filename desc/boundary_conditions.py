@@ -117,7 +117,7 @@ def get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
     dimx = dim_R + dim_Z + dim_L
 
     L_modes = L_basis.modes
-    mnpos = np.where(np.logical_and(L_modes[:, 1] >= 0, L_modes[:, 2] >= 0))[0]
+    mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
     l_lmn = L_modes[mnpos, :]
     if len(l_lmn) > 0:
         c = jacobi_coeffs(l_lmn[:, 0], l_lmn[:, 1])

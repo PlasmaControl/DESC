@@ -81,47 +81,10 @@ class TestTransform(unittest.TestCase):
         correct_dz = -np.cos(t - z) + 2 * np.sin(t - z)
         correct_dtz = np.sin(t - z) + 2 * np.cos(t - z)
 
-        sin_idx_1 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 1] == -1),
-                        np.array(basis.modes[:, 2] == 1),
-                    ]
-                ),
-                axis=0,
-            )
-        )[0]
-        sin_idx_2 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 1] == 1),
-                        np.array(basis.modes[:, 2] == -1),
-                    ]
-                ),
-                axis=0,
-            )
-        )[0]
-        cos_idx_1 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 1] == -1),
-                        np.array(basis.modes[:, 2] == -1),
-                    ]
-                ),
-                axis=0,
-            )
-        )[0]
-        cos_idx_2 = np.where(
-            np.all(
-                np.array(
-                    [np.array(basis.modes[:, 1] == 1), np.array(basis.modes[:, 2] == 1)]
-                ),
-                axis=0,
-            )
-        )[0]
+        sin_idx_1 = np.where((basis.modes[:, 1:] == [-1, 1]).all(axis=1))[0]
+        sin_idx_2 = np.where((basis.modes[:, 1:] == [1, -1]).all(axis=1))[0]
+        cos_idx_1 = np.where((basis.modes[:, 1:] == [-1, -1]).all(axis=1))[0]
+        cos_idx_2 = np.where((basis.modes[:, 1:] == [1, 1]).all(axis=1))[0]
 
         c = np.zeros((basis.modes.shape[0],))
         c[sin_idx_1] = 1
@@ -151,42 +114,9 @@ class TestTransform(unittest.TestCase):
 
         correct_vals = 2 * r * np.sin(t) * np.cos(z) - 0.5 * r * np.cos(t) + np.sin(z)
 
-        idx_0 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 0] == 1),
-                        np.array(basis.modes[:, 1] == -1),
-                        np.array(basis.modes[:, 2] == 1),
-                    ]
-                ),
-                axis=0,
-            )
-        )
-        idx_1 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 0] == 1),
-                        np.array(basis.modes[:, 1] == 1),
-                        np.array(basis.modes[:, 2] == 0),
-                    ]
-                ),
-                axis=0,
-            )
-        )
-        idx_2 = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(basis.modes[:, 0] == 0),
-                        np.array(basis.modes[:, 1] == 0),
-                        np.array(basis.modes[:, 2] == -1),
-                    ]
-                ),
-                axis=0,
-            )
-        )
+        idx_0 = np.where((basis.modes == [1, -1, 1]).all(axis=1))[0]
+        idx_1 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
+        idx_2 = np.where((basis.modes == [0, 0, -1]).all(axis=1))[0]
 
         c = np.zeros((basis.modes.shape[0],))
         c[idx_0] = 2

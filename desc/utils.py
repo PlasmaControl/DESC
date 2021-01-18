@@ -392,20 +392,9 @@ def copy_coeffs(c_old, modes_old, modes_new):
     c_new = np.zeros((num_modes,))
 
     for i in range(num_modes):
-        idx = np.where(
-            np.all(
-                np.array(
-                    [
-                        np.array(modes_old[:, 0] == modes_new[i, 0]),
-                        np.array(modes_old[:, 1] == modes_new[i, 1]),
-                        np.array(modes_old[:, 2] == modes_new[i, 2]),
-                    ]
-                ),
-                axis=0,
-            )
-        )[0]
+        idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]
         if len(idx):
-            c_new[i] = c_old[idx[0]]
+            c_new[i] = c_old[idx]
     return c_new
 
 

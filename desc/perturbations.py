@@ -2,10 +2,12 @@ import numpy as np
 import time
 
 from desc.utils import Timer
-from desc.equilibrium import Equilibrium
+from desc.boundary_conditions import BoundaryConstraint
 
 
-def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equilibrium:
+def perturb(
+    eq, deltas: dict, order=0, Jx=None, verbose=1,
+):
     """Perturbs an Equilibrium wrt input parameters.
 
     Parameters
@@ -32,7 +34,8 @@ def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equi
     timer.start("Total perturbation")
 
     arg_idx = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
-    args = (eq.x, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    y = eq.objective.BC_constraint.project(eq.x)
+    args = (y, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
 
     # 1st order
     if order > 0:
@@ -40,7 +43,7 @@ def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equi
         # partial derivatives wrt state vector (x)
         if Jx is None:
             timer.start("df/dx computation")
-            Jx = eq.objective.derivative(0, *args)
+            Jx = eq.objective.jac_x(*args)
             timer.stop("df/dx computation")
             RHS = eq.objective.compute(*args)
             if verbose > 1:
@@ -51,9 +54,8 @@ def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equi
             if verbose > 0:
                 print("Perturbing {}".format(key))
             timer.start("df/dc computation ({})".format(key))
-            Jc = eq.objective.derivative(arg_idx[key], *args)
+            RHS += eq.objective.jvp(arg_idx[key], dc, *args)
             timer.stop("df/dc computation ({})".format(key))
-            RHS += np.tensordot(Jc, dc, axes=1)
             if verbose > 1:
                 timer.disp("df/dc computation ({})".format(key))
 
@@ -98,11 +100,28 @@ def perturb(eq: Equilibrium, deltas: dict, order=0, Jx=None, verbose=1,) -> Equi
             if verbose > 1:
                 timer.disp("df/dxc computation ({})".format(key))
 
+    eq_new = eq.copy()
+
+    # update input parameters
+    for key, dc in deltas.items():
+        setattr(eq_new, key, getattr(eq_new, key) + dc)
+
+    # update boundary constraint
+    if "Rb_mn" in deltas or "Zb_mn" in deltas:
+        eq_new.objective.BC_constraint = BoundaryConstraint(
+            eq_new.R_basis,
+            eq_new.Z_basis,
+            eq_new.L_basis,
+            eq_new.Rb_basis,
+            eq_new.Zb_basis,
+            eq_new.Rb_mn,
+            eq_new.Zb_mn,
+        )
+
     # perturbation
-    eq_new = eq.copy
     if order > 0:
-        dx = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
-        eq_new.x = eq.x + dx
+        dy = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
+        eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")
     if verbose > 1:

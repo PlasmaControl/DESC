@@ -517,6 +517,10 @@ class Configuration(IOAble):
         """
         return self._i_basis
 
+    @property
+    def zeta_ratio(self) -> float:
+        return self._zeta_ratio
+
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self._R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self._Z_basis.modes]

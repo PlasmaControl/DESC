@@ -212,7 +212,7 @@ class LinearGrid(Grid):
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False)
         axis : bool
-            True to include a point at rh0==0, False for rho[0] = rho[1]/4.
+            True to include a point at rh0==0, False for rho[0] = rho[1]/4. (Default = True)
         endpoint : bool
             if True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT (Default = False)

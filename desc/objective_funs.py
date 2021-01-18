@@ -144,8 +144,21 @@ class ObjectiveFunction(IOAble, ABC):
         """Computes jacobian matrx of vector form of the objective wrt to x"""
         return self._jac.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
+    def jvp(self, argnum, v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Computes jacobian-vector product of the objective function
+        
+        Parameters
+        ----------
+        argnum : int
+            integer describing which argument of the objective should be differentiated.
+        v : ndarray
+            vector to multiply the jacobian matrix by
+        """
+        f = Derivative(self.compute, argnum=argnum, mode="jvp")
+        return f(v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+
     def derivative(self, argnums, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        """Computes arbitrary derivatives of the objective
+        """Computes arbitrary derivatives of the objective function
 
         Parameters
         ----------
@@ -159,7 +172,7 @@ class ObjectiveFunction(IOAble, ABC):
             respect to the fifth.
         """
         if not isinstance(argnums, tuple):
-            argnums = tuple(argnums)
+            argnums = (argnums,)
 
         f = self.compute
         for a in argnums:
@@ -175,8 +188,7 @@ class ObjectiveFunction(IOAble, ABC):
                     )
                 )
 
-        y = f(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
-        return y
+        return f(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
 
 class ForceErrorNodes(ObjectiveFunction):
@@ -264,9 +276,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -334,9 +344,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (

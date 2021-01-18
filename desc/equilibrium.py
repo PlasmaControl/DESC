@@ -8,6 +8,7 @@ from desc.objective_funs import ObjectiveFunction, get_objective_function
 from desc.optimize import Optimizer
 from desc.grid import ConcentricGrid, Grid
 from desc.transform import Transform
+from desc.perturbations import perturb
 
 
 class Equilibrium(Configuration, IOAble):
@@ -292,8 +293,18 @@ class Equilibrium(Configuration, IOAble):
         }
         return Equilibrium(inputs=inputs)
 
-    def optimize(self):
-        raise NotImplementedError("optimizing equilibria has not yet been implemented")
+    def compute(self):
+        y = self._objective.BC_constraint.project(self._x)
+        args = (
+            y,
+            self._Rb_mn,
+            self._Zb_mn,
+            self._p_l,
+            self._i_l,
+            self._Psi,
+            self._zeta_ratio,
+        )
+        return self._objective.compute(*args)
 
     def solve(
         self,
@@ -340,8 +351,7 @@ class Equilibrium(Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")
@@ -353,6 +363,12 @@ class Equilibrium(Configuration, IOAble):
         self.x = self._optimizer.objective.BC_constraint.recover(result["x"])
         self.solved = result["success"]
         return result
+
+    def perturb(self, deltas, **kwargs):
+        return perturb(self, deltas, **kwargs)
+
+    def optimize(self):
+        raise NotImplementedError("optimizing equilibria has not yet been implemented")
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

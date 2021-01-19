@@ -199,10 +199,10 @@ class AutoDiffDerivative(_Derivative):
         return self._compute(*args)
 
     def _compute_jvp(self, v, *args):
-        tangents = list(args)
+        tangents = [np.zeros_like(foo) if not np.isscalar(foo) else 0.0 for foo in args]
         tangents[self.argnum] = v
-        y = jax.jvp(self._fun, args, tangents)
-        return y
+        y, u = jax.jvp(self._fun, args, tuple(tangents))
+        return u
 
     @property
     def mode(self) -> str:

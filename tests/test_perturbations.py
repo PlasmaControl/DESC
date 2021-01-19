@@ -11,7 +11,7 @@ from desc.objective_funs import ObjectiveFunction
 from desc.boundary_conditions import BoundaryConstraint
 
 
-class TestFunLinear(ObjectiveFunction):
+class DummyFunLinear(ObjectiveFunction):
     """A dummy linear objective function."""
 
     @property
@@ -19,8 +19,16 @@ class TestFunLinear(ObjectiveFunction):
         return "BC"
 
     @property
+    def scalar(self):
+        return False
+
+    @property
     def derivatives(self):
-        derivatives = np.array([[0, 0, 0],])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+            ]
+        )
         return derivatives
 
     def compute(self, y, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -29,7 +37,9 @@ class TestFunLinear(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(y, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         toroidal_coords = compute_toroidal_coords(
@@ -70,12 +80,18 @@ class TestPerturbations(unittest.TestCase):
         inputs = {
             "sym": True,
             "NFP": 1,
-            "Psi": 1,
+            "Psi": 1.0,
             "L": 2,
             "M": 2,
             "N": 1,
             "profiles": np.zeros((1, 3)),
-            "boundary": np.array([[-1, 0, 0, 2], [0, 0, 3, 0], [1, 0, 1, 0],]),
+            "boundary": np.array(
+                [
+                    [-1, 0, 0, 2],
+                    [0, 0, 3, 0],
+                    [1, 0, 1, 0],
+                ]
+            ),
         }
         eq_old = Equilibrium(inputs=inputs)
         grid = LinearGrid(NFP=eq_old.NFP, rho=0)
@@ -86,7 +102,7 @@ class TestPerturbations(unittest.TestCase):
         Zb_transform = Transform(grid, eq_old.Zb_basis)
         p_transform = Transform(grid, eq_old.p_basis)
         i_transform = Transform(grid, eq_old.i_basis)
-        obj_fun = TestFunLinear(
+        obj_fun = DummyFunLinear(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,

@@ -44,7 +44,7 @@ class IOAble(ABC):
         reader.read_obj(self, obj_lib=obj_lib)
         return None
 
-    def save(self, file_name, file_format="hdf5", file_mode="w"):
+    def save(self, file_name, file_format=None, file_mode="w"):
         """Save the object.
 
         Parameters
@@ -61,6 +61,14 @@ class IOAble(ABC):
         None
 
         """
+        if file_format is None:
+            file_name = str(file_name)
+            if file_name.endswith(".h5") or file_name.endswith(".hdf5"):
+                file_format = "hdf5"
+            elif file_name.endswith(".pkl") or file_name.endswith(".pickle"):
+                file_format = "pickle"
+            else:
+                file_format = "hdf5"
         writer = writer_factory(file_name, file_format=file_format, file_mode=file_mode)
         writer.write_obj(self)
         writer.close()

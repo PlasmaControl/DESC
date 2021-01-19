@@ -2,7 +2,7 @@ import numpy as np
 from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 import warnings
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.utils import equals, issorted, isalmostequal, islinspaced
 from desc.grid import Grid
 from desc.basis import Basis
@@ -391,7 +391,7 @@ class Transform(IOAble):
                 )
 
             c_pad = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_pad[self.fft_index] = c
+            c_pad = put(c_pad, self.fft_index, c)
             c_pad = jnp.pad(
                 c_pad.reshape((-1, self.num_n_modes)),
                 ((0, 0), (self.zeta_pad, self.zeta_pad)),

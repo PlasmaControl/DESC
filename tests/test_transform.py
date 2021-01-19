@@ -196,19 +196,19 @@ class TestTransform(unittest.TestCase):
             y1 = t1f.transform(x, dr, dv, dz)
             y2 = t1d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on zernike, d={}".format(d)
+                y1, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
             )
             x = np.random.random(basis2.num_modes)
             y1 = t2f.transform(x, dr, dv, dz)
             y2 = t2d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on fourier, d={}".format(d)
+                y1, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
             )
             x = np.random.random(basis3.num_modes)
             y1 = t3f.transform(x, dr, dv, dz)
             y2 = t3d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on double fourier, d={}".format(d)
+                y1, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
             )
 
         M += 1
@@ -236,17 +236,26 @@ class TestTransform(unittest.TestCase):
             y1 = t1f.transform(x, dr, dv, dz)
             y2 = t1d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on zernike after change, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on zernike after change, d={}".format(d),
             )
             x = np.random.random(basis2.num_modes)
             y1 = t2f.transform(x, dr, dv, dz)
             y2 = t2d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on fourier after change, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on fourier after change, d={}".format(d),
             )
             x = np.random.random(basis3.num_modes)
             y1 = t3f.transform(x, dr, dv, dz)
             y2 = t3d.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
-                y1, y2, err_msg="failed on double fourier after change, d={}".format(d)
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on double fourier after change, d={}".format(d),
             )

@@ -96,7 +96,7 @@ def chol_U_update(U, x, alpha):
     return U
 
 
-def evaluate_quadratic_form(x, f, g, HorJ, scale=None, sqr=False):
+def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
     """Compute values of a quadratic function arising in least squares.
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
@@ -121,12 +121,7 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None, sqr=False):
         Value of the function.
     """
     scale = scale if scale is not None else 1
-    if sqr:
-        Jx = J.dot(scale * x)
-        q = Jx.dot(Jx)
-    else:
-        Hx = HorJ.dot(scale * x)
-        q = Hx.dot(scale * x)
+    q = HorJ.quadratic(x * scale, x * scale)
     l = jnp.dot(scale * g, x)
 
     return f + l + 1 / 2 * q
@@ -172,7 +167,7 @@ status_messages = {
     "gtol": "`agol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has " "been exceeded.",
     "max_ngev": "Maximum number of gradient evaluations has " "been exceeded.",
-    "max_nhev": "Maximum number of hessian evaluations has " "been exceeded.",
+    "max_nhev": "Maximum number of jacobian/hessian evaluations has " "been exceeded.",
     "maxiter": "Maximum number of iterations has been " "exceeded.",
     "pr_loss": "Desired error not necessarily achieved due " "to precision loss.",
     "nan": "NaN result encountered.",

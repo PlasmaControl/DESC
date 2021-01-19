@@ -2,7 +2,7 @@ import numpy as np
 from desc.backend import jnp, cho_factor, cho_solve, qr
 
 
-def solve_trust_region_dogleg(g, hess, scale, trust_radius):
+def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
     """
     Solve trust region subproblem the dog-leg method.
 
@@ -16,6 +16,8 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
         scaling array for gradient and hessian
     trust_radius : float
         We are allowed to wander only this far away from the origin.
+    f : ndarray, optional
+        function values for least squares dogleg step
 
     Returns
     -------
@@ -32,16 +34,17 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
 
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
-    p_newton = -1 / scale * hess.solve(g)
+    if f is None:
+        p_newton = -1 / scale * hess.solve(g)
+    else:
+        p_newton = -1 / scale * hess.solve(f)
     if jnp.linalg.norm(p_newton) < trust_radius:
         hits_boundary = False
         return p_newton, hits_boundary
 
     # This is the predicted optimum along the direction of steepest descent.
-    Bg = hess.dot(scale ** 2 * g)
-    p_cauchy = (
-        -(jnp.dot(scale * g, scale * g) / jnp.dot(scale * g, scale * Bg)) * scale * g
-    )
+    gBg = hess.quadratic(scale ** 2 * g, scale ** 2 * g)
+    p_cauchy = -(jnp.dot(scale * g, scale * g) / gBg) * scale * g
 
     # If the Cauchy point is outside the trust region,
     # then return the point where the path intersects the boundary.
@@ -64,7 +67,7 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius):
     return p_boundary, hits_boundary
 
 
-def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
+def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
     """Solve a trust region problem over the 2d subspace spanned by the gradient
     and Newton direction
 
@@ -78,6 +81,8 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
         scaling array for gradient and hessian
     trust_radius : float
         We are allowed to wander only this far away from the origin.
+    f : ndarray, optional
+        function values for least squares subspace step
 
     Returns
     -------
@@ -87,10 +92,13 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius):
         True if the proposed step is on the boundary of the trust region.
 
     """
-    if hess.is_pos_def:
+    if hess.is_pos_def and f is None:
         p_newton = -1 / scale * hess.solve(grad)
-    else:
+    elif f is None:
         p_newton = hess.negative_curvature_direction
+    else:
+        p_newton = -1 / scale * hess.solve(f)
+
     S = np.vstack([grad, p_newton]).T
     S, _ = qr(S, mode="economic")
     g = S.T.dot(scale * grad)

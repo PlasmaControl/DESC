@@ -1,7 +1,7 @@
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
-from .derivative import CholeskyHessian
+from .derivative import QRJacobian
 from .utils import (
     check_termination,
     OptimizeResult,
@@ -17,12 +17,12 @@ from .tr_subproblems import (
 )
 
 
-def fmin_scalar(
+def least_squares(
     fun,
     x0,
     grad,
-    hess="bfgs",
-    init_hess=None,
+    jac,
+    init_jac=None,
     args=(),
     method="dogleg",
     x_scale=1,
@@ -34,23 +34,23 @@ def fmin_scalar(
     callback=None,
     options={},
 ):
-    """Minimize a scalar function using a (quasi)-Newton trust region method
+    """Solve a least squares problem using a (quasi)-Newton trust region method
 
      Parameters
      ----------
      fun : callable
-         objective to be minimized. Should have a signature like fun(x,*args)-> float
+         objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
      x0 : array-like
          initial guess
      grad : callable
-         function to compute gradient, df/dx. Should take the same arguments as fun
-     hess : callable or 'bfgs', optional:
-         function to compute hessian matrix of fun, or 'bfgs' in which case the BFGS method
-         will be used to approximate the hessian.
-     init_hess : array-like, optional
-         initial value for hessian matrix, used if hess='bfgs'
+         function to compute gradient, of 1/2fun**2. Should take the same arguments as fun
+     jac : callable or 'broyden', optional:
+         function to compute jacobian matrix of fun, or 'broyden' in which case the Broyden's
+         method will be used to approximate the jacobian.
+     init_jac : array-like, optional
+         initial value for jacobian matrix, used if hess='broyden'
      args : tuple
-         additional arguments passed to fun, grad, and hess
+         additional arguments passed to fun, grad, and jac
      method : 'dogleg' or 'subspace'
          method to use for trust region subproblem
      x_scale : array_like or 'hess', optional
@@ -60,8 +60,8 @@ def fmin_scalar(
          dimension is proportional to ``x_scale[j]``. Improved convergence may
          be achieved by setting `x_scale` such that a step of a given size
          along any of the scaled variables has a similar effect on the cost
-         function. If set to 'hess', the scale is iteratively updated using the
-         inverse norms of the columns of the hessian matrix.
+         function. If set to 'jac', the scale is iteratively updated using the
+         inverse norms of the columns of the jacobian matrix.
      ftol : float or None, optional
          Tolerance for termination by the change of the cost function. Default
          is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
@@ -82,7 +82,9 @@ def fmin_scalar(
              * 0 (default) : work silently.
              * 1 : display a termination report.
              * 2 : display progress during iterations
-     callback : callable, optional
+    maxiter : int, optional
+         maximum number of iterations. Defaults to size(x)*100
+    callback : callable, optional
          Called after each iteration. Should be a callable with
          the signature:
              ``callback(xk, OptimizeResult state) -> bool``
@@ -90,13 +92,13 @@ def fmin_scalar(
          is an `OptimizeResult` object, with the same fields
          as the ones from the return. If callback returns True
          the algorithm execution is terminated.
-     options : dict, optional
+    options : dict, optional
          dictionary of optional keyword arguments to override default solver settings.
          See the code for more details.
 
-     Returns
-     -------
-     res : OptimizeResult
+    Returns
+    -------
+    res : OptimizeResult
          The optimization result represented as a ``OptimizeResult`` object.
          Important attributes are: ``x`` the solution array, ``success`` a
          Boolean flag indicating if the optimizer exited successfully and
@@ -107,12 +109,13 @@ def fmin_scalar(
 
     nfev = 0
     ngev = 0
-    nhev = 0
+    njev = 0
     iteration = 0
 
-    N = x0.size
+    n = x0.size
     x = x0.copy()
     f = fun(x, *args)
+    m = f.size
     nfev += 1
     g = grad(x, *args)
     ngev += 1
@@ -126,61 +129,56 @@ def fmin_scalar(
             colored("method should be one of 'dogleg' or 'subspace'", "red")
         )
 
+    cost = 0.5 * jnp.dot(f, f)
+
     if maxiter is None:
-        maxiter = N * 100
+        maxiter = n * 100
     max_nfev = options.pop("max_nfev", maxiter)
     max_ngev = options.pop("max_ngev", max_nfev)
-    max_nhev = options.pop("max_nhev", max_nfev)
+    max_njev = options.pop("max_njev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     step_accept_threshold = options.pop("step_accept_threshold", 0.15)
-    hess_recompute_freq = options.pop(
-        "hessian_recompute_interval", 1 if callable(hess) else 0
+    jac_recompute_freq = options.pop(
+        "jac_recompute_interval", 1 if callable(jac) else 0
     )
-    hess_damp_ratio = options.pop("hessian_damping_ratio", 0.2)
-    hess_exception_strategy = options.pop("hessian_exception_strategy", "damp_update")
-    hess_min_curvature = options.pop("hessian_minimum_curvature", None)
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", False)
     return_tr = options.pop("return_tr", False)
 
-    if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0 and callable(hess):
-        hess_recompute_iters = np.arange(1, maxiter, hess_recompute_freq)
-    elif np.size(hess_recompute_freq) == 1 or not callable(hess):  # never recompute
-        hess_recompute_iters = []
+    if np.size(jac_recompute_freq) == 1 and jac_recompute_freq > 0 and callable(jac):
+        jac_recompute_iters = np.arange(1, maxiter, jac_recompute_freq)
+    elif np.size(jac_recompute_freq) == 1 or not callable(jac):  # never recompute
+        jac_recompute_iters = []
     else:
-        hess_recompute_iters = hess_recompute_freq
+        jac_recompute_iters = jac_recompute_freq
 
-    if hess == "bfgs":
-        if init_hess is None:
-            init_hess = "auto"
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=None,
-            hessfun_args=(),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
+    if jac == "broyden":
+        if init_jac is None:
+            init_jac = "auto"
+        jac = QRJacobian(
+            m,
+            n,
+            init_jac,
+            jacfun=None,
+            jacfun_args=(),
         )
 
-    elif callable(hess):
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=hess,
-            hessfun_args=tuple(args),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
+    elif callable(jac):
+        jac = QRJacobian(
+            m,
+            n,
+            init_jac,
+            jacfun=jac,
+            jacfun_args=tuple(args),
         )
     else:
-        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
+        raise ValueError(colored("jac should either be a callable or 'broyden'", "red"))
 
-    hess_scale = isinstance(x_scale, str) and x_scale == "hess"
-    if hess_scale:
-        scale, scale_inv = hess.get_scale()
+    jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
+    if jac_scale:
+        scale, scale_inv = jac.get_scale()
     else:
         scale, scale_inv = x_scale, 1 / x_scale
 
@@ -216,17 +214,19 @@ def fmin_scalar(
     if return_tr:
         alltr = [trust_radius]
 
+    alpha = 0.0  # "Levenberg-Marquardt" parameter
+
     while True:
 
-        if iteration in hess_recompute_iters:
-            hess.recompute(x)
-            nhev += 1
-            if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
+        if iteration in jac_recompute_iters:
+            jac.recompute(x)
+            njev += 1
+            if jac_scale:
+                scale, scale_inv = jac.get_scale(scale_inv)
 
         success, message = check_termination(
             actual_reduction,
-            f,
+            cost,
             step_norm,
             x_norm,
             dg_norm,
@@ -241,21 +241,21 @@ def fmin_scalar(
             max_nfev,
             ngev,
             max_ngev,
-            nhev,
-            max_nhev,
+            njev,
+            max_njev,
         )
         if success is not None:
             result = OptimizeResult(
                 x=x,
                 success=success,
+                cost=cost,
                 fun=f,
-                jac=g,
-                hess=hess.get_matrix(),
-                inv_hess=hess.get_inverse(),
+                grad=g,
+                jac=jac.get_matrix(),
                 optimality=g_norm,
                 nfev=nfev,
                 ngev=ngev,
-                nhev=nhev,
+                njev=njev,
                 nit=iteration,
                 message=message,
             )
@@ -266,20 +266,20 @@ def fmin_scalar(
         # and it tells us whether the proposed step
         # has reached the trust region boundary or not.
         try:
-            step_h, hits_boundary = subproblem(g, hess, scale, trust_radius)
+            step_h, hits_boundary = subproblem(g, jac, scale, trust_radius, f)
 
         except np.linalg.linalg.LinAlgError:
             result = OptimizeResult(
                 x=x,
                 success=False,
+                cost=cost,
                 fun=f,
-                jac=g,
-                hess=hess.get_matrix(),
-                inv_hess=hess.get_inverse(),
+                grad=g,
+                hess=jac.get_matrix(),
                 optimality=g_norm,
                 nfev=nfev,
                 ngev=ngev,
-                nhev=nhev,
+                njev=njev,
                 nit=iteration,
                 message=status_messages["err"],
             )
@@ -291,7 +291,7 @@ def fmin_scalar(
             g1 = grad(x + ga_fd_step * step_h * scale, *args)
             ngev += 1
             dg = (g1 - g0) / ga_fd_step ** 2
-            ga_step_h = -scale_inv * hess.solve(dg) + 1 / ga_fd_step * step_h
+            ga_step_h = -scale_inv * jac.solve(dg) + 1 / ga_fd_step * step_h
             ga_ratio = np.linalg.norm(
                 scale * ga_step_h, ord=xnorm_ord
             ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
@@ -302,8 +302,8 @@ def fmin_scalar(
             ga_step_h = np.zeros_like(step_h)
 
         # calculate the predicted value at the proposed point
-        predicted_reduction = f - evaluate_quadratic_form(
-            step_h, f, g, hess, scale=scale, sqr=False
+        predicted_reduction = cost - evaluate_quadratic_form(
+            step_h, cost, g, jac, scale=scale
         )
 
         #         if predicted_reduction <= 0:
@@ -318,8 +318,9 @@ def fmin_scalar(
         step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
         x_new = x + step
         f_new = fun(x_new, *args)
+        cost_new = 0.5 * np.dot(f_new, f_new)
         nfev += 1
-        actual_reduction = f - f_new
+        actual_reduction = cost - cost_new
 
         # update the trust radius according to the actual/predicted ratio
         trust_radius, ratio = update_tr_radius(
@@ -343,7 +344,9 @@ def fmin_scalar(
         if ratio > step_accept_threshold:
             x_old = x
             x = x_new
+            f_old = f
             f = f_new
+            cost = cost_new
             g_old = g
             g = grad(x, *args)
             ngev += 1
@@ -352,14 +355,14 @@ def fmin_scalar(
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
             # don't update the hessian if we're going to recompute on the next iteration
-            if iteration + 1 not in hess_recompute_iters:
-                hess.update(x_new, x_old, g, g_old)
+            if iteration + 1 not in jac_recompute_iters:
+                jac.update(x_new, x_old, f, f_old)
 
-            if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
+            if jac_scale:
+                scale, scale_inv = jac.get_scale(scale_inv)
             if verbose > 1:
                 print_iteration_nonlinear(
-                    iteration, nfev, f, actual_reduction, step_norm, g_norm
+                    iteration, nfev, cost, actual_reduction, step_norm, g_norm
                 )
 
             if callback is not None:
@@ -368,14 +371,14 @@ def fmin_scalar(
                     result = OptimizeResult(
                         x=x,
                         success=None,
+                        cost=cost,
                         fun=f,
-                        jac=g,
-                        hess=hess.get_matrix(),
-                        inv_hess=hess.get_inverse(),
+                        grad=g,
+                        jac=jac.get_matrix(),
                         optimality=g_norm,
                         nfev=nfev,
                         ngev=ngev,
-                        nhev=nhev,
+                        njev=njev,
                         nit=iteration,
                         message=status_messages["callback"],
                     )
@@ -391,11 +394,11 @@ def fmin_scalar(
             print(result["message"])
         else:
             print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["fun"]))
+        print("         Current function value: {:.3e}".format(result["cost"]))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
-        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+        print("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
         result["allvecs"] = allx

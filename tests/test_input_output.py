@@ -3,9 +3,28 @@ import pytest
 import os
 import pathlib
 import h5py
+import shutil
 
 from desc.io import InputReader
 from desc.io import hdf5Writer, hdf5Reader
+from desc.utils import equals
+
+
+def test_vmec_input(tmpdir_factory):
+    input_path = "./tests/inputs/input.DSHAPE"
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("input.DSHAPE")
+    shutil.copyfile(input_path, tmp_path)
+    ir = InputReader(cl_args=[str(tmp_path)])
+    vmec_inputs = ir.inputs
+    vmec_inputs[0].pop("output_path")
+    path = tmpdir.join("desc_from_vmec")
+    ir.write_desc_input(path)
+    ir2 = InputReader(cl_args=[str(path)])
+    desc_inputs = ir2.inputs
+    desc_inputs[0].pop("output_path")
+    eq = [equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)]
+    assert all(eq)
 
 
 class TestInputReader(unittest.TestCase):

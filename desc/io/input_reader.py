@@ -126,7 +126,7 @@ class InputReader:
         """
         return get_parser()
 
-    def parse_inputs(self):
+    def parse_inputs(self, fname=None):
         """Reads input from DESC input file, converts from VMEC input if necessary
 
         Parameters
@@ -140,6 +140,9 @@ class InputReader:
             all the input parameters and options
 
         """
+
+        if fname is None:
+            fname = self.input_path
 
         # default values
         inputs = {
@@ -176,7 +179,7 @@ class InputReader:
         else:
             inputs["verbose"] = self.args.verbose
 
-        file = open(self.input_path, "r")
+        file = open(fname, "r")
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in file:
@@ -188,7 +191,7 @@ class InputReader:
                 path = self.input_path + "_desc"
                 self._vmec_to_desc_input_(self.input_path, path)
                 print("Generated DESC input file {}:".format(path))
-                return self.parse_input(path)
+                return self.parse_inputs(path)
 
             # extract numbers & words
             match = re.search(r"[!#]", line)
@@ -262,9 +265,7 @@ class InputReader:
                 inputs["gtol"] = np.array(numbers).astype(float)
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
-                inputs["nfev"] = np.array(
-                    [None if i == 0 else i for i in numbers]
-                ).astype(int)
+                inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
 
             # solver methods
             match = re.search(r"optim_method", argument, re.IGNORECASE)
@@ -437,7 +438,10 @@ class InputReader:
             elif inputs[a].size != arr_len:
                 raise IOError(
                     colored(
-                        "Continuation parameter arrays are not proper lengths", "red"
+                        "Continuation parameter array {} is not broadcastable to the proper length".format(
+                            a
+                        ),
+                        "red",
                     )
                 )
 
@@ -501,89 +505,55 @@ class InputReader:
         f = open(filename, "w+")
 
         f.write("# global parameters \n")
-        f.write("sym = {} \n".format(inputs["sym"]))
-        f.write("NFP = {} \n".format(inputs["NFP"]))
-        f.write("Psi_lcfs = {} \n".format(inputs["Psi_lcfs"]))
+        f.write("sym = {} \n".format(inputs[0]["sym"]))
+        f.write("NFP = {} \n".format(inputs[0]["NFP"]))
+        f.write("Psi_lcfs = {} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution \n")
-        f.write(
-            "Mpol = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["Mpol"])])
+        for key, val in {
+            "L_rad": "L",
+            "M_pol": "M",
+            "N_tor": "N",
+            "M_grid": "M_grid",
+            "N_grid": "N_grid",
+        }.items():
+            f.write(
+                key + " = {} \n".format(", ".join([str(inp[val]) for inp in inputs]))
             )
-        )
-        f.write(
-            "Ntor = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["Ntor"])])
-            )
-        )
-        f.write(
-            "M_grid = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["M_grid"])])
-            )
-        )
-        f.write(
-            "N_grid = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["N_grid"])])
-            )
-        )
 
         f.write("\n# continuation parameters \n")
-        f.write(
-            "bdry_ratio = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["bdry_ratio"])])
+        for key in ["bdry_ratio", "pres_ratio", "zeta_ratio", "pert_order"]:
+            f.write(
+                key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )
-        )
-        f.write(
-            "pres_ratio = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["pres_ratio"])])
-            )
-        )
-        f.write(
-            "zeta_ratio = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["zeta_ratio"])])
-            )
-        )
-        f.write(
-            "pert_order = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["pert_order"])])
-            )
-        )
 
         f.write("\n# solver tolerances \n")
-        f.write(
-            "ftol = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["ftol"])])
+        for key in ["ftol", "xtol", "gtol", "nfev"]:
+            f.write(
+                key
+                + " = {} \n".format(
+                    ", ".join(
+                        [
+                            str(inp[key]) if inp[key] is not None else str(0)
+                            for inp in inputs
+                        ]
+                    )
+                )
             )
-        )
-        f.write(
-            "xtol = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["xtol"])])
-            )
-        )
-        f.write(
-            "gtol = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["gtol"])])
-            )
-        )
-        f.write(
-            "nfev = {} \n".format(
-                ", ".join([str(i) for i in np.atleast_1d(inputs["nfev"])])
-            )
-        )
 
         f.write("\n# solver methods \n")
-        f.write("optim_method = {} \n".format(inputs["optim_method"]))
-        f.write("errr_mode = {} \n".format(inputs["errr_mode"]))
-        f.write("bdry_mode = {} \n".format(inputs["bdry_mode"]))
-        f.write("zern_mode = {} \n".format(inputs["zern_mode"]))
-        f.write("node_mode = {} \n".format(inputs["node_mode"]))
+        f.write("optim_method = {} \n".format(inputs[0]["optim_method"]))
+        f.write("errr_mode = {} \n".format(inputs[0]["errr_mode"]))
+        f.write("bdry_mode = {} \n".format(inputs[0]["bdry_mode"]))
+        f.write("zern_mode = {} \n".format(inputs[0]["zern_mode"]))
+        f.write("node_mode = {} \n".format(inputs[0]["node_mode"]))
 
         f.write("\n# pressure and rotational transform profiles \n")
-        for (l, p, i) in inputs["axis"]:
+        for (l, p, i) in inputs[0]["profiles"]:
             f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
 
         f.write("\n# fixed-boundary surface shape \n")
-        for (m, n, R1, Z1) in inputs["boundary"]:
+        for (m, n, R1, Z1) in inputs[0]["boundary"]:
             f.write(
                 "m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(m), int(n), R1, Z1
@@ -591,7 +561,7 @@ class InputReader:
             )
 
         f.write("\n# magnetic axis initial guess \n")
-        for (n, R0, Z0) in inputs["axis"]:
+        for (n, R0, Z0) in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
         f.close()

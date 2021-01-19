@@ -1,3 +1,4 @@
+import pytest
 import unittest
 
 from desc.plotting import Plot
@@ -99,3 +100,75 @@ class TestPlot(unittest.TestCase):
                 ]
             )
         )
+
+
+@pytest.mark.mpl_image_compare
+def test_1d_p(plot_eq):
+    fig, ax = Plot().plot_1d(plot_eq, "p")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_1d_iota(plot_eq):
+    fig, ax = Plot().plot_1d(plot_eq, "iota")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_1d_psi(plot_eq):
+    fig, ax = Plot().plot_1d(plot_eq, "psi")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_2d_B(plot_eq):
+    fig, ax = Plot().plot_2d(plot_eq, "|B|")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_2d_g(plot_eq):
+    fig, ax = Plot().plot_2d(plot_eq, "g")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_2d_lambda(plot_eq):
+    fig, ax = Plot().plot_2d(plot_eq, "lambda")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_section_J(plot_eq):
+    fig, ax = Plot().plot_section(plot_eq, "J^rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_section_Z(plot_eq):
+    fig, ax = Plot().plot_section(plot_eq, "Z")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_section_R(plot_eq):
+    fig, ax = Plot().plot_section(plot_eq, "R")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_section_F(plot_eq):
+    fig, ax = Plot().plot_section(plot_eq, "F_rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_section_logF(plot_eq):
+    fig, ax = Plot().plot_section(plot_eq, "log(|F|)")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_surfaces(plot_eq):
+    fig, ax = Plot().plot_surfaces(plot_eq)
+    return fig

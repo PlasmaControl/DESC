@@ -11,7 +11,7 @@ class TestInputReader(unittest.TestCase):
     def setUp(self):
         self.argv0 = []
         self.argv1 = ["nonexistant_input_file"]
-        self.argv2 = ["./tests/MIN_INPUT"]
+        self.argv2 = ["./tests/inputs/MIN_INPUT"]
 
     def test_no_input_file(self):
         with self.assertRaises(NameError):

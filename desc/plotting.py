@@ -190,7 +190,7 @@ class Plot:
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_2d(
         self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
@@ -258,7 +258,7 @@ class Plot:
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[1]])
         ax.set_ylabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_3d(
         self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
@@ -337,7 +337,7 @@ class Plot:
         ax.set_ylabel(self.axis_labels_XYZ[1])
         ax.set_zlabel(self.axis_labels_XYZ[2])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_section(
         self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
@@ -403,7 +403,7 @@ class Plot:
         ax.set_xlabel(self.axis_labels_RPZ[0])
         ax.set_ylabel(self.axis_labels_RPZ[2])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_surfaces(
         self,
@@ -476,7 +476,7 @@ class Plot:
         ax.set_xlabel(self.axis_labels_RPZ[0])
         ax.set_ylabel(self.axis_labels_RPZ[2])
 
-        return ax
+        return fig, ax
 
     def compute(self, eq: Configuration, name: str, grid: Grid):
         """Compute value specified by name on grid for equilibrium eq.

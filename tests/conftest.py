@@ -1,6 +1,13 @@
 import pytest
 import subprocess
 import os
+from desc.equilibrium import EquilibriaFamily
+
+
+@pytest.fixture
+def plot_eq():
+    eq = EquilibriaFamily(load_from="./tests/inputs/SOLOVEV.h5")[-1]
+    return eq
 
 
 @pytest.fixture(scope="session")

@@ -1,7 +1,7 @@
 import pytest
 import unittest
 
-from desc.plotting import Plot
+from desc.plotting import Plot, plot_logo
 
 
 class TestPlot(unittest.TestCase):
@@ -171,4 +171,10 @@ def test_section_logF(plot_eq):
 @pytest.mark.mpl_image_compare
 def test_plot_surfaces(plot_eq):
     fig, ax = Plot().plot_surfaces(plot_eq)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_logo():
+    fig, ax = plot_logo()
     return fig

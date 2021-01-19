@@ -176,16 +176,10 @@ class _Configuration(IOAble, ABC):
             index=self._index,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
         if self._M < np.max(abs(boundary[:, 0])) or self._N < np.max(
             abs(boundary[:, 1])
@@ -226,9 +220,7 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -372,9 +364,7 @@ class _Configuration(IOAble, ABC):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
     @property
@@ -530,6 +520,10 @@ class _Configuration(IOAble, ABC):
     @property
     def zeta_ratio(self) -> float:
         return self._zeta_ratio
+
+    @zeta_ratio.setter
+    def zeta_ratio(self, zeta_ratio) -> None:
+        self._zeta_ratio = zeta_ratio
 
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self._R_basis.modes]

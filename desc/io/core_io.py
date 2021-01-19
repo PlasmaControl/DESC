@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 
 
 class IO(ABC):
@@ -67,7 +68,7 @@ class IO(ABC):
         if self.check_type(self.target):
             self.base = self.target
             self._close_base_ = False
-        elif type(self.target) is str:
+        elif isinstance(self.target, (str, os.PathLike)):
             self.base = self.open_file(self.target, self.file_mode)
             self._close_base_ = True
         else:

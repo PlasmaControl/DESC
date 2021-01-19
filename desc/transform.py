@@ -254,16 +254,6 @@ class Transform(IOAble):
             return
 
         n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
-        if not isalmostequal(n_cts):
-            warnings.warn(
-                colored(
-                    "fft method requires that there are the same number of poloidal modes for each toroidal mode, falling back to direct method",
-                    "yellow",
-                )
-            )
-            self.method = "direct"
-            return
-
         if len(n_vals) > 1:
             if not islinspaced(n_vals):
                 warnings.warn(
@@ -275,25 +265,11 @@ class Transform(IOAble):
                 self.method = "direct"
                 return
 
-            if not isalmostequal(
-                basis.modes[:, 0].reshape((n_cts[0], -1), order="F")
-            ) or not isalmostequal(
-                basis.modes[:, 1].reshape((n_cts[0], -1), order="F")
-            ):
-                warnings.warn(
-                    colored(
-                        "fft method requires that the poloidal modes are the same for each toroidal mode, falling back to direct method",
-                        "yellow",
-                    )
-                )
-                self.method = "direct"
-                return
-
         if not len(zeta_vals) >= len(n_vals):
             warnings.warn(
                 colored(
-                    "fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}, falling back to direct method".format(
-                        len(zeta_vals), len(n_vals)
+                    "fft method can not undersample in zeta, num_toroidal_modes={}, num_toroidal_angles={}, falling back to direct method".format(
+                        len(n_vals), len(zeta_vals)
                     ),
                     "yellow",
                 )
@@ -302,22 +278,31 @@ class Transform(IOAble):
             return
 
         self.method = "fft"
-        self.numFour = len(n_vals)  # number of toroidal modes
-        self.numFournodes = len(zeta_vals)  # number of toroidal nodes
-        self.zeta_pad = (self.numFournodes - self.numFour) // 2
-        self.pol_zern_idx = basis.modes[: basis.num_modes // self.numFour, :2]
-        pol_nodes = np.hstack(
+        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
+        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
+        self.zeta_pad = (self.num_z_nodes - self.num_n_modes) // 2
+
+        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+        for k in range(basis.num_modes):
+            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
+            col = np.where(basis.modes[k, 2] == n_vals)[0]
+            self.fft_index[k] = self.num_n_modes * row + col
+
+        fft_nodes = np.hstack(
             [
-                grid.nodes[:, :2][: grid.num_nodes // self.numFournodes],
-                np.zeros((grid.num_nodes // self.numFournodes, 1)),
+                grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
+                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
             ]
         )
-        self.pol_grid = Grid(pol_nodes)
+        self.fft_grid = Grid(fft_nodes)
 
     def build(self) -> None:
         """Builds the transform matrices for each derivative order"""
         if self._built:
             return
+
         if self.method == "direct":
             for d in self._derivatives:
                 self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
@@ -328,11 +313,11 @@ class Transform(IOAble):
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
             )
-            n0 = np.argwhere(self.basis.modes[:, 2] == 0).flatten()
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self.pol_grid.nodes, d
-                )[:, n0]
+                    self.fft_grid.nodes, d, modes=temp_modes
+                )
 
         self._built = True
 
@@ -405,13 +390,15 @@ class Transform(IOAble):
                     )
                 )
 
+            c_pad = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_pad[self.fft_index] = c
             c_pad = jnp.pad(
-                c.reshape((-1, self.numFour), order="F"),
+                c_pad.reshape((-1, self.num_n_modes)),
                 ((0, 0), (self.zeta_pad, self.zeta_pad)),
                 mode="constant",
             )
             dk = self.basis.NFP * jnp.arange(
-                -(self.numFournodes // 2), (self.numFournodes // 2) + 1
+                -(self.num_z_nodes // 2), (self.num_z_nodes // 2) + 1
             ).reshape((1, -1))
             c_pad = c_pad[:, :: (-1) ** dz] * dk ** dz * (-1) ** (dz > 1)
             cfft = self._four2phys(c_pad)

@@ -64,7 +64,24 @@ class Basis(IOAble, ABC):
         pass
 
     @abstractmethod
-    def evaluate(self):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluates basis functions at specified nodes
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(3,num_nodes)
+            node coordinates, in (rho,theta,zeta)
+        derivatives : ndarray of int, shape(3,)
+            order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(3,), optional
+            basis modes to evaluate (if None, full basis is used)
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
         pass
 
     @abstractmethod
@@ -180,23 +197,28 @@ class PowerSeries(Basis):
         z = np.zeros((L + 1, 2))
         return np.hstack([l, z])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluates basis functions at specified nodes
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,N)
+        nodes : ndarray of float, size(3,num_nodes)
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(3,), optional
+            basis modes to evaluate (if None, full basis is used)
 
         Returns
         -------
-        y : ndarray, shape(N,K)
+        y : ndarray, shape(num_nodes,num_modes)
             basis functions evaluated at nodes
 
         """
-        return powers(nodes[:, 0], self._modes[:, 0], dr=derivatives[0])
+        if modes is None:
+            modes = self._modes
+
+        return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L: int) -> None:
         """Change resolution of the basis to the given resolution. Overrides parent Basis object's change_resolution method.
@@ -287,23 +309,28 @@ class FourierSeries(Basis):
         z = np.zeros((dim_tor, 2))
         return np.hstack([z, n])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluates basis functions at specified nodes
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,N)
+        nodes : ndarray of float, size(3,num_nodes)
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(3,), optional
+            basis modes to evaluate (if None, full basis is used)
 
         Returns
         -------
-        y : ndarray, shape(N,K)
+        y : ndarray, shape(num_nodes,num_modes)
             basis functions evaluated at nodes
 
         """
-        return fourier(nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        if modes is None:
+            modes = self._modes
+
+        return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
     def change_resolution(self, N: int) -> None:
         """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
@@ -405,26 +432,29 @@ class DoubleFourierSeries(Basis):
         y = np.hstack([z, mm, nn])
         return y
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluates basis functions at specified nodes
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,N)
+        nodes : ndarray of float, size(3,num_nodes)
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(3,), optional
+            basis modes to evaluate (if None, full basis is used)
 
         Returns
         -------
-        y : ndarray, shape(N,K)
+        y : ndarray, shape(num_nodes,num_modes)
             basis functions evaluated at nodes
 
         """
-        poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(
-            nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2]
-        )
+        if modes is None:
+            modes = self._modes
+
+        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return poloidal * toroidal
 
     def change_resolution(self, M: int, N: int) -> None:
@@ -618,29 +648,30 @@ class FourierZernikeBasis(Basis):
         ).T
         return np.hstack([pol, tor])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0])):
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluates basis functions at specified nodes
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,N)
+        nodes : ndarray of float, size(3,num_nodes)
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of in, shape(3,), optional
+            basis modes to evaluate (if None, full basis is used)
 
         Returns
         -------
-        y : ndarray, shape(N,K)
+        y : ndarray, shape(num_nodes,num_modes)
             basis functions evaluated at nodes
 
         """
-        radial = jacobi(
-            nodes[:, 0], self._modes[:, 0], self._modes[:, 1], dr=derivatives[0]
-        )
-        poloidal = fourier(nodes[:, 1], self._modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(
-            nodes[:, 2], self._modes[:, 2], NFP=self._NFP, dt=derivatives[2]
-        )
+        if modes is None:
+            modes = self._modes
+
+        radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
+        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
+        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return radial * poloidal * toroidal
 
     def change_resolution(self, M: int, N: int, delta_lm: int) -> None:

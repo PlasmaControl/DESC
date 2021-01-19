@@ -69,7 +69,7 @@ class TestTransform(unittest.TestCase):
 
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface"""
-        grid = LinearGrid(M=5, N=5)
+        grid = LinearGrid(M=5, N=5, sym=True)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
 
@@ -105,17 +105,19 @@ class TestTransform(unittest.TestCase):
     def test_volume(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume"""
         grid = ConcentricGrid(M=2, N=2)
-        basis = FourierZernikeBasis(M=1, N=1)
+        basis = FourierZernikeBasis(M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
         r = grid.nodes[:, 0]  # rho coordiantes
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 
-        correct_vals = 2 * r * np.sin(t) * np.cos(z) - 0.5 * r * np.cos(t) + np.sin(z)
+        correct_vals = (
+            2 * r * np.sin(t) * np.cos(z) - 0.5 * r * np.cos(t) * np.sin(z) + np.sin(z)
+        )
 
         idx_0 = np.where((basis.modes == [1, -1, 1]).all(axis=1))[0]
-        idx_1 = np.where((basis.modes == [1, 1, 0]).all(axis=1))[0]
+        idx_1 = np.where((basis.modes == [1, 1, -1]).all(axis=1))[0]
         idx_2 = np.where((basis.modes == [0, 0, -1]).all(axis=1))[0]
 
         c = np.zeros((basis.modes.shape[0],))
@@ -214,10 +216,10 @@ class TestTransform(unittest.TestCase):
         Mnodes += 1
         Nnodes += 1
 
-        grid = ConcentricGrid(Mnodes, Nnodes, NFP)
-        basis1 = FourierZernikeBasis(L, M, N, NFP)
-        basis2 = FourierSeries(N, NFP)
-        basis3 = DoubleFourierSeries(M, N, NFP)
+        grid = ConcentricGrid(Mnodes, Nnodes, NFP, sym=True)
+        basis1 = FourierZernikeBasis(L, M, N, NFP, sym="cos")
+        basis2 = FourierSeries(N, NFP, sym="sin")
+        basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
 
         t1f.change_resolution(grid, basis1)
         t2f.change_resolution(grid, basis2)

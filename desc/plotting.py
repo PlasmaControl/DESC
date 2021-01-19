@@ -11,7 +11,7 @@ from desc.backend import put
 from desc.utils import opsindex
 from desc.io import read_ascii
 from desc.grid import Grid, LinearGrid
-from desc.configuration import Configuration
+from desc.equilibrium import Equilibrium
 from desc.basis import FourierZernikeBasis, jacobi, fourier
 
 colorblind_colors = [
@@ -56,7 +56,7 @@ rcParams["axes.prop_cycle"] = color_cycle
 
 
 class Plot:
-    """Class for plotting instances of Configuration and Equilibria on a linear grid."""
+    """Class for plotting instances of Equilibrium on a linear grid."""
 
     axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
     axis_labels_RPZ = [r"$R$", r"$\phi$", r"$Z$"]
@@ -150,14 +150,12 @@ class Plot:
 
         return grid, tuple(plot_axes)
 
-    def plot_1d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_1d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 1D profiles.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -193,14 +191,12 @@ class Plot:
         ax.set_ylabel(self.name_label(name_dict))
         return fig, ax
 
-    def plot_2d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_2d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 2D cross-sections.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -261,14 +257,12 @@ class Plot:
         ax.set_title(self.name_label(name_dict))
         return fig, ax
 
-    def plot_3d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_3d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 3D surfaces.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -341,13 +335,13 @@ class Plot:
         return fig, ax
 
     def plot_section(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
+        self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs
     ):
         """Plots Poincare sections.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -408,7 +402,7 @@ class Plot:
 
     def plot_surfaces(
         self,
-        eq: Configuration,
+        eq: Equilibrium,
         r_grid: Grid = None,
         t_grid: Grid = None,
         ax=None,
@@ -418,7 +412,7 @@ class Plot:
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -479,12 +473,12 @@ class Plot:
 
         return fig, ax
 
-    def compute(self, eq: Configuration, name: str, grid: Grid):
+    def compute(self, eq: Equilibrium, name: str, grid: Grid):
         """Compute value specified by name on grid for equilibrium eq.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -643,7 +637,7 @@ class Plot:
         return label
 
     def __name_key__(self, name_dict):
-        """Reconstruct name for dictionary key used in Configuration compute methods.
+        """Reconstruct name for dictionary key used in Equilibrium compute methods.
 
         Parameters
         ----------

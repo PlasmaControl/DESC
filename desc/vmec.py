@@ -12,13 +12,13 @@ from desc.boundary_conditions import BoundaryConstraint
 
 
 class VMECIO:
-    """Performs input from VMEC netCDF files to DESC Configurations and vice-versa."""
+    """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
     def load(
         cls, path: str, L: int = -1, M: int = -1, N: int = -1, index: str = "ansi"
     ) -> Equilibrium:
-        """Loads a VMEC netCDF file as a Configuration.
+        """Loads a VMEC netCDF file as a Equilibrium.
 
         Parameters
         ----------

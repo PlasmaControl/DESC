@@ -1,7 +1,7 @@
 import numpy as np
 from collections import MutableSequence
 from desc.utils import Timer, expand_state
-from desc.configuration import Configuration
+from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
 from desc.objective_funs import ObjectiveFunction, get_objective_function
@@ -11,17 +11,17 @@ from desc.transform import Transform
 from desc.perturbations import perturb
 
 
-class Equilibrium(Configuration, IOAble):
+class Equilibrium(_Configuration, IOAble):
     """Equilibrium is a decorator design pattern on top of Configuration.
     It adds information about how the equilibrium configuration was solved.
     """
 
     # TODO: add optimizer, objective, grid, transform to io_attrs
     # and figure out why it wont save
-    _io_attrs_ = Configuration._io_attrs_ + ["_solved"]
-    _object_lib_ = Configuration._object_lib_
+    _io_attrs_ = _Configuration._io_attrs_ + ["_solved"]
+    _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
-        {"Configuration": Configuration, "ObjectiveFunction": ObjectiveFunction}
+        {"_Configuration": _Configuration, "ObjectiveFunction": ObjectiveFunction}
     )
 
     def __init__(
@@ -351,7 +351,8 @@ class Equilibrium(Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

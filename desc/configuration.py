@@ -2,7 +2,7 @@ import numpy as np
 import copy
 import warnings
 from termcolor import colored
-
+from abc import ABC
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -27,7 +27,7 @@ from desc.compute_funs import (
 )
 
 
-class Configuration(IOAble):
+class _Configuration(IOAble, ABC):
     """Configuration contains information about a plasma state, including the
     shapes of flux surfaces and profile inputs. It can compute additional
     information, such as the magnetic field and plasma currents.
@@ -176,10 +176,16 @@ class Configuration(IOAble):
             index=self._index,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._Z_sym,
         )
         if self._M < np.max(abs(boundary[:, 0])) or self._N < np.max(
             abs(boundary[:, 1])
@@ -220,7 +226,9 @@ class Configuration(IOAble):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -364,7 +372,9 @@ class Configuration(IOAble):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+            self._x,
+            self._R_basis.num_modes,
+            self._Z_basis.num_modes,
         )
 
     @property

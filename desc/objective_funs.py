@@ -7,7 +7,7 @@ from desc.utils import unpack_state
 from desc.transform import Transform
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.compute_funs import compute_force_error_magnitude, dot
+from desc.compute_funs import compute_force_error_magnitude, dot, compute_energy
 from desc.boundary_conditions import BoundaryConstraint
 
 
@@ -424,6 +424,164 @@ class ForceErrorNodes(ObjectiveFunction):
         return None
 
 
+class EnergyVolIntegral(ObjectiveFunction):
+    """Minimizes the volume integral of MHD energy (B^2 / (2*mu0) - p) in physical space"""
+
+    def __init__(
+        self,
+        R_transform: Transform = None,
+        Z_transform: Transform = None,
+        L_transform: Transform = None,
+        Rb_transform: Transform = None,
+        Zb_transform: Transform = None,
+        p_transform: Transform = None,
+        i_transform: Transform = None,
+        BC_constraint: BoundaryConstraint = None,
+    ) -> None:
+        """Initializes an EnergyVolintegral object
+
+        Parameters
+        ----------
+        R_transform : Transform
+            transforms R_lmn coefficients to real space
+        Z_transform : Transform
+            transforms Z_lmn coefficients to real space
+        L_transform : Transform
+            transforms L_lmn coefficients to real space
+        Rb_transform : Transform
+            transforms Rb_mn coefficients to real space
+        Zb_transform : Transform
+            transforms Zb_mn coefficients to real space
+        p_transform : Transform
+            transforms p_l coefficients to real space
+        i_transform : Transform
+            transforms i_l coefficients to real space
+        BC_constraint : BoundaryConstraint
+            linear constraint to enforce boundary conditions
+
+        Returns
+        -------
+        None
+
+        """
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+        )
+
+    @property
+    def scalar(self):
+        return True
+
+    @property
+    def name(self):
+        return "energy"
+
+    @property
+    def derivatives(self):
+        # TODO: different derivatives for R,Z,L,p,i ?
+        # old axis derivatives
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ]
+        )
+        return derivatives
+
+    def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute energy."""
+
+        if self.BC_constraint is not None:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
+        )
+
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        residual = energy["W"]
+
+        return residual
+
+    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        residual = self.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return residual
+
+    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+        """Prints the energy."""
+
+        if self.BC_constraint is not None:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
+        )
+
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        residual = energy["W"]
+
+        print("Total MHD energy: {:10.3e}".format(residual))
+
+        return None
+
+
 def get_objective_function(
     errr_mode,
     R_transform: Transform = None,
@@ -456,25 +614,21 @@ def get_objective_function(
         transforms i_l coefficients to real space
     BC_constraint : BoundaryConstraint
         linear constraint to enforce boundary conditions
-
-    Returns
-    -------
-    obj_fun : ObjectiveFunction
-        equilibrium objective function object, containing the compute and callback
-        method for the objective function
-
     """
-    if len(R_transform.grid.axis):
-        raise ValueError(
-            colored(
-                "Objective cannot be evaluated at the magnetic axis. "
-                + "Yell at Daniel to implement this!",
-                "red",
-            )
-        )
 
     if errr_mode == "force":
         obj_fun = ForceErrorNodes(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+        )
+    elif errr_mode == "energy":
+        obj_fun = EnergyVolIntegral(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,

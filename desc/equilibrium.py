@@ -351,7 +351,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

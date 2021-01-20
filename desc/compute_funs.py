@@ -1,7 +1,9 @@
 import numpy as np
-
+import warnings
+from termcolor import colored
 from desc.backend import jnp, put
 from desc.transform import Transform
+from scipy import special
 
 
 """These functions perform the core calculations of physical quantities.
@@ -1607,6 +1609,150 @@ def compute_force_error_magnitude(
         current_density,
         magnetic_field,
         con_basis,
+        jacobian,
+        cov_basis,
+        toroidal_coords,
+        profiles,
+    )
+
+
+def compute_energy(
+    Psi,
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    p_l,
+    i_l,
+    R_transform: Transform,
+    Z_transform: Transform,
+    L_transform: Transform,
+    p_transform: Transform,
+    i_transform: Transform,
+    zeta_ratio=1.0,
+):
+    """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results**
+
+    Parameters
+    ----------
+    Psi : float
+        total toroidal flux (in Webers) within the last closed flux surface
+    R_lmn : ndarray
+        spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate
+    Z_lmn : ndarray
+        spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante
+    L_lmn : ndarray
+        spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
+    p_l : ndarray
+        spectral coefficients of p(rho) -- pressure profile
+    i_l : ndarray
+        spectral coefficients of iota(rho) -- rotational transform profile
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    zeta_ratio : float
+        scale factor for zeta derivatives. Setting to zero effectively solves
+        for individual tokamak solutions at each toroidal plane,
+        setting to 1 solves for a stellarator. (Default value = 1.0)
+
+    Returns
+    -------
+    energy: float
+        The scalar value of the integral of (B^2/(2*mu0) - p) over the plasma volume.
+    magnetic_field: dict
+        dictionary of ndarray, shape(num_nodes,) of magnetic field components.
+        Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+        or contravariant (B^x) component of the magnetic field, with the
+        derivative wrt to y.
+    jacobian : dict
+        dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
+        Keys are of the form 'g_x' meaning the x derivative of the coordinate
+        system jacobian g.
+    cov_basis : dict
+        dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
+        Keys are of the form 'e_x_y', meaning the covariant basis vector in
+        the x direction, differentiated wrt to y.
+    toroidal_coords : dict
+        dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+    profiles : dict
+        dictionary of ndarray, shape(num_nodes,) of profiles.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    # prerequisites
+    (
+        magnetic_field,
+        jacobian,
+        cov_basis,
+        toroidal_coords,
+        profiles,
+    ) = compute_magnetic_field_magnitude(
+        Psi,
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        p_l,
+        i_l,
+        R_transform,
+        Z_transform,
+        L_transform,
+        p_transform,
+        i_transform,
+        zeta_ratio,
+    )
+
+    mu0 = 4 * jnp.pi * 1e-7
+
+    pressure = profiles["p"]
+    g_abs = jnp.abs(jacobian["g"])
+    mag_B_sq = magnetic_field["|B|"] ** 2
+
+    rho = R_transform.grid.nodes[:, 0]
+    theta = R_transform.grid.nodes[:, 1]
+    zeta = R_transform.grid.nodes[:, 2]
+
+    NFP = R_transform.grid.NFP
+    N_radial_roots = len(jnp.unique(rho))
+    N_theta = len(jnp.unique(theta))
+    N_zeta = len(jnp.unique(zeta))
+
+    volumes = R_transform.grid.volumes
+    dr = volumes[:, 0]
+    dt = volumes[:, 1]
+    dz = volumes[:, 2]
+
+    roots, weights = special.js_roots(N_radial_roots, 2, 2)
+    if not np.all(np.unique(rho) == roots):
+        warnings.warn(
+            colored(
+                "Quadrature energy integration method requires 'quad' pattern nodes, MHD energy calculated will be incorrect",
+                "yellow",
+            )
+        )
+    energy = {}
+
+    W_p = jnp.sum(pressure * dr * dt * dz * g_abs) * NFP
+    W_B = jnp.sum(mag_B_sq * dr * dt * dz * g_abs) / 2 / mu0 * NFP
+
+    if R_transform.grid.sym:  # double to account for symmetric grid being used
+        W_p = 2 * W_p
+        W_B = 2 * W_B
+
+    energy["W_p"] = -W_p
+    energy["W_B"] = W_B
+    W = W_B - W_p
+    energy["W"] = W
+
+    return (
+        energy,
+        magnetic_field,
         jacobian,
         cov_basis,
         toroidal_coords,

@@ -6,7 +6,11 @@ from desc.boundary_conditions import BoundaryConstraint
 
 
 def perturb(
-    eq, deltas: dict, order=0, Jx=None, verbose=1,
+    eq,
+    deltas: dict,
+    order=0,
+    Jx=None,
+    verbose=1,
 ):
     """Perturbs an Equilibrium wrt input parameters.
 
@@ -87,7 +91,11 @@ def perturb(
             timer.start("df/dcc computation ({})".format(key))
             Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
             timer.stop("df/dcc computation ({})".format(key))
-            RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
+            RHS += 0.5 * np.tensordot(
+                Jcc,
+                np.tensordot(dc, dc, axes=0),
+                axes=2,
+            )
             if verbose > 1:
                 timer.disp("df/dcc computation ({})".format(key))
 
@@ -95,7 +103,9 @@ def perturb(
             Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
             timer.stop("df/dxc computation ({})".format(key))
             RHS -= np.tensordot(
-                Jxc, np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1), axes=2,
+                Jxc,
+                np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1),
+                axes=2,
             )
             if verbose > 1:
                 timer.disp("df/dxc computation ({})".format(key))

@@ -314,27 +314,20 @@ class ForceErrorNodes(ObjectiveFunction):
             zeta_ratio,
         )
 
-        volumes = self.R_transform.grid.volumes
-        dr = volumes[:, 0]
-        dt = volumes[:, 1]
-        dz = volumes[:, 2]
+        weights = self.R_transform.grid.weights
 
         f_rho = (
             force_error["F_rho"]
             * force_error["|grad(rho)|"]
             * jacobian["g"]
-            * dr
-            * dt
-            * dz
+            * weights
             * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
         )
         f_beta = (
             force_error["F_beta"]
             * force_error["|beta|"]
             * jacobian["g"]
-            * dr
-            * dt
-            * dz
+            * weights
             * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
             * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
         )
@@ -384,27 +377,20 @@ class ForceErrorNodes(ObjectiveFunction):
             zeta_ratio,
         )
 
-        volumes = self.R_transform.grid.volumes
-        dr = volumes[:, 0]
-        dt = volumes[:, 1]
-        dz = volumes[:, 2]
+        weights = self.R_transform.grid.weights
 
         f_rho = (
             force_error["F_rho"]
             * force_error["|grad(rho)|"]
             * jacobian["g"]
-            * dr
-            * dt
-            * dz
+            * weights
             * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
         )
         f_beta = (
             force_error["F_beta"]
             * force_error["|beta|"]
             * jacobian["g"]
-            * dr
-            * dt
-            * dz
+            * weights
             * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
             * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
         )

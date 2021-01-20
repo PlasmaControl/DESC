@@ -1723,12 +1723,9 @@ def compute_energy(
     N_theta = len(jnp.unique(theta))
     N_zeta = len(jnp.unique(zeta))
 
-    volumes = R_transform.grid.volumes
-    dr = volumes[:, 0]
-    dt = volumes[:, 1]
-    dz = volumes[:, 2]
+    weights = R_transform.grid.weights
 
-    roots, weights = special.js_roots(N_radial_roots, 2, 2)
+    roots, ws = special.js_roots(N_radial_roots, 2, 2)
     if not np.all(np.unique(rho) == roots):
         warnings.warn(
             colored(
@@ -1738,8 +1735,8 @@ def compute_energy(
         )
     energy = {}
 
-    W_p = jnp.sum(pressure * dr * dt * dz * g_abs) * NFP
-    W_B = jnp.sum(mag_B_sq * dr * dt * dz * g_abs) / 2 / mu0 * NFP
+    W_p = jnp.sum(pressure * weights * g_abs) * NFP
+    W_B = jnp.sum(mag_B_sq * weights * g_abs) / 2 / mu0 * NFP
 
     if R_transform.grid.sym:  # double to account for symmetric grid being used
         W_p = 2 * W_p

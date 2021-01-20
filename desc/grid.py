@@ -8,14 +8,14 @@ from scipy import special
 class Grid(IOAble):
     """Grid is a base class for collocation grids"""
 
-    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_sym", "_nodes", "_volumes"]
+    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_sym", "_nodes", "_weights"]
 
     def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
         """Initializes a custom grid without a pre-defined pattern
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,Nnodes)
+        nodes : ndarray of float, size(Nnodes,3)
             node coordinates, in (rho,theta,zeta)
 
         Returns
@@ -32,7 +32,7 @@ class Grid(IOAble):
             self._NFP = None
             self._sym = False
 
-            self._nodes, self._volumes = self.create_nodes(nodes)
+            self._nodes, self._weights = self.create_nodes(nodes)
 
             self._enforce_symmetry_()
             self._sort_nodes_()
@@ -73,7 +73,7 @@ class Grid(IOAble):
         if self._sym:  # remove nodes with theta > pi
             non_sym_idx = np.where(self._nodes[:, 1] > np.pi)
             self._nodes = np.delete(self._nodes, non_sym_idx, axis=0)
-            self._volumes = np.delete(self._volumes, non_sym_idx, axis=0)
+            self._weights = np.delete(self._weights, non_sym_idx, axis=0)
 
     def _sort_nodes_(self) -> None:
         """Sorts nodes for use with FFT
@@ -86,7 +86,7 @@ class Grid(IOAble):
 
         sort_idx = np.lexsort((self._nodes[:, 1], self._nodes[:, 0], self._nodes[:, 2]))
         self._nodes = self._nodes[sort_idx]
-        self._volumes = self._volumes[sort_idx]
+        self._weights = self._weights[sort_idx]
 
     def _find_axis_(self) -> None:
         """Finds indices of axis nodes
@@ -103,21 +103,21 @@ class Grid(IOAble):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,Nnodes)
+        nodes : ndarray of float, size(Nnodes,3)
             node coordinates, in (rho,theta,zeta)
 
         Returns
         -------
-        nodes : ndarray of float, size(3,Nnodes)
+        nodes : ndarray of float, size(Nnodes,3)
             node coordinates, in (rho,theta,zeta)
 
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3))
-        volumes = np.zeros_like(nodes)
+        weights = np.zeros(nodes.shape[0])
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
-        return nodes, volumes
+        return nodes, weights
 
     def change_resolution(self) -> None:
         pass
@@ -149,7 +149,7 @@ class Grid(IOAble):
 
     @property
     def nodes(self):
-        """ndarray: array of float, size(3,Nnodes):
+        """ndarray: array of float, size(Nnodes,3):
         node coordinates, in (rho,theta,zeta)"""
         return self._nodes
 
@@ -158,14 +158,14 @@ class Grid(IOAble):
         self._nodes = nodes
 
     @property
-    def volumes(self):
-        """ndarray: array of float, size(3,Nnodes):
-        node spacing (drho,dtheta,dzeta) at each node coordinate"""
-        return self._volumes
+    def weights(self):
+        """ndarray: array of float, size(Nnodes,):
+        weight for each node, either exact quadrature or volume based"""
+        return self._weights
 
-    @volumes.setter
-    def volumes(self, volumes) -> None:
-        self._volumes = volumes
+    @weights.setter
+    def weights(self, weights) -> None:
+        self._weights = weights
 
     @property
     def num_nodes(self):
@@ -243,7 +243,7 @@ class LinearGrid(Grid):
             self._theta = theta
             self._zeta = zeta
 
-            self._nodes, self._volumes = self.create_nodes(
+            self._nodes, self._weights = self.create_nodes(
                 L=self._L,
                 M=self._M,
                 N=self._N,
@@ -302,10 +302,10 @@ class LinearGrid(Grid):
 
         Returns
         -------
-        nodes : ndarray of float, size(3,Nnodes)
+        nodes : ndarray of float, size(Nnodes,3)
             node coordinates, in (rho,theta,zeta)
-        volumes : ndarray of float, size(3,Nnodes)
-            node spacing (drho,dtheta,dzeta) at each node coordinate
+        weights : ndarray of float, size(Nnodes,)
+            weight for each node, either exact quadrature or volume based
 
         """
         self._L = L
@@ -355,9 +355,9 @@ class LinearGrid(Grid):
         dz = dz * np.ones_like(z)
 
         nodes = np.stack([r, t, z]).T
-        volumes = np.stack([dr, dt, dz]).T
+        weights = dr * dt * dz
 
-        return nodes, volumes
+        return nodes, weights
 
     def change_resolution(self, L: int, M: int, N: int) -> None:
         """
@@ -380,7 +380,7 @@ class LinearGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._volumes = self.create_nodes(
+            self._nodes, self._weights = self.create_nodes(
                 L=L,
                 M=M,
                 N=N,
@@ -450,7 +450,7 @@ class ConcentricGrid(Grid):
             self._index = index
             self._surfs = surfs
 
-            self._nodes, self._volumes = self.create_nodes(
+            self._nodes, self._weights = self.create_nodes(
                 M=self._M,
                 N=self._N,
                 NFP=self._NFP,
@@ -501,10 +501,10 @@ class ConcentricGrid(Grid):
 
         Returns
         -------
-        nodes : ndarray of float, size(3,Nnodes)
+        nodes : ndarray of float, size(Nnodes, 3)
             node coordinates, in (rho,theta,zeta)
-        volumes : ndarray of float, size(3,Nnodes)
-            node spacing (drho,dtheta,dzeta) at each node coordinate
+        weights : ndarray of float, size(Nnodes,)
+            weight for each node, either exact quadrature or volume based
 
         """
         dim_fourier = 2 * N + 1
@@ -522,8 +522,8 @@ class ConcentricGrid(Grid):
                 )
             )
         if surfs == "quad":
-            nodes, volumes = get_nodes_quad(M, N, NFP, sym=self.sym)
-            return nodes, volumes
+            nodes, weights = get_nodes_quad(M, N, NFP, sym=self.sym)
+            return nodes, weights
 
         pattern = {
             "cheb1": (np.cos(np.arange(M, -1, -1) * np.pi / M) + 1) / 2,
@@ -572,9 +572,9 @@ class ConcentricGrid(Grid):
         dz = np.ones_like(z) * dz
 
         nodes = np.stack([r, t, z]).T
-        volumes = np.stack([dr, dt, dz]).T
+        weights = dr * dt * dz
 
-        return nodes, volumes
+        return nodes, weights
 
     def change_resolution(self, M: int, N: int) -> None:
         """
@@ -595,30 +595,37 @@ class ConcentricGrid(Grid):
             self._L = M + 1
             self._M = M
             self._N = N
-            self._nodes, self._volumes = self.create_nodes(
+            self._nodes, self._weights = self.create_nodes(
                 M=M, N=N, NFP=self._NFP, sym=self._sym, surfs=self._surfs
             )
             self.sort_nodes()
 
 
-def get_nodes_quad(M, N, NFP, weights=True, sym=False):
-    """Compute interpolation nodes for Zernike quadrature, uses (M+1) radial nodes and 2*(M+1) equispaced poloidal nodes
+def get_nodes_quad(M, N, NFP, sym=False):
+    """Compute interpolation nodes for Zernike quadrature
+
+    Uses (M+1) radial nodes and 2*(M+1) equispaced poloidal nodes
         and 2*N+1 toroidal nodes
 
     Args:
-        M (int): maximum poloidal mode number
-        N (int): maximum toroidal mode number
-        NFP (int): number of field periods
-        weights (bool): False to not include the quadrature weights in the dr of the volume
-                        True to return the quadrature radial weights ( dr = weights / r, so sum(val * g*dr*dt*dz) = integral of the val over volume)
-        sym (bool): False for nodes to fill the full domain,
-                    True for nodes in the stellarator symmetry (half) domain
+        M : int
+            maximum poloidal mode number
+        N : int
+            maximum toroidal mode number
+        NFP : int
+            number of field periods
+        sym : bool
+            False for nodes to fill the full domain,
+            True for nodes in the stellarator symmetry (half) domain
 
 
     Returns:
-        nodes (ndarray, size(3,Nnodes)): node coordinates, in (rho,theta,zeta).
-        volumes (ndarray, size(3,Nnodes)): node spacing (drho,dtheta,dzeta) at each node coordinate.
+        nodes : ndarray, size(Nnodes,3)
+            node coordinates, in (rho,theta,zeta).
+        weights : ndarray, size(Nnodes)
+            weight for each node, either exact quadrature or volume based
     """
+    # I'm assuming we always want the quadrature weights with this
 
     nr = M + 1
     if not sym:
@@ -658,20 +665,15 @@ def get_nodes_quad(M, N, NFP, weights=True, sym=False):
     t = t.flatten()
     z = z.flatten()
 
-    dr = np.tile(dr, nt * nz)
-    if weights:
-        dr = np.ones_like(dr)
-        dr = dr * ws / r
+    dr = np.ones_like(r)
+    dr = dr * ws / r
     dt = dt * np.ones_like(t)
     dz = dz * np.ones_like(z)
 
     nodes = np.stack([r, t, z]).T
-    volumes = np.stack([dr, dt, dz]).T
+    weights = dr * dt * dz
 
-    if weights:
-        return nodes, volumes
-    else:
-        return nodes, volumes
+    return nodes, weights
 
 
 # these functions are currently unused ---------------------------------------

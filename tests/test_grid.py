@@ -117,7 +117,7 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid.nodes, nodes, atol=1e-8)
 
         self.assertAlmostEqual(
-            np.sum(grid.volumes[:, 0] * grid.volumes[:, 1] * grid.volumes[:, 2]),
+            np.sum(grid.weights),
             (2 * np.pi) ** 2 / NFP,
         )
 
@@ -165,19 +165,11 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
         self.assertAlmostEqual(
-            np.sum(
-                grid_ansi.volumes[:, 0]
-                * grid_ansi.volumes[:, 1]
-                * grid_ansi.volumes[:, 2]
-            ),
+            np.sum(grid_ansi.weights),
             (2 * np.pi) ** 2 / NFP,
         )
         self.assertAlmostEqual(
-            np.sum(
-                grid_fringe.volumes[:, 0]
-                * grid_fringe.volumes[:, 1]
-                * grid_fringe.volumes[:, 2]
-            ),
+            np.sum(grid_fringe.weights),
             (2 * np.pi) ** 2 / NFP,
         )
 

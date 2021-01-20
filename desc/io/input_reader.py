@@ -465,10 +465,14 @@ class InputReader:
         # split into list of dicts
         inputs_list = []
         for ii in range(arr_len):
-            inputs_ii = {key: val for key, val in inputs.items() if key not in arrs}
-            inputs_ii.update(
-                {key: val[ii] for key, val in inputs.items() if key in arrs}
-            )
+            inputs_ii = {}
+            for key in inputs:
+                if key in arrs:
+                    inputs_ii[key] = inputs[key][ii]
+                elif isinstance(inputs[key], np.ndarray):
+                    inputs_ii[key] = inputs[key].copy()
+                else:
+                    inputs_ii[key] = inputs[key]
             # apply pressure ratio
             inputs_ii["profiles"][:, 1] *= inputs_ii["pres_ratio"]
             # apply boundary ratio

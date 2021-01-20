@@ -128,8 +128,8 @@ class _Configuration(IOAble, ABC):
             self._L = inputs["L"]
             self._M = inputs["M"]
             self._N = inputs["N"]
-            profiles = inputs["profiles"]
-            boundary = inputs["boundary"]
+            self._profiles = inputs["profiles"]
+            self._boundary = inputs["boundary"]
         except:
             raise ValueError(colored("input dict does not contain proper keys", "red"))
 
@@ -152,6 +152,54 @@ class _Configuration(IOAble, ABC):
             self._Z_sym = None
 
         # create bases
+        self._set_basis()
+
+        # format profiles
+        self._p_l, self._i_l = format_profiles(
+            self._profiles, self._p_basis, self._i_basis
+        )
+
+        # format boundary
+        self._Rb_mn, self._Zb_mn = format_boundary(
+            self._boundary, self._Rb_basis, self._Zb_basis, self._bdry_mode
+        )
+
+        # check if state vector is provided
+        try:
+            self._x = inputs["x"]
+            self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
+            )
+        # default initial guess
+        except:
+            axis = inputs.get(
+                "axis", self._boundary[np.where(self._boundary[:, 0] == 0)[0], 1:]
+            )
+            # check if R is provided
+            try:
+                self._R_lmn = inputs["R_lmn"]
+            except:
+                self._R_lmn = initial_guess(
+                    self._R_basis, self._Rb_mn, self._Rb_basis, axis
+                )
+            # check if Z is provided
+            try:
+                self._Z_lmn = inputs["Z_lmn"]
+            except:
+                self._Z_lmn = initial_guess(
+                    self._Z_basis, self._Zb_mn, self._Zb_basis, axis
+                )
+            # check if lambda is provided
+            try:
+                self._L_lmn = inputs["L_lmn"]
+            except:
+                self._L_lmn = np.zeros((self._L_basis.num_modes,))
+            self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
+
+    def _set_basis(self):
+
         self._R_basis = FourierZernikeBasis(
             L=self._L,
             M=self._M,
@@ -188,16 +236,16 @@ class _Configuration(IOAble, ABC):
             NFP=self._NFP,
             sym=self._Z_sym,
         )
-        if self._M < np.max(abs(boundary[:, 0])) or self._N < np.max(
-            abs(boundary[:, 1])
+        if self._M < np.max(abs(self._boundary[:, 0])) or self._N < np.max(
+            abs(self._boundary[:, 1])
         ):
             warnings.warn(
                 colored(
                     "Configuration resolution does not fully resolve boundary inputs, Configuration M,N={},{},  boundary resolution M,N={},{}".format(
                         self._M,
                         self._N,
-                        np.max(abs(boundary[:, 0])),
-                        np.max(abs(boundary[:, 1])),
+                        int(np.max(abs(self._boundary[:, 0]))),
+                        int(np.max(abs(self._boundary[:, 1]))),
                     ),
                     "yellow",
                 )
@@ -205,55 +253,15 @@ class _Configuration(IOAble, ABC):
 
         self._p_basis = PowerSeries(L=self._L)
         self._i_basis = PowerSeries(L=self._L)
-        if self._L < np.max(profiles[:, 0]):
+        if self._L < np.max(self._profiles[:, 0]):
             warnings.warn(
                 colored(
                     "Configuration radial resolution does not fully resolve profile inputs, radial resolution L={}, profile resolution L={}".format(
-                        self._L, np.max(profiles[:, 0])
+                        self._L, int(np.max(self._profiles[:, 0]))
                     ),
                     "yellow",
                 )
             )
-
-        # format profiles
-        self._p_l, self._i_l = format_profiles(profiles, self._p_basis, self._i_basis)
-
-        # format boundary
-        self._Rb_mn, self._Zb_mn = format_boundary(
-            boundary, self._Rb_basis, self._Zb_basis, self._bdry_mode
-        )
-
-        # check if state vector is provided
-        try:
-            self._x = inputs["x"]
-            self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
-            )
-        # default initial guess
-        except:
-            axis = inputs.get("axis", boundary[np.where(boundary[:, 0] == 0)[0], 1:])
-            # check if R is provided
-            try:
-                self._R_lmn = inputs["R_lmn"]
-            except:
-                self._R_lmn = initial_guess(
-                    self._R_basis, self._Rb_mn, self._Rb_basis, axis
-                )
-            # check if Z is provided
-            try:
-                self._Z_lmn = inputs["Z_lmn"]
-            except:
-                self._Z_lmn = initial_guess(
-                    self._Z_basis, self._Zb_mn, self._Zb_basis, axis
-                )
-            # check if lambda is provided
-            try:
-                self._L_lmn = inputs["L_lmn"]
-            except:
-                self._L_lmn = np.zeros((self._L_basis.num_modes,))
-            self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
     def parent(self):
@@ -296,31 +304,31 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self._R_basis.modes
         old_modes_Z = self._Z_basis.modes
         old_modes_L = self._L_basis.modes
+        old_modes_p = self._p_basis.modes
+        old_modes_i = self._i_basis.modes
+        old_modes_Rb = self._Rb_basis.modes
+        old_modes_Zb = self._Zb_basis.modes
 
-        # create bases
-        self._R_basis = FourierZernikeBasis(
-            L=self._L,
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
-            index=self._index,
+        self._set_basis()
+
+        # previous resolution may have left off some coeffs, so we should add them back in
+        # but need to check if "profiles" is still accurate, might have been perturbed
+        # so we reuse the old coeffs up to the old resolution
+        full_p_l, full_i_l = format_profiles(
+            self._profiles, self._p_basis, self._i_basis
         )
-        self._Z_basis = FourierZernikeBasis(
-            L=self._L,
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
-            index=self._index,
+        self._p_l = copy_coeffs(self._p_l, old_modes_p, self.p_basis.modes, full_p_l)
+        self._i_l = copy_coeffs(self._i_l, old_modes_i, self.p_basis.modes, full_i_l)
+
+        # format boundary
+        full_Rb_mn, full_Zb_mn = format_boundary(
+            self._boundary, self._Rb_basis, self._Zb_basis, self._bdry_mode
         )
-        self._L_basis = FourierZernikeBasis(
-            L=self._L,
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
-            index=self._index,
+        self._Rb_mn = copy_coeffs(
+            self._Rb_mn, old_modes_Rb, self.Rb_basis.modes, full_Rb_mn
+        )
+        self._Zb_mn = copy_coeffs(
+            self._Zb_mn, old_modes_Zb, self.Zb_basis.modes, full_Zb_mn
         )
 
         self._R_lmn = copy_coeffs(self._R_lmn, old_modes_R, self._R_basis.modes)
@@ -334,6 +342,10 @@ class _Configuration(IOAble, ABC):
     @property
     def sym(self) -> bool:
         return self._sym
+
+    @property
+    def bdry_mode(self):
+        return self._bdry_mode
 
     @property
     def Psi(self) -> float:

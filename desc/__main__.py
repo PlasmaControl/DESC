@@ -92,15 +92,16 @@ def main(cl_args=None):
     equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input
     if ir.args.vmec is not None:
-        equil_fam[0] = Equilibrium.from_configuration(
-            VMECIO.load(
-                ir.args.vmec,
-                L=ir.inputs[0]["L"],
-                M=ir.inputs[0]["M"],
-                N=ir.inputs[0]["N"],
-                index=ir.inputs[0]["zern_mode"],
-            )
+        equil_fam[0] = VMECIO.load(
+            ir.args.vmec,
+            L=ir.inputs[0]["L"],
+            M=ir.inputs[0]["M"],
+            N=ir.inputs[0]["N"],
+            index=ir.inputs[0]["zern_mode"],
         )
+        equil_fam[0].inputs = ir.inputs[0]
+        equil_fam[0].objective = ir.inputs[0]["errr_mode"]
+        equil_fam[0].optimizer = ir.inputs[0]["optim_method"]
 
     # solve equilibrium
     equil_fam.solve_continuation(

@@ -38,7 +38,7 @@ def SOLOVEV(tmpdir_factory):
     print("cwd=", cwd)
 
     SOLOVEV_run = subprocess.run(
-        ["python", "-m", "desc", "-o", str(output_path), input_filename],
+        ["python", "-m", "desc", "-o", str(output_path), input_filename, "--numpy"],
         stdout=subprocess.PIPE,
         universal_newlines=True,
         timeout=max_time,

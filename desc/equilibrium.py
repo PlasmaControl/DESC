@@ -1,12 +1,12 @@
 import numpy as np
 from collections import MutableSequence
 from desc.utils import Timer, expand_state
-from desc.configuration import _Configuration
+from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
 from desc.objective_funs import ObjectiveFunction, get_objective_function
 from desc.optimize import Optimizer
-from desc.grid import ConcentricGrid, Grid
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 from desc.perturbations import perturb
 
@@ -53,11 +53,6 @@ class Equilibrium(_Configuration, IOAble):
         self.objective = inputs.get("errr_mode", None)
         self.optimizer = inputs.get("optim_method", None)
 
-    @classmethod
-    def from_configuration(cls, configuration):
-        """Create an Equilibrium from a Configuration"""
-        return cls(configuration.inputs)
-
     @property
     def x0(self):
         return self._x0
@@ -67,14 +62,23 @@ class Equilibrium(_Configuration, IOAble):
         self._x0 = x0
 
     @property
+    def axis_location(self):
+        """Returns a tuple of (R0,Z0), the axis location on the zeta=0 plane"""
+
+        R0 = np.dot(self.R_basis.evaluate(np.array([[0, 0, 0]])), self.R_lmn)[0]
+        Z0 = np.dot(self.Z_basis.evaluate(np.array([[0, 0, 0]])), self.Z_lmn)[0]
+        return R0, Z0
+
+    @property
     def M_grid(self):
         return self._M_grid
 
     @M_grid.setter
     def M_grid(self, new):
-        self._M_grid = new
-        self._set_grid()
-        self._set_transforms()
+        if self._M_grid != new:
+            self._M_grid = new
+            self._set_grid()
+            self._set_transforms()
 
     @property
     def N_grid(self):
@@ -82,20 +86,31 @@ class Equilibrium(_Configuration, IOAble):
 
     @N_grid.setter
     def N_grid(self, new):
-        self._N_grid = new
-        self._set_grid()
-        self._set_transforms()
+        if self._N_grid != new:
+            self._N_grid = new
+            self._set_grid()
+            self._set_transforms()
 
     def _set_grid(self):
-        self._grid = ConcentricGrid(
-            M=self.M_grid,
-            N=self.N_grid,
-            NFP=self.NFP,
-            sym=self.sym,
-            axis=False,
-            index=self._zern_mode,
-            surfs=self._node_mode,
-        )
+        if self._node_mode in ["cheb1", "cheb2", "quad"]:
+            self._grid = ConcentricGrid(
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
+                sym=self.sym,
+                axis=False,
+                index=self._zern_mode,
+                surfs=self._node_mode,
+            )
+        elif self._node_mode in ["linear", "uniform"]:
+            self._grid = LinearGrid(
+                L=2 * self.M_grid + 1,
+                M=2 * self.M_grid + 1,
+                N=2 * self.N_grid + 1,
+                NFP=self.NFP,
+                sym=self.sym,
+                axis=False,
+            )
 
     def _set_transforms(self):
 
@@ -174,7 +189,23 @@ class Equilibrium(_Configuration, IOAble):
             self.timer.disp("Boundary constraint factorization")
 
     def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
-        super().change_resolution(L, M, N)
+
+        L_change = M_change = N_change = False
+        if L is not None and L != self._L:
+            L_change = True
+            self._L = L
+        if M is not None and M != self._M:
+            M_change = True
+            self._M = M
+        if N is not None and N != self._N:
+            N_change = True
+            self._N = N
+
+        if any([L_change, M_change, N_change]):
+            super().change_resolution(L, M, N)
+            if self.objective is not None:
+                self.objective = self.objective.name
+
         if M_grid is not None:
             self.M_grid = M_grid
         if N_grid is not None:
@@ -365,11 +396,12 @@ class Equilibrium(_Configuration, IOAble):
         self.solved = result["success"]
         return result
 
-    def perturb(self, deltas, **kwargs):
-        equil = perturb(self, deltas, **kwargs)
-        equil._parent = self
-        self._children.append(equil)
-        return equil
+    def perturb(self, deltas, order, Jx=None, verbose=1, copy=True):
+        equil = perturb(self, deltas, order=order, Jx=Jx, verbose=verbose, copy=copy)
+        if copy:
+            return equil
+        else:
+            return None
 
     def optimize(self):
         raise NotImplementedError("optimizing equilibria has not yet been implemented")
@@ -396,7 +428,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def _init_from_inputs_(self, inputs=None):
         # did we get 1 set of inputs or several?
         if isinstance(inputs, (list, tuple)):
-            self._equilibria = [Equilibrium(inp) for inp in inputs]
+            self._equilibria = [Equilibrium(inputs[0])]
         else:
             self._equilibria = [Equilibrium(inputs=inputs)]
         self.inputs = inputs
@@ -433,53 +465,106 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self.timer = Timer()
         self.timer.start("Total time")
 
-        for ii in range(start_from, len(self)):
+        for ii in range(start_from, len(self.inputs)):
             self.timer.start("Iteration {} total".format(ii + 1))
-            equil = self[ii]
             if verbose > 0:
                 print("================")
-                print("Step {}/{}".format(ii + 1, len(self)))
+                print("Step {}/{}".format(ii + 1, len(self.inputs)))
                 print("================")
                 print(
                     "Spectral resolution (L,M,N)=({},{},{})".format(
-                        equil.L, equil.M, equil.N
+                        self.inputs[ii]["L"], self.inputs[ii]["M"], self.inputs[ii]["N"]
                     )
                 )
                 print(
-                    "Node resolution (M,N)=({},{})".format(equil.M_grid, equil.N_grid)
+                    "Node resolution (M,N)=({},{})".format(
+                        self.inputs[ii]["M_grid"], self.inputs[ii]["N_grid"]
+                    )
                 )
-                print("Boundary ratio = {}".format(equil.inputs["bdry_ratio"]))
-                print("Pressure ratio = {}".format(equil.inputs["pres_ratio"]))
-                print("Zeta ratio = {}".format(equil.inputs["zeta_ratio"]))
-                print("Perturbation Order = {}".format(equil.inputs["pert_order"]))
-                print("Function tolerance = {}".format(equil.inputs["ftol"]))
-                print("Gradient tolerance = {}".format(equil.inputs["gtol"]))
-                print("State vector tolerance = {}".format(equil.inputs["xtol"]))
-                print("Max function evaluations = {}".format(equil.inputs["nfev"]))
+                print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
+                print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+                print("Zeta ratio = {}".format(self.inputs[ii]["zeta_ratio"]))
+                print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
+                print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
+                print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
+                print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
+                print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
                 print("================")
 
-            if ii > start_from:
-                # new initial guess is previous solution
-                new_x = expand_state(
-                    self[ii - 1].x,
-                    self[ii - 1].R_basis.modes,
-                    equil.R_basis.modes,
-                    self[ii - 1].Z_basis.modes,
-                    equil.Z_basis.modes,
-                    self[ii - 1].L_basis.modes,
-                    equil.L_basis.modes,
+            if ii == start_from:
+                equil = self[ii]
+
+            else:
+
+                equil = self[ii - 1].copy()
+                self.insert(ii, equil)
+
+                # figure out if we we need perturbations
+                deltas = {}
+                if not np.allclose(
+                    self.inputs[ii]["boundary"], self.inputs[ii - 1]["boundary"]
+                ):
+                    # if we're changing the bdry ratio, assume we want to increase
+                    # resolution before we do that, otherwise you're not really perturbing anything
+                    if self.inputs[ii]["N"] != self.inputs[ii - 1]["N"]:
+                        equil.change_resolution(
+                            L=self.inputs[ii]["L"],
+                            M=self.inputs[ii]["M"],
+                            N=self.inputs[ii]["N"],
+                            M_grid=self.inputs[ii]["M_grid"],
+                            N_grid=self.inputs[ii]["N_grid"],
+                        )
+
+                    Rb_mn, Zb_mn = format_boundary(
+                        self.inputs[ii]["boundary"],
+                        equil.Rb_basis,
+                        equil.Zb_basis,
+                        equil.bdry_mode,
+                    )
+                    # TODO: make sure this actually works
+                    deltas["Rb_mn"] = Rb_mn - equil.Rb_mn
+                    deltas["Zb_mn"] = Zb_mn - equil.Zb_mn
+                if not np.allclose(
+                    self.inputs[ii]["profiles"], self.inputs[ii - 1]["profiles"]
+                ):
+                    p_l, i_l = format_profiles(
+                        self.inputs[ii]["profiles"], equil.p_basis, equil.i_basis
+                    )
+                    deltas["p_l"] = p_l - equil.p_l
+                if (
+                    self.inputs[ii]["zeta_ratio"] - self.inputs[ii - 1]["zeta_ratio"]
+                    != 0
+                ):
+                    deltas["zeta_ratio"] = (
+                        self.inputs[ii]["zeta_ratio"]
+                        - self.inputs[ii - 1]["zeta_ratio"]
+                    )
+
+                if len(deltas) > 0:
+                    if verbose > 0:
+                        print("Perturbing equilibrium")
+                    equil.build()
+                    equil.perturb(
+                        deltas,
+                        order=self.inputs[ii]["pert_order"],
+                        verbose=verbose,
+                        copy=False,
+                    )
+
+                # this is basically free if nothings actually changing, so we can call
+                # it again even if it was called during the perturbations
+                equil.change_resolution(
+                    L=self.inputs[ii]["L"],
+                    M=self.inputs[ii]["M"],
+                    N=self.inputs[ii]["N"],
+                    M_grid=self.inputs[ii]["M_grid"],
+                    N_grid=self.inputs[ii]["N_grid"],
                 )
 
-                equil.x0 = equil.x = new_x
-                equil._parent = self[ii - 1]
-                self[ii - 1]._children.append(equil)
             # TODO: updating transforms instead of recomputing
-            # TODO: check if params changed and do perturbations
+            equil.objective = self.inputs[ii]["errr_mode"]
+            equil.optimizer = self.inputs[ii]["optim_method"]
             equil.build(verbose)
-            if equil.objective is None:
-                equil.objective = self.objective
-            if equil.optimizer is None:
-                equil.optimizer = self.objective
 
             equil.solve(
                 ftol=equil.inputs["ftol"],

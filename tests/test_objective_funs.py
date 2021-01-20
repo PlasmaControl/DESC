@@ -9,14 +9,14 @@ from desc.basis import (
     FourierSeries,
 )
 from desc.transform import Transform
-from desc.objective_funs import ObjectiveFunctionFactory, ForceErrorNodes
+from desc.objective_funs import ObjectiveFunctionFactory, ForceErrorNodes, EnergyVolIntegral
 
 
 class TestObjectiveFunctionFactory(unittest.TestCase):
     """Test basic functionality of ObjectiveFunctionFactory"""
 
     def test_obj_fxn_types(self):
-        """test the correct objective function is returned for 'force', 'accel', and unimplemented"""
+        """test the correct objective function is returned for 'force', 'energy', and unimplemented"""
         RZ_grid = ConcentricGrid(M=2, N=0)
         R_basis = FourierZernikeBasis(M=2, N=0)
         Z_basis = FourierZernikeBasis(M=2, N=0)
@@ -42,6 +42,21 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
             i_transform=PI_transform,
         )
         self.assertIsInstance(obj_fun, ForceErrorNodes)
+
+        errr_mode = "energy"
+        obj_fun = ObjectiveFunctionFactory.get_equil_obj_fun(
+            errr_mode,
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=RZb_transform,
+            Zb_transform=RZb_transform,
+            p_transform=PI_transform,
+            i_transform=PI_transform,
+        )
+        self.assertIsInstance(obj_fun, EnergyVolIntegral)
+
+
 
         # test unimplemented errr_mode
         with self.assertRaises(ValueError):

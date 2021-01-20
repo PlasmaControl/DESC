@@ -1,5 +1,6 @@
 import numpy as np
-
+import warnings
+from termcolor import colored
 from desc.backend import jnp, put
 from desc.transform import Transform
 from scipy import special
@@ -1628,7 +1629,7 @@ def compute_energy(
     i_transform: Transform,
     zeta_ratio=1.0,
 ):
-    """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results** **Does not work with symmetry**
+    """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results**
 
     Parameters
     ----------
@@ -1709,53 +1710,42 @@ def compute_energy(
     mu0 = 4 * jnp.pi * 1e-7
 
     pressure = profiles["p"]
-    N = R_transform.grid._N
-    rho = p_transform.grid.nodes[:, 0]
-    theta = p_transform.grid.nodes[:, 1]
-    zeta = p_transform.grid.nodes[:, 2]
+    g_abs = jnp.abs(jacobian["g"])
+    mag_B_sq = magnetic_field["|B|"] ** 2
+    
+    rho = R_transform.grid.nodes[:, 0]
+    theta = R_transform.grid.nodes[:, 1]
+    zeta = R_transform.grid.nodes[:, 2]
+    
+    NFP = R_transform.grid.NFP
     N_radial_roots = len(jnp.unique(rho))
-    N_theta = len(jnp.unique(theta)) # should be 2 * N_radial_roots
-    N_zeta = len(jnp.unique(zeta)) # should be 2 * N + 1
-    theta_weight = 2*jnp.pi / (N_theta) 
-    zeta_weight = 2*jnp.pi / (N_zeta)
+    N_theta = len(jnp.unique(theta))
+    N_zeta =  len(jnp.unique(zeta))
+    
+    volumes = R_transform.grid.volumes
+    dr = volumes[:, 0]
+    dt = volumes[:, 1]
+    dz = volumes[:, 2]
     
     roots, weights = special.js_roots(N_radial_roots, 2, 2)
-        
-
+    if not np.all(np.unique(rho) == roots):
+            warnings.warn(
+                colored(
+                    "Quadrature energy integration method requires 'quad' pattern nodes, MHD energy calculated will be incorrect",
+                    "yellow",
+                )
+            )
     energy = {}
-    W_p = 0
 
-    g_abs = jnp.abs(jacobian["g"])
-    dim_angle = N_theta * N_zeta  # dim_poloidal * dim_toroidal
-    i = 0
-    for j in range(len(rho)):
-        W_p += (
-            pressure[j]
-            * weights[i]
-            * theta_weight
-            * zeta_weight
-            * g_abs[j]
-            / rho[j]
-        )
-        if j % (dim_angle) == 0 and j != 0:
-            i += 1  # use the weight for the next radial quadrature node
+    W_p = jnp.sum(pressure * dr * dt * dz * g_abs ) * NFP
+    W_B = jnp.sum(mag_B_sq * dr * dt * dz * g_abs )/ 2 / mu0 * NFP
+
+    if R_transform.grid.sym: # double to account for symmetric grid being used
+        W_p = 2 * W_p
+        W_B = 2 * W_B
+    
+    
     energy["W_p"] = -W_p
-
-    W_B = 0
-    i = 0
-    mag_B_sq = magnetic_field["|B|"] ** 2
-    for j in range(len(rho)):
-        W_B += (
-            mag_B_sq[j]
-            * weights[i]
-            * theta_weight
-            * zeta_weight
-            * g_abs[j]
-            / rho[j]
-        )
-        if j % (dim_angle) == 0 and j != 0:
-            i += 1  # use the weight for the next radial quadrature node
-    W_B = W_B / 2 / mu0
     energy["W_B"] = W_B
     W = W_B - W_p
     energy["W"] = W

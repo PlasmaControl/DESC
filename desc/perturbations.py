@@ -11,6 +11,7 @@ def perturb(
     order=0,
     Jx=None,
     verbose=1,
+    copy=True,
 ):
     """Perturbs an Equilibrium wrt input parameters.
 
@@ -27,6 +28,8 @@ def perturb(
         jacobian matrix df/dx
     verbose : int
         level of output to display
+    copy : bool
+        whether to perturb the input equilibrium or make a copy. Defaults to True
 
     Returns
     -------
@@ -38,6 +41,8 @@ def perturb(
     timer.start("Total perturbation")
 
     arg_idx = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    if not eq.built:
+        eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
     args = (y, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
 
@@ -50,6 +55,7 @@ def perturb(
             Jx = eq.objective.jac_x(*args)
             timer.stop("df/dx computation")
             RHS = eq.objective.compute(*args)
+
             if verbose > 1:
                 timer.disp("df/dx computation")
 
@@ -110,7 +116,10 @@ def perturb(
             if verbose > 1:
                 timer.disp("df/dxc computation ({})".format(key))
 
-    eq_new = eq.copy()
+    if copy:
+        eq_new = eq.copy()
+    else:
+        eq_new = eq
 
     # update input parameters
     for key, dc in deltas.items():

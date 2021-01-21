@@ -62,14 +62,6 @@ class Equilibrium(_Configuration, IOAble):
         self._x0 = x0
 
     @property
-    def axis_location(self):
-        """Returns a tuple of (R0,Z0), the axis location on the zeta=0 plane"""
-
-        R0 = np.dot(self.R_basis.evaluate(np.array([[0, 0, 0]])), self.R_lmn)[0]
-        Z0 = np.dot(self.Z_basis.evaluate(np.array([[0, 0, 0]])), self.Z_lmn)[0]
-        return R0, Z0
-
-    @property
     def M_grid(self):
         return self._M_grid
 
@@ -166,7 +158,7 @@ class Equilibrium(_Configuration, IOAble):
             self._transforms["L"].change_derivatives(derivs, build=False)
 
     def build(self, verbose=1):
-        """Builds transform matrices"""
+        """Builds transform matrices and factorizes boundary constraint"""
 
         self.timer.start("Transform computation")
         if verbose > 0:
@@ -193,24 +185,29 @@ class Equilibrium(_Configuration, IOAble):
         L_change = M_change = N_change = False
         if L is not None and L != self._L:
             L_change = True
-            self._L = L
         if M is not None and M != self._M:
             M_change = True
-            self._M = M
         if N is not None and N != self._N:
             N_change = True
-            self._N = N
 
         if any([L_change, M_change, N_change]):
             super().change_resolution(L, M, N)
-            if self.objective is not None:
-                self.objective = self.objective.name
 
-        if M_grid is not None:
-            self.M_grid = M_grid
-        if N_grid is not None:
-            self.N_grid = N_grid
+        M_grid_change = N_grid_change = False
+        if M_grid is not None and M_grid != self._M_grid:
+            self._M_grid = M_grid
+            M_grid_change = True
+        if N_grid is not None and N_grid != self._N_grid:
+            self._N_grid = N_grid
+            N_grid_change = True
+        if any([M_grid_change, N_grid_change]):
+            self._set_grid()
         self._set_transforms()
+        if (
+            any([L_change, M_change, N_change, M_grid_change, N_grid_change])
+            and self.objective is not None
+        ):
+            self.objective = self.objective.name
 
     @property
     def built(self):
@@ -500,6 +497,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 self.insert(ii, equil)
 
                 # figure out if we we need perturbations
+
                 deltas = {}
                 if not np.allclose(
                     self.inputs[ii]["boundary"], self.inputs[ii - 1]["boundary"]
@@ -521,7 +519,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         equil.Zb_basis,
                         equil.bdry_mode,
                     )
-                    # TODO: make sure this actually works
                     deltas["Rb_mn"] = Rb_mn - equil.Rb_mn
                     deltas["Zb_mn"] = Zb_mn - equil.Zb_mn
                 if not np.allclose(
@@ -541,9 +538,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     )
 
                 if len(deltas) > 0:
+                    equil.build(verbose)
                     if verbose > 0:
                         print("Perturbing equilibrium")
-                    equil.build()
+
                     equil.perturb(
                         deltas,
                         order=self.inputs[ii]["pert_order"],

@@ -1,10 +1,11 @@
 import numpy as np
 import copy
 import warnings
+import matplotlib
 from termcolor import colored
 from abc import ABC
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import unpack_state, copy_coeffs, curve_self_intersects
 from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.basis import (
@@ -1166,6 +1167,43 @@ class _Configuration(IOAble, ABC):
         Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
 
         return R0, Z0
+
+    def is_nested(self, nsurfs=10, zeta=0, Nt=361):
+        """Checks that an equilibrium has properly nested flux surfaces
+            in a given toroidal plane
+        Parameters
+        ----------
+        nsurfs : int
+            number of surfaces to check (Default value = 10)
+        zeta : float
+            toroidal plane to check (Default value = 0)
+        Nt : int
+            number of theta points to use for the test (Default value = 361)
+        Returns
+        -------
+        is_nested : bool
+            whether or not the surfaces are nested
+        """
+
+        surfs = np.linspace(0, 1, nsurfs)[::-1]
+        t = np.tile(np.linspace(0, 2 * np.pi, Nt), [nsurfs, 1])
+        r = surfs[:, np.newaxis] * np.ones_like(t)
+        z = zeta * np.ones_like(t)
+        nodes = np.array([r.flatten(), t.flatten(), z.flatten()]).T
+
+        R_interp = self.R_basis.evaluate(nodes)
+        Z_interp = self.Z_basis.evaluate(nodes)
+
+        Rs = np.matmul(R_interp, self.R_lmn).reshape((nsurfs, -1))
+        Zs = np.matmul(Z_interp, self.Z_lmn).reshape((nsurfs, -1))
+
+        p = [
+            matplotlib.path.Path(np.stack([R, Z]).T, closed=True)
+            for R, Z in zip(Rs, Zs)
+        ]
+        nested = np.all([p[i].contains_path(p[i + 1]) for i in range(len(p) - 1)])
+        intersects = np.any([curve_self_intersects(R, Z) for R, Z in zip(Rs, Zs)])
+        return nested and not intersects
 
 
 def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):

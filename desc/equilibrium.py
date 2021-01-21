@@ -1,4 +1,6 @@
 import numpy as np
+from termcolor import colored
+import warnings
 from collections import MutableSequence
 from desc.utils import Timer, expand_state
 from desc.configuration import _Configuration, format_boundary, format_profiles
@@ -726,6 +728,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
             self.timer.stop("Iteration {} total".format(ii + 1))
             if verbose > 1:
                 self.timer.disp("Iteration {} total".format(ii + 1))
+
+            if not equil.is_nested():
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller resolution steps",
+                        "yellow",
+                    )
+                )
+                break
 
         self.timer.stop("Total time")
         print("====================")

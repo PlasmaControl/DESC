@@ -2,6 +2,8 @@ import unittest
 import numpy as np
 
 from desc.grid import LinearGrid, ConcentricGrid
+from desc.utils import curve_self_intersects
+from desc.equilibrium import Equilibrium
 from desc.basis import (
     PowerSeries,
     DoubleFourierSeries,
@@ -73,3 +75,60 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
                 p_transform=PI_transform,
                 i_transform=PI_transform,
             )
+
+
+class TestIsNested(unittest.TestCase):
+    """tests for functions"""
+
+    def test_is_nested(self):
+
+        inputs = {
+            "L": 4,
+            "M": 2,
+            "N": 0,
+            "NFP": 1,
+            "Psi": 1.0,
+            "profiles": np.array([[0, 0, 0.23]]),
+            "boundary": np.array(
+                [
+                    [
+                        0,
+                        0,
+                        10,
+                        0,
+                    ],
+                    [1, 0, 1, 0],
+                ]
+            ),
+            "index": "fringe",
+        }
+
+        eq1 = Equilibrium(inputs)
+        eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
+        eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
+        eq2 = Equilibrium(inputs)
+        eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
+        eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
+        self.assertTrue(eq1.is_nested())
+        self.assertFalse(eq2.is_nested())
+
+    def test_self_intersection(self):
+
+        # elipse: not self intersected
+
+        a = 1
+        b = 1
+        d = np.pi / 2
+        t = np.linspace(0, 2 * np.pi, 361)
+        x = np.sin(a * t + d)
+        y = np.sin(b * t)
+        self.assertFalse(curve_self_intersects(x, y))
+
+        # lissajois: is self intersected
+        a = 1
+        b = 2
+        d = np.pi / 2
+        t = np.linspace(0, 2 * np.pi, 361)
+        x = np.sin(a * t + d)
+        y = np.sin(b * t)
+        self.assertTrue(curve_self_intersects(x, y))

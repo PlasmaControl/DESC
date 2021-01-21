@@ -47,19 +47,19 @@ Repository Contents
 - examples_ contains example input files along with corresponding VMEC solutions. 
 - tests_ contains routines for automatic testing. 
 
-.. _desc: https://github.com/dpanici/DESC/tree/master/desc
-.. _docs: https://github.com/dpanici/DESC/tree/master/docs
-.. _examples: https://github.com/dpanici/DESC/tree/master/examples
-.. _tests: https://github.com/dpanici/DESC/tree/master/tests
-.. _API: https://desc-apc524.readthedocs.io/en/latest/api.html
+.. _desc: https://github.com/ddudt/DESC/tree/master/desc
+.. _docs: https://github.com/ddudt/DESC/tree/master/docs
+.. _examples: https://github.com/ddudt/DESC/tree/master/examples
+.. _tests: https://github.com/ddudt/DESC/tree/master/tests
+.. _API: https://desc-docs.readthedocs.io/en/latest/api.html
 
 Contribute
 ==========
  
-- `Contributing guidelines <https://github.com/dpanici/DESC/blob/master/CONTRIBUTING.rst>`_
-- `Issue Tracker <https://github.com/dpanici/DESC/issues>`_
-- `Source Code <https://github.com/dpanici/DESC/>`_
-- `Documentation <https://desc-apc524.readthedocs.io/>`_
+- `Contributing guidelines <https://github.com/ddudt/DESC/blob/master/CONTRIBUTING.rst>`_
+- `Issue Tracker <https://github.com/ddudt/DESC/issues>`_
+- `Source Code <https://github.com/ddudt/DESC/>`_
+- `Documentation <https://desc-docs.readthedocs.io/>`_
 
 .. |License| image:: https://img.shields.io/github/license/ddudt/desc?color=blue&logo=open-source-initiative&logoColor=white
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
@@ -69,12 +69,12 @@ Contribute
     :target: https://desc-apc524.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Travis| image:: https://img.shields.io/travis/dpanici/DESC?logo=travis   
-    :target: https://travis-ci.org/dpanici/DESC.svg?branch=master
+.. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
+    :target: https://travis-ci.org/ddudt/DESC.svg?branch=master
     :alt: Build
 
-.. |Codecov| image:: https://codecov.io/gh/dpanici/DESC/branch/master/graph/badge.svg
-    :target: https://codecov.io/gh/dpanici/DESC
+.. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/ddudt/DESC
     :alt: Coverage
 
 

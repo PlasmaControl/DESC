@@ -236,16 +236,21 @@ class _Configuration(IOAble, ABC):
             NFP=self._NFP,
             sym=self._Z_sym,
         )
-        if self._M < np.max(abs(self._boundary[:, 0])) or self._N < np.max(
-            abs(self._boundary[:, 1])
+
+        nonzero_modes = self._boundary[
+            np.argwhere(self._boundary[:, 2:] != np.array([0, 0]))[:, 0]
+        ]
+        if nonzero_modes.size and (
+            self._M < np.max(abs(nonzero_modes[:, 0]))
+            or self._N < np.max(abs(nonzero_modes[:, 1]))
         ):
             warnings.warn(
                 colored(
                     "Configuration resolution does not fully resolve boundary inputs, Configuration M,N={},{},  boundary resolution M,N={},{}".format(
                         self._M,
                         self._N,
-                        int(np.max(abs(self._boundary[:, 0]))),
-                        int(np.max(abs(self._boundary[:, 1]))),
+                        int(np.max(abs(nonzero_modes[:, 0]))),
+                        int(np.max(abs(nonzero_modes[:, 1]))),
                     ),
                     "yellow",
                 )
@@ -253,11 +258,15 @@ class _Configuration(IOAble, ABC):
 
         self._p_basis = PowerSeries(L=self._L)
         self._i_basis = PowerSeries(L=self._L)
-        if self._L < np.max(self._profiles[:, 0]):
+        nonzero_modes = self._profiles[
+            np.argwhere(self._profiles[:, 1:] != np.array([0, 0]))[:, 0]
+        ]
+
+        if nonzero_modes.size and self._L < np.max(nonzero_modes[:, 0]):
             warnings.warn(
                 colored(
                     "Configuration radial resolution does not fully resolve profile inputs, radial resolution L={}, profile resolution L={}".format(
-                        self._L, int(np.max(self._profiles[:, 0]))
+                        self._L, int(np.max(nonzero_modes[:, 0]))
                     ),
                     "yellow",
                 )
@@ -589,11 +598,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=0)
-        Z_transform = Transform(grid, self._Z_basis, derivs=0)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=0, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=0, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
 
         profiles = compute_profiles(
             self._Psi,
@@ -628,11 +637,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=0)
-        Z_transform = Transform(grid, self._Z_basis, derivs=0)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R_transform = Transform(grid, self._R_basis, derivs=0, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=0, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=0, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=0, method="direct")
 
         toroidal_coords = compute_toroidal_coords(
             self._Psi,
@@ -667,11 +676,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=0)
-        Z_transform = Transform(grid, self._Z_basis, derivs=0)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R_transform = Transform(grid, self._R_basis, derivs=0, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=0, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=0, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=0, method="direct")
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self._Psi,
@@ -707,11 +716,11 @@ class _Configuration(IOAble, ABC):
             the x direction, differentiated wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=1)
-        Z_transform = Transform(grid, self._Z_basis, derivs=1)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R_transform = Transform(grid, self._R_basis, derivs=1, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=1, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=0, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=0, method="direct")
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self._Psi,
@@ -747,11 +756,11 @@ class _Configuration(IOAble, ABC):
             system jacobian g.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=1)
-        Z_transform = Transform(grid, self._Z_basis, derivs=1)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R_transform = Transform(grid, self._R_basis, derivs=1, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=1, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=0, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=0, method="direct")
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self._Psi,
@@ -787,11 +796,11 @@ class _Configuration(IOAble, ABC):
             in the x direction, differentiated wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=1)
-        Z_transform = Transform(grid, self._Z_basis, derivs=1)
-        L_transform = Transform(grid, self._L_basis, derivs=0)
-        p_transform = Transform(grid, self._p_basis, derivs=0)
-        i_transform = Transform(grid, self._i_basis, derivs=0)
+        R_transform = Transform(grid, self._R_basis, derivs=1, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=1, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=0, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=0, method="direct")
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self._Psi,
@@ -828,11 +837,11 @@ class _Configuration(IOAble, ABC):
             derivative wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=2)
-        Z_transform = Transform(grid, self._Z_basis, derivs=2)
-        L_transform = Transform(grid, self._L_basis, derivs=1)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=1, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
 
         (
             magnetic_field,
@@ -874,11 +883,11 @@ class _Configuration(IOAble, ABC):
             component of the current, with the derivative wrt to y.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=2)
-        Z_transform = Transform(grid, self._Z_basis, derivs=2)
-        L_transform = Transform(grid, self._L_basis, derivs=2)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=2, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
 
         (
             current_density,
@@ -921,11 +930,11 @@ class _Configuration(IOAble, ABC):
             force error.
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=2)
-        Z_transform = Transform(grid, self._Z_basis, derivs=2)
-        L_transform = Transform(grid, self._L_basis, derivs=2)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=2, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
 
         (
             force_error,
@@ -970,11 +979,11 @@ class _Configuration(IOAble, ABC):
             'W_p' for pressure energy (-p integrated over volume), and 'W' for total MHD energy (W_B + W_p)
 
         """
-        R_transform = Transform(grid, self._R_basis, derivs=2)
-        Z_transform = Transform(grid, self._Z_basis, derivs=2)
-        L_transform = Transform(grid, self._L_basis, derivs=2)
-        p_transform = Transform(grid, self._p_basis, derivs=1)
-        i_transform = Transform(grid, self._i_basis, derivs=1)
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=2, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
 
         (
             energy,
@@ -999,6 +1008,18 @@ class _Configuration(IOAble, ABC):
         )
 
         return energy
+
+    def compute_axis_location(self, zeta=0):
+        """Returns a tuple of (R0,Z0), the axis location"""
+
+        z = np.atleast_1d(zeta).flatten()
+        r = np.zeros_like(z)
+        t = np.zeros_like(z)
+        nodes = np.array([r, t, z]).T
+        R0 = np.dot(self.R_basis.evaluate(nodes), self.R_lmn)
+        Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
+
+        return R0, Z0
 
 
 # these functions are needed to format the input arrays

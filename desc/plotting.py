@@ -11,7 +11,8 @@ from desc.backend import put
 from desc.utils import opsindex
 from desc.io import read_ascii
 from desc.grid import Grid, LinearGrid
-from desc.configuration import Configuration
+from desc.equilibrium import Equilibrium
+from desc.basis import FourierZernikeBasis, jacobi, fourier
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue
@@ -55,7 +56,7 @@ rcParams["axes.prop_cycle"] = color_cycle
 
 
 class Plot:
-    """Class for plotting instances of Configuration and Equilibria on a linear grid."""
+    """Class for plotting instances of Equilibrium on a linear grid."""
 
     axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
     axis_labels_RPZ = [r"$R$", r"$\phi$", r"$Z$"]
@@ -149,14 +150,12 @@ class Plot:
 
         return grid, tuple(plot_axes)
 
-    def plot_1d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_1d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 1D profiles.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -190,16 +189,14 @@ class Plot:
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
-    def plot_2d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_2d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 2D cross-sections.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -258,16 +255,14 @@ class Plot:
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[1]])
         ax.set_ylabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
-    def plot_3d(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
-    ):
+    def plot_3d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
         """Plots 3D surfaces.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -337,16 +332,16 @@ class Plot:
         ax.set_ylabel(self.axis_labels_XYZ[1])
         ax.set_zlabel(self.axis_labels_XYZ[2])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_section(
-        self, eq: Configuration, name: str, grid: Grid = None, ax=None, **kwargs
+        self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs
     ):
         """Plots Poincare sections.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -403,11 +398,11 @@ class Plot:
         ax.set_xlabel(self.axis_labels_RPZ[0])
         ax.set_ylabel(self.axis_labels_RPZ[2])
         ax.set_title(self.name_label(name_dict))
-        return ax
+        return fig, ax
 
     def plot_surfaces(
         self,
-        eq: Configuration,
+        eq: Equilibrium,
         r_grid: Grid = None,
         t_grid: Grid = None,
         ax=None,
@@ -417,7 +412,7 @@ class Plot:
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -476,14 +471,14 @@ class Plot:
         ax.set_xlabel(self.axis_labels_RPZ[0])
         ax.set_ylabel(self.axis_labels_RPZ[2])
 
-        return ax
+        return fig, ax
 
-    def compute(self, eq: Configuration, name: str, grid: Grid):
+    def compute(self, eq: Equilibrium, name: str, grid: Grid):
         """Compute value specified by name on grid for equilibrium eq.
 
         Parameters
         ----------
-        eq : Configuration
+        eq : Equilibrium
             object from which to plot
         name : str
             name of variable to plot
@@ -642,7 +637,7 @@ class Plot:
         return label
 
     def __name_key__(self, name_dict):
-        """Reconstruct name for dictionary key used in Configuration compute methods.
+        """Reconstruct name for dictionary key used in Equilibrium compute methods.
 
         Parameters
         ----------
@@ -686,6 +681,57 @@ def plot_logo(savepath=None, **kwargs):
         handle to the axis used for plotting
 
     """
+
+    eq = np.array(
+        [
+            [0, 0, 0, 3.62287349e00, 0.00000000e00],
+            [1, -1, 0, 0.00000000e00, 1.52398053e00],
+            [1, 1, 0, 8.59865670e-01, 0.00000000e00],
+            [2, -2, 0, 0.00000000e00, 1.46374759e-01],
+            [2, 0, 0, -4.33377700e-01, 0.00000000e00],
+            [2, 2, 0, 6.09609205e-01, 0.00000000e00],
+            [3, -3, 0, 0.00000000e00, 2.13664220e-01],
+            [3, -1, 0, 0.00000000e00, 1.29776568e-01],
+            [3, 1, 0, -1.67706961e-01, 0.00000000e00],
+            [3, 3, 0, 2.32179123e-01, 0.00000000e00],
+            [4, -4, 0, 0.00000000e00, 3.30174283e-02],
+            [4, -2, 0, 0.00000000e00, -5.80394864e-02],
+            [4, 0, 0, -3.10228782e-02, 0.00000000e00],
+            [4, 2, 0, -2.43905484e-03, 0.00000000e00],
+            [4, 4, 0, 1.81292185e-01, 0.00000000e00],
+            [5, -5, 0, 0.00000000e00, 5.37223061e-02],
+            [5, -3, 0, 0.00000000e00, 2.65199520e-03],
+            [5, -1, 0, 0.00000000e00, 1.63010516e-02],
+            [5, 1, 0, 2.73622502e-02, 0.00000000e00],
+            [5, 3, 0, -3.62812195e-02, 0.00000000e00],
+            [5, 5, 0, 7.88069456e-02, 0.00000000e00],
+            [6, -6, 0, 0.00000000e00, 3.50372526e-03],
+            [6, -4, 0, 0.00000000e00, -1.82814700e-02],
+            [6, -2, 0, 0.00000000e00, -1.62703504e-02],
+            [6, 0, 0, 9.37285472e-03, 0.00000000e00],
+            [6, 2, 0, 3.32793660e-03, 0.00000000e00],
+            [6, 4, 0, -9.90606341e-03, 0.00000000e00],
+            [6, 6, 0, 6.00068129e-02, 0.00000000e00],
+            [7, -7, 0, 0.00000000e00, 1.28853330e-02],
+            [7, -5, 0, 0.00000000e00, -2.28268526e-03],
+            [7, -3, 0, 0.00000000e00, -1.04698799e-02],
+            [7, -1, 0, 0.00000000e00, -5.15951605e-03],
+            [7, 1, 0, 2.29082701e-02, 0.00000000e00],
+            [7, 3, 0, -1.19760934e-02, 0.00000000e00],
+            [7, 5, 0, -1.43418200e-02, 0.00000000e00],
+            [7, 7, 0, 2.27668988e-02, 0.00000000e00],
+            [8, -8, 0, 0.00000000e00, -2.53055423e-03],
+            [8, -6, 0, 0.00000000e00, -7.15955981e-03],
+            [8, -4, 0, 0.00000000e00, -6.54397837e-03],
+            [8, -2, 0, 0.00000000e00, -4.08366006e-03],
+            [8, 0, 0, 1.17264567e-02, 0.00000000e00],
+            [8, 2, 0, -1.24364476e-04, 0.00000000e00],
+            [8, 4, 0, -8.59425384e-03, 0.00000000e00],
+            [8, 6, 0, -7.11934473e-03, 0.00000000e00],
+            [8, 8, 0, 1.68974668e-02, 0.00000000e00],
+        ]
+    )
+
     onlyD = kwargs.get("onlyD", False)
     Dcolor = kwargs.get("Dcolor", "xkcd:neon purple")
     Dcolor_rho = kwargs.get("Dcolor_rho", "xkcd:neon pink")
@@ -707,9 +753,6 @@ def plot_logo(savepath=None, **kwargs):
     elif BGcolor == "clear":
         BGcolor = "white"
         transparent = True
-
-    path = os.path.dirname(os.path.abspath(__file__))
-    equil = read_ascii(path + "/../examples/DESC/outputs/LOGO_m12x18_n0x0")
 
     if onlyD:
         fig_width = fig_width / 2
@@ -748,11 +791,13 @@ def plot_logo(savepath=None, **kwargs):
     Cy0 = (top - bottom) / 2
 
     # D
-    cR = equil["cR"]
-    cZ = equil["cZ"]
-    zern_idx = equil["zern_idx"]
-    NFP = equil["NFP"]
-    R0, Z0 = axis_posn(cR, cZ, zern_idx, NFP)
+    cR = eq[:, 3]
+    cZ = eq[:, 4]
+    zern_idx = eq[:, :3]
+    ls, ms, ns = zern_idx.T
+    axis_jacobi = jacobi(0, ls, ms)
+    R0 = axis_jacobi.dot(cR)
+    Z0 = axis_jacobi.dot(cZ)
 
     nr = kwargs.get("nr", 5)
     nt = kwargs.get("nt", 8)
@@ -760,21 +805,21 @@ def plot_logo(savepath=None, **kwargs):
     Nt = 361
     rstep = Nr // nr
     tstep = Nt // nt
-    zeta = 0
     r = np.linspace(0, 1, Nr)
     t = np.linspace(0, 2 * np.pi, Nt)
     r, t = np.meshgrid(r, t, indexing="ij")
     r = r.flatten()
     t = t.flatten()
-    z = zeta * np.ones_like(r)
-    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
-    bdry_nodes = np.array([np.ones(Nt), np.linspace(0, 2 * np.pi, Nt), np.ones(Nt)])
-    bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP)
 
-    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
-    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
-    bdryR = bdry_zernike_transform.transform(cR, 0, 0, 0)
-    bdryZ = bdry_zernike_transform.transform(cZ, 0, 0, 0)
+    radial = jacobi(r, ls, ms)
+    poloidal = fourier(t, ms)
+    zern = radial * poloidal
+    bdry = poloidal
+
+    R = zern.dot(cR).reshape((Nr, Nt))
+    Z = zern.dot(cZ).reshape((Nr, Nt))
+    bdryR = bdry.dot(cR)
+    bdryZ = bdry.dot(cZ)
 
     R = (R - R0) / (R.max() - R.min()) * Dw + DX
     Z = (Z - Z0) / (Z.max() - Z.min()) * Dh + DY
@@ -833,14 +878,14 @@ def plot_logo(savepath=None, **kwargs):
     return fig, ax
 
 
-def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
+def plot_zernike_basis(M, L, indexing, **kwargs):
     """Plots spectral basis of zernike basis functions
 
     Parameters
     ----------
     M : int
         maximum poloidal resolution
-    delta_lm : int
+    L : int
         maximum difference between radial mode l and poloidal mode m
     indexing : str
         zernike indexing method. One of 'fringe', 'ansi', 'house', 'chevron'
@@ -863,22 +908,25 @@ def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
     npts = kwargs.get("npts", 100)
     levels = kwargs.get("levels", np.linspace(-1, 1, npts))
 
-    ls, ms, ns = get_zern_basis_idx_dense(M, 0, delta_lm, indexing).T
-    lmax = np.max(ls)
-    mmax = np.max(ms)
+    basis = FourierZernikeBasis(L=L, M=M, N=0, index=indexing)
+    lmax = basis.L
+    mmax = basis.M
 
+    grid = LinearGrid(npts, npts, 0)
     r = np.linspace(0, 1, npts)
     v = np.linspace(0, 2 * np.pi, npts)
     rr, vv = np.meshgrid(r, v, indexing="ij")
+
+    nodes = np.array([rr, vv, np.zeros_like(rr)]).T
 
     fig = plt.figure(figsize=(scale * mmax, scale * lmax / 2))
 
     ax = {i: {} for i in range(lmax + 1)}
     gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1))
 
-    Zs = zern(rr.flatten(), vv.flatten(), ls, ms, 0, 0)
+    Zs = basis.evaluate(nodes)
 
-    for i, (l, m) in enumerate(zip(ls, ms)):
+    for i, (l, m) in enumerate(zip(basis.modes[:, 0], basis.modes[:, 1])):
         Z = Zs[:, i].reshape((npts, npts))
         ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
         ax[l][m].set_title("$\mathcal{Z}_{" + str(l) + "}^{" + str(m) + "}$")

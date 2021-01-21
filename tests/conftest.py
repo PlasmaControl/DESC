@@ -1,6 +1,14 @@
 import pytest
 import subprocess
 import os
+from desc.equilibrium import EquilibriaFamily
+import h5py
+
+
+@pytest.fixture
+def plot_eq():
+    eq = EquilibriaFamily(load_from="./tests/inputs/SOLOVEV.h5")[-1]
+    return eq
 
 
 @pytest.fixture(scope="session")
@@ -30,7 +38,7 @@ def SOLOVEV(tmpdir_factory):
     print("cwd=", cwd)
 
     SOLOVEV_run = subprocess.run(
-        ["python", "-m", "desc", "-o", str(output_path), input_filename],
+        ["python", "-m", "desc", "-o", str(output_path), input_filename, "--numpy"],
         stdout=subprocess.PIPE,
         universal_newlines=True,
         timeout=max_time,
@@ -79,6 +87,27 @@ def DSHAPE(tmpdir_factory):
         "vmec_nc_path": vmec_nc_path,
     }
     return SOLOVEV_out
+
+
+@pytest.fixture(scope="session")
+def writer_test_file(tmpdir_factory):
+    output_dir = tmpdir_factory.mktemp("writer")
+    return output_dir.join("writer_test_file")
+
+
+@pytest.fixture(scope="session")
+def reader_test_file(tmpdir_factory):
+    output_dir = tmpdir_factory.mktemp("reader")
+    filename = output_dir.join("reader_test_file")
+    thedict = {"a": "a", "b": "b", "c": "c"}
+    f = h5py.File(filename, "w")
+    subgroup = "subgroup"
+    g = f.create_group(subgroup)
+    for key in thedict.keys():
+        f.create_dataset(key, data=thedict[key])
+        g.create_dataset(key, data=thedict[key])
+    f.close()
+    return filename
 
 
 """

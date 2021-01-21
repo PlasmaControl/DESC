@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from termcolor import colored
 from .pickle_io import PickleReader, PickleWriter
@@ -44,7 +45,7 @@ class IOAble(ABC):
         reader.read_obj(self, obj_lib=obj_lib)
         return None
 
-    def save(self, file_name, file_format="hdf5", file_mode="w"):
+    def save(self, file_name, file_format=None, file_mode="w"):
         """Save the object.
 
         Parameters
@@ -61,6 +62,18 @@ class IOAble(ABC):
         None
 
         """
+        if file_format is None:
+            if isinstance(file_name, (str, os.PathLike)):
+                name = str(file_name)
+                if name.endswith(".h5") or name.endswith(".hdf5"):
+                    file_format = "hdf5"
+                elif name.endswith(".pkl") or name.endswith(".pickle"):
+                    file_format = "pickle"
+                else:
+                    file_format = "hdf5"
+            else:
+                file_format = "hdf5"
+
         writer = writer_factory(file_name, file_format=file_format, file_mode=file_mode)
         writer.write_obj(self)
         writer.close()

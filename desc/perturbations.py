@@ -4,9 +4,16 @@ import time
 from desc.utils import Timer
 from desc.boundary_conditions import BoundaryConstraint
 
+__all__ = ["perturb"]
+
 
 def perturb(
-    eq, deltas: dict, order=0, Jx=None, verbose=1,
+    eq,
+    deltas: dict,
+    order=0,
+    Jx=None,
+    verbose=1,
+    copy=True,
 ):
     """Perturbs an Equilibrium wrt input parameters.
 
@@ -23,6 +30,8 @@ def perturb(
         jacobian matrix df/dx
     verbose : int
         level of output to display
+    copy : bool
+        whether to perturb the input equilibrium or make a copy. Defaults to True
 
     Returns
     -------
@@ -34,6 +43,8 @@ def perturb(
     timer.start("Total perturbation")
 
     arg_idx = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    if not eq.built:
+        eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
     args = (y, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
 
@@ -46,6 +57,7 @@ def perturb(
             Jx = eq.objective.jac_x(*args)
             timer.stop("df/dx computation")
             RHS = eq.objective.compute(*args)
+
             if verbose > 1:
                 timer.disp("df/dx computation")
 
@@ -87,7 +99,11 @@ def perturb(
             timer.start("df/dcc computation ({})".format(key))
             Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
             timer.stop("df/dcc computation ({})".format(key))
-            RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
+            RHS += 0.5 * np.tensordot(
+                Jcc,
+                np.tensordot(dc, dc, axes=0),
+                axes=2,
+            )
             if verbose > 1:
                 timer.disp("df/dcc computation ({})".format(key))
 
@@ -95,12 +111,17 @@ def perturb(
             Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
             timer.stop("df/dxc computation ({})".format(key))
             RHS -= np.tensordot(
-                Jxc, np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1), axes=2,
+                Jxc,
+                np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1),
+                axes=2,
             )
             if verbose > 1:
                 timer.disp("df/dxc computation ({})".format(key))
 
-    eq_new = eq.copy()
+    if copy:
+        eq_new = eq.copy()
+    else:
+        eq_new = eq
 
     # update input parameters
     for key, dc in deltas.items():

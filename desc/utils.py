@@ -385,11 +385,12 @@ def sign(x):
     return y
 
 
-def copy_coeffs(c_old, modes_old, modes_new):
+def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """copy coefficients from one resolution to another"""
 
     num_modes = modes_new.shape[0]
-    c_new = np.zeros((num_modes,))
+    if c_new is None:
+        c_new = np.zeros((num_modes,))
 
     for i in range(num_modes):
         idx = np.where((modes_old == modes_new[i, :]).all(axis=1))[0]

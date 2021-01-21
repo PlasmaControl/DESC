@@ -53,7 +53,7 @@ else:
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
-    from jax.scipy.linalg import cho_factor, cho_solve, qr
+    from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
@@ -102,7 +102,7 @@ if use_jax:
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.special import factorial
-    from scipy.linalg import cho_factor, cho_solve, qr
+    from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"

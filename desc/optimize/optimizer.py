@@ -1,9 +1,9 @@
 import numpy as np
-from scipy.optimize import least_squares, minimize
+import scipy.optimize
 from termcolor import colored
 from desc.utils import Timer
 from desc.backend import jit
-from desc.optimize import fmin_scalar
+from desc.optimize import fmin_scalar, least_squares
 
 
 class Optimizer:
@@ -16,12 +16,16 @@ class Optimizer:
         "scipy-trust-ncg",
         "scipy-trust-krylov",
     ]
-    _desc_scalar_methods = ["dogleg", "subspace"]
-    _hessian_free_methods = ["scipy-bfgs"]
+    _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
+    _desc_least_squares_methods = ["lsq-dogleg", "lsq-subspace"]
+    _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scalar_methods = _desc_scalar_methods + _scipy_minimize_methods
-    _least_squares_methods = _scipy_least_squares_methods
+    _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
     _all_methods = (
-        _scipy_least_squares_methods + _scipy_minimize_methods + _desc_scalar_methods
+        _scipy_least_squares_methods
+        + _scipy_minimize_methods
+        + _desc_scalar_methods
+        + _desc_least_squares_methods
     )
 
     def __init__(self, method, objective, use_jit=True, device=None):
@@ -109,6 +113,8 @@ class Optimizer:
             else:
                 self._fun = jit(self.objective.compute, device=self.device)
                 self._jac = jit(self.objective.jac_x, device=self.device)
+                if self.method in Optimizer._desc_least_squares_methods:
+                    self._grad = jit(self.objective.grad_x, device=self.device)
         else:
             if self.method in Optimizer._scalar_methods:
                 self._fun = self.objective.compute_scalar
@@ -120,6 +126,8 @@ class Optimizer:
             else:
                 self._fun = self.objective.compute
                 self._jac = self.objective.jac_x
+                if self.method in Optimizer._desc_least_squares_methods:
+                    self._grad = self.objective.grad_x
 
     def compile(self, x, args, verbose=1):
 
@@ -166,7 +174,7 @@ class Optimizer:
 
         if self.method in Optimizer._scipy_minimize_methods:
 
-            out = minimize(
+            out = scipy.optimize.minimize(
                 self._fun,
                 x0=x_init,
                 args=args,
@@ -181,7 +189,7 @@ class Optimizer:
 
             x_scale = "jac" if x_scale == "auto" else x_scale
 
-            out = least_squares(
+            out = scipy.optimize.least_squares(
                 self._fun,
                 x0=x_init,
                 args=args,
@@ -198,15 +206,41 @@ class Optimizer:
         elif self.method in Optimizer._desc_scalar_methods:
 
             x_scale = "hess" if x_scale == "auto" else x_scale
-
+            method = (
+                self.method if "bfgs" not in self.method else self.method.split("-")[0]
+            )
+            hess = self._hess if "bfgs" not in self.method else "bfgs"
             out = fmin_scalar(
                 self._fun,
                 x0=x_init,
                 grad=self._grad,
-                hess=self._hess,
+                hess=hess,
                 init_hess=None,
                 args=args,
-                method=self.method,
+                method=method,
+                x_scale=x_scale,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=disp,
+                maxiter=maxiter,
+                callback=None,
+                options=options,
+            )
+
+        elif self.method in Optimizer._desc_least_squares_methods:
+
+            x_scale = "jac" if x_scale == "auto" else x_scale
+            method = self.method.split("-")[1]
+            jac = self._jac if "broyden" not in self.method else "broyden"
+            out = least_squares(
+                self._fun,
+                x0=x_init,
+                grad=self._grad,
+                jac=jac,
+                init_jac=None,
+                args=args,
+                method=method,
                 x_scale=x_scale,
                 ftol=ftol,
                 xtol=xtol,

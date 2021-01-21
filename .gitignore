@@ -16,3 +16,4 @@ dist/
 *.out
 .spyproject/
 *.ini
+*.output

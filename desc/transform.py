@@ -2,7 +2,7 @@ import numpy as np
 from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 import warnings
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.utils import equals, issorted, isalmostequal, islinspaced
 from desc.grid import Grid
 from desc.basis import Basis
@@ -10,26 +10,7 @@ from desc.io import IOAble
 
 
 class Transform(IOAble):
-    """Transform
-
-    Attributes
-    ----------
-    grid : Grid
-        DESCRIPTION
-    basis : Basis
-        DESCRIPTION
-    rcond : float
-        relative cutoff for singular values in least squares fit
-    derivatives : ndarray
-        combinations of derivatives needed
-        Each row is one set, columns represent the order of derivatives
-        for [rho, theta, zeta]
-    matrices : ndarray
-        DESCRIPTION
-    pinv : ndarray
-        DESCRIPTION
-
-    """
+    """Transforms from spectral coefficients to real space values"""
 
     _io_attrs_ = ["_grid", "_basis", "_derives", "_matrices"]
 
@@ -48,19 +29,19 @@ class Transform(IOAble):
     ) -> None:
         """Initializes a Transform
 
-         Parameters
-         ----------
-         grid : Grid
-             DESCRIPTION
-         basis : Basis
-             DESCRIPTION
-         derivs : int or array-like
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid of real space coordinates
+        basis : Basis
+            Spectral basis of modes
+        derivs : int or array-like
              order of derivatives needed, if an int (Default = 0)
              OR
              array of derivative orders, shape (N,3)
              [dr, dt, dz]
         rcond : float
-             relative cutoff for singular values in least squares fit
+             relative cutoff for singular values for inverse fitting
         build : bool
             whether to precompute the transforms now or do it later
         build_pinv : bool
@@ -70,9 +51,9 @@ class Transform(IOAble):
             node patterns and spectral basis. 'fft' uses fast fourier transforms in the zeta direction,
             and so must have equally spaced toroidal nodes, and the same node pattern on each zeta plane
 
-         Returns
-         -------
-         None
+        Returns
+        -------
+        None
 
         """
         self._file_format_ = file_format
@@ -131,13 +112,10 @@ class Transform(IOAble):
         Parameters
         ----------
         derivs : int or string
-            order of derivatives needed, if an int (Default = 0)
-            OR
-            type of calculation being performed, if a string
-            ``'force'``: all of the derivatives needed to calculate an
-            equilibrium from the force balance equations
-            ``'qs'``: all of the derivatives needed to calculate quasi-
-            symmetry from the triple-product equation
+             order of derivatives needed, if an int (Default = 0)
+             OR
+             array of derivative orders, shape (N,3)
+             [dr, dt, dz]
 
         Returns
         -------
@@ -173,13 +151,7 @@ class Transform(IOAble):
         return derivatives
 
     def _sort_derivatives(self) -> None:
-        """Sorts derivatives
-
-        Returns
-        -------
-        None
-
-        """
+        """Sorts derivatives"""
         sort_idx = np.lexsort(
             (self._derivatives[:, 0], self._derivatives[:, 1], self._derivatives[:, 2])
         )
@@ -254,16 +226,6 @@ class Transform(IOAble):
             return
 
         n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
-        if not isalmostequal(n_cts):
-            warnings.warn(
-                colored(
-                    "fft method requires that there are the same number of poloidal modes for each toroidal mode, falling back to direct method",
-                    "yellow",
-                )
-            )
-            self.method = "direct"
-            return
-
         if len(n_vals) > 1:
             if not islinspaced(n_vals):
                 warnings.warn(
@@ -275,25 +237,11 @@ class Transform(IOAble):
                 self.method = "direct"
                 return
 
-            if not isalmostequal(
-                basis.modes[:, 0].reshape((n_cts[0], -1), order="F")
-            ) or not isalmostequal(
-                basis.modes[:, 1].reshape((n_cts[0], -1), order="F")
-            ):
-                warnings.warn(
-                    colored(
-                        "fft method requires that the poloidal modes are the same for each toroidal mode, falling back to direct method",
-                        "yellow",
-                    )
-                )
-                self.method = "direct"
-                return
-
         if not len(zeta_vals) >= len(n_vals):
             warnings.warn(
                 colored(
-                    "fft method can not undersample in zeta, num_zeta_vals={}, num_n_vals={}, falling back to direct method".format(
-                        len(zeta_vals), len(n_vals)
+                    "fft method can not undersample in zeta, num_toroidal_modes={}, num_toroidal_angles={}, falling back to direct method".format(
+                        len(n_vals), len(zeta_vals)
                     ),
                     "yellow",
                 )
@@ -302,22 +250,31 @@ class Transform(IOAble):
             return
 
         self.method = "fft"
-        self.numFour = len(n_vals)  # number of toroidal modes
-        self.numFournodes = len(zeta_vals)  # number of toroidal nodes
-        self.zeta_pad = (self.numFournodes - self.numFour) // 2
-        self.pol_zern_idx = basis.modes[: basis.num_modes // self.numFour, :2]
-        pol_nodes = np.hstack(
+        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
+        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
+        self.zeta_pad = (self.num_z_nodes - self.num_n_modes) // 2
+
+        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+        for k in range(basis.num_modes):
+            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
+            col = np.where(basis.modes[k, 2] == n_vals)[0]
+            self.fft_index[k] = self.num_n_modes * row + col
+
+        fft_nodes = np.hstack(
             [
-                grid.nodes[:, :2][: grid.num_nodes // self.numFournodes],
-                np.zeros((grid.num_nodes // self.numFournodes, 1)),
+                grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
+                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
             ]
         )
-        self.pol_grid = Grid(pol_nodes)
+        self.fft_grid = Grid(fft_nodes)
 
     def build(self) -> None:
         """Builds the transform matrices for each derivative order"""
         if self._built:
             return
+
         if self.method == "direct":
             for d in self._derivatives:
                 self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
@@ -328,11 +285,11 @@ class Transform(IOAble):
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
             )
-            n0 = np.argwhere(self.basis.modes[:, 2] == 0).flatten()
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self.pol_grid.nodes, d
-                )[:, n0]
+                    self.fft_grid.nodes, d, modes=temp_modes
+                )
 
         self._built = True
 
@@ -365,7 +322,6 @@ class Transform(IOAble):
         -------
         x : ndarray, shape(N_nodes,)
             array of values of function at node locations
-
         """
         if not self._built:
             raise AttributeError(
@@ -405,13 +361,15 @@ class Transform(IOAble):
                     )
                 )
 
+            c_pad = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_pad = put(c_pad, self.fft_index, c)
             c_pad = jnp.pad(
-                c.reshape((-1, self.numFour), order="F"),
+                c_pad.reshape((-1, self.num_n_modes)),
                 ((0, 0), (self.zeta_pad, self.zeta_pad)),
                 mode="constant",
             )
             dk = self.basis.NFP * jnp.arange(
-                -(self.numFournodes // 2), (self.numFournodes // 2) + 1
+                -(self.num_z_nodes // 2), (self.num_z_nodes // 2) + 1
             ).reshape((1, -1))
             c_pad = c_pad[:, :: (-1) ** dz] * dk ** dz * (-1) ** (dz > 1)
             cfft = self._four2phys(c_pad)
@@ -464,16 +422,12 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        grid : Grid, optional
-            DESCRIPTION
-        basis : Basis, optional
-            DESCRIPTION
+        grid : Grid
+            Collocation grid of real space coordinates
+        basis : Basis
+            Spectral basis of modes
         build : bool
             whether to recompute matrices now or wait until requested
-
-        Returns
-        -------
-        None
 
         """
         if grid is None:
@@ -497,23 +451,17 @@ class Transform(IOAble):
             self.build_pinv()
 
     @property
-    def grid(self):
+    def grid(self) -> Grid:
+        """Collocation grid for the transform
+
+        Returns
+        -------
+        Grid
+        """
         return self._grid
 
     @grid.setter
     def grid(self, grid: Grid) -> None:
-        """Changes the grid and updates the matrices accordingly
-
-        Parameters
-        ----------
-        grid : Grid
-            DESCRIPTION
-
-        Returns
-        -------
-        None
-
-        """
         if self._grid != grid:
             self._grid = grid
             if self.method == "fft":
@@ -526,23 +474,17 @@ class Transform(IOAble):
                 self.build_pinv()
 
     @property
-    def basis(self):
+    def basis(self) -> Basis:
+        """Spectral basis for the transform
+
+        Returns
+        -------
+        Basis
+        """
         return self._basis
 
     @basis.setter
     def basis(self, basis: Basis) -> None:
-        """Changes the basis and updates the matrices accordingly
-
-        Parameters
-        ----------
-        basis : Basis
-            DESCRIPTION
-
-        Returns
-        -------
-        None
-
-        """
         if self._basis != basis:
             self._basis = basis
             if self.method == "fft":
@@ -556,6 +498,15 @@ class Transform(IOAble):
 
     @property
     def derivatives(self):
+        """Set of derivatives the transform can compute
+
+        Returns
+        -------
+        derivatives : ndarray
+            combinations of derivatives needed
+            Each row is one set, columns represent the order of derivatives
+            for [rho, theta, zeta]
+        """
         return self._derivatives
 
     def change_derivatives(self, derivs, build=True) -> None:
@@ -597,20 +548,50 @@ class Transform(IOAble):
 
     @property
     def matrices(self):
+        """Transform matrices such that x=A*c
+
+        Returns
+        -------
+        dict of ndarray
+        """
         return self._matrices
 
     @property
-    def num_nodes(self):
+    def num_nodes(self) -> int:
+        """Number of nodes in the collocation grid
+
+        Returns
+        -------
+        int
+        """
         return self._grid.num_nodes
 
     @property
-    def num_modes(self):
+    def num_modes(self) -> int:
+        """Number of modes in the spectral basis
+
+        Returns
+        -------
+        int
+        """
         return self._basis.num_modes
 
     @property
-    def built(self):
+    def built(self) -> bool:
+        """Whether the transform matrices have been built
+
+        Returns
+        -------
+        bool
+        """
         return self._built
 
     @property
-    def built_pinv(self):
+    def built_pinv(self) -> bool:
+        """Whether the pseudoinverse matrix has been computed for inverse fitting
+
+        Returns
+        -------
+        bool
+        """
         return self._built_pinv

@@ -1,0 +1,33 @@
+&INDATA
+  ! DSHAPE Tokamak from Hirshman and Whitson 1983
+  MGRID_FILE = 'none'
+  LFREEB = F
+  DELT =   9.00E-01
+  TCON0 =   2.00E+00
+  LASYM = F
+  NFP =    1
+  NCURR =    0
+  MPOL =   12
+  NTOR =   0
+  NS_ARRAY = 16 32 64 128
+  NITER_ARRAY = 1000 2000 4000 20000
+  FTOL_ARRAY = 1E-06 1E-08 1E-10 1E-12
+  NITER = 5000
+  NSTEP =  250
+  NVACSKIP =    6
+  GAMMA =   0.000000E+00
+  PHIEDGE =   1.00000000000000E+00
+  BLOAT =   1.000000E+00
+  CURTOR =   0.00000000000000E+00
+  SPRES_PED =   1.00000000000000E+00
+  PRES_SCALE = 1.6E3
+  PMASS_TYPE = "power_series"
+  AM =  1 -2 1
+  AI = 1.0 -0.67
+  RAXIS =   3.51
+  ZAXIS =   0.00000000000000E+00
+  RBC( 0,0) =  3.510     ZBS( 0,0) =  0.000
+  RBC( 0,1) =  1.000     ZBS( 0,1) =  1.470
+  RBC( 0,2) =  0.106     ZBS( 0,2) = -0.160
+/
+&END

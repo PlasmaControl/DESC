@@ -9,10 +9,15 @@ class BoundaryConstraint(LinearEqualityConstraint):
     """Linear equality constraint for boundary conditions and gauge freedom
 
     enforces:
+
     R(1,theta,zeta) = Rb(theta,zeta)
+
     Z(1,theta,zeta) = Zb(theta,zeta)
+
     lambda(0,theta,zeta) == 0
+
     lambda(rho,0,0) == 0
+
 
     Parameters
     ----------
@@ -50,10 +55,10 @@ class BoundaryConstraint(LinearEqualityConstraint):
         build=True,
     ):
 
-        Alcfs, blcfs = get_lcfs_bc_matrices(
+        Alcfs, blcfs = _get_lcfs_bc_matrices(
             R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn
         )
-        Agauge, bgauge = get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
+        Agauge, bgauge = _get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
 
         A = np.vstack([Alcfs, Agauge])
         b = np.concatenate([blcfs, bgauge])
@@ -85,7 +90,7 @@ class BoundaryConstraint(LinearEqualityConstraint):
         return b
 
 
-def get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
+def _get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
     """Compute constraint matrices for gauge freedom of lambda
 
     enforces lambda(rho,0,0) == 0
@@ -127,7 +132,7 @@ def get_gauge_bc_matrices(R_basis, Z_basis, L_basis):
     return A, b
 
 
-def get_lcfs_bc_matrices(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn):
+def _get_lcfs_bc_matrices(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn):
     """Compute constraint matrices for the shape of the last closed flux surface.
 
     enforces r(1,theta,zeta) == 1

@@ -1,3 +1,4 @@
+import numpy as np
 import sys
 import warnings
 from termcolor import colored
@@ -92,15 +93,16 @@ def main(cl_args=None):
     equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input
     if ir.args.vmec is not None:
-        equil_fam[0] = Equilibrium.from_configuration(
-            VMECIO.load(
-                ir.args.vmec,
-                L=ir.inputs[0]["L"],
-                M=ir.inputs[0]["M"],
-                N=ir.inputs[0]["N"],
-                index=ir.inputs[0]["zern_mode"],
-            )
+        equil_fam[0] = VMECIO.load(
+            ir.args.vmec,
+            L=ir.inputs[0]["L"],
+            M=ir.inputs[0]["M"],
+            N=ir.inputs[0]["N"],
+            index=ir.inputs[0]["zern_mode"],
         )
+        equil_fam[0].inputs = ir.inputs[0]
+        equil_fam[0].objective = ir.inputs[0]["errr_mode"]
+        equil_fam[0].optimizer = ir.inputs[0]["optim_method"]
 
     # solve equilibrium
     equil_fam.solve_continuation(
@@ -109,6 +111,7 @@ def main(cl_args=None):
 
     if ir.args.plot > 1:
         print("Plotting initial guess")
+        print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[0].initial)
         plt.show()
         ax = Plot().plot_2d(equil_fam[0].initial, "log(|F|)")
@@ -116,12 +119,14 @@ def main(cl_args=None):
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
+            print("Axis location: {}".format(eq.compute_axis_location()))
             ax = Plot().plot_surfaces(eq)
             plt.show()
             ax = Plot().plot_2d(eq, "log(|F|)")
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
+        print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[-1])
         plt.show()
         ax = Plot().plot_2d(equil_fam[-1], "log(|F|)")

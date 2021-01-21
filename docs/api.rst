@@ -2,19 +2,13 @@
 API Documentation
 =================
 
-Backend
-*******
-
-.. automodule:: desc.backend
-    :members:
-    :undoc-members:
-
 Basis
 *****
 
 .. automodule:: desc.basis
     :members:
     :undoc-members:
+    :inherited-members:       
 
 Boundary Conditions
 *******************
@@ -22,27 +16,22 @@ Boundary Conditions
 .. automodule:: desc.boundary_conditions
     :members:
     :undoc-members:
+    :inherited-members:
     
-Configuration
-*************
+Derivatives
+***********
 
-.. automodule:: desc.configuration
-    :members:
-    :undoc-members:  
-
-Continuation
-************
-
-.. automodule:: desc.continuation
+.. automodule:: desc.derivatives
     :members:
     :undoc-members:
 
-Equilibrium IO
-**************
+Equilibrium
+***********
 
-.. automodule:: desc.equilibrium_io
+.. automodule:: desc.equilibrium
     :members:
     :undoc-members:
+    :inherited-members:
 
 Grid
 ****
@@ -50,21 +39,14 @@ Grid
 .. automodule:: desc.grid
     :members:
     :undoc-members:
-    
-Initial Guess
-*************
+    :inherited-members:
 
-.. automodule:: desc.init_guess
+IO
+***
+
+.. automodule:: desc.io
     :members:
     :undoc-members:
-    
-Input Reader
-************
-
-.. automodule:: desc.input_reader
-    :members:
-    :undoc-members:
-    
 
 Objective Functions
 *******************
@@ -72,6 +54,13 @@ Objective Functions
 .. automodule:: desc.objective_funs
     :members:
     :undoc-members:
+
+Optimize
+********
+
+.. automodule:: desc.optimize
+   :members:
+   :undoc-members:
 
 Perturbations
 *************

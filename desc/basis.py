@@ -4,6 +4,8 @@ from scipy.special import factorial
 from desc.utils import sign, flatten_list, equals
 from desc.io import IOAble
 
+__all__ = ["PowerSeries", "FourierSeries", "DoubleFourierSeries", "FourierZernikeBasis"]
+
 
 class Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets"""
@@ -69,11 +71,11 @@ class Basis(IOAble, ABC):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,num_nodes)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
         derivatives : ndarray of int, shape(3,)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(3,), optional
+        modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
         Returns
@@ -125,7 +127,7 @@ class Basis(IOAble, ABC):
 
     @property
     def modes(self):
-        """ndarray:  arrauy of int, shape(Nmodes,3):
+        """ndarray:  arrauy of int, shape(num_modes,3):
         array of mode numbers [l,m,n],
         each row is one basis function with modes (l,m,n)"""
         return self._modes
@@ -188,7 +190,7 @@ class PowerSeries(Basis):
 
         Returns
         -------
-        modes : ndarray of int, shape(Nmodes,3)
+        modes : ndarray of int, shape(num_modes,3)
             array of mode numbers [l,m,n]
             each row is one basis function with modes (l,m,n)
 
@@ -202,11 +204,11 @@ class PowerSeries(Basis):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,num_nodes)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        derivatives : ndarray of int, shape(3,)
+        derivatives : ndarray of int, shape(num_derivatives,3)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(3,), optional
+        modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
         Returns
@@ -221,7 +223,7 @@ class PowerSeries(Basis):
         return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L: int) -> None:
-        """Change resolution of the basis to the given resolution. Overrides parent Basis object's change_resolution method.
+        """Change resolution of the basis to the given resolution.
 
         Parameters
         ----------
@@ -299,7 +301,7 @@ class FourierSeries(Basis):
 
         Returns
         -------
-        modes : ndarray of int, shape(Nmodes,3)
+        modes : ndarray of int, shape(num_modes,3)
             array of mode numbers [l,m,n]
             each row is one basis function with modes (l,m,n)
 
@@ -314,11 +316,11 @@ class FourierSeries(Basis):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,num_nodes)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        derivatives : ndarray of int, shape(3,)
+        derivatives : ndarray of int, shape(num_derivatives,3)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(3,), optional
+        modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
         Returns
@@ -333,7 +335,7 @@ class FourierSeries(Basis):
         return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
     def change_resolution(self, N: int) -> None:
-        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
+        """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
@@ -416,7 +418,7 @@ class DoubleFourierSeries(Basis):
 
         Returns
         -------
-        modes : ndarray of int, shape(Nmodes,3)
+        modes : ndarray of int, shape(num_modes,3)
             array of mode numbers [l,m,n]
             each row is one basis function with modes (l,m,n)
 
@@ -437,11 +439,11 @@ class DoubleFourierSeries(Basis):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,num_nodes)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        derivatives : ndarray of int, shape(3,)
+        derivatives : ndarray of int, shape(num_derivatives,3)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(3,), optional
+        modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
         Returns
@@ -458,7 +460,7 @@ class DoubleFourierSeries(Basis):
         return poloidal * toroidal
 
     def change_resolution(self, M: int, N: int) -> None:
-        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
+        """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
@@ -538,12 +540,6 @@ class FourierZernikeBasis(Basis):
             "house" like shape. Gives multiple modes at m=M and l=L.
             (Default value = 'ansi')
 
-        Returns
-        -------
-        modes : ndarray of int, shape(Nmodes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
-
         """
         self._file_format_ = file_format
 
@@ -606,7 +602,7 @@ class FourierZernikeBasis(Basis):
 
         Returns
         -------
-        modes : ndarray of int, shape(Nmodes,3)
+        modes : ndarray of int, shape(num_modes,3)
             array of mode numbers [l,m,n]
             each row is one basis function with modes (l,m,n)
 
@@ -653,11 +649,11 @@ class FourierZernikeBasis(Basis):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(3,num_nodes)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        derivatives : ndarray of int, shape(3,)
+        derivatives : ndarray of int, shape(num_derivatives,3)
             order of derivatives to compute in (rho,theta,zeta)
-        modes : ndarray of in, shape(3,), optional
+        modes : ndarray of int, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
         Returns
@@ -674,32 +670,24 @@ class FourierZernikeBasis(Basis):
         toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return radial * poloidal * toroidal
 
-    def change_resolution(self, M: int, N: int, delta_lm: int) -> None:
-        """Change resolution of the basis to the given resolutions. Overrides parent Basis object's change_resolution method.
+    def change_resolution(self, L: int, M: int, N: int) -> None:
+        """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
+        L : int
+            maximum radial resolution
         M : int
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        delta_lm : int
-            maximum difference between poloidal and radial resolution (l-m).
-            If < 0, defaults to ``M`` for 'ansi' or 'chevron' indexing, and
-            ``2*M`` for 'fringe' or 'house'. Unused for 'fourier' indexing.
-
-        Returns
-        -------
-        None
 
         """
-        if M != self._M or N != self._N or delta_lm != self._delta_lm:
+        if M != self._M or N != self._N or L != self._L:
             self._M = M
             self._N = N
-            self._delta_lm = delta_lm
-            self._modes = self.get_modes(
-                self._M, self._N, delta_lm=self._delta_lm, indexing=self._indexing
-            )
+            self._L = L
+            self._modes = self.get_modes(self._L, self._M, self._N, index=self._index)
             self._sort_modes()
 
 

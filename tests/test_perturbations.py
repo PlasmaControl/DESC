@@ -121,7 +121,17 @@ class TestPerturbations(unittest.TestCase):
             ),
         )
         eq_old.objective = obj_fun
-        res_old = eq_old.compute()
+        y = eq_old.objective.BC_constraint.project(eq_old.x)
+        args = (
+            y,
+            eq_old.Rb_mn,
+            eq_old.Zb_mn,
+            eq_old.p_l,
+            eq_old.i_l,
+            eq_old.Psi,
+            eq_old.zeta_ratio,
+        )
+        res_old = eq_old.objective.compute(*args)
 
         deltas = {
             "Rb_mn": np.zeros((eq_old.Rb_basis.num_modes,)),
@@ -134,7 +144,18 @@ class TestPerturbations(unittest.TestCase):
         deltas["Zb_mn"][idx_Z] = -0.3
 
         eq_new = eq_old.perturb(deltas, order=1)
-        res_new = eq_new.compute()
+        y = eq_new.objective.BC_constraint.project(eq_new.x)
+        args = (
+            y,
+            eq_new.Rb_mn,
+            eq_new.Zb_mn,
+            eq_new.p_l,
+            eq_new.i_l,
+            eq_new.Psi,
+            eq_new.zeta_ratio,
+        )
+
+        res_new = eq_new.objective.compute(*args)
 
         # tolerance could be lower if only testing with JAX
         np.testing.assert_allclose(res_old, 0, atol=1e-6)

@@ -1,3 +1,4 @@
+import numpy as np
 import sys
 import warnings
 from termcolor import colored
@@ -110,6 +111,7 @@ def main(cl_args=None):
 
     if ir.args.plot > 1:
         print("Plotting initial guess")
+        print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[0].initial)
         plt.show()
         ax = Plot().plot_2d(equil_fam[0].initial, "log(|F|)")
@@ -117,12 +119,14 @@ def main(cl_args=None):
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
+            print("Axis location: {}".format(eq.compute_axis_location()))
             ax = Plot().plot_surfaces(eq)
             plt.show()
             ax = Plot().plot_2d(eq, "log(|F|)")
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
+        print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[-1])
         plt.show()
         ax = Plot().plot_2d(equil_fam[-1], "log(|F|)")

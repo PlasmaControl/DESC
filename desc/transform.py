@@ -10,26 +10,7 @@ from desc.io import IOAble
 
 
 class Transform(IOAble):
-    """Transform
-
-    Attributes
-    ----------
-    grid : Grid
-        DESCRIPTION
-    basis : Basis
-        DESCRIPTION
-    rcond : float
-        relative cutoff for singular values in least squares fit
-    derivatives : ndarray
-        combinations of derivatives needed
-        Each row is one set, columns represent the order of derivatives
-        for [rho, theta, zeta]
-    matrices : ndarray
-        DESCRIPTION
-    pinv : ndarray
-        DESCRIPTION
-
-    """
+    """Transforms from spectral coefficients to real space values"""
 
     _io_attrs_ = ["_grid", "_basis", "_derives", "_matrices"]
 
@@ -48,19 +29,19 @@ class Transform(IOAble):
     ) -> None:
         """Initializes a Transform
 
-         Parameters
-         ----------
-         grid : Grid
-             DESCRIPTION
-         basis : Basis
-             DESCRIPTION
-         derivs : int or array-like
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid of real space coordinates
+        basis : Basis
+            Spectral basis of modes
+        derivs : int or array-like
              order of derivatives needed, if an int (Default = 0)
              OR
              array of derivative orders, shape (N,3)
              [dr, dt, dz]
         rcond : float
-             relative cutoff for singular values in least squares fit
+             relative cutoff for singular values for inverse fitting
         build : bool
             whether to precompute the transforms now or do it later
         build_pinv : bool
@@ -70,9 +51,9 @@ class Transform(IOAble):
             node patterns and spectral basis. 'fft' uses fast fourier transforms in the zeta direction,
             and so must have equally spaced toroidal nodes, and the same node pattern on each zeta plane
 
-         Returns
-         -------
-         None
+        Returns
+        -------
+        None
 
         """
         self._file_format_ = file_format
@@ -131,13 +112,10 @@ class Transform(IOAble):
         Parameters
         ----------
         derivs : int or string
-            order of derivatives needed, if an int (Default = 0)
-            OR
-            type of calculation being performed, if a string
-            ``'force'``: all of the derivatives needed to calculate an
-            equilibrium from the force balance equations
-            ``'qs'``: all of the derivatives needed to calculate quasi-
-            symmetry from the triple-product equation
+             order of derivatives needed, if an int (Default = 0)
+             OR
+             array of derivative orders, shape (N,3)
+             [dr, dt, dz]
 
         Returns
         -------
@@ -173,13 +151,7 @@ class Transform(IOAble):
         return derivatives
 
     def _sort_derivatives(self) -> None:
-        """Sorts derivatives
-
-        Returns
-        -------
-        None
-
-        """
+        """Sorts derivatives"""
         sort_idx = np.lexsort(
             (self._derivatives[:, 0], self._derivatives[:, 1], self._derivatives[:, 2])
         )
@@ -350,7 +322,6 @@ class Transform(IOAble):
         -------
         x : ndarray, shape(N_nodes,)
             array of values of function at node locations
-
         """
         if not self._built:
             raise AttributeError(
@@ -451,16 +422,12 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        grid : Grid, optional
-            DESCRIPTION
-        basis : Basis, optional
-            DESCRIPTION
+        grid : Grid
+            Collocation grid of real space coordinates
+        basis : Basis
+            Spectral basis of modes
         build : bool
             whether to recompute matrices now or wait until requested
-
-        Returns
-        -------
-        None
 
         """
         if grid is None:
@@ -484,23 +451,17 @@ class Transform(IOAble):
             self.build_pinv()
 
     @property
-    def grid(self):
+    def grid(self) -> Grid:
+        """Collocation grid for the transform
+
+        Returns
+        -------
+        Grid
+        """
         return self._grid
 
     @grid.setter
     def grid(self, grid: Grid) -> None:
-        """Changes the grid and updates the matrices accordingly
-
-        Parameters
-        ----------
-        grid : Grid
-            DESCRIPTION
-
-        Returns
-        -------
-        None
-
-        """
         if self._grid != grid:
             self._grid = grid
             if self.method == "fft":
@@ -513,23 +474,17 @@ class Transform(IOAble):
                 self.build_pinv()
 
     @property
-    def basis(self):
+    def basis(self) -> Basis:
+        """Spectral basis for the transform
+
+        Returns
+        -------
+        Basis
+        """
         return self._basis
 
     @basis.setter
     def basis(self, basis: Basis) -> None:
-        """Changes the basis and updates the matrices accordingly
-
-        Parameters
-        ----------
-        basis : Basis
-            DESCRIPTION
-
-        Returns
-        -------
-        None
-
-        """
         if self._basis != basis:
             self._basis = basis
             if self.method == "fft":
@@ -543,6 +498,15 @@ class Transform(IOAble):
 
     @property
     def derivatives(self):
+        """Set of derivatives the transform can compute
+
+        Returns
+        -------
+        derivatives : ndarray
+            combinations of derivatives needed
+            Each row is one set, columns represent the order of derivatives
+            for [rho, theta, zeta]
+        """
         return self._derivatives
 
     def change_derivatives(self, derivs, build=True) -> None:
@@ -584,20 +548,50 @@ class Transform(IOAble):
 
     @property
     def matrices(self):
+        """Transform matrices such that x=A*c
+
+        Returns
+        -------
+        dict of ndarray
+        """
         return self._matrices
 
     @property
-    def num_nodes(self):
+    def num_nodes(self) -> int:
+        """Number of nodes in the collocation grid
+
+        Returns
+        -------
+        int
+        """
         return self._grid.num_nodes
 
     @property
-    def num_modes(self):
+    def num_modes(self) -> int:
+        """Number of modes in the spectral basis
+
+        Returns
+        -------
+        int
+        """
         return self._basis.num_modes
 
     @property
-    def built(self):
+    def built(self) -> bool:
+        """Whether the transform matrices have been built
+
+        Returns
+        -------
+        bool
+        """
         return self._built
 
     @property
-    def built_pinv(self):
+    def built_pinv(self) -> bool:
+        """Whether the pseudoinverse matrix has been computed for inverse fitting
+
+        Returns
+        -------
+        bool
+        """
         return self._built_pinv

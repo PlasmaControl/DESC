@@ -36,74 +36,75 @@ def least_squares(
 ):
     """Solve a least squares problem using a (quasi)-Newton trust region method
 
-     Parameters
-     ----------
-     fun : callable
-         objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
-     x0 : array-like
-         initial guess
-     grad : callable
-         function to compute gradient, of 1/2fun**2. Should take the same arguments as fun
-     jac : callable or 'broyden', optional:
-         function to compute jacobian matrix of fun, or 'broyden' in which case the Broyden's
-         method will be used to approximate the jacobian.
-     init_jac : array-like, optional
-         initial value for jacobian matrix, used if hess='broyden'
-     args : tuple
-         additional arguments passed to fun, grad, and jac
-     method : 'dogleg' or 'subspace'
-         method to use for trust region subproblem
-     x_scale : array_like or 'hess', optional
-         Characteristic scale of each variable. Setting `x_scale` is equivalent
-         to reformulating the problem in scaled variables ``xs = x / x_scale``.
-         An alternative view is that the size of a trust region along jth
-         dimension is proportional to ``x_scale[j]``. Improved convergence may
-         be achieved by setting `x_scale` such that a step of a given size
-         along any of the scaled variables has a similar effect on the cost
-         function. If set to 'jac', the scale is iteratively updated using the
-         inverse norms of the columns of the jacobian matrix.
-     ftol : float or None, optional
-         Tolerance for termination by the change of the cost function. Default
-         is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
-         and there was an adequate agreement between a local quadratic model and
-         the true model in the last step. If None, the termination by this
-         condition is disabled.
-     xtol : float or None, optional
-         Tolerance for termination by the change of the independent variables.
-         Default is 1e-8. Optimization is stopped when
-         ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-         this condition is disabled.
-     gtol : float or None, optional
-         Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-         Optimizer teriminates when ``norm(g) < gtol``, where
-         If None, the termination by this condition is disabled.
+    Parameters
+    ----------
+    fun : callable
+        objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
+    x0 : array-like
+        initial guess
+    grad : callable
+        function to compute gradient, of 1/2fun**2. Should take the same arguments as fun
+    jac : callable or 'broyden', optional:
+        function to compute jacobian matrix of fun, or 'broyden' in which case the Broyden's
+        method will be used to approximate the jacobian.
+    init_jac : array-like, optional
+        initial value for jacobian matrix, used if hess='broyden'
+    args : tuple
+        additional arguments passed to fun, grad, and jac
+    method : 'dogleg' or 'subspace'
+        method to use for trust region subproblem
+    x_scale : array_like or 'hess', optional
+        Characteristic scale of each variable. Setting `x_scale` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        An alternative view is that the size of a trust region along jth
+        dimension is proportional to ``x_scale[j]``. Improved convergence may
+        be achieved by setting `x_scale` such that a step of a given size
+        along any of the scaled variables has a similar effect on the cost
+        function. If set to 'jac', the scale is iteratively updated using the
+        inverse norms of the columns of the jacobian matrix.
+    ftol : float or None, optional
+        Tolerance for termination by the change of the cost function. Default
+        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        and there was an adequate agreement between a local quadratic model and
+        the true model in the last step. If None, the termination by this
+        condition is disabled.
+    xtol : float or None, optional
+        Tolerance for termination by the change of the independent variables.
+        Default is 1e-8. Optimization is stopped when
+        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
+        this condition is disabled.
+    gtol : float or None, optional
+        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
+        Optimizer teriminates when ``norm(g) < gtol``, where
+        If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
-         Level of algorithm's verbosity:
-             * 0 (default) : work silently.
-             * 1 : display a termination report.
-             * 2 : display progress during iterations
+        * 0 (default) : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     maxiter : int, optional
-         maximum number of iterations. Defaults to size(x)*100
+        maximum number of iterations. Defaults to size(x)*100
     callback : callable, optional
-         Called after each iteration. Should be a callable with
-         the signature:
-             ``callback(xk, OptimizeResult state) -> bool``
-         where ``xk`` is the current parameter vector. and ``state``
-         is an `OptimizeResult` object, with the same fields
-         as the ones from the return. If callback returns True
-         the algorithm execution is terminated.
+        Called after each iteration. Should be a callable with
+        the signature:
+
+            ``callback(xk, OptimizeResult state) -> bool``
+
+        where ``xk`` is the current parameter vector. and ``state``
+        is an `OptimizeResult` object, with the same fields
+        as the ones from the return. If callback returns True
+        the algorithm execution is terminated.
     options : dict, optional
-         dictionary of optional keyword arguments to override default solver settings.
-         See the code for more details.
+        dictionary of optional keyword arguments to override default solver settings.
+        See the code for more details.
 
     Returns
     -------
     res : OptimizeResult
-         The optimization result represented as a ``OptimizeResult`` object.
-         Important attributes are: ``x`` the solution array, ``success`` a
-         Boolean flag indicating if the optimizer exited successfully and
-         ``message`` which describes the cause of the termination. See
-         `OptimizeResult` for a description of other attributes.
+        The optimization result represented as a ``OptimizeResult`` object.
+        Important attributes are: ``x`` the solution array, ``success`` a
+        Boolean flag indicating if the optimizer exited successfully and
+        ``message`` which describes the cause of the termination. See
+        `OptimizeResult` for a description of other attributes.
 
     """
 

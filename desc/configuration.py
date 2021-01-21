@@ -29,7 +29,8 @@ from desc.compute_funs import (
 
 
 class _Configuration(IOAble, ABC):
-    """Configuration contains information about a plasma state, including the
+    """Configuration is an abstract base class for equilibrium information.
+    It contains information about a plasma state, including the
     shapes of flux surfaces and profile inputs. It can compute additional
     information, such as the magnetic field and plasma currents.
     """
@@ -104,10 +105,6 @@ class _Configuration(IOAble, ABC):
             file to initialize from
         file_format : str
             file format of file initializing from. Default is 'hdf5'
-
-        Returns
-        -------
-        None
 
         """
         self._file_format_ = file_format
@@ -274,7 +271,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def parent(self):
-        """Pointer to the configuration this was derived from"""
+        """Pointer to the equilibrium this was derived from"""
         return self._parent
 
     @property
@@ -295,6 +292,17 @@ class _Configuration(IOAble, ABC):
     def change_resolution(
         self, L: int = None, M: int = None, N: int = None, *args, **kwargs
     ) -> None:
+        """Set the spectral resolution
+
+        Parameters
+        ----------
+        L : int
+            maximum radial zernike mode number
+        M : int
+            maximum poloidal fourier mode number
+        N : int
+            maximum toroidal fourier mode number
+        """
 
         L_change = M_change = N_change = False
         if L is not None and L != self._L:
@@ -350,15 +358,34 @@ class _Configuration(IOAble, ABC):
 
     @property
     def sym(self) -> bool:
+        """Whether this equilibrium is stellarator symmetric
+
+        Returns
+        -------
+        bool
+        """
         return self._sym
 
     @property
-    def bdry_mode(self):
+    def bdry_mode(self) -> str:
+        """Mode for specifying plasma boundary
+
+
+        Returns
+        -------
+        str
+        """
         return self._bdry_mode
 
     @property
     def Psi(self) -> float:
-        """ float, total toroidal flux (in Webers) within LCFS"""
+        """Total toroidal flux (in Webers) within LCFS
+
+        Returns
+        -------
+        float
+        """
+
         return self._Psi
 
     @Psi.setter
@@ -367,7 +394,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def NFP(self) -> int:
-        """ int, number of field periods"""
+        """Number of field periods
+
+        Returns
+        -------
+        int
+        """
+
         return self._NFP
 
     @NFP.setter
@@ -376,18 +409,46 @@ class _Configuration(IOAble, ABC):
 
     @property
     def L(self) -> int:
+        """Maximum radial mode number
+
+        Returns
+        -------
+        int
+        """
+
         return self._L
 
     @property
     def M(self) -> int:
+        """Maximum poloidal fourier mode number
+
+        Returns
+        -------
+        int
+        """
+
         return self._M
 
     @property
     def N(self) -> int:
+        """Maximum toroidal fourier mode number
+
+        Returns
+        -------
+        int
+        """
+
         return self._N
 
     @property
     def x(self):
+        """Optimization state vector
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._x
 
     @x.setter
@@ -401,7 +462,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def R_lmn(self):
-        """ spectral coefficients of R """
+        """Spectral coefficients of R
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._R_lmn
 
     @R_lmn.setter
@@ -411,7 +478,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Z_lmn(self):
-        """ spectral coefficients of Z """
+        """Spectral coefficients of Z
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -421,7 +494,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def L_lmn(self):
-        """ spectral coefficients of lambda """
+        """Spectral coefficients of lambda
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._L_lmn
 
     @L_lmn.setter
@@ -431,7 +510,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Rb_mn(self):
-        """ spectral coefficients of R at the boundary"""
+        """Spectral coefficients of R at the boundary
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._Rb_mn
 
     @Rb_mn.setter
@@ -440,7 +525,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Zb_mn(self):
-        """ spectral coefficients of Z at the boundary"""
+        """Spectral coefficients of Z at the boundary
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._Zb_mn
 
     @Zb_mn.setter
@@ -449,7 +540,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def p_l(self):
-        """ spectral coefficients of pressure """
+        """Spectral coefficients of pressure profile
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._p_l
 
     @p_l.setter
@@ -458,7 +555,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def i_l(self):
-        """ spectral coefficients of iota """
+        """Spectral coefficients of iota profile
+
+        Returns
+        -------
+        ndarray
+        """
+
         return self._i_l
 
     @i_l.setter
@@ -551,6 +654,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def zeta_ratio(self) -> float:
+        """Multiplier on toroidal derivatives
+
+        Returns
+        -------
+        float
+        """
+
         return self._zeta_ratio
 
     @zeta_ratio.setter
@@ -567,15 +677,36 @@ class _Configuration(IOAble, ABC):
         self.xlabel = {i: val for i, val in enumerate(x_label)}
         self.rev_xlabel = {val: i for i, val in self.xlabel.items()}
 
-    def get_xlabel_by_idx(self, idx):
-        """Find which mode corresponds to a given entry in x"""
+    def get_xlabel_by_idx(self, idx: int):
+        """Find which mode corresponds to a given entry in x
 
+        Parameters
+        ----------
+        idx : int or array-like of int
+            index into optimization vector x
+
+        Returns
+        -------
+        label : str or list of str
+            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
+        """
         idx = np.atleast_1d(idx)
         labels = [self.xlabel.get(i, None) for i in idx]
         return labels
 
     def get_idx_by_xlabel(self, labels):
-        """Find which index of x corresponds to a given mode"""
+        """Find which index of x corresponds to a given mode
+
+        Parameters
+        ----------
+        label : str or list of str
+            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
+
+        Returns
+        -------
+        idx : int or array-like of int
+            index into optimization vector x
+        """
 
         if not isinstance(labels, (list, tuple)):
             labels = list(labels)
@@ -963,20 +1094,22 @@ class _Configuration(IOAble, ABC):
         return force_error
 
     def compute_energy(self, grid: Grid) -> dict:
-        """Computes total MHD energy, and the two components that it is sum of, magnetic and pressure energy.
+        """Computes total MHD energy
+
+        Also computes the individual components (magnetic and pressure)
 
         Parameters
         ----------
         grid : Grid
             Quadrature grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
+            the nodes to evaluate at
 
         Returns
         -------
         energy : dict
-            dictionary of floats, of energy.
-            Keys are 'W_B' for magnetic energy (|B|^2 / 2mu0 integrated over volume),
-            'W_p' for pressure energy (-p integrated over volume), and 'W' for total MHD energy (W_B + W_p)
+            Keys are 'W_B' for magnetic energy (B**2 / 2mu0 integrated over volume),
+            'W_p' for pressure energy (-p integrated over volume), and 'W' for total
+            MHD energy (W_B + W_p)
 
         """
         R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
@@ -1010,7 +1143,20 @@ class _Configuration(IOAble, ABC):
         return energy
 
     def compute_axis_location(self, zeta=0):
-        """Returns a tuple of (R0,Z0), the axis location"""
+        """Find the axis location on specified zeta plane(s)
+
+        Parameters
+        ----------
+        zeta : float or array-like of float
+            zeta planes to find axis on
+
+        Returns
+        -------
+        R0 : ndarray
+            R coordinate of axis on specified zeta planes
+        Z0 : ndarray
+            Z coordinate of axis on specified zeta planes
+        """
 
         z = np.atleast_1d(zeta).flatten()
         r = np.zeros_like(z)
@@ -1020,9 +1166,6 @@ class _Configuration(IOAble, ABC):
         Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
 
         return R0, Z0
-
-
-# these functions are needed to format the input arrays
 
 
 def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):
@@ -1068,7 +1211,7 @@ def format_boundary(
     Parameters
     ----------
     boundary : ndarray, shape(Nbdry,4)
-        array of fourier coeffs [m, n, R1, Z1]
+        array of fourier coeffs [m, n, Rb_mn, Zb_mn]
         or array of real space coordinates, [theta, phi, R, Z]
     Rb_basis : DoubleFourierSeries
         spectral basis for Rb_mn coefficients

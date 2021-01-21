@@ -12,8 +12,12 @@ from desc.perturbations import perturb
 
 
 class Equilibrium(_Configuration, IOAble):
-    """Equilibrium is a decorator design pattern on top of Configuration.
-    It adds information about how the equilibrium configuration was solved.
+    """Equilibrium is an object that represents a plasma equilibrium. It
+    contains information about a plasma state, including the
+    shapes of flux surfaces and profile inputs. It can compute additional
+    information, such as the magnetic field and plasma currents, as well as
+    "solving" itself by finding the equilibrium fields, and perturbing those fields
+    to find nearby equilibria.
     """
 
     # TODO: add optimizer, objective, grid, transform to io_attrs
@@ -31,6 +35,41 @@ class Equilibrium(_Configuration, IOAble):
         file_format: str = "hdf5",
         obj_lib=None,
     ) -> None:
+        """Initializes a Configuration
+
+        Parameters
+        ----------
+        inputs : dict
+            Dictionary of inputs with the following required keys:
+                Psi : float, total toroidal flux (in Webers) within LCFS
+                NFP : int, number of field periods
+                L : int, radial resolution
+                M : int, poloidal resolution
+                N : int, toroidal resolution
+                profiles : ndarray, array of profile coeffs [l, p_l, i_l]
+                boundary : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
+            And the following optional keys:
+                sym : bool, is the problem stellarator symmetric or not, default is False
+                index : str, type of Zernike indexing scheme to use, default is 'ansi'
+                bdry_mode : str, how to calculate error at bdry, default is 'spectral'
+                zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
+                axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
+                x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
+                R_lmn : ndarray, spectral coefficients of R
+                Z_lmn : ndarray, spectral coefficients of Z
+                L_lmn : ndarray, spectral coefficients of lambda
+                M_grid : int, resolution of real space nodes in poloidal/radial direction
+                N_grid : int, resolution of real space nodes in toroidal direction
+                node_mode : str, node pattern, default is "cheb1"
+                errr_mode : str, mode for equilibrium solution
+                optim_method : str, optimizer to use
+        load_from : str file path OR file instance
+            file to initialize from
+        file_format : str
+            file format of file initializing from. Default is 'hdf5'
+
+        """
+        # TODO: make this ^ format correctly with sphinx, dont show it as init method
         super().__init__(
             inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
         )
@@ -54,7 +93,13 @@ class Equilibrium(_Configuration, IOAble):
         self.optimizer = inputs.get("optim_method", None)
 
     @property
-    def x0(self):
+    def x0(self) -> np.ndarray:
+        """Initial optimization vector (before solution)
+
+        Returns
+        -------
+        ndarray
+        """
         return self._x0
 
     @x0.setter
@@ -62,22 +107,34 @@ class Equilibrium(_Configuration, IOAble):
         self._x0 = x0
 
     @property
-    def M_grid(self):
+    def M_grid(self) -> int:
+        """Poloidal/Radial resolution in real space
+
+        Returns
+        -------
+        int
+        """
         return self._M_grid
 
     @M_grid.setter
-    def M_grid(self, new):
+    def M_grid(self, new: Grid):
         if self._M_grid != new:
             self._M_grid = new
             self._set_grid()
             self._set_transforms()
 
     @property
-    def N_grid(self):
+    def N_grid(self) -> int:
+        """Toroidal resolution in real space
+
+        Returns
+        -------
+        int
+        """
         return self._N_grid
 
     @N_grid.setter
-    def N_grid(self, new):
+    def N_grid(self, new: Grid):
         if self._N_grid != new:
             self._N_grid = new
             self._set_grid()
@@ -158,7 +215,13 @@ class Equilibrium(_Configuration, IOAble):
             self._transforms["L"].change_derivatives(derivs, build=False)
 
     def build(self, verbose=1):
-        """Builds transform matrices and factorizes boundary constraint"""
+        """Builds transform matrices and factorizes boundary constraint
+
+        Parameters
+        ----------
+        verbose : int
+            level of output
+        """
 
         self.timer.start("Transform computation")
         if verbose > 0:
@@ -181,6 +244,21 @@ class Equilibrium(_Configuration, IOAble):
             self.timer.disp("Boundary constraint factorization")
 
     def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
+        """Set the spectral and real space resolution
+
+        Parameters
+        ----------
+        L : int
+            maximum radial zernike mode number
+        M : int
+            maximum poloidal fourier mode number
+        N : int
+            maximum toroidal fourier mode number
+        M_grid : int
+            poloidal/radial real space resolution
+        N_grid : int
+            toroidal real space resolution
+        """
 
         L_change = M_change = N_change = False
         if L is not None and L != self._L:
@@ -210,7 +288,13 @@ class Equilibrium(_Configuration, IOAble):
             self.objective = self.objective.name
 
     @property
-    def built(self):
+    def built(self) -> bool:
+        """Whether the equilibrium is ready to solve
+
+        Returns
+        -------
+        bool
+        """
         tr = np.all([tr.built for tr in self._transforms.values()])
         if self.objective is not None and self.objective.BC_constraint is not None:
             bc = self.objective.BC_constraint.built
@@ -219,7 +303,13 @@ class Equilibrium(_Configuration, IOAble):
         return tr and bc
 
     @property
-    def grid(self):
+    def grid(self) -> Grid:
+        """The grid of real space collocation nodes
+
+        Returns
+        -------
+        Grid
+        """
         return self._grid
 
     @grid.setter
@@ -231,6 +321,12 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def solved(self) -> bool:
+        """Whether the equilibrium has been solved
+
+        Returns
+        -------
+        bool
+        """
         return self._solved
 
     @solved.setter
@@ -238,7 +334,13 @@ class Equilibrium(_Configuration, IOAble):
         self._solved = solved
 
     @property
-    def objective(self):
+    def objective(self) -> ObjectiveFunction:
+        """The objective function currently assigned
+
+        Returns
+        -------
+        ObjectiveFunction
+        """
         return self._objective
 
     @objective.setter
@@ -273,7 +375,13 @@ class Equilibrium(_Configuration, IOAble):
         self.solved = False
 
     @property
-    def optimizer(self):
+    def optimizer(self) -> Optimizer:
+        """The optimizer currently assigned
+
+        Returns
+        -------
+        Optimizer
+        """
         return self._optimizer
 
     @optimizer.setter
@@ -321,19 +429,6 @@ class Equilibrium(_Configuration, IOAble):
         }
         return Equilibrium(inputs=inputs)
 
-    def compute(self):
-        y = self._objective.BC_constraint.project(self._x)
-        args = (
-            y,
-            self._Rb_mn,
-            self._Zb_mn,
-            self._p_l,
-            self._i_l,
-            self._Psi,
-            self._zeta_ratio,
-        )
-        return self._objective.compute(*args)
-
     def solve(
         self,
         ftol=1e-6,
@@ -341,9 +436,26 @@ class Equilibrium(_Configuration, IOAble):
         gtol=1e-6,
         verbose=1,
         maxiter=None,
-        x_scale="auto",
         options={},
     ):
+        """Solve to find the equilibrium configuration
+
+        Parameters
+        ----------
+        ftol : float
+            relative stopping tolerance on objective function value
+        xtol : float
+            stopping tolerance on step size
+        gtol : float
+            stopping tolerance on norm of gradient
+        verbose : int
+            level of output
+        maxiter : int
+            maximum number of solver steps
+        options : dict
+            dictionary of additional options to pass to optimizer
+        """
+
         if self._optimizer is None:
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving."
@@ -366,7 +478,6 @@ class Equilibrium(_Configuration, IOAble):
         result = self._optimizer.optimize(
             x_init=x_init,
             args=args,
-            x_scale=x_scale,
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -394,6 +505,28 @@ class Equilibrium(_Configuration, IOAble):
         return result
 
     def perturb(self, deltas, order, Jx=None, verbose=1, copy=True):
+        """Perturb the equilibrium while maintaining equilibrium
+
+        Parameters
+        ----------
+        deltas : dict
+            dictionary of ndarray of objective function parameters to perturb.
+            Allowed keys are: 'Rb_mn', 'Zb_mn', 'p_l', 'i_l', 'Psi', 'zeta_ratio'
+        order : int, optional
+            order of perturbation (0=none, 1=linear, 2=quadratic)
+        Jx : ndarray, optional
+            jacobian matrix df/dx
+        verbose : int
+            level of output to display
+        copy : bool
+            True to return a modified copy of the current equilibrium, False to perturb
+            the current equilibrium in place
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            perturbed equilibrum, only returned if copy=True
+        """
         equil = perturb(self, deltas, order=order, Jx=Jx, verbose=verbose, copy=copy)
         if copy:
             return equil
@@ -401,11 +534,14 @@ class Equilibrium(_Configuration, IOAble):
             return None
 
     def optimize(self):
+        """Optimize an equilibrium for a physics or engineering objective"""
         raise NotImplementedError("optimizing equilibria has not yet been implemented")
 
 
 class EquilibriaFamily(IOAble, MutableSequence):
-    """EquilibriaFamily stores a list of Equilibria"""
+    """EquilibriaFamily stores a list of Equilibria and has methods for solving
+    for complex equilibria using a multi-grid continuation method
+    """
 
     _io_attrs_ = ["equilibria"]
     _object_lib_ = Equilibrium._object_lib_
@@ -414,6 +550,20 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def __init__(
         self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None
     ) -> None:
+        """Initializes a family of Equilibria
+
+        Parameters
+        ----------
+        inputs : dict or list
+            either a dictionary of inputs or list of dictionaries. For more information
+            see inputs required by Equilibrium.
+            If solving using continuation method, a list should be given.
+        load_from : str file path OR file instance
+            file to initialize from
+        file_format : str
+            file format of file initializing from. Default is 'hdf5'
+
+        """
         self._file_format_ = file_format
         if load_from is None:
             self._init_from_inputs_(inputs=inputs)
@@ -435,10 +585,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ):
         """Solves for an equilibrium by continuation method
 
-        Follows this procedure to solve the equilibrium:
             1. Creates an initial guess from the given inputs
-            2. Optimizes the equilibrium's flux surfaces by minimizing
-                the given objective function.
+            2. Find equilibrium flux surfaces by minimizing the given objective function.
             3. Step up to higher resolution and perturb the previous solution
             4. Repeat 2 and 3 until at desired resolution
 
@@ -447,11 +595,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
         start_from : integer
             start solution from the given index
         verbose : integer
-            how much progress information to display
-                0: no output
-                1: summary of each iteration
-                2: as above plus timing information
-                3: as above plus detailed solver output
+            * 0: no output
+            * 1: summary of each iteration
+            * 2: as above plus timing information
+            * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
         device : jax.device or None
@@ -558,7 +705,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     M_grid=self.inputs[ii]["M_grid"],
                     N_grid=self.inputs[ii]["N_grid"],
                 )
-
+            # TODO: assign device properly
             # TODO: updating transforms instead of recomputing
             equil.objective = self.inputs[ii]["errr_mode"]
             equil.optimizer = self.inputs[ii]["optim_method"]
@@ -590,27 +737,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("====================")
 
     @property
-    def solver(self):
-        return self._solver
-
-    @solver.setter
-    def solver(self, solver):
-        self._solver = solver
-        for eq in self._equilibria:
-            eq.optimizer = solver
-
-    @property
-    def objective(self):
-        return self._objective
-
-    @objective.setter
-    def objective(self, objective):
-        self._objective = objective
-        for eq in self._equilibria:
-            eq.objective = objective
-
-    @property
     def equilibria(self):
+        """List of equilibria contained in the family
+
+        Returns
+        -------
+        list
+        """
         return self._equilibria
 
     @equilibria.setter

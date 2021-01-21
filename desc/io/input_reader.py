@@ -13,11 +13,6 @@ class InputReader:
     """
     Reads command line arguments and parses input files.
 
-    Arguments
-    ---------
-    cl_args (optional): list
-        explicit command line arguments
-
     Attributes
     ----------
     args : Namespace
@@ -28,12 +23,6 @@ class InputReader:
         path to input file
     output_path: string
         path to output file
-
-    Methods
-    -------
-    parse_args
-    parse_inputs
-    write_desc_input
 
     """
 
@@ -136,8 +125,9 @@ class InputReader:
 
         Returns
         -------
-        inputs : dict
-            all the input parameters and options
+        inputs : list of dictionaries
+            all the input parameters and options. One dictionary for each resolution
+            level.
 
         """
 
@@ -189,7 +179,7 @@ class InputReader:
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
-                self._vmec_to_desc_input_(self.input_path, path)
+                self.vmec_to_desc_input_(self.input_path, path)
                 print("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
@@ -570,7 +560,7 @@ class InputReader:
 
         f.close()
 
-    def _vmec_to_desc_input_(self, vmec_fname, desc_fname):
+    def vmec_to_desc_input_(self, vmec_fname, desc_fname):
         """Converts a VMEC input file to an equivalent DESC input file
 
         Parameters

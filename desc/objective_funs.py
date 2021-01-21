@@ -10,6 +10,8 @@ from desc.derivatives import Derivative
 from desc.compute_funs import compute_force_error_magnitude, dot, compute_energy
 from desc.boundary_conditions import BoundaryConstraint
 
+__all__ = ["ForceErrorNodes", "EnergyVolIntegral", "get_objective_function"]
+
 
 class ObjectiveFunction(IOAble, ABC):
 
@@ -34,12 +36,6 @@ class ObjectiveFunction(IOAble, ABC):
     BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
 
-    Methods
-    -------
-    compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
-        compute the equilibrium objective function
-    callback(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0)
-        function that prints equilibrium errors
     """
 
     _io_attrs_ = [
@@ -110,33 +106,28 @@ class ObjectiveFunction(IOAble, ABC):
     @abstractmethod
     def scalar(self):
         """boolean of whether default "compute" method is a scalar or vector"""
-        pass
 
     @property
     @abstractmethod
     def name(self):
         """return a string indicator of the type of objective function"""
-        return "abc"
 
     @property
     @abstractmethod
-    def derivatives(cls):
+    def derivatives(self):
         """return arrays indicating which derivatives are needed to compute"""
-        pass
 
     @abstractmethod
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """compute the objective function"""
-        pass
 
     @abstractmethod
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """compute the scalar form of the objective"""
-        pass
 
     @abstractmethod
     def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        pass
+        """print the value of the objective"""
 
     def grad_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Computes gradient vector of scalar form of the objective wrt to x"""
@@ -159,6 +150,11 @@ class ObjectiveFunction(IOAble, ABC):
             integer describing which argument of the objective should be differentiated.
         v : ndarray
             vector to multiply the jacobian matrix by
+
+        Returns
+        -------
+        df : ndarray
+            Jacobian vector product
         """
         f = Derivative(self.compute, argnum=argnum, mode="jvp")
         return f(v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
@@ -176,6 +172,11 @@ class ObjectiveFunction(IOAble, ABC):
             zeroth argument, while argnums=(3,5) would compute a mixed second
             derivative, first with respect to the third argument and then with
             respect to the fifth.
+
+        Returns
+        -------
+        df : ndarray
+            specified derivative of the objective
         """
         if not isinstance(argnums, tuple):
             argnums = (argnums,)
@@ -211,7 +212,7 @@ class ForceErrorNodes(ObjectiveFunction):
         i_transform: Transform = None,
         BC_constraint: BoundaryConstraint = None,
     ) -> None:
-        """Initializes a ForceErrorNodes object
+        """Initializes a force error objective function
 
         Parameters
         ----------
@@ -232,10 +233,6 @@ class ForceErrorNodes(ObjectiveFunction):
         BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
 
-        Returns
-        -------
-        None
-
         """
         super().__init__(
             R_transform,
@@ -250,14 +247,17 @@ class ForceErrorNodes(ObjectiveFunction):
 
     @property
     def scalar(self):
+        """boolean of whether default "compute" method is a scalar or vector"""
         return False
 
     @property
     def name(self):
+        """return a string indicator of the type of objective function"""
         return "force"
 
     @property
     def derivatives(self):
+        """return arrays indicating which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
         # old axis derivatives
         axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
@@ -278,7 +278,30 @@ class ForceErrorNodes(ObjectiveFunction):
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        """Compute force balance error."""
+        """Compute force balance error
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+        """
 
         if self.BC_constraint is not None:
             # x is really 'y', need to recover full state vector
@@ -336,12 +359,56 @@ class ForceErrorNodes(ObjectiveFunction):
         return residual
 
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total force balance error
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total force balance error
+        """
         residual = self.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
         residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
     def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
-        """Prints the rms errors."""
+        """Prints the rms errors for radial and helical force balance
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+        """
 
         if self.BC_constraint is not None:
             # x is really 'y', need to recover full state vector
@@ -445,10 +512,6 @@ class EnergyVolIntegral(ObjectiveFunction):
         BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
 
-        Returns
-        -------
-        None
-
         """
         super().__init__(
             R_transform,
@@ -463,16 +526,18 @@ class EnergyVolIntegral(ObjectiveFunction):
 
     @property
     def scalar(self):
+        """boolean of whether default "compute" method is a scalar or vector"""
         return True
 
     @property
     def name(self):
+        """return a string indicator of the type of objective function"""
         return "energy"
 
     @property
     def derivatives(self):
+        """return arrays indicating which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
-        # old axis derivatives
         derivatives = np.array(
             [
                 [0, 0, 0],
@@ -484,7 +549,30 @@ class EnergyVolIntegral(ObjectiveFunction):
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        """Compute energy."""
+        """Compute MHD energy
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        W : float
+            total MHD energy in the plasma volume
+        """
 
         if self.BC_constraint is not None:
             # x is really 'y', need to recover full state vector
@@ -523,12 +611,54 @@ class EnergyVolIntegral(ObjectiveFunction):
         return residual
 
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute MHD energy
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        W : float
+            total MHD energy in the plasma volume
+        """
         residual = self.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
         return residual
 
     def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
-        """Prints the energy."""
+        """Print the MHD energy
 
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
         if self.BC_constraint is not None:
             # x is really 'y', need to recover full state vector
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
@@ -563,9 +693,11 @@ class EnergyVolIntegral(ObjectiveFunction):
 
         residual = energy["W"]
 
-        print("Total MHD energy: {:10.3e}".format(residual))
-
-        return None
+        print(
+            "Total MHD energy: {:10.3e}, Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e}".format(
+                energy["W"], energy["W_B"], energy["W_p"]
+            )
+        )
 
 
 def get_objective_function(
@@ -579,11 +711,12 @@ def get_objective_function(
     i_transform: Transform = None,
     BC_constraint: BoundaryConstraint = None,
 ) -> ObjectiveFunction:
-    """Accepts parameters necessary to create an objective function,
-    and returns the corresponding ObjectiveFunction object
+    """Get an objective function by name
 
     Parameters
     ----------
+    errr_mode : str
+        name of the desired objective function, eg 'force' or 'energy'
     R_transform : Transform
         transforms R_lmn coefficients to real space
     Z_transform : Transform
@@ -600,6 +733,11 @@ def get_objective_function(
         transforms i_l coefficients to real space
     BC_constraint : BoundaryConstraint
         linear constraint to enforce boundary conditions
+
+    Returns
+    -------
+    objective : ObjectiveFunction
+        objective initialized with the given transforms and constraints
     """
 
     if errr_mode == "force":

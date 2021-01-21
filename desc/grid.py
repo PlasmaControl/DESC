@@ -4,6 +4,8 @@ from desc.utils import equals
 from desc.io import IOAble
 from scipy import special
 
+__all__ = ["Grid", "LinearGrid", "ConcentricGrid"]
+
 
 class Grid(IOAble):
     """Grid is a base class for collocation grids"""
@@ -15,7 +17,7 @@ class Grid(IOAble):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(Nnodes,3)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
 
         Returns
@@ -103,17 +105,17 @@ class Grid(IOAble):
 
         Parameters
         ----------
-        nodes : ndarray of float, size(Nnodes,3)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
 
         Returns
         -------
-        nodes : ndarray of float, size(Nnodes,3)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
 
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3))
-        weights = np.zeros(nodes.shape[0])
+        weights = np.ones(nodes.shape[0])
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
@@ -149,7 +151,7 @@ class Grid(IOAble):
 
     @property
     def nodes(self):
-        """ndarray: array of float, size(Nnodes,3):
+        """ndarray: array of float, size(num_nodes,3):
         node coordinates, in (rho,theta,zeta)"""
         return self._nodes
 
@@ -159,7 +161,7 @@ class Grid(IOAble):
 
     @property
     def weights(self):
-        """ndarray: array of float, size(Nnodes,):
+        """ndarray: array of float, size(num_nodes,):
         weight for each node, either exact quadrature or volume based"""
         return self._weights
 
@@ -223,10 +225,6 @@ class LinearGrid(Grid):
             poloidal coordinates
         zeta : ndarray of float, optional
             toroidal coordinates
-
-        Returns
-        -------
-        None
 
         """
         self._file_format_ = file_format
@@ -302,10 +300,10 @@ class LinearGrid(Grid):
 
         Returns
         -------
-        nodes : ndarray of float, size(Nnodes,3)
+        nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        weights : ndarray of float, size(Nnodes,)
-            weight for each node, either exact quadrature or volume based
+        weights : ndarray of float, size(num_nodes,)
+            weight for each node, based on local volume around the node
 
         """
         self._L = L
@@ -360,20 +358,16 @@ class LinearGrid(Grid):
         return nodes, weights
 
     def change_resolution(self, L: int, M: int, N: int) -> None:
-        """
+        """Change the resolution of the grid
 
         Parameters
         ----------
         L : int
             new radial grid resolution (L radial nodes)
         M : int
-            new poloidal grid resolution (2*M+1 poloidal nodes)
+            new poloidal grid resolution (M poloidal nodes)
         N : int
-            new toroidal grid resolution (2*N+1 toroidal nodes)
-
-        Returns
-        -------
-        None
+            new toroidal grid resolution (N toroidal nodes)
 
         """
         if L != self._L or M != self._M or N != self._N:
@@ -432,10 +426,6 @@ class ConcentricGrid(Grid):
                 cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
                 anything else defaults to linear spacing in r=[0,1]
-
-        Returns
-        -------
-        None
 
         """
         self._file_format_ = file_format
@@ -496,14 +486,15 @@ class ConcentricGrid(Grid):
             pattern for radial coordinates
                 cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                quad  = Radial nodes are roots of Shifted Jacobi polynomial of degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+                quad  = Radial nodes are roots of Shifted Jacobi polynomial of degree
+                M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
                 anything else defaults to linear spacing in r=[0,1]
 
         Returns
         -------
-        nodes : ndarray of float, size(Nnodes, 3)
+        nodes : ndarray of float, size(num_nodes, 3)
             node coordinates, in (rho,theta,zeta)
-        weights : ndarray of float, size(Nnodes,)
+        weights : ndarray of float, size(num_nodes,)
             weight for each node, either exact quadrature or volume based
 
         """
@@ -577,7 +568,7 @@ class ConcentricGrid(Grid):
         return nodes, weights
 
     def change_resolution(self, M: int, N: int) -> None:
-        """
+        """Change the resolution of the grid
 
         Parameters
         ----------
@@ -585,10 +576,6 @@ class ConcentricGrid(Grid):
             new poloidal grid resolution
         N : int
             new toroidal grid resolution
-
-        Returns
-        -------
-        None
 
         """
         if M != self._M or N != self._N:
@@ -681,7 +668,7 @@ def get_nodes_quad(M, N, NFP, sym=False):
 # TODO: finish option for placing nodes at irrational surfaces
 
 
-def dec_to_cf(x, dmax=6):
+def dec_to_cf(x, dmax=6):  # oragma: no cover
     """Compute continued fraction form of a number.
 
     Parameters
@@ -710,7 +697,7 @@ def dec_to_cf(x, dmax=6):
     return np.array(cf)
 
 
-def cf_to_dec(cf):
+def cf_to_dec(cf):  # oragma: no cover
     """Compute decimal form of a continued fraction.
 
     Parameters
@@ -730,7 +717,7 @@ def cf_to_dec(cf):
         return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
-def most_rational(a, b):
+def most_rational(a, b):  # oragma: no cover
     """Compute the most rational number in the range [a,b]
 
     Parameters

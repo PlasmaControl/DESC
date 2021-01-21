@@ -4,6 +4,8 @@ import time
 from desc.utils import Timer
 from desc.boundary_conditions import BoundaryConstraint
 
+__all__ = ["perturb"]
+
 
 def perturb(
     eq,

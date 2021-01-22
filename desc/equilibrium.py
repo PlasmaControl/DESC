@@ -1,4 +1,6 @@
 import numpy as np
+from termcolor import colored
+import warnings
 from collections import MutableSequence
 from desc.utils import Timer, expand_state
 from desc.configuration import _Configuration, format_boundary, format_profiles
@@ -22,7 +24,7 @@ class Equilibrium(_Configuration, IOAble):
 
     # TODO: add optimizer, objective, grid, transform to io_attrs
     # and figure out why it wont save
-    _io_attrs_ = _Configuration._io_attrs_ + ["_solved"]
+    _io_attrs_ = _Configuration._io_attrs_ + ["_solved", "_x0", "_M_grid", "_N_grid"]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
         {"_Configuration": _Configuration, "ObjectiveFunction": ObjectiveFunction}
@@ -726,6 +728,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
             self.timer.stop("Iteration {} total".format(ii + 1))
             if verbose > 1:
                 self.timer.disp("Iteration {} total".format(ii + 1))
+
+            if not equil.is_nested():
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller resolution steps",
+                        "yellow",
+                    )
+                )
+                break
 
         self.timer.stop("Total time")
         print("====================")

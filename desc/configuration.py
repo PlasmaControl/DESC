@@ -1,8 +1,10 @@
 import numpy as np
 import copy
 import warnings
+import matplotlib
 from termcolor import colored
 from abc import ABC
+from shapely.geometry import LineString, MultiLineString
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -1164,6 +1166,55 @@ class _Configuration(IOAble, ABC):
         Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
 
         return R0, Z0
+
+    def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
+        """Checks that an equilibrium has properly nested flux surfaces
+            in a given toroidal plane
+        Parameters
+        ----------
+        nsurfs : int, optional
+            number of radial surfaces to check (Default value = 10)
+        ntheta : int, optional
+            number of sfl poloidal contours to check (Default value = 20)
+        zeta : float, optional
+            toroidal plane to check (Default value = 0)
+        Nt : int, optional
+            number of theta points to use for the r contours (Default value = 45)
+        Nr : int, optional
+            number of r points to use for the theta contours (Default value = 20)
+        Returns
+        -------
+        is_nested : bool
+            whether or not the surfaces are nested
+        """
+
+        r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
+        t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
+
+        r_coords = self.compute_toroidal_coords(r_grid)
+        t_coords = self.compute_toroidal_coords(t_grid)
+
+        v_nodes = t_grid.nodes
+        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
+        v_grid = Grid(v_nodes)
+        v_coords = self.compute_toroidal_coords(v_grid)
+
+        # rho contours
+        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+
+        # theta contours
+        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+
+        rline = MultiLineString(
+            [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
+        )
+        vline = MultiLineString(
+            [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
+        )
+
+        return rline.is_simple and vline.is_simple
 
 
 def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):

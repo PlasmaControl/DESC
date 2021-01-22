@@ -9,3 +9,4 @@ h5py
 netcdf4
 colorama
 termcolor
+shapely

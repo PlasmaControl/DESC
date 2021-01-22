@@ -1,7 +1,9 @@
+import os
 import math
 import numpy as np
 from netCDF4 import Dataset, stringtochar
-
+from shapely.geometry import Polygon
+import matplotlib.pyplot as plt
 from desc.backend import put
 from desc.utils import sign
 from desc.grid import LinearGrid
@@ -650,3 +652,226 @@ class VMECIO:
                 x_mn[:, k] = np.matmul(A, x_lmn[idx])
 
         return m, n, x_mn
+
+    @classmethod
+    def read_vmec_output(cls, fname):
+        """Reads VMEC data from wout nc file
+
+        Parameters
+        ----------
+        fname : str or path-like
+            filename of VMEC output file
+
+        Returns
+        -------
+        vmec_data : dict
+            the VMEC data fields
+        """
+
+        file = Dataset(fname, mode="r")
+
+        vmec_data = {
+            "NFP": file.variables["nfp"][:],
+            "psi": file.variables["phi"][:],  # toroidal flux is saved as 'phi'
+            "xm": file.variables["xm"][:],
+            "xn": file.variables["xn"][:],
+            "rmnc": file.variables["rmnc"][:],
+            "zmns": file.variables["zmns"][:],
+            "lmns": file.variables["lmns"][:],
+        }
+        try:
+            vmec_data["rmns"] = file.variables["rmns"][:]
+            vmec_data["zmnc"] = file.variables["zmnc"][:]
+            vmec_data["lmnc"] = file.variables["lmnc"][:]
+            vmec_data["sym"] = False
+        except:
+            vmec_data["sym"] = True
+
+        return vmec_data
+
+    @staticmethod
+    def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, sym=True):
+        """Interpolates VMEC data on a flux surface
+        Parameters
+        ----------
+        Cmn : ndarray
+            cos(mt-np) Fourier coefficients
+        Smn : ndarray
+            sin(mt-np) Fourier coefficients
+        xm : ndarray
+            poloidal mode numbers
+        xn : ndarray
+            toroidal mode numbers
+        theta : ndarray
+            poloidal angles
+        phi : ndarray
+            toroidal angles
+        sym : bool
+            stellarator symmetry (Default value = True)
+        Returns
+        -------
+        if sym = True
+            C, S (tuple of ndarray): VMEC data interpolated at the angles (theta,phi)
+            where C has cosine symmetry and S has sine symmetry
+        if sym = False
+            X (ndarray): non-symmetric VMEC data interpolated at the angles (theta,phi)
+        """
+
+        C_arr = []
+        S_arr = []
+        dim = Cmn.shape
+
+        for j in range(dim[1]):
+
+            m = xm[j]
+            n = xn[j]
+
+            C = [
+                [[Cmn[s, j] * np.cos(m * t - n * p) for p in phi] for t in theta]
+                for s in range(dim[0])
+            ]
+            S = [
+                [[Smn[s, j] * np.sin(m * t - n * p) for p in phi] for t in theta]
+                for s in range(dim[0])
+            ]
+            C_arr.append(C)
+            S_arr.append(S)
+
+        C = np.sum(C_arr, axis=0)
+        S = np.sum(S_arr, axis=0)
+        if sym:
+            return C, S
+        else:
+            return C + S
+
+    @classmethod
+    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=180):
+        """Computes the average normalized area difference between vmec and desc equilibria
+
+        Parameters
+        ----------
+        equil : Equilibrium
+            desc equilibrium to compare
+        vmec_data : dict
+            dictionary of vmec outputs
+        Nr : int, optional
+            number of radial surfaces to average over
+        Nt : int, optional
+            number of theta points to use for surface comparison
+
+        Returns
+        -------
+        area : float
+            the average normalized area difference between flux surfaces
+            area between flux surfaces is defined as the symmetric difference between
+            the two shapes, and each is normalized to the nominal area of the flux surface,
+            and finally averaged over the total number of flux surfaces being compared
+        """
+
+        # 1e-3 seems like a reasonable tolerance for testing, similar to comparison by eye
+        if isinstance(vmec_data, (str, os.PathLike)):
+            vmec_data = cls.read_vmec_output(vmec_data)
+
+        if equil.N == 0:
+            Nz = 1
+            rows = 1
+        else:
+            Nz = 6
+            rows = 2
+
+        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
+        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
+        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
+        if s_idx == 0:
+            idxes = idxes[1:]
+            Nr -= 1
+        r = np.sqrt(idxes / Nr_vmec)
+        t = np.linspace(0, 2 * np.pi, Nt)
+        z = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        grid = LinearGrid(rho=r, theta=t, zeta=z)
+
+        coords_desc = equil.compute_toroidal_coords(grid)
+        R_desc = coords_desc["R"].reshape((Nt, r.size, Nz), order="F")
+        Z_desc = coords_desc["Z"].reshape((Nt, r.size, Nz), order="F")
+
+        R_vmec, Z_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"][idxes],
+            vmec_data["zmns"][idxes],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            t,
+            z,
+        )
+
+        desc_poly = [
+            [
+                Polygon(np.array([R, Z]).T)
+                for R, Z in zip(R_desc[:, :, i].T, Z_desc[:, :, i].T)
+            ]
+            for i in range(Nz)
+        ]
+        vmec_poly = [
+            [Polygon(np.array([R[:, i], Z[:, i]]).T) for R, Z in zip(R_vmec, Z_vmec)]
+            for i in range(Nz)
+        ]
+
+        return np.sum(
+            [
+                desc_poly[iz][ir].symmetric_difference(vmec_poly[iz][ir]).area
+                / vmec_poly[iz][ir].area
+                for ir in range(Nr)
+                for iz in range(Nz)
+            ]
+        ) / (Nr * Nz)
+
+    @classmethod
+    def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=180):
+
+        if isinstance(vmec_data, (str, os.PathLike)):
+            vmec_data = cls.read_vmec_output(vmec_data)
+
+        if equil.N == 0:
+            Nz = 1
+            rows = 1
+        else:
+            Nz = 6
+            rows = 2
+
+        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
+        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
+        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
+        if s_idx != 0:
+            idxes = np.pad(idxes, (1, 0), mode="constant")
+        r = np.sqrt(idxes / Nr_vmec)
+        t = np.linspace(0, 2 * np.pi, Nt)
+        z = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        grid = LinearGrid(rho=r, theta=t, zeta=z)
+
+        coords_desc = equil.compute_toroidal_coords(grid)
+        R_desc = coords_desc["R"].reshape((Nt, r.size, Nz), order="F")
+        Z_desc = coords_desc["Z"].reshape((Nt, r.size, Nz), order="F")
+
+        R_vmec, Z_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"][idxes],
+            vmec_data["zmns"][idxes],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            t,
+            z,
+        )
+
+        plt.figure(figsize=(20, 20))
+        for k in range(Nz):
+            ax = plt.subplot(rows, int(Nz / rows), k + 1)
+            ax.plot(R_vmec[0, 0, k], Z_vmec[0, 0, k], "bo")
+            s_vmec = ax.plot(R_vmec[:, :, k].T, Z_vmec[:, :, k].T, "b-")
+            ax.plot(R_desc[0, 0, k], Z_desc[0, 0, k], "ro")
+            s_desc = ax.plot(R_desc[:, :, k], Z_desc[:, :, k], "r--")
+            ax.axis("equal")
+            ax.set_xlabel("R")
+            ax.set_ylabel("Z")
+            if k == 0:
+                s_vmec[0].set_label("VMEC")
+                s_desc[0].set_label("DESC")
+                ax.legend(fontsize="xx-small")
+        plt.show()

@@ -24,7 +24,7 @@ class Equilibrium(_Configuration, IOAble):
 
     # TODO: add optimizer, objective, grid, transform to io_attrs
     # and figure out why it wont save
-    _io_attrs_ = _Configuration._io_attrs_ + ["_solved"]
+    _io_attrs_ = _Configuration._io_attrs_ + ["_solved", "_x0", "_M_grid", "_N_grid"]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
         {"_Configuration": _Configuration, "ObjectiveFunction": ObjectiveFunction}

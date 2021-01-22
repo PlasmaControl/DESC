@@ -114,7 +114,7 @@ def main(cl_args=None):
         print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[0].initial)
         plt.show()
-        ax = Plot().plot_2d(equil_fam[0].initial, "log(|F|)")
+        ax = Plot().plot_2d(equil_fam[0].initial, "|F|", log=True)
         plt.show()
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
@@ -122,14 +122,14 @@ def main(cl_args=None):
             print("Axis location: {}".format(eq.compute_axis_location()))
             ax = Plot().plot_surfaces(eq)
             plt.show()
-            ax = Plot().plot_2d(eq, "log(|F|)")
+            ax = Plot().plot_2d(eq, "|F|", log=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
         print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
         ax = Plot().plot_surfaces(equil_fam[-1])
         plt.show()
-        ax = Plot().plot_2d(equil_fam[-1], "log(|F|)")
+        ax = Plot().plot_2d(equil_fam[-1], "|F|", log=True)
         plt.show()
 
 

@@ -164,7 +164,7 @@ def test_section_F(plot_eq):
 
 @pytest.mark.mpl_image_compare
 def test_section_logF(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "log(|F|)")
+    fig, ax = Plot().plot_section(plot_eq, "|F|", log=True)
     return fig
 
 

@@ -3,6 +3,7 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import re
 from termcolor import colored
@@ -59,8 +60,8 @@ class Plot:
     """Class for plotting instances of Equilibrium on a linear grid."""
 
     axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
-    axis_labels_RPZ = [r"$R$", r"$\phi$", r"$Z$"]
-    axis_labels_XYZ = [r"$X$", r"$Y$", r"$Z$"]
+    axis_labels_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
+    axis_labels_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
     def __init__(self):
         """Initialize a Plot class.
@@ -110,13 +111,13 @@ class Plot:
                 colored("ax agument must be None or an axis instance", "red")
             )
 
-    def get_grid(self, **kwargs):
+    def _get_grid(self, **kwargs):
         """Get grid for plotting.
 
         Parameters
         ----------
         kwargs
-            any arguments taken by LinearGrid (Default L=100, M=1, N=1)
+            any arguments taken by LinearGrid (Default L=1, M=1, N=1)
 
         Returns
         -------
@@ -140,17 +141,39 @@ class Plot:
                 grid_args[key] = kwargs[key]
         grid = LinearGrid(**grid_args)
 
+        return grid
+
+    def _get_plot_axes(self, grid):
+        """Find which axes are being plotted
+
+        Parameters
+        ----------
+        grid : Grid
+
+        Returns
+        -------
+        tuple
+
+        """
         plot_axes = [0, 1, 2]
-        if grid.L == 1:
+        if np.unique(grid.nodes[:, 0]).size == 1:
             plot_axes.remove(0)
-        if grid.M == 1:
+        if np.unique(grid.nodes[:, 1]).size == 1:
             plot_axes.remove(1)
-        if grid.N == 1:
+        if np.unique(grid.nodes[:, 2]).size == 1:
             plot_axes.remove(2)
 
-        return grid, tuple(plot_axes)
+        return tuple(plot_axes)
 
-    def plot_1d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
+    def plot_1d(
+        self,
+        eq: Equilibrium,
+        name: str,
+        grid: Grid = None,
+        ax=None,
+        log=False,
+        **kwargs
+    ):
         """Plots 1D profiles.
 
         Parameters
@@ -163,6 +186,8 @@ class Plot:
             grid of coordinates to plot at
         ax : matplotlib AxesSubplot, optional
             axis to plot on
+        log : bool, optional
+            whether to use a log scale
         kwargs
             any arguments taken by LinearGrid
 
@@ -174,7 +199,8 @@ class Plot:
         if grid is None:
             if kwargs == {}:
                 kwargs.update({"L": 100, "NFP": eq.NFP})
-            grid, plot_axes = self.get_grid(**kwargs)
+            grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(grid)
         if len(plot_axes) != 1:
             return ValueError(colored("Grid must be 1D", "red"))
 
@@ -183,15 +209,26 @@ class Plot:
         fig, ax = self.format_ax(ax)
 
         # reshape data to 1D
-        data = data[:, 0, 0]
+        data = data.flatten()
 
-        ax.plot(grid.nodes[:, plot_axes[0]], data)
+        if log:
+            ax.semilogy(grid.nodes[:, plot_axes[0]], data)
+        else:
+            ax.plot(grid.nodes[:, plot_axes[0]], data)
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[0]])
         ax.set_ylabel(self.name_label(name_dict))
         return fig, ax
 
-    def plot_2d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
+    def plot_2d(
+        self,
+        eq: Equilibrium,
+        name: str,
+        grid: Grid = None,
+        ax=None,
+        log=False,
+        **kwargs
+    ):
         """Plots 2D cross-sections.
 
         Parameters
@@ -204,6 +241,8 @@ class Plot:
             grid of coordinates to plot at
         ax : matplotlib AxesSubplot, optional
             axis to plot on
+        log : bool, optional
+            whether to use a log scale
         kwargs
             any arguments taken by LinearGrid
 
@@ -215,7 +254,8 @@ class Plot:
         if grid is None:
             if kwargs == {}:
                 kwargs.update({"L": 25, "M": 25, "NFP": eq.NFP})
-            grid, plot_axes = self.get_grid(**kwargs)
+            grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(grid)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", "red"))
 
@@ -238,6 +278,8 @@ class Plot:
             "interpolation": "bilinear",
             "aspect": "auto",
         }
+        if log:
+            imshow_kwargs["norm"] = matplotlib.colors.LogNorm()
         imshow_kwargs["extent"] = [
             grid.nodes[0, plot_axes[1]],
             grid.nodes[-1, plot_axes[1]],
@@ -249,7 +291,6 @@ class Plot:
         im = ax.imshow(data.T, cmap="jet", **imshow_kwargs)
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(im, cax=cax)
-        cbar.formatter.set_powerlimits((0, 0))
         cbar.update_ticks()
 
         ax.set_xlabel(self.axis_labels_rtz[plot_axes[1]])
@@ -257,7 +298,16 @@ class Plot:
         ax.set_title(self.name_label(name_dict))
         return fig, ax
 
-    def plot_3d(self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs):
+    def plot_3d(
+        self,
+        eq: Equilibrium,
+        name: str,
+        grid: Grid = None,
+        ax=None,
+        log=False,
+        all_field_periods=True,
+        **kwargs
+    ):
         """Plots 3D surfaces.
 
         Parameters
@@ -270,6 +320,10 @@ class Plot:
             grid of coordinates to plot at
         ax : matplotlib AxesSubplot, optional
             axis to plot on
+        log : bool, optional
+            whether to use a log scale
+        all_field_periods : bool, optional
+            whether to plot full torus or just one field period
         kwargs
             any arguments taken by LinearGrid
 
@@ -278,10 +332,12 @@ class Plot:
         axis
 
         """
+        nfp = 1 if all_field_periods else eq.NFP
         if grid is None:
             if kwargs == {}:
-                kwargs.update({"M": 46, "N": 46, "NFP": eq.NFP})
-            grid, plot_axes = self.get_grid(**kwargs)
+                kwargs.update({"M": 46, "N": 46, "NFP": nfp})
+            grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(grid)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", "red"))
 
@@ -313,7 +369,10 @@ class Plot:
             Z = Z[0, :, :]
 
         minn, maxx = data.min().min(), data.max().max()
-        norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
+        if log:
+            norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
+        else:
+            norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
         m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
         m.set_array([])
 
@@ -335,7 +394,13 @@ class Plot:
         return fig, ax
 
     def plot_section(
-        self, eq: Equilibrium, name: str, grid: Grid = None, ax=None, **kwargs
+        self,
+        eq: Equilibrium,
+        name: str,
+        grid: Grid = None,
+        ax=None,
+        log=False,
+        **kwargs
     ):
         """Plots Poincare sections.
 
@@ -349,6 +414,8 @@ class Plot:
             grid of coordinates to plot at
         ax : matplotlib AxesSubplot, optional
             axis to plot on
+        log : bool, optional
+            whether to use a log scale
         kwargs
             any arguments taken by LinearGrid
 
@@ -360,7 +427,8 @@ class Plot:
         if grid is None:
             if kwargs == {}:
                 kwargs.update({"L": 20, "M": 91, "NFP": eq.NFP, "axis": False})
-            grid, plot_axes = self.get_grid(**kwargs)
+            grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(grid)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", "red"))
         if 2 in plot_axes:
@@ -374,24 +442,17 @@ class Plot:
         coords = eq.compute_toroidal_coords(grid)
         R = coords["R"].reshape((grid.L, grid.M, grid.N), order="F")[:, :, 0].flatten()
         Z = coords["Z"].reshape((grid.L, grid.M, grid.N), order="F")[:, :, 0].flatten()
+        # TODO: plot multiple sections for stellarators
 
-        imshow_kwargs = {
-            "origin": "lower",
-            "interpolation": "bilinear",
-            "aspect": "auto",
-        }
-        imshow_kwargs["extent"] = [
-            grid.nodes[0, plot_axes[1]],
-            grid.nodes[-1, plot_axes[1]],
-            grid.nodes[0, plot_axes[0]],
-            grid.nodes[-1, plot_axes[0]],
-        ]
+        imshow_kwargs = {}
+        if log:
+            imshow_kwargs["locator"] = matplotlib.ticker.LogLocator()
         cax_kwargs = {"size": "5%", "pad": 0.05}
 
-        cntr = ax.tricontourf(R, Z, data, levels=100, cmap="jet")
+        # TODO: make this log scale prettier
+        cntr = ax.tricontourf(R, Z, data, levels=100, cmap="jet", **imshow_kwargs)
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(cntr, cax=cax)
-        cbar.formatter.set_powerlimits((0, 0))
         cbar.update_ticks()
 
         ax.axis("equal")
@@ -433,10 +494,17 @@ class Plot:
         if r_grid is None:
             if kwargs == {}:
                 kwargs.update({"L": 8, "M": 180})
-            r_grid, plot_axes = self.get_grid(**kwargs)
+            r_grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(r_grid)
+        if len(plot_axes) != 2:
+            return ValueError(colored("Grid must be 2D", "red"))
+        if 2 in plot_axes:
+            return ValueError(colored("Grid must be in rho vs theta", "red"))
+
         if t_grid is None:
             kwargs.update({"L": 50, "M": 8, "endpoint": False})
-            t_grid, plot_axes = self.get_grid(**kwargs)
+            t_grid = self._get_grid(**kwargs)
+        plot_axes = self._get_plot_axes(t_grid)
         if len(plot_axes) != 2:
             return ValueError(colored("Grid must be 2D", "red"))
         if 2 in plot_axes:
@@ -451,6 +519,8 @@ class Plot:
         )
         v_grid = Grid(v_nodes)
         v_coords = eq.compute_toroidal_coords(v_grid)
+
+        # TODO: plot multiple sections for stellarators
 
         # rho contours
         Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
@@ -509,9 +579,6 @@ class Plot:
             out = eq.compute_current_density(grid)[self.__name_key__(name_dict)]
         elif name_dict["base"] in ["F", "|F|"]:
             out = eq.compute_force_error(grid)[self.__name_key__(name_dict)]
-        elif name_dict["base"] == "log(|F|)":
-            out = eq.compute_force_error(grid)["|F|"]
-            out = np.log10(np.asarray(out))
 
         else:
             raise NotImplementedError(
@@ -548,7 +615,14 @@ class Plot:
         parsed name : dict
 
         """
-        name_dict = {"base": "", "sups": "", "subs": "", "power": "", "d": ""}
+        name_dict = {
+            "base": "",
+            "sups": "",
+            "subs": "",
+            "power": "",
+            "d": "",
+            "units": "",
+        }
         if "**" in name:
             parsename, power = name.split("**")
             if "_" in power or "^" in power:
@@ -580,6 +654,25 @@ class Plot:
             name_dict["base"], name_dict["sups"] = parsename.split("^")
         else:
             name_dict["base"] = parsename
+
+        units = {
+            "psi": r"(\mathrm{Webers})",
+            "p": r"(\mathrm{Pa})",
+            "iota": "",
+            "R": r"(\mathrm{m})",
+            "Z": r"(\mathrm{m})",
+            "lambda": "",
+            "g": r"(\mathrm{m}^3)",
+            "B": r"(\mathrm{T})",
+            "|B|": r"(\mathrm{T})",
+            "J": r"(\mathrm{A}/\mathrm{m}^2)",
+            "F": r"(\mathrm{N}/\mathrm{m}^3)",
+            "|F|": r"(\mathrm{N})",
+        }
+        name_dict["units"] = units[name_dict["base"]]
+        if name_dict["power"]:
+            name_dict["units"] += "^" + name_dict["power"]
+
         return name_dict
 
     def name_label(self, name_dict):
@@ -601,6 +694,16 @@ class Plot:
             base = "|" + re.sub("mag", "", name_dict["base"]) + "|"
         else:
             base = name_dict["base"]
+
+        if "lambda" in base:
+            idx = base.index("lambda")
+            base = base[:idx] + "\\" + base[idx:]
+        if "iota" in base:
+            idx = base.index("iota")
+            base = base[:idx] + "\\" + base[idx:]
+        if "psi" in base:
+            idx = base.index("psi")
+            base = base[:idx] + "\\" + base[idx:]
 
         if name_dict["d"] != "":
             dstr0 = "d"
@@ -633,7 +736,17 @@ class Plot:
             substr = "_{" + esc + name_dict["subs"] + "}"
         else:
             substr = ""
-        label = r"$" + dstr0 + base + supstr + substr + dstr1 + "$"
+        label = (
+            r"$"
+            + dstr0
+            + base
+            + supstr
+            + substr
+            + dstr1
+            + "~"
+            + name_dict["units"]
+            + "$"
+        )
         return label
 
     def __name_key__(self, name_dict):

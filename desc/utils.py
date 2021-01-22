@@ -409,38 +409,3 @@ def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
 
     x = np.concatenate([R_lmn, Z_lmn, L_lmn])
     return x
-
-
-def curve_self_intersects(x, y):
-    """Checks if a curve intersects itself
-    Parameters
-    ----------
-    x,y : ndarray
-        x and y coordinates of points along the curve
-    Returns
-    -------
-    is_intersected : bool
-        whether the curve intersects itself
-    """
-
-    pts = np.array([x, y])
-    pts1 = pts[:, 0:-1]
-    pts2 = pts[:, 1:]
-
-    # [start/stop, x/y, segment]
-    segments = np.array([pts1, pts2])
-    s1, s2 = np.meshgrid(np.arange(len(x) - 1), np.arange(len(y) - 1))
-    idx = np.array([s1.flatten(), s2.flatten()])
-    a, b = segments[:, :, idx[0, :]]
-    c, d = segments[:, :, idx[1, :]]
-
-    def signed_2d_area(a, b, c):
-        return (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0])
-
-    # signs of areas correspond to which side of ab points c and d are
-    a1 = signed_2d_area(a, b, d)  # Compute winding of abd (+ or -)
-    a2 = signed_2d_area(a, b, c)  # To intersect, must have sign opposite of a1
-    a3 = signed_2d_area(c, d, a)  # Compute winding of cda (+ or -)
-    a4 = a3 + a2 - a1  # Since area is constant a1 - a2 = a3 - a4, or a4 = a3 + a2 - a1
-
-    return np.any(np.where(np.logical_and(a1 * a2 < 0, a3 * a4 < 0), True, False))

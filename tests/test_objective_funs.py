@@ -2,7 +2,6 @@ import unittest
 import numpy as np
 
 from desc.grid import LinearGrid, ConcentricGrid
-from desc.utils import curve_self_intersects
 from desc.equilibrium import Equilibrium
 from desc.basis import (
     PowerSeries,
@@ -111,24 +110,3 @@ class TestIsNested(unittest.TestCase):
         eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
         self.assertTrue(eq1.is_nested())
         self.assertFalse(eq2.is_nested())
-
-    def test_self_intersection(self):
-
-        # elipse: not self intersected
-
-        a = 1
-        b = 1
-        d = np.pi / 2
-        t = np.linspace(0, 2 * np.pi, 361)
-        x = np.sin(a * t + d)
-        y = np.sin(b * t)
-        self.assertFalse(curve_self_intersects(x, y))
-
-        # lissajois: is self intersected
-        a = 1
-        b = 2
-        d = np.pi / 2
-        t = np.linspace(0, 2 * np.pi, 361)
-        x = np.sin(a * t + d)
-        y = np.sin(b * t)
-        self.assertTrue(curve_self_intersects(x, y))

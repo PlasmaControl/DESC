@@ -668,7 +668,7 @@ def get_nodes_quad(M, N, NFP, sym=False):
 # TODO: finish option for placing nodes at irrational surfaces
 
 
-def dec_to_cf(x, dmax=6):  # oragma: no cover
+def dec_to_cf(x, dmax=6):  # pragma: no cover
     """Compute continued fraction form of a number.
 
     Parameters
@@ -697,7 +697,7 @@ def dec_to_cf(x, dmax=6):  # oragma: no cover
     return np.array(cf)
 
 
-def cf_to_dec(cf):  # oragma: no cover
+def cf_to_dec(cf):  # pragma: no cover
     """Compute decimal form of a continued fraction.
 
     Parameters
@@ -717,7 +717,7 @@ def cf_to_dec(cf):  # oragma: no cover
         return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
-def most_rational(a, b):  # oragma: no cover
+def most_rational(a, b):  # pragma: no cover
     """Compute the most rational number in the range [a,b]
 
     Parameters

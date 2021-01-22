@@ -5,21 +5,6 @@ from desc.equilibrium import EquilibriaFamily
 from desc.vmec import VMECIO
 
 
-# test for sucessful runs
-
-
-def test_SOLOVEV_run(SOLOVEV):
-    """Tests that the SOLOVEV example runs without errors."""
-    output = SOLOVEV["output"]
-    assert output.returncode == 0
-
-
-def test_DSHAPE_run(DSHAPE):
-    """Tests that the DSHAPE example runs without errors."""
-    output = DSHAPE["output"]
-    assert output.returncode == 0
-
-
 # compare results to VMEC solution
 
 

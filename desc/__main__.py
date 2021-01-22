@@ -133,5 +133,5 @@ def main(cl_args=None):
         plt.show()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main(sys.argv[1:])

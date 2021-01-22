@@ -3,6 +3,7 @@ import subprocess
 import os
 from desc.equilibrium import EquilibriaFamily
 import h5py
+from desc.__main__ import main
 
 
 @pytest.fixture
@@ -37,15 +38,10 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    SOLOVEV_run = subprocess.run(
-        ["python", "-m", "desc", "-o", str(output_path), input_filename, "--numpy"],
-        stdout=subprocess.PIPE,
-        universal_newlines=True,
-        timeout=max_time,
-        cwd=exec_dir,
-    )
+    args = ["-o", str(output_path), input_filename, "--numpy"]
+    main(args)
+
     SOLOVEV_out = {
-        "output": SOLOVEV_run,
         "input_path": input_path,
         "output_path": output_path,
         "desc_nc_path": desc_nc_path,
@@ -72,15 +68,10 @@ def DSHAPE(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    DSHAPE_run = subprocess.run(
-        ["python", "-m", "desc", "-o", str(output_path), input_filename],
-        stdout=subprocess.PIPE,
-        universal_newlines=True,
-        timeout=max_time,
-        cwd=exec_dir,
-    )
+    args = ["-o", str(output_path), input_filename]
+    main(args)
+
     SOLOVEV_out = {
-        "output": DSHAPE_run,
         "input_path": input_path,
         "output_path": output_path,
         "desc_nc_path": desc_nc_path,

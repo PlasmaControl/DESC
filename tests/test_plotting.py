@@ -1,7 +1,16 @@
 import pytest
 import unittest
-
-from desc.plotting import Plot, plot_logo
+import numpy as np
+from desc.plotting import (
+    plot_1d,
+    plot_2d,
+    plot_3d,
+    plot_surfaces,
+    plot_section,
+    plot_logo,
+)
+from desc.grid import LinearGrid
+from desc import plotting as dplt
 
 
 class TestPlot(unittest.TestCase):
@@ -27,9 +36,8 @@ class TestPlot(unittest.TestCase):
         self.ds = ["", "", "", "", "r", "r", "r", "", "r", "", "", "r", "r"]
         self.pows = ["", "", "", "", "", "", "", "2", "2", "2", "2", "2", "2"]
         self.name_dicts = []
-        self.plot = Plot()
         for name in self.names:
-            self.name_dicts.append(self.plot.format_name(name))
+            self.name_dicts.append(dplt._format_name(name))
 
     def test_name_dict(self):
         self.assertTrue(
@@ -69,7 +77,7 @@ class TestPlot(unittest.TestCase):
         )
 
     def test_name_label(self):
-        labels = [self.plot.name_label(nd) for nd in self.name_dicts]
+        labels = [dplt._name_label(nd) for nd in self.name_dicts]
         print(labels)
         self.assertTrue(all([label[0] == "$" and label[-1] == "$" for label in labels]))
         self.assertTrue(
@@ -104,73 +112,155 @@ class TestPlot(unittest.TestCase):
 
 @pytest.mark.mpl_image_compare
 def test_1d_p(plot_eq):
-    fig, ax = Plot().plot_1d(plot_eq, "p")
+    fig, ax = plot_1d(plot_eq, "p")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_1d_dpdr(plot_eq):
+    fig, ax = plot_1d(plot_eq, "p_r")
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_1d_iota(plot_eq):
-    fig, ax = Plot().plot_1d(plot_eq, "iota")
+    grid = LinearGrid(rho=0.5, theta=np.linspace(0, 2 * np.pi, 100), zeta=0, axis=True)
+    fig, ax = plot_1d(plot_eq, "iota", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare
-def test_1d_psi(plot_eq):
-    fig, ax = Plot().plot_1d(plot_eq, "psi")
+def test_1d_logpsi(plot_eq):
+    fig, ax = plot_1d(plot_eq, "psi", log=True)
     return fig
 
 
 @pytest.mark.mpl_image_compare
-def test_2d_B(plot_eq):
-    fig, ax = Plot().plot_2d(plot_eq, "|B|")
+def test_2d_logF(plot_eq):
+    grid = LinearGrid(
+        rho=np.linspace(0, 1, 100),
+        theta=np.linspace(0, 2 * np.pi, 100),
+        zeta=0,
+        axis=True,
+    )
+    fig, ax = plot_2d(plot_eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare
-def test_2d_g(plot_eq):
-    fig, ax = Plot().plot_2d(plot_eq, "g")
+def test_2d_g_tz(plot_eq):
+    grid = LinearGrid(
+        rho=0.5,
+        theta=np.linspace(0, 2 * np.pi, 100),
+        zeta=np.linspace(0, 2 * np.pi, 100),
+        axis=True,
+    )
+    fig, ax = plot_2d(plot_eq, "g", grid=grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_2d_g_rz(plot_eq):
+    grid = LinearGrid(
+        rho=np.linspace(0, 1, 100),
+        theta=0,
+        zeta=np.linspace(0, 2 * np.pi, 100),
+        axis=True,
+    )
+    fig, ax = plot_2d(plot_eq, "g", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_2d_lambda(plot_eq):
-    fig, ax = Plot().plot_2d(plot_eq, "lambda")
+    fig, ax = plot_2d(plot_eq, "lambda")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_3d_B(plot_eq):
+    fig, ax = plot_3d(plot_eq, "B^zeta")
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_3d_J(plot_eq):
+    grid = LinearGrid(
+        rho=1,
+        theta=np.linspace(0, 2 * np.pi, 100),
+        zeta=np.linspace(0, 2 * np.pi, 100),
+        axis=True,
+    )
+    fig, ax = plot_3d(plot_eq, "J^theta", grid=grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_3d_tz(plot_eq):
+    grid = LinearGrid(
+        rho=0.5,
+        theta=np.linspace(0, 2 * np.pi, 100),
+        zeta=np.linspace(0, 2 * np.pi, 100),
+        axis=True,
+    )
+    fig, ax = plot_3d(plot_eq, "|F|", log=True, grid=grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_3d_rz(plot_eq):
+    grid = LinearGrid(
+        rho=np.linspace(0, 1, 100),
+        theta=0,
+        zeta=np.linspace(0, 2 * np.pi, 100),
+        axis=True,
+    )
+    fig, ax = plot_3d(plot_eq, "p", grid=grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_3d_rt(plot_eq):
+    grid = LinearGrid(
+        rho=np.linspace(0, 1, 100), theta=np.linspace(0, 2 * np.pi, 100), zeta=0
+    )
+    fig, ax = plot_3d(plot_eq, "psi", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_section_J(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "J^rho")
+    fig, ax = plot_section(plot_eq, "J^rho")
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_section_Z(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "Z")
+    fig, ax = plot_section(plot_eq, "Z")
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_section_R(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "R")
+    fig, ax = plot_section(plot_eq, "R")
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_section_F(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "F_rho")
+    fig, ax = plot_section(plot_eq, "F_rho")
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_section_logF(plot_eq):
-    fig, ax = Plot().plot_section(plot_eq, "|F|", log=True)
+    fig, ax = plot_section(plot_eq, "|F|", log=True)
     return fig
 
 
 @pytest.mark.mpl_image_compare
 def test_plot_surfaces(plot_eq):
-    fig, ax = Plot().plot_surfaces(plot_eq)
+    fig, ax = plot_surfaces(plot_eq)
     return fig
 
 

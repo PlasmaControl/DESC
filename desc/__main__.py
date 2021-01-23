@@ -79,7 +79,7 @@ def main(cl_args=None):
     from desc.equilibrium import EquilibriaFamily, Equilibrium
     from desc.vmec import VMECIO
     from desc.backend import use_jax
-    from desc.plotting import Plot
+    from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
 
     if use_jax:
@@ -112,24 +112,24 @@ def main(cl_args=None):
     if ir.args.plot > 1:
         print("Plotting initial guess")
         print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
-        ax = Plot().plot_surfaces(equil_fam[0].initial)
+        ax = plot_surfaces(equil_fam[0].initial)
         plt.show()
-        ax = Plot().plot_2d(equil_fam[0].initial, "|F|", log=True)
+        ax = plot_section(equil_fam[0].initial, "|F|", log=True)
         plt.show()
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
             print("Axis location: {}".format(eq.compute_axis_location()))
-            ax = Plot().plot_surfaces(eq)
+            ax = plot_surfaces(eq)
             plt.show()
-            ax = Plot().plot_2d(eq, "|F|", log=True)
+            ax = plot_section(eq, "|F|", log=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
         print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
-        ax = Plot().plot_surfaces(equil_fam[-1])
+        ax = plot_surfaces(equil_fam[-1])
         plt.show()
-        ax = Plot().plot_2d(equil_fam[-1], "|F|", log=True)
+        ax = plot_section(equil_fam[-1], "|F|", log=True)
         plt.show()
 
 

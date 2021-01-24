@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.githubpages',
     # 'numpydoc',
     'sphinx.ext.napoleon',
+    'sphinx.ext.autosummary',
     'sphinxarg.ext'
 ]
 # numpydoc_class_members_toctree = False
@@ -55,13 +56,16 @@ napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = True
 napoleon_include_private_with_doc = False
-napoleon_include_special_with_doc = True
+napoleon_include_special_with_doc = False
 napoleon_use_admonition_for_examples = False
 napoleon_use_admonition_for_notes = False
 napoleon_use_admonition_for_references = False
 napoleon_use_ivar = False
 napoleon_use_param = True
 napoleon_use_rtype = False
+
+autosummary_generate = True
+autosummary_generate_overwrite = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -87,7 +91,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'README.rst']
 
 
 # -- Options for HTML output -------------------------------------------------

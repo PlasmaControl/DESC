@@ -16,7 +16,7 @@ Please cite our work if you use DESC!
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. 
 .. _paper: https://github.com/ddudt/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
-.. _Theory: https://desc-apc524.readthedocs.io/en/latest/theory_general.html
+.. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start
 ===========
@@ -34,10 +34,10 @@ As an example usage, to use DESC to solve for the equilibrium of the high-beta, 
 :bash:`python -u -m desc -p examples/DESC/DSHAPE`
 Where the :bash:`-u` flag is so Python prints the output of the optimization in real time as opposed to storing in a buffer, and the :bash:`-p` flag tells DESC to plot the results once it finishes.
 
-.. _Installation: https://desc-apc524.readthedocs.io/en/latest/installation.html
-.. _Command Line Interface: https://desc-apc524.readthedocs.io/en/latest/command_line.html
-.. _Inputs: https://desc-apc524.readthedocs.io/en/latest/input.html
-.. _Outputs: https://desc-apc524.readthedocs.io/en/latest/output.html
+.. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
+.. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
+.. _Inputs: https://desc-docs.readthedocs.io/en/latest/input.html
+.. _Outputs: https://desc-docs.readthedocs.io/en/latest/output.html
 
 Repository Contents
 ===================
@@ -66,7 +66,7 @@ Contribute
     :alt: License
 
 .. |Docs| image:: https://img.shields.io/readthedocs/desc-apc524?logo=Read-the-Docs
-    :target: https://desc-apc524.readthedocs.io/en/latest/?badge=latest
+    :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
 .. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   

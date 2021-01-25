@@ -460,11 +460,11 @@ def plot_section(
         if kwargs == {}:
             kwargs.update(
                 {
-                    "rho": np.linspace(1e-3, 1, 50),
-                    "M": 91,
-                    "N": N,
+                    "L": 50,
                     "NFP": nfp,
                     "axis": False,
+                    "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
+                    "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
                 }
             )
         grid = _get_grid(**kwargs)
@@ -518,7 +518,10 @@ def plot_section(
         ax[i].axis("equal")
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
-        ax[i].set_title(_name_label(name_dict) + ", $\\zeta = {:.3f}$".format(zeta[i]))
+        ax[i].set_title(
+            _name_label(name_dict)
+            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+        )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -560,10 +563,24 @@ def plot_surfaces(
             rows = 2
             cols = 3
         if kwargs == {}:
-            kwargs.update({"L": 8, "M": 180, "N": N, "NFP": nfp})
+            kwargs.update(
+                {
+                    "L": 8,
+                    "NFP": nfp,
+                    "theta": np.linspace(0, 2 * np.pi, 180, endpoint=True),
+                    "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+                }
+            )
         r_grid = _get_grid(**kwargs)
         zeta = np.unique(r_grid.nodes[:, 2])
-        kwargs.update({"L": 50, "M": 8, "zeta": zeta, "NFP": nfp, "endpoint": False})
+        kwargs.update(
+            {
+                "L": 50,
+                "NFP": nfp,
+                "theta": np.linspace(0, 2 * np.pi, 9, endpoint=True),
+                "zeta": zeta,
+            }
+        )
         t_grid = _get_grid(**kwargs)
 
     elif r_grid is None:
@@ -633,7 +650,9 @@ def plot_surfaces(
         ax[i].axis("equal")
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
-        ax[i].set_title("$\\zeta = {:.3f}$".format(zeta[i]))
+        ax[i].set_title(
+            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+        )
 
     fig.set_tight_layout(True)
     return fig, ax

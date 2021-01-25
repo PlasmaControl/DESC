@@ -167,9 +167,7 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -216,22 +214,13 @@ class _Configuration(IOAble, ABC):
             index=self._index,
         )
         self._L_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
 
         nonzero_modes = self._boundary[
@@ -455,9 +444,7 @@ class _Configuration(IOAble, ABC):
     def x(self, x) -> None:
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
     @property
@@ -1317,10 +1304,14 @@ def initial_guess(
         n = b_basis.modes[k, 2]
         idx = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
         if m == 0:
+            idx0 = np.where(axis[:, 0] == n)[0]
             idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-            x0 = np.where(axis[:, 0] == n, axis[:, 1], b_mn[k])[0]
-            x_lmn[idx] = x0
-            x_lmn[idx2] = b_mn[k] - x0
+            if len(idx0):
+                x0 = axis[idx0, 1]
+            else:
+                x0 = b_mn[k]
+            x_lmn[idx] = (b_mn[k] + x0) / 2
+            x_lmn[idx2] = (b_mn[k] - x0) / 2
         else:
             x_lmn[idx] = b_mn[k]
 

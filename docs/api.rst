@@ -5,11 +5,36 @@ API Documentation
 Basis
 *****
 
-.. automodule:: desc.basis
-    :members:
-    :undoc-members:
-    :inherited-members:       
+.. autosummary::
+   :toctree: api/basis/
+   :recursive:
+	     
+    desc.basis.PowerSeries
+    desc.basis.FourierSeries
+    desc.basis.DoubleFourierSeries
+    desc.basis.FourierZernikeBasis
 
+Grid
+****
+
+.. autosummary::
+   :toctree: api/grid/
+   :recursive:
+
+    desc.grid.Grid
+    desc.grid.LinearGrid
+    desc.grid.ConcentricGrid
+
+Transform
+*********
+
+.. autosummary::
+   :toctree: api/transform/
+   :recursive:
+      
+   desc.transform.Transform
+
+    
 Boundary Conditions
 *******************
 
@@ -33,14 +58,8 @@ Equilibrium
     :undoc-members:
     :inherited-members:
 
-Grid
-****
-
-.. automodule:: desc.grid
-    :members:
-    :undoc-members:
-    :inherited-members:
-
+       
+    
 IO
 ***
 
@@ -77,12 +96,6 @@ Plotting
     :undoc-members:
     
 
-Transform
-*********
-
-.. automodule:: desc.transform
-    :members:
-    :undoc-members:
 
 VMEC
 ****

@@ -12,10 +12,6 @@ class Basis(IOAble, ABC):
 
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes"]
 
-    @abstractmethod
-    def __init__(self) -> None:
-        pass
-
     def __eq__(self, other) -> bool:
         """Overloads the == operator
 
@@ -35,14 +31,9 @@ class Basis(IOAble, ABC):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def _enforce_symmetry_(self) -> None:
-        """Enforces stellarator symmetry
+    def _enforce_symmetry(self) -> None:
+        """Enforces stellarator symmetry"""
 
-        Returns
-        -------
-        None
-
-        """
         if self._sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self._modes[:, 1]) != sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
@@ -51,19 +42,14 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
     def _sort_modes(self) -> None:
-        """Sorts modes for use with FFT
+        """Sorts modes for use with FFT"""
 
-        Returns
-        -------
-        None
-
-        """
         sort_idx = np.lexsort((self._modes[:, 1], self._modes[:, 0], self._modes[:, 2]))
         self._modes = self._modes[sort_idx]
 
     @abstractmethod
-    def get_modes(self):
-        pass
+    def _get_modes(self):
+        """ndarray: the modes numbers for the basis"""
 
     @abstractmethod
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
@@ -84,19 +70,10 @@ class Basis(IOAble, ABC):
             basis functions evaluated at nodes
 
         """
-        pass
 
     @abstractmethod
     def change_resolution(self) -> None:
-        """Change resolution of the basis to the given resolutions.
-
-
-        Returns
-        -------
-        None
-
-        """
-        pass
+        """Change resolution of the basis to the given resolutions"""
 
     @property
     def L(self) -> int:
@@ -120,16 +97,12 @@ class Basis(IOAble, ABC):
 
     @property
     def sym(self) -> str:
-        """str:
-        'cos' for cos(m*t-n*z) symmetry, 'sin for sin(m*t-n*z) symmetry,
-        None for no symmetry (Default)"""
+        """str: {'cos', 'sin', None} type of symmetry"""
         return self._sym
 
     @property
     def modes(self):
-        """ndarray:  arrauy of int, shape(num_modes,3):
-        array of mode numbers [l,m,n],
-        each row is one basis function with modes (l,m,n)"""
+        """ndarray: mode numbers [l,m,n]"""
         return self._modes
 
     @modes.setter
@@ -138,29 +111,27 @@ class Basis(IOAble, ABC):
 
     @property
     def num_modes(self) -> int:
+        """int: number of modes in the spectral basis"""
         return self._modes.shape[0]
 
 
 class PowerSeries(Basis):
     """1D basis set for flux surface quantities.
+
     Power series in the radial coordinate.
+
+
+    Parameters
+    ---------
+    L : int
+        maximum radial resolution
+
     """
 
     def __init__(
         self, L: int = 0, load_from=None, file_format=None, obj_lib=None
     ) -> None:
-        """Initializes a PowerSeries
 
-        Parameters
-        ----------
-        L : int
-            maximum radial resolution
-
-        Returns
-        -------
-        None
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -170,9 +141,9 @@ class PowerSeries(Basis):
             self._NFP = 1
             self._sym = None
 
-            self._modes = self.get_modes(L=self._L)
+            self._modes = self._get_modes(L=self._L)
 
-            self._enforce_symmetry_()
+            self._enforce_symmetry()
             self._sort_modes()
 
         else:
@@ -180,7 +151,7 @@ class PowerSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def get_modes(self, L: int = 0):
+    def _get_modes(self, L: int = 0):
         """Gets mode numbers for power series
 
         Parameters
@@ -230,20 +201,28 @@ class PowerSeries(Basis):
         L : int
             maximum radial resolution
 
-        Returns
-        -------
-        None
-
         """
         if L != self._L:
             self._L = L
-            self._modes = self.get_modes(self._L)
+            self._modes = self._get_modes(self._L)
             self._sort_modes()
 
 
 class FourierSeries(Basis):
     """1D basis set for use with the magnetic axis.
     Fourier series in the toroidal coordinate.
+
+    Parameters
+    ----------
+    N : int
+        maximum toroidal resolution
+    NFP : int
+        number of field periods
+    sym : {'cos', 'sin', None}
+        * 'cos' for cos(m*t-n*z) symmetry
+        * 'sin' for sin(m*t-n*z) symmetry
+        * None for no symmetry (Default)
+
     """
 
     def __init__(
@@ -255,23 +234,7 @@ class FourierSeries(Basis):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a FourierSeries
 
-        Parameters
-        ----------
-        N : int
-            maximum toroidal resolution
-        NFP : int
-            number of field periods
-        sym : str
-            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
-            None for no symmetry (Default)
-
-        Returns
-        -------
-        None
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -281,9 +244,9 @@ class FourierSeries(Basis):
             self._NFP = NFP
             self._sym = sym
 
-            self._modes = self.get_modes(N=self._N)
+            self._modes = self._get_modes(N=self._N)
 
-            self._enforce_symmetry_()
+            self._enforce_symmetry()
             self._sort_modes()
 
         else:
@@ -291,7 +254,7 @@ class FourierSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def get_modes(self, N: int = 0) -> None:
+    def _get_modes(self, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -342,20 +305,30 @@ class FourierSeries(Basis):
         N : int
             maximum toroidal resolution
 
-        Returns
-        -------
-        None
-
         """
         if N != self._N:
             self._N = N
-            self._modes = self.get_modes(self._N)
+            self._modes = self._get_modes(self._N)
             self._sort_modes()
 
 
 class DoubleFourierSeries(Basis):
     """2D basis set for use on a single flux surface.
     Fourier series in both the poloidal and toroidal coordinates.
+
+    Parameters
+    ----------
+    M : int
+        maximum poloidal resolution
+    N : int
+        maximum toroidal resolution
+    NFP : int
+        number of field periods
+    sym : {'cos', 'sin', None}
+        * 'cos' for cos(m*t-n*z) symmetry
+        * 'sin' for sin(m*t-n*z) symmetry
+        * None for no symmetry (Default)
+
     """
 
     def __init__(
@@ -368,25 +341,7 @@ class DoubleFourierSeries(Basis):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a DoubleFourierSeries
 
-        Parameters
-        ----------
-        M : int
-            maximum poloidal resolution
-        N : int
-            maximum toroidal resolution
-        NFP : int
-            number of field periods
-        sym : str
-            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
-            None for no symmetry (Default)
-
-        Returns
-        -------
-        None
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -396,9 +351,9 @@ class DoubleFourierSeries(Basis):
             self._NFP = NFP
             self._sym = sym
 
-            self._modes = self.get_modes(M=self._M, N=self._N)
+            self._modes = self._get_modes(M=self._M, N=self._N)
 
-            self._enforce_symmetry_()
+            self._enforce_symmetry()
             self._sort_modes()
 
         else:
@@ -406,7 +361,7 @@ class DoubleFourierSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def get_modes(self, M: int = 0, N: int = 0) -> None:
+    def _get_modes(self, M: int = 0, N: int = 0) -> None:
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -477,7 +432,7 @@ class DoubleFourierSeries(Basis):
         if M != self._M or N != self._N:
             self._M = M
             self._N = N
-            self._modes = self.get_modes(self._M, self._N)
+            self._modes = self._get_modes(self._M, self._N)
             self._sort_modes()
 
 
@@ -485,6 +440,53 @@ class FourierZernikeBasis(Basis):
     """3D basis set for analytic functions in a toroidal volume.
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
+
+    Initializes a FourierZernikeBasis
+
+    Parameters
+    ----------
+    L : int
+        maximum radial resolution
+    M : int
+        maximum poloidal resolution
+    N : int
+        maximum toroidal resolution
+    NFP : int
+        number of field periods
+    sym : {'cos', 'sin', None}
+        * 'cos' for cos(m*t-n*z) symmetry
+        * 'sin' for sin(m*t-n*z) symmetry
+        * None for no symmetry (Default)
+    index : {'ansi', 'frige', 'chevron', 'house'}
+        Indexing method, default value = 'ansi'
+
+        For L=0, all methods are equivalent and give a "chevron" shaped
+        basis (only the outer edge of the zernike pyramid of width M).
+        For L>0, the indexing scheme defines order of the basis functions:
+
+        ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
+        decreasing size, ending in a triagle shape. The maximum L is M,
+        at which point the traditional ANSI indexing is recovered.
+        Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
+        Total number of modes = (M-(L//2)+1)*((L//2)+1)
+
+        ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
+        decreasing size, ending in a diamond shape. The maximum L is 2*M,
+        for which the traditional fringe/U of Arizona indexing is recovered.
+        Gives a single mode at m=M and a single mode at l=L and m=0.
+        Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
+
+        ``'chevron'``: Beginning from the initial chevron of width M,
+        increasing L adds additional chevrons of the same width.
+        Similar to "house" but with fewer modes with high l and low m.
+        Total number of modes = (M+1)*(2*(L//2)+1)
+
+        ``'house'``: Fills in the pyramid row by row, with a maximum
+        horizontal width of M and a maximum radial resolution of L.
+        For L=M, it is equivalent to ANSI, while for L>M it takes on a
+        "house" like shape. Gives multiple modes at m=M and l=L.
+
+
     """
 
     def __init__(
@@ -499,48 +501,7 @@ class FourierZernikeBasis(Basis):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a FourierZernikeBasis
 
-        Parameters
-        ----------
-        L : int
-            maximum radial resolution
-        M : int
-            maximum poloidal resolution
-        N : int
-            maximum toroidal resolution
-        NFP : int
-            number of field periods
-        sym : str
-            'cos' for cos(m*t-n*z) symmetry, 'sin' for sin(m*t-n*z) symmetry,
-            None for no symmetry (Default)
-        index : str
-            Indexing method, one of the following options:
-            ('ansi','frige','chevron','house').
-            For L=0, all methods are equivalent and give a "chevron" shaped
-            basis (only the outer edge of the zernike pyramid of width M).
-            For L>0, the indexing scheme defines order of the basis functions:
-            ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. The maximum L is M,
-            at which point the traditional ANSI indexing is recovered.
-            Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
-            Total number of modes = (M-(L//2)+1)*((L//2)+1)
-            ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
-            decreasing size, ending in a diamond shape. The maximum L is 2*M,
-            for which the traditional fringe/U of Arizona indexing is recovered.
-            Gives a single mode at m=M and a single mode at l=L and m=0.
-            Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
-            ``'chevron'``: Beginning from the initial chevron of width M,
-            increasing L adds additional chevrons of the same width.
-            Similar to "house" but with fewer modes with high l and low m.
-            Total number of modes = (M+1)*(2*(L//2)+1)
-            ``'house'``: Fills in the pyramid row by row, with a maximum
-            horizontal width of M and a maximum radial resolution of L.
-            For L=M, it is equivalent to ANSI, while for L>M it takes on a
-            "house" like shape. Gives multiple modes at m=M and l=L.
-            (Default value = 'ansi')
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -551,11 +512,11 @@ class FourierZernikeBasis(Basis):
             self._sym = sym
             self._index = index
 
-            self._modes = self.get_modes(
+            self._modes = self._get_modes(
                 L=self._L, M=self._M, N=self._N, index=self._index
             )
 
-            self._enforce_symmetry_()
+            self._enforce_symmetry()
             self._sort_modes()
 
         else:
@@ -563,7 +524,7 @@ class FourierZernikeBasis(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = "ansi"):
+    def _get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = "ansi"):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -574,31 +535,34 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        index : str
-            Indexing method, one of the following options:
-            ('ansi','frige','chevron','house').
+        index : {'ansi', 'frige', 'chevron', 'house'}
+            Indexing method, default value = 'ansi'
+
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
             For L>0, the indexing scheme defines order of the basis functions:
+
             ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
             decreasing size, ending in a triagle shape. The maximum L is M,
             at which point the traditional ANSI indexing is recovered.
             Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
             Total number of modes = (M-(L//2)+1)*((L//2)+1)
+
             ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
             decreasing size, ending in a diamond shape. The maximum L is 2*M,
             for which the traditional fringe/U of Arizona indexing is recovered.
             Gives a single mode at m=M and a single mode at l=L and m=0.
             Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
+
             ``'chevron'``: Beginning from the initial chevron of width M,
             increasing L adds additional chevrons of the same width.
             Similar to "house" but with fewer modes with high l and low m.
             Total number of modes = (M+1)*(2*(L//2)+1)
+
             ``'house'``: Fills in the pyramid row by row, with a maximum
             horizontal width of M and a maximum radial resolution of L.
             For L=M, it is equivalent to ANSI, while for L>M it takes on a
             "house" like shape. Gives multiple modes at m=M and l=L.
-            (Default value = 'ansi')
 
         Returns
         -------
@@ -687,12 +651,14 @@ class FourierZernikeBasis(Basis):
             self._M = M
             self._N = N
             self._L = L
-            self._modes = self.get_modes(self._L, self._M, self._N, index=self._index)
+            self._modes = self._get_modes(self._L, self._M, self._N, index=self._index)
             self._sort_modes()
 
 
 def polyder_vec(p, m):
-    """Vectorized version of polyder for differentiating multiple polynomials of the same degree
+    """Vectorized version of polyder
+
+    For differentiating multiple polynomials of the same degree
 
     Parameters
     ----------
@@ -723,8 +689,9 @@ def polyder_vec(p, m):
 
 
 def polyval_vec(p, x):
-    """Evaluate a polynomial at specific values,
-    vectorized for evaluating multiple polynomials of the same degree.
+    """Evaluate a polynomial at specific values
+
+    Vectorized for evaluating multiple polynomials of the same degree.
 
     Parameters
     ----------
@@ -770,8 +737,7 @@ def power_coeffs(l):
 
     Returns
     -------
-    coeffsy : ndarray, shape(l+1,)
-
+    coeffs : ndarray, shape(l+1,)
 
     """
     l = np.atleast_1d(l).astype(int)
@@ -818,7 +784,6 @@ def jacobi_coeffs(l, m):
     Returns
     -------
     coeffs : ndarray
-
 
     """
     factorial = np.math.factorial

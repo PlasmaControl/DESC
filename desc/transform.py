@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg
 from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 import warnings
@@ -10,7 +11,30 @@ from desc.io import IOAble
 
 
 class Transform(IOAble):
-    """Transforms from spectral coefficients to real space values"""
+    """Transforms from spectral coefficients to real space values
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid of real space coordinates
+    basis : Basis
+        Spectral basis of modes
+    derivs : int or array-like
+        * if an int, order of derivatives needed (default=0)
+        * if an array, derivative orders specified explicitly. Shape should be (N,3),
+          where each row is one set of partial derivatives [dr, dt, dz]
+    rcond : float
+         relative cutoff for singular values for inverse fitting
+    build : bool
+        whether to precompute the transforms now or do it later
+    build_pinv : bool
+        whether to precompute the pseudoinverse now or do it later
+    method : {'fft', 'direct'}
+        * 'fft' uses fast fourier transforms in the zeta direction, and so must have
+          equally spaced toroidal nodes, and the same node pattern on each zeta plane
+        * 'direct' uses full matrices and can handle arbitrary node patterns and
+          spectral bases.
+    """
 
     _io_attrs_ = ["_grid", "_basis", "_derives", "_matrices"]
 
@@ -19,7 +43,7 @@ class Transform(IOAble):
         grid: Grid = None,
         basis: Basis = None,
         derivs=0,
-        rcond=1e-6,
+        rcond=None,
         build=True,
         build_pinv=False,
         method="fft",
@@ -27,35 +51,7 @@ class Transform(IOAble):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a Transform
 
-        Parameters
-        ----------
-        grid : Grid
-            Collocation grid of real space coordinates
-        basis : Basis
-            Spectral basis of modes
-        derivs : int or array-like
-             order of derivatives needed, if an int (Default = 0)
-             OR
-             array of derivative orders, shape (N,3)
-             [dr, dt, dz]
-        rcond : float
-             relative cutoff for singular values for inverse fitting
-        build : bool
-            whether to precompute the transforms now or do it later
-        build_pinv : bool
-            whether to precompute the pseudoinverse now or do it later
-        method : str
-            one of 'direct', or 'fft'. 'direct' uses full matrices and can handle arbitrary
-            node patterns and spectral basis. 'fft' uses fast fourier transforms in the zeta direction,
-            and so must have equally spaced toroidal nodes, and the same node pattern on each zeta plane
-
-        Returns
-        -------
-        None
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -299,7 +295,7 @@ class Transform(IOAble):
             return
         A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
         if A.size:
-            self._pinv = np.linalg.pinv(A, rcond=self._rcond)
+            self._pinv = scipy.linalg.pinv(A, rcond=self._rcond)
         else:
             self._pinv = np.zeros_like(A.T)
         self._built_pinv = True
@@ -309,8 +305,8 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients, indexed as (lm,n) flattened in row major order
+        c : ndarray, shape(num_coeffs,)
+            spectral coefficients, indexed to correspond to the spectral basis
         dr : int
             order of radial derivative
         dt : int
@@ -320,7 +316,7 @@ class Transform(IOAble):
 
         Returns
         -------
-        x : ndarray, shape(N_nodes,)
+        x : ndarray, shape(num_nodes,)
             array of values of function at node locations
         """
         if not self._built:
@@ -396,13 +392,13 @@ class Transform(IOAble):
 
         Parameters
         ----------
-        x : ndarray, shape(N_nodes,)
-            values in real space at coordinates specified by self.grid
+        x : ndarray, shape(num_nodes,)
+            values in real space at coordinates specified by grid
 
         Returns
         -------
-        c : ndarray, shape(N_coeffs,)
-            spectral coefficients in self.basis
+        c : ndarray, shape(num_coeffs,)
+            spectral coefficients in basis
 
         """
         if not self._built_pinv:
@@ -418,7 +414,7 @@ class Transform(IOAble):
         build: bool = True,
         build_pinv: bool = False,
     ) -> None:
-        """Re-builds the matrices with a new grid and basise
+        """Re-builds the matrices with a new grid and basis
 
         Parameters
         ----------
@@ -516,17 +512,14 @@ class Transform(IOAble):
 
         Parameters
         ----------
-         derivs : int or array-like
-             order of derivatives needed, if an int (Default = 0)
-             OR
-             array of derivative orders, shape (N,3)
-             [dr, dt, dz]
+        derivs : int or array-like
+              * if an int, order of derivatives needed (default=0)
+              * if an array, derivative orders specified explicitly.
+                shape should be (N,3), where each row is one set of partial derivatives
+                [dr, dt, dz]
+
         build : bool
             whether to build transforms immediately or wait
-
-        Returns
-        -------
-        None
 
         """
         new_derivatives = self._get_derivatives(derivs)

@@ -1170,6 +1170,7 @@ class _Configuration(IOAble, ABC):
     def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
         """Checks that an equilibrium has properly nested flux surfaces
             in a given toroidal plane
+
         Parameters
         ----------
         nsurfs : int, optional
@@ -1182,6 +1183,7 @@ class _Configuration(IOAble, ABC):
             number of theta points to use for the r contours (Default value = 45)
         Nr : int, optional
             number of r points to use for the theta contours (Default value = 20)
+
         Returns
         -------
         is_nested : bool

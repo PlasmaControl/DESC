@@ -8,23 +8,24 @@ __all__ = ["Grid", "LinearGrid", "ConcentricGrid"]
 
 
 class Grid(IOAble):
-    """Grid is a base class for collocation grids"""
+    """Base class for collocation grids
 
+    Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
+    to pass in a custom set of collocation nodes.
+
+
+    Parameters
+    ----------
+    nodes : ndarray of float, size(num_nodes,3)
+        node coordinates, in (rho,theta,zeta)
+
+    """
+
+    # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_sym", "_nodes", "_weights"]
 
     def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
-        """Initializes a custom grid without a pre-defined pattern
 
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
-
-        Returns
-        -------
-        None
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -34,11 +35,11 @@ class Grid(IOAble):
             self._NFP = None
             self._sym = False
 
-            self._nodes, self._weights = self.create_nodes(nodes)
+            self._nodes, self._weights = self._create_nodes(nodes)
 
-            self._enforce_symmetry_()
-            self._sort_nodes_()
-            self._find_axis_()
+            self._enforce_symmetry()
+            self._sort_nodes()
+            self._find_axis()
 
         else:
             self._init_from_file_(
@@ -64,43 +65,25 @@ class Grid(IOAble):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def _enforce_symmetry_(self) -> None:
-        """Enforces stellarator symmetry
-
-        Returns
-        -------
-        None
-
-        """
+    def _enforce_symmetry(self) -> None:
+        """Enforces stellarator symmetry"""
         if self._sym:  # remove nodes with theta > pi
             non_sym_idx = np.where(self._nodes[:, 1] > np.pi)
             self._nodes = np.delete(self._nodes, non_sym_idx, axis=0)
             self._weights = np.delete(self._weights, non_sym_idx, axis=0)
 
-    def _sort_nodes_(self) -> None:
-        """Sorts nodes for use with FFT
-
-        Returns
-        -------
-        None
-
-        """
+    def _sort_nodes(self) -> None:
+        """Sorts nodes for use with FFT"""
 
         sort_idx = np.lexsort((self._nodes[:, 1], self._nodes[:, 0], self._nodes[:, 2]))
         self._nodes = self._nodes[sort_idx]
         self._weights = self._weights[sort_idx]
 
-    def _find_axis_(self) -> None:
-        """Finds indices of axis nodes
-
-        Returns
-        -------
-        None
-
-        """
+    def _find_axis(self) -> None:
+        """Finds indices of axis nodes"""
         self._axis = np.where(self._nodes[:, 0] == 0)[0]
 
-    def create_nodes(self, nodes):
+    def _create_nodes(self, nodes):
         """Allows for custom node creation
 
         Parameters
@@ -120,9 +103,6 @@ class Grid(IOAble):
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
         return nodes, weights
-
-    def change_resolution(self) -> None:
-        pass
 
     @property
     def L(self) -> int:
@@ -146,13 +126,12 @@ class Grid(IOAble):
 
     @property
     def sym(self) -> bool:
-        """ bool: True for stellarator symmetry, False otherwise (Default = False)"""
+        """ bool: True for stellarator symmetry, False otherwise"""
         return self._sym
 
     @property
     def nodes(self):
-        """ndarray: array of float, size(num_nodes,3):
-        node coordinates, in (rho,theta,zeta)"""
+        """ndarray: node coordinates, in (rho,theta,zeta)"""
         return self._nodes
 
     @nodes.setter
@@ -161,8 +140,7 @@ class Grid(IOAble):
 
     @property
     def weights(self):
-        """ndarray: array of float, size(num_nodes,):
-        weight for each node, either exact quadrature or volume based"""
+        """ndarray: weight for each node, either exact quadrature or volume based"""
         return self._weights
 
     @weights.setter
@@ -171,17 +149,45 @@ class Grid(IOAble):
 
     @property
     def num_nodes(self):
-        """ int: total number of nodes"""
+        """int: total number of nodes"""
         return self._nodes.shape[0]
 
     @property
     def axis(self):
+        """ndarray: indices of nodes at magnetic axis"""
         return self._axis
 
 
 class LinearGrid(Grid):
-    """LinearGrid is a collocation grid in which the nodes are linearly
-    spaced in each coordinate.
+    """Grid in which the nodes are linearly spaced in each coordinate.
+
+    Useful for plotting and other analysis, though not very efficient for using as the
+    solution grid.
+
+    Parameters
+    ----------
+    L : int
+        radial grid resolution (L radial nodes, Defualt = 1)
+    M : int
+        poloidal grid resolution (M poloidal nodes, Default = 1)
+    N : int
+        toroidal grid resolution (N toroidal nodes, Default = 1)
+    NFP : int
+        number of field periods (Default = 1)
+    sym : bool
+        True for stellarator symmetry, False otherwise (Default = False)
+    axis : bool
+        True to include a point at rh0==0, False for rho[0] = rho[1]/4. (Default = True)
+    endpoint : bool
+        if True, theta=0 and zeta=0 are duplicated after a full period.
+        Should be False for use with FFT (Default = False)
+    rho : ndarray of float, optional
+        radial coordinates
+    theta : ndarray of float, optional
+        poloidal coordinates
+    zeta : ndarray of float, optional
+        toroidal coordinates
+
     """
 
     def __init__(
@@ -200,33 +206,7 @@ class LinearGrid(Grid):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a LinearGrid
 
-        Parameters
-        ----------
-        L : int
-            radial grid resolution (L radial nodes, Defualt = 1)
-        M : int
-            poloidal grid resolution (M poloidal nodes, Default = 1)
-        N : int
-            toroidal grid resolution (N toroidal nodes, Default = 1)
-        NFP : int
-            number of field periods (Default = 1)
-        sym : bool
-            True for stellarator symmetry, False otherwise (Default = False)
-        axis : bool
-            True to include a point at rh0==0, False for rho[0] = rho[1]/4. (Default = True)
-        endpoint : bool
-            if True, theta=0 and zeta=0 are duplicated after a full period.
-            Should be False for use with FFT (Default = False)
-        rho : ndarray of float, optional
-            radial coordinates
-        theta : ndarray of float, optional
-            poloidal coordinates
-        zeta : ndarray of float, optional
-            toroidal coordinates
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -241,7 +221,7 @@ class LinearGrid(Grid):
             self._theta = theta
             self._zeta = zeta
 
-            self._nodes, self._weights = self.create_nodes(
+            self._nodes, self._weights = self._create_nodes(
                 L=self._L,
                 M=self._M,
                 N=self._N,
@@ -253,16 +233,16 @@ class LinearGrid(Grid):
                 zeta=self._zeta,
             )
 
-            self._enforce_symmetry_()
-            self._sort_nodes_()
-            self._find_axis_()
+            self._enforce_symmetry()
+            self._sort_nodes()
+            self._find_axis()
 
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def create_nodes(
+    def _create_nodes(
         self,
         L: int = 1,
         M: int = 1,
@@ -374,21 +354,47 @@ class LinearGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self.create_nodes(
+            self._nodes, self._weights = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
                 NFP=self._NFP,
-                sym=self._sym,
                 endpoint=self._endpoint,
-                surfs=self._surfs,
             )
-            self.sort_nodes()
+            self._sort_nodes()
 
 
 class ConcentricGrid(Grid):
-    """ConcentricGrid is a collocation grid in which the nodes are arranged
-    in concentric circles within each toroidal cross-section.
+    """Grid in which the nodes are arranged in concentric circles
+
+    Nodes are arranged concentrically within each toroidal cross-section, with more
+    nodes per flux surface at larger radius. Typically used as the solution grid,
+    cannot be easily used for plotting due to non-uniform spacing.
+
+    Parameters
+    ----------
+    M : int
+        poloidal grid resolution
+    N : int
+        toroidal grid resolution
+    NFP : int
+        number of field periods (Default = 1)
+    sym : bool
+        True for stellarator symmetry, False otherwise (Default = False)
+    axis : bool
+        True to include the magnetic axis, False otherwise (Default = False)
+    index : {'ansi', 'chevron', 'fringe', 'house'}
+        Zernike indexing scheme
+    surfs : {'cheb1', 'cheb2', 'quad', None}
+        pattern for radial coordinates
+
+            * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+            * 'cheb2': Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+            * 'quad': Radial nodes are roots of Shifted Jacobi polynomial of degree
+              M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+            * None : linear spacing in r=[0,1]
+
+
     """
 
     def __init__(
@@ -404,30 +410,7 @@ class ConcentricGrid(Grid):
         file_format=None,
         obj_lib=None,
     ) -> None:
-        """Initializes a ConcentricGrid
 
-        Parameters
-        ----------
-        M : int
-            poloidal grid resolution
-        N : int
-            toroidal grid resolution
-        NFP : int
-            number of field periods (Default = 1)
-        sym : bool
-            True for stellarator symmetry, False otherwise (Default = False)
-        axis : bool
-            True to include the magnetic axis, False otherwise (Default = False)
-        index : string
-            Zernike indexing scheme
-                ansi (Default), chevron, fringe, house
-        surfs : string
-            pattern for radial coordinates
-                cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-                cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                anything else defaults to linear spacing in r=[0,1]
-
-        """
         self._file_format_ = file_format
 
         if load_from is None:
@@ -440,7 +423,7 @@ class ConcentricGrid(Grid):
             self._index = index
             self._surfs = surfs
 
-            self._nodes, self._weights = self.create_nodes(
+            self._nodes, self._weights = self._create_nodes(
                 M=self._M,
                 N=self._N,
                 NFP=self._NFP,
@@ -449,16 +432,16 @@ class ConcentricGrid(Grid):
                 surfs=self._surfs,
             )
 
-            self._enforce_symmetry_()
-            self._sort_nodes_()
-            self._find_axis_()
+            self._enforce_symmetry()
+            self._sort_nodes()
+            self._find_axis()
 
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def create_nodes(
+    def _create_nodes(
         self,
         M: int,
         N: int,
@@ -479,16 +462,16 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        index : string
+        index : {'ansi', 'chevron', 'fringe', 'house'}
             Zernike indexing scheme
-                ansi (Default), chevron, fringe, house
-        surfs : string
+        surfs : {'cheb1', 'cheb2', 'quad', None}
             pattern for radial coordinates
-                cheb1 = Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-                cheb2 = Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                quad  = Radial nodes are roots of Shifted Jacobi polynomial of degree
+
+                * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+                * 'cheb2': Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+                * 'quad': Radial nodes are roots of Shifted Jacobi polynomial of degree
                 M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
-                anything else defaults to linear spacing in r=[0,1]
+                * None : linear spacing in r=[0,1]
 
         Returns
         -------
@@ -582,10 +565,10 @@ class ConcentricGrid(Grid):
             self._L = M + 1
             self._M = M
             self._N = N
-            self._nodes, self._weights = self.create_nodes(
-                M=M, N=N, NFP=self._NFP, sym=self._sym, surfs=self._surfs
+            self._nodes, self._weights = self._create_nodes(
+                M=M, N=N, NFP=self._NFP, surfs=self._surfs
             )
-            self.sort_nodes()
+            self._sort_nodes()
 
 
 def get_nodes_quad(M, N, NFP, sym=False):
@@ -668,7 +651,7 @@ def get_nodes_quad(M, N, NFP, sym=False):
 # TODO: finish option for placing nodes at irrational surfaces
 
 
-def dec_to_cf(x, dmax=6):  # oragma: no cover
+def dec_to_cf(x, dmax=6):  # pragma: no cover
     """Compute continued fraction form of a number.
 
     Parameters
@@ -697,7 +680,7 @@ def dec_to_cf(x, dmax=6):  # oragma: no cover
     return np.array(cf)
 
 
-def cf_to_dec(cf):  # oragma: no cover
+def cf_to_dec(cf):  # pragma: no cover
     """Compute decimal form of a continued fraction.
 
     Parameters
@@ -717,7 +700,7 @@ def cf_to_dec(cf):  # oragma: no cover
         return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
-def most_rational(a, b):  # oragma: no cover
+def most_rational(a, b):  # pragma: no cover
     """Compute the most rational number in the range [a,b]
 
     Parameters

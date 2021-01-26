@@ -714,11 +714,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil.build(verbose)
 
             equil.solve(
-                ftol=equil.inputs["ftol"],
-                xtol=equil.inputs["xtol"],
-                gtol=equil.inputs["gtol"],
+                ftol=self.inputs[ii]["ftol"],
+                xtol=self.inputs[ii]["xtol"],
+                gtol=self.inputs[ii]["gtol"],
                 verbose=verbose,
-                maxiter=equil.inputs["nfev"],
+                maxiter=self.inputs[ii]["nfev"],
             )
 
             if checkpoint_path is not None:

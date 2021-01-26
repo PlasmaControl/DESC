@@ -24,9 +24,8 @@ class Timer:
 
     Parameters
     ----------
-
-    Returns
-    -------
+    ns : bool, optional
+       use nanosecond timing if available
 
     """
 
@@ -61,9 +60,6 @@ class Timer:
         name : str
             name to associate with timer
 
-        Returns
-        -------
-
         """
 
         self._timers[name] = [self.op()]
@@ -75,9 +71,6 @@ class Timer:
         ----------
         name : str
             name of timer to stop
-
-        Returns
-        -------
 
         Raises
         ------
@@ -110,9 +103,6 @@ class Timer:
             text to print before time
         time : float
             time (in seconds) to print
-
-        Returns
-        -------
 
         """
         us = time * 1e6
@@ -150,9 +140,6 @@ class Timer:
         name : str
             name of the timer to display
 
-        Returns
-        -------
-
         Raises
         ------
         ValueError
@@ -188,10 +175,6 @@ class _Indexable:
     >>> opsindex[1:2, 3, None, ..., ::2]
     (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
     copied from jax.ops.index to work with either backend
-    Parameters
-    ----------
-    Returns
-    -------
     """
 
     __slots__ = ()
@@ -242,7 +225,7 @@ def unpack_state(x, nR, nZ):
     return R_lmn, Z_lmn, L_lmn
 
 
-def equals(a, b) -> bool:
+def equals(a, b):
     """Compares dictionaries that have numpy array values
 
     Parameters
@@ -301,10 +284,10 @@ def issorted(x, axis=None, tol=1e-12):
         input values
     axis : int
         axis along which to check if the array is sorted.
-        If None, the flattened array is used. (Default value = None)
+        If None, the flattened array is used
     tol : float
         tolerance for determining order. Array is still considered sorted
-        if the difference between adjacent values is greater than -tol (Default value = 1e-12)
+        if the difference between adjacent values is greater than -tol
 
     Returns
     -------
@@ -326,9 +309,9 @@ def isalmostequal(x, axis=-1, tol=1e-12):
     x : array-like
         input values
     axis : int
-        axis along which to make comparison. If None, the flattened array is used (Default value = -1)
+        axis along which to make comparison. If None, the flattened array is used
     tol : float
-        tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis (Default value = 1e-12)
+        tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis
 
     Returns
     -------
@@ -350,9 +333,9 @@ def islinspaced(x, axis=-1, tol=1e-12):
     x : array-like
         input values
     axis : int
-        axis along which to make comparison. If None, the flattened array is used (Default value = -1)
+        axis along which to make comparison. If None, the flattened array is used
     tol : float
-        tolerance for comparison. Array is considered linearly spaced if std(diff(x)) < tol along axis (Default value = 1e-12)
+        tolerance for comparison. Array is considered linearly spaced if std(diff(x)) < tol along axis
 
     Returns
     -------

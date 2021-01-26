@@ -24,7 +24,7 @@ class Grid(IOAble):
     # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_sym", "_nodes", "_weights"]
 
-    def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None) -> None:
+    def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None):
 
         self._file_format_ = file_format
 
@@ -46,7 +46,7 @@ class Grid(IOAble):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         """Overloads the == operator
 
         Parameters
@@ -65,21 +65,21 @@ class Grid(IOAble):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def _enforce_symmetry(self) -> None:
+    def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""
         if self._sym:  # remove nodes with theta > pi
             non_sym_idx = np.where(self._nodes[:, 1] > np.pi)
             self._nodes = np.delete(self._nodes, non_sym_idx, axis=0)
             self._weights = np.delete(self._weights, non_sym_idx, axis=0)
 
-    def _sort_nodes(self) -> None:
+    def _sort_nodes(self):
         """Sorts nodes for use with FFT"""
 
         sort_idx = np.lexsort((self._nodes[:, 1], self._nodes[:, 0], self._nodes[:, 2]))
         self._nodes = self._nodes[sort_idx]
         self._weights = self._weights[sort_idx]
 
-    def _find_axis(self) -> None:
+    def _find_axis(self):
         """Finds indices of axis nodes"""
         self._axis = np.where(self._nodes[:, 0] == 0)[0]
 
@@ -105,27 +105,27 @@ class Grid(IOAble):
         return nodes, weights
 
     @property
-    def L(self) -> int:
+    def L(self):
         """int: radial grid resolution"""
         return self._L
 
     @property
-    def M(self) -> int:
+    def M(self):
         """ int: poloidal grid resolution"""
         return self._M
 
     @property
-    def N(self) -> int:
+    def N(self):
         """ int: toroidal grid resolution"""
         return self._N
 
     @property
-    def NFP(self) -> int:
+    def NFP(self):
         """ int: number of field periods"""
         return self._NFP
 
     @property
-    def sym(self) -> bool:
+    def sym(self):
         """ bool: True for stellarator symmetry, False otherwise"""
         return self._sym
 
@@ -135,7 +135,7 @@ class Grid(IOAble):
         return self._nodes
 
     @nodes.setter
-    def nodes(self, nodes) -> None:
+    def nodes(self, nodes):
         self._nodes = nodes
 
     @property
@@ -144,7 +144,7 @@ class Grid(IOAble):
         return self._weights
 
     @weights.setter
-    def weights(self, weights) -> None:
+    def weights(self, weights):
         self._weights = weights
 
     @property
@@ -192,20 +192,20 @@ class LinearGrid(Grid):
 
     def __init__(
         self,
-        L: int = 1,
-        M: int = 1,
-        N: int = 1,
-        NFP: int = 1,
-        sym: bool = False,
-        axis: bool = True,
-        endpoint: bool = False,
+        L=1,
+        M=1,
+        N=1,
+        NFP=1,
+        sym=False,
+        axis=True,
+        endpoint=False,
         rho=None,
         theta=None,
         zeta=None,
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -244,12 +244,12 @@ class LinearGrid(Grid):
 
     def _create_nodes(
         self,
-        L: int = 1,
-        M: int = 1,
-        N: int = 1,
-        NFP: int = 1,
-        axis: bool = True,
-        endpoint: bool = False,
+        L=1,
+        M=1,
+        N=1,
+        NFP=1,
+        axis=True,
+        endpoint=False,
         rho=None,
         theta=None,
         zeta=None,
@@ -337,7 +337,7 @@ class LinearGrid(Grid):
 
         return nodes, weights
 
-    def change_resolution(self, L: int, M: int, N: int) -> None:
+    def change_resolution(self, L, M, N):
         """Change the resolution of the grid
 
         Parameters
@@ -399,17 +399,17 @@ class ConcentricGrid(Grid):
 
     def __init__(
         self,
-        M: int,
-        N: int,
-        NFP: int = 1,
-        sym: bool = False,
-        axis: bool = False,
+        M,
+        N,
+        NFP=1,
+        sym=False,
+        axis=False,
         index="ansi",
         surfs="cheb1",
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -443,10 +443,10 @@ class ConcentricGrid(Grid):
 
     def _create_nodes(
         self,
-        M: int,
-        N: int,
-        NFP: int = 1,
-        axis: bool = False,
+        M,
+        N,
+        NFP=1,
+        axis=False,
         index="ansi",
         surfs="cheb1",
     ):
@@ -550,7 +550,7 @@ class ConcentricGrid(Grid):
 
         return nodes, weights
 
-    def change_resolution(self, M: int, N: int) -> None:
+    def change_resolution(self, M, N):
         """Change the resolution of the grid
 
         Parameters

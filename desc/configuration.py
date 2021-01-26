@@ -75,11 +75,11 @@ class _Configuration(IOAble, ABC):
 
     def __init__(
         self,
-        inputs: dict = None,
+        inputs=None,
         load_from=None,
-        file_format: str = "hdf5",
+        file_format="hdf5",
         obj_lib=None,
-    ) -> None:
+    ):
         """Initializes a Configuration
 
         Parameters
@@ -119,7 +119,7 @@ class _Configuration(IOAble, ABC):
             )
         self._make_labels()
 
-    def _init_from_inputs_(self, inputs: dict = None) -> None:
+    def _init_from_inputs_(self, inputs=None):
         # required inputs
         try:
             self._Psi = inputs["Psi"]
@@ -291,9 +291,7 @@ class _Configuration(IOAble, ABC):
         self._children.append(new)
         return new
 
-    def change_resolution(
-        self, L: int = None, M: int = None, N: int = None, *args, **kwargs
-    ) -> None:
+    def change_resolution(self, L=None, M=None, N=None, *args, **kwargs):
         """Set the spectral resolution
 
         Parameters
@@ -359,102 +357,55 @@ class _Configuration(IOAble, ABC):
         self._make_labels()
 
     @property
-    def sym(self) -> bool:
-        """Whether this equilibrium is stellarator symmetric
-
-        Returns
-        -------
-        bool
-        """
+    def sym(self):
+        """bool : whether this equilibrium is stellarator symmetric"""
         return self._sym
 
     @property
-    def bdry_mode(self) -> str:
-        """Mode for specifying plasma boundary
-
-
-        Returns
-        -------
-        str
-        """
+    def bdry_mode(self):
+        """str : mode for specifying plasma boundary"""
         return self._bdry_mode
 
     @property
-    def Psi(self) -> float:
-        """Total toroidal flux (in Webers) within LCFS
-
-        Returns
-        -------
-        float
-        """
-
+    def Psi(self):
+        """float : total toroidal flux (in Webers) within LCFS"""
         return self._Psi
 
     @Psi.setter
-    def Psi(self, Psi) -> None:
+    def Psi(self, Psi):
         self._Psi = Psi
 
     @property
-    def NFP(self) -> int:
-        """Number of field periods
-
-        Returns
-        -------
-        int
-        """
-
+    def NFP(self):
+        """int : number of field periods"""
         return self._NFP
 
     @NFP.setter
-    def NFP(self, NFP) -> None:
+    def NFP(self, NFP):
         self._NFP = NFP
 
     @property
-    def L(self) -> int:
-        """Maximum radial mode number
-
-        Returns
-        -------
-        int
-        """
-
+    def L(self):
+        """int : maximum radial mode number"""
         return self._L
 
     @property
-    def M(self) -> int:
-        """Maximum poloidal fourier mode number
-
-        Returns
-        -------
-        int
-        """
-
+    def M(self):
+        """int : maximum poloidal fourier mode number"""
         return self._M
 
     @property
-    def N(self) -> int:
-        """Maximum toroidal fourier mode number
-
-        Returns
-        -------
-        int
-        """
-
+    def N(self):
+        """int : maximum toroidal fourier mode number"""
         return self._N
 
     @property
     def x(self):
-        """Optimization state vector
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : optimization state vector"""
         return self._x
 
     @x.setter
-    def x(self, x) -> None:
+    def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
             self._x,
@@ -464,209 +415,112 @@ class _Configuration(IOAble, ABC):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients of R
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of R"""
         return self._R_lmn
 
     @R_lmn.setter
-    def R_lmn(self, R_lmn) -> None:
+    def R_lmn(self, R_lmn):
         self._R_lmn = R_lmn
         self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients of Z
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of Z"""
         return self._Z_lmn
 
     @Z_lmn.setter
-    def Z_lmn(self, Z_lmn) -> None:
+    def Z_lmn(self, Z_lmn):
         self._Z_lmn = Z_lmn
         self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
     def L_lmn(self):
-        """Spectral coefficients of lambda
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of lambda"""
         return self._L_lmn
 
     @L_lmn.setter
-    def L_lmn(self, L_lmn) -> None:
+    def L_lmn(self, L_lmn):
         self._L_lmn = L_lmn
         self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
     def Rb_mn(self):
-        """Spectral coefficients of R at the boundary
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of R at the boundary"""
         return self._Rb_mn
 
     @Rb_mn.setter
-    def Rb_mn(self, Rb_mn) -> None:
+    def Rb_mn(self, Rb_mn):
         self._Rb_mn = Rb_mn
 
     @property
     def Zb_mn(self):
-        """Spectral coefficients of Z at the boundary
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of Z at the boundary"""
         return self._Zb_mn
 
     @Zb_mn.setter
-    def Zb_mn(self, Zb_mn) -> None:
+    def Zb_mn(self, Zb_mn):
         self._Zb_mn = Zb_mn
 
     @property
     def p_l(self):
-        """Spectral coefficients of pressure profile
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of pressure profile"""
         return self._p_l
 
     @p_l.setter
-    def p_l(self, p_l) -> None:
+    def p_l(self, p_l):
         self._p_l = p_l
 
     @property
     def i_l(self):
-        """Spectral coefficients of iota profile
-
-        Returns
-        -------
-        ndarray
-        """
-
+        """ndarray : spectral coefficients of iota profile"""
         return self._i_l
 
     @i_l.setter
-    def i_l(self, i_l) -> None:
+    def i_l(self, i_l):
         self._i_l = i_l
 
     @property
-    def R_basis(self) -> FourierZernikeBasis:
-        """
-        Spectral basis for R
-
-        Returns
-        -------
-        FourierZernikeBasis
-
-        """
+    def R_basis(self):
+        """FourierZernikeBasis : spectral basis for R"""
         return self._R_basis
 
     @property
-    def Z_basis(self) -> FourierZernikeBasis:
-        """
-        Spectral basis for Z
-
-        Returns
-        -------
-        FourierZernikeBasis
-
-        """
+    def Z_basis(self):
+        """FourierZernikeBasis : spectral basis for Z"""
         return self._Z_basis
 
     @property
-    def L_basis(self) -> FourierZernikeBasis:
-        """
-        Spectral basis for lambda
-
-        Returns
-        -------
-        FourierZernikeBasis
-
-        """
+    def L_basis(self):
+        """FourierZernikeBasis : spectral basis for lambda"""
         return self._L_basis
 
     @property
-    def Rb_basis(self) -> DoubleFourierSeries:
-        """
-        Spectral basis for R at the boundary
-
-        Returns
-        -------
-        DoubleFourierSeries
-
-        """
+    def Rb_basis(self):
+        """DoubleFourierSeries : spectral basis for R at the boundary"""
         return self._Rb_basis
 
     @property
-    def Zb_basis(self) -> DoubleFourierSeries:
-        """
-        Spectral basis for Z at the boundary
-
-        Returns
-        -------
-        DoubleFourierSeries
-
-        """
+    def Zb_basis(self):
+        """DoubleFourierSeries : spectral basis for Z at the boundary"""
         return self._Zb_basis
 
     @property
-    def p_basis(self) -> PowerSeries:
-        """
-        Spectral basis for pressure
-
-        Returns
-        -------
-        PowerSeries
-
-        """
+    def p_basis(self):
+        """PowerSeries : spectral basis for pressure"""
         return self._p_basis
 
     @property
-    def i_basis(self) -> PowerSeries:
-        """
-        Spectral basis for rotational transform
-
-        Returns
-        -------
-        PowerSeries
-
-        """
+    def i_basis(self):
+        """PowerSeries : spectral basis for rotational transform"""
         return self._i_basis
 
     @property
-    def zeta_ratio(self) -> float:
-        """Multiplier on toroidal derivatives
-
-        Returns
-        -------
-        float
-        """
-
+    def zeta_ratio(self):
+        """float : multiplier on toroidal derivatives"""
         return self._zeta_ratio
 
     @zeta_ratio.setter
-    def zeta_ratio(self, zeta_ratio) -> None:
+    def zeta_ratio(self, zeta_ratio):
         self._zeta_ratio = zeta_ratio
 
     def _make_labels(self):
@@ -679,7 +533,7 @@ class _Configuration(IOAble, ABC):
         self.xlabel = {i: val for i, val in enumerate(x_label)}
         self.rev_xlabel = {val: i for i, val in self.xlabel.items()}
 
-    def get_xlabel_by_idx(self, idx: int):
+    def get_xlabel_by_idx(self, idx):
         """Find which mode corresponds to a given entry in x
 
         Parameters
@@ -715,7 +569,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute_profiles(self, grid: Grid) -> dict:
+    def compute_profiles(self, grid):
         """Computes magnetic flux, pressure, and rotational transform profiles.
 
         Parameters
@@ -754,7 +608,7 @@ class _Configuration(IOAble, ABC):
 
         return profiles
 
-    def compute_toroidal_coords(self, grid: Grid) -> dict:
+    def compute_toroidal_coords(self, grid):
         """Computes toroidal coordinates from polar coordinates.
 
         Parameters
@@ -770,6 +624,8 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
+
+        # TODO: option to return intermediate variables for all these
         R_transform = Transform(grid, self._R_basis, derivs=0, method="direct")
         Z_transform = Transform(grid, self._Z_basis, derivs=0, method="direct")
         L_transform = Transform(grid, self._L_basis, derivs=0, method="direct")
@@ -793,7 +649,7 @@ class _Configuration(IOAble, ABC):
 
         return toroidal_coords
 
-    def compute_cartesian_coords(self, grid: Grid) -> dict:
+    def compute_cartesian_coords(self, grid):
         """Computes cartesian coordinates from toroidal coordinates.
 
         Parameters
@@ -832,7 +688,7 @@ class _Configuration(IOAble, ABC):
 
         return cartesian_coords
 
-    def compute_covariant_basis(self, grid: Grid) -> dict:
+    def compute_covariant_basis(self, grid):
         """Computes covariant basis vectors.
 
         Parameters
@@ -872,7 +728,7 @@ class _Configuration(IOAble, ABC):
 
         return cov_basis
 
-    def compute_jacobian(self, grid: Grid) -> dict:
+    def compute_jacobian(self, grid):
         """Computes coordinate system jacobian.
 
         Parameters
@@ -912,7 +768,7 @@ class _Configuration(IOAble, ABC):
 
         return jacobian
 
-    def compute_contravariant_basis(self, grid: Grid) -> dict:
+    def compute_contravariant_basis(self, grid):
         """Computes contravariant basis vectors.
 
         Parameters
@@ -952,7 +808,7 @@ class _Configuration(IOAble, ABC):
 
         return con_basis
 
-    def compute_magnetic_field(self, grid: Grid) -> dict:
+    def compute_magnetic_field(self, grid):
         """Computes magnetic field components.
 
         Parameters
@@ -999,7 +855,7 @@ class _Configuration(IOAble, ABC):
 
         return magnetic_field
 
-    def compute_current_density(self, grid: Grid) -> dict:
+    def compute_current_density(self, grid):
         """Computes current density field components.
 
         Parameters
@@ -1046,7 +902,7 @@ class _Configuration(IOAble, ABC):
 
         return current_density
 
-    def compute_force_error(self, grid: Grid) -> dict:
+    def compute_force_error(self, grid):
         """Computes force errors and magnitude.
 
         Parameters
@@ -1095,7 +951,7 @@ class _Configuration(IOAble, ABC):
 
         return force_error
 
-    def compute_energy(self, grid: Grid) -> dict:
+    def compute_energy(self, grid):
         """Computes total MHD energy
 
         Also computes the individual components (magnetic and pressure)
@@ -1221,7 +1077,7 @@ class _Configuration(IOAble, ABC):
         return rline.is_simple and vline.is_simple
 
 
-def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):
+def format_profiles(profiles, p_basis, i_basis):
     """Formats profile input arrays
 
     Parameters
@@ -1253,12 +1109,7 @@ def format_profiles(profiles, p_basis: PowerSeries, i_basis: PowerSeries):
     return p_l, i_l
 
 
-def format_boundary(
-    boundary,
-    Rb_basis: DoubleFourierSeries,
-    Zb_basis: DoubleFourierSeries,
-    mode: str = "spectral",
-):
+def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
     """Formats boundary arrays and converts between real and fourier representations
 
     Parameters
@@ -1308,9 +1159,7 @@ def format_boundary(
     return Rb_mn, Zb_mn
 
 
-def initial_guess(
-    x_basis: FourierZernikeBasis, b_mn, b_basis: DoubleFourierSeries, axis
-):
+def initial_guess(x_basis, b_mn, b_basis, axis):
     """creates the coefficients x_lmn based on the boundary coefficients b_mn"""
 
     x_lmn = np.zeros((x_basis.num_modes,))

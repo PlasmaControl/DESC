@@ -4,7 +4,7 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
-from desc.backend import put
+
 from desc.utils import sign
 from desc.grid import LinearGrid, Grid
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
@@ -17,9 +17,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(
-        cls, path: str, L: int = -1, M: int = -1, N: int = -1, index: str = "ansi"
-    ) -> Equilibrium:
+    def load(cls, path, L=-1, M=-1, N=-1, index="ansi"):
         """Loads a VMEC netCDF file as a Equilibrium.
 
         Parameters
@@ -120,7 +118,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq: Equilibrium, path: str, surfs: int = 128) -> None:
+    def save(cls, eq, path, surfs=128):
         """Saves an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -573,7 +571,7 @@ class VMECIO:
         return m_0, n_0, s, c
 
     @staticmethod
-    def _fourier_to_zernike(m, n, x_mn, basis: FourierZernikeBasis):
+    def _fourier_to_zernike(m, n, x_mn, basis):
         """Converts from a double Fourier series at each flux surface to a
         Fourier-Zernike basis.
 
@@ -605,12 +603,12 @@ class VMECIO:
             if len(idx):
                 A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
                 c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
-                x_lmn = put(x_lmn, idx, c)
+                x_lmn[idx] = c
 
         return x_lmn
 
     @staticmethod
-    def _zernike_to_fourier(x_lmn, basis: FourierZernikeBasis, rho):
+    def _zernike_to_fourier(x_lmn, basis, rho):
         """Converts from a Fourier-Zernike basis to a double Fourier series at each
         flux surface.
 
@@ -810,7 +808,26 @@ class VMECIO:
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+        """Computes the average normalized area difference between vmec and desc equilibria
 
+        Parameters
+        ----------
+        equil : Equilibrium
+            desc equilibrium to compare
+        vmec_data : dict
+            dictionary of vmec outputs
+        Nr : int, optional
+            number of rho contours
+        Nt : int, optional
+            number of vartheta contours
+
+        Returns
+        -------
+        coords : dict of ndarray
+            dictionary of coordinate arrays with keys Xy_code where X is R or Z, y is r
+            for rho contours, or v for vartheta contours, and code is vmec or desc
+
+        """
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
 
@@ -898,7 +915,27 @@ class VMECIO:
 
     @classmethod
     def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+        """Computes the average normalized area difference between vmec and desc equilibria
 
+        Parameters
+        ----------
+        equil : Equilibrium
+            desc equilibrium to compare
+        vmec_data : dict
+            dictionary of vmec outputs
+        Nr : int, optional
+            number of rho contours to plot
+        Nt : int, optional
+            number of vartheta contours to plot
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            figure being plotted to
+        ax : matplotlib.axes.Axes or ndarray of Axes
+            axes being plotted to
+
+        """
         coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
         if equil.N == 0:

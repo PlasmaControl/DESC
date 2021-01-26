@@ -9,25 +9,20 @@ if use_jax:
 
 
 class _Derivative(ABC):
-    """_Derivative is an abstract base class for derivative matrix calculations"""
+    """_Derivative is an abstract base class for derivative matrix calculations
+
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnums : int, optional
+        Specifies which positional argument to differentiate with respect to
+
+    """
 
     @abstractmethod
-    def __init__(self, fun: callable, argnum: int = 0, **kwargs) -> None:
-        """Initializes a Derivative object
-
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnums : int, optional
-            Specifies which positional argument to differentiate with respect to
-
-        Returns
-        -------
-        None
-
-        """
-        pass
+    def __init__(self, fun, argnum=0, **kwargs):
+        """Initializes a Derivative object"""
 
     @abstractmethod
     def compute(self, *args):
@@ -41,65 +36,81 @@ class _Derivative(ABC):
 
         Returns
         -------
-        J : ndarray of float, shape(len(f),len(x))
-            df/dx, where f is the output of the function fun and x is the input
-            argument at position argnum.
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
 
         """
-        pass
 
     @property
-    def fun(self) -> callable:
+    def fun(self):
+        """callable : function being differentiated"""
         return self._fun
 
     @fun.setter
-    def fun(self, fun: callable) -> None:
+    def fun(self, fun):
         self._fun = fun
 
     @property
-    def argnum(self) -> int:
+    def argnum(self):
+        """int : argument being differentiated with respect to"""
         return self._argnum
 
     @argnum.setter
-    def argnum(self, argnum: int) -> None:
+    def argnum(self, argnum):
         self._argnum = argnum
 
     def __call__(self, *args):
+        """Computes the derivative matrix
+
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
+
+        """
         return self.compute(*args)
 
 
 class AutoDiffDerivative(_Derivative):
-    """Computes derivatives using automatic differentiation with JAX"""
+    """Computes derivatives using automatic differentiation with JAX
+
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnum : int, optional
+        Specifies which positional argument to differentiate with respect to
+    mode : str, optional
+        Automatic differentiation mode.
+        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
+        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
+        or 'jvp' (jacobian vector product)
+        Default = 'fwd'
+    use_jit : bool, optional
+        whether to use just-in-time compilation
+    devices : jax.device or list of jax.device
+        device to jit compile to
+
+    Raises
+    ------
+    ValueError, if mode is not supported
+
+    """
 
     def __init__(
-        self,
-        fun: callable,
-        argnum: int = 0,
-        mode: str = "fwd",
-        use_jit=False,
-        devices=None,
-        **kwargs
-    ) -> None:
-        """Initializes an AutoDiffDerivative
+        self, fun, argnum=0, mode="fwd", use_jit=False, devices=None, **kwargs
+    ):
 
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnum : int, optional
-            Specifies which positional argument to differentiate with respect to
-        mode : str, optional
-            Automatic differentiation mode.
-            One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-            'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-            or 'jvp' (jacobian vector product)
-            Default = 'fwd'
-
-        Raises
-        ------
-        ValueError, if mode is not supported
-
-        """
         self._fun = fun
         self._argnum = argnum
         self._use_jit = use_jit
@@ -204,8 +215,8 @@ class AutoDiffDerivative(_Derivative):
         return u
 
     @property
-    def mode(self) -> str:
-        """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
+    def mode(self):
+        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
     def _set_mode(self, mode, device=None) -> None:
@@ -248,35 +259,28 @@ class AutoDiffDerivative(_Derivative):
 
 
 class FiniteDiffDerivative(_Derivative):
-    """Computes derivatives using 2nd order centered finite differences"""
+    """Computes derivatives using 2nd order centered finite differences
 
-    def __init__(
-        self,
-        fun: callable,
-        argnum: int = 0,
-        mode: str = "fwd",
-        rel_step: float = 1e-3,
-        **kwargs
-    ) -> None:
-        """Initializes a FiniteDiffDerivative
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnum : int, optional
+        Specifies which positional argument to differentiate with respect to
+    mode : str, optional
+        Automatic differentiation mode.
+        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
+        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
+        or 'jvp' (jacobian vector product)
+        Default = 'fwd'
+    rel_step : float, optional
+        Relative step size: dx = max(1, abs(x))*rel_step
+        Default = 1e-3
 
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnum : int, optional
-            Specifies which positional argument to differentiate with respect to
-        mode : str, optional
-            Automatic differentiation mode.
-            One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-            'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-            or 'jvp' (jacobian vector product)
-            Default = 'fwd'
-        rel_step : float, optional
-            Relative step size: dx = max(1, abs(x))*rel_step
-            Default = 1e-3
+    """
 
-        """
+    def __init__(self, fun, argnum=0, mode="fwd", rel_step=1e-3, **kwargs):
+
         self._fun = fun
         self._argnum = argnum
         self.rel_step = rel_step
@@ -382,8 +386,8 @@ class FiniteDiffDerivative(_Derivative):
         return df * normv
 
     @property
-    def mode(self) -> str:
-        """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
+    def mode(self):
+        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
     def _set_mode(self, mode):

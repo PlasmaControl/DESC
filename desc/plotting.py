@@ -5,11 +5,7 @@ import numpy as np
 import re
 from termcolor import colored
 
-from desc.backend import put
-from desc.utils import opsindex
-from desc.io import read_ascii
 from desc.grid import Grid, LinearGrid
-from desc.equilibrium import Equilibrium
 from desc.basis import FourierZernikeBasis, jacobi, fourier
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
@@ -83,7 +79,10 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=(6, 6)):
 
     Returns
     -------
-    matpliblib Figure instance, matplotlib AxesSubplot instance
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     if ax is None:
@@ -178,9 +177,7 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def plot_1d(
-    eq: Equilibrium, name: str, grid: Grid = None, ax=None, log=False, **kwargs
-):
+def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     """Plots 1D profiles.
 
     Parameters
@@ -200,7 +197,10 @@ def plot_1d(
 
     Returns
     -------
-    axis
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     if grid is None:
@@ -229,9 +229,7 @@ def plot_1d(
     return fig, ax
 
 
-def plot_2d(
-    eq: Equilibrium, name: str, grid: Grid = None, ax=None, log=False, **kwargs
-):
+def plot_2d(eq, name, grid=None, ax=None, log=False, **kwargs):
     """Plots 2D cross-sections.
 
     Parameters
@@ -251,7 +249,10 @@ def plot_2d(
 
     Returns
     -------
-    axis
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     if grid is None:
@@ -303,15 +304,7 @@ def plot_2d(
     return fig, ax
 
 
-def plot_3d(
-    eq: Equilibrium,
-    name: str,
-    grid: Grid = None,
-    ax=None,
-    log=False,
-    all_field_periods=True,
-    **kwargs
-):
+def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
     """Plots 3D surfaces.
 
     Parameters
@@ -333,7 +326,10 @@ def plot_3d(
 
     Returns
     -------
-    axis
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     nfp = 1 if all_field_periods else eq.NFP
@@ -421,9 +417,7 @@ def plot_3d(
     return fig, ax
 
 
-def plot_section(
-    eq: Equilibrium, name: str, grid: Grid = None, ax=None, log=False, **kwargs
-):
+def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
     """Plots Poincare sections.
 
     Parameters
@@ -443,7 +437,10 @@ def plot_section(
 
     Returns
     -------
-    axis
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     if grid is None:
@@ -526,9 +523,7 @@ def plot_section(
     return fig, ax
 
 
-def plot_surfaces(
-    eq: Equilibrium, r_grid: Grid = None, t_grid: Grid = None, ax=None, **kwargs
-):
+def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
     """Plots flux surfaces.
 
     Parameters
@@ -548,7 +543,10 @@ def plot_surfaces(
 
     Returns
     -------
-    axis
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
     if r_grid is None and t_grid is None:
@@ -658,7 +656,7 @@ def plot_surfaces(
     return fig, ax
 
 
-def _compute(eq: Equilibrium, name: str, grid: Grid):
+def _compute(eq, name, grid):
     """Compute value specified by name on grid for equilibrium eq.
 
     Parameters
@@ -667,16 +665,16 @@ def _compute(eq: Equilibrium, name: str, grid: Grid):
         object from which to plot
     name : str
         name of variable to plot
-    grid : Grid, optional
-        grid of coordinates to plot at
+    grid : Grid
+        grid of coordinates to calcuulate at
 
     Returns
     -------
-    out, float array of shape (L, M, N)
+    out, float array of shape (M, L, N)
         computed values
 
     """
-    if type(name) is not dict:
+    if not isinstance(name, dict):
         name_dict = _format_name(name)
     else:
         name_dict = name
@@ -898,9 +896,9 @@ def plot_logo(savepath=None, **kwargs):
 
     Returns
     -------
-    fig : matplotlib.figure
+    fig : matplotlib.figure.Figure
         handle to the figure used for plotting
-    ax : matplotlib.axes
+    ax : matplotlib.axes.Axes
         handle to the axis used for plotting
 
     """

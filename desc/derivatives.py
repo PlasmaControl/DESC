@@ -72,7 +72,13 @@ class AutoDiffDerivative(_Derivative):
     """Computes derivatives using automatic differentiation with JAX"""
 
     def __init__(
-        self, fun: callable, argnum: int = 0, mode: str = "fwd", **kwargs
+        self,
+        fun: callable,
+        argnum: int = 0,
+        mode: str = "fwd",
+        use_jit=False,
+        devices=None,
+        **kwargs
     ) -> None:
         """Initializes an AutoDiffDerivative
 
@@ -96,17 +102,20 @@ class AutoDiffDerivative(_Derivative):
         """
         self._fun = fun
         self._argnum = argnum
+        self._use_jit = use_jit
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
 
         if ("block_size" in kwargs or "num_blocks" in kwargs) and mode in [
             "fwd",
             "rev",
             "hess",
         ]:
-            self._init_blocks(mode, kwargs)
+            self._init_blocks(mode, devices, kwargs)
         else:
-            self.mode = mode
+            self._set_mode(mode, devices[0])
 
-    def _init_blocks(self, mode, kwargs):
+    def _init_blocks(self, mode, devices, kwargs):
 
         if mode in ["fwd", "rev"]:
             self._block_fun = self._fun
@@ -141,13 +150,6 @@ class AutoDiffDerivative(_Derivative):
             self._num_blocks = num_blocks
             self._block_size = np.ceil(N / num_blocks).astype(int)
 
-        devices = kwargs.get("devices", None)
-        if type(devices) in [list, tuple]:
-            self._devices = devices
-        else:
-            self._devices = [devices]
-
-        self._use_jit = kwargs.get("use_jit", True)
         self._f_blocks = []
         self._jac_blocks = []
 
@@ -165,7 +167,7 @@ class AutoDiffDerivative(_Derivative):
                 self._jac_blocks.append(
                     jax.jit(
                         jax.jacrev(self._f_blocks[i], self._argnum),
-                        device=self._devices[i % len(self._devices)],
+                        device=devices[i % len(devices)],
                     )
                 )
             else:
@@ -206,31 +208,55 @@ class AutoDiffDerivative(_Derivative):
         """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
-    @mode.setter
-    def mode(self, mode: str) -> None:
+    def _set_mode(self, mode, device=None) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
             )
 
         self._mode = mode
-        if self._mode == "fwd":
-            self._compute = jax.jacfwd(self._fun, self._argnum)
-        elif self._mode == "rev":
-            self._compute = jax.jacrev(self._fun, self._argnum)
-        elif self._mode == "grad":
-            self._compute = jax.grad(self._fun, self._argnum)
-        elif self._mode == "hess":
-            self._compute = jax.hessian(self._fun, self._argnum)
-        elif self._mode == "jvp":
-            self._compute = self._compute_jvp
+        if self._use_jit:
+            if self._mode == "fwd":
+                self._compute = jax.jit(
+                    jax.jacfwd(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "rev":
+                self._compute = jax.jit(
+                    jax.jacrev(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "grad":
+                self._compute = jax.jit(
+                    jax.grad(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "hess":
+                self._compute = jax.jit(
+                    jax.hessian(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "jvp":
+                self._compute = self._compute_jvp
+        else:
+            if self._mode == "fwd":
+                self._compute = jax.jacfwd(self._fun, self._argnum)
+            elif self._mode == "rev":
+                self._compute = jax.jacrev(self._fun, self._argnum)
+            elif self._mode == "grad":
+                self._compute = jax.grad(self._fun, self._argnum)
+            elif self._mode == "hess":
+                self._compute = jax.hessian(self._fun, self._argnum)
+            elif self._mode == "jvp":
+                self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):
     """Computes derivatives using 2nd order centered finite differences"""
 
     def __init__(
-        self, fun: callable, argnum: int = 0, mode: str = "fwd", rel_step: float = 1e-3
+        self,
+        fun: callable,
+        argnum: int = 0,
+        mode: str = "fwd",
+        rel_step: float = 1e-3,
+        **kwargs
     ) -> None:
         """Initializes a FiniteDiffDerivative
 
@@ -254,7 +280,7 @@ class FiniteDiffDerivative(_Derivative):
         self._fun = fun
         self._argnum = argnum
         self.rel_step = rel_step
-        self.mode = mode
+        self._set_mode(mode)
 
     def _compute_hessian(self, *args):
         """Computes the hessian matrix using 2nd order centered finite differences.
@@ -360,8 +386,7 @@ class FiniteDiffDerivative(_Derivative):
         """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
-    @mode.setter
-    def mode(self, mode: str) -> None:
+    def _set_mode(self, mode):
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored(

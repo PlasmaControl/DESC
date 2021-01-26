@@ -709,7 +709,31 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 )
             # TODO: assign device properly
             # TODO: updating transforms instead of recomputing
-            equil.objective = self.inputs[ii]["errr_mode"]
+
+            objective = get_objective_function(
+                self.inputs[ii]["errr_mode"],
+                R_transform=equil._transforms["R"],
+                Z_transform=equil._transforms["Z"],
+                L_transform=equil._transforms["L"],
+                Rb_transform=equil._transforms["Rb"],
+                Zb_transform=equil._transforms["Zb"],
+                p_transform=equil._transforms["p"],
+                i_transform=equil._transforms["i"],
+                BC_constraint=BoundaryConstraint(
+                    equil.R_basis,
+                    equil.Z_basis,
+                    equil.L_basis,
+                    equil.Rb_basis,
+                    equil.Zb_basis,
+                    equil.Rb_mn,
+                    equil.Zb_mn,
+                    build=False,
+                ),
+                use_jit=True,
+                devices=device,
+            )
+
+            equil.objective = objective
             equil.optimizer = self.inputs[ii]["optim_method"]
             equil.build(verbose)
 

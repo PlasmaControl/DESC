@@ -2,7 +2,6 @@ import numpy as np
 import scipy.optimize
 from termcolor import colored
 from desc.utils import Timer
-from desc.backend import jit
 from desc.optimize import fmin_scalar, least_squares
 
 
@@ -28,13 +27,11 @@ class Optimizer:
         + _desc_least_squares_methods
     )
 
-    def __init__(self, method, objective, use_jit=True, device=None):
+    def __init__(self, method, objective):
 
         self._check_method_objective(method, objective)
         self._method = method
         self._objective = objective
-        self.use_jit = use_jit
-        self._device = device
         self.timer = Timer()
         self._set_compute_funs()
         self.compiled = False
@@ -90,49 +87,23 @@ class Optimizer:
         self._set_compute_funs()
         self.compiled = False
 
-    @property
-    def device(self):
-        return self._device
-
-    @device.setter
-    def device(self, device):
-        self._device = device
-        self._set_compute_funs()
-        self.compiled = False
-
     def _set_compute_funs(self):
 
-        if self.use_jit:
-            if self.method in Optimizer._scalar_methods:
-                self._fun = jit(self.objective.compute_scalar, device=self.device)
-                self._grad = jit(self.objective.grad_x, device=self.device)
-                if self.method in Optimizer._hessian_free_methods:
-                    self._hess = None
-                else:
-                    self._hess = jit(self.objective.hess_x, device=self.device)
+        if self.method in Optimizer._scalar_methods:
+            self._fun = self.objective.compute_scalar
+            self._grad = self.objective.grad_x
+            if self.method in Optimizer._hessian_free_methods:
+                self._hess = None
             else:
-                self._fun = jit(self.objective.compute, device=self.device)
-                self._jac = jit(self.objective.jac_x, device=self.device)
-                if self.method in Optimizer._desc_least_squares_methods:
-                    self._grad = jit(self.objective.grad_x, device=self.device)
+                self._hess = self.objective.hess_x
         else:
-            if self.method in Optimizer._scalar_methods:
-                self._fun = self.objective.compute_scalar
+            self._fun = self.objective.compute
+            self._jac = self.objective.jac_x
+            if self.method in Optimizer._desc_least_squares_methods:
                 self._grad = self.objective.grad_x
-                if self.method in Optimizer._hessian_free_methods:
-                    self._hess = None
-                else:
-                    self._hess = self.objective.hess_x
-            else:
-                self._fun = self.objective.compute
-                self._jac = self.objective.jac_x
-                if self.method in Optimizer._desc_least_squares_methods:
-                    self._grad = self.objective.grad_x
 
     def compile(self, x, args, verbose=1):
 
-        if not self.use_jit:
-            return
         if verbose > 0:
             print("Compiling objective function")
         self.timer.start("Compilation time")
@@ -162,7 +133,7 @@ class Optimizer:
         maxiter=None,
         options={},
     ):
-        if self.use_jit and not self.compiled:
+        if not self.compiled:
             self.compile(x_init, args, verbose)
 
         # need some weird logic because scipy optimizers expect disp={0,1,2}

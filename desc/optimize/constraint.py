@@ -40,7 +40,8 @@ class LinearEqualityConstraint:
         self._built = False
         self._Z = None
         self._Ainv = None
-
+        self._dimx = self._A.shape[1]
+        self._dimy = None
         if build:
             self.build()
 
@@ -86,7 +87,7 @@ class LinearEqualityConstraint:
 
         self._Z = Z
         self._Ainv = Ainv
-
+        self._dimy = self._Z.shape[1]
         if self._x0 is None:
             self._x0 = self._Ainv.dot(self._b)
 
@@ -102,6 +103,16 @@ class LinearEqualityConstraint:
     @property
     def built(self):
         return self._built
+
+    @property
+    def dimy(self):
+        if self._dimy is None:
+            self._dimy = self._A.shape[1] - np.linalg.matrix_rank(self._A)
+        return self._dimy
+
+    @property
+    def dimx(self):
+        return self._dimx
 
     @property
     def b(self):

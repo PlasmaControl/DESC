@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import jnp, jit
 from desc.utils import unpack_state
 from desc.transform import Transform
 from desc.io import IOAble
@@ -50,7 +50,7 @@ class ObjectiveFunction(IOAble, ABC):
         "BC_constraint",
     ]
 
-    arg_names = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ration": 6}
+    arg_names = {"Rb_mn": 1, "Zb_mn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
 
     def __init__(
         self,
@@ -62,6 +62,8 @@ class ObjectiveFunction(IOAble, ABC):
         p_transform: Transform = None,
         i_transform: Transform = None,
         BC_constraint: BoundaryConstraint = None,
+        use_jit=True,
+        devices=None,
     ) -> None:
         """Initializes an ObjectiveFunction
 
@@ -83,6 +85,10 @@ class ObjectiveFunction(IOAble, ABC):
             transforms i_l coefficients to real space
         BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
+        use_jit : bool, optional
+            whether to just-in-time compile the objective and derivatives
+        devices : jax.device or list of jax.device, optional
+            devices to jit compile to
 
         Returns
         -------
@@ -97,10 +103,24 @@ class ObjectiveFunction(IOAble, ABC):
         self.p_transform = p_transform
         self.i_transform = i_transform
         self.BC_constraint = BC_constraint
+        self._use_jit = use_jit
 
-        self._grad = Derivative(self.compute_scalar, mode="grad")
-        self._hess = Derivative(self.compute_scalar, mode="hess")
-        self._jac = Derivative(self.compute, mode="fwd")
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+
+        self._grad = Derivative(
+            self.compute_scalar, mode="grad", use_jit=use_jit, devices=devices
+        )
+        self._hess = Derivative(
+            self.compute_scalar, mode="hess", use_jit=use_jit, devices=devices
+        )
+        self._jac = Derivative(
+            self.compute, mode="fwd", use_jit=use_jit, devices=devices
+        )
+
+        if self._use_jit:
+            self.compute = jit(self.compute, device=devices[0])
+            self.compute_scalar = jit(self.compute_scalar, device=devices[0])
 
     @property
     @abstractmethod
@@ -211,6 +231,8 @@ class ForceErrorNodes(ObjectiveFunction):
         p_transform: Transform = None,
         i_transform: Transform = None,
         BC_constraint: BoundaryConstraint = None,
+        use_jit=True,
+        devices=None,
     ) -> None:
         """Initializes a force error objective function
 
@@ -232,6 +254,10 @@ class ForceErrorNodes(ObjectiveFunction):
             transforms i_l coefficients to real space
         BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
+        use_jit : bool, optional
+            whether to just-in-time compile the objective and derivatives
+        devices : jax.device or list of jax.device, optional
+            devices to jit compile to
 
         """
         super().__init__(
@@ -243,7 +269,49 @@ class ForceErrorNodes(ObjectiveFunction):
             p_transform,
             i_transform,
             BC_constraint,
+            use_jit,
+            devices,
         )
+        self.dimx = (
+            R_transform.num_modes + Z_transform.num_modes + L_transform.num_modes
+        )
+        self.dimy = self.dimx if BC_constraint is None else BC_constraint.dimy
+        self.dimf = 2 * R_transform.num_nodes
+        block_size = 3000
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+
+        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=self._use_jit)
+
+        if self.dimy > block_size:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+                block_size=block_size,
+                shape=(self.dimy, self.dimy),
+            )
+        else:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+            )
+        if self.dimf > block_size:
+            self._jac = Derivative(
+                self.compute,
+                mode="fwd",
+                use_jit=self._use_jit,
+                devices=devices,
+                block_size=block_size,
+                shape=(self.dimf, self.dimy),
+            )
+        else:
+            self._jac = Derivative(
+                self.compute, mode="fwd", use_jit=self._use_jit, devices=devices
+            )
 
     @property
     def scalar(self):
@@ -303,7 +371,7 @@ class ForceErrorNodes(ObjectiveFunction):
             force error in radial and helical directions at each node
         """
 
-        if self.BC_constraint is not None:
+        if self.BC_constraint is not None and x.size == self.dimy:
             # x is really 'y', need to recover full state vector
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
@@ -490,6 +558,8 @@ class EnergyVolIntegral(ObjectiveFunction):
         p_transform: Transform = None,
         i_transform: Transform = None,
         BC_constraint: BoundaryConstraint = None,
+        use_jit=True,
+        devices=None,
     ) -> None:
         """Initializes an EnergyVolintegral object
 
@@ -511,8 +581,10 @@ class EnergyVolIntegral(ObjectiveFunction):
             transforms i_l coefficients to real space
         BC_constraint : BoundaryConstraint
             linear constraint to enforce boundary conditions
-
+        use_jit : bool
+            whether to just-in-time compile the objective and derivatives
         """
+
         super().__init__(
             R_transform,
             Z_transform,
@@ -522,6 +594,41 @@ class EnergyVolIntegral(ObjectiveFunction):
             p_transform,
             i_transform,
             BC_constraint,
+            use_jit,
+            devices,
+        )
+        self.dimx = (
+            R_transform.num_modes + Z_transform.num_modes + L_transform.num_modes
+        )
+        self.dimy = self.dimx if BC_constraint is None else BC_constraint.dimy
+        self.dimf = self.dimy
+        block_size = 1000
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+
+        self._grad = Derivative(
+            self.compute_scalar, mode="grad", use_jit=self._use_jit, device=devices[0]
+        )
+
+        if self.dimy > block_size:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+                block_size=block_size,
+                shape=(self.dimy, self.dimy),
+            )
+        else:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+            )
+        # scalar objective -> jac = grad
+        self._jac = Derivative(
+            self.compute, mode="rev", use_jit=self._use_jit, devices=devices
         )
 
     @property
@@ -574,7 +681,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             total MHD energy in the plasma volume
         """
 
-        if self.BC_constraint is not None:
+        if self.BC_constraint is not None and x.size == self.dimy:
             # x is really 'y', need to recover full state vector
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
@@ -710,6 +817,8 @@ def get_objective_function(
     p_transform: Transform = None,
     i_transform: Transform = None,
     BC_constraint: BoundaryConstraint = None,
+    use_jit=True,
+    devices=None,
 ) -> ObjectiveFunction:
     """Get an objective function by name
 
@@ -733,6 +842,10 @@ def get_objective_function(
         transforms i_l coefficients to real space
     BC_constraint : BoundaryConstraint
         linear constraint to enforce boundary conditions
+    use_jit : bool
+        whether to just-in-time compile the objective and derivatives
+    devices : jax.device or list of jax.device, optional
+        devices to jit compile to
 
     Returns
     -------
@@ -750,6 +863,8 @@ def get_objective_function(
             p_transform=p_transform,
             i_transform=i_transform,
             BC_constraint=BC_constraint,
+            use_jit=use_jit,
+            devices=devices,
         )
     elif errr_mode == "energy":
         obj_fun = EnergyVolIntegral(
@@ -761,6 +876,8 @@ def get_objective_function(
             p_transform=p_transform,
             i_transform=i_transform,
             BC_constraint=BC_constraint,
+            use_jit=use_jit,
+            devices=devices,
         )
     else:
         raise ValueError(

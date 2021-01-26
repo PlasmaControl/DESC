@@ -6,9 +6,9 @@ NFP = 1
 Psi = 1.00000000E+00
 
 # spectral resolution
-M_pol  =  7, 11
+M_pol  =  6, 12
 N_tor  =  0
-M_grid = 11, 18
+M_grid = 12, 18
 N_grid =  0
 
 # continuation parameters
@@ -27,7 +27,7 @@ nfev = 100
 optim_method = scipy-trf
 errr_mode = force
 bdry_mode = spectral
-zern_mode = ansi
+zern_mode = fringe
 node_mode = cheb1
 
 # pressure and rotational transform profiles

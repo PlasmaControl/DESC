@@ -12,7 +12,7 @@ class Basis(IOAble, ABC):
 
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes"]
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         """Overloads the == operator
 
         Parameters
@@ -31,7 +31,7 @@ class Basis(IOAble, ABC):
             return False
         return equals(self.__dict__, other.__dict__)
 
-    def _enforce_symmetry(self) -> None:
+    def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""
 
         if self._sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
@@ -41,7 +41,7 @@ class Basis(IOAble, ABC):
             non_sym_idx = np.where(sign(self._modes[:, 1]) == sign(self._modes[:, 2]))
             self._modes = np.delete(self._modes, non_sym_idx, axis=0)
 
-    def _sort_modes(self) -> None:
+    def _sort_modes(self):
         """Sorts modes for use with FFT"""
 
         sort_idx = np.lexsort((self._modes[:, 1], self._modes[:, 0], self._modes[:, 2]))
@@ -72,31 +72,31 @@ class Basis(IOAble, ABC):
         """
 
     @abstractmethod
-    def change_resolution(self) -> None:
+    def change_resolution(self):
         """Change resolution of the basis to the given resolutions"""
 
     @property
-    def L(self) -> int:
-        """ int: maximum radial resolution"""
+    def L(self):
+        """int: maximum radial resolution"""
         return self._L
 
     @property
-    def M(self) -> int:
-        """ int:  maximum poloidal resolution"""
+    def M(self):
+        """int:  maximum poloidal resolution"""
         return self._M
 
     @property
-    def N(self) -> int:
-        """ int: maximum toroidal resolution"""
+    def N(self):
+        """int: maximum toroidal resolution"""
         return self._N
 
     @property
-    def NFP(self) -> int:
-        """ int: number of field periods"""
+    def NFP(self):
+        """int: number of field periods"""
         return self._NFP
 
     @property
-    def sym(self) -> str:
+    def sym(self):
         """str: {'cos', 'sin', None} type of symmetry"""
         return self._sym
 
@@ -106,11 +106,11 @@ class Basis(IOAble, ABC):
         return self._modes
 
     @modes.setter
-    def modes(self, modes) -> None:
+    def modes(self, modes):
         self._modes = modes
 
     @property
-    def num_modes(self) -> int:
+    def num_modes(self):
         """int: number of modes in the spectral basis"""
         return self._modes.shape[0]
 
@@ -128,9 +128,7 @@ class PowerSeries(Basis):
 
     """
 
-    def __init__(
-        self, L: int = 0, load_from=None, file_format=None, obj_lib=None
-    ) -> None:
+    def __init__(self, L=0, load_from=None, file_format=None, obj_lib=None):
 
         self._file_format_ = file_format
 
@@ -151,7 +149,7 @@ class PowerSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, L: int = 0):
+    def _get_modes(self, L=0):
         """Gets mode numbers for power series
 
         Parameters
@@ -193,7 +191,7 @@ class PowerSeries(Basis):
 
         return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
 
-    def change_resolution(self, L: int) -> None:
+    def change_resolution(self, L):
         """Change resolution of the basis to the given resolution.
 
         Parameters
@@ -227,13 +225,13 @@ class FourierSeries(Basis):
 
     def __init__(
         self,
-        N: int = 0,
-        NFP: int = 1,
-        sym: str = None,
+        N=0,
+        NFP=1,
+        sym=None,
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -254,7 +252,7 @@ class FourierSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, N: int = 0) -> None:
+    def _get_modes(self, N=0):
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -297,7 +295,7 @@ class FourierSeries(Basis):
 
         return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
-    def change_resolution(self, N: int) -> None:
+    def change_resolution(self, N):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -333,14 +331,14 @@ class DoubleFourierSeries(Basis):
 
     def __init__(
         self,
-        M: int = 0,
-        N: int = 0,
-        NFP: int = 1,
-        sym: str = None,
+        M=0,
+        N=0,
+        NFP=1,
+        sym=None,
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -361,7 +359,7 @@ class DoubleFourierSeries(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, M: int = 0, N: int = 0) -> None:
+    def _get_modes(self, M=0, N=0):
         """Gets mode numbers for double fourier series
 
         Parameters
@@ -414,7 +412,7 @@ class DoubleFourierSeries(Basis):
         toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return poloidal * toroidal
 
-    def change_resolution(self, M: int, N: int) -> None:
+    def change_resolution(self, M, N):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -491,16 +489,16 @@ class FourierZernikeBasis(Basis):
 
     def __init__(
         self,
-        L: int = -1,
-        M: int = 0,
-        N: int = 0,
-        NFP: int = 1,
-        sym: str = None,
-        index: str = "ansi",
+        L=-1,
+        M=0,
+        N=0,
+        NFP=1,
+        sym=None,
+        index="ansi",
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -524,7 +522,7 @@ class FourierZernikeBasis(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, L: int = -1, M: int = 0, N: int = 0, index: str = "ansi"):
+    def _get_modes(self, L=-1, M=0, N=0, index="ansi"):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -634,7 +632,7 @@ class FourierZernikeBasis(Basis):
         toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L: int, M: int, N: int) -> None:
+    def change_resolution(self, L, M, N):
         """Change resolution of the basis to the given resolutions.
 
         Parameters

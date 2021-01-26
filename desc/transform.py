@@ -3,10 +3,9 @@ import scipy.linalg
 from itertools import permutations, combinations_with_replacement
 from termcolor import colored
 import warnings
+
 from desc.backend import jnp, put
 from desc.utils import equals, issorted, isalmostequal, islinspaced
-from desc.grid import Grid
-from desc.basis import Basis
 from desc.io import IOAble
 
 
@@ -40,8 +39,8 @@ class Transform(IOAble):
 
     def __init__(
         self,
-        grid: Grid = None,
-        basis: Basis = None,
+        grid=None,
+        basis=None,
         derivs=0,
         rcond=None,
         build=True,
@@ -50,7 +49,7 @@ class Transform(IOAble):
         load_from=None,
         file_format=None,
         obj_lib=None,
-    ) -> None:
+    ):
 
         self._file_format_ = file_format
 
@@ -83,7 +82,7 @@ class Transform(IOAble):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other):
         """Overloads the == operator
 
         Parameters
@@ -146,7 +145,7 @@ class Transform(IOAble):
 
         return derivatives
 
-    def _sort_derivatives(self) -> None:
+    def _sort_derivatives(self):
         """Sorts derivatives"""
         sort_idx = np.lexsort(
             (self._derivatives[:, 0], self._derivatives[:, 1], self._derivatives[:, 2])
@@ -264,9 +263,9 @@ class Transform(IOAble):
                 np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
             ]
         )
-        self.fft_grid = Grid(fft_nodes)
+        self.fft_nodes = fft_nodes
 
-    def build(self) -> None:
+    def build(self):
         """Builds the transform matrices for each derivative order"""
         if self._built:
             return
@@ -284,7 +283,7 @@ class Transform(IOAble):
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self.fft_grid.nodes, d, modes=temp_modes
+                    self.fft_nodes, d, modes=temp_modes
                 )
 
         self._built = True
@@ -326,7 +325,7 @@ class Transform(IOAble):
 
         if self.method == "direct":
             A = self._matrices[dr][dt][dz]
-            if type(A) is dict:
+            if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
@@ -343,7 +342,7 @@ class Transform(IOAble):
 
         elif self.method == "fft":
             A = self._matrices[dr][dt][0]
-            if type(A) is dict:
+            if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
@@ -409,11 +408,11 @@ class Transform(IOAble):
 
     def change_resolution(
         self,
-        grid: Grid = None,
-        basis: Basis = None,
-        build: bool = True,
-        build_pinv: bool = False,
-    ) -> None:
+        grid=None,
+        basis=None,
+        build=True,
+        build_pinv=False,
+    ):
         """Re-builds the matrices with a new grid and basis
 
         Parameters
@@ -447,17 +446,12 @@ class Transform(IOAble):
             self.build_pinv()
 
     @property
-    def grid(self) -> Grid:
-        """Collocation grid for the transform
-
-        Returns
-        -------
-        Grid
-        """
+    def grid(self):
+        """Grid : collocation grid for the transform"""
         return self._grid
 
     @grid.setter
-    def grid(self, grid: Grid) -> None:
+    def grid(self, grid):
         if self._grid != grid:
             self._grid = grid
             if self.method == "fft":
@@ -470,17 +464,12 @@ class Transform(IOAble):
                 self.build_pinv()
 
     @property
-    def basis(self) -> Basis:
-        """Spectral basis for the transform
-
-        Returns
-        -------
-        Basis
-        """
+    def basis(self):
+        """Basis : spectral basis for the transform"""
         return self._basis
 
     @basis.setter
-    def basis(self, basis: Basis) -> None:
+    def basis(self, basis):
         if self._basis != basis:
             self._basis = basis
             if self.method == "fft":
@@ -505,7 +494,7 @@ class Transform(IOAble):
         """
         return self._derivatives
 
-    def change_derivatives(self, derivs, build=True) -> None:
+    def change_derivatives(self, derivs, build=True):
         """Changes the order and updates the matrices accordingly
 
         Doesn't delete any old orders, only adds new ones if not already there
@@ -541,50 +530,25 @@ class Transform(IOAble):
 
     @property
     def matrices(self):
-        """Transform matrices such that x=A*c
-
-        Returns
-        -------
-        dict of ndarray
-        """
+        """dict of ndarray : transform matrices such that x=A*c"""
         return self._matrices
 
     @property
-    def num_nodes(self) -> int:
-        """Number of nodes in the collocation grid
-
-        Returns
-        -------
-        int
-        """
+    def num_nodes(self):
+        """int : number of nodes in the collocation grid"""
         return self._grid.num_nodes
 
     @property
-    def num_modes(self) -> int:
-        """Number of modes in the spectral basis
-
-        Returns
-        -------
-        int
-        """
+    def num_modes(self):
+        """int : number of modes in the spectral basis"""
         return self._basis.num_modes
 
     @property
-    def built(self) -> bool:
-        """Whether the transform matrices have been built
-
-        Returns
-        -------
-        bool
-        """
+    def built(self):
+        """bool : whether the transform matrices have been built"""
         return self._built
 
     @property
-    def built_pinv(self) -> bool:
-        """Whether the pseudoinverse matrix has been computed for inverse fitting
-
-        Returns
-        -------
-        bool
-        """
+    def built_pinv(self):
+        """bool : whether the pseudoinverse matrix has been computed for inverse fitting"""
         return self._built_pinv

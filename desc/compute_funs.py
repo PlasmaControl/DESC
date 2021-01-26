@@ -1,9 +1,5 @@
 import numpy as np
-import warnings
-from termcolor import colored
 from desc.backend import jnp, put
-from desc.transform import Transform
-from scipy import special
 
 
 """These functions perform the core calculations of physical quantities.
@@ -92,11 +88,11 @@ def compute_profiles(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes magnetic flux, pressure, and rotational transform profiles.
@@ -163,11 +159,11 @@ def compute_toroidal_coords(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Transforms toroidal coordinates to real space.
@@ -225,11 +221,11 @@ def compute_cartesian_coords(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes cartesian coordinates from toroidal coordinates.
@@ -306,11 +302,11 @@ def compute_covariant_basis(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes covariant basis vectors.
@@ -400,11 +396,11 @@ def compute_jacobian(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes coordinate system jacobian.
@@ -484,11 +480,11 @@ def compute_contravariant_basis(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes contravariant basis vectors.
@@ -578,11 +574,11 @@ def compute_magnetic_field(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes magnetic field components.
@@ -706,11 +702,11 @@ def compute_magnetic_field_axis(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes magnetic field components; can handle nodes at the magnetic axis.
@@ -873,11 +869,11 @@ def compute_magnetic_field_magnitude(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes magnetic field magnitude.
@@ -977,11 +973,11 @@ def compute_magnetic_field_magnitude_axis(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes magnetic field magnitude; can handle nodes at the magnetic axis.
@@ -1081,11 +1077,11 @@ def compute_current_density(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes current density field components.
@@ -1368,11 +1364,11 @@ def compute_force_error(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes force error components.
@@ -1487,11 +1483,11 @@ def compute_force_error_magnitude(
     L_mn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes force error magnitude.
@@ -1642,11 +1638,11 @@ def compute_energy(
     L_lmn,
     p_l,
     i_l,
-    R_transform: Transform,
-    Z_transform: Transform,
-    L_transform: Transform,
-    p_transform: Transform,
-    i_transform: Transform,
+    R_transform,
+    Z_transform,
+    L_transform,
+    p_transform,
+    i_transform,
     zeta_ratio=1.0,
 ):
     """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results**
@@ -1733,25 +1729,10 @@ def compute_energy(
     g_abs = jnp.abs(jacobian["g"])
     mag_B_sq = magnetic_field["|B|"] ** 2
 
-    rho = R_transform.grid.nodes[:, 0]
-    theta = R_transform.grid.nodes[:, 1]
-    zeta = R_transform.grid.nodes[:, 2]
-
     NFP = R_transform.grid.NFP
-    N_radial_roots = len(jnp.unique(rho))
-    N_theta = len(jnp.unique(theta))
-    N_zeta = len(jnp.unique(zeta))
 
     weights = R_transform.grid.weights
 
-    roots, ws = special.js_roots(N_radial_roots, 2, 2)
-    if not np.all(np.unique(rho) == roots):
-        warnings.warn(
-            colored(
-                "Quadrature energy integration method requires 'quad' pattern nodes, MHD energy calculated will be incorrect",
-                "yellow",
-            )
-        )
     energy = {}
 
     W_p = jnp.sum(pressure * weights * g_abs) * NFP

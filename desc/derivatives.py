@@ -9,25 +9,20 @@ if use_jax:
 
 
 class _Derivative(ABC):
-    """_Derivative is an abstract base class for derivative matrix calculations"""
+    """_Derivative is an abstract base class for derivative matrix calculations
+
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnums : int, optional
+        Specifies which positional argument to differentiate with respect to
+
+    """
 
     @abstractmethod
-    def __init__(self, fun: callable, argnum: int = 0, **kwargs) -> None:
-        """Initializes a Derivative object
-
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnums : int, optional
-            Specifies which positional argument to differentiate with respect to
-
-        Returns
-        -------
-        None
-
-        """
-        pass
+    def __init__(self, fun, argnum=0, **kwargs):
+        """Initializes a Derivative object"""
 
     @abstractmethod
     def compute(self, *args):
@@ -41,72 +36,97 @@ class _Derivative(ABC):
 
         Returns
         -------
-        J : ndarray of float, shape(len(f),len(x))
-            df/dx, where f is the output of the function fun and x is the input
-            argument at position argnum.
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
 
         """
-        pass
 
     @property
-    def fun(self) -> callable:
+    def fun(self):
+        """callable : function being differentiated"""
         return self._fun
 
     @fun.setter
-    def fun(self, fun: callable) -> None:
+    def fun(self, fun):
         self._fun = fun
 
     @property
-    def argnum(self) -> int:
+    def argnum(self):
+        """int : argument being differentiated with respect to"""
         return self._argnum
 
     @argnum.setter
-    def argnum(self, argnum: int) -> None:
+    def argnum(self, argnum):
         self._argnum = argnum
 
     def __call__(self, *args):
+        """Computes the derivative matrix
+
+        Parameters
+        ----------
+        *args : list
+            Arguments of the objective function where the derivative is to be
+            evaluated at.
+
+        Returns
+        -------
+        D : ndarray of float
+            derivative of f evaluated at x, where f is the output of the function
+            fun and x is the input argument at position argnum. Exact shape and meaning
+            will depend on "mode"
+
+        """
         return self.compute(*args)
 
 
 class AutoDiffDerivative(_Derivative):
-    """Computes derivatives using automatic differentiation with JAX"""
+    """Computes derivatives using automatic differentiation with JAX
+
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnum : int, optional
+        Specifies which positional argument to differentiate with respect to
+    mode : str, optional
+        Automatic differentiation mode.
+        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
+        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
+        or 'jvp' (jacobian vector product)
+        Default = 'fwd'
+    use_jit : bool, optional
+        whether to use just-in-time compilation
+    devices : jax.device or list of jax.device
+        device to jit compile to
+
+    Raises
+    ------
+    ValueError, if mode is not supported
+
+    """
 
     def __init__(
-        self, fun: callable, argnum: int = 0, mode: str = "fwd", **kwargs
-    ) -> None:
-        """Initializes an AutoDiffDerivative
+        self, fun, argnum=0, mode="fwd", use_jit=False, devices=None, **kwargs
+    ):
 
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnum : int, optional
-            Specifies which positional argument to differentiate with respect to
-        mode : str, optional
-            Automatic differentiation mode.
-            One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-            'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-            or 'jvp' (jacobian vector product)
-            Default = 'fwd'
-
-        Raises
-        ------
-        ValueError, if mode is not supported
-
-        """
         self._fun = fun
         self._argnum = argnum
+        self._use_jit = use_jit
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
 
         if ("block_size" in kwargs or "num_blocks" in kwargs) and mode in [
             "fwd",
             "rev",
             "hess",
         ]:
-            self._init_blocks(mode, kwargs)
+            self._init_blocks(mode, devices, kwargs)
         else:
-            self.mode = mode
+            self._set_mode(mode, devices[0])
 
-    def _init_blocks(self, mode, kwargs):
+    def _init_blocks(self, mode, devices, kwargs):
 
         if mode in ["fwd", "rev"]:
             self._block_fun = self._fun
@@ -141,13 +161,6 @@ class AutoDiffDerivative(_Derivative):
             self._num_blocks = num_blocks
             self._block_size = np.ceil(N / num_blocks).astype(int)
 
-        devices = kwargs.get("devices", None)
-        if type(devices) in [list, tuple]:
-            self._devices = devices
-        else:
-            self._devices = [devices]
-
-        self._use_jit = kwargs.get("use_jit", True)
         self._f_blocks = []
         self._jac_blocks = []
 
@@ -165,7 +178,7 @@ class AutoDiffDerivative(_Derivative):
                 self._jac_blocks.append(
                     jax.jit(
                         jax.jacrev(self._f_blocks[i], self._argnum),
-                        device=self._devices[i % len(self._devices)],
+                        device=devices[i % len(devices)],
                     )
                 )
             else:
@@ -202,59 +215,76 @@ class AutoDiffDerivative(_Derivative):
         return u
 
     @property
-    def mode(self) -> str:
-        """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
+    def mode(self):
+        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
-    @mode.setter
-    def mode(self, mode: str) -> None:
+    def _set_mode(self, mode, device=None) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
             )
 
         self._mode = mode
-        if self._mode == "fwd":
-            self._compute = jax.jacfwd(self._fun, self._argnum)
-        elif self._mode == "rev":
-            self._compute = jax.jacrev(self._fun, self._argnum)
-        elif self._mode == "grad":
-            self._compute = jax.grad(self._fun, self._argnum)
-        elif self._mode == "hess":
-            self._compute = jax.hessian(self._fun, self._argnum)
-        elif self._mode == "jvp":
-            self._compute = self._compute_jvp
+        if self._use_jit:
+            if self._mode == "fwd":
+                self._compute = jax.jit(
+                    jax.jacfwd(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "rev":
+                self._compute = jax.jit(
+                    jax.jacrev(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "grad":
+                self._compute = jax.jit(
+                    jax.grad(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "hess":
+                self._compute = jax.jit(
+                    jax.hessian(self._fun, self._argnum), device=device
+                )
+            elif self._mode == "jvp":
+                self._compute = self._compute_jvp
+        else:
+            if self._mode == "fwd":
+                self._compute = jax.jacfwd(self._fun, self._argnum)
+            elif self._mode == "rev":
+                self._compute = jax.jacrev(self._fun, self._argnum)
+            elif self._mode == "grad":
+                self._compute = jax.grad(self._fun, self._argnum)
+            elif self._mode == "hess":
+                self._compute = jax.hessian(self._fun, self._argnum)
+            elif self._mode == "jvp":
+                self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):
-    """Computes derivatives using 2nd order centered finite differences"""
+    """Computes derivatives using 2nd order centered finite differences
 
-    def __init__(
-        self, fun: callable, argnum: int = 0, mode: str = "fwd", rel_step: float = 1e-3
-    ) -> None:
-        """Initializes a FiniteDiffDerivative
+    Parameters
+    ----------
+    fun : callable
+        Function to be differentiated.
+    argnum : int, optional
+        Specifies which positional argument to differentiate with respect to
+    mode : str, optional
+        Automatic differentiation mode.
+        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
+        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
+        or 'jvp' (jacobian vector product)
+        Default = 'fwd'
+    rel_step : float, optional
+        Relative step size: dx = max(1, abs(x))*rel_step
+        Default = 1e-3
 
-        Parameters
-        ----------
-        fun : callable
-            Function to be differentiated.
-        argnum : int, optional
-            Specifies which positional argument to differentiate with respect to
-        mode : str, optional
-            Automatic differentiation mode.
-            One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-            'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-            or 'jvp' (jacobian vector product)
-            Default = 'fwd'
-        rel_step : float, optional
-            Relative step size: dx = max(1, abs(x))*rel_step
-            Default = 1e-3
+    """
 
-        """
+    def __init__(self, fun, argnum=0, mode="fwd", rel_step=1e-3, **kwargs):
+
         self._fun = fun
         self._argnum = argnum
         self.rel_step = rel_step
-        self.mode = mode
+        self._set_mode(mode)
 
     def _compute_hessian(self, *args):
         """Computes the hessian matrix using 2nd order centered finite differences.
@@ -356,12 +386,11 @@ class FiniteDiffDerivative(_Derivative):
         return df * normv
 
     @property
-    def mode(self) -> str:
-        """The kind of derivative being computed (eg 'grad', 'hess', etc)"""
+    def mode(self):
+        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
         return self._mode
 
-    @mode.setter
-    def mode(self, mode: str) -> None:
+    def _set_mode(self, mode):
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored(

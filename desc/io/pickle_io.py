@@ -7,17 +7,8 @@ class PickleIO(IO):
     """Class to wrap ABC IO for pickle file format. """
 
     def __init__(self):
-        """Initialize PickleIO instance.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        None
-
-        """
-        self._file_types_ = [io.BufferedWriter]
+        """Initialize PickleIO instance"""
+        self._file_types_ = io.BufferedWriter
         self._file_format_ = "pickle"
         super().__init__()
 
@@ -52,10 +43,6 @@ class PickleReader(PickleIO, Reader):
         target : str or file instance
             Path to file OR file instance to be read.
 
-        Returns
-        -------
-        None
-
         """
         self.target = target
         self.file_mode = "r"
@@ -70,10 +57,6 @@ class PickleReader(PickleIO, Reader):
             object must have _io_attrs_ attribute to have attributes read and loaded
         where : None or file insance
             specifies where to read obj from
-
-        Returns
-        -------
-        None
 
         """
         loc = self.resolve_where(where)
@@ -92,14 +75,9 @@ class PickleReader(PickleIO, Reader):
         where : None of file instance
             specifies where to read dict from
 
-        Returns
-        -------
-        None
-
         """
         loc = self.resolve_where(where)
         thedict.update(pickle.load(loc))
-        return None
 
 
 class PickleWriter(PickleIO, Writer):
@@ -114,10 +92,6 @@ class PickleWriter(PickleIO, Writer):
             path OR file instance to write to
         file_mode : str
             mode used when opening file.
-
-        Returns
-        -------
-        None
 
         """
         self.target = target
@@ -134,14 +108,9 @@ class PickleWriter(PickleIO, Writer):
         where : None or file insance
             specifies where to write obj to
 
-        Returns
-        -------
-        None
-
         """
         loc = self.resolve_where(where)
         pickle.dump(obj, loc)
-        return None
 
     def write_dict(self, thedict, where=None):
         """Write dictionary to file in group specified by where argument.
@@ -153,12 +122,7 @@ class PickleWriter(PickleIO, Writer):
         where : None of file instance
             specifies where to write dict to
 
-        Returns
-        -------
-        None
-
         """
-        if type(thedict) is not dict:
+        if not isinstance(thedict, dict):
             raise TypeError("Object provided is not a dictionary.")
         self.write_object(thedict, where=where)
-        return None

@@ -78,30 +78,9 @@ if use_jax:
 
         return jax.ops.index_update(arr, inds, vals)
 
-    @jit
-    def factorial(n):
-        """Factorial function for jax backend
-
-        Parameters
-        ----------
-        n : array-like of int
-            input values. if n<0, returns 0
-
-        Returns
-        -------
-        n! : array-like of float
-            factorial of n
-
-        """
-        x = jnp.asarray(n + 1)
-        y = jnp.exp(jax.scipy.special.gammaln(x))
-        y = jnp.where(x < 1, 0, y)
-        return y
-
 
 else:
     jit = lambda func, *args, **kwargs: func
-    from scipy.special import factorial
     from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
 
     def put(arr, inds, vals):

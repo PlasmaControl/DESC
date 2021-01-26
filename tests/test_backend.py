@@ -1,16 +1,12 @@
 import unittest
 import numpy as np
 
-from desc.backend import factorial, put
+from desc.backend import put
 from desc.utils import sign
 
 
 class TestBackend(unittest.TestCase):
     """tests for backend functions"""
-
-    def test_factorial(self):
-        self.assertAlmostEqual(factorial(10), 3628800)
-        self.assertAlmostEqual(factorial(0), 1)
 
     def test_put(self):
         a = np.array([0, 0, 0])

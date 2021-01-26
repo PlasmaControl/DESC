@@ -9,7 +9,7 @@ __all__ = ["perturb"]
 
 def perturb(
     eq,
-    deltas: dict,
+    deltas,
     order=0,
     Jx=None,
     verbose=1,
@@ -23,7 +23,8 @@ def perturb(
         equilibrium to perturb
     deltas : dict
         dictionary of ndarray of objective function parameters to perturb.
-        Allowed keys are: 'Rb_mn', 'Zb_mn', 'p_l', 'i_l', 'Psi', 'zeta_ratio'
+        Allowed keys are: ``'Rb_mn'``, ``'Zb_mn'``, ``'p_l'``, ``'i_l'``,
+        ``'Psi'``, ``'zeta_ratio'``
     order : int, optional
         order of perturbation (0=none, 1=linear, 2=quadratic)
     Jx : ndarray, optional

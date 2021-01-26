@@ -6,47 +6,18 @@ class IO(ABC):
     """Abstract Base Class (ABC) for readers and writers."""
 
     def __init__(self):
-        """Initalize ABC IO.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-
-        None
-
-        """
+        """Initalize ABC IO"""
         self.resolve_base()
 
     def __del__(self):
-        """Close file upon garbage colleciton or explicit deletion with del function.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        None
-
-        """
+        """Close file upon garbage colleciton or explicit deletion with del function"""
         self.close()
 
     def close(self):
-        """Close file if initialized with class instance.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        None
-
-        """
+        """Close file if initialized with class instance"""
         if self._close_base_:
             self.base.close()
             self._close_base_ = False
-        return None
 
     def resolve_base(self):
         """Set base attribute.
@@ -56,13 +27,6 @@ class IO(ABC):
 
         Base is a runtime-initialized file if target is a string file path.
         _close_base_ is True.
-
-        Parameters
-        ----------
-
-        Returns
-        -------
-        None
 
         """
         if self.check_type(self.target):
@@ -102,10 +66,10 @@ class IO(ABC):
 
     @abstractmethod
     def open_file(self, file_name, file_mode):
-        pass
+        """opens the file"""
 
     def check_type(self, obj):
-        if type(obj) in self._file_types_:
+        if isinstance(obj, self._file_types_):
             return True
         else:
             return False
@@ -116,11 +80,11 @@ class Reader(ABC):
 
     @abstractmethod
     def read_obj(self, obj, where=None):
-        pass
+        """reads an object"""
 
     @abstractmethod
     def read_dict(self, thedict, where=None):
-        pass
+        """reads a dictionary"""
 
 
 class Writer(ABC):
@@ -128,8 +92,8 @@ class Writer(ABC):
 
     @abstractmethod
     def write_obj(self, obj, where=None):
-        pass
+        """writes an object"""
 
     @abstractmethod
     def write_dict(self, thedict, where=None):
-        pass
+        """writes a dictionary"""

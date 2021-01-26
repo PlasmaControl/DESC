@@ -6,7 +6,7 @@ from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 from desc.backend import put
 from desc.utils import sign
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, Grid
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.equilibrium import Equilibrium
@@ -690,7 +690,7 @@ class VMECIO:
         return vmec_data
 
     @staticmethod
-    def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, sym=True):
+    def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, lam=None, sym=True):
         """Interpolates VMEC data on a flux surface
         Parameters
         ----------
@@ -702,10 +702,12 @@ class VMECIO:
             poloidal mode numbers
         xn : ndarray
             toroidal mode numbers
-        theta : ndarray
+        theta : ndarray, shape(Nt,Nz)
             poloidal angles
-        phi : ndarray
+        phi : ndarray, shape(Nt,Nz)
             toroidal angles
+        lam : ndarray shape(Ns,Nt,Nv)
+            lambda value to be added to theta on each flux surface
         sym : bool
             stellarator symmetry (Default value = True)
         Returns
@@ -720,18 +722,19 @@ class VMECIO:
         C_arr = []
         S_arr = []
         dim = Cmn.shape
-
+        if lam is None:
+            lam = np.zeros((dim[0], *theta.shape))
         for j in range(dim[1]):
 
             m = xm[j]
             n = xn[j]
 
             C = [
-                [[Cmn[s, j] * np.cos(m * t - n * p) for p in phi] for t in theta]
+                Cmn[s, j] * np.cos(m * (theta - lam[s]) - n * phi)
                 for s in range(dim[0])
             ]
             S = [
-                [[Smn[s, j] * np.sin(m * t - n * p) for p in phi] for t in theta]
+                Smn[s, j] * np.sin(m * (theta - lam[s]) - n * phi)
                 for s in range(dim[0])
             ]
             C_arr.append(C)
@@ -745,7 +748,7 @@ class VMECIO:
             return C + S
 
     @classmethod
-    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=180):
+    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
         """Computes the average normalized area difference between vmec and desc equilibria
 
         Parameters
@@ -757,7 +760,7 @@ class VMECIO:
         Nr : int, optional
             number of radial surfaces to average over
         Nt : int, optional
-            number of theta points to use for surface comparison
+            number of vartheta contours to compare
 
         Returns
         -------
@@ -774,44 +777,25 @@ class VMECIO:
 
         if equil.N == 0:
             Nz = 1
-            rows = 1
         else:
             Nz = 6
-            rows = 2
 
-        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
-        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
-        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
-        if s_idx == 0:
-            idxes = idxes[1:]
-            Nr -= 1
-        r = np.sqrt(idxes / Nr_vmec)
-        t = np.linspace(0, 2 * np.pi, Nt)
-        z = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
-        grid = LinearGrid(rho=r, theta=t, zeta=z)
-
-        coords_desc = equil.compute_toroidal_coords(grid)
-        R_desc = coords_desc["R"].reshape((Nt, r.size, Nz), order="F")
-        Z_desc = coords_desc["Z"].reshape((Nt, r.size, Nz), order="F")
-
-        R_vmec, Z_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"][idxes],
-            vmec_data["zmns"][idxes],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            t,
-            z,
-        )
+        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
         desc_poly = [
             [
                 Polygon(np.array([R, Z]).T)
-                for R, Z in zip(R_desc[:, :, i].T, Z_desc[:, :, i].T)
+                for R, Z in zip(
+                    coords["Rr_desc"][:, :, i].T, coords["Zr_desc"][:, :, i].T
+                )
             ]
             for i in range(Nz)
         ]
         vmec_poly = [
-            [Polygon(np.array([R[:, i], Z[:, i]]).T) for R, Z in zip(R_vmec, Z_vmec)]
+            [
+                Polygon(np.array([R[:, i], Z[:, i]]).T)
+                for R, Z in zip(coords["Rr_vmec"], coords["Zr_vmec"])
+            ]
             for i in range(Nz)
         ]
 
@@ -819,16 +803,103 @@ class VMECIO:
             [
                 desc_poly[iz][ir].symmetric_difference(vmec_poly[iz][ir]).area
                 / vmec_poly[iz][ir].area
-                for ir in range(Nr)
+                for ir in range(1, Nr)
                 for iz in range(Nz)
             ]
-        ) / (Nr * Nz)
+        ) / ((Nr - 1) * Nz)
 
     @classmethod
-    def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=180):
+    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
 
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
+
+        if equil.N == 0:
+            Nz = 1
+        else:
+            Nz = 6
+
+        num_theta = kwargs.get("num_theta", 180)
+        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
+        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
+        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
+        if s_idx != 0:
+            idxes = np.pad(idxes, (1, 0), mode="constant")
+        rr = np.sqrt(idxes / Nr_vmec)
+        rt = np.linspace(0, 2 * np.pi, num_theta)
+        rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+        tr = np.linspace(0, 1, 50)
+        tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
+        tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
+
+        r_coords_desc = equil.compute_toroidal_coords(r_grid)
+        t_coords_desc = equil.compute_toroidal_coords(t_grid)
+
+        # theta coordinates cooresponding to linearly spaced vartheta angles
+        v_nodes = t_grid.nodes
+        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords_desc["lambda"]
+        v_grid = Grid(v_nodes)
+        v_coords_desc = equil.compute_toroidal_coords(v_grid)
+
+        # r contours
+        Rr_desc = r_coords_desc["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+        Zr_desc = r_coords_desc["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+
+        # theta contours
+        Rv_desc = v_coords_desc["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+        Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+
+        rtt, rtz = np.meshgrid(rt, rz, indexing="ij")
+        ttt, ttz = np.meshgrid(tt, tz, indexing="ij")
+
+        _, L_vmec = cls.vmec_interpolate(
+            np.zeros_like(vmec_data["lmns"]),
+            vmec_data["lmns"],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            ttt,
+            ttz,
+        )
+
+        tv = ttt - L_vmec
+
+        Rr_vmec, Zr_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"][idxes],
+            vmec_data["zmns"][idxes],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            rtt,
+            rtz,
+        )
+
+        Rv_vmec, Zv_vmec = cls.vmec_interpolate(
+            vmec_data["rmnc"],
+            vmec_data["zmns"],
+            vmec_data["xm"],
+            vmec_data["xn"],
+            ttt,
+            ttz,
+            lam=L_vmec,
+        )
+
+        coords = {
+            "Rr_desc": Rr_desc,
+            "Zr_desc": Zr_desc,
+            "Rv_desc": Rv_desc,
+            "Zv_desc": Zv_desc,
+            "Rr_vmec": Rr_vmec,
+            "Zr_vmec": Zr_vmec,
+            "Rv_vmec": Rv_vmec,
+            "Zv_vmec": Zv_vmec,
+        }
+        return coords
+
+    @classmethod
+    def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+
+        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
         if equil.N == 0:
             Nz = 1
@@ -837,41 +908,32 @@ class VMECIO:
             Nz = 6
             rows = 2
 
-        Nr_vmec = vmec_data["rmnc"].shape[0] - 1
-        s_idx = Nr_vmec % np.floor(Nr_vmec / (Nr - 1))
-        idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
-        if s_idx != 0:
-            idxes = np.pad(idxes, (1, 0), mode="constant")
-        r = np.sqrt(idxes / Nr_vmec)
-        t = np.linspace(0, 2 * np.pi, Nt)
-        z = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
-        grid = LinearGrid(rho=r, theta=t, zeta=z)
+        if Nz == 1:
+            fig, ax = plt.subplots(1, 1, figsize=(6, 6), squeeze=False)
+        else:
+            fig, ax = plt.subplots(2, 3, figsize=(16, 12), squeeze=False)
+        ax = ax.flatten()
 
-        coords_desc = equil.compute_toroidal_coords(grid)
-        R_desc = coords_desc["R"].reshape((Nt, r.size, Nz), order="F")
-        Z_desc = coords_desc["Z"].reshape((Nt, r.size, Nz), order="F")
-
-        R_vmec, Z_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"][idxes],
-            vmec_data["zmns"][idxes],
-            vmec_data["xm"],
-            vmec_data["xn"],
-            t,
-            z,
-        )
-
-        plt.figure(figsize=(20, 20))
         for k in range(Nz):
-            ax = plt.subplot(rows, int(Nz / rows), k + 1)
-            ax.plot(R_vmec[0, 0, k], Z_vmec[0, 0, k], "bo")
-            s_vmec = ax.plot(R_vmec[:, :, k].T, Z_vmec[:, :, k].T, "b-")
-            ax.plot(R_desc[0, 0, k], Z_desc[0, 0, k], "ro")
-            s_desc = ax.plot(R_desc[:, :, k], Z_desc[:, :, k], "r--")
-            ax.axis("equal")
-            ax.set_xlabel("R")
-            ax.set_ylabel("Z")
+            ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
+            s_vmec = ax[k].plot(
+                coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
+            )
+            ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
+
+            ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
+            ax[k].plot(
+                coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r-."
+            )
+            s_desc = ax[k].plot(
+                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r-."
+            )
+            ax[k].axis("equal")
+            ax[k].set_xlabel("R")
+            ax[k].set_ylabel("Z")
+            ax[k].grid(True)
             if k == 0:
                 s_vmec[0].set_label("VMEC")
                 s_desc[0].set_label("DESC")
-                ax.legend(fontsize="xx-small")
-        plt.show()
+                ax[k].legend(fontsize="xx-small")
+        return fig, ax

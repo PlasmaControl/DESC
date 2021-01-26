@@ -8,21 +8,15 @@ from .hdf5_io import hdf5Reader, hdf5Writer
 class IOAble(ABC):
     """Abstract Base Class for savable and loadable objects."""
 
-    def _init_from_file_(
-        self, load_from=None, file_format: str = None, obj_lib=None
-    ) -> None:
+    def _init_from_file_(self, load_from=None, file_format=None, obj_lib=None):
         """Initialize from file.
 
         Parameters
         ----------
-        load_from : str file path OR file instance (Default self.load_from)
+        load_from : str or path-like or file instance (Default self.load_from)
             file to initialize from
         file_format : str (Default self._file_format_)
             file format of file initializing from
-
-        Returns
-        -------
-        None
 
         """
         if load_from is None:
@@ -43,7 +37,6 @@ class IOAble(ABC):
 
         reader = reader_factory(load_from, file_format)
         reader.read_obj(self, obj_lib=obj_lib)
-        return None
 
     def save(self, file_name, file_format=None, file_mode="w"):
         """Save the object.
@@ -56,10 +49,6 @@ class IOAble(ABC):
             format of save file. Only used if file_name is a file path
         file_mode : str (Default w - overwrite)
             mode for save file. Only used if file_name is a file path
-
-        Returns
-        -------
-        None
 
         """
         if file_format is None:

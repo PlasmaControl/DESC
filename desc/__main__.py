@@ -75,6 +75,8 @@ def main(cl_args=None):
 
     if ir.args.verbose:
         print(desc.BANNER)
+        print("Reading input from {}".format(ir.input_path))
+        print("Outputs will be written to {}".format(ir.output_path))
 
     from desc.equilibrium import EquilibriaFamily, Equilibrium
     from desc.vmec import VMECIO

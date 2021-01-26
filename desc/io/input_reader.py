@@ -10,50 +10,59 @@ from termcolor import colored
 
 
 class InputReader:
-    """
-    Reads command line arguments and parses input files.
+    """Reads command line arguments and parses input files
 
-    Attributes
+    Parameters
     ----------
-    args : Namespace
-        parsed namespace of all command line arguments
-    inputs: dict
-        dictionary of values from input file
-    input_path: string
-        path to input file
-    output_path: string
-        path to output file
+    cl_args : None, str, or list (Default = None)
+        command line arguments to parse
 
     """
 
     def __init__(self, cl_args=None):
-        """Initialize InputReader instance.
+        """Initialize InputReader instance"""
 
-        Parameters
-        ----------
-        cl_args : None or list (Default = None)
-            command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
+        self._args = None
+        self._inputs = None
+        self._input_path = None
+        self._output_path = None
 
-        Returns
-        -------
-        None
+        if cl_args is not None:
+            if isinstance(cl_args, os.PathLike):
+                cl_args = list(cl_args)
+            elif isinstance(cl_args, str):
+                cl_args = cl_args.split(" ")
+            self._args = self.parse_args(cl_args=cl_args)
+            if not self.args.version:
+                self._inputs = self.parse_inputs()
 
-        """
-        self.args = self.parse_args(cl_args=cl_args)
+    @property
+    def args(self):
+        """Namespace: parsed namespace of all command line arguments"""
+        return self._args
 
-        if not self.args.version and not self.args.quiet:
-            print("Reading input from {}".format(self.input_path))
-            print("Outputs will be written to {}".format(self.output_path))
-        if not self.args.version:
-            self.inputs = self.parse_inputs()
+    @property
+    def inputs(self):
+        """list of dictionaries : dictionary of values from input file"""
+        return self._inputs
+
+    @property
+    def input_path(self):
+        """str : path to input file"""
+        return self._input_path
+
+    @property
+    def output_path(self):
+        """str : path to output file"""
+        return self._output_path
 
     def parse_args(self, cl_args=None):
         """Parse command line arguments.
 
         Parameters
         ----------
-        cl_args : None or list (Default = None)
-            command line arguments to parse. Default (=None) is to use command line arguments from sys.argv.
+        cl_args : None, str, or list (Default = None)
+            command line arguments to parse
 
         Returns
         -------
@@ -61,12 +70,16 @@ class InputReader:
             parsed arguments
 
         """
-        self.parser = self._get_parser_()
 
         if cl_args is None:
-            cl_args = sys.argv[1:]
-        else:
-            pass
+            return
+
+        if isinstance(cl_args, os.PathLike):
+            cl_args = list(cl_args)
+        elif isinstance(cl_args, str):
+            cl_args = cl_args.split(" ")
+
+        self.parser = self._get_parser_()
         args = self.parser.parse_args(cl_args)
 
         if args.version:
@@ -77,22 +90,19 @@ class InputReader:
 
         if len(args.input_file) == 0:
             raise NameError("Input file path must be specified")
-            # print('Input file path must be specified')
-            # return None
 
-        # ''.join(args.input_file)).resolve()
-        self.input_path = pathlib.Path(args.input_file[0]).resolve()
+        self._input_path = pathlib.Path(args.input_file[0]).resolve()
         if self.input_path.is_file():
-            self.input_path = str(self.input_path)
+            self._input_path = str(self.input_path)
         else:
             raise FileNotFoundError(
                 "Input file '{}' does not exist.".format(str(self.input_path))
             )
 
         if args.output:
-            self.output_path = args.output
+            self._output_path = args.output
         else:
-            self.output_path = self.input_path + ".output"
+            self._output_path = self.input_path + ".output"
 
         if args.numpy:
             os.environ["DESC_USE_NUMPY"] = "True"
@@ -103,9 +113,6 @@ class InputReader:
 
     def _get_parser_(self):
         """Gets parser for command line arguments.
-
-        Parameters
-        ----------
 
         Returns
         -------
@@ -133,6 +140,8 @@ class InputReader:
 
         if fname is None:
             fname = self.input_path
+        else:
+            self._input_path = fname
 
         # default values
         inputs = {
@@ -164,10 +173,12 @@ class InputReader:
 
         inputs["output_path"] = self.output_path
 
-        if self.args.quiet:
+        if self.args is not None and self.args.quiet:
             inputs["verbose"] = 0
-        else:
+        elif self.args is not None:
             inputs["verbose"] = self.args.verbose
+        else:
+            inputs["verbose"] = 1
 
         file = open(fname, "r")
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
@@ -179,7 +190,7 @@ class InputReader:
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
-                self.vmec_to_desc_input_(self.input_path, path)
+                self.vmec_to_desc_input(self.input_path, path)
                 print("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
@@ -485,16 +496,11 @@ class InputReader:
         inputs : dict
             dictionary of input parameters
 
-        Returns
-        -------
-
         """
 
         # default to use self.inputs
         if inputs is None:
             inputs = self.inputs
-        else:
-            pass
 
         f = open(filename, "w+")
 
@@ -560,7 +566,7 @@ class InputReader:
 
         f.close()
 
-    def vmec_to_desc_input_(self, vmec_fname, desc_fname):
+    def vmec_to_desc_input(self, vmec_fname, desc_fname):
         """Converts a VMEC input file to an equivalent DESC input file
 
         Parameters
@@ -569,9 +575,6 @@ class InputReader:
             filename of VMEC input file
         desc_fname : str or path-like
             filename of DESC input file. If it already exists it is overwritten.
-
-        Returns
-        -------
 
         """
 
@@ -999,9 +1002,6 @@ class InputReader:
 
 def get_parser():
     """Gets parser for command line arguments.
-
-    Parameters
-    ----------
 
     Returns
     -------

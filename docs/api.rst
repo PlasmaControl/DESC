@@ -34,6 +34,14 @@ Transform
       
    desc.transform.Transform
 
+IO
+***
+
+.. autosummary::
+   :toctree: api/io/
+   :recursive:
+      
+   desc.io.InputReader
     
 Boundary Conditions
 *******************
@@ -60,12 +68,6 @@ Equilibrium
 
        
     
-IO
-***
-
-.. automodule:: desc.io
-    :members:
-    :undoc-members:
 
 Objective Functions
 *******************

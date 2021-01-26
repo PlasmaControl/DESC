@@ -11,9 +11,6 @@ def write_ascii(fname, equil):
     equil : dict
         dictionary of equilibrium parameters.
 
-    Returns
-    -------
-
     """
 
     cR = equil["cR"]
@@ -77,8 +74,6 @@ def write_ascii(fname, equil):
     # close file
     file.truncate()
     file.close()
-
-    return None
 
 
 def read_ascii(filename):

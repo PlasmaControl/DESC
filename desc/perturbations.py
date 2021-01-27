@@ -8,12 +8,7 @@ __all__ = ["perturb"]
 
 
 def perturb(
-    eq,
-    deltas,
-    order=0,
-    Jx=None,
-    verbose=1,
-    copy=True,
+    eq, deltas, order=0, Jx=None, verbose=1, copy=True,
 ):
     """Perturbs an Equilibrium wrt input parameters.
 
@@ -75,6 +70,8 @@ def perturb(
     # 2nd order
     if order > 1:
 
+        RHS1 = RHS
+
         # partial derivatives wrt state vector (x)
         Jxi = np.linalg.pinv(Jx, rcond=1e-6)
         timer.start("df/dxx computation")
@@ -83,8 +80,8 @@ def perturb(
         RHS += 0.5 * np.tensordot(
             Jxx,
             np.tensordot(
-                np.tensordot(Jxi, RHS, axes=1),
-                np.tensordot(RHS.T, Jxi.T, axes=1),
+                np.tensordot(Jxi, RHS1, axes=1),
+                np.tensordot(RHS1.T, Jxi.T, axes=1),
                 axes=0,
             ),
             axes=2,
@@ -100,11 +97,7 @@ def perturb(
             timer.start("df/dcc computation ({})".format(key))
             Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
             timer.stop("df/dcc computation ({})".format(key))
-            RHS += 0.5 * np.tensordot(
-                Jcc,
-                np.tensordot(dc, dc, axes=0),
-                axes=2,
-            )
+            RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
             if verbose > 1:
                 timer.disp("df/dcc computation ({})".format(key))
 
@@ -112,9 +105,7 @@ def perturb(
             Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
             timer.stop("df/dxc computation ({})".format(key))
             RHS -= np.tensordot(
-                Jxc,
-                np.tensordot(Jxi, np.tensordot(RHS, dc, axes=0), axes=1),
-                axes=2,
+                Jxc, np.tensordot(Jxi, np.tensordot(RHS1, dc, axes=0), axes=1), axes=2,
             )
             if verbose > 1:
                 timer.disp("df/dxc computation ({})".format(key))

@@ -1015,7 +1015,7 @@ def convert_to_sfl(equil, L=None, M=None, N=None, index="ansi"):
     # find theta corresponding to vartheta from lambda
     i = 0
     for rho, vartheta, zeta in sfl_grid.nodes:
-        args = (rho, vartheta, zeta, equil.L_lmn, equil.L_basis)
+        args = (rho, vartheta, zeta, equil)
         t = fsolve(sfl_err, vartheta, args=args)
         theta[i] = t
         i += 1
@@ -1045,7 +1045,7 @@ def convert_to_sfl(equil, L=None, M=None, N=None, index="ansi"):
     return R_lmn, Z_lmn, R_basis, Z_basis
 
 
-def sfl_err(theta, rho, vartheta, zeta, L_lmn, L_basis):
+def sfl_err(theta, rho, vartheta, zeta, equil):
     """f(vartheta,zeta) = vartheta - theta - lambda(theta,zeta)
     Parameters
     ----------
@@ -1057,10 +1057,8 @@ def sfl_err(theta, rho, vartheta, zeta, L_lmn, L_basis):
         sfl poloidal angle
     zeta : float
         toroidal angle
-    L_lmn : ndarray
-        spectral coefficients of lambda(rho,theta,zeta) -- sfl coordinate map
-    L_basis : FourierZernikeBasis
-        basis for the  L_lmn coefficients
+    equil : Equilibrium
+        equilibrium
 
     Returns
     -------
@@ -1069,7 +1067,6 @@ def sfl_err(theta, rho, vartheta, zeta, L_lmn, L_basis):
     """
 
     node = np.array([[rho, theta[0], zeta]])
-    L_grid = Grid(node)
-    L_transform = Transform(L_grid, L_basis)
-    lmbda = L_transform.transform(L_lmn)
+    grid = Grid(node)
+    lmbda = equil.compute_toroidal_coords(grid)["lambda"]
     return vartheta - theta - lmbda

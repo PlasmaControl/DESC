@@ -2,6 +2,10 @@ import numpy as np
 from desc.backend import jnp, put
 
 
+# lambda(rho,theta,zeta) = lambda(1,theta,zeta) * rho^lmbda_exp
+lmbda_exp = 2
+
+
 """These functions perform the core calculations of physical quantities.
 They are used as methods of the Configuration class, and also used to compute
 quantities in the objective functions.
@@ -208,7 +212,7 @@ def compute_toroidal_coords(
     toroidal_coords = {}
     toroidal_coords["R"] = R_transform.transform(R_lmn)
     toroidal_coords["Z"] = Z_transform.transform(Z_lmn)
-    toroidal_coords["lambda"] = L_transform.transform(L_mn) * rho ** 2
+    toroidal_coords["lambda"] = L_transform.transform(L_mn) * rho ** lmbda_exp
     toroidal_coords["0"] = jnp.zeros_like(toroidal_coords["R"])
 
     return toroidal_coords
@@ -667,10 +671,10 @@ def compute_magnetic_field(
 
     # lambda derivatives
     toroidal_coords["lambda_t"] = (
-        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** 2
+        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** lmbda_exp
     )
     toroidal_coords["lambda_z"] = (
-        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** 2 * zeta_ratio
+        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
     )
 
     magnetic_field = {}
@@ -797,10 +801,10 @@ def compute_magnetic_field_axis(
 
     # lambda derivatives
     toroidal_coords["lambda_t"] = (
-        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** 2
+        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** lmbda_exp
     )
     toroidal_coords["lambda_z"] = (
-        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** 2 * zeta_ratio
+        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
     )
 
     # toroidal coordinate 2nd derivatives
@@ -1181,19 +1185,24 @@ def compute_current_density(
 
     # lambda derivatives
     toroidal_coords["lambda_rt"] = (
-        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] * 2
+        L_transform.transform(L_mn, 0, 1, 0)
+        * profiles["rho"] ** (lmbda_exp - 1)
+        * lmbda_exp
     )
     toroidal_coords["lambda_rz"] = (
-        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] * 2 * zeta_ratio
+        L_transform.transform(L_mn, 0, 0, 1)
+        * profiles["rho"] ** (lmbda_exp - 1)
+        * lmbda_exp
+        * zeta_ratio
     )
     toroidal_coords["lambda_tt"] = (
-        L_transform.transform(L_mn, 0, 2, 0) * profiles["rho"] ** 2
+        L_transform.transform(L_mn, 0, 2, 0) * profiles["rho"] ** lmbda_exp
     )
     toroidal_coords["lambda_tz"] = (
-        L_transform.transform(L_mn, 0, 1, 1) * profiles["rho"] ** 2 * zeta_ratio
+        L_transform.transform(L_mn, 0, 1, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
     )
     toroidal_coords["lambda_zz"] = (
-        L_transform.transform(L_mn, 0, 0, 2) * profiles["rho"] ** 2 * zeta_ratio
+        L_transform.transform(L_mn, 0, 0, 2) * profiles["rho"] ** lmbda_exp * zeta_ratio
     )
 
     # covariant basis derivatives

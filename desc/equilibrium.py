@@ -60,18 +60,19 @@ class Equilibrium(_Configuration, IOAble):
 
     # TODO: add optimizer, objective, grid, transform to io_attrs
     # and figure out why it wont save
-    _io_attrs_ = _Configuration._io_attrs_ + ["_solved", "_x0", "_M_grid", "_N_grid"]
+    _io_attrs_ = _Configuration._io_attrs_ + [
+        "_solved",
+        "_x0",
+        "_M_grid",
+        "_N_grid",
+    ]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
         {"_Configuration": _Configuration, "ObjectiveFunction": ObjectiveFunction}
     )
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
 
         super().__init__(
@@ -388,13 +389,7 @@ class Equilibrium(_Configuration, IOAble):
         return Equilibrium(inputs=inputs)
 
     def solve(
-        self,
-        ftol=1e-6,
-        xtol=1e-6,
-        gtol=1e-6,
-        verbose=1,
-        maxiter=None,
-        options={},
+        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -448,8 +443,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

@@ -355,11 +355,137 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L,
-                M=M,
-                N=N,
-                NFP=self._NFP,
-                endpoint=self._endpoint,
+                L=L, M=M, N=N, NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
+            )
+            self._sort_nodes()
+
+
+class QuadratureGrid(Grid):
+    """Grid used for numerical quadrature.
+
+    Parameters
+    ----------
+    L : int
+        radial grid resolution (L radial nodes, Defualt = 1)
+    M : int
+        poloidal grid resolution (M poloidal nodes, Default = 1)
+    N : int
+        toroidal grid resolution (N toroidal nodes, Default = 1)
+    NFP : int
+        number of field periods (Default = 1)
+    sym : bool
+        True for stellarator symmetry, False otherwise (Default = False)
+
+    """
+
+    def __init__(
+        self,
+        L=1,
+        M=1,
+        N=1,
+        NFP=1,
+        sym=False,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ):
+
+        self._file_format_ = file_format
+
+        if load_from is None:
+            self._L = L
+            self._M = M
+            self._N = N
+            self._NFP = NFP
+            self._sym = sym
+
+            self._nodes, self._weights = self._create_nodes(
+                L=self._L, M=self._M, N=self._N, NFP=self._NFP,
+            )
+
+            self._enforce_symmetry()
+            self._sort_nodes()
+            self._find_axis()
+
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
+
+    def _create_nodes(
+        self, L=1, M=1, N=1, NFP=1,
+    ):
+        """
+
+        Parameters
+        ----------
+        L : int
+            radial grid resolution (L radial nodes, Defualt = 1)
+        M : int
+            poloidal grid resolution (M poloidal nodes, Default = 1)
+        N : int
+            toroidal grid resolution (N toroidal nodes, Default = 1)
+        NFP : int
+            number of field periods (Default = 1)
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            node coordinates, in (rho,theta,zeta)
+        weights : ndarray of float, size(num_nodes,)
+            weight for each node, based on local volume around the node
+
+        """
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+
+        # rho
+        r, wr = special.js_roots(self._L, 2, 2)
+
+        # theta/vartheta
+        t = np.linspace(0, 2 * np.pi, self._M, endpoint=False)
+        wt = 2 * np.pi / self._M * np.ones_like(t)
+
+        # zeta/phi
+        z = np.linspace(0, 2 * np.pi / self._NFP, self._N, endpoint=False)
+        wz = 2 * np.pi / self._N * np.ones_like(z)
+
+        r, t, z = np.meshgrid(r, t, z, indexing="ij")
+        r = r.flatten()
+        t = t.flatten()
+        z = z.flatten()
+
+        wr, wt, wz = np.meshgrid(wr, wt, wz, indexing="ij")
+        wr = wr.flatten()
+        wt = wt.flatten()
+        wz = wz.flatten()
+
+        nodes = np.stack([r, t, z]).T
+        weights = wr * wt * wz
+
+        return nodes, weights
+
+    def change_resolution(self, L, M, N):
+        """Change the resolution of the grid
+
+        Parameters
+        ----------
+        L : int
+            new radial grid resolution (L radial nodes)
+        M : int
+            new poloidal grid resolution (M poloidal nodes)
+        N : int
+            new toroidal grid resolution (N toroidal nodes)
+
+        """
+        if L != self._L or M != self._M or N != self._N:
+            self._L = L
+            self._M = M
+            self._N = N
+            self._nodes, self._weights = self._create_nodes(
+                L=L, M=M, N=N, NFP=self._NFP
             )
             self._sort_nodes()
 
@@ -442,13 +568,7 @@ class ConcentricGrid(Grid):
             )
 
     def _create_nodes(
-        self,
-        M,
-        N,
-        NFP=1,
-        axis=False,
-        index="ansi",
-        surfs="cheb1",
+        self, M, N, NFP=1, axis=False, index="ansi", surfs="cheb1",
     ):
         """
 

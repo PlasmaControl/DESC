@@ -1,10 +1,12 @@
 import numpy as np
 from desc.backend import jnp, cho_factor, cho_solve, qr
+from desc.utils import isalmostequal
 
 
-def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
-    """
-    Solve trust region subproblem the dog-leg method.
+def solve_trust_region_dogleg(
+    g, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
+):
+    """Solve trust region subproblem the dog-leg method.
 
     Parameters
     ----------
@@ -18,6 +20,8 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
         We are allowed to wander only this far away from the origin.
     f : ndarray, optional
         function values for least squares dogleg step
+    initial_alpha : float
+        initial guess for levenberg-marquadt parameter - unused by this method
 
     Returns
     -------
@@ -25,6 +29,8 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
         The proposed step.
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        "levenberg-marquadt" parameter - unused by this method
 
     Notes
     -----
@@ -40,7 +46,7 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
         p_newton = -1 / scale * hess.solve(f)
     if jnp.linalg.norm(p_newton) < trust_radius:
         hits_boundary = False
-        return p_newton, hits_boundary
+        return p_newton, hits_boundary, initial_alpha
 
     # This is the predicted optimum along the direction of steepest descent.
     gBg = hess.quadratic(scale ** 2 * g, scale ** 2 * g)
@@ -52,7 +58,7 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
     if p_cauchy_norm >= trust_radius:
         p_boundary = p_cauchy * (trust_radius / p_cauchy_norm)
         hits_boundary = True
-        return p_boundary, hits_boundary
+        return p_boundary, hits_boundary, initial_alpha
 
     # Compute the intersection of the trust region boundary
     # and the line segment connecting the Cauchy and Newton points.
@@ -64,10 +70,12 @@ def solve_trust_region_dogleg(g, hess, scale, trust_radius, f=None):
     p_boundary = p_cauchy + tb * delta
     hits_boundary = True
 
-    return p_boundary, hits_boundary
+    return p_boundary, hits_boundary, initial_alpha
 
 
-def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
+def solve_trust_region_2d_subspace(
+    grad, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
+):
     """Solve a trust region problem over the 2d subspace spanned by the gradient
     and Newton direction
 
@@ -83,6 +91,8 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
         We are allowed to wander only this far away from the origin.
     f : ndarray, optional
         function values for least squares subspace step
+    initial_alpha : float
+        initial guess for levenberg-marquadt parameter - unused by this method
 
     Returns
     -------
@@ -90,6 +100,8 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
         The proposed step.
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        "levenberg-marquadt" parameter - unused by this method
 
     """
     if hess.is_pos_def and f is None:
@@ -102,7 +114,8 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
     S = np.vstack([grad, p_newton]).T
     S, _ = qr(S, mode="economic")
     g = S.T.dot(scale * grad)
-    B = S.T.dot(scale[:, jnp.newaxis] * hess.dot(scale[:, jnp.newaxis] * S))
+    Sscale = S * scale[:, jnp.newaxis]
+    B = hess.quadratic(Sscale, Sscale)
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
@@ -112,7 +125,7 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
         R, lower = cho_factor(B)
         q = -cho_solve((R, lower), g)
         if np.dot(q, q) <= trust_radius ** 2:
-            return S.dot(q), True
+            return S.dot(q), True, initial_alpha
     except np.linalg.linalg.LinAlgError:
         pass
 
@@ -133,64 +146,58 @@ def solve_trust_region_2d_subspace(grad, hess, scale, trust_radius, f=None):
     q = q[:, i]
     p = S.dot(q)
 
-    return p, False
+    return p, False, initial_alpha
 
 
-# not used yet, need to get some other stuff working first
-# TODO: give this the same signature as the others?
+def solve_lsq_trust_region_exact(
+    grad, jac, scale, trust_radius, f, initial_alpha=None, **kwargs
+):
+    """Solve a trust-region problem arising in least-squares using near exact method
 
-
-def solve_lsq_trust_region(
-    n, m, uf, s, V, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
-):  # pragma: no cover
-    """Solve a trust-region problem arising in least-squares minimization.
-    This function implements a method described by J. J. More [1]_ and used
-    in MINPACK, but it relies on a single SVD of Jacobian instead of series
-    of Cholesky decompositions. Before running this function, compute:
-    ``U, s, VT = svd(J, full_matrices=False)``.
     Parameters
     ----------
-    n : int
-        Number of variables.
-    m : int
-        Number of residuals.
-    uf : ndarray
-        Computed as U.T.dot(f).
-    s : ndarray
-        Singular values of J.
-    V : ndarray
-        Transpose of VT.
+    grad : ndarray
+        gradient of objective function
+    jac : OptimizerDerivative
+        jacobian of objective function
+    scale : ndarray
+        scaling array for gradient and jacobian
     trust_radius : float
         Radius of a trust region.
+    f : ndarray
+        residual vector
     initial_alpha : float, optional
         Initial guess for alpha, which might be available from a previous
         iteration. If None, determined automatically.
-    rtol : float, optional
-        Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
-    max_iter : int, optional
-        Maximum allowed number of iterations for the root-finding procedure.
+
     Returns
     -------
     p : ndarray, shape (n,)
         Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
     alpha : float
         Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
         Sometimes called Levenberg-Marquardt parameter.
-    n_iter : int
-        Number of iterations made by root-finding procedure. Zero means
-        that Gauss-Newton step was selected as the solution.
-    References
-    ----------
-    .. [1] More, J. J., "The Levenberg-Marquardt Algorithm: Implementation
-           and Theory," Numerical Analysis, ed. G. A. Watson, Lecture Notes
-           in Mathematics 630, Springer Verlag, pp. 105-116, 1977.
+
     """
+
+    rtol = kwargs.get("rtol", 0.01)
+    max_iter = kwargs.get("max_iter", 10)
+    m, n = jac.shape
+    if not hasattr(jac, "svd"):
+        raise ValueError("exact trust region method only works with svd derivative")
+    if not isalmostequal(scale):
+        raise ValueError(
+            "exact trust region method does not currently work with diagonal scaling"
+        )
+    u, s, v = jac.svd()
+    uf = u.T.dot(f)
 
     def phi_and_derivative(alpha, suf, s, trust_radius):
         """Function of which to find zero.
         It is defined as "norm of regularized (by alpha) least-squares
-        solution minus `trust_radius`". Refer to [1]_.
+        solution minus `trust_radius`".
         """
         denom = s ** 2 + alpha
         p_norm = np.linalg.norm(suf / denom)
@@ -201,14 +208,14 @@ def solve_lsq_trust_region(
     suf = s * uf
 
     # Check if J has full rank and try Gauss-Newton step.
-    threshold = EPS * m * s[0]
+    threshold = np.finfo(s.dtype).eps * m * s[0]
     full_rank = s[-1] > threshold
     if full_rank:
-        p = -V.dot(uf / s)
-        if norm(p) <= trust_radius:
-            return p, 0.0, 0
+        p = -v.dot(uf / s)
+        if np.linalg.norm(p) <= trust_radius:
+            return p, False, 0.0
 
-    alpha_upper = norm(suf) / trust_radius
+    alpha_upper = np.linalg.norm(suf) / trust_radius
 
     if full_rank:
         phi, phi_prime = phi_and_derivative(0.0, suf, s, trust_radius)
@@ -216,7 +223,7 @@ def solve_lsq_trust_region(
     else:
         alpha_lower = 0.0
 
-    if initial_alpha is None or not full_rank and initial_alpha == 0:
+    if np.isnan(initial_alpha) or not full_rank and initial_alpha == 0:
         alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
     else:
         alpha = initial_alpha
@@ -237,14 +244,14 @@ def solve_lsq_trust_region(
         if np.abs(phi) < rtol * trust_radius:
             break
 
-    p = -V.dot(suf / (s ** 2 + alpha))
+    p = -v.dot(suf / (s ** 2 + alpha))
 
     # Make the norm of p equal to trust_radius, p is changed only slightly during
     # this. It is done to prevent p lie outside the trust region (which can
     # cause problems later).
-    p *= trust_radius / norm(p)
+    p *= trust_radius / np.linalg.norm(p)
 
-    return p, alpha, it + 1
+    return p, True, alpha
 
 
 def update_tr_radius(

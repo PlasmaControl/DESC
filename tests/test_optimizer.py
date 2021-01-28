@@ -1,21 +1,23 @@
 import unittest
 import numpy as np
 
-from desc.optimize import fmin_scalar
+from desc.backend import jnp
+from desc.optimize import fmintr, lsqtr
 from desc.optimize.utils import make_spd, chol_U_update
 from scipy.optimize import rosen, rosen_der, rosen_hess
 from desc.derivatives import Derivative
 from numpy.random import default_rng
 
 
-def ellipsoid(x, p, q):
-    i = jnp.arange(x.size) + 1
-    d = x.size
-    return jnp.sum((i / d) ** p * x ** (2 + q * 2 * i))
-
-
-ellipsoid_grad = Derivative(ellipsoid, argnum=0, mode="grad")
-ellipsoid_hess = Derivative(ellipsoid, argnum=0, mode="hess")
+def fun(x, p):
+    a0 = x * p[0]
+    a1 = jnp.exp(-(x ** 2) * p[1])
+    a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
+    a3 = jnp.sum(
+        jnp.array([(x + 2) ** -(i * 2) * pi ** (i + 1) for i, pi in enumerate(p[3:])]),
+        axis=0,
+    )
+    return a0 + a1 + 3 * a2 + a3
 
 
 class TestUtils(unittest.TestCase):
@@ -54,7 +56,7 @@ class TestFmin(unittest.TestCase):
         x0 = rando.random(7)
         true_x = np.ones(7)
 
-        out = fmin_scalar(
+        out = fmintr(
             rosen,
             x0,
             rosen_der,
@@ -75,7 +77,7 @@ class TestFmin(unittest.TestCase):
 
         x0 = rando.random(7)
         true_x = np.ones(7)
-        out = fmin_scalar(
+        out = fmintr(
             rosen,
             x0,
             rosen_der,
@@ -96,7 +98,7 @@ class TestFmin(unittest.TestCase):
 
         x0 = rando.random(7)
         true_x = np.ones(7)
-        out = fmin_scalar(
+        out = fmintr(
             rosen,
             x0,
             rosen_der,
@@ -116,7 +118,7 @@ class TestFmin(unittest.TestCase):
 
         x0 = rando.random(7)
         true_x = np.ones(7)
-        out = fmin_scalar(
+        out = fmintr(
             rosen,
             x0,
             rosen_der,
@@ -130,3 +132,59 @@ class TestFmin(unittest.TestCase):
             options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
+
+
+class TestLSQTR(unittest.TestCase):
+    def test_lsqtr_exact(self):
+
+        p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+        x = np.linspace(-1, 1, 100)
+        y = fun(x, p)
+
+        def res(p):
+            return fun(x, p) - y
+
+        rando = default_rng(seed=0)
+        p0 = p + 1 * (rando.random(p.size) - 0.5)
+
+        grad = Derivative(lambda x: np.sum(res(x) ** 2), 0, "grad")
+        jac = Derivative(res, 0, "fwd")
+
+        out = lsqtr(
+            res,
+            p0,
+            grad,
+            jac,
+            verbose=0,
+            method="exact",
+            x_scale=1,
+            options={"jac_recompute_interval": 1},
+        )
+        np.testing.assert_allclose(out["x"], p)
+
+    def test_lsqtr_dogleg(self):
+
+        p = np.array([1.5, 2.5, 3.5, 4.5, 1.5, 2.5])
+        x = np.linspace(-1, 1, 100)
+        y = fun(x, p)
+
+        def res(p):
+            return fun(x, p) - y
+
+        rando = default_rng(seed=0)
+        p0 = p + 1 * (rando.random(p.size) - 0.5)
+
+        grad = Derivative(lambda x: np.sum(res(x) ** 2), 0, "grad")
+        jac = Derivative(res, 0, "fwd")
+
+        out = lsqtr(
+            res,
+            p0,
+            grad,
+            jac,
+            verbose=0,
+            method="dogleg",
+            x_scale=1,
+            options={"jac_recompute_interval": 1},
+        )
+        np.testing.assert_allclose(out["x"], p)

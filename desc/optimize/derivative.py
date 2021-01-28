@@ -137,18 +137,21 @@ class CholeskyHessian(OptimizerDerivative):
 
     @property
     def min_eig(self):
+        """an estimate for the minimum eigenvalue of the matrix"""
         return self._min_eig
 
     @property
     def is_pos_def(self):
+        """whether the matrix is positive definite"""
         return self._is_pos_def
 
     @property
     def negative_curvature_direction(self):
+        """a direction corresponding to a negative eigenvalue"""
         return self._negative_curvature_direction
 
     def _auto_scale_init(self, delta_x, delta_grad):
-        # Heuristic to scale matrix at first iteration.
+        """Heuristic to scale matrix at first iteration"""
         # Described in Nocedal and Wright "Numerical Optimization"
         # p.143 formula (6.20).
         s_norm2 = np.dot(delta_x, delta_x)
@@ -162,23 +165,13 @@ class CholeskyHessian(OptimizerDerivative):
         self._initialized = True
 
     def recompute(self, x):
+        """recompute the full matrix at the current point"""
         H = self._hessfun(x, *self._hessfun_args)
         H = make_spd(H, delta=self.min_curvature, tol=0.1)
         self._U = jnp.linalg.cholesky(H).T
 
     def update(self, x_new, x_old, grad_new, grad_old):
-        """Update internal matrix.
-        Update Hessian matrix or its inverse (depending on how 'approx_type'
-        is defined) using information about the last evaluated points.
-        Parameters
-        ----------
-        delta_x : ndarray
-            The difference between two points the gradient
-            function have been evaluated at: ``delta_x = x2 - x1``.
-        delta_grad : ndarray
-            The difference between the gradients:
-            ``delta_grad = grad(x2) - grad(x1)``.
-        """
+        """Update internal matrix"""
         x_new = np.asarray(x_new)
         x_old = np.asarray(x_old)
         grad_new = np.asarray(grad_new)
@@ -196,11 +189,11 @@ class CholeskyHessian(OptimizerDerivative):
                 self._auto_scale_init(delta_x, delta_grad)
             elif self._initialization == "hessfun":
                 self.recompute(x_new)
-
+                return
         self._bfgs_update(delta_x, delta_grad)
 
     def _bfgs_update(self, delta_x, delta_grad):
-
+        """rank 2 update using BFGS rule"""
         if np.all(delta_x == 0.0):
             return
         if np.all(delta_grad == 0.0):
@@ -235,28 +228,191 @@ class CholeskyHessian(OptimizerDerivative):
         self._U = chol_U_update(np.asarray(self._U), v, beta)
 
     def get_matrix(self):
+        """get the current internal matrix"""
         return jnp.dot(self._U.T, self._U)
 
     def get_inverse(self):
+        """get the inverse of the internal matrix"""
         return cho_solve((self._U, False), jnp.eye(self._n))
 
     def dot(self, x):
+        """compute H@x"""
         return jnp.dot(self._U.T, jnp.dot(self._U, x))
 
-    def solve(self, x):
-        return cho_solve((self._U, False), x)
+    def solve(self, b):
+        """solve Hx=b for x"""
+        return cho_solve((self._U, False), b)
 
     def get_scale(self, prev_scale=None):
+        """get diagonal scaling vector"""
         return compute_jac_scale(self._U, prev_scale)
 
     def quadratic(self, u, v):
+        """evaluate quadratic form"""
         uu = jnp.dot(self._U, u)
         vv = jnp.dot(self._U, v)
-        return jnp.dot(uu, vv)
+        return jnp.dot(uu.T, vv)
+
+
+class SVDJacobian(OptimizerDerivative):
+    def __init__(
+        self,
+        m,
+        n,
+        init_jac=None,
+        jacfun=None,
+        jacfun_args=(),
+    ):
+        self._m = m
+        self._n = n
+        self._shape = (m, n)
+        self._is_pos_def = True
+        self._min_eig = None
+        self._negative_curvature_direction = None
+        self._rcond = max(m, n) * np.finfo(np.float64).eps
+
+        if jacfun is not None:
+            if callable(jacfun):
+                self._jacfun = jacfun
+                self._jacfun_args = jacfun_args
+            else:
+                raise ValueError(colored("jacfun should be callable or None", "red"))
+        else:
+            self._jacfun = None
+            self._jacfun_args = ()
+
+        if init_jac in [None, "auto"] and jacfun is None:
+            self._U = np.eye(m, n)
+            self._S = np.ones(n)
+            self._V = np.eye(n, n)
+            self._initialized = True
+            self._initialization = "eye"
+        elif init_jac is None and jacfun is not None:
+            self._U = np.eye(m, n)
+            self._S = np.ones(n)
+            self._V = np.eye(n, n)
+            self._initialized = False
+            self._initialization = "jacfun"
+        elif isinstance(init_jac, str):
+            raise ValueError(colored("unknown jacobian initialization", "red"))
+        else:
+            u, s, vh = jnp.linalg.svd(init_jac, full_matrices=False)
+            self._U = u
+            self._S = s
+            self._V = vh.T
+            self._initialized = True
+            self._initialization = "init_jac"
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def min_eig(self):
+        """an estimate for the minimum eigenvalue"""
+        return self._min_eig
+
+    @property
+    def is_pos_def(self):
+        """whether the matrix is positive definite"""
+        return self._is_pos_def
+
+    @property
+    def negative_curvature_direction(self):
+        """a direction corresponding to a negative eigenvalue"""
+        return self._negative_curvature_direction
+
+    def recompute(self, x):
+        """recompute the full matrix at the current point"""
+        J = self._jacfun(x, *self._jacfun_args)
+        u, s, vh = jnp.linalg.svd(J, full_matrices=False)
+        self._U = u
+        self._S = s
+        self._V = vh.T
+
+    def update(self, x_new, x_old, f_new, f_old):
+        """Update internal matrix."""
+
+        x_new = np.asarray(x_new)
+        x_old = np.asarray(x_old)
+        f_new = np.asarray(f_new)
+        f_old = np.asarray(f_old)
+
+        delta_x = x_new - x_old
+        delta_f = f_new - f_old
+
+        if np.all(delta_x == 0.0):
+            return
+        if np.all(delta_f == 0.0):
+            return
+        if not self._initialized:
+            if self._initialization == "jacfun":
+                self.recompute(x_new)
+                return
+
+        self._broyden_update(delta_x, delta_f)
+
+    def _broyden_update(self, delta_x, delta_f):
+        """rank 1 update using broydens rule"""
+        if np.all(delta_x == 0.0):
+            return
+        if np.all(delta_f == 0.0):
+            return
+
+        u = (delta_f - self.dot(delta_x)) / np.linalg.norm(delta_x) ** 2
+        v = delta_x
+
+        J = self.get_matrix()
+        J += u.reshape((-1, 1)) * v.reshape((1, -1))
+        u, s, vh = jnp.linalg.svd(J, full_matrices=False)
+        self._U = u
+        self._S = s
+        self._V = vh.T
+
+    def get_matrix(self):
+        """get the current internal matrix"""
+        return jnp.dot(self._U * self._S, self._V.T)
+
+    def get_inverse(self):
+        """get the pseudoinverse of the internal matrix"""
+        sinv = jnp.where(self._S > self._S[0] * self._rcond, 1 / self._S, 0)
+        return jnp.dot(self._V, sinv * self._U.T)
+
+    def svd(self):
+        """return components of the svd"""
+        return self._U, self._S, self._V
+
+    def dot(self, x):
+        """compute J@x"""
+        return jnp.dot(self._U * self._S, jnp.dot(self._V.T, x))
+
+    def solve(self, b):
+        """solve Jx=b for x (least squares)"""
+        sinv = jnp.where(self._S > self._S[0] * self._rcond, 1 / self._S, 0)
+        return jnp.dot(self._V, sinv * jnp.dot(self._U.T, b))
+
+    def get_scale(self, prev_scale=None):
+        """get diagonal scaling vector"""
+        return compute_jac_scale(self._S * self._V.T, prev_scale)
+
+    def quadratic(self, u, v):
+        """evaluate quadratic form"""
+        uu = jnp.dot(self._S * self._V.T, u)
+        vv = jnp.dot(self._S * self._V.T, v)
+        return jnp.dot(uu.T, vv)
+
+
+def compute_jac_scale(A, prev_scale_inv=None):
+    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
 
 
 # TODO: pivoting QR for rank deficient jacobian
-class QRJacobian(OptimizerDerivative):
+class QRJacobian(OptimizerDerivative):  # pragma: no cover
     def __init__(
         self,
         m,
@@ -307,17 +463,21 @@ class QRJacobian(OptimizerDerivative):
 
     @property
     def min_eig(self):
+        """an estimate for the minimum eigenvalue"""
         return self._min_eig
 
     @property
     def is_pos_def(self):
+        """whether the matrix is positive definite"""
         return self._is_pos_def
 
     @property
     def negative_curvature_direction(self):
+        """a direction corresponding to a negative eigenvalue"""
         return self._negative_curvature_direction
 
     def recompute(self, x):
+        """recompute the full internal matrix at the current point"""
         J = self._jacfun(x, *self._jacfun_args)
         Q, R = qr(J, mode="economic")
         self._Q = Q
@@ -341,11 +501,11 @@ class QRJacobian(OptimizerDerivative):
         if not self._initialized:
             if self._initialization == "jacfun":
                 self.recompute(x_new)
-
+                return
         self._broyden_update(delta_x, delta_f)
 
     def _broyden_update(self, delta_x, delta_f):
-
+        """rank 1 update using broydens rule"""
         if np.all(delta_x == 0.0):
             return
         if np.all(delta_f == 0.0):
@@ -359,31 +519,32 @@ class QRJacobian(OptimizerDerivative):
         self._Q, self._R = scipy.linalg.qr_update(Q, R, u, v)
 
     def get_matrix(self):
+        """get the current internal matrix"""
         return jnp.dot(self._Q, self._R)
 
     def get_inverse(self):
+        """get the pseudoinverse of the internal matrix"""
         return solve_triangular(self._R, self._Q.T)
 
+    def qr(self):
+        """return the components of the qr"""
+        return self._Q, self._R
+
     def dot(self, x):
+        """compute J@x"""
         return jnp.dot(self._Q, jnp.dot(self._R, x))
 
-    def solve(self, x):
-        y = jnp.dot(self._Q.T, x)
+    def solve(self, b):
+        """solve Jx=b for x (least squares)"""
+        y = jnp.dot(self._Q.T, b)
         return solve_triangular(self._R, y)
 
     def get_scale(self, prev_scale=None):
+        """get diagonal scaling vector"""
         return compute_jac_scale(self._R, prev_scale)
 
     def quadratic(self, u, v):
+        """evaluate quadratic form"""
         uu = jnp.dot(self._R, u)
         vv = jnp.dot(self._R, v)
-        return jnp.dot(uu, vv)
-
-
-def compute_jac_scale(A, prev_scale_inv=None):
-    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
-
-    if prev_scale_inv is not None:
-        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
-    return 1 / scale_inv, scale_inv
+        return jnp.dot(uu.T, vv)

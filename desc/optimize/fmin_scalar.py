@@ -17,7 +17,7 @@ from .tr_subproblems import (
 )
 
 
-def fmin_scalar(
+def fmintr(
     fun,
     x0,
     grad,
@@ -143,11 +143,11 @@ def fmin_scalar(
     hess_min_curvature = options.pop("hessian_minimum_curvature", None)
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
-    return_all = options.pop("return_all", False)
-    return_tr = options.pop("return_tr", False)
+    return_all = options.pop("return_all", True)
+    return_tr = options.pop("return_tr", True)
 
     if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0 and callable(hess):
-        hess_recompute_iters = np.arange(1, maxiter, hess_recompute_freq)
+        hess_recompute_iters = np.arange(0, maxiter, hess_recompute_freq)
     elif np.size(hess_recompute_freq) == 1 or not callable(hess):  # never recompute
         hess_recompute_iters = []
     else:
@@ -183,6 +183,7 @@ def fmin_scalar(
     if hess_scale:
         scale, scale_inv = hess.get_scale()
     else:
+        x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
     # initial trust region radius
@@ -207,7 +208,6 @@ def fmin_scalar(
     step_norm = np.inf
     actual_reduction = np.inf
     ratio = 1  # ratio between actual reduction and predicted reduction
-    dg_norm = np.inf
 
     if verbose > 1:
         print_header_nonlinear()
@@ -216,6 +216,8 @@ def fmin_scalar(
         allx = [x]
     if return_tr:
         alltr = [trust_radius]
+
+    alpha = np.nan  # "Levenberg-Marquardt" parameter
 
     while True:
 
@@ -230,7 +232,6 @@ def fmin_scalar(
             f,
             step_norm,
             x_norm,
-            dg_norm,
             g_norm,
             ratio,
             ftol,
@@ -246,110 +247,101 @@ def fmin_scalar(
             max_nhev,
         )
         if success is not None:
-            result = OptimizeResult(
-                x=x,
-                success=success,
-                fun=f,
-                jac=g,
-                hess=hess.get_matrix(),
-                inv_hess=hess.get_inverse(),
-                optimality=g_norm,
-                nfev=nfev,
-                ngev=ngev,
-                nhev=nhev,
-                nit=iteration,
-                message=message,
-            )
             break
 
-        # Solve the sub-problem.
-        # This gives us the proposed step relative to the current position
-        # and it tells us whether the proposed step
-        # has reached the trust region boundary or not.
-        try:
-            step_h, hits_boundary = subproblem(g, hess, scale, trust_radius)
+        actual_reduction = -1
+        while actual_reduction <= 0 and nfev < max_nfev:
+            # Solve the sub-problem.
+            # This gives us the proposed step relative to the current position
+            # and it tells us whether the proposed step
+            # has reached the trust region boundary or not.
+            try:
+                step_h, hits_boundary, alpha = subproblem(g, hess, scale, trust_radius)
 
-        except np.linalg.linalg.LinAlgError:
-            result = OptimizeResult(
-                x=x,
-                success=False,
-                fun=f,
-                jac=g,
-                hess=hess.get_matrix(),
-                inv_hess=hess.get_inverse(),
-                optimality=g_norm,
-                nfev=nfev,
-                ngev=ngev,
-                nhev=nhev,
-                nit=iteration,
-                message=status_messages["err"],
+            except np.linalg.linalg.LinAlgError:
+                success = (False,)
+                message = (status_messages["err"],)
+                break
+
+            # geodesic acceleration
+            if ga_accept_threshold > 0:
+                g0 = g
+                g1 = grad(x + ga_fd_step * step_h * scale, *args)
+                ngev += 1
+                dg = (g1 - g0) / ga_fd_step ** 2
+                ga_step_h = -scale_inv * hess.solve(dg) + 1 / ga_fd_step * step_h
+                ga_ratio = np.linalg.norm(
+                    scale * ga_step_h, ord=xnorm_ord
+                ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
+                if ga_ratio < ga_accept_threshold:
+                    step_h += ga_step_h
+            else:
+                ga_ratio = -1
+                ga_step_h = np.zeros_like(step_h)
+
+            # calculate the predicted value at the proposed point
+            predicted_reduction = f - evaluate_quadratic_form(
+                step_h, f, g, hess, scale=scale
             )
-            break
 
-        # geodesic acceleration
-        if ga_accept_threshold > 0:
-            g0 = g
-            g1 = grad(x + ga_fd_step * step_h * scale, *args)
-            ngev += 1
-            dg = (g1 - g0) / ga_fd_step ** 2
-            ga_step_h = -scale_inv * hess.solve(dg) + 1 / ga_fd_step * step_h
-            ga_ratio = np.linalg.norm(
-                scale * ga_step_h, ord=xnorm_ord
-            ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
-            if ga_ratio < ga_accept_threshold:
-                step_h += ga_step_h
-        else:
-            ga_ratio = -1
-            ga_step_h = np.zeros_like(step_h)
+            # calculate actual reduction and step norm
+            step = scale * step_h
+            step_norm = np.linalg.norm(step, ord=xnorm_ord)
+            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+            x_new = x + step
+            f_new = fun(x_new, *args)
+            nfev += 1
+            actual_reduction = f - f_new
 
-        # calculate the predicted value at the proposed point
-        predicted_reduction = f - evaluate_quadratic_form(
-            step_h, f, g, hess, scale=scale
-        )
+            # update the trust radius according to the actual/predicted ratio
+            trust_radius, ratio = update_tr_radius(
+                trust_radius,
+                actual_reduction,
+                predicted_reduction,
+                step_h_norm,
+                hits_boundary,
+                max_trust_radius,
+                min_trust_radius,
+                tr_increase_threshold,
+                tr_increase_ratio,
+                tr_decrease_threshold,
+                tr_decrease_ratio,
+                ga_ratio,
+                ga_accept_threshold,
+            )
+            if return_tr:
+                alltr.append(trust_radius)
 
-        #         if predicted_reduction <= 0:
-        #             result = OptimizeResult(x=x, success=False, fun=f, jac=g, hess=hess.get_matrix(),
-        #                                     inv_hess=hess.get_inverse(), optimality=g_norm, nfev=nfev,
-        #                                     ngev=ngev, nhev=nhev, nit=iteration, message=status_messages['approx'])
-        #             break
+            success, message = check_termination(
+                actual_reduction,
+                f,
+                step_norm,
+                x_norm,
+                g_norm,
+                ratio,
+                ftol,
+                xtol,
+                gtol,
+                iteration,
+                maxiter,
+                nfev,
+                max_nfev,
+                ngev,
+                max_ngev,
+                nhev,
+                max_nhev,
+            )
+            if success is not None:
+                break
 
-        # calculate actual reduction and step norm
-        step = scale * step_h
-        step_norm = np.linalg.norm(step, ord=xnorm_ord)
-        step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
-        x_new = x + step
-        f_new = fun(x_new, *args)
-        nfev += 1
-        actual_reduction = f - f_new
-
-        # update the trust radius according to the actual/predicted ratio
-        trust_radius, ratio = update_tr_radius(
-            trust_radius,
-            actual_reduction,
-            predicted_reduction,
-            step_h_norm,
-            hits_boundary,
-            max_trust_radius,
-            min_trust_radius,
-            tr_increase_threshold,
-            tr_increase_ratio,
-            tr_decrease_threshold,
-            tr_decrease_ratio,
-            ga_ratio,
-            ga_accept_threshold,
-        )
-        if return_tr:
-            alltr.append(trust_radius)
         # if reduction was enough, accept the step
-        if ratio > step_accept_threshold:
+        if actual_reduction > 0:
             x_old = x
             x = x_new
             f = f_new
             g_old = g
             g = grad(x, *args)
             ngev += 1
-            dg = g - g_old
-            dg_norm = np.linalg.norm(dg, ord=gnorm_ord)
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
             # don't update the hessian if we're going to recompute on the next iteration
@@ -364,29 +356,33 @@ def fmin_scalar(
                 )
 
             if callback is not None:
-                stop = callback(np.copy(x), result)
+                stop = callback(np.copy(x), *args)
                 if stop:
-                    result = OptimizeResult(
-                        x=x,
-                        success=None,
-                        fun=f,
-                        jac=g,
-                        hess=hess.get_matrix(),
-                        inv_hess=hess.get_inverse(),
-                        optimality=g_norm,
-                        nfev=nfev,
-                        ngev=ngev,
-                        nhev=nhev,
-                        nit=iteration,
-                        message=status_messages["callback"],
-                    )
+                    success = False
+                    message = status_messages["callback"]
                     break
 
             if return_all:
                 allx.append(x)
+        else:
+            step_norm = 0
+            actual_reduction = 0
 
-            iteration += 1
+        iteration += 1
 
+    result = OptimizeResult(
+        x=x,
+        success=success,
+        fun=f,
+        grad=g,
+        hess=hess.get_matrix(),
+        optimality=g_norm,
+        nfev=nfev,
+        ngev=ngev,
+        nhev=nhev,
+        nit=iteration,
+        message=message,
+    )
     if verbose > 0:
         if result["success"]:
             print(result["message"])

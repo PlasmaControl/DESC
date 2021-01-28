@@ -2,7 +2,7 @@ import numpy as np
 import scipy.optimize
 from termcolor import colored
 from desc.utils import Timer
-from desc.optimize import fmin_scalar, least_squares
+from desc.optimize import fmintr, lsqtr
 
 
 class Optimizer:
@@ -16,7 +16,7 @@ class Optimizer:
         "scipy-trust-krylov",
     ]
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
-    _desc_least_squares_methods = ["lsq-dogleg", "lsq-subspace"]
+    _desc_least_squares_methods = ["lsq-dogleg", "lsq-subspace", "lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scalar_methods = _desc_scalar_methods + _scipy_minimize_methods
     _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
@@ -181,7 +181,7 @@ class Optimizer:
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
             hess = self._hess if "bfgs" not in self.method else "bfgs"
-            out = fmin_scalar(
+            out = fmintr(
                 self._fun,
                 x0=x_init,
                 grad=self._grad,
@@ -204,7 +204,7 @@ class Optimizer:
             x_scale = "jac" if x_scale == "auto" else x_scale
             method = self.method.split("-")[1]
             jac = self._jac if "broyden" not in self.method else "broyden"
-            out = least_squares(
+            out = lsqtr(
                 self._fun,
                 x0=x_init,
                 grad=self._grad,

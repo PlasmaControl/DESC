@@ -112,9 +112,7 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
         Hessian/Jacobian matrix or operator
     scale : ndarray, shape(n,)
         scaling to apply. Scales hess -> scale*hess*scale, g-> scale*g
-    sqr : bool
-        whether HorJ should be treated as is or squared first
-        ie whether to compute x.T*HorJ*x or (x*HorJ).T*(HorJ*x)
+
     Returns
     -------
     values : float
@@ -184,7 +182,6 @@ def check_termination(
     F,
     dx_norm,
     x_norm,
-    dg_norm,
     g_norm,
     ratio,
     ftol,

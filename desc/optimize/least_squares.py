@@ -1,7 +1,7 @@
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
-from .derivative import QRJacobian
+from .derivative import SVDJacobian
 from .utils import (
     check_termination,
     OptimizeResult,
@@ -13,11 +13,12 @@ from .utils import (
 from .tr_subproblems import (
     solve_trust_region_dogleg,
     solve_trust_region_2d_subspace,
+    solve_lsq_trust_region_exact,
     update_tr_radius,
 )
 
 
-def least_squares(
+def lsqtr(
     fun,
     x0,
     grad,
@@ -87,11 +88,10 @@ def least_squares(
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, OptimizeResult state) -> bool``
+            ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``state``
-        is an `OptimizeResult` object, with the same fields
-        as the ones from the return. If callback returns True
+        where ``xk`` is the current parameter vector. and ``args``
+        are the same arguments passed to fun and jac. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -125,9 +125,11 @@ def least_squares(
         subproblem = solve_trust_region_dogleg
     elif method == "subspace":
         subproblem = solve_trust_region_2d_subspace
+    elif method == "exact":
+        subproblem = solve_lsq_trust_region_exact
     else:
         raise ValueError(
-            colored("method should be one of 'dogleg' or 'subspace'", "red")
+            colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
         )
 
     cost = 0.5 * jnp.dot(f, f)
@@ -145,11 +147,11 @@ def least_squares(
     )
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
-    return_all = options.pop("return_all", False)
-    return_tr = options.pop("return_tr", False)
+    return_all = options.pop("return_all", True)
+    return_tr = options.pop("return_tr", True)
 
     if np.size(jac_recompute_freq) == 1 and jac_recompute_freq > 0 and callable(jac):
-        jac_recompute_iters = np.arange(1, maxiter, jac_recompute_freq)
+        jac_recompute_iters = np.arange(0, maxiter, jac_recompute_freq)
     elif np.size(jac_recompute_freq) == 1 or not callable(jac):  # never recompute
         jac_recompute_iters = []
     else:
@@ -158,7 +160,7 @@ def least_squares(
     if jac == "broyden":
         if init_jac is None:
             init_jac = "auto"
-        jac = QRJacobian(
+        jac = SVDJacobian(
             m,
             n,
             init_jac,
@@ -167,7 +169,7 @@ def least_squares(
         )
 
     elif callable(jac):
-        jac = QRJacobian(
+        jac = SVDJacobian(
             m,
             n,
             init_jac,
@@ -181,6 +183,7 @@ def least_squares(
     if jac_scale:
         scale, scale_inv = jac.get_scale()
     else:
+        x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
     # initial trust region radius
@@ -204,8 +207,7 @@ def least_squares(
     success = None
     step_norm = np.inf
     actual_reduction = np.inf
-    ratio = 1  # ratio between actual reduction and predicted reduction
-    dg_norm = np.inf
+    ratio = 0  # ratio between actual reduction and predicted reduction
 
     if verbose > 1:
         print_header_nonlinear()
@@ -215,7 +217,7 @@ def least_squares(
     if return_tr:
         alltr = [trust_radius]
 
-    alpha = 0.0  # "Levenberg-Marquardt" parameter
+    alpha = np.nan  # "Levenberg-Marquardt" parameter
 
     while True:
 
@@ -225,12 +227,13 @@ def least_squares(
             if jac_scale:
                 scale, scale_inv = jac.get_scale(scale_inv)
 
+        if success is not None:
+            break
         success, message = check_termination(
             actual_reduction,
             cost,
             step_norm,
             x_norm,
-            dg_norm,
             g_norm,
             ratio,
             ftol,
@@ -245,117 +248,110 @@ def least_squares(
             njev,
             max_njev,
         )
-        if success is not None:
-            result = OptimizeResult(
-                x=x,
-                success=success,
-                cost=cost,
-                fun=f,
-                grad=g,
-                jac=jac.get_matrix(),
-                optimality=g_norm,
-                nfev=nfev,
-                ngev=ngev,
-                njev=njev,
-                nit=iteration,
-                message=message,
+
+        actual_reduction = -1
+        while actual_reduction <= 0 and nfev < max_nfev:
+            # Solve the sub-problem.
+            # This gives us the proposed step relative to the current position
+            # and it tells us whether the proposed step
+            # has reached the trust region boundary or not.
+            try:
+                step_h, hits_boundary, alpha = subproblem(
+                    g, jac, scale, trust_radius, f, alpha
+                )
+
+            except np.linalg.linalg.LinAlgError:
+                success = (False,)
+                message = (status_messages["err"],)
+                break
+
+            # geodesic acceleration
+            if ga_accept_threshold > 0:
+                f0 = f
+                f1 = fun(x + ga_fd_step * step_h * scale, *args)
+                nfev += 1
+                df = (f1 - f0) / ga_fd_step ** 2
+                ga_step_h = -scale_inv * jac.solve(df) + 1 / ga_fd_step * step_h
+                ga_ratio = np.linalg.norm(
+                    scale * ga_step_h, ord=xnorm_ord
+                ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
+                if ga_ratio < ga_accept_threshold:
+                    step_h += ga_step_h
+            else:
+                ga_ratio = -1
+                ga_step_h = np.zeros_like(step_h)
+
+            # calculate the predicted value at the proposed point
+            predicted_reduction = -evaluate_quadratic_form(
+                step_h, 0, g, jac, scale=scale
             )
-            break
 
-        # Solve the sub-problem.
-        # This gives us the proposed step relative to the current position
-        # and it tells us whether the proposed step
-        # has reached the trust region boundary or not.
-        try:
-            step_h, hits_boundary = subproblem(g, jac, scale, trust_radius, f)
+            # calculate actual reduction and step norm
+            step = scale * step_h
+            step_norm = np.linalg.norm(step, ord=xnorm_ord)
+            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+            x_new = x + step
+            f_new = fun(x_new, *args)
 
-        except np.linalg.linalg.LinAlgError:
-            result = OptimizeResult(
-                x=x,
-                success=False,
-                cost=cost,
-                fun=f,
-                grad=g,
-                hess=jac.get_matrix(),
-                optimality=g_norm,
-                nfev=nfev,
-                ngev=ngev,
-                njev=njev,
-                nit=iteration,
-                message=status_messages["err"],
+            cost_new = 0.5 * np.dot(f_new, f_new)
+            nfev += 1
+            actual_reduction = cost - cost_new
+
+            # update the trust radius according to the actual/predicted ratio
+            tr_old = trust_radius
+            trust_radius, ratio = update_tr_radius(
+                trust_radius,
+                actual_reduction,
+                predicted_reduction,
+                step_h_norm,
+                hits_boundary,
+                max_trust_radius,
+                min_trust_radius,
+                tr_increase_threshold,
+                tr_increase_ratio,
+                tr_decrease_threshold,
+                tr_decrease_ratio,
+                ga_ratio,
+                ga_accept_threshold,
             )
-            break
+            if return_tr:
+                alltr.append(trust_radius)
+            alpha *= tr_old / trust_radius
 
-        # geodesic acceleration
-        if ga_accept_threshold > 0:
-            g0 = g
-            g1 = grad(x + ga_fd_step * step_h * scale, *args)
-            ngev += 1
-            dg = (g1 - g0) / ga_fd_step ** 2
-            ga_step_h = -scale_inv * jac.solve(dg) + 1 / ga_fd_step * step_h
-            ga_ratio = np.linalg.norm(
-                scale * ga_step_h, ord=xnorm_ord
-            ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
-            if ga_ratio < ga_accept_threshold:
-                step_h += ga_step_h
-        else:
-            ga_ratio = -1
-            ga_step_h = np.zeros_like(step_h)
+            success, message = check_termination(
+                actual_reduction,
+                cost,
+                step_norm,
+                x_norm,
+                g_norm,
+                ratio,
+                ftol,
+                xtol,
+                gtol,
+                iteration,
+                maxiter,
+                nfev,
+                max_nfev,
+                ngev,
+                max_ngev,
+                njev,
+                max_njev,
+            )
+            if success is not None:
+                break
 
-        # calculate the predicted value at the proposed point
-        predicted_reduction = cost - evaluate_quadratic_form(
-            step_h, cost, g, jac, scale=scale
-        )
-
-        #         if predicted_reduction <= 0:
-        #             result = OptimizeResult(x=x, success=False, fun=f, jac=g, hess=hess.get_matrix(),
-        #                                     inv_hess=hess.get_inverse(), optimality=g_norm, nfev=nfev,
-        #                                     ngev=ngev, nhev=nhev, nit=iteration, message=status_messages['approx'])
-        #             break
-
-        # calculate actual reduction and step norm
-        step = scale * step_h
-        step_norm = np.linalg.norm(step, ord=xnorm_ord)
-        step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
-        x_new = x + step
-        f_new = fun(x_new, *args)
-        cost_new = 0.5 * np.dot(f_new, f_new)
-        nfev += 1
-        actual_reduction = cost - cost_new
-
-        # update the trust radius according to the actual/predicted ratio
-        trust_radius, ratio = update_tr_radius(
-            trust_radius,
-            actual_reduction,
-            predicted_reduction,
-            step_h_norm,
-            hits_boundary,
-            max_trust_radius,
-            min_trust_radius,
-            tr_increase_threshold,
-            tr_increase_ratio,
-            tr_decrease_threshold,
-            tr_decrease_ratio,
-            ga_ratio,
-            ga_accept_threshold,
-        )
-        if return_tr:
-            alltr.append(trust_radius)
         # if reduction was enough, accept the step
-        if ratio > step_accept_threshold:
+        if actual_reduction > 0:
             x_old = x
             x = x_new
             f_old = f
             f = f_new
             cost = cost_new
-            g_old = g
             g = grad(x, *args)
             ngev += 1
-            dg = g - g_old
-            dg_norm = np.linalg.norm(dg, ord=gnorm_ord)
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
-            # don't update the hessian if we're going to recompute on the next iteration
+            # don't update the jacobian if we're going to recompute on the next iteration
             if iteration + 1 not in jac_recompute_iters:
                 jac.update(x_new, x_old, f, f_old)
 
@@ -367,29 +363,34 @@ def least_squares(
                 )
 
             if callback is not None:
-                stop = callback(np.copy(x), result)
+                stop = callback(np.copy(x), *args)
                 if stop:
-                    result = OptimizeResult(
-                        x=x,
-                        success=None,
-                        cost=cost,
-                        fun=f,
-                        grad=g,
-                        jac=jac.get_matrix(),
-                        optimality=g_norm,
-                        nfev=nfev,
-                        ngev=ngev,
-                        njev=njev,
-                        nit=iteration,
-                        message=status_messages["callback"],
-                    )
+                    success = False
+                    message = status_messages["callback"]
                     break
 
             if return_all:
                 allx.append(x)
+        else:
+            step_norm = 0
+            actual_reduction = 0
 
-            iteration += 1
+        iteration += 1
 
+    result = OptimizeResult(
+        x=x,
+        success=success,
+        cost=cost,
+        fun=f,
+        grad=g,
+        jac=jac.get_matrix(),
+        optimality=g_norm,
+        nfev=nfev,
+        ngev=ngev,
+        njev=njev,
+        nit=iteration,
+        message=message,
+    )
     if verbose > 0:
         if result["success"]:
             print(result["message"])
@@ -402,7 +403,7 @@ def least_squares(
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
-        result["allvecs"] = allx
+        result["allx"] = allx
     if return_tr:
         result["alltr"] = alltr
     return result

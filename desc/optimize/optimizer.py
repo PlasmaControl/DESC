@@ -6,9 +6,32 @@ from desc.optimize import fmintr, lsqtr
 
 
 class Optimizer:
+    """A helper class to wrap several different optimization routines
+
+    Offers all of the ``scipy.optimize.least_squares`` routines  and several of the most
+    useful ``scipy.optimize.minimize`` routines.
+    Also offers several custom routines specifically designed for DESC, both scalar and
+    least squares routines with and without jacobian/hessian information.
+
+    Parameters
+    ----------
+    method : str
+        name of the optimizer to use. Options are:
+
+        * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-dogleg'``,
+          ``'scipy-trust-exact'``, ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
+        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
+        * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
+          ``'subspace-bfgs'``
+        * desc least squares routines: ``'lsq-exact'``, ``'lsq-dogleg'``, ``'lsq-subspace'``
+
+    objective : ObjectiveFunction
+        objective to be optimized
+
+    """
 
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
-    _scipy_minimize_methods = [
+    _scipy_scalar_methods = [
         "scipy-bfgs",
         "scipy-dogleg",
         "scipy-trust-exact",
@@ -18,11 +41,11 @@ class Optimizer:
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
     _desc_least_squares_methods = ["lsq-dogleg", "lsq-subspace", "lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
-    _scalar_methods = _desc_scalar_methods + _scipy_minimize_methods
+    _scalar_methods = _desc_scalar_methods + _scipy_scalar_methods
     _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
     _all_methods = (
         _scipy_least_squares_methods
-        + _scipy_minimize_methods
+        + _scipy_scalar_methods
         + _desc_scalar_methods
         + _desc_least_squares_methods
     )
@@ -58,6 +81,7 @@ class Optimizer:
 
     @property
     def method(self):
+        """str : name of the optimization method"""
         return self._method
 
     @method.setter
@@ -77,6 +101,7 @@ class Optimizer:
 
     @property
     def objective(self):
+        """ObjectiveFunction : the objective being optimized"""
         return self._objective
 
     @objective.setter
@@ -103,7 +128,18 @@ class Optimizer:
                 self._grad = self.objective.grad_x
 
     def compile(self, x, args, verbose=1):
+        """Calls the necessary functions to ensure the function is compiled
 
+        Parameters
+        ----------
+        x : ndarray
+            any array of the correct shape to trigger jit compilation
+        args : tuple
+            additional arguments passed to objective function and derivatives
+        verbose : int, optional
+            level of output
+
+        """
         if verbose > 0:
             print("Compiling objective function")
         self.timer.start("Compilation time")
@@ -133,6 +169,59 @@ class Optimizer:
         maxiter=None,
         options={},
     ):
+        """Optimize the objective function
+
+        Parameters
+        ----------
+        x_init : ndarray
+            initial guess. Should satisfy any constraints on x
+        args : tuple, optional
+            additional arguments passed to objective fun and derivatives
+        x_scale : array_like or 'auto', optional
+            Characteristic scale of each variable. Setting `x_scale` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting `x_scale` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to 'auto', the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
+        ftol : float or None, optional
+            Tolerance for termination by the change of the cost function. Default
+            is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+            and there was an adequate agreement between a local quadratic model and
+            the true model in the last step. If None, the termination by this
+            condition is disabled.
+        xtol : float or None, optional
+            Tolerance for termination by the change of the independent variables.
+            Default is 1e-8. Optimization is stopped when
+            ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
+            this condition is disabled.
+        gtol : float or None, optional
+            Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
+            Optimizer teriminates when ``norm(g) < gtol``, where
+            If None, the termination by this condition is disabled.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1-2 : display a termination report.
+            * 3 : display progress during iterations
+        maxiter : int, optional
+            maximum number of iterations. Defaults to size(x)*100
+        options : dict, optional
+            dictionary of optional keyword arguments to override default solver settings.
+            See the code for more details.
+
+        Returns
+        -------
+        res : OptimizeResult
+            The optimization result represented as a ``OptimizeResult`` object.
+            Important attributes are: ``x`` the solution array, ``success`` a
+            Boolean flag indicating if the optimizer exited successfully and
+            ``message`` which describes the cause of the termination. See
+            `OptimizeResult` for a description of other attributes.
+
+        """
+        # TODO: document options
         if not self.compiled:
             self.compile(x_init, args, verbose)
 
@@ -143,7 +232,7 @@ class Optimizer:
         if verbose > 0:
             print("Starting optimization")
 
-        if self.method in Optimizer._scipy_minimize_methods:
+        if self.method in Optimizer._scipy_scalar_methods:
 
             out = scipy.optimize.minimize(
                 self._fun,

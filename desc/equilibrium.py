@@ -26,28 +26,32 @@ class Equilibrium(_Configuration, IOAble):
     ----------
     inputs : dict
         Dictionary of inputs with the following required keys:
-            Psi : float, total toroidal flux (in Webers) within LCFS
-            NFP : int, number of field periods
-            L : int, radial resolution
-            M : int, poloidal resolution
-            N : int, toroidal resolution
-            profiles : ndarray, array of profile coeffs [l, p_l, i_l]
-            boundary : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
+
+        * ``'Psi'`` : float, total toroidal flux (in Webers) within LCFS
+        * ``'NFP'`` : int, number of field periods
+        * ``'L'`` : int, radial resolution
+        * ``'M'`` : int, poloidal resolution
+        * ``'N'`` : int, toroidal resolution
+        * ``'profiles'`` : ndarray, array of profile coeffs [l, p_l, i_l]
+        * ``'boundary'`` : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
+
         And the following optional keys:
-            sym : bool, is the problem stellarator symmetric or not, default is False
-            index : str, type of Zernike indexing scheme to use, default is 'ansi'
-            bdry_mode : str, how to calculate error at bdry, default is 'spectral'
-            zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
-            axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-            x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
-            R_lmn : ndarray, spectral coefficients of R
-            Z_lmn : ndarray, spectral coefficients of Z
-            L_lmn : ndarray, spectral coefficients of lambda
-            M_grid : int, resolution of real space nodes in poloidal/radial direction
-            N_grid : int, resolution of real space nodes in toroidal direction
-            node_mode : str, node pattern, default is "cheb1"
-            errr_mode : str, mode for equilibrium solution
-            optim_method : str, optimizer to use
+
+        * ``'sym'`` : bool, is the problem stellarator symmetric or not, default is False
+        * ``'index'`` : str, type of Zernike indexing scheme to use, default is 'ansi'
+        * ``'bdry_mode'`` : str, how to calculate error at bdry, default is 'spectral'
+        * ``'zeta_ratio'`` : float, Multiplier on the toroidal derivatives. Default = 1.0.
+        * ``'axis'`` : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
+        * ``'x'`` : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
+        * ``'R_lmn'`` : ndarray, spectral coefficients of R
+        * ``'Z_lmn'`` : ndarray, spectral coefficients of Z
+        * ``'L_lmn'`` : ndarray, spectral coefficients of lambda
+        * ``'M_grid'`` : int, resolution of real space nodes in poloidal/radial direction
+        * ``'N_grid'`` : int, resolution of real space nodes in toroidal direction
+        * ``'node_mode'`` : str, node pattern, default is "cheb1"
+        * ``'errr_mode'`` : str, mode for equilibrium solution
+        * ``'optim_method'`` : str, optimizer to use
+
     load_from : str file path OR file instance
         file to initialize from
     file_format : str
@@ -72,7 +76,11 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
 
         super().__init__(
@@ -389,7 +397,13 @@ class Equilibrium(_Configuration, IOAble):
         return Equilibrium(inputs=inputs)
 
     def solve(
-        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
+        self,
+        ftol=1e-6,
+        xtol=1e-6,
+        gtol=1e-6,
+        verbose=1,
+        maxiter=None,
+        options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -443,7 +457,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")
@@ -498,7 +513,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ----------
     inputs : dict or list
         either a dictionary of inputs or list of dictionaries. For more information
-        see inputs required by Equilibrium.
+        see inputs required by ``'Equilibrium'``.
         If solving using continuation method, a list should be given.
     load_from : str file path OR file instance
         file to initialize from

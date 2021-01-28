@@ -2,6 +2,8 @@
 API Documentation
 =================
 
+
+
 Basis
 *****
 
@@ -14,6 +16,29 @@ Basis
     desc.basis.DoubleFourierSeries
     desc.basis.FourierZernikeBasis
 
+Derivatives
+***********
+Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
+
+.. autosummary::
+    :toctree: api/derivatives
+    :recursive:
+
+    desc.derivatives.AutoDiffDerivative
+    desc.derivatives.FiniteDiffDerivative
+
+
+Equilibrium
+***********
+
+.. autosummary:: 
+    :toctree: api/equilibrium
+    :recursive:
+
+    desc.equilibrium.Equilibrium
+    desc.equilibrium.EquilibriaFamily
+
+    
 Grid
 ****
 
@@ -25,14 +50,6 @@ Grid
     desc.grid.LinearGrid
     desc.grid.ConcentricGrid
 
-Transform
-*********
-
-.. autosummary::
-   :toctree: api/transform/
-   :recursive:
-      
-   desc.transform.Transform
 
 IO
 ***
@@ -43,60 +60,72 @@ IO
       
    desc.io.InputReader
     
+Objective Functions
+*******************
+
+.. autosummary::
+    :toctree: api/objective_funs
+    :recursive:
+
+    desc.objective_funs.get_objective_function
+    desc.objective_funs.ForceErrorNodes
+    desc.objective_funs.EnergyVolIntegral
+
+Optimize
+********
+
+.. autosummary:: 
+   :toctree: api/optimize
+   :recursive:
+
+   desc.optimize.Optimizer
+   desc.optimize.fmintr
+   desc.optimize.lsqtr
+
+
+Perturbations
+*************
+
+.. autosummary:: 
+    :toctree: api/perturbations
+    :recursive:
+
+    desc.perturbations.perturb
+
+    
+Plotting
+********
+
+.. autosummary:: 
+    :toctree: api/plotting
+    :recursive:
+
+    desc.plotting.plot_1d
+    desc.plotting.plot_2d    
+    desc.plotting.plot_3d
+    desc.plotting.plot_surfaces
+    desc.plotting.plot_section   
+   
+
+Transform
+*********
+
+.. autosummary::
+   :toctree: api/transform/
+   :recursive:
+      
+   desc.transform.Transform
+
+   
 Boundary Conditions
 *******************
 
 .. automodule:: desc.boundary_conditions
     :members:
     :undoc-members:
-    :inherited-members:
-    
-Derivatives
-***********
+    :inherited-members:    
 
-.. automodule:: desc.derivatives
-    :members:
-    :undoc-members:
 
-Equilibrium
-***********
-
-.. automodule:: desc.equilibrium
-    :members:
-    :undoc-members:
-    :inherited-members:
-
-       
-    
-
-Objective Functions
-*******************
-
-.. automodule:: desc.objective_funs
-    :members:
-    :undoc-members:
-
-Optimize
-********
-
-.. automodule:: desc.optimize
-   :members:
-   :undoc-members:
-
-Perturbations
-*************
-
-.. automodule:: desc.perturbations
-    :members:
-    :undoc-members:
-
-Plotting
-********
-
-.. automodule:: desc.plotting
-    :members:
-    :undoc-members:
-    
 
 
 VMEC

@@ -23,7 +23,6 @@ def lsqtr(
     x0,
     grad,
     jac,
-    init_jac=None,
     args=(),
     method="dogleg",
     x_scale=1,
@@ -48,13 +47,11 @@ def lsqtr(
     jac : callable or 'broyden', optional:
         function to compute jacobian matrix of fun, or 'broyden' in which case the Broyden's
         method will be used to approximate the jacobian.
-    init_jac : array-like, optional
-        initial value for jacobian matrix, used if hess='broyden'
     args : tuple
         additional arguments passed to fun, grad, and jac
-    method : 'dogleg' or 'subspace'
+    method : 'exact', 'dogleg' or 'subspace'
         method to use for trust region subproblem
-    x_scale : array_like or 'hess', optional
+    x_scale : array_like or 'jac', optional
         Characteristic scale of each variable. Setting `x_scale` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         An alternative view is that the size of a trust region along jth
@@ -142,6 +139,7 @@ def lsqtr(
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     step_accept_threshold = options.pop("step_accept_threshold", 0.15)
+    init_jac = options.pop("init_jac", "auto")
     jac_recompute_freq = options.pop(
         "jac_recompute_interval", 1 if callable(jac) else 0
     )
@@ -158,8 +156,6 @@ def lsqtr(
         jac_recompute_iters = jac_recompute_freq
 
     if jac == "broyden":
-        if init_jac is None:
-            init_jac = "auto"
         jac = SVDJacobian(
             m,
             n,

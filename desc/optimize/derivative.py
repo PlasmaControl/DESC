@@ -115,7 +115,7 @@ class CholeskyHessian(OptimizerDerivative):
             self._U = np.eye(n)
             self._initialized = True
             self._initialization = "eye"
-        elif init_hess is None and hessfun is not None:
+        elif init_hess in [None, "auto"] and hessfun is not None:
             self._U = np.eye(n)
             self._initialized = False
             self._initialization = "hessfun"
@@ -287,7 +287,7 @@ class SVDJacobian(OptimizerDerivative):
             self._V = np.eye(n, n)
             self._initialized = True
             self._initialization = "eye"
-        elif init_jac is None and jacfun is not None:
+        elif init_jac in [None, "auto"] and jacfun is not None:
             self._U = np.eye(m, n)
             self._S = np.ones(n)
             self._V = np.eye(n, n)

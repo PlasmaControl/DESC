@@ -293,6 +293,8 @@ class Transform(IOAble):
         if self._built_pinv:
             return
         A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
+        # for weighted least squares
+        A = self.grid.weights[:, np.newaxis] * A
         if A.size:
             self._pinv = scipy.linalg.pinv(A, rcond=self._rcond)
         else:
@@ -387,7 +389,7 @@ class Transform(IOAble):
         return x
 
     def fit(self, x):
-        """Transform from physical domain to spectral using least squares fit
+        """Transform from physical domain to spectral using weighted least squares fit
 
         Parameters
         ----------
@@ -404,7 +406,7 @@ class Transform(IOAble):
             raise AttributeError(
                 "inverse transform must be built with Transform.build_pinv() before it can be used"
             )
-        return jnp.matmul(self._pinv, x)
+        return jnp.matmul(self._pinv, self.grid.weights * x)
 
     def change_resolution(
         self,

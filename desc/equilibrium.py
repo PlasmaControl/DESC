@@ -76,11 +76,7 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
 
         super().__init__(
@@ -397,13 +393,7 @@ class Equilibrium(_Configuration, IOAble):
         return Equilibrium(inputs=inputs)
 
     def solve(
-        self,
-        ftol=1e-6,
-        xtol=1e-6,
-        gtol=1e-6,
-        verbose=1,
-        maxiter=None,
-        options={},
+        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -439,6 +429,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("Starting optimization")
 
+        self.x0 = self.x
         x_init = self._optimizer.objective.BC_constraint.project(self.x)
         self.timer.start("Solution time")
 
@@ -457,8 +448,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

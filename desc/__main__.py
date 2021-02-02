@@ -1,4 +1,3 @@
-import numpy as np
 import sys
 import warnings
 from termcolor import colored

@@ -2,7 +2,7 @@ import numpy as np
 from termcolor import colored
 import warnings
 from collections import MutableSequence
-from desc.utils import Timer, expand_state
+from desc.utils import Timer
 from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint

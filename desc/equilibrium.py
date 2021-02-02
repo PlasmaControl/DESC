@@ -2,7 +2,8 @@ import numpy as np
 from termcolor import colored
 import warnings
 from collections import MutableSequence
-from desc.utils import Timer, expand_state
+
+from desc.utils import Timer
 from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
@@ -425,6 +426,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("Starting optimization")
 
+        self.x0 = self.x
         x_init = self._optimizer.objective.BC_constraint.project(self.x)
         self.timer.start("Solution time")
 

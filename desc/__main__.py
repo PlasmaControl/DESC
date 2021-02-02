@@ -1,4 +1,3 @@
-import numpy as np
 import sys
 import warnings
 from termcolor import colored
@@ -78,7 +77,7 @@ def main(cl_args=None):
         print("Reading input from {}".format(ir.input_path))
         print("Outputs will be written to {}".format(ir.output_path))
 
-    from desc.equilibrium import EquilibriaFamily, Equilibrium
+    from desc.equilibrium import EquilibriaFamily
     from desc.vmec import VMECIO
     from desc.backend import use_jax
     from desc.plotting import plot_surfaces, plot_section

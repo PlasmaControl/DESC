@@ -2,6 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from scipy.special import factorial
 from desc.utils import sign, flatten_list, equals
+
 from desc.io import IOAble
 
 __all__ = ["PowerSeries", "FourierSeries", "DoubleFourierSeries", "FourierZernikeBasis"]
@@ -224,13 +225,7 @@ class FourierSeries(Basis):
     """
 
     def __init__(
-        self,
-        N=0,
-        NFP=1,
-        sym=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -330,14 +325,7 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(
-        self,
-        M=0,
-        N=0,
-        NFP=1,
-        sym=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, M=0, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
     ):
 
         self._file_format_ = file_format

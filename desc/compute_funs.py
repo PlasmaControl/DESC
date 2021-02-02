@@ -2,10 +2,6 @@ import numpy as np
 from desc.backend import jnp, put
 
 
-# lambda(rho,theta,zeta) = lambda(1,theta,zeta) * rho^lmbda_exp
-lmbda_exp = 2
-
-
 """These functions perform the core calculations of physical quantities.
 They are used as methods of the Configuration class, and also used to compute
 quantities in the objective functions.
@@ -208,11 +204,10 @@ def compute_toroidal_coords(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    rho = i_transform.grid.nodes[:, 0]
     toroidal_coords = {}
     toroidal_coords["R"] = R_transform.transform(R_lmn)
     toroidal_coords["Z"] = Z_transform.transform(Z_lmn)
-    toroidal_coords["lambda"] = L_transform.transform(L_mn) * rho ** lmbda_exp
+    toroidal_coords["lambda"] = L_transform.transform(L_mn)
     toroidal_coords["0"] = jnp.zeros_like(toroidal_coords["R"])
 
     return toroidal_coords
@@ -670,12 +665,8 @@ def compute_magnetic_field(
     )
 
     # lambda derivatives
-    toroidal_coords["lambda_t"] = (
-        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** lmbda_exp
-    )
-    toroidal_coords["lambda_z"] = (
-        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
-    )
+    toroidal_coords["lambda_t"] = L_transform.transform(L_mn, 0, 1, 0)
+    toroidal_coords["lambda_z"] = L_transform.transform(L_mn, 0, 0, 1)
 
     magnetic_field = {}
     magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
@@ -800,12 +791,8 @@ def compute_magnetic_field_axis(
     axis = i_transform.grid.axis
 
     # lambda derivatives
-    toroidal_coords["lambda_t"] = (
-        L_transform.transform(L_mn, 0, 1, 0) * profiles["rho"] ** lmbda_exp
-    )
-    toroidal_coords["lambda_z"] = (
-        L_transform.transform(L_mn, 0, 0, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
-    )
+    toroidal_coords["lambda_t"] = L_transform.transform(L_mn, 0, 1, 0)
+    toroidal_coords["lambda_z"] = L_transform.transform(L_mn, 0, 0, 1)
 
     # toroidal coordinate 2nd derivatives
     toroidal_coords["R_rr"] = R_transform.transform(R_lmn, 2, 0, 0)
@@ -1184,26 +1171,11 @@ def compute_current_density(
     toroidal_coords["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2) * zeta_ratio
 
     # lambda derivatives
-    toroidal_coords["lambda_rt"] = (
-        L_transform.transform(L_mn, 0, 1, 0)
-        * profiles["rho"] ** (lmbda_exp - 1)
-        * lmbda_exp
-    )
-    toroidal_coords["lambda_rz"] = (
-        L_transform.transform(L_mn, 0, 0, 1)
-        * profiles["rho"] ** (lmbda_exp - 1)
-        * lmbda_exp
-        * zeta_ratio
-    )
-    toroidal_coords["lambda_tt"] = (
-        L_transform.transform(L_mn, 0, 2, 0) * profiles["rho"] ** lmbda_exp
-    )
-    toroidal_coords["lambda_tz"] = (
-        L_transform.transform(L_mn, 0, 1, 1) * profiles["rho"] ** lmbda_exp * zeta_ratio
-    )
-    toroidal_coords["lambda_zz"] = (
-        L_transform.transform(L_mn, 0, 0, 2) * profiles["rho"] ** lmbda_exp * zeta_ratio
-    )
+    toroidal_coords["lambda_rt"] = L_transform.transform(L_mn, 1, 1, 0)
+    toroidal_coords["lambda_rz"] = L_transform.transform(L_mn, 1, 0, 1)
+    toroidal_coords["lambda_tt"] = L_transform.transform(L_mn, 0, 2, 0)
+    toroidal_coords["lambda_tz"] = L_transform.transform(L_mn, 0, 1, 1)
+    toroidal_coords["lambda_zz"] = L_transform.transform(L_mn, 0, 0, 2)
 
     # covariant basis derivatives
     cov_basis["e_rho_r"] = jnp.array(

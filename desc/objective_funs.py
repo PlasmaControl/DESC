@@ -113,30 +113,37 @@ class ObjectiveFunction(IOAble, ABC):
         """ndarray : which derivatives are needed to compute"""
 
     @abstractmethod
-    def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
-        """compute the objective function"""
+    def compute(self, *args):
+        """compute the objective function
+
+        Parameters
+        ----------
+        args : list
+            (x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+
+        """
 
     @abstractmethod
-    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, *args):
         """compute the scalar form of the objective"""
 
     @abstractmethod
-    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, *args):
         """print the value of the objective"""
 
-    def grad_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def grad_x(self, *args):
         """Computes gradient vector of scalar form of the objective wrt to x"""
-        return self._grad.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._grad.compute(*args)
 
-    def hess_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def hess_x(self, *args):
         """Computes hessian matrix of scalar form of the objective wrt to x"""
-        return self._hess.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._hess.compute(*args)
 
-    def jac_x(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def jac_x(self, *args):
         """Computes jacobian matrx of vector form of the objective wrt to x"""
-        return self._jac.compute(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return self._jac.compute(*args)
 
-    def jvp(self, argnum, v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def jvp(self, argnum, v, *args):
         """Computes jacobian-vector product of the objective function
 
         Parameters
@@ -145,6 +152,8 @@ class ObjectiveFunction(IOAble, ABC):
             integer describing which argument of the objective should be differentiated.
         v : ndarray
             vector to multiply the jacobian matrix by
+        args : list
+            (x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
         Returns
         -------
@@ -152,9 +161,9 @@ class ObjectiveFunction(IOAble, ABC):
             Jacobian vector product
         """
         f = Derivative(self.compute, argnum=argnum, mode="jvp")
-        return f(v, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return f(v, *args)
 
-    def derivative(self, argnums, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def derivative(self, argnums, *args):
         """Computes arbitrary derivatives of the objective function
 
         Parameters
@@ -167,6 +176,8 @@ class ObjectiveFunction(IOAble, ABC):
             zeroth argument, while argnums=(3,5) would compute a mixed second
             derivative, first with respect to the third argument and then with
             respect to the fifth.
+        args : list
+            (x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
         Returns
         -------
@@ -177,6 +188,7 @@ class ObjectiveFunction(IOAble, ABC):
             argnums = (argnums,)
 
         f = self.compute
+        dims = [f(*args).size]
         for a in argnums:
             if isinstance(a, int) and a < 7:
                 f = Derivative(f, argnum=a)
@@ -189,8 +201,9 @@ class ObjectiveFunction(IOAble, ABC):
                         ObjectiveFunction.arg_names, a
                     )
                 )
+            dims.append(args[a].size)
 
-        return f(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        return f(*args).reshape(tuple(dims))
 
 
 class ForceErrorNodes(ObjectiveFunction):
@@ -351,9 +364,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_mn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -458,9 +469,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_mn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -631,14 +640,7 @@ class EnergyVolIntegral(ObjectiveFunction):
     def derivatives(self):
         """ndarray : which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-            ]
-        )
+        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],])
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -672,9 +674,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -757,9 +757,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (

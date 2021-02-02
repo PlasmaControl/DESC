@@ -6,14 +6,14 @@ NFP = 1
 Psi = 1.00000000E+00
 
 # spectral resolution
-M_pol  =  6, 12
+M_pol  =  6,  8
 N_tor  =  0
-M_grid = 12, 18
+M_grid = 12, 16
 N_grid =  0
 
 # continuation parameters
 bdry_ratio = 1
-pres_ratio = 0, 1
+pres_ratio = 1
 zeta_ratio = 1
 pert_order = 1
 
@@ -27,8 +27,8 @@ nfev = 100
 optim_method = scipy-trf
 errr_mode = force
 bdry_mode = spectral
-zern_mode = fringe
-node_mode = cheb1
+zern_mode = ansi
+node_mode = quad
 
 # pressure and rotational transform profiles
 l:   0	p =   1.25000000E-01	i =   1.00000000E+00

@@ -49,11 +49,12 @@ def perturb(
 
         # partial derivatives wrt state vector (x)
         if Jx is None:
+            if verbose > 0:
+                print("Computing df/dx")
             timer.start("df/dx computation")
             Jx = eq.objective.jac_x(*args)
             timer.stop("df/dx computation")
             RHS = eq.objective.compute(*args)
-
             if verbose > 1:
                 timer.disp("df/dx computation")
 
@@ -69,14 +70,15 @@ def perturb(
 
     # 2nd order
     if order > 1:
-
         RHS1 = RHS
 
         # partial derivatives wrt state vector (x)
+        if verbose > 0:
+            print("Computing d^2f/dx^2")
         Jxi = np.linalg.pinv(Jx, rcond=1e-6)
-        timer.start("df/dxx computation")
+        timer.start("d^2f/dx^2 computation")
         Jxx = eq.objective.derivative((0, 0), *args)
-        timer.stop("df/dxx computation")
+        timer.stop("d^2f/dx^2 computation")
         RHS += 0.5 * np.tensordot(
             Jxx,
             np.tensordot(
@@ -87,28 +89,28 @@ def perturb(
             axes=2,
         )
         if verbose > 1:
-            timer.disp("df/dxx computation")
+            timer.disp("d^2f/dx^2 computation")
 
         # partial derivatives wrt input parameters (c)
         for key, dc in deltas.items():
-
             if verbose > 0:
                 print("Perturbing {}".format(key))
-            timer.start("df/dcc computation ({})".format(key))
+
+            timer.start("d^2f/dc^2 computation ({})".format(key))
             Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
-            timer.stop("df/dcc computation ({})".format(key))
+            timer.stop("d^2f/dc^2 computation ({})".format(key))
             RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
             if verbose > 1:
-                timer.disp("df/dcc computation ({})".format(key))
+                timer.disp("d^2f/dc^2 computation ({})".format(key))
 
-            timer.start("df/dxc computation ({})".format(key))
+            timer.start("d^2f/dxdc computation ({})".format(key))
             Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
-            timer.stop("df/dxc computation ({})".format(key))
+            timer.stop("d^2f/dxdc computation ({})".format(key))
             RHS -= np.tensordot(
                 Jxc, np.tensordot(Jxi, np.tensordot(RHS1, dc, axes=0), axes=1), axes=2,
             )
             if verbose > 1:
-                timer.disp("df/dxc computation ({})".format(key))
+                timer.disp("d^2f/dxdc computation ({})".format(key))
 
     if copy:
         eq_new = eq.copy()

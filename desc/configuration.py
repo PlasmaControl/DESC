@@ -1,10 +1,10 @@
 import numpy as np
 import copy
 import warnings
-import matplotlib
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
+
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -15,7 +15,6 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
-
 from desc.compute_funs import (
     compute_profiles,
     compute_toroidal_coords,
@@ -74,11 +73,7 @@ class _Configuration(IOAble, ABC):
     }
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
         """Initializes a Configuration
 
@@ -167,9 +162,7 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -215,23 +208,14 @@ class _Configuration(IOAble, ABC):
             sym=self._Z_sym,
             index=self._index,
         )
-        self._L_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+        self._L_basis = FourierZernikeBasis(
+            L=1, M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym, index="chevron",
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
+            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
         )
 
         nonzero_modes = self._boundary[
@@ -406,9 +390,7 @@ class _Configuration(IOAble, ABC):
     def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_mn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
     @property

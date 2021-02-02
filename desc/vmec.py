@@ -691,6 +691,7 @@ class VMECIO:
     @staticmethod
     def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, lam=None, sym=True):
         """Interpolates VMEC data on a flux surface
+
         Parameters
         ----------
         Cmn : ndarray
@@ -705,10 +706,9 @@ class VMECIO:
             poloidal angles
         phi : ndarray, shape(Nt,Nz)
             toroidal angles
-        lam : ndarray shape(Ns,Nt,Nv)
-            lambda value to be added to theta on each flux surface
         sym : bool
             stellarator symmetry (Default value = True)
+
         Returns
         -------
         if sym = True
@@ -716,13 +716,14 @@ class VMECIO:
             where C has cosine symmetry and S has sine symmetry
         if sym = False
             X (ndarray): non-symmetric VMEC data interpolated at the angles (theta,phi)
-        """
 
+        """
         C_arr = []
         S_arr = []
         dim = Cmn.shape
         if lam is None:
             lam = np.zeros((dim[0], *theta.shape))
+
         for j in range(dim[1]):
 
             m = xm[j]
@@ -815,8 +816,8 @@ class VMECIO:
         ----------
         equil : Equilibrium
             desc equilibrium to compare
-        vmec_data : dict
-            dictionary of vmec outputs
+        vmec_data : str or path-like or dict
+            path to VMEC output file, or dictionary of vmec outputs
         Nr : int, optional
             number of rho contours
         Nt : int, optional
@@ -869,8 +870,8 @@ class VMECIO:
         Rv_desc = v_coords_desc["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
         Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
-        rtt, rtz = np.meshgrid(rt, rz, indexing="ij")
-        ttt, ttz = np.meshgrid(tt, tz, indexing="ij")
+        rtt, rzz = np.meshgrid(rt, rz, indexing="ij")
+        ttt, tzz = np.meshgrid(tt, tz, indexing="ij")
 
         _, L_vmec = cls.vmec_interpolate(
             np.zeros_like(vmec_data["lmns"]),
@@ -878,10 +879,8 @@ class VMECIO:
             vmec_data["xm"],
             vmec_data["xn"],
             ttt,
-            ttz,
+            tzz,
         )
-
-        tv = ttt - L_vmec
 
         Rr_vmec, Zr_vmec = cls.vmec_interpolate(
             vmec_data["rmnc"][idxes],
@@ -889,7 +888,7 @@ class VMECIO:
             vmec_data["xm"],
             vmec_data["xn"],
             rtt,
-            rtz,
+            rzz,
         )
 
         Rv_vmec, Zv_vmec = cls.vmec_interpolate(
@@ -898,7 +897,7 @@ class VMECIO:
             vmec_data["xm"],
             vmec_data["xn"],
             ttt,
-            ttz,
+            tzz,
             lam=L_vmec,
         )
 
@@ -916,14 +915,14 @@ class VMECIO:
 
     @classmethod
     def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Computes the average normalized area difference between vmec and desc equilibria
+        """Plots a comparison to VMEC flux surfaces
 
         Parameters
         ----------
         equil : Equilibrium
             desc equilibrium to compare
-        vmec_data : dict
-            dictionary of vmec outputs
+        vmec_data : str or path-like or dict
+            path to VMEC output file, or dictionary of vmec outputs
         Nr : int, optional
             number of rho contours to plot
         Nt : int, optional
@@ -937,22 +936,17 @@ class VMECIO:
             axes being plotted to
 
         """
+        if isinstance(vmec_data, (str, os.PathLike)):
+            vmec_data = cls.read_vmec_output(vmec_data)
         coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
         if equil.N == 0:
-            Nz = 1
-            rows = 1
-        else:
-            Nz = 6
-            rows = 2
-
-        if Nz == 1:
             fig, ax = plt.subplots(1, 1, figsize=(6, 6), squeeze=False)
         else:
             fig, ax = plt.subplots(2, 3, figsize=(16, 12), squeeze=False)
         ax = ax.flatten()
 
-        for k in range(Nz):
+        for k in range(len(ax)):
             ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
             s_vmec = ax[k].plot(
                 coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
@@ -960,12 +954,11 @@ class VMECIO:
             ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
 
             ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
-            ax[k].plot(
-                coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r-."
-            )
+            ax[k].plot(coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r:")
             s_desc = ax[k].plot(
-                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r-."
+                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r:"
             )
+
             ax[k].axis("equal")
             ax[k].set_xlabel("R")
             ax[k].set_ylabel("Z")
@@ -974,6 +967,7 @@ class VMECIO:
                 s_vmec[0].set_label("VMEC")
                 s_desc[0].set_label("DESC")
                 ax[k].legend(fontsize="xx-small")
+
         return fig, ax
 
 

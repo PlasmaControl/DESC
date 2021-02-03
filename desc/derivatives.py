@@ -208,11 +208,81 @@ class AutoDiffDerivative(_Derivative):
         """
         return self._compute(*args)
 
-    def _compute_jvp(self, v, *args):
-        tangents = [np.zeros_like(foo) if not np.isscalar(foo) else 0.0 for foo in args]
-        tangents[self.argnum] = v
-        y, u = jax.jvp(self._fun, args, tuple(tangents))
+    @classmethod
+    def compute_jvp(cls, fun, argnum, v, *args):
+        """Compute df/dx*v
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        v : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp : array-like
+            jacobian times vectors v, summed over different argnums
+        """
+        tangents = [
+            jnp.zeros_like(foo) if not jnp.isscalar(foo) else 0.0 for foo in args
+        ]
+        if jnp.isscalar(argnum):
+            argnum = (argnum,)
+            v = (v,) if not isinstance(v, tuple) else v
+        else:
+            argnum = tuple(argnum)
+            v = (v,) if not isinstance(v, tuple) else v
+
+        for i, vi in enumerate(v):
+            tangents[argnum[i]] = vi
+        y, u = jax.jvp(fun, args, tuple(tangents))
         return u
+
+    @classmethod
+    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
+        """Compute d^2f/dx^2*v1*v2
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum1, argnum2 : int or tuple of int
+            arguments to differentiate with respect to. First entry corresponds to v1,
+            second to v2
+        v1,v2 : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp2 : array-like
+            second derivative times vectors v1, v2, summed over different argnums
+        """
+        if np.isscalar(argnum1):
+            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            argnum1 = (argnum1,)
+        else:
+            v1 = tuple(v1)
+
+        if np.isscalar(argnum2):
+            argnum2 = (argnum2 + len(argnum1),)
+            v2 = (v2,) if not isinstance(v2, tuple) else v2
+        else:
+            argnum2 = tuple([i + len(argnum1) for i in argnum2])
+            v2 = tuple(v2)
+
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, *dx1, *args)
+        return d2fdx2(v1, v2)
+
+    def _compute_jvp(self, v, *args):
+        return self.compute_jvp(self._fun, self.argnum, v, *args)
 
     @property
     def mode(self):
@@ -371,17 +441,103 @@ class FiniteDiffDerivative(_Derivative):
             J = np.ravel(J)
         return J
 
-    def _compute_jvp(self, v, *args):
+    @classmethod
+    def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
+        """Compute df/dx*v
 
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        v : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp : array-like
+            jacobian times vectors v, summed over different argnums
+        """
+        rel_step = kwargs.get("rel_step", 1e-3)
+
+        if np.isscalar(argnum):
+            nargs = 1
+            argnum = (argnum,)
+            v = (v,) if not isinstance(v, tuple) else v
+        else:
+            nargs = len(argnum)
+            v = (v,) if not isinstance(v, tuple) else v
+
+        f = np.array(
+            [
+                cls._compute_jvp_1arg(fun, argnum[i], v[i], *args, rel_step=rel_step)
+                for i in range(nargs)
+            ]
+        )
+        return np.sum(f, axis=0)
+
+    @classmethod
+    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
+        """Compute d^2f/dx^2*v1*v2
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum1, argnum2 : int or tuple of int
+            arguments to differentiate with respect to. First entry corresponds to v1,
+            second to v2
+        v1,v2 : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp2 : array-like
+            second derivative times vectors v1, v2, summed over different argnums
+        """
+        if np.isscalar(argnum1):
+            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            argnum1 = (argnum1,)
+        else:
+            v1 = tuple(v1)
+
+        if np.isscalar(argnum2):
+            argnum2 = (argnum2 + len(argnum1),)
+            v2 = (v2,) if not isinstance(v2, tuple) else v2
+        else:
+            argnum2 = tuple([i + len(argnum1) for i in argnum2])
+            v2 = tuple(v2)
+
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, *dx1, *args)
+        return d2fdx2(v1, v2)
+
+    def _compute_jvp(self, v, *args):
+        return self.compute_jvp(
+            self._fun, self._argnum, v, *args, rel_step=self.rel_step
+        )
+
+    @classmethod
+    def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
+        """compute a jvp wrt to a single argument"""
+        rel_step = kwargs.get("rel_step", 1e-3)
         normv = np.linalg.norm(v)
-        vh = v / normv
-        x = args[self.argnum]
+        if normv != 0:
+            vh = v / normv
+        else:
+            vh = v
+        x = args[argnum]
 
         def f(x):
-            tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
-            return self._fun(*tempargs)
+            tempargs = args[0:argnum] + (x,) + args[argnum + 1 :]
+            return fun(*tempargs)
 
-        h = self.rel_step
+        h = rel_step
         df = (f(x + h * vh) - f(x - h * vh)) / (2 * h)
         return df * normv
 

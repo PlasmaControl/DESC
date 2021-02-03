@@ -89,3 +89,68 @@ class TestDerivative(unittest.TestCase):
         A1 = hess(y)
 
         np.testing.assert_allclose(A1, A)
+
+
+class TestJVP(unittest.TestCase):
+    @staticmethod
+    def fun(x, c):
+        Amat = np.arange(12).reshape((4, 3))
+        return jnp.dot(Amat, (x + c) ** 2)
+
+    x = np.ones(3).astype(float)
+    c = np.arange(3).astype(float)
+
+    dx = np.array([1, 2, 3]).astype(float)
+    dc = np.array([3, 4, 5]).astype(float)
+
+    def test_autodiff_jvp(self):
+
+        df = AutoDiffDerivative.compute_jvp(self.fun, 0, self.dx, self.x, self.c)
+        np.testing.assert_allclose(df, np.array([44.0, 128.0, 212.0, 296.0]))
+        df = AutoDiffDerivative.compute_jvp(self.fun, 1, self.dc, self.x, self.c)
+        np.testing.assert_allclose(df, np.array([76.0, 232.0, 388.0, 544.0]))
+        df = AutoDiffDerivative.compute_jvp(
+            self.fun, (0, 1), (self.dx, self.dc), self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([120.0, 360.0, 600.0, 840.0]))
+
+    def test_finitediff_jvp(self):
+
+        df = FiniteDiffDerivative.compute_jvp(self.fun, 0, self.dx, self.x, self.c)
+        np.testing.assert_allclose(df, np.array([44.0, 128.0, 212.0, 296.0]))
+        df = FiniteDiffDerivative.compute_jvp(self.fun, 1, self.dc, self.x, self.c)
+        np.testing.assert_allclose(df, np.array([76.0, 232.0, 388.0, 544.0]))
+        df = FiniteDiffDerivative.compute_jvp(
+            self.fun, (0, 1), (self.dx, self.dc), self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([120.0, 360.0, 600.0, 840.0]))
+
+    def test_autodiff_jvp2(self):
+
+        df = AutoDiffDerivative.compute_jvp2(
+            self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([60.0, 180.0, 300.0, 420.0]))
+        df = AutoDiffDerivative.compute_jvp2(
+            self.fun, 1, 1, self.dc + 1, self.dc, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([160.0, 532.0, 904.0, 1276.0]))
+        df = AutoDiffDerivative.compute_jvp2(
+            self.fun, 0, 1, self.dx, self.dc, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([76.0, 232.0, 388.0, 544.0]))
+
+    def test_finitediff_jvp2(self):
+
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([60.0, 180.0, 300.0, 420.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 1, 1, self.dc + 1, self.dc, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([160.0, 532.0, 904.0, 1276.0]))
+        df = FiniteDiffDerivative.compute_jvp2(
+            self.fun, 0, 1, self.dx, self.dc, self.x, self.c
+        )
+        np.testing.assert_allclose(df, np.array([76.0, 232.0, 388.0, 544.0]))

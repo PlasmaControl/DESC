@@ -146,22 +146,46 @@ class ObjectiveFunction(IOAble, ABC):
     def jvp(self, argnum, v, *args):
         """Computes jacobian-vector product of the objective function
 
+        Eg, df/dx*v
+
         Parameters
         ----------
-        argnum : int
+        argnum : int or tuple of int
             integer describing which argument of the objective should be differentiated.
-        v : ndarray
-            vector to multiply the jacobian matrix by
+        v : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
         args : list
             (x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
 
         Returns
         -------
         df : ndarray
+            Jacobian vector product, summed over different argnums
+        """
+        f = Derivative.compute_jvp(self.compute, argnum, v, *args)
+        return f
+
+    def jvp2(self, argnum1, argnum2, v1, v2, *args):
+        """Computes 2nd derivative jacobian-vector product of the objective function
+
+        Eg, d^2f/dx^2*v1*v2
+
+        Parameters
+        ----------
+        argnum1, argnum2 : int or tuple of int
+            integer describing which argument of the objective should be differentiated.
+        v1, v2 : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
+        args : list
+            (x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        d2f : ndarray
             Jacobian vector product
         """
-        f = Derivative(self.compute, argnum=argnum, mode="jvp")
-        return f(v, *args)
+        f = Derivative.compute_jvp2(self.compute, argnum1, argnum2, v1, v2, *args)
+        return f
 
     def derivative(self, argnums, *args):
         """Computes arbitrary derivatives of the objective function
@@ -364,7 +388,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -469,7 +495,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -640,7 +668,14 @@ class EnergyVolIntegral(ObjectiveFunction):
     def derivatives(self):
         """ndarray : which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
-        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ]
+        )
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -674,7 +709,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -757,7 +794,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (

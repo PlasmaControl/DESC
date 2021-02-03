@@ -275,7 +275,6 @@ class Optimizer:
                 x0=x_init,
                 grad=self._grad,
                 hess=hess,
-                init_hess=None,
                 args=args,
                 method=method,
                 x_scale=x_scale,
@@ -290,7 +289,8 @@ class Optimizer:
 
         elif self.method in Optimizer._desc_least_squares_methods:
 
-            x_scale = "jac" if x_scale == "auto" else x_scale
+            if "exact" in self.method:
+                x_scale = 1
             method = self.method.split("-")[1]
             jac = self._jac if "broyden" not in self.method else "broyden"
             out = lsqtr(
@@ -298,7 +298,6 @@ class Optimizer:
                 x0=x_init,
                 grad=self._grad,
                 jac=jac,
-                init_jac=None,
                 args=args,
                 method=method,
                 x_scale=x_scale,

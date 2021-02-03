@@ -4,7 +4,7 @@ from desc.utils import equals
 from desc.io import IOAble
 from scipy import special
 
-__all__ = ["Grid", "LinearGrid", "ConcentricGrid"]
+__all__ = ["Grid", "LinearGrid", "QuadratureGrid", "ConcentricGrid"]
 
 
 class Grid(IOAble):
@@ -355,7 +355,12 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
+                L=L,
+                M=M,
+                N=N,
+                NFP=self._NFP,
+                axis=self._axis,
+                endpoint=self._endpoint,
             )
             self._sort_nodes()
 
@@ -400,7 +405,10 @@ class QuadratureGrid(Grid):
             self._sym = sym
 
             self._nodes, self._weights = self._create_nodes(
-                L=self._L, M=self._M, N=self._N, NFP=self._NFP,
+                L=self._L,
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
             )
 
             self._enforce_symmetry()
@@ -413,7 +421,11 @@ class QuadratureGrid(Grid):
             )
 
     def _create_nodes(
-        self, L=1, M=1, N=1, NFP=1,
+        self,
+        L=1,
+        M=1,
+        N=1,
+        NFP=1,
     ):
         """
 
@@ -568,7 +580,13 @@ class ConcentricGrid(Grid):
             )
 
     def _create_nodes(
-        self, M, N, NFP=1, axis=False, index="ansi", surfs="cheb1",
+        self,
+        M,
+        N,
+        NFP=1,
+        axis=False,
+        index="ansi",
+        surfs="cheb1",
     ):
         """
 
@@ -584,12 +602,12 @@ class ConcentricGrid(Grid):
             True to include the magnetic axis, False otherwise (Default = False)
         index : {'ansi', 'chevron', 'fringe', 'house'}
             Zernike indexing scheme
-        surfs : {'cheb1', 'cheb2', 'quad', None}
+        surfs : {'cheb1', 'cheb2', 'jacobi', None}
             pattern for radial coordinates
 
                 * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 * 'cheb2': Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                * 'quad': Radial nodes are roots of Shifted Jacobi polynomial of degree
+                * 'jacobi': Radial nodes are roots of Shifted Jacobi polynomial of degree
                 M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
                 * None : linear spacing in r=[0,1]
 
@@ -615,29 +633,30 @@ class ConcentricGrid(Grid):
                     "red",
                 )
             )
-        if surfs == "quad":
-            nodes, weights = get_nodes_quad(M, N, NFP, sym=self.sym)
-            return nodes, weights
 
         pattern = {
             "cheb1": (np.cos(np.arange(M, -1, -1) * np.pi / M) + 1) / 2,
             "cheb2": -np.cos(np.arange(M, 2 * M + 1, 1) * np.pi / (2 * M)),
+            "jacobi": special.js_roots(M + 1, 2, 2)[0],
         }
         rho = pattern.get(surfs, np.linspace(0, 1, num=M + 1))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0
-        else:
-            rho[0] = rho[1] / 4
+        elif rho[0] == 0:
+            rho[0] = rho[1] / 10
 
-        drho = np.zeros_like(rho)
-        for i in range(rho.size):
-            if i == 0:
-                drho[i] = (rho[0] + rho[1]) / 2
-            elif i == rho.size - 1:
-                drho[i] = 1 - (rho[-2] + rho[-1]) / 2
-            else:
-                drho[i] = (rho[i + 1] - rho[i - 1]) / 2
+        if surfs == "jacobi":
+            drho = special.js_roots(M + 1, 2, 2)[1]
+        else:
+            drho = np.zeros_like(rho)
+            for i in range(rho.size):
+                if i == 0:
+                    drho[i] = (rho[0] + rho[1]) / 2
+                elif i == rho.size - 1:
+                    drho[i] = 1 - (rho[-2] + rho[-1]) / 2
+                else:
+                    drho[i] = (rho[i + 1] - rho[i - 1]) / 2
 
         r = np.zeros(dim_zernike)
         t = np.zeros(dim_zernike)
@@ -689,81 +708,6 @@ class ConcentricGrid(Grid):
                 M=M, N=N, NFP=self._NFP, surfs=self._surfs
             )
             self._sort_nodes()
-
-
-def get_nodes_quad(M, N, NFP, sym=False):
-    """Compute interpolation nodes for Zernike quadrature
-
-    Uses (M+1) radial nodes and 2*(M+1) equispaced poloidal nodes
-        and 2*N+1 toroidal nodes
-
-    Args:
-        M : int
-            maximum poloidal mode number
-        N : int
-            maximum toroidal mode number
-        NFP : int
-            number of field periods
-        sym : bool
-            False for nodes to fill the full domain,
-            True for nodes in the stellarator symmetry (half) domain
-
-
-    Returns:
-        nodes : ndarray, size(Nnodes,3)
-            node coordinates, in (rho,theta,zeta).
-        weights : ndarray, size(Nnodes)
-            weight for each node, either exact quadrature or volume based
-    """
-    # I'm assuming we always want the quadrature weights with this
-
-    nr = M + 1
-    if not sym:
-        nt = 2 * nr  # use twice as many angular nodes as radial nodes for quadrature
-    if sym:
-        nt = nr  # use twice as many angular nodes as radial nodes for quadrature
-
-    nz = 2 * N + 1
-
-    r, ws = special.js_roots(
-        nr, 2, 2
-    )  # quadrature roots for the Shifted Jacobi Polynomials
-
-    dr = np.zeros_like(r)
-    for i in range(r.size):
-        if i == 0:
-            dr[i] = (r[0] + r[1]) / 2
-        elif i == r.size - 1:
-            dr[i] = 1 - (r[-2] + r[-1]) / 2
-        else:
-            dr[i] = (r[i + 1] - r[i - 1]) / 2
-    if not sym:
-        t = np.arange(0, 2 * np.pi, step=2 * np.pi / nt)
-        dt = 2 * np.pi / nt
-    elif sym:
-        t = np.arange(0, np.pi, step=np.pi / nt)
-        dt = np.pi / nt
-
-    dz = 2 * np.pi / NFP / nz
-    z = np.arange(0, 2 * np.pi / NFP, 2 * np.pi / NFP / nz)
-
-    ws, _, _ = np.meshgrid(ws, t, z, indexing="ij")
-    ws = ws.flatten()
-
-    r, t, z = np.meshgrid(r, t, z, indexing="ij")
-    r = r.flatten()
-    t = t.flatten()
-    z = z.flatten()
-
-    dr = np.ones_like(r)
-    dr = dr * ws / r
-    dt = dt * np.ones_like(t)
-    dz = dz * np.ones_like(z)
-
-    nodes = np.stack([r, t, z]).T
-    weights = dr * dt * dz
-
-    return nodes, weights
 
 
 # these functions are currently unused ---------------------------------------

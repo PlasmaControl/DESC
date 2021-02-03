@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from scipy import special
-from desc.grid import LinearGrid, ConcentricGrid
+from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 
 
 class TestGrid(unittest.TestCase):
@@ -175,21 +175,26 @@ class TestGrid(unittest.TestCase):
 
     def test_quadrature_grid(self):
 
-        M = 1
-        N = 0
+        L = 2
+        M = 4
+        N = 1
         NFP = 1
 
-        grid_quad = ConcentricGrid(
-            M, N, NFP, sym=False, axis=False, index="ansi", surfs="quad"
+        grid_quad = QuadratureGrid(
+            L,
+            M,
+            N,
+            NFP,
+            sym=False,
         )
 
-        roots, weights = special.js_roots(M + 1, 2, 2)
+        roots, weights = special.js_roots(L, 2, 2)
 
         quadrature_nodes = np.stack(
             [
                 np.array([roots[0]] * 4 + [roots[1]] * 4),
                 np.array([0, np.pi / 2, np.pi, 3 * np.pi / 2] * 2),
-                np.zeros((2 * 2 * (M + 1),)),
+                np.zeros((2 * 2 * (L),)),
             ]
         ).T
 

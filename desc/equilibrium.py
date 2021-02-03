@@ -8,7 +8,7 @@ from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
 from desc.objective_funs import ObjectiveFunction, get_objective_function
 from desc.optimize import Optimizer
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.perturbations import perturb
 
@@ -76,7 +76,11 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
 
         super().__init__(
@@ -135,7 +139,7 @@ class Equilibrium(_Configuration, IOAble):
             self._set_transforms()
 
     def _set_grid(self):
-        if self._node_mode in ["cheb1", "cheb2", "quad"]:
+        if self._node_mode in ["cheb1", "cheb2", "jacobi"]:
             self._grid = ConcentricGrid(
                 M=self.M_grid,
                 N=self.N_grid,
@@ -153,6 +157,18 @@ class Equilibrium(_Configuration, IOAble):
                 NFP=self.NFP,
                 sym=self.sym,
                 axis=False,
+            )
+        elif self._node_mode in ["quad"]:
+            self._grid = QuadratureGrid(
+                L=2 * self.M_grid + 1,
+                M=2 * self.M_grid + 1,
+                N=2 * self.N_grid + 1,
+                NFP=self.NFP,
+                sym=self.sym,
+            )
+        else:
+            raise ValueError(
+                colored("unknown grid type {}".format(self._node_mode), "red")
             )
 
     def _set_transforms(self):
@@ -393,7 +409,13 @@ class Equilibrium(_Configuration, IOAble):
         return Equilibrium(inputs=inputs)
 
     def solve(
-        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
+        self,
+        ftol=1e-6,
+        xtol=1e-6,
+        gtol=1e-6,
+        verbose=1,
+        maxiter=None,
+        options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -448,7 +470,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

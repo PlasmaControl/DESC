@@ -228,9 +228,7 @@ class AutoDiffDerivative(_Derivative):
         jvp : array-like
             jacobian times vectors v, summed over different argnums
         """
-        tangents = [
-            jnp.zeros_like(foo) if not jnp.isscalar(foo) else 0.0 for foo in args
-        ]
+        tangents = list(nested_zeros_like(args))
         if jnp.isscalar(argnum):
             argnum = (argnum,)
             v = (v,) if not isinstance(v, tuple) else v
@@ -271,14 +269,14 @@ class AutoDiffDerivative(_Derivative):
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
-            argnum2 = (argnum2 + len(argnum1),)
+            argnum2 = (argnum2 + 1,)
             v2 = (v2,) if not isinstance(v2, tuple) else v2
         else:
-            argnum2 = tuple([i + len(argnum1) for i in argnum2])
+            argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, *dx1, *args)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
         return d2fdx2(v1, v2)
 
     def _compute_jvp(self, v, *args):
@@ -507,14 +505,14 @@ class FiniteDiffDerivative(_Derivative):
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
-            argnum2 = (argnum2 + len(argnum1),)
+            argnum2 = (argnum2 + 1,)
             v2 = (v2,) if not isinstance(v2, tuple) else v2
         else:
-            argnum2 = tuple([i + len(argnum1) for i in argnum2])
+            argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, *dx1, *args)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
         return d2fdx2(v1, v2)
 
     def _compute_jvp(self, v, *args):
@@ -584,6 +582,17 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         return self._compute(*args)
+
+
+def nested_zeros_like(x):
+
+    if jnp.isscalar(x):
+        return 0.0
+    if isinstance(x, tuple):
+        return tuple([nested_zeros_like(a) for a in x])
+    if isinstance(x, list):
+        return list([nested_zeros_like(a) for a in x])
+    return jnp.zeros_like(x)
 
 
 if use_jax:

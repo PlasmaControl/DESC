@@ -8,7 +8,12 @@ __all__ = ["perturb"]
 
 
 def perturb(
-    eq, deltas, order=0, Jx=None, verbose=1, copy=True,
+    eq,
+    deltas,
+    order=0,
+    Jx=None,
+    verbose=1,
+    copy=True,
 ):
     """Perturbs an Equilibrium wrt input parameters.
 
@@ -57,60 +62,52 @@ def perturb(
             RHS = eq.objective.compute(*args)
             if verbose > 1:
                 timer.disp("df/dx computation")
+        Jxi = np.linalg.pinv(Jx, rcond=1e-6)
 
         # partial derivatives wrt input parameters (c)
-        for key, dc in deltas.items():
-            if verbose > 0:
-                print("Perturbing {}".format(key))
-            timer.start("df/dc computation ({})".format(key))
-            RHS += eq.objective.jvp(arg_idx[key], dc, *args)
-            timer.stop("df/dc computation ({})".format(key))
-            if verbose > 1:
-                timer.disp("df/dc computation ({})".format(key))
+        keys = ", ".join(deltas.keys())
+        inds = tuple([arg_idx[key] for key in deltas])
+        dc = tuple([val for val in deltas.values()])
+        if verbose > 0:
+            print("Perturbing {}".format(keys))
+        timer.start("df/dc computation ({})".format(keys))
+        RHS += eq.objective.jvp(inds, dc, *args)
+        timer.stop("df/dc computation ({})".format(keys))
+        if verbose > 1:
+            timer.disp("df/dc computation ({})".format(keys))
 
     # 2nd order
     if order > 1:
         RHS1 = RHS
+        dx1 = Jxi.dot(RHS1)
 
-        # partial derivatives wrt state vector (x)
+        # 2nd partial derivatives wrt state vector (x)
         if verbose > 0:
             print("Computing d^2f/dx^2")
-        Jxi = np.linalg.pinv(Jx, rcond=1e-6)
         timer.start("d^2f/dx^2 computation")
-        Jxx = eq.objective.derivative((0, 0), *args)
+        RHS += 0.5 * eq.objective.jvp2(0, 0, dx1, dx1, *args)
         timer.stop("d^2f/dx^2 computation")
-        RHS += 0.5 * np.tensordot(
-            Jxx,
-            np.tensordot(
-                np.tensordot(Jxi, RHS1, axes=1),
-                np.tensordot(RHS1.T, Jxi.T, axes=1),
-                axes=0,
-            ),
-            axes=2,
-        )
         if verbose > 1:
             timer.disp("d^2f/dx^2 computation")
 
-        # partial derivatives wrt input parameters (c)
+        # 2nd partial derivatives wrt input parameters (c)
         for key, dc in deltas.items():
-            if verbose > 0:
-                print("Perturbing {}".format(key))
-
             timer.start("d^2f/dc^2 computation ({})".format(key))
-            Jcc = eq.objective.derivative((arg_idx[key], arg_idx[key]), *args)
+            ind = arg_idx[key]
+            RHS += 0.5 * eq.objective.jvp2(ind, ind, dc, dc, *args)
             timer.stop("d^2f/dc^2 computation ({})".format(key))
-            RHS += 0.5 * np.tensordot(Jcc, np.tensordot(dc, dc, axes=0), axes=2,)
             if verbose > 1:
                 timer.disp("d^2f/dc^2 computation ({})".format(key))
 
-            timer.start("d^2f/dxdc computation ({})".format(key))
-            Jxc = eq.objective.derivative((0, arg_idx[key]), *args)
-            timer.stop("d^2f/dxdc computation ({})".format(key))
-            RHS -= np.tensordot(
-                Jxc, np.tensordot(Jxi, np.tensordot(RHS1, dc, axes=0), axes=1), axes=2,
-            )
-            if verbose > 1:
-                timer.disp("d^2f/dxdc computation ({})".format(key))
+        # mixed partials wrt to x, c
+        keys = ", ".join(deltas.keys())
+        inds = tuple([arg_idx[key] for key in deltas])
+        dc = tuple([val for val in deltas.values()])
+        timer.start("d^2f/dxdc computation ({})".format(keys))
+        RHS -= eq.objective.jvp2(0, inds, dx1, dc, *args)
+        timer.stop("d^2f/dxdc computation ({})".format(keys))
+        if verbose > 1:
+            timer.disp("d^2f/dxdc computation ({})".format(keys))
 
     if copy:
         eq_new = eq.copy()
@@ -135,7 +132,7 @@ def perturb(
 
     # perturbation
     if order > 0:
-        dy = -np.linalg.lstsq(Jx, RHS, rcond=1e-6)[0]
+        dy = -Jxi.dot(RHS)
         eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")

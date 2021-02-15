@@ -249,7 +249,8 @@ class Transform(IOAble):
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
         self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
-        self.zeta_pad = (self.num_z_nodes - self.num_n_modes) // 2
+        self.pad_dim = (self.num_z_nodes - self.num_n_modes) // 2
+        self.N = (self.num_z_nodes - 1) // 2  # transformed toroidal resolution
 
         self.fft_index = np.zeros((basis.num_modes,), dtype=int)
         for k in range(basis.num_modes):
@@ -257,13 +258,12 @@ class Transform(IOAble):
             col = np.where(basis.modes[k, 2] == n_vals)[0]
             self.fft_index[k] = self.num_n_modes * row + col
 
-        fft_nodes = np.hstack(
+        self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
                 np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
             ]
         )
-        self.fft_nodes = fft_nodes
 
     def build(self):
         """Builds the transform matrices for each derivative order"""
@@ -358,35 +358,29 @@ class Transform(IOAble):
                     )
                 )
 
+            # reshape and pad coefficients
             c_pad = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_pad = put(c_pad, self.fft_index, c)
             c_pad = jnp.pad(
                 c_pad.reshape((-1, self.num_n_modes)),
-                ((0, 0), (self.zeta_pad, self.zeta_pad)),
+                ((0, 0), (self.pad_dim, self.pad_dim)),
                 mode="constant",
             )
+            # differentiate
             dk = self.basis.NFP * jnp.arange(
                 -(self.num_z_nodes // 2), (self.num_z_nodes // 2) + 1
             ).reshape((1, -1))
             c_pad = c_pad[:, :: (-1) ** dz] * dk ** dz * (-1) ** (dz > 1)
-            cfft = self._four2phys(c_pad)
-            return jnp.matmul(A, cfft).flatten(order="F")
-
-    def _four2phys(self, c):
-        """helper function to do ffts"""
-        K, L = c.shape
-        N = (L - 1) // 2
-        # pad with negative wavenumbers
-        a = c[:, N:]
-        b = c[:, :N][:, ::-1]
-        a = jnp.hstack([a[:, 0][:, jnp.newaxis], a[:, 1:] / 2, a[:, 1:][:, ::-1] / 2])
-        b = jnp.hstack([jnp.zeros((K, 1)), -b[:, 0:] / 2, b[:, ::-1] / 2])
-        # inverse Fourier transform
-        a = a * L
-        b = b * L
-        c = a + 1j * b
-        x = jnp.real(jnp.fft.ifft(c, None, 1))
-        return x
+            # re-format in complex notation
+            c_cmplx = (self.N + 0.5) * (
+                c_pad[:, self.N :]
+                - 1j
+                * jnp.pad(c_pad[:, self.N - 1 :: -1], ((0, 0), (1, 0)), mode="constant")
+            )
+            c_cmplx = put(c_cmplx, (np.arange(self.num_lm_modes), 0), 2 * c_cmplx[:, 0])
+            # transform coefficients
+            c_fft = jnp.fft.irfft(c_cmplx, n=self.num_z_nodes)
+            return jnp.matmul(A, c_fft).flatten(order="F")
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit
@@ -409,11 +403,7 @@ class Transform(IOAble):
         return jnp.matmul(self._pinv, self.grid.weights * x)
 
     def change_resolution(
-        self,
-        grid=None,
-        basis=None,
-        build=True,
-        build_pinv=False,
+        self, grid=None, basis=None, build=True, build_pinv=False,
     ):
         """Re-builds the matrices with a new grid and basis
 

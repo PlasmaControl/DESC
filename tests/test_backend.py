@@ -12,7 +12,7 @@ class TestBackend(unittest.TestCase):
         a = np.array([0, 0, 0])
         b = np.array([1, 2, 3])
 
-        a = put(a, [0, 1, 2], [1, 2, 3])
+        a = put(a, np.array([0, 1, 2]), np.array([1, 2, 3]))
 
         np.testing.assert_array_almost_equal(a, b)
 

@@ -542,8 +542,8 @@ class ConcentricGrid(Grid):
         NFP=1,
         sym=False,
         axis=False,
-        index="ansi",
-        surfs="cheb1",
+        index="fringe",
+        surfs="jacobi",
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -585,8 +585,8 @@ class ConcentricGrid(Grid):
         N,
         NFP=1,
         axis=False,
-        index="ansi",
-        surfs="cheb1",
+        index="fringe",
+        surfs="jacobi",
     ):
         """
 
@@ -646,17 +646,14 @@ class ConcentricGrid(Grid):
         elif rho[0] == 0:
             rho[0] = rho[1] / 10
 
-        if surfs == "jacobi":
-            drho = special.js_roots(M + 1, 2, 2)[1]
-        else:
-            drho = np.zeros_like(rho)
-            for i in range(rho.size):
-                if i == 0:
-                    drho[i] = (rho[0] + rho[1]) / 2
-                elif i == rho.size - 1:
-                    drho[i] = 1 - (rho[-2] + rho[-1]) / 2
-                else:
-                    drho[i] = (rho[i + 1] - rho[i - 1]) / 2
+        drho = np.zeros_like(rho)
+        for i in range(rho.size):
+            if i == 0:
+                drho[i] = (rho[0] + rho[1]) / 2
+            elif i == rho.size - 1:
+                drho[i] = 1 - (rho[-2] + rho[-1]) / 2
+            else:
+                drho[i] = (rho[i + 1] - rho[i - 1]) / 2
 
         r = np.zeros(dim_zernike)
         t = np.zeros(dim_zernike)

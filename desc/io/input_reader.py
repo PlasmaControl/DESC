@@ -165,7 +165,7 @@ class InputReader:
             "errr_mode": "force",
             "bdry_mode": "spectral",
             "zern_mode": "fringe",
-            "node_mode": "quad",
+            "node_mode": "jacobi",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
             "boundary": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
@@ -456,9 +456,9 @@ class InputReader:
             inputs["axis"] = inputs["boundary"][axis_idx, 1:]
         if None in inputs["L"]:
             default_L = {
-                "fringe": 2 * inputs["M"],
                 "ansi": inputs["M"],
                 "chevron": inputs["M"],
+                "fringe": 2 * inputs["M"],
                 "house": 2 * inputs["M"],
             }
             inputs["L"] = default_L[inputs["zern_mode"]]

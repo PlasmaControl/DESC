@@ -92,8 +92,8 @@ class Equilibrium(_Configuration, IOAble):
         self._x0 = self._x
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
-        self._zern_mode = inputs.get("zern_mode", "ansi")
-        self._node_mode = inputs.get("node_mode", "cheb1")
+        self._zern_mode = inputs.get("zern_mode", "fringe")
+        self._node_mode = inputs.get("node_mode", "quad")
         self.optimizer_results = {}
         self._solved = False
         self._transforms = {}
@@ -407,6 +407,24 @@ class Equilibrium(_Configuration, IOAble):
             "x": self._x0,
         }
         return Equilibrium(inputs=inputs)
+
+    def evaluate(self):
+        """Evaluates the scalar objective
+
+        Returns
+        -------
+        float
+
+        """
+        y = self.objective.BC_constraint.project(self.x)
+        return self._objective.compute_scalar(
+            y,
+            self.Rc_lm,
+            self.Zc_lm,
+            self.p_l,
+            self.i_l,
+            self.Psi,
+        )
 
     def solve(
         self,

@@ -58,7 +58,7 @@ class _Configuration(IOAble, ABC):
         "_Zb_basis",
         "_p_basis",
         "_i_basis",
-        "_index",
+        "_zern_mode",
         "_bdry_mode",
         "_zeta_ratio",
     ]
@@ -129,7 +129,7 @@ class _Configuration(IOAble, ABC):
 
         # optional inputs
         self._sym = inputs.get("sym", False)
-        self._index = inputs.get("index", "ansi")
+        self._zern_mode = inputs.get("index", "fringe")
         self._bdry_mode = inputs.get("bdry_mode", "spectral")
         self._zeta_ratio = inputs.get("zeta_ratio", 1.0)
 
@@ -198,7 +198,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._R_sym,
-            index=self._index,
+            index=self._zern_mode,
         )
         self._Z_basis = FourierZernikeBasis(
             L=self._L,
@@ -206,7 +206,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._Z_sym,
-            index=self._index,
+            index=self._zern_mode,
         )
         self._L_basis = FourierZernikeBasis(
             L=self._L,
@@ -214,7 +214,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._Z_sym,
-            index=self._index,
+            index=self._zern_mode,
         )
         self._Rb_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,

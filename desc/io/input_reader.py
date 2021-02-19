@@ -165,7 +165,7 @@ class InputReader:
             "errr_mode": "force",
             "bdry_mode": "spectral",
             "zern_mode": "fringe",
-            "node_mode": "cheb1",
+            "node_mode": "quad",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
             "boundary": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),

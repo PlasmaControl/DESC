@@ -366,11 +366,13 @@ class Transform(IOAble):
                 ((0, 0), (self.pad_dim, self.pad_dim)),
                 mode="constant",
             )
+
             # differentiate
             dk = self.basis.NFP * jnp.arange(
                 -(self.num_z_nodes // 2), (self.num_z_nodes // 2) + 1
             ).reshape((1, -1))
             c_pad = c_pad[:, :: (-1) ** dz] * dk ** dz * (-1) ** (dz > 1)
+
             # re-format in complex notation
             c_cmplx = (self.N + 0.5) * (
                 c_pad[:, self.N :]
@@ -378,6 +380,7 @@ class Transform(IOAble):
                 * jnp.pad(c_pad[:, self.N - 1 :: -1], ((0, 0), (1, 0)), mode="constant")
             )
             c_cmplx = put(c_cmplx, (np.arange(self.num_lm_modes), 0), 2 * c_cmplx[:, 0])
+
             # transform coefficients
             c_fft = jnp.fft.irfft(c_cmplx, n=self.num_z_nodes)
             return jnp.matmul(A, c_fft).flatten(order="F")

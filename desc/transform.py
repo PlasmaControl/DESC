@@ -249,15 +249,14 @@ class Transform(IOAble):
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
         self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
-        self.pad_dim = (self.num_z_nodes - self.num_n_modes) // 2
-        self.N = (self.num_z_nodes - 1) // 2  # transformed toroidal resolution
-
+        self.N = basis.N  # toroidal resolution of basis
+        self.pad_dim = (self.num_z_nodes - 1) // 2 - self.N
+        self.dk = basis.NFP * jnp.arange(-self.N, self.N + 1).reshape((1, -1))
         self.fft_index = np.zeros((basis.num_modes,), dtype=int)
         for k in range(basis.num_modes):
             row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
             col = np.where(basis.modes[k, 2] == n_vals)[0]
             self.fft_index[k] = self.num_n_modes * row + col
-
         self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
@@ -358,31 +357,30 @@ class Transform(IOAble):
                     )
                 )
 
-            # reshape and pad coefficients
-            c_pad = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_pad = put(c_pad, self.fft_index, c)
-            c_pad = jnp.pad(
-                c_pad.reshape((-1, self.num_n_modes)),
-                ((0, 0), (self.pad_dim, self.pad_dim)),
-                mode="constant",
-            )
+            # reshape coefficients
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
 
             # differentiate
-            dk = self.basis.NFP * jnp.arange(
-                -(self.num_z_nodes // 2), (self.num_z_nodes // 2) + 1
-            ).reshape((1, -1))
-            c_pad = c_pad[:, :: (-1) ** dz] * dk ** dz * (-1) ** (dz > 1)
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk ** dz * (-1) ** (dz > 1)
 
             # re-format in complex notation
-            c_cmplx = (self.N + 0.5) * (
-                c_pad[:, self.N :]
-                - 1j
-                * jnp.pad(c_pad[:, self.N - 1 :: -1], ((0, 0), (1, 0)), mode="constant")
+            c_real = jnp.pad(
+                (self.num_z_nodes / 2)
+                * (c_diff[:, self.N + 1 :] - 1j * c_diff[:, self.N - 1 :: -1]),
+                ((0, 0), (0, self.pad_dim)),
+                mode="constant",
             )
-            c_cmplx = put(c_cmplx, (np.arange(self.num_lm_modes), 0), 2 * c_cmplx[:, 0])
+            c_cplx = jnp.hstack(
+                (
+                    self.num_z_nodes * c_diff[:, self.N, jnp.newaxis],
+                    c_real,
+                    jnp.fliplr(jnp.conj(c_real)),
+                )
+            )
 
             # transform coefficients
-            c_fft = jnp.fft.irfft(c_cmplx, n=self.num_z_nodes)
+            c_fft = jnp.real(jnp.fft.ifft(c_cplx))
             return jnp.matmul(A, c_fft).flatten(order="F")
 
     def fit(self, x):

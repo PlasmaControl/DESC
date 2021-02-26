@@ -575,7 +575,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             {
                 "L": 50,
                 "NFP": nfp,
-                "theta": np.linspace(0, 2 * np.pi, 9, endpoint=True),
+                "theta": np.linspace(0, 2 * np.pi, 4, endpoint=True),
                 "zeta": zeta,
             }
         )
@@ -680,7 +680,13 @@ def _compute(eq, name, grid):
         name_dict = name
 
     # primary calculations
-    if name_dict["base"] in ["psi", "p", "iota"]:
+    if name_dict["base"] in ["rho", "theta", "zeta"]:
+        idx = ["rho", "theta", "zeta"].index(name_dict["base"])
+        out = grid.nodes[:, idx]
+    elif name_dict["base"] == "vartheta":
+        lmbda = eq.compute_toroidal_coords(grid)["lambda"]
+        out = grid.nodes[:, 1] + lmbda
+    elif name_dict["base"] in ["psi", "p", "iota"]:
         out = eq.compute_profiles(grid)[_name_key(name_dict)]
     elif name_dict["base"] in ["R", "Z", "lambda"]:
         out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
@@ -770,6 +776,10 @@ def _format_name(name):
         name_dict["base"] = parsename
 
     units = {
+        "rho": "",
+        "theta": r"(\mathrm{rad})",
+        "zeta": r"(\mathrm{rad})",
+        "vartheta": r"(\mathrm{rad})",
         "psi": r"(\mathrm{Webers})",
         "p": r"(\mathrm{Pa})",
         "iota": "",
@@ -810,6 +820,18 @@ def _name_label(name_dict):
     else:
         base = name_dict["base"]
 
+    if "rho" in base:
+        idx = base.index("rho")
+        base = base[:idx] + "\\" + base[idx:]
+    if "vartheta" in base:
+        idx = base.index("vartheta")
+        base = base[:idx] + "\\" + base[idx:]
+    elif "theta" in base:
+        idx = base.index("theta")
+        base = base[:idx] + "\\" + base[idx:]
+    if "zeta" in base:
+        idx = base.index("zeta")
+        base = base[:idx] + "\\" + base[idx:]
     if "lambda" in base:
         idx = base.index("lambda")
         base = base[:idx] + "\\" + base[idx:]

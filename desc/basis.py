@@ -224,13 +224,7 @@ class FourierSeries(Basis):
     """
 
     def __init__(
-        self,
-        N=0,
-        NFP=1,
-        sym=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -330,14 +324,7 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(
-        self,
-        M=0,
-        N=0,
-        NFP=1,
-        sym=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, M=0, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -570,27 +557,29 @@ class FourierZernikeBasis(Basis):
 
         """
         default_L = {"ansi": M, "fringe": 2 * M, "chevron": M, "house": 2 * M}
-        L = L if L >= 0 else default_L[index]
+        self._L = L if L >= 0 else default_L[index]
 
         if index == "ansi":
             pol_posm = [
                 [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
-                for d in range(0, L + 1, 2)
+                for d in range(0, self._L + 1, 2)
             ]
 
         elif index == "fringe":
             pol_posm = [
                 [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
-                for d in range(0, L + 1, 2)
+                for d in range(0, self._L + 1, 2)
             ]
 
         elif index == "chevron":
-            pol_posm = [(m + d, m) for m in range(0, M + 1) for d in range(0, L + 1, 2)]
+            pol_posm = [
+                (m + d, m) for m in range(0, M + 1) for d in range(0, self._L + 1, 2)
+            ]
 
         elif index == "house":
             pol_posm = [
                 [(l, m) for m in range(0, M + 1) if l >= m and (l - m) % 2 == 0]
-                for l in range(0, L + 1)
+                for l in range(0, self._L + 1)
             ] + [(m, m) for m in range(M + 1)]
             pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
 

@@ -395,7 +395,7 @@ class Equilibrium(_Configuration, IOAble):
             "L": self._L,
             "M": self._M,
             "N": self._N,
-            "index": self._index,
+            "index": self._zern_mode,
             "bdry_mode": self._bdry_mode,
             "zeta_ratio": self._zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),

@@ -177,6 +177,42 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
+def plot_coefficients(eq, ax=None):
+    """Plots 1D profiles.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    fig, ax = _format_ax(ax, rows=1, cols=3)
+
+    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
+    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
+    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+
+    ax[0, 0].set_xlabel("l + |m| + |n|")
+    ax[0, 1].set_xlabel("l + |m| + |n|")
+    ax[0, 2].set_xlabel("l + |m| + |n|")
+
+    ax[0, 0].set_title("$|R_{lmn}|$")
+    ax[0, 1].set_title("$|Z_{lmn}|$")
+    ax[0, 2].set_title("$|\\lambda_{lmn}|$")
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
 def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     """Plots 1D profiles.
 

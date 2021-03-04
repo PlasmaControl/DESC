@@ -502,7 +502,9 @@ class Equilibrium(_Configuration, IOAble):
         self.solved = result["success"]
         return result
 
-    def perturb(self, deltas, order, Jx=None, verbose=1, copy=True):
+    def perturb(
+        self, deltas, order, tr_ratio=0.1, cutoff=1e-6, Jx=None, verbose=1, copy=True
+    ):
         """Perturb the equilibrium while maintaining equilibrium
 
         Parameters
@@ -525,7 +527,16 @@ class Equilibrium(_Configuration, IOAble):
         eq_new : Equilibrium
             perturbed equilibrum, only returned if copy=True
         """
-        equil = perturb(self, deltas, order=order, Jx=Jx, verbose=verbose, copy=copy)
+        equil = perturb(
+            self,
+            deltas,
+            order=order,
+            tr_ratio=tr_ratio,
+            cutoff=cutoff,
+            Jx=Jx,
+            verbose=verbose,
+            copy=copy,
+        )
         if copy:
             return equil
         else:

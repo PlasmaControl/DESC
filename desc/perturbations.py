@@ -3,6 +3,7 @@ import time
 
 from desc.utils import Timer
 from desc.boundary_conditions import BoundaryConstraint
+from desc.optimize.tr_subproblems import trust_region_step_exact
 
 __all__ = ["perturb"]
 
@@ -11,6 +12,8 @@ def perturb(
     eq,
     deltas,
     order=0,
+    tr_ratio=0.1,
+    cutoff=1e-6,
     Jx=None,
     verbose=1,
     copy=True,
@@ -27,6 +30,13 @@ def perturb(
         ``'Psi'``, ``'zeta_ratio'``
     order : int, optional
         order of perturbation (0=none, 1=linear, 2=quadratic)
+    tr_ratio : float or array of float
+        radius of the trust region, as a fraction of ||x||.
+        enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||
+        if a scalar uses same ratio for both steps, if an array uses the first element
+        for the first step and so on
+    cutoff : float
+        relative cutoff for small singular values in pseudoinverse
     Jx : ndarray, optional
         jacobian matrix df/dx
     verbose : int
@@ -48,6 +58,14 @@ def perturb(
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
     args = (y, eq.Rb_mn, eq.Zb_mn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    dx1 = 0
+    dx2 = 0
+
+    try:
+        tr_ratio1, tr_ratio2 = tr_ratio
+    except TypeError:
+        tr_ratio1 = tr_ratio
+        tr_ratio2 = tr_ratio
 
     # 1st order
     if order > 0:
@@ -59,10 +77,17 @@ def perturb(
             timer.start("df/dx computation")
             Jx = eq.objective.jac_x(*args)
             timer.stop("df/dx computation")
-            RHS = eq.objective.compute(*args)
             if verbose > 1:
                 timer.disp("df/dx computation")
-        Jxi = np.linalg.pinv(Jx, rcond=1e-6)
+        u, s, vt = np.linalg.svd(Jx, full_matrices=False)
+        m, n = Jx.shape
+        #         cutoff = np.finfo(s.dtype).eps * m * np.amax(s, axis=-1, keepdims=True)
+        cutoff = cutoff * s[0]
+        large = s > cutoff
+        s_inv = np.divide(1, s, where=large)
+        s_inv[~large] = 0
+        Jxi = np.matmul(vt.T, s_inv[..., np.newaxis] * u.T)
+        RHS = eq.objective.compute(*args)
 
         # partial derivatives wrt input parameters (c)
         keys = ", ".join(deltas.keys())
@@ -71,43 +96,75 @@ def perturb(
         if verbose > 0:
             print("Perturbing {}".format(keys))
         timer.start("df/dc computation ({})".format(keys))
-        RHS += eq.objective.jvp(inds, dc, *args)
+        temp = eq.objective.jvp(inds, dc, *args)
+        RHS += temp
         timer.stop("df/dc computation ({})".format(keys))
         if verbose > 1:
             timer.disp("df/dc computation ({})".format(keys))
+        dx1, hit, alpha = trust_region_step_exact(
+            n,
+            m,
+            RHS,
+            u,
+            s,
+            vt.T,
+            tr_ratio * np.linalg.norm(y),
+            initial_alpha=None,
+            rtol=0.01,
+            max_iter=10,
+            threshold=1e-6,
+        )
 
     # 2nd order
     if order > 1:
-        RHS1 = RHS
-        dx1 = Jxi.dot(RHS1)
 
         # 2nd partial derivatives wrt state vector (x)
         if verbose > 0:
             print("Computing d^2f/dx^2")
         timer.start("d^2f/dx^2 computation")
-        RHS += 0.5 * eq.objective.jvp2(0, 0, dx1, dx1, *args)
+        temp = 0.5 * eq.objective.jvp2(0, 0, dx1, dx1, *args)
+        RHS = temp
+
         timer.stop("d^2f/dx^2 computation")
         if verbose > 1:
             timer.disp("d^2f/dx^2 computation")
 
-        # 2nd partial derivatives wrt input parameters (c)
-        for key, dc in deltas.items():
-            timer.start("d^2f/dc^2 computation ({})".format(key))
-            ind = arg_idx[key]
-            RHS += 0.5 * eq.objective.jvp2(ind, ind, dc, dc, *args)
-            timer.stop("d^2f/dc^2 computation ({})".format(key))
-            if verbose > 1:
-                timer.disp("d^2f/dc^2 computation ({})".format(key))
+        keys = ", ".join(deltas.keys())
+        inds = tuple([arg_idx[key] for key in deltas])
+        dc = tuple([val for val in deltas.values()])
+        timer.start("d^2f/dc^2 computation ({})".format(keys))
+        temp = 0.5 * eq.objective.jvp2(inds, inds, dc, dc, *args)
+        RHS += temp
+
+        timer.stop("d^2f/dc^2 computation ({})".format(keys))
+        if verbose > 1:
+            timer.disp("d^2f/dc^2 computation ({})".format(keys))
 
         # mixed partials wrt to x, c
         keys = ", ".join(deltas.keys())
         inds = tuple([arg_idx[key] for key in deltas])
         dc = tuple([val for val in deltas.values()])
         timer.start("d^2f/dxdc computation ({})".format(keys))
-        RHS -= eq.objective.jvp2(0, inds, dx1, dc, *args)
+        temp = eq.objective.jvp2(0, inds, dx1, dc, *args)
+        RHS += temp
+
         timer.stop("d^2f/dxdc computation ({})".format(keys))
         if verbose > 1:
             timer.disp("d^2f/dxdc computation ({})".format(keys))
+
+        dx2, hit, alpha = trust_region_step_exact(
+            n,
+            m,
+            RHS,
+            u,
+            s,
+            vt.T,
+            tr_ratio * np.linalg.norm(dx1),
+            initial_alpha=None,
+            rtol=0.01,
+            max_iter=10,
+            threshold=1e-6,
+        )
 
     if copy:
         eq_new = eq.copy()
@@ -130,9 +187,10 @@ def perturb(
             eq_new.Zb_mn,
         )
 
+    print("rhs: ", max(abs(RHS)))
     # perturbation
     if order > 0:
-        dy = -Jxi.dot(RHS)
+        dy = dx1 + dx2
         eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")

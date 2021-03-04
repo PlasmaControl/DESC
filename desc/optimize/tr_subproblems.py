@@ -184,6 +184,7 @@ def solve_lsq_trust_region_exact(
 
     rtol = kwargs.get("rtol", 0.01)
     max_iter = kwargs.get("max_iter", 10)
+    threshold = kwargs.get("threshold", None)
     m, n = jac.shape
     if not hasattr(jac, "svd"):
         raise ValueError("exact trust region method only works with svd derivative")
@@ -192,38 +193,89 @@ def solve_lsq_trust_region_exact(
             "exact trust region method does not currently work with diagonal scaling"
         )
     u, s, v = jac.svd()
-    uf = u.T.dot(f)
+    return trust_region_step_exact(
+        n, m, f, u, s, v, trust_radius, initial_alpha, rtol, max_iter, threshold
+    )
 
-    def phi_and_derivative(alpha, suf, s, trust_radius):
+
+def trust_region_step_exact(
+    n, m, f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
+):
+    """Solve a trust-region problem using a semi-exact method
+
+    Solves problems of the form
+        min_p ||J*p + f||^2,  ||p|| < Delta
+
+    Parameters
+    ----------
+    n : int
+        Number of variables.
+    m : int
+        Number of residuals.
+    f : ndarray
+        Vector of residuals
+    u : ndarray
+        Left singular vectors of J.
+    s : ndarray
+        Singular values of J.
+    v : ndarray
+        Right singular vectors of J (eg transpose of VT).
+    Delta : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha, which might be available from a previous
+        iteration. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure. Namely, the
+        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+    max_iter : int, optional
+        Maximum allowed number of iterations for the root-finding procedure.
+    threshold : float
+        relative cutoff for small singular values
+
+    Returns
+    -------
+    p : ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
+        Sometimes called Levenberg-Marquardt parameter.
+
+    """
+
+    uf = u.T.dot(f)
+    suf = s * uf
+
+    def phi_and_derivative(alpha, suf, s, Delta):
         """Function of which to find zero.
         It is defined as "norm of regularized (by alpha) least-squares
-        solution minus `trust_radius`".
+        solution minus `Delta`".
         """
         denom = s ** 2 + alpha
         p_norm = np.linalg.norm(suf / denom)
-        phi = p_norm - trust_radius
+        phi = p_norm - Delta
         phi_prime = -np.sum(suf ** 2 / denom ** 3) / p_norm
         return phi, phi_prime
 
-    suf = s * uf
-
     # Check if J has full rank and try Gauss-Newton step.
-    threshold = np.finfo(s.dtype).eps * m * s[0]
-    full_rank = s[-1] > threshold
-    if full_rank:
-        p = -v.dot(uf / s)
-        if np.linalg.norm(p) <= trust_radius:
-            return p, False, 0.0
-
-    alpha_upper = np.linalg.norm(suf) / trust_radius
-
-    if full_rank:
-        phi, phi_prime = phi_and_derivative(0.0, suf, s, trust_radius)
-        alpha_lower = -phi / phi_prime
+    if threshold is None:
+        threshold = np.finfo(s.dtype).eps * m * s[0]
     else:
-        alpha_lower = 0.0
+        threshold *= s[0]
+    large = s > threshold
+    s_inv = np.divide(1, s, where=large)
+    s_inv[~large] = 0
 
-    if np.isnan(initial_alpha) or not full_rank and initial_alpha == 0:
+    p = -v.dot(uf * s_inv)
+    if np.linalg.norm(p) <= Delta:
+        return p, False, 0.0
+
+    alpha_upper = np.linalg.norm(suf) / Delta
+    alpha_lower = 0.0
+
+    if initial_alpha is None or initial_alpha == 0:
         alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
     else:
         alpha = initial_alpha
@@ -232,24 +284,24 @@ def solve_lsq_trust_region_exact(
         if alpha < alpha_lower or alpha > alpha_upper:
             alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
 
-        phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
+        phi, phi_prime = phi_and_derivative(alpha, suf, s, Delta)
 
         if phi < 0:
             alpha_upper = alpha
 
         ratio = phi / phi_prime
         alpha_lower = max(alpha_lower, alpha - ratio)
-        alpha -= (phi + trust_radius) * ratio / trust_radius
+        alpha -= (phi + Delta) * ratio / Delta
 
-        if np.abs(phi) < rtol * trust_radius:
+        if np.abs(phi) < rtol * Delta:
             break
 
     p = -v.dot(suf / (s ** 2 + alpha))
 
-    # Make the norm of p equal to trust_radius, p is changed only slightly during
+    # Make the norm of p equal to Delta, p is changed only slightly during
     # this. It is done to prevent p lie outside the trust region (which can
     # cause problems later).
-    p *= trust_radius / np.linalg.norm(p)
+    p *= Delta / np.linalg.norm(p)
 
     return p, True, alpha
 

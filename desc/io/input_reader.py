@@ -222,7 +222,7 @@ class InputReader:
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
                 inputs["NFP"] = numbers[0]
-                if len(numbers):
+                if len(numbers) > 1:
                     inputs["NFP"] /= numbers[1]
 
             # spectral resolution

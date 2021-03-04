@@ -355,18 +355,15 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L,
-                M=M,
-                N=N,
-                NFP=self._NFP,
-                axis=self._axis,
-                endpoint=self._endpoint,
+                L=L, M=M, N=N, NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
             )
             self._sort_nodes()
 
 
 class QuadratureGrid(Grid):
     """Grid used for numerical quadrature.
+    To exactly integrate a Fourier-Zernike basis of resolution L', M', N', a quadrature
+    grid with L=(L'+1)/2, M=2*M'+1, N=2*N'+1 should be used.
 
     Parameters
     ----------
@@ -405,10 +402,7 @@ class QuadratureGrid(Grid):
             self._sym = sym
 
             self._nodes, self._weights = self._create_nodes(
-                L=self._L,
-                M=self._M,
-                N=self._N,
-                NFP=self._NFP,
+                L=self._L, M=self._M, N=self._N, NFP=self._NFP,
             )
 
             self._enforce_symmetry()
@@ -421,11 +415,7 @@ class QuadratureGrid(Grid):
             )
 
     def _create_nodes(
-        self,
-        L=1,
-        M=1,
-        N=1,
-        NFP=1,
+        self, L=1, M=1, N=1, NFP=1,
     ):
         """
 
@@ -580,13 +570,7 @@ class ConcentricGrid(Grid):
             )
 
     def _create_nodes(
-        self,
-        M,
-        N,
-        NFP=1,
-        axis=False,
-        index="fringe",
-        surfs="jacobi",
+        self, M, N, NFP=1, axis=False, index="fringe", surfs="jacobi",
     ):
         """
 

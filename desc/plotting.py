@@ -177,6 +177,42 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
+def plot_coefficients(eq, ax=None):
+    """Plots 1D profiles.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    fig, ax = _format_ax(ax, rows=1, cols=3)
+
+    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
+    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
+    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+
+    ax[0, 0].set_xlabel("l + |m| + |n|")
+    ax[0, 1].set_xlabel("l + |m| + |n|")
+    ax[0, 2].set_xlabel("l + |m| + |n|")
+
+    ax[0, 0].set_title("$|R_{lmn}|$")
+    ax[0, 1].set_title("$|Z_{lmn}|$")
+    ax[0, 2].set_title("$|\\lambda_{lmn}|$")
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
 def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     """Plots 1D profiles.
 
@@ -575,7 +611,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             {
                 "L": 50,
                 "NFP": nfp,
-                "theta": np.linspace(0, 2 * np.pi, 9, endpoint=True),
+                "theta": np.linspace(0, 2 * np.pi, 4, endpoint=True),
                 "zeta": zeta,
             }
         )
@@ -680,7 +716,13 @@ def _compute(eq, name, grid):
         name_dict = name
 
     # primary calculations
-    if name_dict["base"] in ["psi", "p", "iota"]:
+    if name_dict["base"] in ["rho", "theta", "zeta"]:
+        idx = ["rho", "theta", "zeta"].index(name_dict["base"])
+        out = grid.nodes[:, idx]
+    elif name_dict["base"] == "vartheta":
+        lmbda = eq.compute_toroidal_coords(grid)["lambda"]
+        out = grid.nodes[:, 1] + lmbda
+    elif name_dict["base"] in ["psi", "p", "iota"]:
         out = eq.compute_profiles(grid)[_name_key(name_dict)]
     elif name_dict["base"] in ["R", "Z", "lambda"]:
         out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
@@ -770,6 +812,10 @@ def _format_name(name):
         name_dict["base"] = parsename
 
     units = {
+        "rho": "",
+        "theta": r"(\mathrm{rad})",
+        "zeta": r"(\mathrm{rad})",
+        "vartheta": r"(\mathrm{rad})",
         "psi": r"(\mathrm{Webers})",
         "p": r"(\mathrm{Pa})",
         "iota": "",
@@ -810,6 +856,18 @@ def _name_label(name_dict):
     else:
         base = name_dict["base"]
 
+    if "rho" in base:
+        idx = base.index("rho")
+        base = base[:idx] + "\\" + base[idx:]
+    if "vartheta" in base:
+        idx = base.index("vartheta")
+        base = base[:idx] + "\\" + base[idx:]
+    elif "theta" in base:
+        idx = base.index("theta")
+        base = base[:idx] + "\\" + base[idx:]
+    if "zeta" in base:
+        idx = base.index("zeta")
+        base = base[:idx] + "\\" + base[idx:]
     if "lambda" in base:
         idx = base.index("lambda")
         base = base[:idx] + "\\" + base[idx:]

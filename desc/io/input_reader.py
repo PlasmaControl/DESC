@@ -221,7 +221,9 @@ class InputReader:
                 inputs["Psi"] = numbers[0]
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
-                inputs["NFP"] = int(numbers[0])
+                inputs["NFP"] = numbers[0]
+                if len(numbers):
+                    inputs["NFP"] /= numbers[1]
 
             # spectral resolution
             match = re.search(r"L_rad", argument, re.IGNORECASE)

@@ -76,11 +76,7 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
 
         super().__init__(
@@ -160,9 +156,9 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self._node_mode in ["quad"]:
             self._grid = QuadratureGrid(
-                L=2 * self.M_grid + 1,
-                M=2 * self.M_grid + 1,
-                N=2 * self.N_grid + 1,
+                L=np.ceil((self.L + 1) / 2),
+                M=2 * self.M + 1,
+                N=2 * self.N + 1,
                 NFP=self.NFP,
                 sym=self.sym,
             )
@@ -399,7 +395,7 @@ class Equilibrium(_Configuration, IOAble):
             "L": self._L,
             "M": self._M,
             "N": self._N,
-            "index": self._index,
+            "index": self._zern_mode,
             "bdry_mode": self._bdry_mode,
             "zeta_ratio": self._zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),
@@ -418,22 +414,11 @@ class Equilibrium(_Configuration, IOAble):
         """
         y = self.objective.BC_constraint.project(self.x)
         return self._objective.compute_scalar(
-            y,
-            self.Rc_lm,
-            self.Zc_lm,
-            self.p_l,
-            self.i_l,
-            self.Psi,
+            y, self.Rc_lm, self.Zc_lm, self.p_l, self.i_l, self.Psi,
         )
 
     def solve(
-        self,
-        ftol=1e-6,
-        xtol=1e-6,
-        gtol=1e-6,
-        verbose=1,
-        maxiter=None,
-        options={},
+        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -488,8 +473,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

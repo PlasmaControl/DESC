@@ -251,7 +251,7 @@ class Transform(IOAble):
         self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
         self.N = basis.N  # toroidal resolution of basis
         self.pad_dim = (self.num_z_nodes - 1) // 2 - self.N
-        self.dk = basis.NFP * jnp.arange(-self.N, self.N + 1).reshape((1, -1))
+        self.dk = basis.NFP * np.arange(-self.N, self.N + 1).reshape((1, -1))
         self.fft_index = np.zeros((basis.num_modes,), dtype=int)
         for k in range(basis.num_modes):
             row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
@@ -404,7 +404,11 @@ class Transform(IOAble):
         return jnp.matmul(self._pinv, self.grid.weights * x)
 
     def change_resolution(
-        self, grid=None, basis=None, build=True, build_pinv=False,
+        self,
+        grid=None,
+        basis=None,
+        build=True,
+        build_pinv=False,
     ):
         """Re-builds the matrices with a new grid and basis
 

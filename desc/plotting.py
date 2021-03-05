@@ -732,6 +732,8 @@ def _compute(eq, name, grid):
         out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
     elif name_dict["base"] == "J":
         out = eq.compute_current_density(grid)[_name_key(name_dict)]
+    elif name_dict["base"] in ["gradB", "|gradB|"]:
+        out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
     elif name_dict["base"] in ["F", "|F|"]:
         out = eq.compute_force_error(grid)[_name_key(name_dict)]
 
@@ -826,6 +828,8 @@ def _format_name(name):
         "B": r"(\mathrm{T})",
         "|B|": r"(\mathrm{T})",
         "J": r"(\mathrm{A}/\mathrm{m}^2)",
+        "gradB": r"\mathrm{T}^2/\mathrm{m}",
+        "|gradB|": r"\mathrm{N}/\mathrm{m}^3",
         "F": r"(\mathrm{N}/\mathrm{m}^3)",
         "|F|": r"(\mathrm{N})",
     }

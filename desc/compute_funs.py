@@ -1450,23 +1450,23 @@ def compute_magnetic_pressure_gradient(
     ) + dot(magnetic_field["B_con"], cov_basis["e_zeta_z"], 0)
     
     # contravariant components of magnetic pressure gradient
-    magnetic_pressure["gradB^rho"] = (#(1/2/mu0) * 
+    magnetic_pressure["gradB^rho"] = ((1/2/mu0) * (
          magnetic_field["B^theta"] * magnetic_field["B_theta_r"]
          + magnetic_field["B_theta"] * magnetic_field["B^theta_r"]
          + magnetic_field["B^zeta"] * magnetic_field["B_zeta_r"]
-         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_r"]
+         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_r"])
         )
-    magnetic_pressure["gradB^theta"] = (#(1/2/mu0) * 
+    magnetic_pressure["gradB^theta"] = ((1/2/mu0) * (
          magnetic_field["B^theta"]*magnetic_field["B_theta_t"]
          + magnetic_field["B_theta"]*magnetic_field["B^theta_t"]
          + magnetic_field["B^zeta"]*magnetic_field["B_zeta_t"]
-         + magnetic_field["B_zeta"]*magnetic_field["B^zeta_t"]
+         + magnetic_field["B_zeta"]*magnetic_field["B^zeta_t"])
         )
-    magnetic_pressure["gradB^zeta"] = (#(1/2/mu0) * 
+    magnetic_pressure["gradB^zeta"] = ((1/2/mu0) * (
          magnetic_field["B^theta"]*magnetic_field["B_theta_z"]
          + magnetic_field["B_theta"]*magnetic_field["B^theta_z"]
          + magnetic_field["B^zeta"]*magnetic_field["B_zeta_z"]
-         + magnetic_field["B_zeta"]*magnetic_field["B^zeta_z"]
+         + magnetic_field["B_zeta"]*magnetic_field["B^zeta_z"])
         )
     
     # magnetic pressure vector

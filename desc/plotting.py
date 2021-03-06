@@ -265,7 +265,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     return fig, ax
 
 
-def plot_2d(eq, name, grid=None, ax=None, log=False, **kwargs):
+def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     """Plots 2D cross-sections.
 
     Parameters
@@ -280,6 +280,10 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, **kwargs):
         axis to plot on
     log : bool, optional
         whether to use a log scale
+    norm_F : bool,optional
+        whether to normalize a plot of force error to be unitless. A vacuum 
+        equilibrium force error is normalized by the gradient of magnetic pressure,
+        while an equilibrium solved with pressure is normalized by pressure gradient.
     kwargs
         any arguments taken by LinearGrid
 
@@ -303,6 +307,18 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, **kwargs):
     data = _compute(eq, name_dict, grid)
     fig, ax = _format_ax(ax)
     divider = make_axes_locatable(ax)
+
+    if norm_F:
+        if name not in ["F", "|F|"]:
+            return ValueError(colored("Can only normalize F or |F|","red"))
+        else:
+            if np.max(eq.p_l) < 1e-1: # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name('|gradB|')
+            else:# normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name('p_r')
+            norm_name_dict["units"] = '' # make unitless
+            norm_data = _compute(eq,norm_name_dict,grid)
+            data = data / np.abs(norm_data) * 100 # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -332,10 +348,13 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, **kwargs):
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
-
+    
+    
     ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
     ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_title(_name_label(name_dict))
+    if norm_F:
+        ax.set_title("Pct Error  %s / |%s|"%(name_dict['base'],_name_label(norm_name_dict)))
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -453,7 +472,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     return fig, ax
 
 
-def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
+def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs):
     """Plots Poincare sections.
 
     Parameters
@@ -468,6 +487,10 @@ def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
         axis to plot on
     log : bool, optional
         whether to use a log scale
+    norm_F : bool,optional
+        whether to normalize a plot of force error to be unitless. A vacuum 
+        equilibrium force error is normalized by the gradient of magnetic pressure,
+        while an equilibrium solved with pressure is normalized by pressure gradient.
     kwargs
         any arguments taken by LinearGrid
 
@@ -493,7 +516,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
         if kwargs == {}:
             kwargs.update(
                 {
-                    "L": 50,
+                    "L": 25,
                     "NFP": nfp,
                     "axis": False,
                     "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
@@ -511,6 +534,17 @@ def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
 
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
+    if norm_F:
+        if name not in ["F", "|F|"]:
+            return ValueError(colored("Can only normalize F or |F|","red"))
+        else:
+            if np.max(eq.p_l) < 1e-1: # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name('|gradB|')
+            else:# normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name('p_r')
+            norm_name_dict["units"] = '' # make unitless
+            norm_data = _compute(eq,norm_name_dict,grid)
+            data = data / np.abs(norm_data) * 100 # normalize
     figw = 5 * cols
     figh = 5 * rows
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
@@ -553,8 +587,10 @@ def plot_section(eq, name, grid=None, ax=None, log=False, **kwargs):
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].set_title(
             _name_label(name_dict)
-            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(eq.NFP * zeta[i] / (2 * np.pi))
         )
+    if norm_F:
+        ax.set_title("Pct Error  %s / |%s|"%(name_dict['base'],_name_label(norm_name_dict)))
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -734,6 +770,8 @@ def _compute(eq, name, grid):
         out = eq.compute_current_density(grid)[_name_key(name_dict)]
     elif name_dict["base"] in ["gradB", "|gradB|"]:
         out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+    elif name_dict["base"] in ["Btension", "|Btension|"]:
+        out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
     elif name_dict["base"] in ["F", "|F|"]:
         out = eq.compute_force_error(grid)[_name_key(name_dict)]
 
@@ -828,10 +866,12 @@ def _format_name(name):
         "B": r"(\mathrm{T})",
         "|B|": r"(\mathrm{T})",
         "J": r"(\mathrm{A}/\mathrm{m}^2)",
-        "gradB": r"\mathrm{T}^2/\mathrm{m}",
+        "gradB": r"\mathrm{N}/\mathrm{m}^3",
         "|gradB|": r"\mathrm{N}/\mathrm{m}^3",
+        "Btension": r"\mathrm{N}/\mathrm{m}^3",
+        "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
         "F": r"(\mathrm{N}/\mathrm{m}^3)",
-        "|F|": r"(\mathrm{N})",
+        "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
     }
     name_dict["units"] = units[name_dict["base"]]
     if name_dict["power"]:
@@ -857,6 +897,10 @@ def _name_label(name_dict):
 
     if "mag" in name_dict["base"]:
         base = "|" + re.sub("mag", "", name_dict["base"]) + "|"
+    elif "gradB" in name_dict["base"]:
+        base = "\\nabla(B^2 /(2\mu_0))"
+    elif "Btension" in name_dict["base"]:
+        base = "(B \\cdot \\nabla)B"
     else:
         base = name_dict["base"]
 

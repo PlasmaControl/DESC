@@ -405,7 +405,7 @@ class Equilibrium(_Configuration, IOAble):
         return Equilibrium(inputs=inputs)
 
     def evaluate(self):
-        """Evaluates the scalar objective
+        """Evaluates the objective function.
 
         Returns
         -------
@@ -413,9 +413,13 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         y = self.objective.BC_constraint.project(self.x)
-        return self._objective.compute_scalar(
-            y, self.Rc_lm, self.Zc_lm, self.p_l, self.i_l, self.Psi,
+        f = self._objective.compute(
+            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
         )
+        jac = self._objective.jac_x(
+            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
+        )
+        return f, jac
 
     def solve(
         self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},

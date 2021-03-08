@@ -79,7 +79,7 @@ def main(cl_args=None):
 
     from desc.equilibrium import EquilibriaFamily
     from desc.vmec import VMECIO
-    from desc.backend import use_jax
+
     from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
 

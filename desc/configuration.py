@@ -60,7 +60,7 @@ class _Configuration(IOAble, ABC):
         "_Zb_basis",
         "_p_basis",
         "_i_basis",
-        "_zern_mode",
+        "_spectral_indexing",
         "_bdry_mode",
         "_zeta_ratio",
     ]
@@ -96,7 +96,7 @@ class _Configuration(IOAble, ABC):
                 boundary : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
             And the following optional keys:
                 sym : bool, is the problem stellarator symmetric or not, default is False
-                index : str, type of Zernike indexing scheme to use, default is 'ansi'
+                spectral_indexing : str, type of Zernike indexing scheme to use, default is 'ansi'
                 bdry_mode : str, how to calculate error at bdry, default is 'spectral'
                 zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
@@ -135,7 +135,7 @@ class _Configuration(IOAble, ABC):
 
         # optional inputs
         self._sym = inputs.get("sym", False)
-        self._zern_mode = inputs.get("index", "fringe")
+        self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
         self._bdry_mode = inputs.get("bdry_mode", "spectral")
         self._zeta_ratio = inputs.get("zeta_ratio", 1.0)
 
@@ -206,7 +206,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._R_sym,
-            index=self._zern_mode,
+            spectral_indexing=self._spectral_indexing,
         )
         self._Z_basis = FourierZernikeBasis(
             L=self._L,
@@ -214,7 +214,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._Z_sym,
-            index=self._zern_mode,
+            spectral_indexing=self._spectral_indexing,
         )
         self._L_basis = FourierZernikeBasis(
             L=self._L,
@@ -222,7 +222,7 @@ class _Configuration(IOAble, ABC):
             N=self._N,
             NFP=self._NFP,
             sym=self._Z_sym,
-            index=self._zern_mode,
+            spectral_indexing=self._spectral_indexing,
         )
         self._Rb_basis = DoubleFourierSeries(
             M=self._M,

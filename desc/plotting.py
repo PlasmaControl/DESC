@@ -281,7 +281,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     log : bool, optional
         whether to use a log scale
     norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum 
+        whether to normalize a plot of force error to be unitless. A vacuum
         equilibrium force error is normalized by the gradient of magnetic pressure,
         while an equilibrium solved with pressure is normalized by pressure gradient.
     kwargs
@@ -310,15 +310,15 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
     if norm_F:
         if name not in ["F", "|F|"]:
-            return ValueError(colored("Can only normalize F or |F|","red"))
+            return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
-            if np.max(eq.p_l) < 1e-1: # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name('|gradB|')
-            else:# normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name('p_r')
-            norm_name_dict["units"] = '' # make unitless
-            norm_data = _compute(eq,norm_name_dict,grid)
-            data = data / np.abs(norm_data) * 100 # normalize
+            if np.max(eq.p_l) < 1e-1:  # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name("|gradB|")
+            else:  # normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name("p_r")
+            norm_name_dict["units"] = ""  # make unitless
+            norm_data = _compute(eq, norm_name_dict, grid)
+            data = data / np.abs(norm_data)  # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -348,13 +348,12 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
-    
-    
+
     ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
     ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_title(_name_label(name_dict))
     if norm_F:
-        ax.set_title("Pct Error  %s / |%s|"%(name_dict['base'],_name_label(norm_name_dict)))
+        ax.set_title("%s / |%s|" % (name_dict["base"], _name_label(norm_name_dict)))
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -472,7 +471,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     return fig, ax
 
 
-def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs):
+def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     """Plots Poincare sections.
 
     Parameters
@@ -488,7 +487,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs)
     log : bool, optional
         whether to use a log scale
     norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum 
+        whether to normalize a plot of force error to be unitless. A vacuum
         equilibrium force error is normalized by the gradient of magnetic pressure,
         while an equilibrium solved with pressure is normalized by pressure gradient.
     kwargs
@@ -536,15 +535,15 @@ def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs)
     data = _compute(eq, name_dict, grid)
     if norm_F:
         if name not in ["F", "|F|"]:
-            return ValueError(colored("Can only normalize F or |F|","red"))
+            return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
-            if np.max(eq.p_l) < 1e-1: # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name('|gradB|')
-            else:# normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name('p_r')
-            norm_name_dict["units"] = '' # make unitless
-            norm_data = _compute(eq,norm_name_dict,grid)
-            data = data / np.abs(norm_data) * 100 # normalize
+            if np.max(eq.p_l) < 1e-1:  # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name("|gradB|")
+            else:  # normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name("p_r")
+            norm_name_dict["units"] = ""  # make unitless
+            norm_data = _compute(eq, norm_name_dict, grid)
+            data = data / np.abs(norm_data)  # normalize
     figw = 5 * cols
     figh = 5 * rows
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
@@ -587,10 +586,19 @@ def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs)
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].set_title(
             _name_label(name_dict)
-            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(eq.NFP * zeta[i] / (2 * np.pi))
+            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                eq.NFP * zeta[i] / (2 * np.pi)
+            )
         )
         if norm_F:
-            ax[i].set_title("Pct Error  %s / |%s| $\\zeta \\cdot NFP/2\\pi = %3.3f$ "%(name_dict['base'],_name_label(norm_name_dict),eq.NFP * zeta[i] / (2 * np.pi)))
+            ax[i].set_title(
+                "%s / |%s| $\\zeta \\cdot NFP/2\\pi = %3.3f$ "
+                % (
+                    name_dict["base"],
+                    _name_label(norm_name_dict),
+                    eq.NFP * zeta[i] / (2 * np.pi),
+                )
+            )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -647,7 +655,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             {
                 "L": 50,
                 "NFP": nfp,
-                "theta": np.linspace(0, 2 * np.pi, 4, endpoint=True),
+                "theta": np.linspace(0, 2 * np.pi, 9, endpoint=False),
                 "zeta": zeta,
             }
         )
@@ -1205,7 +1213,7 @@ def plot_logo(savepath=None, **kwargs):
     return fig, ax
 
 
-def plot_zernike_basis(M, L, indexing, **kwargs):
+def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
     """Plots spectral basis of zernike basis functions
 
     Parameters
@@ -1214,7 +1222,7 @@ def plot_zernike_basis(M, L, indexing, **kwargs):
         maximum poloidal resolution
     L : int
         maximum difference between radial mode l and poloidal mode m
-    indexing : str
+    spectral_indexing : str
         zernike indexing method. One of 'fringe', 'ansi', 'house', 'chevron'
     **kwargs :
         additional plot formatting arguments
@@ -1235,7 +1243,7 @@ def plot_zernike_basis(M, L, indexing, **kwargs):
     npts = kwargs.get("npts", 100)
     levels = kwargs.get("levels", np.linspace(-1, 1, npts))
 
-    basis = FourierZernikeBasis(L=L, M=M, N=0, index=indexing)
+    basis = FourierZernikeBasis(L=L, M=M, N=0, index=spectral_indexing)
     lmax = basis.L
     mmax = basis.M
 

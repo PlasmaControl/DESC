@@ -77,6 +77,7 @@ def main(cl_args=None):
         print("Reading input from {}".format(ir.input_path))
         print("Outputs will be written to {}".format(ir.output_path))
 
+    from desc.backend import use_jax
     from desc.equilibrium import EquilibriaFamily
     from desc.vmec import VMECIO
 
@@ -99,11 +100,11 @@ def main(cl_args=None):
             L=ir.inputs[0]["L"],
             M=ir.inputs[0]["M"],
             N=ir.inputs[0]["N"],
-            index=ir.inputs[0]["zern_mode"],
+            index=ir.inputs[0]["spectral_indexing"],
         )
         equil_fam[0].inputs = ir.inputs[0]
-        equil_fam[0].objective = ir.inputs[0]["errr_mode"]
-        equil_fam[0].optimizer = ir.inputs[0]["optim_method"]
+        equil_fam[0].objective = ir.inputs[0]["objective"]
+        equil_fam[0].optimizer = ir.inputs[0]["optimizer"]
 
     # solve equilibrium
     equil_fam.solve_continuation(
@@ -115,7 +116,7 @@ def main(cl_args=None):
         print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
         ax = plot_surfaces(equil_fam[0].initial)
         plt.show()
-        ax = plot_section(equil_fam[0].initial, "|F|", log=True)
+        ax = plot_section(equil_fam[0].initial, "|F|", log=True, norm_F=True)
         plt.show()
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
@@ -123,14 +124,14 @@ def main(cl_args=None):
             print("Axis location: {}".format(eq.compute_axis_location()))
             ax = plot_surfaces(eq)
             plt.show()
-            ax = plot_section(eq, "|F|", log=True)
+            ax = plot_section(eq, "|F|", log=True, norm_F=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
         print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
         ax = plot_surfaces(equil_fam[-1])
         plt.show()
-        ax = plot_section(equil_fam[-1], "|F|", log=True)
+        ax = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)
         plt.show()
 
 

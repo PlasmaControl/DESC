@@ -224,7 +224,13 @@ class FourierSeries(Basis):
     """
 
     def __init__(
-        self, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
+        self,
+        N=0,
+        NFP=1,
+        sym=None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -324,7 +330,14 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(
-        self, M=0, N=0, NFP=1, sym=None, load_from=None, file_format=None, obj_lib=None,
+        self,
+        M=0,
+        N=0,
+        NFP=1,
+        sym=None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -442,7 +455,7 @@ class FourierZernikeBasis(Basis):
         * 'cos' for cos(m*t-n*z) symmetry
         * 'sin' for sin(m*t-n*z) symmetry
         * None for no symmetry (Default)
-    index : {'ansi', 'frige', 'chevron', 'house'}
+    spectral_indexing : {'ansi', 'frige', 'chevron', 'house'}
         Indexing method, default value = 'ansi'
 
         For L=0, all methods are equivalent and give a "chevron" shaped
@@ -481,7 +494,7 @@ class FourierZernikeBasis(Basis):
         N=0,
         NFP=1,
         sym=None,
-        index="ansi",
+        spectral_indexing="ansi",
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -495,10 +508,13 @@ class FourierZernikeBasis(Basis):
             self._N = N
             self._NFP = NFP
             self._sym = sym
-            self._index = index
+            self._spectral_indexing = spectral_indexing
 
             self._modes = self._get_modes(
-                L=self._L, M=self._M, N=self._N, index=self._index
+                L=self._L,
+                M=self._M,
+                N=self._N,
+                spectral_indexing=self._spectral_indexing,
             )
 
             self._enforce_symmetry()
@@ -509,7 +525,7 @@ class FourierZernikeBasis(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, L=-1, M=0, N=0, index="ansi"):
+    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -520,7 +536,7 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        index : {'ansi', 'frige', 'chevron', 'house'}
+        spectral_indexing : {'ansi', 'frige', 'chevron', 'house'}
             Indexing method, default value = 'ansi'
 
             For L=0, all methods are equivalent and give a "chevron" shaped
@@ -557,26 +573,26 @@ class FourierZernikeBasis(Basis):
 
         """
         default_L = {"ansi": M, "fringe": 2 * M, "chevron": M, "house": 2 * M}
-        self._L = L if L >= 0 else default_L[index]
+        self._L = L if L >= 0 else default_L[spectral_indexing]
 
-        if index == "ansi":
+        if spectral_indexing == "ansi":
             pol_posm = [
                 [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
                 for d in range(0, self._L + 1, 2)
             ]
 
-        elif index == "fringe":
+        elif spectral_indexing == "fringe":
             pol_posm = [
                 [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
                 for d in range(0, self._L + 1, 2)
             ]
 
-        elif index == "chevron":
+        elif spectral_indexing == "chevron":
             pol_posm = [
                 (m + d, m) for m in range(0, M + 1) for d in range(0, self._L + 1, 2)
             ]
 
-        elif index == "house":
+        elif spectral_indexing == "house":
             pol_posm = [
                 [(l, m) for m in range(0, M + 1) if l >= m and (l - m) % 2 == 0]
                 for l in range(0, self._L + 1)
@@ -638,7 +654,9 @@ class FourierZernikeBasis(Basis):
             self._M = M
             self._N = N
             self._L = L
-            self._modes = self._get_modes(self._L, self._M, self._N, index=self._index)
+            self._modes = self._get_modes(
+                self._L, self._M, self._N, spectral_indexing=self._spectral_indexing
+            )
             self._sort_modes()
 
 

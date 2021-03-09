@@ -38,7 +38,7 @@ class Equilibrium(_Configuration, IOAble):
         And the following optional keys:
 
         * ``'sym'`` : bool, is the problem stellarator symmetric or not, default is False
-        * ``'index'`` : str, type of Zernike indexing scheme to use, default is 'ansi'
+        * ``'spectral_indexing'`` : str, type of Zernike indexing scheme to use, default is 'ansi'
         * ``'bdry_mode'`` : str, how to calculate error at bdry, default is 'spectral'
         * ``'zeta_ratio'`` : float, Multiplier on the toroidal derivatives. Default = 1.0.
         * ``'axis'`` : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
@@ -48,9 +48,9 @@ class Equilibrium(_Configuration, IOAble):
         * ``'L_lmn'`` : ndarray, spectral coefficients of lambda
         * ``'M_grid'`` : int, resolution of real space nodes in poloidal/radial direction
         * ``'N_grid'`` : int, resolution of real space nodes in toroidal direction
-        * ``'node_mode'`` : str, node pattern, default is "cheb1"
-        * ``'errr_mode'`` : str, mode for equilibrium solution
-        * ``'optim_method'`` : str, optimizer to use
+        * ``'node_pattern'`` : str, node pattern, default is "cheb1"
+        * ``'objective'`` : str, mode for equilibrium solution
+        * ``'optimizer'`` : str, optimizer to use
 
     load_from : str file path OR file instance
         file to initialize from
@@ -76,7 +76,11 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
 
         super().__init__(
@@ -88,8 +92,8 @@ class Equilibrium(_Configuration, IOAble):
         self._x0 = self._x
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
-        self._zern_mode = inputs.get("zern_mode", "fringe")
-        self._node_mode = inputs.get("node_mode", "quad")
+        self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
+        self._node_pattern = inputs.get("node_pattern", "quad")
         self.optimizer_results = {}
         self._solved = False
         self._transforms = {}
@@ -98,8 +102,8 @@ class Equilibrium(_Configuration, IOAble):
         self.timer = Timer()
         self._set_grid()
         self._set_transforms()
-        self.objective = inputs.get("errr_mode", None)
-        self.optimizer = inputs.get("optim_method", None)
+        self.objective = inputs.get("objective", None)
+        self.optimizer = inputs.get("optimizer", None)
 
     @property
     def x0(self):
@@ -135,17 +139,17 @@ class Equilibrium(_Configuration, IOAble):
             self._set_transforms()
 
     def _set_grid(self):
-        if self._node_mode in ["cheb1", "cheb2", "jacobi"]:
+        if self._node_pattern in ["cheb1", "cheb2", "jacobi"]:
             self._grid = ConcentricGrid(
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
                 axis=False,
-                index=self._zern_mode,
-                surfs=self._node_mode,
+                spectral_indexing=self._spectral_indexing,
+                node_pattern=self._node_pattern,
             )
-        elif self._node_mode in ["linear", "uniform"]:
+        elif self._node_pattern in ["linear", "uniform"]:
             self._grid = LinearGrid(
                 L=2 * self.M_grid + 1,
                 M=2 * self.M_grid + 1,
@@ -154,7 +158,7 @@ class Equilibrium(_Configuration, IOAble):
                 sym=self.sym,
                 axis=False,
             )
-        elif self._node_mode in ["quad"]:
+        elif self._node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
                 L=np.ceil((self.L + 1) / 2),
                 M=2 * self.M + 1,
@@ -164,7 +168,7 @@ class Equilibrium(_Configuration, IOAble):
             )
         else:
             raise ValueError(
-                colored("unknown grid type {}".format(self._node_mode), "red")
+                colored("unknown grid type {}".format(self._node_pattern), "red")
             )
 
     def _set_transforms(self):
@@ -395,7 +399,7 @@ class Equilibrium(_Configuration, IOAble):
             "L": self._L,
             "M": self._M,
             "N": self._N,
-            "index": self._zern_mode,
+            "spectral_indexing": self._spectral_indexing,
             "bdry_mode": self._bdry_mode,
             "zeta_ratio": self._zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),
@@ -414,15 +418,31 @@ class Equilibrium(_Configuration, IOAble):
         """
         y = self.objective.BC_constraint.project(self.x)
         f = self._objective.compute(
-            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
+            y,
+            self.Rb_mn,
+            self.Zb_mn,
+            self.p_l,
+            self.i_l,
+            self.Psi,
         )
         jac = self._objective.jac_x(
-            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
+            y,
+            self.Rb_mn,
+            self.Zb_mn,
+            self.p_l,
+            self.i_l,
+            self.Psi,
         )
         return f, jac
 
     def solve(
-        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
+        self,
+        ftol=1e-6,
+        xtol=1e-6,
+        gtol=1e-6,
+        verbose=1,
+        maxiter=None,
+        options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -477,7 +497,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")
@@ -702,7 +723,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: updating transforms instead of recomputing
 
             objective = get_objective_function(
-                self.inputs[ii]["errr_mode"],
+                self.inputs[ii]["objective"],
                 R_transform=equil._transforms["R"],
                 Z_transform=equil._transforms["Z"],
                 L_transform=equil._transforms["L"],
@@ -725,7 +746,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
             equil.objective = objective
-            equil.optimizer = self.inputs[ii]["optim_method"]
+            equil.optimizer = self.inputs[ii]["optimizer"]
             equil.build(verbose)
 
             equil.solve(

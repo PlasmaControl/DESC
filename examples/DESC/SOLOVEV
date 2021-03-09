@@ -24,11 +24,10 @@ gtol = 1e-6
 nfev = 100
 
 # solver methods
-optim_method = scipy-trf
-errr_mode = force
-bdry_mode = spectral
-zern_mode = fringe
-node_mode = cheb1
+optimizer         = scipy-trf
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0	p =   1.25000000E-01	i =   1.00000000E+00

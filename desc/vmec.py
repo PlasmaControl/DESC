@@ -18,7 +18,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, index="ansi"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi"):
         """Loads a VMEC netCDF file as a Equilibrium.
 
         Parameters
@@ -31,7 +31,7 @@ class VMECIO:
             Poloidal resolution. Default = MPOL-1 from VMEC solution.
         N : int, optional
             Toroidal resolution. Default = NTOR from VMEC solution.
-        index : str, optional
+        spectral_indexing : str, optional
             Type of Zernike indexing scheme to use. (Default = 'ansi')
 
         Returns
@@ -48,14 +48,14 @@ class VMECIO:
         inputs["NFP"] = int(file.variables["nfp"][0])
         inputs["M"] = M if M > 0 else int(file.variables["mpol"][0] - 1)
         inputs["N"] = N if N >= 0 else int(file.variables["ntor"][0])
-        inputs["index"] = index
+        inputs["spectral_indexing"] = spectral_indexing
         default_L = {
             "ansi": inputs["M"],
             "fringe": 2 * inputs["M"],
             "chevron": inputs["M"],
             "house": 2 * inputs["M"],
         }
-        inputs["L"] = L if L >= 0 else default_L[inputs["index"]]
+        inputs["L"] = L if L >= 0 else default_L[inputs["spectral_indexing"]]
 
         # data
         xm = file.variables["xm"][:].filled()
@@ -971,7 +971,7 @@ class VMECIO:
         return fig, ax
 
 
-def convert_to_sfl(equil, L=None, M=None, N=None, index="ansi"):
+def convert_to_sfl(equil, L=None, M=None, N=None, spectral_indexing="ansi"):
     """
 
     Parameters
@@ -984,7 +984,7 @@ def convert_to_sfl(equil, L=None, M=None, N=None, index="ansi"):
         poloidal resolution of conversion
     Nres : int
         toroidal resolution of conversion
-    index : string
+    spectral_indexing : string
         Zernike ordering index
 
     Returns
@@ -1029,8 +1029,22 @@ def convert_to_sfl(equil, L=None, M=None, N=None, index="ansi"):
     else:
         R_sym = None
         Z_sym = None
-    R_basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=equil.NFP, sym=R_sym, index=index,)
-    Z_basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=equil.NFP, sym=Z_sym, index=index,)
+    R_basis = FourierZernikeBasis(
+        L=L,
+        M=M,
+        N=N,
+        NFP=equil.NFP,
+        sym=R_sym,
+        indexing=spectral_indexing,
+    )
+    Z_basis = FourierZernikeBasis(
+        L=L,
+        M=M,
+        N=N,
+        NFP=equil.NFP,
+        sym=Z_sym,
+        indexing=spectral_indexing,
+    )
     R_transform = Transform(sfl_grid, R_basis, build_pinv=True)
     Z_transform = Transform(sfl_grid, Z_basis, build_pinv=True)
     R_lmn = R_transform.fit(R)

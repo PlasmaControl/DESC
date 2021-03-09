@@ -76,11 +76,7 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
 
         super().__init__(
@@ -141,30 +137,30 @@ class Equilibrium(_Configuration, IOAble):
     def _set_grid(self):
         if self._node_pattern in ["cheb1", "cheb2", "jacobi"]:
             self._grid = ConcentricGrid(
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
-                sym=self.sym,
+                M=self._M_grid,
+                N=self._N_grid,
+                NFP=self._NFP,
+                sym=self._sym,
                 axis=False,
                 spectral_indexing=self._spectral_indexing,
                 node_pattern=self._node_pattern,
             )
         elif self._node_pattern in ["linear", "uniform"]:
             self._grid = LinearGrid(
-                L=2 * self.M_grid + 1,
-                M=2 * self.M_grid + 1,
-                N=2 * self.N_grid + 1,
-                NFP=self.NFP,
-                sym=self.sym,
+                L=2 * self._M_grid + 1,
+                M=2 * self._M_grid + 1,
+                N=2 * self._N_grid + 1,
+                NFP=self._NFP,
+                sym=self._sym,
                 axis=False,
             )
         elif self._node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=np.ceil((self.L + 1) / 2),
-                M=2 * self.M + 1,
-                N=2 * self.N + 1,
-                NFP=self.NFP,
-                sym=self.sym,
+                L=np.ceil((self._L + 1) / 2),
+                M=2 * self._M_grid + 1,
+                N=2 * self._N_grid + 1,
+                NFP=self._NFP,
+                sym=self._sym,
             )
         else:
             raise ValueError(
@@ -418,31 +414,15 @@ class Equilibrium(_Configuration, IOAble):
         """
         y = self.objective.BC_constraint.project(self.x)
         f = self._objective.compute(
-            y,
-            self.Rb_mn,
-            self.Zb_mn,
-            self.p_l,
-            self.i_l,
-            self.Psi,
+            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
         )
         jac = self._objective.jac_x(
-            y,
-            self.Rb_mn,
-            self.Zb_mn,
-            self.p_l,
-            self.i_l,
-            self.Psi,
+            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
         )
         return f, jac
 
     def solve(
-        self,
-        ftol=1e-6,
-        xtol=1e-6,
-        gtol=1e-6,
-        verbose=1,
-        maxiter=None,
-        options={},
+        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -497,8 +477,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
+                "Avg time per step", self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")

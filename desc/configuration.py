@@ -24,6 +24,8 @@ from desc.compute_funs import (
     compute_contravariant_basis,
     compute_magnetic_field_magnitude_axis,
     compute_current_density,
+    compute_magnetic_pressure_gradient,
+    compute_magnetic_tension,
     compute_force_error_magnitude,
     compute_energy,
 )
@@ -886,6 +888,102 @@ class _Configuration(IOAble, ABC):
         )
 
         return current_density
+
+    def compute_magnetic_pressure_gradient(self, grid):
+        """Computes magnetic pressure gradient components and its magnitude.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        magnetic_pressure : dict
+            dictionary of ndarray, shape(num_nodes,), of magnetic pressure gradient components.
+            Keys are of the form 'grad_B^x' meaning the contravariant (grad_B^x) component of the
+            magnetic pressure gradient.
+
+        """
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=2, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
+
+        (
+            magnetic_pressure,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_magnetic_pressure_gradient(
+            self._Psi,
+            self._R_lmn,
+            self._Z_lmn,
+            self._L_lmn,
+            self._p_l,
+            self._i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+            self._zeta_ratio,
+        )
+
+        return magnetic_pressure
+
+    def compute_magnetic_tension(self, grid):
+        """Computes magnetic tension vector and its magnitude.
+
+        Parameters
+        ----------
+        grid : Grid
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        magnetic_tension : dict
+            dictionary of ndarray, shape(num_nodes,), of magnetic tension vector.
+            Keys are of the form 'gradB' for the vector form and '|gradB|' for its
+            magnitude.
+
+        """
+        R_transform = Transform(grid, self._R_basis, derivs=2, method="direct")
+        Z_transform = Transform(grid, self._Z_basis, derivs=2, method="direct")
+        L_transform = Transform(grid, self._L_basis, derivs=2, method="direct")
+        p_transform = Transform(grid, self._p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self._i_basis, derivs=1, method="direct")
+
+        (
+            magnetic_tension,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_magnetic_tension(
+            self._Psi,
+            self._R_lmn,
+            self._Z_lmn,
+            self._L_lmn,
+            self._p_l,
+            self._i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+            self._zeta_ratio,
+        )
+
+        return magnetic_tension
 
     def compute_force_error(self, grid):
         """Computes force errors and magnitude.

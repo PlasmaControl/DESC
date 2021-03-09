@@ -589,8 +589,8 @@ def plot_section(eq, name, grid=None, ax=None, log=False,norm_F=False, **kwargs)
             _name_label(name_dict)
             + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(eq.NFP * zeta[i] / (2 * np.pi))
         )
-    if norm_F:
-        ax.set_title("Pct Error  %s / |%s|"%(name_dict['base'],_name_label(norm_name_dict)))
+        if norm_F:
+            ax[i].set_title("Pct Error  %s / |%s| $\\zeta \\cdot NFP/2\\pi = %3.3f$ "%(name_dict['base'],_name_label(norm_name_dict),eq.NFP * zeta[i] / (2 * np.pi)))
     fig.set_tight_layout(True)
     return fig, ax
 

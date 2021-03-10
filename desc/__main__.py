@@ -100,7 +100,7 @@ def main(cl_args=None):
             L=ir.inputs[0]["L"],
             M=ir.inputs[0]["M"],
             N=ir.inputs[0]["N"],
-            index=ir.inputs[0]["spectral_indexing"],
+            spectral_indexing=ir.inputs[0]["spectral_indexing"],
         )
         equil_fam[0].inputs = ir.inputs[0]
         equil_fam[0].objective = ir.inputs[0]["objective"]

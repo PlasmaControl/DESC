@@ -76,7 +76,11 @@ class Equilibrium(_Configuration, IOAble):
     )
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
 
         super().__init__(
@@ -409,20 +413,47 @@ class Equilibrium(_Configuration, IOAble):
 
         Returns
         -------
-        float
+        f : ndarray or float
+            function value
+        jac : ndarray
+            derivative df/dx
 
         """
         y = self.objective.BC_constraint.project(self.x)
         f = self._objective.compute(
-            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
+            y,
+            self.Rb_mn,
+            self.Zb_mn,
+            self.p_l,
+            self.i_l,
+            self.Psi,
         )
         jac = self._objective.jac_x(
-            y, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi,
+            y,
+            self.Rb_mn,
+            self.Zb_mn,
+            self.p_l,
+            self.i_l,
+            self.Psi,
         )
         return f, jac
 
+    def resolution_summary(self):
+        """Prints a summary of the spectral and real space resolution"""
+
+        print("Spectral indexing: {}".format(self._spectral_indexing))
+        print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        print("Node pattern: {}".format(self._node_pattern))
+        print("Node resolution (M,N)=({},{})".format(self._M_grid, self._N_grid))
+
     def solve(
-        self, ftol=1e-6, xtol=1e-6, gtol=1e-6, verbose=1, maxiter=None, options={},
+        self,
+        ftol=1e-6,
+        xtol=1e-6,
+        gtol=1e-6,
+        verbose=1,
+        maxiter=100,
+        options={},
     ):
         """Solve to find the equilibrium configuration
 
@@ -477,7 +508,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             self.timer.disp("Solution time")
             self.timer.pretty_print(
-                "Avg time per step", self.timer["Solution time"] / result["nfev"],
+                "Avg time per step",
+                self.timer["Solution time"] / result["nfev"],
             )
         if verbose > 0:
             print("Start of solver")
@@ -574,6 +606,58 @@ class EquilibriaFamily(IOAble, MutableSequence):
             self._equilibria = [Equilibrium(inputs=inputs)]
         self.inputs = inputs
 
+    @staticmethod
+    def _format_deltas(inputs, inputs_prev, equil):
+        """Figures out the changes in continuation parameters
+
+        Parameters
+        ----------
+        inputs, inputs_prev : dict
+            dictionaries of continuation parameters for current and  previous step
+        equil : Equilibrium
+            equilibrium being perturbed
+
+        Returns
+        -------
+        deltas : dict
+            dictionary of delta values to be passed to equil.perturb"""
+        deltas = {}
+        Rb_mn, Zb_mn = format_boundary(
+            inputs["boundary"],
+            equil.Rb_basis,
+            equil.Zb_basis,
+            equil.bdry_mode,
+        )
+        if not np.allclose(Rb_mn, equil.Rb_mn):
+            deltas["Rb_mn"] = Rb_mn - equil.Rb_mn
+        if not np.allclose(Zb_mn, equil.Zb_mn):
+            deltas["Zb_mn"] = Zb_mn - equil.Zb_mn
+        p_l, i_l = format_profiles(inputs["profiles"], equil.p_basis, equil.i_basis)
+        if not np.allclose(p_l, equil.p_l):
+            deltas["p_l"] = p_l - equil.p_l
+        if not np.allclose(i_l, equil.i_l):
+            deltas["i_l"] = i_l - equil.i_l
+        if not np.allclose(inputs["zeta_ratio"], inputs_prev["zeta_ratio"]):
+            deltas["zeta_ratio"] = inputs["zeta_ratio"] - inputs_prev["zeta_ratio"]
+        if not np.allclose(inputs["Psi"], inputs_prev["Psi"]):
+            deltas["Psi"] = inputs["Psi"] - inputs_prev["Psi"]
+        return deltas
+
+    def _print_iteration(self, ii, equil):
+        print("================")
+        print("Step {}/{}".format(ii + 1, len(self.inputs)))
+        print("================")
+        equil.resolution_summary()
+        print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
+        print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        print("Zeta ratio = {}".format(self.inputs[ii]["zeta_ratio"]))
+        print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
+        print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
+        print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
+        print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
+        print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
+        print("================")
+
     def solve_continuation(
         self, start_from=0, verbose=None, checkpoint_path=None, device=None
     ):
@@ -605,78 +689,31 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         for ii in range(start_from, len(self.inputs)):
             self.timer.start("Iteration {} total".format(ii + 1))
-            if verbose > 0:
-                print("================")
-                print("Step {}/{}".format(ii + 1, len(self.inputs)))
-                print("================")
-                print(
-                    "Spectral resolution (L,M,N)=({},{},{})".format(
-                        self.inputs[ii]["L"], self.inputs[ii]["M"], self.inputs[ii]["N"]
-                    )
-                )
-                print(
-                    "Node resolution (M,N)=({},{})".format(
-                        self.inputs[ii]["M_grid"], self.inputs[ii]["N_grid"]
-                    )
-                )
-                print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
-                print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
-                print("Zeta ratio = {}".format(self.inputs[ii]["zeta_ratio"]))
-                print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-                print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
-                print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
-                print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
-                print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
-                print("================")
-
             if ii == start_from:
                 equil = self[ii]
+                if verbose > 0:
+                    self._print_iteration(ii, equil)
 
             else:
-
                 equil = self[ii - 1].copy()
                 self.insert(ii, equil)
+                # this is basically free if nothings actually changing, so we can call
+                # it on each iteration
+                equil.change_resolution(
+                    L=self.inputs[ii]["L"],
+                    M=self.inputs[ii]["M"],
+                    N=self.inputs[ii]["N"],
+                    M_grid=self.inputs[ii]["M_grid"],
+                    N_grid=self.inputs[ii]["N_grid"],
+                )
+                # TODO: updating transforms instead of recomputing
+                if verbose > 0:
+                    self._print_iteration(ii, equil)
 
                 # figure out if we we need perturbations
-
-                deltas = {}
-                if not np.allclose(
-                    self.inputs[ii]["boundary"], self.inputs[ii - 1]["boundary"]
-                ):
-                    # if we're changing the bdry ratio, assume we want to increase
-                    # resolution before we do that, otherwise you're not really perturbing anything
-                    if self.inputs[ii]["N"] != self.inputs[ii - 1]["N"]:
-                        equil.change_resolution(
-                            L=self.inputs[ii]["L"],
-                            M=self.inputs[ii]["M"],
-                            N=self.inputs[ii]["N"],
-                            M_grid=self.inputs[ii]["M_grid"],
-                            N_grid=self.inputs[ii]["N_grid"],
-                        )
-
-                    Rb_mn, Zb_mn = format_boundary(
-                        self.inputs[ii]["boundary"],
-                        equil.Rb_basis,
-                        equil.Zb_basis,
-                        equil.bdry_mode,
-                    )
-                    deltas["Rb_mn"] = Rb_mn - equil.Rb_mn
-                    deltas["Zb_mn"] = Zb_mn - equil.Zb_mn
-                if not np.allclose(
-                    self.inputs[ii]["profiles"], self.inputs[ii - 1]["profiles"]
-                ):
-                    p_l, i_l = format_profiles(
-                        self.inputs[ii]["profiles"], equil.p_basis, equil.i_basis
-                    )
-                    deltas["p_l"] = p_l - equil.p_l
-                if (
-                    self.inputs[ii]["zeta_ratio"] - self.inputs[ii - 1]["zeta_ratio"]
-                    != 0
-                ):
-                    deltas["zeta_ratio"] = (
-                        self.inputs[ii]["zeta_ratio"]
-                        - self.inputs[ii - 1]["zeta_ratio"]
-                    )
+                deltas = self._format_deltas(
+                    self.inputs[ii], self.inputs[ii - 1], equil
+                )
 
                 if len(deltas) > 0:
                     equil.build(verbose)
@@ -689,17 +726,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         verbose=verbose,
                         copy=False,
                     )
-
-                # this is basically free if nothings actually changing, so we can call
-                # it again even if it was called during the perturbations
-                equil.change_resolution(
-                    L=self.inputs[ii]["L"],
-                    M=self.inputs[ii]["M"],
-                    N=self.inputs[ii]["N"],
-                    M_grid=self.inputs[ii]["M_grid"],
-                    N_grid=self.inputs[ii]["N_grid"],
-                )
-            # TODO: updating transforms instead of recomputing
 
             objective = get_objective_function(
                 self.inputs[ii]["objective"],

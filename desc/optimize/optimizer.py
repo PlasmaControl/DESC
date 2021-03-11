@@ -43,6 +43,8 @@ class Optimizer:
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scalar_methods = _desc_scalar_methods + _scipy_scalar_methods
     _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
+    _scipy_methods = _scipy_least_squares_methods + _scipy_scalar_methods
+    _desc_methods = _desc_least_squares_methods + _desc_scalar_methods
     _all_methods = (
         _scipy_least_squares_methods
         + _scipy_scalar_methods
@@ -228,6 +230,11 @@ class Optimizer:
         # need some weird logic because scipy optimizers expect disp={0,1,2}
         # while we use verbose={0,1,2,3}
         disp = verbose - 1 if verbose > 1 else verbose
+
+        if self.method in Optimizer._desc_methods:
+            if not isinstance(x_scale, str) and np.allclose(x_scale, 1):
+                options.setdefault("initial_trust_radius", 0.5)
+                options.setdefault("max_trust_radius", 1.0)
 
         if verbose > 0:
             print("Starting optimization")

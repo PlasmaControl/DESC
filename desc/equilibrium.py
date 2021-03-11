@@ -363,6 +363,7 @@ class Equilibrium(_Configuration, IOAble):
                 "objective should be of type 'ObjectiveFunction' or string"
             )
         self.solved = False
+        self.optimizer_results = {}
 
     @property
     def optimizer(self):
@@ -452,6 +453,7 @@ class Equilibrium(_Configuration, IOAble):
         xtol=1e-6,
         gtol=1e-6,
         verbose=1,
+        x_scale="auto",
         maxiter=100,
         options={},
     ):
@@ -499,6 +501,7 @@ class Equilibrium(_Configuration, IOAble):
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
+            x_scale=x_scale,
             verbose=verbose,
             maxiter=maxiter,
             options=options,
@@ -517,7 +520,7 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             self._objective.callback(result["x"], *args)
 
-        self.optimizer_results = result
+        self.optimizer_results = {key: val for key, val in result.items()}
         self.x = self._optimizer.objective.BC_constraint.recover(result["x"])
         self.solved = result["success"]
         return result
@@ -557,6 +560,9 @@ class Equilibrium(_Configuration, IOAble):
             verbose=verbose,
             copy=copy,
         )
+        equil.solved = False
+        equil.optimizer_results = {}
+
         if copy:
             return equil
         else:
@@ -652,6 +658,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
         print("Zeta ratio = {}".format(self.inputs[ii]["zeta_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
+        print("Objective: {}".format(equil.objective.name))
+        print("Optimizer: {}".format(equil.optimizer.method))
         print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
         print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
         print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
@@ -684,7 +692,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         """
         if verbose is None:
-            verbose = self._inputs[0]["verbose"]
+            verbose = self.inputs[0]["verbose"]
         self.timer.start("Total time")
 
         for ii in range(start_from, len(self.inputs)):
@@ -726,6 +734,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         verbose=verbose,
                         copy=False,
                     )
+            if not equil.is_nested():
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
+                break
 
             objective = get_objective_function(
                 self.inputs[ii]["objective"],
@@ -774,7 +792,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 warnings.warn(
                     colored(
                         "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller resolution steps",
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
                         "yellow",
                     )
                 )

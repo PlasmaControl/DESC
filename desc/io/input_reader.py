@@ -161,11 +161,11 @@ class InputReader:
             "xtol": np.atleast_1d(1e-6),
             "gtol": np.atleast_1d(1e-6),
             "nfev": np.atleast_1d(None),
-            "optim_method": "scipy-trf",
-            "errr_mode": "force",
+            "optimizer": "scipy-trf",
+            "objective": "force",
             "bdry_mode": "spectral",
-            "zern_mode": "fringe",
-            "node_mode": "jacobi",
+            "spectral_indexing": "fringe",
+            "node_pattern": "jacobi",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
             "boundary": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
@@ -271,21 +271,21 @@ class InputReader:
                 inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
 
             # solver methods
-            match = re.search(r"optim_method", argument, re.IGNORECASE)
+            match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
-                inputs["optim_method"] = words[0]
-            match = re.search(r"errr_mode", argument, re.IGNORECASE)
+                inputs["optimizer"] = words[0]
+            match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
-                inputs["errr_mode"] = words[0]
+                inputs["objective"] = words[0]
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_mode"] = words[0]
-            match = re.search(r"zern_mode", argument, re.IGNORECASE)
+            match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
-                inputs["zern_mode"] = words[0]
-            match = re.search(r"node_mode", argument, re.IGNORECASE)
+                inputs["spectral_indexing"] = words[0]
+            match = re.search(r"node_pattern", argument, re.IGNORECASE)
             if match:
-                inputs["node_mode"] = words[0]
+                inputs["node_pattern"] = words[0]
 
             # coefficient indicies
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -463,7 +463,7 @@ class InputReader:
                 "fringe": 2 * inputs["M"],
                 "house": 2 * inputs["M"],
             }
-            inputs["L"] = default_L[inputs["zern_mode"]]
+            inputs["L"] = default_L[inputs["spectral_indexing"]]
 
         # split into list of dicts
         inputs_list = []
@@ -544,11 +544,11 @@ class InputReader:
             )
 
         f.write("\n# solver methods \n")
-        f.write("optim_method = {} \n".format(inputs[0]["optim_method"]))
-        f.write("errr_mode = {} \n".format(inputs[0]["errr_mode"]))
+        f.write("optimizer = {} \n".format(inputs[0]["optimizer"]))
+        f.write("objective = {} \n".format(inputs[0]["objective"]))
         f.write("bdry_mode = {} \n".format(inputs[0]["bdry_mode"]))
-        f.write("zern_mode = {} \n".format(inputs[0]["zern_mode"]))
-        f.write("node_mode = {} \n".format(inputs[0]["node_mode"]))
+        f.write("spectral_indexing = {} \n".format(inputs[0]["spectral_indexing"]))
+        f.write("node_pattern = {} \n".format(inputs[0]["node_pattern"]))
 
         f.write("\n# pressure and rotational transform profiles \n")
         for (l, p, i) in inputs[0]["profiles"]:

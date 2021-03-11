@@ -128,10 +128,22 @@ class TestGrid(unittest.TestCase):
         NFP = 1
 
         grid_ansi = ConcentricGrid(
-            M, N, NFP, sym=False, axis=True, index="ansi", surfs="linear"
+            M,
+            N,
+            NFP,
+            sym=False,
+            axis=True,
+            spectral_indexing="ansi",
+            node_pattern="linear",
         )
         grid_fringe = ConcentricGrid(
-            M, N, NFP, sym=False, axis=True, index="fringe", surfs="linear"
+            M,
+            N,
+            NFP,
+            sym=False,
+            axis=True,
+            spectral_indexing="fringe",
+            node_pattern="linear",
         )
 
         ansi_nodes = np.stack(

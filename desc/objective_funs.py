@@ -388,7 +388,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -493,7 +495,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -711,7 +715,9 @@ class ForceConstraintNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -822,7 +828,9 @@ class ForceConstraintNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1000,7 +1008,14 @@ class EnergyVolIntegral(ObjectiveFunction):
     def derivatives(self):
         """ndarray : which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
-        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ]
+        )
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -1034,7 +1049,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1117,7 +1134,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1152,7 +1171,7 @@ class EnergyVolIntegral(ObjectiveFunction):
 
 
 def get_objective_function(
-    errr_mode,
+    objective,
     R_transform,
     Z_transform,
     L_transform,
@@ -1168,7 +1187,7 @@ def get_objective_function(
 
     Parameters
     ----------
-    errr_mode : str
+    objective : str
         name of the desired objective function, eg 'force' or 'energy'
     R_transform : Transform
         transforms R_lmn coefficients to real space
@@ -1197,7 +1216,7 @@ def get_objective_function(
         objective initialized with the given transforms and constraints
     """
 
-    if errr_mode == "force":
+    if objective == "force":
         obj_fun = ForceErrorNodes(
             R_transform=R_transform,
             Z_transform=Z_transform,
@@ -1210,7 +1229,7 @@ def get_objective_function(
             use_jit=use_jit,
             devices=devices,
         )
-    elif errr_mode == "lambda":
+    elif objective == "lambda":
         obj_fun = ForceConstraintNodes(
             R_transform=R_transform,
             Z_transform=Z_transform,
@@ -1223,7 +1242,7 @@ def get_objective_function(
             use_jit=use_jit,
             devices=devices,
         )
-    elif errr_mode == "energy":
+    elif objective == "energy":
         obj_fun = EnergyVolIntegral(
             R_transform=R_transform,
             Z_transform=Z_transform,

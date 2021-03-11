@@ -22,14 +22,13 @@ pert_order = 1
 ftol = 1e-6
 xtol = 1e-6
 gtol = 1e-2
-nfev = 1000
+nfev = 50
 
 # solver methods
-optim_method = scipy-bfgs
-errr_mode = force
-bdry_mode = spectral
-zern_mode = fringe
-node_mode = cheb2
+optimizer         = scipy-trf
+objective         = force
+spectral_indexing = ansi
+node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0	p =   6.85517649E+04	i =   3.47354557E-01

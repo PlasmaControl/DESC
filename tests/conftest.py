@@ -58,7 +58,7 @@ def DSHAPE(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     output_path = output_dir.join("DSHAPE_out")
     desc_nc_path = output_dir.join("DSHAPE_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    vmec_nc_path = "examples//VMEC//wout_DSHAPE_s256_M14_N0.nc"
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")

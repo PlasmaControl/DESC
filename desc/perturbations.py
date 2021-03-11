@@ -187,7 +187,6 @@ def perturb(
             eq_new.Zb_mn,
         )
 
-    print("rhs: ", max(abs(RHS)))
     # perturbation
     if order > 0:
         dy = dx1 + dx2

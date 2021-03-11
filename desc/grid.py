@@ -355,7 +355,12 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self._NFP, axis=self._axis, endpoint=self._endpoint,
+                L=L,
+                M=M,
+                N=N,
+                NFP=self._NFP,
+                axis=self._axis,
+                endpoint=self._endpoint,
             )
             self._sort_nodes()
 
@@ -402,7 +407,10 @@ class QuadratureGrid(Grid):
             self._sym = sym
 
             self._nodes, self._weights = self._create_nodes(
-                L=self._L, M=self._M, N=self._N, NFP=self._NFP,
+                L=self._L,
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
             )
 
             self._enforce_symmetry()
@@ -415,7 +423,11 @@ class QuadratureGrid(Grid):
             )
 
     def _create_nodes(
-        self, L=1, M=1, N=1, NFP=1,
+        self,
+        L=1,
+        M=1,
+        N=1,
+        NFP=1,
     ):
         """
 
@@ -511,9 +523,9 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    index : {'ansi', 'chevron', 'fringe', 'house'}
+    spectral_indexing : {'ansi', 'chevron', 'fringe', 'house'}
         Zernike indexing scheme
-    surfs : {'cheb1', 'cheb2', 'quad', None}
+    node_pattern : {'cheb1', 'cheb2', 'quad', None}
         pattern for radial coordinates
 
             * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
@@ -532,8 +544,8 @@ class ConcentricGrid(Grid):
         NFP=1,
         sym=False,
         axis=False,
-        index="fringe",
-        surfs="jacobi",
+        spectral_indexing="fringe",
+        node_pattern="jacobi",
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -548,16 +560,16 @@ class ConcentricGrid(Grid):
             self._NFP = NFP
             self._sym = sym
             self._axis = axis
-            self._index = index
-            self._surfs = surfs
+            self._spectral_indexing = spectral_indexing
+            self._node_pattern = node_pattern
 
             self._nodes, self._weights = self._create_nodes(
                 M=self._M,
                 N=self._N,
                 NFP=self._NFP,
                 axis=self._axis,
-                index=self._index,
-                surfs=self._surfs,
+                spectral_indexing=self._spectral_indexing,
+                node_pattern=self._node_pattern,
             )
 
             self._enforce_symmetry()
@@ -570,7 +582,13 @@ class ConcentricGrid(Grid):
             )
 
     def _create_nodes(
-        self, M, N, NFP=1, axis=False, index="fringe", surfs="jacobi",
+        self,
+        M,
+        N,
+        NFP=1,
+        axis=False,
+        spectral_indexing="fringe",
+        node_pattern="jacobi",
     ):
         """
 
@@ -584,9 +602,9 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        index : {'ansi', 'chevron', 'fringe', 'house'}
+        spectral_indexing : {'ansi', 'chevron', 'fringe', 'house'}
             Zernike indexing scheme
-        surfs : {'cheb1', 'cheb2', 'jacobi', None}
+        node_pattern : {'cheb1', 'cheb2', 'jacobi', None}
             pattern for radial coordinates
 
                 * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
@@ -604,10 +622,10 @@ class ConcentricGrid(Grid):
 
         """
         dim_fourier = 2 * N + 1
-        if index in ["ansi", "chevron"]:
+        if spectral_indexing in ["ansi", "chevron"]:
             dim_zernike = int((M + 1) * (M + 2) / 2)
             a = 1
-        elif index in ["fringe", "house"]:
+        elif spectral_indexing in ["fringe", "house"]:
             dim_zernike = int((M + 1) ** 2)
             a = 2
         else:
@@ -623,7 +641,7 @@ class ConcentricGrid(Grid):
             "cheb2": -np.cos(np.arange(M, 2 * M + 1, 1) * np.pi / (2 * M)),
             "jacobi": special.js_roots(M + 1, 2, 2)[0],
         }
-        rho = pattern.get(surfs, np.linspace(0, 1, num=M + 1))
+        rho = pattern.get(node_pattern, np.linspace(0, 1, num=M + 1))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0
@@ -686,7 +704,7 @@ class ConcentricGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                M=M, N=N, NFP=self._NFP, surfs=self._surfs
+                M=M, N=N, NFP=self._NFP, node_pattern=self._node_pattern
             )
             self._sort_nodes()
 

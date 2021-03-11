@@ -320,9 +320,7 @@ class Transform(IOAble):
             array of values of function at node locations
         """
         if not self._built:
-            raise AttributeError(
-                "Transform must be built with Transform.build() before it can be used"
-            )
+            self.build()
 
         if self.method == "direct":
             A = self._matrices[dr][dt][dz]
@@ -398,9 +396,7 @@ class Transform(IOAble):
 
         """
         if not self._built_pinv:
-            raise AttributeError(
-                "inverse transform must be built with Transform.build_pinv() before it can be used"
-            )
+            self.build()
         return jnp.matmul(self._pinv, self.grid.weights * x)
 
     def change_resolution(

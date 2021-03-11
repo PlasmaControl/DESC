@@ -137,17 +137,13 @@ class LinearEqualityConstraint:
     @property
     def Ainv(self):
         if not self.built:
-            raise ValueError(
-                "constraint must be build with constraint.build() to create Ainv"
-            )
+            self.build()
         return self._Ainv
 
     @property
     def Z(self):
         if not self.built:
-            raise ValueError(
-                "constraint must be build with constraint.build() to create Z"
-            )
+            self.build()
         return self._Z
 
     def compute_residual(self, x):
@@ -166,9 +162,7 @@ class LinearEqualityConstraint:
     def make_feasible(self, x):
         """make a vector x feasible by projecting onto the nullspace of A"""
         if not self.built:
-            raise ValueError(
-                "constraint must be build with constraint.build() before using"
-            )
+            self.build()
         dx = x - self._x0
         y = self._Z.T.dot(dx)
         return self._x0 + self._Z.dot(y)
@@ -187,18 +181,14 @@ class LinearEqualityConstraint:
     def recover(self, y):
         """Recover the full solution x from the optimization variable y"""
         if not self.built:
-            raise ValueError(
-                "constraint must be build with constraint.build() before using"
-            )
+            self.build()
         x = self._x0 + jnp.dot(self._Z, y)
         return jnp.squeeze(x)
 
     def project(self, x):
         """Project a full solution x to the optimization variable y"""
         if not self.built:
-            raise ValueError(
-                "constraint must be build with constraint.build() before using"
-            )
+            self.build()
         dx = x - self._x0
         y = jnp.dot(self._Z.T, dx)
         return jnp.squeeze(y)

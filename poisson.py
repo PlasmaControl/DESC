@@ -17,7 +17,7 @@ from desc.backend import jnp
 from desc.utils import copy_coeffs
 from desc.derivatives import Derivative
 from desc.basis import FourierZernikeBasis
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.optimize import Optimizer
 
@@ -33,14 +33,15 @@ class ObjectiveFun:
         self.sigma = 0.1
 
         # grid, basis, transform
-        basis = FourierZernikeBasis(M=M, N=0, index=index)
+        basis = FourierZernikeBasis(M=M, N=0, spectral_indexing=index)
         grid = QuadratureGrid(L=np.ceil((basis.L + 1) / 2), M=(2 * basis.M + 1), N=1)
         self.transform = Transform(grid, basis, derivs=2)
         if index == "ansi":
             self.idx = np.squeeze(np.argwhere(np.abs(basis.modes[:, 1]) < basis.M))
         else:
-            self.idx = np.squeeze(np.argwhere(
-                basis.modes[:, 0] + np.abs(basis.modes[:, 1]) < basis.L))
+            self.idx = np.squeeze(
+                np.argwhere(basis.modes[:, 0] + np.abs(basis.modes[:, 1]) < basis.L)
+            )
 
         # Dirichlet boundary condition
         A = np.zeros((2 * basis.M + 1, basis.num_modes))
@@ -90,23 +91,31 @@ class ObjectiveFun:
         u_tt = self.transform.transform(xx, 0, 2)
 
         Lu = u_rr + u_r / r + u_tt / r ** 2
-        F = self.F0 * jnp.exp((-r ** 2 - self.r0 ** 2 + 2 * r * self.r0 * (
-           jnp.cos(t) * jnp.cos(self.t0) + jnp.sin(t) * jnp.sin(self.t0))) / (
-           2 * self.sigma ** 2))
+        F = self.F0 * jnp.exp(
+            (
+                -(r ** 2)
+                - self.r0 ** 2
+                + 2
+                * r
+                * self.r0
+                * (jnp.cos(t) * jnp.cos(self.t0) + jnp.sin(t) * jnp.sin(self.t0))
+            )
+            / (2 * self.sigma ** 2)
+        )
         return Lu - F
 
     def compute(self, x):
         """Return f(x) coefficients."""
         f = self.residual(x)
-        w = self.transform.grid.weights / (2*jnp.pi)
+        w = self.transform.grid.weights / (2 * jnp.pi)
         A = self.transform._matrices[0][0][0]
-        r = jnp.sum(jnp.atleast_2d(f * w).T * A, axis=0)
+        r = jnp.dot(A.T, f * w)
         return r[self.idx]
 
     def compute_scalar(self, x):
         """Return the integral of f(x) over the unit disc."""
         f = self.residual(x)
-        return jnp.sum(jnp.abs(f)*self.transform.grid.weights) / (2*jnp.pi)
+        return jnp.sum(jnp.abs(f) * self.transform.grid.weights) / (2 * jnp.pi)
 
     def grad_x(self, x):
         """Return gradient of scalar objective."""
@@ -241,13 +250,21 @@ ax.set_title("$u(\\rho,\\theta)$  M={}  Fringe".format(M))
 fig.set_tight_layout(True)
 
 # plot coefficients
-basis_ansi = FourierZernikeBasis(M=M, N=0, index="ansi")
-basis_fringe = FourierZernikeBasis(M=M, N=0, index="fringe")
+basis_ansi = FourierZernikeBasis(M=M, N=0, spectral_indexing="ansi")
+basis_fringe = FourierZernikeBasis(M=M, N=0, spectral_indexing="fringe")
 fig, ax = plt.subplots()
-ax.semilogy(np.sum(np.abs(basis_ansi.modes), axis=1), np.abs(results_ansi[M]["x"]),
-            "bo", label="ANSI")
-ax.semilogy(np.sum(np.abs(basis_fringe.modes), axis=1), np.abs(results_fringe[M]["x"]),
-            "ro", label="Fringe")
+ax.semilogy(
+    np.sum(np.abs(basis_ansi.modes), axis=1),
+    np.abs(results_ansi[M]["x"]),
+    "bo",
+    label="ANSI",
+)
+ax.semilogy(
+    np.sum(np.abs(basis_fringe.modes), axis=1),
+    np.abs(results_fringe[M]["x"]),
+    "ro",
+    label="Fringe",
+)
 ax.set_ylim(1e-10, 1e-2)
 ax.legend()
 ax.set_xlabel("$l + |m|$")

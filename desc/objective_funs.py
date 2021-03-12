@@ -8,7 +8,12 @@ from desc.backend import jnp, jit
 from desc.utils import unpack_state
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.compute_funs import compute_force_error_magnitude, dot, compute_energy
+from desc.compute_funs import (
+    compute_force_error,
+    compute_force_error_magnitude,
+    dot,
+    compute_energy,
+)
 
 __all__ = ["ForceErrorNodes", "EnergyVolIntegral", "get_objective_function"]
 
@@ -230,6 +235,306 @@ class ObjectiveFunction(IOAble, ABC):
         return f(*args).reshape(tuple(dims))
 
 
+class ForceErrorGalerkin(ObjectiveFunction):
+    """Minimizes spectral coefficients of force balance residual
+
+    Parameters
+    ----------
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_mn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_mn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryConstraint
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
+    devices : jax.device or list of jax.device, optional
+        devices to jit compile to
+
+    """
+
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint=None,
+        use_jit=True,
+        devices=None,
+    ):
+
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+            use_jit,
+            devices,
+        )
+        self.dimx = (
+            R_transform.num_modes + Z_transform.num_modes + L_transform.num_modes
+        )
+        self.dimy = self.dimx if BC_constraint is None else BC_constraint.dimy
+        self.dimf = 2 * R_transform.num_nodes
+        block_size = 3000
+        if not isinstance(devices, (list, tuple)):
+            devices = [devices]
+
+        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=self._use_jit)
+
+        if self.dimy > block_size:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+                block_size=block_size,
+                shape=(self.dimy, self.dimy),
+            )
+        else:
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=self._use_jit,
+                devices=devices,
+            )
+        if self.dimf > block_size:
+            self._jac = Derivative(
+                self.compute,
+                mode="fwd",
+                use_jit=self._use_jit,
+                devices=devices,
+                block_size=block_size,
+                shape=(self.dimf, self.dimy),
+            )
+        else:
+            self._jac = Derivative(
+                self.compute, mode="fwd", use_jit=self._use_jit, devices=devices
+            )
+
+    @property
+    def scalar(self):
+        """bool : whether default "compute" method is a scalar or vector"""
+        return False
+
+    @property
+    def name(self):
+        """str : type of objective function"""
+        return "force"
+
+    @property
+    def derivatives(self):
+        """ndarray : which derivatives are needed to compute"""
+        # TODO: different derivatives for R,Z,L,p,i ?
+        # old axis derivatives
+        axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 2, 0],
+                [0, 1, 1],
+                [0, 0, 2],
+            ]
+        )
+        return derivatives
+
+    def _residuals(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute force balance residuals at collocation nodes.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        F_R = (
+            force_error["F_rho"] * toroidal_coords["R_r"]
+            + force_error["F_theta"] * toroidal_coords["R_t"]
+            + force_error["F_zeta"] * toroidal_coords["R_z"]
+        )
+        F_Z = (
+            force_error["F_rho"] * toroidal_coords["Z_r"]
+            + force_error["F_theta"] * toroidal_coords["Z_t"]
+            + force_error["F_zeta"] * toroidal_coords["Z_z"]
+        )
+
+        return F_R, F_Z
+
+    def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute spectral coefficients of force balance residual by quadrature.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        F_R, F_Z = self._residuals(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        weights = self.R_transform.grid.weights
+
+        f_R = jnp.dot(self.R_transform._matrices[0][0][0].T, F_R * weights)
+        f_Z = jnp.dot(self.Z_transform._matrices[0][0][0].T, F_Z * weights)
+
+        residual = jnp.concatenate([f_R.flatten(), f_Z.flatten()])
+        return residual
+
+    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the integral of the force balance residual by quadrature.
+
+        eg int(|F_R| + |F_Z|)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total force balance error
+
+        """
+        F_R, F_Z = self._residuals(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        weights = self.R_transform.grid.weights
+        return jnp.sum((jnp.abs(F_R) + jnp.abs(F_Z)) * weights)
+
+    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+        """Prints the rms errors for radial and helical force balance
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_mn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_mn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        F_R, F_Z = self._residuals(x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio)
+        weights = self.R_transform.grid.weights
+        F_R_int = jnp.sum(jnp.abs(F_R) * weights)
+        F_Z_int = jnp.sum(jnp.abs(F_Z) * weights)
+        F_T_int = jnp.sum((jnp.abs(F_R) + jnp.abs(F_Z)) * weights)
+
+        print(
+            "int(|F_R|+|F_Z|): {:10.3e}  int(|F_R|): {:10.3e}  int(|F_Z|): {:10.3e}".format(
+                F_T_int, F_R_int, F_Z_int
+            )
+        )
+
+        return None
+
+
 class ForceErrorNodes(ObjectiveFunction):
     """Minimizes equilibrium force balance error in physical space
 
@@ -388,9 +693,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -495,9 +798,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -715,9 +1016,7 @@ class ForceConstraintNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -828,9 +1127,7 @@ class ForceConstraintNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1008,14 +1305,7 @@ class EnergyVolIntegral(ObjectiveFunction):
     def derivatives(self):
         """ndarray : which derivatives are needed to compute"""
         # TODO: different derivatives for R,Z,L,p,i ?
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-            ]
-        )
+        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1],])
         return derivatives
 
     def compute(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -1049,9 +1339,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1134,9 +1422,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_bdry(x, Rb_mn, Zb_mn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1218,6 +1504,19 @@ def get_objective_function(
 
     if objective == "force":
         obj_fun = ForceErrorNodes(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+            use_jit=use_jit,
+            devices=devices,
+        )
+    elif objective == "galerkin":
+        obj_fun = ForceErrorGalerkin(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,

@@ -10,7 +10,7 @@ __all__ = ["PowerSeries", "FourierSeries", "DoubleFourierSeries", "FourierZernik
 class Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets"""
 
-    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes"]
+    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes", "_sym", "_spectral_indexing"]
 
     def __eq__(self, other):
         """Overloads the == operator
@@ -34,18 +34,18 @@ class Basis(IOAble, ABC):
     def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""
 
-        if self._sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self._modes[:, 1]) != sign(self._modes[:, 2]))
-            self._modes = np.delete(self._modes, non_sym_idx, axis=0)
-        elif self._sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self._modes[:, 1]) == sign(self._modes[:, 2]))
-            self._modes = np.delete(self._modes, non_sym_idx, axis=0)
+        if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
+            non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
 
     def _sort_modes(self):
         """Sorts modes for use with FFT"""
 
-        sort_idx = np.lexsort((self._modes[:, 1], self._modes[:, 0], self._modes[:, 2]))
-        self._modes = self._modes[sort_idx]
+        sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
+        self._modes = self.modes[sort_idx]
 
     @abstractmethod
     def _get_modes(self):
@@ -78,31 +78,43 @@ class Basis(IOAble, ABC):
     @property
     def L(self):
         """int: maximum radial resolution"""
+        if not hasattr(self, "_L"):
+            self._L = 0
         return self._L
 
     @property
     def M(self):
         """int:  maximum poloidal resolution"""
+        if not hasattr(self, "_M"):
+            self._M = 0
         return self._M
 
     @property
     def N(self):
         """int: maximum toroidal resolution"""
+        if not hasattr(self, "_N"):
+            self._N = 0
         return self._N
 
     @property
     def NFP(self):
         """int: number of field periods"""
+        if not hasattr(self, "_NFP"):
+            self._NFP = 1
         return self._NFP
 
     @property
     def sym(self):
-        """str: {'cos', 'sin', None} type of symmetry"""
+        """str: {'cos', 'sin', False} type of symmetry"""
+        if not hasattr(self, "_sym"):
+            self._sym = False
         return self._sym
 
     @property
     def modes(self):
         """ndarray: mode numbers [l,m,n]"""
+        if not hasattr(self, "_modes"):
+            self._modes = np.array([]).reshape((0, 3))
         return self._modes
 
     @modes.setter
@@ -112,7 +124,14 @@ class Basis(IOAble, ABC):
     @property
     def num_modes(self):
         """int: number of modes in the spectral basis"""
-        return self._modes.shape[0]
+        return self.modes.shape[0]
+
+    @property
+    def spectral_indexing(self):
+        """str: type of indexing used for the spectral basis"""
+        if not hasattr(self, "_spectral_indexing"):
+            self._spectral_indexing = "linear"
+        return self._spectral_indexing
 
 
 class PowerSeries(Basis):
@@ -137,9 +156,10 @@ class PowerSeries(Basis):
             self._M = 0
             self._N = 0
             self._NFP = 1
-            self._sym = None
+            self._sym = False
+            self._spectral_indexing = "linear"
 
-            self._modes = self._get_modes(L=self._L)
+            self._modes = self._get_modes(L=self.L)
 
             self._enforce_symmetry()
             self._sort_modes()
@@ -187,7 +207,7 @@ class PowerSeries(Basis):
 
         """
         if modes is None:
-            modes = self._modes
+            modes = self.modes
 
         return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
 
@@ -200,9 +220,9 @@ class PowerSeries(Basis):
             maximum radial resolution
 
         """
-        if L != self._L:
+        if L != self.L:
             self._L = L
-            self._modes = self._get_modes(self._L)
+            self._modes = self._get_modes(self.L)
             self._sort_modes()
 
 
@@ -216,10 +236,10 @@ class FourierSeries(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', None}
+    sym : {'cos', 'sin', False}
         * 'cos' for cos(m*t-n*z) symmetry
         * 'sin' for sin(m*t-n*z) symmetry
-        * None for no symmetry (Default)
+        * False for no symmetry (Default)
 
     """
 
@@ -227,7 +247,7 @@ class FourierSeries(Basis):
         self,
         N=0,
         NFP=1,
-        sym=None,
+        sym=False,
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -241,8 +261,9 @@ class FourierSeries(Basis):
             self._N = N
             self._NFP = NFP
             self._sym = sym
+            self._spectral_indexing = "linear"
 
-            self._modes = self._get_modes(N=self._N)
+            self._modes = self._get_modes(N=self.N)
 
             self._enforce_symmetry()
             self._sort_modes()
@@ -291,7 +312,7 @@ class FourierSeries(Basis):
 
         """
         if modes is None:
-            modes = self._modes
+            modes = self.modes
 
         return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
@@ -304,9 +325,9 @@ class FourierSeries(Basis):
             maximum toroidal resolution
 
         """
-        if N != self._N:
+        if N != self.N:
             self._N = N
-            self._modes = self._get_modes(self._N)
+            self._modes = self._get_modes(self.N)
             self._sort_modes()
 
 
@@ -322,10 +343,10 @@ class DoubleFourierSeries(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', None}
+    sym : {'cos', 'sin', False}
         * 'cos' for cos(m*t-n*z) symmetry
         * 'sin' for sin(m*t-n*z) symmetry
-        * None for no symmetry (Default)
+        * False for no symmetry (Default)
 
     """
 
@@ -334,7 +355,7 @@ class DoubleFourierSeries(Basis):
         M=0,
         N=0,
         NFP=1,
-        sym=None,
+        sym=False,
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -348,8 +369,9 @@ class DoubleFourierSeries(Basis):
             self._N = N
             self._NFP = NFP
             self._sym = sym
+            self._spectral_indexing = "linear"
 
-            self._modes = self._get_modes(M=self._M, N=self._N)
+            self._modes = self._get_modes(M=self.M, N=self.N)
 
             self._enforce_symmetry()
             self._sort_modes()
@@ -406,10 +428,10 @@ class DoubleFourierSeries(Basis):
 
         """
         if modes is None:
-            modes = self._modes
+            modes = self.modes
 
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
         return poloidal * toroidal
 
     def change_resolution(self, M, N):
@@ -427,10 +449,10 @@ class DoubleFourierSeries(Basis):
         None
 
         """
-        if M != self._M or N != self._N:
+        if M != self.M or N != self.N:
             self._M = M
             self._N = N
-            self._modes = self._get_modes(self._M, self._N)
+            self._modes = self._get_modes(self.M, self.N)
             self._sort_modes()
 
 
@@ -451,11 +473,11 @@ class FourierZernikeBasis(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', None}
+    sym : {'cos', 'sin', False}
         * 'cos' for cos(m*t-n*z) symmetry
         * 'sin' for sin(m*t-n*z) symmetry
-        * None for no symmetry (Default)
-    spectral_indexing : {'ansi', 'frige', 'chevron', 'house'}
+        * False for no symmetry (Default)
+    spectral_indexing : {'ansi', 'fringe', 'chevron', 'house'}
         Indexing method, default value = 'ansi'
 
         For L=0, all methods are equivalent and give a "chevron" shaped
@@ -493,7 +515,7 @@ class FourierZernikeBasis(Basis):
         M=0,
         N=0,
         NFP=1,
-        sym=None,
+        sym=False,
         spectral_indexing="ansi",
         load_from=None,
         file_format=None,
@@ -511,10 +533,10 @@ class FourierZernikeBasis(Basis):
             self._spectral_indexing = spectral_indexing
 
             self._modes = self._get_modes(
-                L=self._L,
-                M=self._M,
-                N=self._N,
-                spectral_indexing=self._spectral_indexing,
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                spectral_indexing=self.spectral_indexing,
             )
 
             self._enforce_symmetry()
@@ -578,24 +600,24 @@ class FourierZernikeBasis(Basis):
         if spectral_indexing == "ansi":
             pol_posm = [
                 [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
-                for d in range(0, self._L + 1, 2)
+                for d in range(0, self.L + 1, 2)
             ]
 
         elif spectral_indexing == "fringe":
             pol_posm = [
                 [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
-                for d in range(0, self._L + 1, 2)
+                for d in range(0, self.L + 1, 2)
             ]
 
         elif spectral_indexing == "chevron":
             pol_posm = [
-                (m + d, m) for m in range(0, M + 1) for d in range(0, self._L + 1, 2)
+                (m + d, m) for m in range(0, M + 1) for d in range(0, self.L + 1, 2)
             ]
 
         elif spectral_indexing == "house":
             pol_posm = [
                 [(l, m) for m in range(0, M + 1) if l >= m and (l - m) % 2 == 0]
-                for l in range(0, self._L + 1)
+                for l in range(0, self.L + 1)
             ] + [(m, m) for m in range(M + 1)]
             pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
 
@@ -630,11 +652,11 @@ class FourierZernikeBasis(Basis):
 
         """
         if modes is None:
-            modes = self._modes
+            modes = self.modes
 
         radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
         return radial * poloidal * toroidal
 
     def change_resolution(self, L, M, N):
@@ -650,12 +672,12 @@ class FourierZernikeBasis(Basis):
             maximum toroidal resolution
 
         """
-        if M != self._M or N != self._N or L != self._L:
+        if M != self.M or N != self.N or L != self.L:
             self._M = M
             self._N = N
             self._L = L
             self._modes = self._get_modes(
-                self._L, self._M, self._N, spectral_indexing=self._spectral_indexing
+                self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
             self._sort_modes()
 

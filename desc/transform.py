@@ -7,6 +7,13 @@ import warnings
 from desc.backend import jnp, put
 from desc.utils import equals, issorted, isalmostequal, islinspaced
 from desc.io import IOAble
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.basis import (
+    PowerSeries,
+    FourierSeries,
+    DoubleFourierSeries,
+    FourierZernikeBasis,
+)
 
 
 class Transform(IOAble):
@@ -35,7 +42,17 @@ class Transform(IOAble):
           spectral bases.
     """
 
-    _io_attrs_ = ["_grid", "_basis", "_derives", "_matrices"]
+    _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
+    _object_lib_ = {
+        "PowerSeries": PowerSeries,
+        "FourierSeries": FourierSeries,
+        "DoubleFourierSeries": DoubleFourierSeries,
+        "FourierZernikeBasis": FourierZernikeBasis,
+        "Grid": Grid,
+        "LinearGrid": LinearGrid,
+        "ConcentricGrid": ConcentricGrid,
+        "QuadratureGrid": QuadratureGrid,
+    }
 
     def __init__(
         self,
@@ -56,7 +73,8 @@ class Transform(IOAble):
         if load_from is None:
             self._grid = grid
             self._basis = basis
-            self._rcond = rcond
+            self._rcond = rcond if rcond is not None else "auto"
+
             self._built = False
             self._built_pinv = False
             self._matrices = {
@@ -66,13 +84,13 @@ class Transform(IOAble):
 
             self._sort_derivatives()
             if method in ["direct", "fft"]:
-                self.method = method
+                self._method = method
             else:
                 raise ValueError(
                     colored("Unknown Transform method '{}'".format(method), "red")
                 )
             if self.method == "fft":
-                self._check_inputs_fft(self._grid, self._basis)
+                self._check_inputs_fft(self.grid, self.basis)
             if build:
                 self.build()
             if build_pinv:
@@ -148,9 +166,9 @@ class Transform(IOAble):
     def _sort_derivatives(self):
         """Sorts derivatives"""
         sort_idx = np.lexsort(
-            (self._derivatives[:, 0], self._derivatives[:, 1], self._derivatives[:, 2])
+            (self.derivatives[:, 0], self.derivatives[:, 1], self.derivatives[:, 2])
         )
-        self._derivatives = self._derivatives[sort_idx]
+        self._derivatives = self.derivatives[sort_idx]
 
     def _check_inputs_fft(self, grid, basis):
         """helper function to check that inputs are formatted correctly for fft method"""
@@ -163,7 +181,7 @@ class Transform(IOAble):
                     "yellow",
                 )
             )
-            self.method = "direct"
+            self._method = "direct"
             return
 
         if not isalmostequal(zeta_cts):
@@ -173,7 +191,7 @@ class Transform(IOAble):
                     "yellow",
                 )
             )
-            self.method = "direct"
+            self._method = "direct"
             return
 
         if len(zeta_vals) > 1:
@@ -184,7 +202,7 @@ class Transform(IOAble):
                         "yellow",
                     )
                 )
-                self.method = "direct"
+                self._method = "direct"
                 return
 
             if not isalmostequal(
@@ -196,7 +214,7 @@ class Transform(IOAble):
                         "yellow",
                     )
                 )
-                self.method = "direct"
+                self._method = "direct"
                 return
 
             if not abs((zeta_vals[-1] + zeta_vals[1]) * grid.NFP - 2 * np.pi) < 1e-14:
@@ -206,7 +224,7 @@ class Transform(IOAble):
                         "yellow",
                     )
                 )
-                self.method = "direct"
+                self._method = "direct"
                 return
 
         id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
@@ -217,7 +235,7 @@ class Transform(IOAble):
                     "yellow",
                 )
             )
-            self.method = "direct"
+            self._method = "direct"
             return
 
         n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
@@ -229,7 +247,7 @@ class Transform(IOAble):
                         "yellow",
                     )
                 )
-                self.method = "direct"
+                self._method = "direct"
                 return
 
         if not len(zeta_vals) >= len(n_vals):
@@ -241,10 +259,10 @@ class Transform(IOAble):
                     "yellow",
                 )
             )
-            self.method = "direct"
+            self._method = "direct"
             return
 
-        self.method = "fft"
+        self._method = "fft"
         self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
@@ -266,13 +284,13 @@ class Transform(IOAble):
 
     def build(self):
         """Builds the transform matrices for each derivative order"""
-        if self._built:
+        if self.built:
             return
 
         if self.method == "direct":
-            for d in self._derivatives:
-                self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self._grid.nodes, d
+            for d in self.derivatives:
+                self._matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d
                 )
 
         elif self.method == "fft":
@@ -281,7 +299,7 @@ class Transform(IOAble):
             )
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
-                self.matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
+                self.matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
                     self.fft_nodes, d, modes=temp_modes
                 )
 
@@ -289,15 +307,16 @@ class Transform(IOAble):
 
     def build_pinv(self):
         """build pseudoinverse for fitting"""
-        if self._built_pinv:
+        if self.built_pinv:
             return
-        A = self._basis.evaluate(self._grid.nodes, np.array([0, 0, 0]))
+        A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
         # for weighted least squares
         A = self.grid.weights[:, np.newaxis] * A
+        rcond = None if self.rcond == "auto" else self.rcond
         if A.size:
-            self._pinv = scipy.linalg.pinv(A, rcond=self._rcond)
+            self._matrices["pinv"] = scipy.linalg.pinv(A, rcond=rcond)
         else:
-            self._pinv = np.zeros_like(A.T)
+            self._matrices["pinv"] = np.zeros_like(A.T)
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -319,11 +338,11 @@ class Transform(IOAble):
         x : ndarray, shape(num_nodes,)
             array of values of function at node locations
         """
-        if not self._built:
+        if not self.built:
             self.build()
 
         if self.method == "direct":
-            A = self._matrices[dr][dt][dz]
+            A = self.matrices[dr][dt][dz]
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
@@ -340,7 +359,7 @@ class Transform(IOAble):
             return jnp.matmul(A, c)
 
         elif self.method == "fft":
-            A = self._matrices[dr][dt][0]
+            A = self.matrices[dr][dt][0]
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
@@ -395,9 +414,9 @@ class Transform(IOAble):
             spectral coefficients in basis
 
         """
-        if not self._built_pinv:
-            self.build()
-        return jnp.matmul(self._pinv, self.grid.weights * x)
+        if not self.built_pinv:
+            self.build_pinv()
+        return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
 
     def change_resolution(
         self,
@@ -419,20 +438,20 @@ class Transform(IOAble):
 
         """
         if grid is None:
-            grid = self._grid
+            grid = self.grid
         if basis is None:
-            basis = self._basis
+            basis = self.basis
 
-        if self._grid != grid:
+        if self.grid != grid:
             self._grid = grid
             self._built = False
             self._built_pinv = False
-        if self._basis != basis:
+        if self.basis != basis:
             self._basis = basis
             self._built = False
             self._built_pinv = False
         if self.method == "fft":
-            self._check_inputs_fft(self._grid, self._basis)
+            self._check_inputs_fft(self.grid, self.basis)
         if build:
             self.build()
         if build_pinv:
@@ -441,36 +460,40 @@ class Transform(IOAble):
     @property
     def grid(self):
         """Grid : collocation grid for the transform"""
+        if not hasattr(self, "_grid"):
+            self._grid = None
         return self._grid
 
     @grid.setter
     def grid(self, grid):
-        if self._grid != grid:
+        if self.grid != grid:
             self._grid = grid
             if self.method == "fft":
-                self._check_inputs_fft(self._grid, self._basis)
-            if self._built:
+                self._check_inputs_fft(self.grid, self.basis)
+            if self.built:
                 self._built = False
                 self.build()
-            if self._built_pinv:
+            if self.built_pinv:
                 self._built_pinv = False
                 self.build_pinv()
 
     @property
     def basis(self):
         """Basis : spectral basis for the transform"""
+        if not hasattr(self, "_basis"):
+            self._basis = None
         return self._basis
 
     @basis.setter
     def basis(self, basis):
-        if self._basis != basis:
+        if self.basis != basis:
             self._basis = basis
             if self.method == "fft":
-                self._check_inputs_fft(self._grid, self._basis)
-            if self._built:
+                self._check_inputs_fft(self.grid, self.basis)
+            if self.built:
                 self._built = False
                 self.build()
-            if self._built_pinv:
+            if self.built_pinv:
                 self._built_pinv = False
                 self.build_pinv()
 
@@ -514,8 +537,8 @@ class Transform(IOAble):
             # we don't update self._built here because if it was built before it still is
             # but if it wasn't it still might have unbuilt matrices
             for d in derivs_to_add:
-                self._matrices[d[0]][d[1]][d[2]] = self._basis.evaluate(
-                    self._grid.nodes, d
+                self._matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
+                    self.grid.nodes, d
                 )
         elif len(derivs_to_add):
             # if we actually added derivatives and didn't build them, then its not built
@@ -524,24 +547,56 @@ class Transform(IOAble):
     @property
     def matrices(self):
         """dict of ndarray : transform matrices such that x=A*c"""
+        if not hasattr(self, "_matrices"):
+            self._matrices = {
+                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+            }
         return self._matrices
 
     @property
     def num_nodes(self):
         """int : number of nodes in the collocation grid"""
-        return self._grid.num_nodes
+        return self.grid.num_nodes
 
     @property
     def num_modes(self):
         """int : number of modes in the spectral basis"""
-        return self._basis.num_modes
+        return self.basis.num_modes
+
+    @property
+    def modes(self):
+        """ndarray: collocation nodes"""
+        return self.grid.nodes
+
+    @property
+    def nodes(self):
+        """ndarray: spectral mode numbers"""
+        return self.basis.nodes
 
     @property
     def built(self):
         """bool : whether the transform matrices have been built"""
+        if not hasattr(self, "_built"):
+            self._built = False
         return self._built
 
     @property
     def built_pinv(self):
         """bool : whether the pseudoinverse matrix has been computed for inverse fitting"""
+        if not hasattr(self, "_built_pinv"):
+            self._built_pinv = False
         return self._built_pinv
+
+    @property
+    def rcond(self):
+        """float: reciprocal condition number for inverse transform"""
+        if not hasattr(self, "_rcond"):
+            self._rcond = "auto"
+        return self._rcond
+
+    @property
+    def method(self):
+        """{'direct', 'fft'}: method of computing transform"""
+        if not hasattr(self, "_method"):
+            self._method = "direct"
+        return self._method

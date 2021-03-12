@@ -6,7 +6,7 @@ from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
-from desc.grid import Grid, LinearGrid, ConcentricGrid
+from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.basis import (
     PowerSeries,
@@ -70,8 +70,6 @@ class _Configuration(IOAble, ABC):
         "FourierSeries": FourierSeries,
         "DoubleFourierSeries": DoubleFourierSeries,
         "FourierZernikeBasis": FourierZernikeBasis,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
     }
 
     def __init__(

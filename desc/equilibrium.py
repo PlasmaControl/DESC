@@ -8,7 +8,7 @@ from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
 from desc.objective_funs import ObjectiveFunction, get_objective_function
 from desc.optimize import Optimizer
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.perturbations import perturb
 
@@ -62,17 +62,27 @@ class Equilibrium(_Configuration, IOAble):
 
     # TODO: make this ^ format correctly with sphinx, dont show it as init method
 
-    # TODO: add optimizer, objective, grid, transform to io_attrs
+    # TODO: add optimizer, objective, transform to io_attrs
     # and figure out why it wont save
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
         "_x0",
         "_M_grid",
         "_N_grid",
+        "_grid",
+        "_node_pattern",
+        # "_transforms", # TODO: figure out why we can't save dictionaries
     ]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
-        {"_Configuration": _Configuration, "ObjectiveFunction": ObjectiveFunction}
+        {
+            "_Configuration": _Configuration,
+            "Grid": Grid,
+            "LinearGrid": LinearGrid,
+            "ConcentricGrid": ConcentricGrid,
+            "QuadratureGrid": QuadratureGrid,
+            "Transform": Transform,
+        }
     )
 
     def __init__(

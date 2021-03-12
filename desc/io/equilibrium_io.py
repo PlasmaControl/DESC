@@ -27,13 +27,19 @@ class IOAble(ABC):
                 )
             )
 
-        if file_format is None:
-            raise RuntimeError(
-                colored(
-                    "file_format argument must be included when loading from file",
-                    "red",
+        if file_format is None and isinstance(load_from, (str, os.PathLike)):
+            name = str(load_from)
+            if name.endswith(".h5") or name.endswith(".hdf5"):
+                file_format = "hdf5"
+            elif name.endswith(".pkl") or name.endswith(".pickle"):
+                file_format = "pickle"
+            else:
+                raise RuntimeError(
+                    colored(
+                        "could not infer file format from file name, it should be provided as file_format",
+                        "red",
+                    )
                 )
-            )
 
         reader = reader_factory(load_from, file_format)
         reader.read_obj(self, obj_lib=obj_lib)

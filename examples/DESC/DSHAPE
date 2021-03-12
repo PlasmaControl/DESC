@@ -28,7 +28,7 @@ nfev = 100
 optimizer         = scipy-trf
 objective         = force
 spectral_indexing = ansi
-node_pattern      = quad
+node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0	p =   1.60000000E+03	i =   1.00000000E+00

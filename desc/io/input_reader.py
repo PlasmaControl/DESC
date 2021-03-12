@@ -109,6 +109,11 @@ class InputReader:
         else:
             os.environ["DESC_USE_NUMPY"] = ""
 
+        if args.gpu is True:
+            args.gpu = 0
+        elif args.gpu is not False:
+            args.gpu = int(args.gpu)
+
         return args
 
     def _get_parser_(self):

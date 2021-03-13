@@ -207,6 +207,7 @@ def lsqtr(
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(iteration, nfev, cost, None, None, g_norm)
 
     if return_all:
         allx = [x]

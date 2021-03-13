@@ -397,8 +397,8 @@ class SVDJacobian(OptimizerDerivative):
 
     def quadratic(self, u, v):
         """evaluate quadratic form"""
-        uu = jnp.dot(self._S * self._V.T, u)
-        vv = jnp.dot(self._S * self._V.T, v)
+        uu = jnp.dot(self._S[:, np.newaxis] * self._V.T, u)
+        vv = jnp.dot(self._S[:, np.newaxis] * self._V.T, v)
         return jnp.dot(uu.T, vv)
 
 

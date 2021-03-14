@@ -342,6 +342,11 @@ class _Configuration(IOAble, ABC):
         self._make_labels()
 
     @property
+    def spectral_indexing(self):
+        """str: type of indexing used for the spectral basis"""
+        return self._spectral_indexing
+
+    @property
     def sym(self):
         """bool : whether this equilibrium is stellarator symmetric"""
         return self._sym

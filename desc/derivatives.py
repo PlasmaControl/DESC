@@ -128,13 +128,6 @@ class AutoDiffDerivative(_Derivative):
 
     def _init_blocks(self, mode, devices, kwargs):
 
-        if mode in ["fwd", "rev"]:
-            self._block_fun = self._fun
-            self._mode = "blocked-rev"
-        elif mode in ["hess"]:
-            self._block_fun = jax.grad(self._fun, self._argnum)
-            self._mode = "blocked-hess"
-
         try:
             self.shape = kwargs["shape"]
         except KeyError as e:
@@ -150,16 +143,27 @@ class AutoDiffDerivative(_Derivative):
             raise ValueError(
                 colored("can specify either block_size or num_blocks, not both", "red")
             )
-
-        elif block_size is None and num_blocks is None:
-            self._block_size = N
-            self._num_blocks = 1
+        if block_size is not None and M <= block_size:
+            # if its a small matrix we don't need to break it up
+            self._set_mode(mode, devices[0])
+            return
         elif block_size is not None:
             self._block_size = block_size
             self._num_blocks = np.ceil(N / block_size).astype(int)
-        else:
+        elif num_blocks is not None:
             self._num_blocks = num_blocks
             self._block_size = np.ceil(N / num_blocks).astype(int)
+        else:
+            # didn't specify num_blocks or block_size, don't break it up
+            self._set_mode(mode, devices[0])
+            return
+
+        if mode in ["fwd", "rev"]:
+            self._block_fun = self._fun
+            self._mode = "blocked-rev"
+        elif mode in ["hess"]:
+            self._block_fun = jax.grad(self._fun, self._argnum)
+            self._mode = "blocked-hess"
 
         self._f_blocks = []
         self._jac_blocks = []

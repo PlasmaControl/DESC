@@ -42,7 +42,13 @@ class Transform(IOAble):
           spectral bases.
     """
 
-    _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
+    _io_attrs_ = [
+        "_grid",
+        "_basis",
+        "_derivatives",
+        "_rcond",
+        "_method",
+    ]
     _object_lib_ = {
         "PowerSeries": PowerSeries,
         "FourierSeries": FourierSeries,
@@ -83,12 +89,13 @@ class Transform(IOAble):
                 raise ValueError(
                     colored("Unknown Transform method '{}'".format(method), "red")
                 )
-            if self.method == "fft":
-                self._check_inputs_fft(self.grid, self.basis)
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
+
+        if self.method == "fft":
+            self._check_inputs_fft(self.grid, self.basis)
 
         self._built = False
         self._built_pinv = False

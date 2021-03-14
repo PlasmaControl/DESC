@@ -75,13 +75,7 @@ class Transform(IOAble):
             self._basis = basis
             self._rcond = rcond if rcond is not None else "auto"
 
-            self._built = False
-            self._built_pinv = False
-            self._matrices = {
-                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
-            }
             self._derivatives = self._get_derivatives(derivs)
-
             self._sort_derivatives()
             if method in ["direct", "fft"]:
                 self._method = method
@@ -91,14 +85,20 @@ class Transform(IOAble):
                 )
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
-            if build:
-                self.build()
-            if build_pinv:
-                self.build_pinv()
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
+
+        self._built = False
+        self._built_pinv = False
+        self._matrices = {
+            i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+        }
+        if build:
+            self.build()
+        if build_pinv:
+            self.build_pinv()
 
     def __eq__(self, other):
         """Overloads the == operator
@@ -117,7 +117,14 @@ class Transform(IOAble):
         """
         if self.__class__ != other.__class__:
             return False
-        return equals(self.__dict__, other.__dict__)
+        ignore_keys = ["_built", "_built_pinv", "_matrices"]
+        dict1 = {
+            key: val for key, val in self.__dict__.items() if key not in ignore_keys
+        }
+        dict2 = {
+            key: val for key, val in other.__dict__.items() if key not in ignore_keys
+        }
+        return equals(dict1, dict2)
 
     def _get_derivatives(self, derivs):
         """Get array of derivatives needed for calculating objective function

@@ -78,9 +78,10 @@ class Equilibrium(_Configuration, IOAble):
         "_N_grid",
         "_grid",
         "_node_pattern",
-        # "_transforms", # TODO: figure out why we can't save dictionaries
+        "_transforms",  # TODO: figure out why we can't save dictionaries
         "_objective",
         "_optimizer",
+        "optimizer_results",
     ]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
@@ -585,7 +586,7 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             self.objective.callback(result["x"], *args)
 
-        self.optimizer_results = {key: val for key, val in result.items()}
+        self.optimizer_results = result
         self.x = self.objective.BC_constraint.recover(result["x"])
         self.solved = result["success"]
         return result

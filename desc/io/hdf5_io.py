@@ -79,6 +79,7 @@ class hdf5Reader(hdf5IO, Reader):
         """
         self.target = target
         self.file_mode = "r"
+        self.obj_lib = {}
         super().__init__()
 
     def read_obj(self, obj, where=None, obj_lib=None):
@@ -93,152 +94,135 @@ class hdf5Reader(hdf5IO, Reader):
 
         """
         if obj_lib is not None:
-            self.obj_lib = obj_lib
-        elif hasattr(self, "obj_lib"):
-            pass
-        elif hasattr(obj, "_object_lib_"):
-            self.obj_lib = obj._object_lib_
-        else:
-            pass
+            self.obj_lib.update(obj_lib)
+        if hasattr(obj, "_object_lib_"):
+            self.obj_lib.update(obj._object_lib_)
+
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
-            try:
-                setattr(obj, attr, loc[attr][()])
-            except KeyError:
+            if attr not in loc.keys():
                 warnings.warn(
                     "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
                 )
-            except AttributeError:
-                try:
-                    if "name" in loc[attr].keys():
-                        theattr = loc[attr]["name"][()]
-                        if theattr == "list":
-                            setattr(obj, attr, self.read_list(where=loc[attr]))
-                        elif theattr == "dict":
-                            setattr(obj, attr, self.read_dict(where=loc[attr]))
-                        else:
-                            try:
-                                # initialized an object from object_lib
-                                # print('setting attribute', attr, 'as an ', theattr)
-                                setattr(
-                                    obj,
-                                    attr,
-                                    self.obj_lib[theattr](
-                                        load_from=loc[attr],
-                                        file_format=self._file_format_,
-                                        obj_lib=self.obj_lib,
-                                    ),
-                                )
-                            except KeyError:
-                                warnings.warn(
-                                    "No object_lib '{}'.".format(attr), RuntimeWarning
-                                )
-                    else:
-                        warnings.warn(
-                            "Could not load attribute '{}'.".format(attr),
-                            RuntimeWarning,
-                        )
-                except AttributeError:
+                continue
+            if isinstance(loc[attr], h5py.Dataset):
+                setattr(obj, attr, loc[attr][()])
+            elif isinstance(loc[attr], h5py.Group):
+                if "name" not in loc[attr].keys():
                     warnings.warn(
-                        "Could not set attribute '{}'.".format(attr), RuntimeWarning
+                        "Could not load attribute '{}', no name found.".format(attr),
+                        RuntimeWarning,
+                    )
+                    continue
+                name = loc[attr]["name"][()]
+                if name == "list":
+                    setattr(obj, attr, self.read_list(where=loc[attr]))
+                elif name == "dict":
+                    setattr(obj, attr, self.read_dict(where=loc[attr]))
+                else:
+                    if name not in self.obj_lib:
+                        warnings.warn(
+                            "No object_lib '{}'.".format(name), RuntimeWarning
+                        )
+                        continue
+
+                    # initialized an object from object_lib
+                    setattr(
+                        obj,
+                        attr,
+                        self.obj_lib[name](
+                            load_from=loc[attr],
+                            file_format=self._file_format_,
+                            obj_lib=self.obj_lib,
+                        ),
                     )
 
-    def read_dict(self, thedict=None, where=None):
+    def read_dict(self, where=None):
         """Read dictionary from file in group specified by where argument.
 
         Parameters
         ----------
-        thedict : dictionary (Default None)
-            dictionary to update from the file
         where : None or file instance
             specifies where to read dict from
 
         """
-        ret = False
-        if thedict is None:
-            thedict = {}
-            ret = True
+        thedict = {}
         loc = self.resolve_where(where)
         for key in loc.keys():
-            try:
+            if isinstance(loc[key], h5py.Dataset) and key != "name":
                 thedict[key] = loc[key][()]
-            except AttributeError:
-                if "name" in loc[key].keys():
-                    theattr = loc[key]["name"][()]
-                    if theattr == "list":
-                        thedict[theattr] = self.read_list(where=loc[key])
-                    elif theattr == "dict":
-                        thedict[theattr] = self.read_dict(where=loc[key])
-                    else:
-                        try:
-                            # initialized an object from object_lib
-                            thedict[theattr] = self.obj_lib[theattr](
-                                load_from=loc[key],
-                                file_format=self._file_format_,
-                                obj_lib=self.obj_lib,
-                            )
-                        except KeyError:
-                            warnings.warn(
-                                "Could not load attribute '{}'.".format(key),
-                                RuntimeWarning,
-                            )
-                else:
+            elif isinstance(loc[key], h5py.Group):
+                if "name" not in loc[key].keys():
                     warnings.warn(
-                        "Could not load attribute '{}'.".format(key), RuntimeWarning
+                        "Could not load attribute '{}', no name found.".format(key),
+                        RuntimeWarning,
                     )
-        if ret:
-            return thedict
+                    continue
+                name = loc[key]["name"][()]
+                if name == "list":
+                    thedict[name] = self.read_list(where=loc[key])
+                elif name == "dict":
+                    thedict[key] = self.read_dict(where=loc[key])
+                else:
+                    if name not in self.obj_lib:
+                        warnings.warn(
+                            "No object_lib '{}'.".format(name), RuntimeWarning
+                        )
+                        continue
 
-    def read_list(self, thelist=None, where=None):
+                    # initialized an object from object_lib
+                    thedict[key] = self.obj_lib[name](
+                        load_from=loc[key],
+                        file_format=self._file_format_,
+                        obj_lib=self.obj_lib,
+                    )
+        return thedict
+
+    def read_list(self, where=None):
         """Read list from file in group specified by where argument.
 
         Parameters
         ----------
-        thelist : list (Default None)
-            list to update from the file
         where : None or file instance
             specifies wehre to read dict from
 
         """
-        ret = False
-        if thelist is None:
-            thelist = []
-            ret = True
+        thelist = []
         loc = self.resolve_where(where)
         i = 0
         while str(i) in loc.keys():
-            try:
+            if isinstance(loc[str(i)], h5py.Dataset):
                 thelist.append(loc[str(i)][()])
-            except AttributeError:
-                if "name" in loc[str(i)].keys():
-                    theattr = loc[str(i)]["name"][()]
-                    # print('loading a ', theattr, 'from list') #debug
-                    if theattr == "list":
-                        thelist.append(self.read_list(where=theattr))
-                    elif theattr == "dict":
-                        thelist.append(self.read_dict(where=theattr))
-                    else:
-                        try:
-                            # initialized an object from object_lib
-                            thelist.append(
-                                self.obj_lib[theattr](
-                                    load_from=loc[str(i)],
-                                    file_format=self._file_format_,
-                                    obj_lib=self.obj_lib,
-                                )
-                            )
-                        except KeyError:
-                            warnings.warn(
-                                "Could not load list index '{}'.".format(i),
-                                RuntimeWarning,
-                            )
-                else:
+            elif isinstance(loc[str(i)], h5py.Group):
+                if "name" not in loc[str(i)].keys():
                     warnings.warn(
-                        "Could not load list index '{}'.".format(i), RuntimeWarning
+                        "Could not load attribute '{}', no name found.".format(str(i)),
+                        RuntimeWarning,
                     )
-            i += 1
-        if ret:
-            return thelist
+                    continue
+                name = loc[str(i)]["name"][()]
+                if name == "list":
+                    thelist.append(self.read_list(where=loc[key]))
+                elif name == "dict":
+                    thelist.append(self.read_dict(where=loc[key]))
+                else:
+                    if name not in self.obj_lib:
+                        warnings.warn(
+                            "No object_lib '{}'.".format(name), RuntimeWarning
+                        )
+                        continue
+
+                    # initialized an object from object_lib
+                    thelist.append(
+                        self.obj_lib[name](
+                            load_from=loc[str(i)],
+                            file_format=self._file_format_,
+                            obj_lib=self.obj_lib,
+                        )
+                    )
+                i += 1
+
+        return thelist
 
 
 class hdf5Writer(hdf5IO, Writer):
@@ -271,6 +255,7 @@ class hdf5Writer(hdf5IO, Writer):
 
         """
         loc = self.resolve_where(where)
+
         # save name of object class
         loc.create_dataset("name", data=type(obj).__name__)
         for attr in obj._io_attrs_:
@@ -285,11 +270,14 @@ class hdf5Writer(hdf5IO, Writer):
             except TypeError:
                 theattr = getattr(obj, attr)
                 if isinstance(theattr, dict):
-                    self.write_dict(theattr, where=self.sub(attr))
+                    group = loc.create_group(attr)
+                    self.write_dict(theattr, where=group)
                 elif isinstance(theattr, list):
-                    self.write_list(theattr, where=self.sub(attr))
+                    group = loc.create_group(attr)
+                    self.write_list(theattr, where=group)
                 else:
                     try:
+
                         group = loc.create_group(attr)
                         sub_obj = getattr(obj, attr)
                         sub_obj.save(group)
@@ -315,7 +303,8 @@ class hdf5Writer(hdf5IO, Writer):
             try:
                 loc.create_dataset(key, data=thedict[key])
             except TypeError:
-                self.write_obj(thedict[key], loc)
+                group = loc.create_group(key)
+                self.write_obj(thedict[key], group)
 
     def write_list(self, thelist, where=None):
         """Write list to file in group specified by where argument.

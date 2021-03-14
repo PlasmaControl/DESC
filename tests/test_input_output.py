@@ -210,26 +210,6 @@ def test_reader_given_file(reader_test_file):
     f.close()
 
 
-def test_reader_read_dict(reader_test_file):
-    reader = hdf5Reader(reader_test_file)
-    newdict = {}
-    newsubdict = {}
-    otherdict = {}
-    reader.read_dict(newdict)
-    reader.read_dict(newsubdict, where=reader.sub("subgroup"))
-    with pytest.raises(SyntaxError):
-        reader.read_dict(otherdict, where="not a readable type")
-    reader.close()
-    if type(newdict["a"]) is bytes:
-        for key in newdict.keys():
-            newdict[key] = newdict[key].decode("ascii")
-        for key in newsubdict.keys():
-            newsubdict[key] = newsubdict[key].decode("ascii")
-    thedict = {"a": "a", "b": "b", "c": "c"}
-    assert thedict == newdict
-    assert thedict == newsubdict
-
-
 def test_reader_read_obj(reader_test_file):
     mo = MockObject()
     reader = hdf5Reader(reader_test_file)
@@ -243,6 +223,10 @@ def test_reader_read_obj(reader_test_file):
     for key in mo._io_attrs_:
         assert hasattr(mo, key)
         assert hasattr(submo, key)
+
+
+def test_reader_read_dict(reader_test_file):
+    pass
 
 
 def test_reader_load_configuration():

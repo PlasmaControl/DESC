@@ -6,7 +6,14 @@ from desc.utils import Timer
 from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
-from desc.objective_funs import ObjectiveFunction, get_objective_function
+from desc.objective_funs import (
+    get_objective_function,
+    ObjectiveFunction,
+    ForceErrorNodes,
+    ForceConstraintNodes,
+    ForceErrorGalerkin,
+    EnergyVolIntegral,
+)
 from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
@@ -72,6 +79,8 @@ class Equilibrium(_Configuration, IOAble):
         "_grid",
         "_node_pattern",
         # "_transforms", # TODO: figure out why we can't save dictionaries
+        "_objective",
+        "_optimizer",
     ]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
@@ -82,17 +91,25 @@ class Equilibrium(_Configuration, IOAble):
             "ConcentricGrid": ConcentricGrid,
             "QuadratureGrid": QuadratureGrid,
             "Transform": Transform,
+            "Optimizer": Optimizer,
+            "ForceErrorNodes": ForceErrorNodes,
+            "ForceErrorGalerkin": ForceErrorGalerkin,
+            "ForceConstraintNodes": ForceConstraintNodes,
+            "EnergyVolIntegral": EnergyVolIntegral,
         }
     )
+    _object_lib_.update(
+        ObjectiveFunction._object_lib_
+    )  # need the lower level object libs available at higher level for some reason
 
     def __init__(
         self,
         inputs=None,
         load_from=None,
-        file_format="hdf5",
+        file_format=None,
         obj_lib=None,
     ):
-
+        self.timer = Timer()
         super().__init__(
             inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
         )
@@ -109,7 +126,6 @@ class Equilibrium(_Configuration, IOAble):
         self._transforms = {}
         self._objective = None
         self._optimizer = None
-        self.timer = Timer()
         self._set_grid()
         self._set_transforms()
         self.objective = inputs.get("objective", None)
@@ -118,6 +134,8 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def x0(self):
         """ndarray : initial optimization vector (before solution)"""
+        if not hasattr(self, "_x0"):
+            self._x0 = None
         return self._x0
 
     @x0.setter
@@ -127,11 +145,13 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def M_grid(self):
         """int : poloidal/radial resolution in real space"""
+        if not hasattr(self, "_M_grid"):
+            self._M_grid = 1
         return self._M_grid
 
     @M_grid.setter
     def M_grid(self, new: Grid):
-        if self._M_grid != new:
+        if self.M_grid != new:
             self._M_grid = new
             self._set_grid()
             self._set_transforms()
@@ -139,51 +159,67 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def N_grid(self):
         """int : toroidal resolution in real space"""
+        if not hasattr(self, "_N_grid"):
+            self._N_grid = 0
         return self._N_grid
 
     @N_grid.setter
     def N_grid(self, new: Grid):
-        if self._N_grid != new:
+        if self.N_grid != new:
             self._N_grid = new
             self._set_grid()
             self._set_transforms()
 
+    @property
+    def node_pattern(self):
+        """str: pattern for placement of nodes in rho,theta,zeta"""
+        if not hasattr(self, "_node_pattern"):
+            self._node_pattern = None
+        return self._node_pattern
+
+    @property
+    def transforms(self):
+        if not hasattr(self, "_transforms"):
+            self._transforms = {}
+            self._set_transforms()
+        return self._transforms
+
     def _set_grid(self):
-        if self._node_pattern in ["cheb1", "cheb2", "jacobi"]:
+        if self.node_pattern in ["cheb1", "cheb2", "jacobi"]:
             self._grid = ConcentricGrid(
-                M=self._M_grid,
-                N=self._N_grid,
-                NFP=self._NFP,
-                sym=self._sym,
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
+                sym=self.sym,
                 axis=False,
-                spectral_indexing=self._spectral_indexing,
-                node_pattern=self._node_pattern,
+                spectral_indexing=self.spectral_indexing,
+                node_pattern=self.node_pattern,
             )
-        elif self._node_pattern in ["linear", "uniform"]:
+        elif self.node_pattern in ["linear", "uniform"]:
             self._grid = LinearGrid(
-                L=2 * self._M_grid + 1,
-                M=2 * self._M_grid + 1,
-                N=2 * self._N_grid + 1,
-                NFP=self._NFP,
-                sym=self._sym,
+                L=2 * self.M_grid + 1,
+                M=2 * self.M_grid + 1,
+                N=2 * self.N_grid + 1,
+                NFP=self.NFP,
+                sym=self.sym,
                 axis=False,
             )
-        elif self._node_pattern in ["quad"]:
+        elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=np.ceil((self._L + 1) / 2),
-                M=2 * self._M_grid + 1,
-                N=2 * self._N_grid + 1,
-                NFP=self._NFP,
-                sym=self._sym,
+                L=np.ceil((self.L + 1) / 2),
+                M=2 * self.M_grid + 1,
+                N=2 * self.N_grid + 1,
+                NFP=self.NFP,
+                sym=self.sym,
             )
         else:
             raise ValueError(
-                colored("unknown grid type {}".format(self._node_pattern), "red")
+                colored("unknown grid type {}".format(self.node_pattern), "red")
             )
 
     def _set_transforms(self):
 
-        if len(self._transforms) == 0:
+        if len(self.transforms) == 0:
             self._transforms["R"] = Transform(
                 self.grid, self.R_basis, derivs=0, build=False
             )
@@ -207,32 +243,22 @@ class Equilibrium(_Configuration, IOAble):
             )
 
         else:
-            self._transforms["R"].change_resolution(
-                self.grid, self.R_basis, build=False
-            )
-            self._transforms["Z"].change_resolution(
-                self.grid, self.Z_basis, build=False
-            )
-            self._transforms["L"].change_resolution(
-                self.grid, self.L_basis, build=False
-            )
-            self._transforms["Rb"].change_resolution(
+            self.transforms["R"].change_resolution(self.grid, self.R_basis, build=False)
+            self.transforms["Z"].change_resolution(self.grid, self.Z_basis, build=False)
+            self.transforms["L"].change_resolution(self.grid, self.L_basis, build=False)
+            self.transforms["Rb"].change_resolution(
                 self.grid, self.Rb_basis, build=False
             )
-            self._transforms["Zb"].change_resolution(
+            self.transforms["Zb"].change_resolution(
                 self.grid, self.Zb_basis, build=False
             )
-            self._transforms["p"].change_resolution(
-                self.grid, self.p_basis, build=False
-            )
-            self._transforms["i"].change_resolution(
-                self.grid, self.i_basis, build=False
-            )
+            self.transforms["p"].change_resolution(self.grid, self.p_basis, build=False)
+            self.transforms["i"].change_resolution(self.grid, self.i_basis, build=False)
         if self.objective is not None:
             derivs = self.objective.derivatives
-            self._transforms["R"].change_derivatives(derivs, build=False)
-            self._transforms["Z"].change_derivatives(derivs, build=False)
-            self._transforms["L"].change_derivatives(derivs, build=False)
+            self.transforms["R"].change_derivatives(derivs, build=False)
+            self.transforms["Z"].change_derivatives(derivs, build=False)
+            self.transforms["L"].change_derivatives(derivs, build=False)
 
     def build(self, verbose=1):
         """Builds transform matrices and factorizes boundary constraint
@@ -247,7 +273,7 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("Precomputing Transforms")
         self._set_transforms()
-        for tr in self._transforms.values():
+        for tr in self.transforms.values():
             tr.build()
 
         self.timer.stop("Transform computation")
@@ -281,21 +307,21 @@ class Equilibrium(_Configuration, IOAble):
         """
 
         L_change = M_change = N_change = False
-        if L is not None and L != self._L:
+        if L is not None and L != self.L:
             L_change = True
-        if M is not None and M != self._M:
+        if M is not None and M != self.M:
             M_change = True
-        if N is not None and N != self._N:
+        if N is not None and N != self.N:
             N_change = True
 
         if any([L_change, M_change, N_change]):
             super().change_resolution(L, M, N)
 
         M_grid_change = N_grid_change = False
-        if M_grid is not None and M_grid != self._M_grid:
+        if M_grid is not None and M_grid != self.M_grid:
             self._M_grid = M_grid
             M_grid_change = True
-        if N_grid is not None and N_grid != self._N_grid:
+        if N_grid is not None and N_grid != self.N_grid:
             self._N_grid = N_grid
             N_grid_change = True
         if any([M_grid_change, N_grid_change]):
@@ -310,7 +336,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def built(self):
         """bool : whether the equilibrium is ready to solve"""
-        tr = np.all([tr.built for tr in self._transforms.values()])
+        tr = np.all([tr.built for tr in self.transforms.values()])
         if self.objective is not None and self.objective.BC_constraint is not None:
             bc = self.objective.BC_constraint.built
         else:
@@ -341,22 +367,31 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def objective(self):
         """ObjectiveFunction : the objective function currently assigned"""
+        if not hasattr(self, "_objective"):
+            self._objective = None
         return self._objective
 
     @objective.setter
     def objective(self, objective):
-        if isinstance(objective, ObjectiveFunction) or objective is None:
+        if objective is None:
+            self._objective = objective
+        elif isinstance(objective, ObjectiveFunction) and objective.eq(self.objective):
+            return
+        elif isinstance(objective, ObjectiveFunction) and not objective.eq(
+            self.objective
+        ):
             self._objective = objective
         elif isinstance(objective, str):
+            self._set_transforms()
             self._objective = get_objective_function(
                 objective,
-                R_transform=self._transforms["R"],
-                Z_transform=self._transforms["Z"],
-                L_transform=self._transforms["L"],
-                Rb_transform=self._transforms["Rb"],
-                Zb_transform=self._transforms["Zb"],
-                p_transform=self._transforms["p"],
-                i_transform=self._transforms["i"],
+                R_transform=self.transforms["R"],
+                Z_transform=self.transforms["Z"],
+                L_transform=self.transforms["L"],
+                Rb_transform=self.transforms["Rb"],
+                Zb_transform=self.transforms["Zb"],
+                p_transform=self.transforms["p"],
+                i_transform=self.transforms["i"],
                 BC_constraint=BoundaryConstraint(
                     self.R_basis,
                     self.Z_basis,
@@ -370,7 +405,9 @@ class Equilibrium(_Configuration, IOAble):
             )
         else:
             raise ValueError(
-                "objective should be of type 'ObjectiveFunction' or string"
+                "objective should be of type 'ObjectiveFunction' or string, got {}".format(
+                    objective
+                )
             )
         self.solved = False
         self.optimizer_results = {}
@@ -378,44 +415,56 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def optimizer(self):
         """Optimizer : the optimizer currently assigned"""
+        if not hasattr(self, "_optimizer"):
+            self._optimizer = None
         return self._optimizer
 
     @optimizer.setter
     def optimizer(self, optimizer):
-        if isinstance(optimizer, Optimizer) or optimizer is None:
+        if optimizer is None:
+            self._optimizer = optimizer
+        elif isinstance(optimizer, Optimizer) and optimizer == self.optimizer:
+            return
+        elif isinstance(optimizer, Optimizer) and optimizer != self.optimizer:
             self._optimizer = optimizer
         elif optimizer in Optimizer._all_methods:
-            self._optimizer = Optimizer(optimizer, self.objective)
+            self._optimizer = Optimizer(optimizer)
         else:
-            raise ValueError("Invalid optimizer {}".format(optimizer))
+            raise ValueError(
+                "optimizer should be of type Optimizer or str, got  {}".format(
+                    optimizer
+                )
+            )
 
     @property
     def initial(self):
         """Equilibrium : initial Equilibrium from which the Equilibrium was solved"""
 
         p_modes = np.array(
-            [self._p_basis.modes[:, 0], self._p_l, np.zeros_like(self._p_l)]
+            [self.p_basis.modes[:, 0], self.p_l, np.zeros_like(self.p_l)]
         ).T
         i_modes = np.array(
-            [self._i_basis.modes[:, 0], np.zeros_like(self._i_l), self._i_l]
+            [self.i_basis.modes[:, 0], np.zeros_like(self.i_l), self.i_l]
         ).T
-        Rb_mn = self._Rb_mn.reshape((-1, 1))
-        Zb_mn = self._Zb_mn.reshape((-1, 1))
-        Rb_modes = np.hstack([self._Rb_basis.modes[:, 1:], Rb_mn, np.zeros_like(Rb_mn)])
-        Zb_modes = np.hstack([self._Zb_basis.modes[:, 1:], np.zeros_like(Zb_mn), Zb_mn])
+        Rb_mn = self.Rb_mn.reshape((-1, 1))
+        Zb_mn = self.Zb_mn.reshape((-1, 1))
+        Rb_modes = np.hstack([self.Rb_basis.modes[:, 1:], Rb_mn, np.zeros_like(Rb_mn)])
+        Zb_modes = np.hstack([self.Zb_basis.modes[:, 1:], np.zeros_like(Zb_mn), Zb_mn])
         inputs = {
-            "sym": self._sym,
-            "NFP": self._NFP,
-            "Psi": self._Psi,
-            "L": self._L,
-            "M": self._M,
-            "N": self._N,
-            "spectral_indexing": self._spectral_indexing,
-            "bdry_mode": self._bdry_mode,
-            "zeta_ratio": self._zeta_ratio,
+            "sym": self.sym,
+            "NFP": self.NFP,
+            "Psi": self.Psi,
+            "L": self.L,
+            "M": self.M,
+            "N": self.N,
+            "spectral_indexing": self.spectral_indexing,
+            "bdry_mode": self.bdry_mode,
+            "zeta_ratio": self.zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),
             "boundary": np.vstack((Rb_modes, Zb_modes)),
-            "x": self._x0,
+            "x": self.x0,
+            "objective": self.objective.name,
+            "optimizer": self.optimizer.method,
         }
         return Equilibrium(inputs=inputs)
 
@@ -430,8 +479,13 @@ class Equilibrium(_Configuration, IOAble):
             derivative df/dx
 
         """
+        if self.objective is None:
+            raise AttributeError(
+                "Equilibrium must have objective defined before evaluating."
+            )
+
         y = self.objective.BC_constraint.project(self.x)
-        f = self._objective.compute(
+        f = self.objective.compute(
             y,
             self.Rb_mn,
             self.Zb_mn,
@@ -439,7 +493,7 @@ class Equilibrium(_Configuration, IOAble):
             self.i_l,
             self.Psi,
         )
-        jac = self._objective.jac_x(
+        jac = self.objective.jac_x(
             y,
             self.Rb_mn,
             self.Zb_mn,
@@ -452,10 +506,10 @@ class Equilibrium(_Configuration, IOAble):
     def resolution_summary(self):
         """Prints a summary of the spectral and real space resolution"""
 
-        print("Spectral indexing: {}".format(self._spectral_indexing))
+        print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self._node_pattern))
-        print("Node resolution (M,N)=({},{})".format(self._M_grid, self._N_grid))
+        print("Node pattern: {}".format(self.node_pattern))
+        print("Node resolution (M,N)=({},{})".format(self.M_grid, self.N_grid))
 
     def solve(
         self,
@@ -485,7 +539,7 @@ class Equilibrium(_Configuration, IOAble):
             dictionary of additional options to pass to optimizer
         """
 
-        if self._optimizer is None:
+        if self.optimizer is None:
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving."
             )
@@ -496,16 +550,17 @@ class Equilibrium(_Configuration, IOAble):
             self.p_l,
             self.i_l,
             self.Psi,
-            self._zeta_ratio,
+            self.zeta_ratio,
         )
         if verbose > 0:
             print("Starting optimization")
 
         self.x0 = self.x
-        x_init = self._optimizer.objective.BC_constraint.project(self.x)
+        x_init = self.objective.BC_constraint.project(self.x)
         self.timer.start("Solution time")
 
-        result = self._optimizer.optimize(
+        result = self.optimizer.optimize(
+            self.objective,
             x_init=x_init,
             args=args,
             ftol=ftol,
@@ -526,12 +581,12 @@ class Equilibrium(_Configuration, IOAble):
             )
         if verbose > 0:
             print("Start of solver")
-            self._objective.callback(x_init, *args)
+            self.objective.callback(x_init, *args)
             print("End of solver")
-            self._objective.callback(result["x"], *args)
+            self.objective.callback(result["x"], *args)
 
         self.optimizer_results = {key: val for key, val in result.items()}
-        self.x = self._optimizer.objective.BC_constraint.recover(result["x"])
+        self.x = self.objective.BC_constraint.recover(result["x"])
         self.solved = result["success"]
         return result
 
@@ -606,7 +661,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     def __init__(self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None):
         self.timer = Timer()
-        self._file_format_ = file_format
         if load_from is None:
             self._init_from_inputs_(inputs=inputs)
         else:
@@ -617,9 +671,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def _init_from_inputs_(self, inputs=None):
         # did we get 1 set of inputs or several?
         if isinstance(inputs, (list, tuple)):
-            self._equilibria = [Equilibrium(inputs[0])]
+            self.equilibria = [Equilibrium(inputs[0])]
         else:
-            self._equilibria = [Equilibrium(inputs=inputs)]
+            self.equilibria = [Equilibrium(inputs=inputs)]
         self.inputs = inputs
 
     @staticmethod
@@ -757,13 +811,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
             objective = get_objective_function(
                 self.inputs[ii]["objective"],
-                R_transform=equil._transforms["R"],
-                Z_transform=equil._transforms["Z"],
-                L_transform=equil._transforms["L"],
-                Rb_transform=equil._transforms["Rb"],
-                Zb_transform=equil._transforms["Zb"],
-                p_transform=equil._transforms["p"],
-                i_transform=equil._transforms["i"],
+                R_transform=equil.transforms["R"],
+                Z_transform=equil.transforms["Z"],
+                L_transform=equil.transforms["L"],
+                Rb_transform=equil.transforms["Rb"],
+                Zb_transform=equil.transforms["Zb"],
+                p_transform=equil.transforms["p"],
+                i_transform=equil.transforms["i"],
                 BC_constraint=BoundaryConstraint(
                     equil.R_basis,
                     equil.Z_basis,
@@ -779,7 +833,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
             equil.objective = objective
-            equil.optimizer = self.inputs[ii]["optimizer"]
+            optimizer = Optimizer(self.inputs[ii]["optimizer"])
+            equil.optimizer = optimizer
             equil.build(verbose)
 
             equil.solve(

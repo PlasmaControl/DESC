@@ -1,11 +1,12 @@
 import numpy as np
 import scipy.optimize
 from termcolor import colored
-from desc.utils import Timer
+from desc.utils import equals
 from desc.optimize import fmintr, lsqtr
+from desc.io import IOAble
 
 
-class Optimizer:
+class Optimizer(IOAble):
     """A helper class to wrap several different optimization routines
 
     Offers all of the ``scipy.optimize.least_squares`` routines  and several of the most
@@ -30,6 +31,10 @@ class Optimizer:
 
     """
 
+    _io_attrs_ = [
+        "_method",
+    ]
+
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
@@ -52,16 +57,47 @@ class Optimizer:
         + _desc_least_squares_methods
     )
 
-    def __init__(self, method, objective):
+    def __init__(
+        self,
+        method=None,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ):
 
-        self._check_method_objective(method, objective)
-        self._method = method
-        self._objective = objective
-        self.timer = Timer()
-        self._set_compute_funs()
-        self.compiled = False
+        if load_from is None:
+            self.method = method
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
-    def _check_method_objective(self, method, objective):
+    def __eq__(self, other):
+        """Overloads the == operator
+
+        Parameters
+        ----------
+        other : Optimizer
+            another Optimizer object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is a Optimizer with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        return equals(self.__dict__, other.__dict__)
+
+    @property
+    def method(self):
+        """str : name of the optimization method"""
+        return self._method
+
+    @method.setter
+    def method(self, method):
         if method not in Optimizer._all_methods:
             raise NotImplementedError(
                 colored(
@@ -71,96 +107,11 @@ class Optimizer:
                     "red",
                 )
             )
-        if objective.scalar and (method in Optimizer._least_squares_methods):
-            raise ValueError(
-                colored(
-                    "method {} is incompatible with scalar objective function".format(
-                        ".".join([method])
-                    ),
-                    "red",
-                )
-            )
-
-    @property
-    def method(self):
-        """str : name of the optimization method"""
-        return self._method
-
-    @method.setter
-    def method(self, method):
-        self._check_method_objective(method, self.objective)
-        if (
-            method in Optimizer._scalar_methods
-            and self.method in Optimizer._least_squares_methods
-        ) or (
-            method in Optimizer._least_squares_methods
-            and self.method in Optimizer._scalar_methods
-        ):
-            self.compiled = False
-
         self._method = method
-        self._set_compute_funs()
-
-    @property
-    def objective(self):
-        """ObjectiveFunction : the objective being optimized"""
-        return self._objective
-
-    @objective.setter
-    def objective(self, objective):
-        self._check_method_objective(self.method, objective)
-        self._objective = objective
-        self.method = self.method
-        self._set_compute_funs()
-        self.compiled = False
-
-    def _set_compute_funs(self):
-
-        if self.method in Optimizer._scalar_methods:
-            self._fun = self.objective.compute_scalar
-            self._grad = self.objective.grad_x
-            if self.method in Optimizer._hessian_free_methods:
-                self._hess = None
-            else:
-                self._hess = self.objective.hess_x
-        else:
-            self._fun = self.objective.compute
-            self._jac = self.objective.jac_x
-            if self.method in Optimizer._desc_least_squares_methods:
-                self._grad = self.objective.grad_x
-
-    def compile(self, x, args, verbose=1):
-        """Calls the necessary functions to ensure the function is compiled
-
-        Parameters
-        ----------
-        x : ndarray
-            any array of the correct shape to trigger jit compilation
-        args : tuple
-            additional arguments passed to objective function and derivatives
-        verbose : int, optional
-            level of output
-
-        """
-        if verbose > 0:
-            print("Compiling objective function")
-        self.timer.start("Compilation time")
-
-        if self.method in Optimizer._scalar_methods:
-            f0 = self._fun(x, *args)
-            g0 = self._grad(x, *args)
-            if self.method not in Optimizer._hessian_free_methods:
-                H0 = self._hess(x, *args)
-        else:
-            f0 = self._fun(x, *args)
-            J0 = self._jac(x, *args)
-        self.timer.stop("Compilation time")
-        if verbose > 1:
-            self.timer.disp("Compilation time")
-        self.compiled = True
 
     def optimize(
         self,
+        objective,
         x_init,
         args=(),
         x_scale="auto",
@@ -175,6 +126,8 @@ class Optimizer:
 
         Parameters
         ----------
+        objective : ObjectiveFunction
+            objective function to optimize
         x_init : ndarray
             initial guess. Should satisfy any constraints on x
         args : tuple, optional
@@ -224,8 +177,19 @@ class Optimizer:
 
         """
         # TODO: document options
-        if not self.compiled:
-            self.compile(x_init, args, verbose)
+        if objective.scalar and (self.method in Optimizer._least_squares_methods):
+            raise ValueError(
+                colored(
+                    "method {} is incompatible with scalar objective function".format(
+                        ".".join([self.method])
+                    ),
+                    "red",
+                )
+            )
+
+        if not objective.compiled:
+            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+            objective.compile(x_init, args, verbose, mode=mode)
 
         # need some weird logic because scipy optimizers expect disp={0,1,2}
         # while we use verbose={0,1,2,3}
@@ -242,12 +206,12 @@ class Optimizer:
         if self.method in Optimizer._scipy_scalar_methods:
 
             out = scipy.optimize.minimize(
-                self._fun,
+                objective.compute_scalar,
                 x0=x_init,
                 args=args,
                 method=self.method[len("scipy-") :],
-                jac=self._grad,
-                hess=self._hess,
+                jac=objective.grad_x,
+                hess=objective.hess_x,
                 tol=gtol,
                 options={"maxiter": maxiter, "disp": disp, **options},
             )
@@ -257,10 +221,10 @@ class Optimizer:
             x_scale = "jac" if x_scale == "auto" else x_scale
 
             out = scipy.optimize.least_squares(
-                self._fun,
+                objective.compute,
                 x0=x_init,
                 args=args,
-                jac=self._jac,
+                jac=objective.jac_x,
                 method=self.method[len("scipy-") :],
                 x_scale=x_scale,
                 ftol=ftol,
@@ -276,11 +240,11 @@ class Optimizer:
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            hess = self._hess if "bfgs" not in self.method else "bfgs"
+            hess = objective.hess_x if "bfgs" not in self.method else "bfgs"
             out = fmintr(
-                self._fun,
+                objective.compute_scalar,
                 x0=x_init,
-                grad=self._grad,
+                grad=objective.grad_x,
                 hess=hess,
                 args=args,
                 method=method,
@@ -299,11 +263,11 @@ class Optimizer:
             if "exact" in self.method:
                 x_scale = 1
             method = self.method.split("-")[1]
-            jac = self._jac if "broyden" not in self.method else "broyden"
+            jac = objective.jac_x if "broyden" not in self.method else "broyden"
             out = lsqtr(
-                self._fun,
+                objective.compute,
                 x0=x_init,
-                grad=self._grad,
+                grad=objective.grad_x,
                 jac=jac,
                 args=args,
                 method=method,

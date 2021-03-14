@@ -24,9 +24,6 @@ class LinearEqualityConstraint(IOAble):
         and n is the dimension of x
     b : ndarray
         Constraint vector, shape(m,1)
-    x0 : ndarray, optional
-        initial feasible solution. If not provided, one will be generated
-        from the least norm solution of Ax=b
     build : bool
         whether to compute null space and pseudoinverse now or wait until needed.
 
@@ -38,7 +35,6 @@ class LinearEqualityConstraint(IOAble):
         self,
         A=None,
         b=None,
-        x0=None,
         build=True,
         load_from=None,
         file_format=None,
@@ -48,9 +44,6 @@ class LinearEqualityConstraint(IOAble):
         if load_from is None:
             self._A = np.atleast_2d(A)
             self._b = np.atleast_1d(b)
-            if x0 is not None and not self.is_feasible(x0):
-                raise ValueError(colored("x0 is not feasible", "red"))
-            self._x0 = x0
             self._built = False
             self._Z = None
             self._Ainv = None
@@ -132,8 +125,7 @@ class LinearEqualityConstraint(IOAble):
         self._Z = Z
         self._Ainv = Ainv
         self._dimy = Z.shape[1]
-        if self.x0 is None:
-            self._x0 = Ainv.dot(self.b)
+        self._x0 = Ainv.dot(self.b)
 
         self._built = True
 
@@ -146,12 +138,14 @@ class LinearEqualityConstraint(IOAble):
 
     @property
     def built(self):
+        if not hasattr(self, "_built"):
+            self._built = False
         return self._built
 
     @property
     def dimy(self):
-        if self._dimy is None:
-            self._dimy = self.A.shape[1] - np.linalg.matrix_rank(self.A)
+        if not self.built:
+            self.build()
         return self._dimy
 
     @property
@@ -212,6 +206,8 @@ class LinearEqualityConstraint(IOAble):
     @property
     def x0(self):
         """particular feasible solution"""
+        if not self.built:
+            self.build()
         return self._x0
 
     @x0.setter

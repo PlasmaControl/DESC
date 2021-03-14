@@ -60,7 +60,6 @@ class BoundaryConstraint(LinearEqualityConstraint):
         Zb_basis=None,
         Rb_mn=None,
         Zb_mn=None,
-        x0=None,
         build=True,
         load_from=None,
         file_format=None,
@@ -85,7 +84,7 @@ class BoundaryConstraint(LinearEqualityConstraint):
             self._blcfs = blcfs
             self._bgauge = bgauge
 
-            super().__init__(A, b, x0, build)
+            super().__init__(A, b, build)
         else:
             self._init_from_file_(
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib

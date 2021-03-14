@@ -42,37 +42,54 @@ class BoundaryConstraint(LinearEqualityConstraint):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
+    _io_attrs_ = LinearEqualityConstraint._io_attrs_ + [
+        "_Alcfs",
+        "_blcfs",
+        "_Aaxis",
+        "_baxis",
+        "_Agauge",
+        "_bgauge",
+    ]
+
     def __init__(
         self,
-        R_basis,
-        Z_basis,
-        L_basis,
-        Rb_basis,
-        Zb_basis,
-        Rb_mn,
-        Zb_mn,
+        R_basis=None,
+        Z_basis=None,
+        L_basis=None,
+        Rb_basis=None,
+        Zb_basis=None,
+        Rb_mn=None,
+        Zb_mn=None,
         x0=None,
         build=True,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
     ):
 
-        Alcfs, blcfs = _get_lcfs_bc_matrices(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn
-        )
-        Aaxis, baxis = _get_axis_bc_matrices(R_basis, Z_basis, L_basis)
-        Agauge, bgauge = _get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
+        if load_from is None:
+            Alcfs, blcfs = _get_lcfs_bc_matrices(
+                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_mn, Zb_mn
+            )
+            Aaxis, baxis = _get_axis_bc_matrices(R_basis, Z_basis, L_basis)
+            Agauge, bgauge = _get_gauge_bc_matrices(R_basis, Z_basis, L_basis)
 
-        A = np.vstack([Alcfs, Aaxis, Agauge])
-        b = np.concatenate([blcfs, baxis, bgauge])
+            A = np.vstack([Alcfs, Aaxis, Agauge])
+            b = np.concatenate([blcfs, baxis, bgauge])
 
-        self._Aaxis = Aaxis
-        self._Alcfs = Alcfs
-        self._Agauge = Agauge
+            self._Aaxis = Aaxis
+            self._Alcfs = Alcfs
+            self._Agauge = Agauge
 
-        self._baxis = baxis
-        self._blcfs = blcfs
-        self._bgauge = bgauge
+            self._baxis = baxis
+            self._blcfs = blcfs
+            self._bgauge = bgauge
 
-        super().__init__(A, b, x0, build)
+            super().__init__(A, b, x0, build)
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def recover_from_bdry(self, y, Rb_mn=None, Zb_mn=None):
 

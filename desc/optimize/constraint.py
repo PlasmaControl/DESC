@@ -2,9 +2,11 @@ import numpy as np
 from desc.backend import jnp
 import scipy.linalg
 from termcolor import colored
+from desc.io import IOAble
+from desc.utils import equals
 
 
-class LinearEqualityConstraint:
+class LinearEqualityConstraint(IOAble):
     """Linear constraint for optimization
 
     solution vector x must satisfy Ax = b
@@ -30,20 +32,36 @@ class LinearEqualityConstraint:
 
     """
 
-    def __init__(self, A, b, x0=None, build=True):
+    _io_attrs_ = ["_A", "_b", "_dimx"]
 
-        self._A = np.atleast_2d(A)
-        self._b = np.atleast_1d(b)
-        if x0 is not None and not self.is_feasible(x0):
-            raise ValueError(colored("x0 is not feasible", "red"))
-        self._x0 = x0
-        self._built = False
-        self._Z = None
-        self._Ainv = None
-        self._dimx = self._A.shape[1]
-        self._dimy = None
-        if build:
-            self.build()
+    def __init__(
+        self,
+        A=None,
+        b=None,
+        x0=None,
+        build=True,
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ):
+
+        if load_from is None:
+            self._A = np.atleast_2d(A)
+            self._b = np.atleast_1d(b)
+            if x0 is not None and not self.is_feasible(x0):
+                raise ValueError(colored("x0 is not feasible", "red"))
+            self._x0 = x0
+            self._built = False
+            self._Z = None
+            self._Ainv = None
+            self._dimx = self.A.shape[1]
+            self._dimy = None
+            if build:
+                self.build()
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
 
     def __add__(self, other):
         if not isinstance(other, LinearEqualityConstraint):
@@ -56,17 +74,43 @@ class LinearEqualityConstraint:
                 )
             )
 
-        newA = np.vstack([self._A, other._A])
-        newb = np.concatenate([self._b, other._b])
+        newA = np.vstack([self.A, other.A])
+        newb = np.concatenate([self.b, other.b])
         return LinearEqualityConstraint(newA, newb)
+
+    def __eq__(self, other):
+        """Overloads the == operator
+
+        Parameters
+        ----------
+        other : LinearEqualityConstraint
+            another LinearEqualityConstraint object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is an LinearEqualityConstraint with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        ignore_keys = ["_Z", "_Ainv", "_dimy", "_x0", "_built"]
+        dict1 = {
+            key: val for key, val in self.__dict__.items() if key not in ignore_keys
+        }
+        dict2 = {
+            key: val for key, val in other.__dict__.items() if key not in ignore_keys
+        }
+        return equals(dict1, dict2)
 
     def build(self):
         """Builds linear constraint by factorizing A to get pseudoinverse and nullspace"""
 
-        if self._built:
+        if self.built:
             return
 
-        A = self._A
+        A = self.A
         u, s, vh = np.linalg.svd(A, full_matrices=True)
         M, N = u.shape[0], vh.shape[1]
         K = min(M, N)
@@ -87,15 +131,15 @@ class LinearEqualityConstraint:
 
         self._Z = Z
         self._Ainv = Ainv
-        self._dimy = self._Z.shape[1]
-        if self._x0 is None:
-            self._x0 = self._Ainv.dot(self._b)
+        self._dimy = Z.shape[1]
+        if self.x0 is None:
+            self._x0 = Ainv.dot(self.b)
 
         self._built = True
 
     def remove_duplicates(self):
         """Delete duplicate constraints (ie duplicate rows in A,b)"""
-        temp = np.hstack([self._A, self._b.reshape((-1, 1))])
+        temp = np.hstack([self.A, self.b.reshape((-1, 1))])
         temp = np.unique(temp, axis=0)
         self._A = np.atleast_2d(temp[:, :-1])
         self._b = temp[:, -1].flatten()
@@ -107,7 +151,7 @@ class LinearEqualityConstraint:
     @property
     def dimy(self):
         if self._dimy is None:
-            self._dimy = self._A.shape[1] - np.linalg.matrix_rank(self._A)
+            self._dimy = self.A.shape[1] - np.linalg.matrix_rank(self.A)
         return self._dimy
 
     @property
@@ -121,8 +165,8 @@ class LinearEqualityConstraint:
     @b.setter
     def b(self, b):
         self._b = b
-        if not self.is_feasible(self._x0):
-            self._x0 = self._Ainv.dot(self._b)
+        if not self.is_feasible(self.x0):
+            self.x0 = self.Ainv.dot(self.b)
 
     @property
     def A(self):
@@ -148,7 +192,7 @@ class LinearEqualityConstraint:
 
     def compute_residual(self, x):
         """computes the residual of Ax=b"""
-        res = self._A.dot(x) - self._b
+        res = self.A.dot(x) - self.b
         return res
 
     def is_feasible(self, x, tol=1e-8):
@@ -161,11 +205,9 @@ class LinearEqualityConstraint:
 
     def make_feasible(self, x):
         """make a vector x feasible by projecting onto the nullspace of A"""
-        if not self.built:
-            self.build()
-        dx = x - self._x0
-        y = self._Z.T.dot(dx)
-        return self._x0 + self._Z.dot(y)
+        dx = x - self.x0
+        y = self.Z.T.dot(dx)
+        return self.x0 + self.Z.dot(y)
 
     @property
     def x0(self):
@@ -182,13 +224,13 @@ class LinearEqualityConstraint:
         """Recover the full solution x from the optimization variable y"""
         if not self.built:
             self.build()
-        x = self._x0 + jnp.dot(self._Z, y)
+        x = self.x0 + jnp.dot(self.Z, y)
         return jnp.squeeze(x)
 
     def project(self, x):
         """Project a full solution x to the optimization variable y"""
         if not self.built:
             self.build()
-        dx = x - self._x0
-        y = jnp.dot(self._Z.T, dx)
+        dx = x - self.x0
+        y = jnp.dot(self.Z.T, dx)
         return jnp.squeeze(y)

@@ -677,15 +677,15 @@ def compute_magnetic_field(
         profiles["iota"] - toroidal_coords["lambda_z"]
     )
     magnetic_field["B^zeta"] = magnetic_field["B0"] * (1 + toroidal_coords["lambda_t"])
-    magnetic_field["B_con"] = (
+    magnetic_field["B"] = (
         magnetic_field["B^theta"] * cov_basis["e_theta"]
         + magnetic_field["B^zeta"] * cov_basis["e_zeta"]
     )
 
     # covariant components
-    magnetic_field["B_rho"] = dot(magnetic_field["B_con"], cov_basis["e_rho"], 0)
-    magnetic_field["B_theta"] = dot(magnetic_field["B_con"], cov_basis["e_theta"], 0)
-    magnetic_field["B_zeta"] = dot(magnetic_field["B_con"], cov_basis["e_zeta"], 0)
+    magnetic_field["B_rho"] = dot(magnetic_field["B"], cov_basis["e_rho"], 0)
+    magnetic_field["B_theta"] = dot(magnetic_field["B"], cov_basis["e_theta"], 0)
+    magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
 
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 
@@ -840,15 +840,15 @@ def compute_magnetic_field_axis(
         profiles["iota"] - toroidal_coords["lambda_z"]
     )
     magnetic_field["B^zeta"] = magnetic_field["B0"] * (1 + toroidal_coords["lambda_t"])
-    magnetic_field["B_con"] = (
+    magnetic_field["B"] = (
         magnetic_field["B^theta"] * cov_basis["e_theta"]
         + magnetic_field["B^zeta"] * cov_basis["e_zeta"]
     )
 
     # covariant components
-    magnetic_field["B_rho"] = dot(magnetic_field["B_con"], cov_basis["e_rho"], 0)
-    magnetic_field["B_theta"] = dot(magnetic_field["B_con"], cov_basis["e_theta"], 0)
-    magnetic_field["B_zeta"] = dot(magnetic_field["B_con"], cov_basis["e_zeta"], 0)
+    magnetic_field["B_rho"] = dot(magnetic_field["B"], cov_basis["e_rho"], 0)
+    magnetic_field["B_theta"] = dot(magnetic_field["B"], cov_basis["e_theta"], 0)
+    magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
 
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 
@@ -1297,22 +1297,22 @@ def compute_current_density(
     # B covariant component derivatives
     magnetic_field["B_rho_t"] = dot(
         magnetic_field["B_con_t"], cov_basis["e_rho"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_rho_t"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_rho_t"], 0)
     magnetic_field["B_rho_z"] = dot(
         magnetic_field["B_con_z"], cov_basis["e_rho"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_rho_z"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_rho_z"], 0)
     magnetic_field["B_theta_r"] = dot(
         magnetic_field["B_con_r"], cov_basis["e_theta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_theta_r"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_theta_r"], 0)
     magnetic_field["B_theta_z"] = dot(
         magnetic_field["B_con_z"], cov_basis["e_theta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_theta_z"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_theta_z"], 0)
     magnetic_field["B_zeta_r"] = dot(
         magnetic_field["B_con_r"], cov_basis["e_zeta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_zeta_r"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_zeta_r"], 0)
     magnetic_field["B_zeta_t"] = dot(
         magnetic_field["B_con_t"], cov_basis["e_zeta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_zeta_t"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_zeta_t"], 0)
 
     current_density = {}
 
@@ -1441,10 +1441,10 @@ def compute_magnetic_pressure_gradient(
     # B covariant component derivatives
     magnetic_field["B_theta_t"] = dot(
         magnetic_field["B_con_t"], cov_basis["e_theta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_theta_t"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_theta_t"], 0)
     magnetic_field["B_zeta_z"] = dot(
         magnetic_field["B_con_z"], cov_basis["e_zeta"], 0
-    ) + dot(magnetic_field["B_con"], cov_basis["e_zeta_z"], 0)
+    ) + dot(magnetic_field["B"], cov_basis["e_zeta_z"], 0)
 
     # contravariant components of magnetic pressure gradient
     magnetic_pressure["gradB^rho"] = (1 / 2 / mu_0) * (

@@ -120,6 +120,8 @@ class ObjectiveFunction(IOAble, ABC):
         self._check_transforms()
         self.set_derivatives(use_jit, devices)
         self.compiled = False
+        if not use_jit:
+            self.compiled = True
 
     def _check_transforms(self):
         """makes sure transforms can compute the correct derivatives"""

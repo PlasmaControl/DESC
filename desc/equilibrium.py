@@ -757,7 +757,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
         if verbose is None:
             verbose = self.inputs[0]["verbose"]
         self.timer.start("Total time")
-
+        
+        if device is None:
+            use_jit = False
+        else:
+            use_jit = True
+        
         for ii in range(start_from, len(self.inputs)):
             self.timer.start("Iteration {} total".format(ii + 1))
             if ii == start_from:
@@ -806,7 +811,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     )
                 )
                 break
-
+            
             objective = get_objective_function(
                 self.inputs[ii]["objective"],
                 R_transform=equil.transforms["R"],
@@ -826,7 +831,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     equil.Zb_mn,
                     build=False,
                 ),
-                use_jit=True,
+                use_jit=use_jit,
                 devices=device,
             )
 

@@ -1,7 +1,10 @@
 import numpy as np
 import time
+import warnings
+from termcolor import colored
 
 from desc.utils import Timer
+from desc.backend import use_jax
 from desc.boundary_conditions import BoundaryConstraint
 from desc.optimize.tr_subproblems import trust_region_step_exact
 
@@ -50,6 +53,14 @@ def perturb(
         perturbed equilibrium
 
     """
+    if not use_jax:
+        warnings.warn(
+            colored(
+                "Computing perturbations with finite differences can be highly innacurate. Consider using JAX for exact derivatives",
+                "yellow",
+            )
+        )
+
     timer = Timer()
     timer.start("Total perturbation")
 

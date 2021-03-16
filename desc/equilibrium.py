@@ -2,7 +2,8 @@ import numpy as np
 from termcolor import colored
 import warnings
 from collections import MutableSequence
-from desc.utils import Timer
+from desc.backend import use_jax
+from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
 from desc.boundary_conditions import BoundaryConstraint
@@ -551,8 +552,6 @@ class Equilibrium(_Configuration, IOAble):
             self.Psi,
             self.zeta_ratio,
         )
-        if verbose > 0:
-            print("Starting optimization")
 
         self.x0 = self.x
         x_init = self.objective.BC_constraint.project(self.x)
@@ -757,12 +756,22 @@ class EquilibriaFamily(IOAble, MutableSequence):
         if verbose is None:
             verbose = self.inputs[0]["verbose"]
         self.timer.start("Total time")
-        
-        if device is None:
-            use_jit = False
-        else:
-            use_jit = True
-        
+
+        if (
+            not (
+                isalmostequal([inp["bdry_ratio"] for inp in self.inputs])
+                and isalmostequal([inp["pres_ratio"] for inp in self.inputs])
+                and isalmostequal([inp["zeta_ratio"] for inp in self.inputs])
+            )
+            and not use_jax
+        ):
+            warnings.warn(
+                colored(
+                    "Computing perturbations with finite differences can be highly innacurate, consider using JAX or setting all perturbation rations to 1",
+                    "yellow",
+                )
+            )
+
         for ii in range(start_from, len(self.inputs)):
             self.timer.start("Iteration {} total".format(ii + 1))
             if ii == start_from:
@@ -811,7 +820,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     )
                 )
                 break
-            
+
             objective = get_objective_function(
                 self.inputs[ii]["objective"],
                 R_transform=equil.transforms["R"],
@@ -831,7 +840,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     equil.Zb_mn,
                     build=False,
                 ),
-                use_jit=use_jit,
+                use_jit=True,
                 devices=device,
             )
 

@@ -4,7 +4,7 @@ from termcolor import colored
 import warnings
 import scipy.special
 
-from desc.backend import jnp, jit
+from desc.backend import jnp, jit, use_jax
 from desc.utils import unpack_state, equals, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
@@ -215,6 +215,9 @@ class ObjectiveFunction(IOAble, ABC):
         """
         if not hasattr(self, "_grad"):
             self.set_derivatives()
+        if not use_jax:
+            self.compiled = True
+            return
 
         timer = Timer()
         if mode == "auto" and self.scalar:

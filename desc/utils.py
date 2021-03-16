@@ -295,6 +295,7 @@ def issorted(x, axis=None, tol=1e-12):
         whether the array is sorted along specified axis
 
     """
+    x = np.asarray(x)
     if axis is None:
         x = x.flatten()
         axis = 0
@@ -319,6 +320,7 @@ def isalmostequal(x, axis=-1, tol=1e-12):
         whether the array is equal along specified axis
 
     """
+    x = np.asarray(x)
     if axis is None:
         x = x.flatten()
         axis = 0
@@ -343,6 +345,7 @@ def islinspaced(x, axis=-1, tol=1e-12):
         whether the array is linearly spaced along specified axis
 
     """
+    x = np.asarray(x)
     if axis is None:
         x = x.flatten()
         axis = 0

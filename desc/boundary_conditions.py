@@ -3,6 +3,9 @@ import numpy as np
 from desc.backend import jnp
 from desc.basis import jacobi_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
+from desc.grid import LinearGrid
+from desc.transform import Transform
+from desc.utils import unpack_state
 
 
 class BoundaryConstraint(LinearEqualityConstraint):
@@ -108,6 +111,62 @@ class BoundaryConstraint(LinearEqualityConstraint):
 
         b = jnp.concatenate([Rb_mn.flatten(), Zb_mn.flatten(), z1, z2])
         return b
+
+
+class RadialConstraint:
+    """Penalty term to enforce nested flux surfaces
+    Penalizes the spacing between flux surfaces to ensure that r is a positive monotonic
+    function of rho.
+    Parameters
+    ----------
+    r_basis : Basis
+        spectral basis for r
+    L : integer, optional
+        how many flux surfaces to test (default 10)
+    M : integer, optional
+        how many theta angles to test (default 2*basis.M + 1)
+    N : integer, optional
+        how many poincare sections to test (default 2*basis.N + 1)
+    a : float, optional
+        strength of softmin function. (default 10*L)
+    scalar : bool, optional
+        whether to compute a scalar or vector loss
+    """
+
+    def __init__(self, R_basis, Z_basis, L=10, M=None, N=None, a=None, scalar=False):
+
+        self._R_basis = R_basis
+        self._Z_basis = Z_basis
+        self._L = L
+        self._M = M if M is not None else 2 * R_basis.M + 1
+        self._N = M if M is not None else 2 * R_basis.N + 1
+        self._a = a or self._L * 10
+        self._scalar = scalar
+        self._grid = LinearGrid(L=self._L, M=self._M, N=self._N, axis=True)
+        self._R_transform = Transform(self._grid, self._R_basis)
+        self._Z_transform = Transform(self._grid, self._Z_basis)
+
+    def compute(self, x, *args):
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x,
+            self._R_transform.basis.num_modes,
+            self._Z_transform.basis.num_modes,
+        )
+        R = self._R_transform.transform(R_lmn)
+        Z = self._R_transform.transform(Z_lmn)
+        R0 = jnp.mean(R[self._grid.axis])
+        Z0 = jnp.mean(Z[self._grid.axis])
+        r2 = (R - R0) ** 2 + (Z - Z0) ** 2
+        dr = jnp.diff(
+            r2.reshape((self._L, self._M, self._N), order="F"), axis=0
+        ).flatten()
+
+        if self._scalar:
+            # apply softmin
+            num = jnp.sum(dr * jnp.exp(-self._a * dr))
+            den = jnp.sum(jnp.exp(-self._a * dr))
+            return num / den
+        return -jnp.log(dr) / self._a
 
 
 def _get_gauge_bc_matrices(R_basis, Z_basis, L_basis):

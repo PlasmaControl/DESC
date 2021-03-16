@@ -312,13 +312,15 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         if name not in ["F", "|F|"]:
             return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
-            if np.max(eq.p_l) < 1e-1:  # normalize vacuum force by B pressure gradient
+            if (
+                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+            ):  # normalize vacuum force by B pressure gradient
                 norm_name_dict = _format_name("|gradB|")
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
-            data = data / np.abs(norm_data)  # normalize
+            data = data / np.abs(norm_data).mean()  # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -374,7 +376,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     log : bool, optional
         whether to use a log scale
     all_field_periods : bool, optional
-        whether to plot full torus or just one field period
+        whether to plot full torus or just one field period. Ignored if grid is specified
     kwargs
         any arguments taken by LinearGrid
 
@@ -537,13 +539,15 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
         if name not in ["F", "|F|"]:
             return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
-            if np.max(eq.p_l) < 1e-1:  # normalize vacuum force by B pressure gradient
+            if (
+                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+            ):  # normalize vacuum force by B pressure gradient
                 norm_name_dict = _format_name("|gradB|")
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
-            data = data / np.abs(norm_data)  # normalize
+            data = data / np.abs(norm_data).mean()  # normalize
     figw = 5 * cols
     figh = 5 * rows
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
@@ -552,13 +556,11 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     coords = eq.compute_toroidal_coords(grid)
     R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
-    # TODO: plot multiple sections for stellarators
 
     imshow_kwargs = {}
     if log:
         norm = matplotlib.colors.LogNorm()
         levels = 100
-        # levels=np.logspace(np.log10(data.min()), np.log10(data.max()),100)
     else:
         norm = matplotlib.colors.Normalize()
         levels = np.linspace(data.min(), data.max(), 100)

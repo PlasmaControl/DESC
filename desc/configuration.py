@@ -8,6 +8,9 @@ from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
+from desc.grid import QuadratureGrid
+from desc.objective_funs import get_objective_function
+from desc.boundary_conditions import BoundaryConstraint
 from desc.basis import (
     PowerSeries,
     FourierSeries,
@@ -536,6 +539,7 @@ class _Configuration(IOAble, ABC):
         label : str or list of str
             label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
         """
+        self._make_labels()
         idx = np.atleast_1d(idx)
         labels = [self.xlabel.get(i, None) for i in idx]
         return labels
@@ -553,9 +557,9 @@ class _Configuration(IOAble, ABC):
         idx : int or array-like of int
             index into optimization vector x
         """
-
+        self._make_labels()
         if not isinstance(labels, (list, tuple)):
-            labels = list(labels)
+            labels = [labels]
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
@@ -1161,6 +1165,67 @@ class _Configuration(IOAble, ABC):
         )
 
         return rline.is_simple and vline.is_simple
+
+    def compute_dW(self, free_bdry=True, grid=None):
+        """Computes the dW ideal MHD stability matrix, ie the Hessian of the energy
+
+        Parameters
+        ----------
+        free_bdry : bool, optional
+            whether to compute free boundary stability. If False, computes fixed boundary
+            stabiltiy (ie stability to perturbations that leave the boundary fixed)
+        grid : Grid, optional
+            grid to use for computation. If None, a QuadratureGrid is created
+
+        Returns
+        -------
+        dW : ndarray
+            symmetric matrix whose eigenvalues determine mhd stability and eigenvectors
+            describe the shape of unstable perturbations
+
+        """
+
+        if grid is None:
+            grid = QuadratureGrid(
+                L=2 * self.L + 1, M=2 * self.M + 1, N=2 * self.N + 1, sym=self.sym
+            )
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
+        L_transform = Transform(grid, self.L_basis, derivs=1, method="direct")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="direct")
+        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="direct")
+
+        obj = get_objective_function(
+            "energy",
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint=BoundaryConstraint(
+                self.R_basis,
+                self.Z_basis,
+                self.L_basis,
+                self.Rb_basis,
+                self.Zb_basis,
+                self.Rb_mn,
+                self.Zb_mn,
+                build=True,
+            ),
+            use_jit=False,
+        )
+        if free_bdry:
+            x = self.x
+        else:
+            x = obj.BC_constraint.project(self.x)
+        dW = obj.hess_x(
+            x, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
+        )
+        return dW
 
 
 def format_profiles(profiles, p_basis, i_basis):

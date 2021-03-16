@@ -69,8 +69,6 @@ class Equilibrium(_Configuration, IOAble):
 
     # TODO: make this ^ format correctly with sphinx, dont show it as init method
 
-    # TODO: add optimizer, objective, transform to io_attrs
-    # and figure out why it wont save
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
         "_x0",
@@ -78,7 +76,7 @@ class Equilibrium(_Configuration, IOAble):
         "_N_grid",
         "_grid",
         "_node_pattern",
-        "_transforms",  # TODO: figure out why we can't save dictionaries
+        "_transforms",
         "_objective",
         "_optimizer",
         "optimizer_results",
@@ -779,7 +777,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     M_grid=self.inputs[ii]["M_grid"],
                     N_grid=self.inputs[ii]["N_grid"],
                 )
-                # TODO: updating transforms instead of recomputing
                 if verbose > 0:
                     self._print_iteration(ii, equil)
 

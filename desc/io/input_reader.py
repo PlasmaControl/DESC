@@ -1,6 +1,5 @@
 import argparse
 import pathlib
-import sys
 import warnings
 import os
 import re
@@ -10,7 +9,7 @@ from termcolor import colored
 
 
 class InputReader:
-    """Reads command line arguments and parses input files
+    """Reads command line arguments and parses input files.
 
     Parameters
     ----------
@@ -20,8 +19,7 @@ class InputReader:
     """
 
     def __init__(self, cl_args=None):
-        """Initialize InputReader instance"""
-
+        """Initialize InputReader instance."""
         self._args = None
         self._inputs = None
         self._input_path = None
@@ -38,22 +36,22 @@ class InputReader:
 
     @property
     def args(self):
-        """Namespace: parsed namespace of all command line arguments"""
+        """Namespace : parsed namespace of all command line arguments."""
         return self._args
 
     @property
     def inputs(self):
-        """list of dictionaries : dictionary of values from input file"""
+        """List of dictionaries with values from input file."""
         return self._inputs
 
     @property
     def input_path(self):
-        """str : path to input file"""
+        """Path to input file."""
         return self._input_path
 
     @property
     def output_path(self):
-        """str : path to output file"""
+        """Path to output file."""
         return self._output_path
 
     def parse_args(self, cl_args=None):
@@ -70,7 +68,6 @@ class InputReader:
             parsed arguments
 
         """
-
         if cl_args is None:
             return
 
@@ -117,7 +114,7 @@ class InputReader:
         return args
 
     def _get_parser_(self):
-        """Gets parser for command line arguments.
+        """Get parser for command line arguments.
 
         Returns
         -------
@@ -128,7 +125,7 @@ class InputReader:
         return get_parser()
 
     def parse_inputs(self, fname=None):
-        """Reads input from DESC input file, converts from VMEC input if necessary
+        """Read input from DESC input file; converts from VMEC input if necessary.
 
         Parameters
         ----------
@@ -142,7 +139,6 @@ class InputReader:
             level.
 
         """
-
         if fname is None:
             fname = self.input_path
         else:
@@ -446,9 +442,8 @@ class InputReader:
             elif inputs[a].size != arr_len:
                 raise IOError(
                     colored(
-                        "Continuation parameter array {} is not broadcastable to the proper length".format(
-                            a
-                        ),
+                        "Continuation parameter array {} ".format(a)
+                        + "is not broadcastable to the proper length",
                         "red",
                     )
                 )
@@ -494,7 +489,7 @@ class InputReader:
         return inputs_list
 
     def write_desc_input(self, filename, inputs=None):
-        """Generates a DESC input file from a dictionary of parameters
+        """Generate a DESC input file from a dictionary of parameters.
 
         Parameters
         ----------
@@ -504,7 +499,6 @@ class InputReader:
             dictionary of input parameters
 
         """
-
         # default to use self.inputs
         if inputs is None:
             inputs = self.inputs
@@ -574,7 +568,7 @@ class InputReader:
         f.close()
 
     def vmec_to_desc_input(self, vmec_fname, desc_fname):
-        """Converts a VMEC input file to an equivalent DESC input file
+        """Convert a VMEC input file to an equivalent DESC input file.
 
         Parameters
         ----------
@@ -584,7 +578,6 @@ class InputReader:
             filename of DESC input file. If it already exists it is overwritten.
 
         """
-
         # file objects
         vmec_file = open(vmec_fname, "r")
         desc_file = open(desc_fname, "w")
@@ -594,9 +587,8 @@ class InputReader:
         date = now.strftime("%m/%d/%Y")
         time = now.strftime("%H:%M:%S")
         desc_file.write(
-            "# This DESC input file was auto generated from the VMEC input file\n# {}\n# on {} at {}.\n\n".format(
-                vmec_fname, date, time
-            )
+            "# This DESC input file was auto generated from the VMEC input file\n"
+            + "# {}\n# on {} at {}.\n\n".format(vmec_fname, date, time)
         )
 
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
@@ -800,25 +792,27 @@ class InputReader:
                 ]
                 n = int(numbers[0])
                 m = int(numbers[1])
+                m_sgn = np.sign(np.array([m]))[0]
                 n_sgn = np.sign(np.array([n]))[0]
-                n *= n_sgn
-                if np.sign(m) < 0:
+                n = abs(n)
+                if m_sgn < 0:
                     warnings.warn(colored("m is negative!", "yellow"))
+                    m = abs(m)
                 RBS = numbers[2]
-                if m != 0:
+                if m != 0:  # RBS*sin(m*t)*cos(n*p)
                     m_idx = np.where(bdry[:, 0] == -m)[0]
                     n_idx = np.where(bdry[:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
-                        bdry[m_idx[idx[0]], 2] = RBS
+                    if np.size(idx):
+                        bdry[m_idx[idx[0]], 2] = m_sgn * RBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, n, RBS, 0.0])
-                if n != 0:
+                        bdry[-1, :] = np.array([-m, n, m_sgn * RBS, 0.0])
+                if n != 0:  # -RBS*cos(m*t)*sin(n*p)
                     m_idx = np.where(bdry[:, 0] == m)[0]
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
+                    if np.size(idx):
                         bdry[m_idx[idx[0]], 2] = -n_sgn * RBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
@@ -842,29 +836,31 @@ class InputReader:
                 ]
                 n = int(numbers[0])
                 m = int(numbers[1])
+                m_sgn = np.sign(np.array([m]))[0]
                 n_sgn = np.sign(np.array([n]))[0]
-                n *= n_sgn
-                if np.sign(m) < 0:
+                n = abs(n)
+                if m_sgn < 0:
                     warnings.warn(colored("m is negative!", "yellow"))
-                RBS = numbers[2]
-                if m != 0:
+                    m = abs(m)
+                RBC = numbers[2]
+                # RBC*cos(m*t)*cos(n*p)
+                m_idx = np.where(bdry[:, 0] == m)[0]
+                n_idx = np.where(bdry[:, 1] == n)[0]
+                idx = np.where(np.isin(m_idx, n_idx))[0]
+                if np.size(idx):
+                    bdry[m_idx[idx[0]], 2] = RBC
+                else:
+                    bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
+                    bdry[-1, :] = np.array([m, n, RBC, 0.0])
+                if m != 0 and n != 0:  # RBC*sin(m*t)*sin(n*p)
                     m_idx = np.where(bdry[:, 0] == -m)[0]
-                    n_idx = np.where(bdry[:, 1] == n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
-                        bdry[m_idx[idx[0]], 2] = RBS
-                    else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, n, RBS, 0.0])
-                if n != 0:
-                    m_idx = np.where(bdry[:, 0] == m)[0]
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
-                        bdry[m_idx[idx[0]], 2] = -n_sgn * RBS
+                    if np.size(idx):
+                        bdry[m_idx[idx[0]], 2] = m_sgn * n_sgn * RBC
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([m, -n, -n_sgn * RBS, 0.0])
+                        bdry[-1, :] = np.array([-m, -n, m_sgn * n_sgn * RBC, 0.0])
             # ZBS*sin(m*t-n*p) = ZBS*sin(m*t)*cos(n*p) - ZBS*cos(m*t)*sin(n*p)
             match = re.search(
                 r"ZBS\(\s*"
@@ -884,25 +880,27 @@ class InputReader:
                 ]
                 n = int(numbers[0])
                 m = int(numbers[1])
+                m_sgn = np.sign(np.array([m]))[0]
                 n_sgn = np.sign(np.array([n]))[0]
-                n *= n_sgn
-                if np.sign(m) < 0:
+                n = abs(n)
+                if m_sgn < 0:
                     warnings.warn(colored("m is negative!", "yellow"))
+                    m = abs(m)
                 ZBS = numbers[2]
-                if m != 0:
+                if m != 0:  # ZBS*sin(m*t)*cos(n*p)
                     m_idx = np.where(bdry[:, 0] == -m)[0]
                     n_idx = np.where(bdry[:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
-                        bdry[m_idx[idx[0]], 3] = ZBS
+                    if np.size(idx):
+                        bdry[m_idx[idx[0]], 3] = m_sgn * ZBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, n, 0.0, ZBS])
-                if n != 0:
+                        bdry[-1, :] = np.array([-m, n, 0.0, m_sgn * ZBS])
+                if n != 0:  # -ZBS*cos(m*t)*sin(n*p)
                     m_idx = np.where(bdry[:, 0] == m)[0]
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
+                    if np.size(idx):
                         bdry[m_idx[idx[0]], 3] = -n_sgn * ZBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
@@ -926,28 +924,31 @@ class InputReader:
                 ]
                 n = int(numbers[0])
                 m = int(numbers[1])
+                m_sgn = np.sign(np.array([m]))[0]
                 n_sgn = np.sign(np.array([n]))[0]
-                n *= n_sgn
-                if np.sign(m) < 0:
+                n = abs(n)
+                if m_sgn < 0:
                     warnings.warn(colored("m is negative!", "yellow"))
+                    m = abs(m)
                 ZBC = numbers[2]
+                # ZBC*cos(m*t)*cos(n*p)
                 m_idx = np.where(bdry[:, 0] == m)[0]
                 n_idx = np.where(bdry[:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
-                if np.size(idx) > 0:
+                if np.size(idx):
                     bdry[m_idx[idx[0]], 3] = ZBC
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                     bdry[-1, :] = np.array([m, n, 0.0, ZBC])
-                if m != 0 and n != 0:
+                if m != 0 and n != 0:  # ZBC*sin(m*t)*sin(n*p)
                     m_idx = np.where(bdry[:, 0] == -m)[0]
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx) > 0:
-                        bdry[m_idx[idx[0]], 3] = n_sgn * ZBC
+                    if np.size(idx):
+                        bdry[m_idx[idx[0]], 3] = m_sgn * n_sgn * ZBC
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, -n, 0.0, n_sgn * ZBC])
+                        bdry[-1, :] = np.array([-m, -n, 0.0, m_sgn * n_sgn * ZBC])
 
             # catch multi-line inputs
             match = re.search(r"=", command)
@@ -980,20 +981,20 @@ class InputReader:
                 )
 
         desc_file.write("\n")
-        desc_file.write("# fixed-boundary surface shape\n")
-        for k in range(np.shape(bdry)[0]):
-            desc_file.write(
-                "m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
-                    int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]
-                )
-            )
-
-        desc_file.write("\n")
         desc_file.write("# magnetic axis initial guess\n")
         for k in range(np.shape(axis)[0]):
             desc_file.write(
                 "n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(
                     int(axis[k, 0]), axis[k, 1], axis[k, 2]
+                )
+            )
+
+        desc_file.write("\n")
+        desc_file.write("# fixed-boundary surface shape\n")
+        for k in range(np.shape(bdry)[0]):
+            desc_file.write(
+                "m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                    int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]
                 )
             )
 
@@ -1008,7 +1009,7 @@ class InputReader:
 
 
 def get_parser():
-    """Gets parser for command line arguments.
+    """Get parser for command line arguments.
 
     Returns
     -------
@@ -1035,14 +1036,16 @@ def get_parser():
         "--plot",
         action="count",
         default=0,
-        help="Plot results after solver finishes. Give once to show only final solution, "
-        + "twice (eg -pp) to plot both initial and final, and three times (-ppp) to show all iterations",
+        help="Plot results after solver finishes. "
+        + "Give once to show only final solution, "
+        + "twice (eg -pp) to plot both initial and final, "
+        + "and three times (-ppp) to show all iterations.",
     )
     parser.add_argument(
         "--vmec",
         metavar="vmec_path",
         default=None,
-        help="Path to VMEC data for initial guess",
+        help="Path to VMEC data for initial guess.",
     )
     parser.add_argument(
         "--gpu",
@@ -1052,32 +1055,33 @@ def get_parser():
         default=False,
         const=True,
         metavar="gpuID",
-        help="Use GPU if available, and an optional device ID to use a specific GPU."
-        + " If no ID is given, default is to select the GPU with most available memory."
-        + " Note that not all of the computation will be done "
-        + "on the gpu, only the most expensive parts where the I/O efficiency is worth it.",
+        help="Use GPU if available, and an optional device ID to use a specific GPU. "
+        + "If no ID is given, default is to select the GPU with most available memory. "
+        + "Note that not all of the computation will be done on the gpu, "
+        + "only the most expensive parts where the I/O efficiency is worth it.",
     )
     parser.add_argument(
         "--numpy",
         action="store_true",
-        help="Use numpy backend.Performance will be much slower,"
-        + " and autodiff won't work but may be useful for debugging",
+        help="Use numpy backend.Performance will be much slower, "
+        + "and autodiff won't work but may be useful for debugging.",
     )
     parser.add_argument(
-        "--version", action="store_true", help="Display version number and exit"
+        "--version", action="store_true", help="Display version number and exit."
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "-q",
         "--quiet",
         action="store_true",
-        help="Do not display any progress information",
+        help="Do not display any progress information.",
     )
     group.add_argument(
         "-v",
         "--verbose",
         action="count",
         default=1,
-        help="Display detailed progress information. Once to include timing, twice to also show individual iterations",
+        help="Display detailed progress information. "
+        + "Once to include timing, twice to also show individual iterations.",
     )
     return parser

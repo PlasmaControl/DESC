@@ -58,10 +58,12 @@ class DummyFunLinear(ObjectiveFunction):
         )
 
         axis = self.R_transform.grid.axis
-        R0_idx = jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        R0_mn = jnp.where(
+            (self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1), Rb_mn, 0
+        ).sum()
 
         # f = R0_x / Psi - R0_b
-        residual = toroidal_coords["R"][axis] / Psi - Rb_mn[R0_idx]
+        residual = toroidal_coords["R"][axis] / Psi - R0_mn
         return residual * jnp.ones_like(y)
 
     def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -136,7 +138,7 @@ class TestPerturbations(unittest.TestCase):
         deltas = {
             "Rb_mn": np.zeros((eq_old.Rb_basis.num_modes,)),
             "Zb_mn": np.zeros((eq_old.Zb_basis.num_modes,)),
-            "Psi": np.array([0.2]),
+            "Psi": 0.2,
         }
         idx_R = np.where((eq_old.Rb_basis.modes == [0, 2, 1]).all(axis=1))[0]
         idx_Z = np.where((eq_old.Zb_basis.modes == [0, -2, 1]).all(axis=1))[0]

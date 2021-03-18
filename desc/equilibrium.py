@@ -80,7 +80,6 @@ class Equilibrium(_Configuration, IOAble):
         "_transforms",
         "_objective",
         "_optimizer",
-        "optimizer_results",
     ]
     _object_lib_ = _Configuration._object_lib_
     _object_lib_.update(
@@ -110,6 +109,9 @@ class Equilibrium(_Configuration, IOAble):
         obj_lib=None,
     ):
         self.timer = Timer()
+        self.optimizer_results = {}
+        self._transforms = {}
+        
         super().__init__(
             inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
         )
@@ -121,9 +123,7 @@ class Equilibrium(_Configuration, IOAble):
         self._N_grid = inputs.get("N_grid", self._N)
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
         self._node_pattern = inputs.get("node_pattern", "quad")
-        self.optimizer_results = {}
         self._solved = False
-        self._transforms = {}
         self._objective = None
         self._optimizer = None
         self._set_grid()

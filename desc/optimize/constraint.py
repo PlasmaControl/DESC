@@ -145,7 +145,7 @@ class LinearEqualityConstraint(IOAble):
     @property
     def dimy(self):
         if not self.built:
-            self.build()
+            self._dimy = self.A.shape[1] - np.linalg.matrix_rank(self.A)
         return self._dimy
 
     @property

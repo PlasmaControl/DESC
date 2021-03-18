@@ -128,31 +128,31 @@ class ObjectiveFunction(IOAble, ABC):
         if not all(
             (self.derivatives[:, None] == self.R_transform.derivatives).all(-1).any(-1)
         ):
-            self.R_transform.change_derivatives(self.derivatives)
+            self.R_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.Z_transform.derivatives).all(-1).any(-1)
         ):
-            self.Z_transform.change_derivatives(self.derivatives)
+            self.Z_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.L_transform.derivatives).all(-1).any(-1)
         ):
-            self.L_transform.change_derivatives(self.derivatives)
+            self.L_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.Rb_transform.derivatives).all(-1).any(-1)
         ):
-            self.Rb_transform.change_derivatives(self.derivatives)
+            self.Rb_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
         ):
-            self.Zb_transform.change_derivatives(self.derivatives)
+            self.Zb_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.p_transform.derivatives).all(-1).any(-1)
         ):
-            self.p_transform.change_derivatives(self.derivatives)
+            self.p_transform.change_derivatives(self.derivatives, build=False)
         if not all(
             (self.derivatives[:, None] == self.i_transform.derivatives).all(-1).any(-1)
         ):
-            self.i_transform.change_derivatives(self.derivatives)
+            self.i_transform.change_derivatives(self.derivatives, build=False)
 
     def set_derivatives(self, use_jit=True, devices=[None], block_size="auto"):
         """Set up derivatives of the objective function

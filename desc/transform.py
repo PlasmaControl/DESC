@@ -66,7 +66,7 @@ class Transform(IOAble):
         basis=None,
         derivs=0,
         rcond=None,
-        build=True,
+        build=False,
         build_pinv=False,
         method="fft",
         load_from=None,
@@ -547,16 +547,13 @@ class Transform(IOAble):
         self._derivatives = np.vstack([self.derivatives, derivs_to_add])
         self._sort_derivatives()
 
+        if len(derivs_to_add):
+            # if we actually added derivatives and didn't build them, then its not built
+            self._built = False
         if build:
             # we don't update self._built here because if it was built before it still is
             # but if it wasn't it still might have unbuilt matrices
-            for d in derivs_to_add:
-                self._matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d
-                )
-        elif len(derivs_to_add):
-            # if we actually added derivatives and didn't build them, then its not built
-            self._built = False
+            self.build()
 
     @property
     def matrices(self):

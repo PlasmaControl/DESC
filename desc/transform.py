@@ -186,6 +186,11 @@ class Transform(IOAble):
 
     def _check_inputs_fft(self, grid, basis):
         """helper function to check that inputs are formatted correctly for fft method"""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # this is the trivial case where we just return all zeros, so it doesn't matter
+            self._method = "fft"
+            return
+
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
         if not issorted(grid.nodes[:, 2]):
@@ -301,6 +306,10 @@ class Transform(IOAble):
         if self.built:
             return
 
+        if self.basis.num_modes == 0:
+            self._built = True
+            return
+
         if self.method == "direct":
             for d in self.derivatives:
                 self._matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
@@ -354,6 +363,9 @@ class Transform(IOAble):
         """
         if not self.built:
             self.build()
+
+        if len(c) == 0:
+            return np.zeros(self.grid.num_nodes)
 
         if self.method == "direct":
             A = self.matrices[dr][dt][dz]

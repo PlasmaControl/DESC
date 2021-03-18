@@ -258,7 +258,8 @@ class PowerSeries(Basis):
         """
         if modes is None:
             modes = self.modes
-
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
         return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
 
     def change_resolution(self, L):
@@ -363,6 +364,8 @@ class FourierSeries(Basis):
         """
         if modes is None:
             modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
 
         return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
 
@@ -479,6 +482,8 @@ class DoubleFourierSeries(Basis):
         """
         if modes is None:
             modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
 
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
         toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
@@ -535,27 +540,15 @@ class FourierZernikeBasis(Basis):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. The maximum L is M,
-        at which point the traditional ANSI indexing is recovered.
-        Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
-        Total number of modes = (M-(L//2)+1)*((L//2)+1)
+        decreasing size, ending in a triagle shape. For L == M,
+        the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
+        to the bottom of the pyramid, increasing L while keeping M constant,
+        giving a "house" shape
 
         ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
-        decreasing size, ending in a diamond shape. The maximum L is 2*M,
-        for which the traditional fringe/U of Arizona indexing is recovered.
-        Gives a single mode at m=M and a single mode at l=L and m=0.
-        Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
-
-        ``'chevron'``: Beginning from the initial chevron of width M,
-        increasing L adds additional chevrons of the same width.
-        Similar to "house" but with fewer modes with high l and low m.
-        Total number of modes = (M+1)*(2*(L//2)+1)
-
-        ``'house'``: Fills in the pyramid row by row, with a maximum
-        horizontal width of M and a maximum radial resolution of L.
-        For L=M, it is equivalent to ANSI, while for L>M it takes on a
-        "house" like shape. Gives multiple modes at m=M and l=L.
-
+        decreasing size, ending in a diamond shape for L=2*M where
+        the traditional fringe/U of Arizona indexing is recovered.
+        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
 
     """
 
@@ -690,6 +683,8 @@ class FourierZernikeBasis(Basis):
         """
         if modes is None:
             modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
 
         radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])

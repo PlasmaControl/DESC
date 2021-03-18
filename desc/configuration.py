@@ -121,7 +121,7 @@ class _Configuration(IOAble, ABC):
     def _init_from_inputs_(self, inputs=None):
         # required inputs
         try:
-            self._Psi = inputs["Psi"]
+            self._Psi = float(inputs["Psi"])
             self._NFP = inputs["NFP"]
             self._L = inputs["L"]
             self._M = inputs["M"]
@@ -135,7 +135,7 @@ class _Configuration(IOAble, ABC):
         self._sym = inputs.get("sym", False)
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
         self._bdry_mode = inputs.get("bdry_mode", "spectral")
-        self._zeta_ratio = inputs.get("zeta_ratio", 1.0)
+        self._zeta_ratio = float(inputs.get("zeta_ratio", 1.0))
 
         # keep track of where it came from
         self._parent = None
@@ -356,7 +356,7 @@ class _Configuration(IOAble, ABC):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = Psi
+        self._Psi = float(Psi)
 
     @property
     def NFP(self):
@@ -1245,7 +1245,7 @@ def format_profiles(profiles, p_basis, i_basis):
         p_l[idx_p] = p
         i_l[idx_i] = i
 
-    return p_l, i_l
+    return p_l.astype(float), i_l.astype(float)
 
 
 def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
@@ -1295,7 +1295,7 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
             Rb_mn[idx_R] = R1
             Zb_mn[idx_Z] = Z1
 
-    return Rb_mn, Zb_mn
+    return Rb_mn.astype(float), Zb_mn.astype(float)
 
 
 def initial_guess(x_basis, b_mn, b_basis, axis):

@@ -41,7 +41,7 @@ class Equilibrium(_Configuration, IOAble):
         * ``'M'`` : int, poloidal resolution
         * ``'N'`` : int, toroidal resolution
         * ``'profiles'`` : ndarray, array of profile coeffs [l, p_l, i_l]
-        * ``'boundary'`` : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
+        * ``'boundary'`` : ndarray, array of boundary coeffs [l, m, n, Rb_mn, Zb_mn]
 
         And the following optional keys:
 
@@ -111,7 +111,7 @@ class Equilibrium(_Configuration, IOAble):
         self.timer = Timer()
         self.optimizer_results = {}
         self._transforms = {}
-        
+
         super().__init__(
             inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
         )
@@ -448,8 +448,8 @@ class Equilibrium(_Configuration, IOAble):
         ).T
         Rb_mn = self.Rb_mn.reshape((-1, 1))
         Zb_mn = self.Zb_mn.reshape((-1, 1))
-        Rb_modes = np.hstack([self.Rb_basis.modes[:, 1:], Rb_mn, np.zeros_like(Rb_mn)])
-        Zb_modes = np.hstack([self.Zb_basis.modes[:, 1:], np.zeros_like(Zb_mn), Zb_mn])
+        Rb_modes = np.hstack([self.Rb_basis.modes, Rb_mn, np.zeros_like(Rb_mn)])
+        Zb_modes = np.hstack([self.Zb_basis.modes, np.zeros_like(Zb_mn), Zb_mn])
         inputs = {
             "sym": self.sym,
             "NFP": self.NFP,

@@ -77,7 +77,11 @@ class _Configuration(IOAble, ABC):
     }
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
         """Initializes a Configuration
 
@@ -166,12 +170,14 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
             )
         # default initial guess
         except:
             axis = inputs.get(
-                "axis", self._boundary[np.where(self._boundary[:, 0] == 0)[0], 1:]
+                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 1:]
             )
             # check if R is provided
             try:
@@ -221,27 +227,36 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self._spectral_indexing,
         )
         self._Rb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._R_sym,
         )
         self._Zb_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
+            M=self._M,
+            N=self._N,
+            NFP=self._NFP,
+            sym=self._Z_sym,
         )
 
         nonzero_modes = self._boundary[
-            np.argwhere(self._boundary[:, 2:] != np.array([0, 0]))[:, 0]
+            np.argwhere(self._boundary[:, 3:] != np.array([0, 0]))[:, 0]
         ]
         if nonzero_modes.size and (
-            self._M < np.max(abs(nonzero_modes[:, 0]))
-            or self._N < np.max(abs(nonzero_modes[:, 1]))
+            self.L < np.max(abs(nonzero_modes[:, 0]))
+            or self.M < np.max(abs(nonzero_modes[:, 1]))
+            or self.N < np.max(abs(nonzero_modes[:, 2]))
         ):
             warnings.warn(
                 colored(
                     "Configuration resolution does not fully resolve boundary inputs, "
-                    + "Configuration M,N={},{},  boundary resolution M,N={},{}".format(
-                        self._M,
-                        self._N,
+                    + "Configuration L,M,N={},{},{},  boundary resolution L,M,N={},{},{}".format(
+                        self.L,
+                        self.M,
+                        self.N,
                         int(np.max(abs(nonzero_modes[:, 0]))),
                         int(np.max(abs(nonzero_modes[:, 1]))),
+                        int(np.max(abs(nonzero_modes[:, 2]))),
                     ),
                     "yellow",
                 )
@@ -391,7 +406,9 @@ class _Configuration(IOAble, ABC):
     def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+            self._x,
+            self._R_basis.num_modes,
+            self._Z_basis.num_modes,
         )
 
     @property
@@ -1253,9 +1270,9 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
 
     Parameters
     ----------
-    boundary : ndarray, shape(Nbdry,4)
-        array of fourier coeffs [m, n, Rb_mn, Zb_mn]
-        or array of real space coordinates, [theta, phi, R, Z]
+    boundary : ndarray, shape(Nbdry,5)
+        array of fourier coeffs [l, m, n, Rb_mn, Zb_mn]
+        or array of real space coordinates, [rho, theta, phi, R, Z]
     Rb_basis : DoubleFourierSeries
         spectral basis for Rb_mn coefficients
     Zb_basis : DoubleFourierSeries
@@ -1272,9 +1289,9 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
 
     """
     if mode == "real":
-        theta = boundary[:, 0]
-        phi = boundary[:, 1]
-        rho = np.ones_like(theta)
+        rho = boundary[:, 0]
+        theta = boundary[:, 1]
+        phi = boundary[:, 2]
 
         nodes = np.array([rho, theta, phi]).T
         grid = Grid(nodes)
@@ -1282,18 +1299,37 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
         Z1_tform = Transform(grid, Zb_basis, build=True, build_pinv=True)
 
         # fit real data to spectral coefficients
-        Rb_mn = R1_tform.fit(boundary[:, 2])
-        Zb_mn = Z1_tform.fit(boundary[:, 3])
+        Rb_mn = R1_tform.fit(boundary[:, 3])
+        Zb_mn = Z1_tform.fit(boundary[:, 4])
 
     else:
         Rb_mn = np.zeros((Rb_basis.num_modes,))
         Zb_mn = np.zeros((Zb_basis.num_modes,))
 
-        for m, n, R1, Z1 in boundary:
-            idx_R = np.where((Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            idx_Z = np.where((Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            Rb_mn[idx_R] = R1
-            Zb_mn[idx_Z] = Z1
+        if np.all(boundary[:, 0] == 0):
+            # boundary is on m,n LCFS
+            for m, n, R1, Z1 in boundary[:, 1:]:
+                idx_R = np.where(
+                    (Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1)
+                )[0]
+                idx_Z = np.where(
+                    (Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1)
+                )[0]
+                Rb_mn[idx_R] = R1
+                Zb_mn[idx_Z] = Z1
+        elif np.all(boundary[:, 2] == 0):
+            # boundary is on l,m poincare section
+            for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
+                idx_R = np.where(
+                    (Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1)
+                )[0]
+                idx_Z = np.where(
+                    (Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1)
+                )[0]
+                Rb_mn[idx_R] = R1
+                Zb_mn[idx_Z] = Z1
+        else:
+            raise ValueError("boundary should either have l=0 or n=0")
 
     return Rb_mn.astype(float), Zb_mn.astype(float)
 

@@ -168,7 +168,7 @@ class InputReader:
             "spectral_indexing": "fringe",
             "node_pattern": "jacobi",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
-            "boundary": np.atleast_2d((0, 0, 0.0, 0.0)),
+            "boundary": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
 
@@ -296,6 +296,8 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
+            else:
+                l = 0
             match = re.search(r"m\s*:\s*" + num_form, command, re.IGNORECASE)
             if match:
                 m = [
@@ -303,6 +305,8 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
+            else:
+                m = 0
             match = re.search(r"n\s*:\s*" + num_form, command, re.IGNORECASE)
             if match:
                 n = [
@@ -310,7 +314,8 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
-
+            else:
+                n = 0
             # profile coefficients
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -351,17 +356,18 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][1]
-                bdry_m = np.where(inputs["boundary"][:, 0] == m)[0]
-                bdry_n = np.where(inputs["boundary"][:, 1] == n)[0]
-                bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
+                bdry_idx = np.where(
+                    (inputs["boundary"][:, :3] == [l, m, n]).all(axis=1)
+                )[0]
                 if bdry_idx.size == 0:
                     bdry_idx = np.atleast_1d(inputs["boundary"].shape[0])
                     inputs["boundary"] = np.pad(
                         inputs["boundary"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["boundary"][bdry_idx[0], 0] = m
-                    inputs["boundary"][bdry_idx[0], 1] = n
-                inputs["boundary"][bdry_idx[0], 2] = R1
+                    inputs["boundary"][bdry_idx[0], 0] = l
+                    inputs["boundary"][bdry_idx[0], 1] = m
+                    inputs["boundary"][bdry_idx[0], 2] = n
+                inputs["boundary"][bdry_idx[0], 3] = R1
             match = re.search(r"Z1\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 Z1 = [
@@ -369,17 +375,18 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][1]
-                bdry_m = np.where(inputs["boundary"][:, 0] == m)[0]
-                bdry_n = np.where(inputs["boundary"][:, 1] == n)[0]
-                bdry_idx = bdry_m[np.in1d(bdry_m, bdry_n)]
+                bdry_idx = np.where(
+                    (inputs["boundary"][:, :3] == [l, m, n]).all(axis=1)
+                )[0]
                 if bdry_idx.size == 0:
                     bdry_idx = np.atleast_1d(inputs["boundary"].shape[0])
                     inputs["boundary"] = np.pad(
                         inputs["boundary"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["boundary"][bdry_idx[0], 0] = m
-                    inputs["boundary"][bdry_idx[0], 1] = n
-                inputs["boundary"][bdry_idx[0], 3] = Z1
+                    inputs["boundary"][bdry_idx[0], 0] = l
+                    inputs["boundary"][bdry_idx[0], 1] = m
+                    inputs["boundary"][bdry_idx[0], 2] = n
+                inputs["boundary"][bdry_idx[0], 4] = Z1
 
             # magnetic axis coefficients
             match = re.search(r"R0\s*=\s*" + num_form, command, re.IGNORECASE)
@@ -554,10 +561,10 @@ class InputReader:
             f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
 
         f.write("\n# fixed-boundary surface shape \n")
-        for (m, n, R1, Z1) in inputs[0]["boundary"]:
+        for (l, m, n, R1, Z1) in inputs[0]["boundary"]:
             f.write(
-                "m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
-                    int(m), int(n), R1, Z1
+                "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                    int(l), int(m), int(n), R1, Z1
                 )
             )
 

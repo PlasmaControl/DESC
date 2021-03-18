@@ -87,7 +87,7 @@ class VMECIO:
         # boundary
         m, n, Rb_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((m, n, Rb_mn, Zb_mn)).T
+        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_mn, Zb_mn)).T
 
         # initialize Equilibrium
         eq = Equilibrium(inputs=inputs)

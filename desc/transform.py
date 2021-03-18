@@ -614,3 +614,14 @@ class Transform(IOAble):
         if not hasattr(self, "_method"):
             self._method = "direct"
         return self._method
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (method={}, basis={}, grid={})".format(
+                self.method, repr(self.basis), repr(self.grid)
+            )
+        )

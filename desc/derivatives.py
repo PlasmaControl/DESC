@@ -21,7 +21,7 @@ class _Derivative(ABC):
     """
 
     @abstractmethod
-    def __init__(self, fun, argnum=0, **kwargs):
+    def __init__(self, fun, argnum=0, mode=None, **kwargs):
         """Initializes a Derivative object"""
 
     @abstractmethod
@@ -61,6 +61,11 @@ class _Derivative(ABC):
     def argnum(self, argnum):
         self._argnum = argnum
 
+    @property
+    def mode(self):
+        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
+        return self._mode
+
     def __call__(self, *args):
         """Computes the derivative matrix
 
@@ -79,6 +84,17 @@ class _Derivative(ABC):
 
         """
         return self.compute(*args)
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (fun={}, argnum={}, mode={})".format(
+                repr(self.fun), self.argnum, self.mode
+            )
+        )
 
 
 class AutoDiffDerivative(_Derivative):
@@ -285,11 +301,6 @@ class AutoDiffDerivative(_Derivative):
 
     def _compute_jvp(self, v, *args):
         return self.compute_jvp(self._fun, self.argnum, v, *args)
-
-    @property
-    def mode(self):
-        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
-        return self._mode
 
     def _set_mode(self, mode, device=None) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
@@ -542,11 +553,6 @@ class FiniteDiffDerivative(_Derivative):
         h = rel_step
         df = (f(x + h * vh) - f(x - h * vh)) / (2 * h)
         return df * normv
-
-    @property
-    def mode(self):
-        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
-        return self._mode
 
     def _set_mode(self, mode):
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:

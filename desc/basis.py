@@ -172,6 +172,17 @@ class Basis(IOAble, ABC):
             self._spectral_indexing = "linear"
         return self._spectral_indexing
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
+                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
+            )
+        )
+
 
 class PowerSeries(Basis):
     """1D basis set for flux surface quantities.

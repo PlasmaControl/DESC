@@ -191,6 +191,17 @@ class Grid(IOAble):
             self._node_pattern = None
         return self._node_pattern
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
+                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
+            )
+        )
+
 
 class LinearGrid(Grid):
     """Grid in which the nodes are linearly spaced in each coordinate.

@@ -746,8 +746,8 @@ class InputReader:
                     else:
                         l = k
                     idx = np.where(axis[:, 0] == l)[0]
-                    if np.size(idx) > 0:
-                        axis[idx[0], 1] = numbers[k]
+                    if np.size(idx):
+                        axis[idx[0], 1] += numbers[k]
                     else:
                         axis = np.pad(axis, ((0, 1), (0, 0)), mode="constant")
                         axis[-1, :] = np.array([l, numbers[k], 0.0])
@@ -767,7 +767,7 @@ class InputReader:
                         l = -k
                     idx = np.where(axis[:, 0] == l)[0]
                     if np.size(idx) > 0:
-                        axis[idx[0], 2] = numbers[k]
+                        axis[idx[0], 2] += numbers[k]
                     else:
                         axis = np.pad(axis, ((0, 1), (0, 0)), mode="constant")
                         axis[-1, :] = np.array([l, 0.0, numbers[k]])
@@ -804,7 +804,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] = m_sgn * RBS
+                        bdry[m_idx[idx[0]], 2] += m_sgn * RBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([-m, n, m_sgn * RBS, 0.0])
@@ -813,7 +813,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] = -n_sgn * RBS
+                        bdry[m_idx[idx[0]], 2] += -n_sgn * RBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([m, -n, -n_sgn * RBS, 0.0])
@@ -848,7 +848,7 @@ class InputReader:
                 n_idx = np.where(bdry[:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    bdry[m_idx[idx[0]], 2] = RBC
+                    bdry[m_idx[idx[0]], 2] += RBC
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                     bdry[-1, :] = np.array([m, n, RBC, 0.0])
@@ -857,7 +857,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] = m_sgn * n_sgn * RBC
+                        bdry[m_idx[idx[0]], 2] += m_sgn * n_sgn * RBC
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([-m, -n, m_sgn * n_sgn * RBC, 0.0])
@@ -892,7 +892,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] = m_sgn * ZBS
+                        bdry[m_idx[idx[0]], 3] += m_sgn * ZBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([-m, n, 0.0, m_sgn * ZBS])
@@ -901,7 +901,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] = -n_sgn * ZBS
+                        bdry[m_idx[idx[0]], 3] += -n_sgn * ZBS
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([m, -n, 0.0, -n_sgn * ZBS])
@@ -936,7 +936,7 @@ class InputReader:
                 n_idx = np.where(bdry[:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    bdry[m_idx[idx[0]], 3] = ZBC
+                    bdry[m_idx[idx[0]], 3] += ZBC
                 else:
                     bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                     bdry[-1, :] = np.array([m, n, 0.0, ZBC])
@@ -945,7 +945,7 @@ class InputReader:
                     n_idx = np.where(bdry[:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] = m_sgn * n_sgn * ZBC
+                        bdry[m_idx[idx[0]], 3] += m_sgn * n_sgn * ZBC
                     else:
                         bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
                         bdry[-1, :] = np.array([-m, -n, 0.0, m_sgn * n_sgn * ZBC])

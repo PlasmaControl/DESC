@@ -1245,23 +1245,22 @@ def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
     npts = kwargs.get("npts", 100)
     levels = kwargs.get("levels", np.linspace(-1, 1, npts))
 
-    basis = FourierZernikeBasis(L=L, M=M, N=0, index=spectral_indexing)
-    lmax = basis.L
-    mmax = basis.M
+    basis = FourierZernikeBasis(L=L, M=M, N=0, spectral_indexing=spectral_indexing)
+    lmax = abs(basis.modes[:, 0]).max()
+    mmax = abs(basis.modes[:, 1]).max()
 
-    grid = LinearGrid(npts, npts, 0)
-    r = np.linspace(0, 1, npts)
-    v = np.linspace(0, 2 * np.pi, npts)
-    rr, vv = np.meshgrid(r, v, indexing="ij")
-
-    nodes = np.array([rr, vv, np.zeros_like(rr)]).T
+    grid = LinearGrid(npts, npts, 1, endpoint=True)
+    r = np.unique(grid.nodes[:, 0])
+    v = np.unique(grid.nodes[:, 1])
 
     fig = plt.figure(figsize=(scale * mmax, scale * lmax / 2))
 
     ax = {i: {} for i in range(lmax + 1)}
-    gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1))
+    ratios = np.ones(2 * (mmax + 1) + 1)
+    ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+    gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios)
 
-    Zs = basis.evaluate(nodes)
+    Zs = basis.evaluate(grid.nodes)
 
     for i, (l, m) in enumerate(zip(basis.modes[:, 0], basis.modes[:, 1])):
         Z = Zs[:, i].reshape((npts, npts))
@@ -1270,7 +1269,7 @@ def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
         ax[l][m].axis("off")
         im = ax[l][m].contourf(v, r, Z, levels=levels, cmap=cmap)
 
-    cb_ax = fig.add_axes([0.83, 0.1, 0.02, 0.8])
+    cb_ax = plt.subplot(gs[:, -1])
     plt.subplots_adjust(right=0.8)
     cbar = fig.colorbar(im, cax=cb_ax)
     cbar.set_ticks(np.linspace(-1, 1, 9))

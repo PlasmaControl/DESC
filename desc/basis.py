@@ -597,7 +597,7 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        spectral_indexing : {'ansi', 'frige', 'chevron', 'house'}
+        spectral_indexing : {'ansi', 'fringe'}
             Indexing method, default value = 'ansi'
 
             For L=0, all methods are equivalent and give a "chevron" shaped
@@ -605,26 +605,15 @@ class FourierZernikeBasis(Basis):
             For L>0, the indexing scheme defines order of the basis functions:
 
             ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. The maximum L is M,
-            at which point the traditional ANSI indexing is recovered.
-            Gives a single mode at m=M, and multiple modes at l=L, from m=0 to m=l.
-            Total number of modes = (M-(L//2)+1)*((L//2)+1)
+            decreasing size, ending in a triagle shape. For L == M,
+            the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
+            to the bottom of the pyramid, increasing L while keeping M constant,
+            giving a "house" shape
 
             ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
-            decreasing size, ending in a diamond shape. The maximum L is 2*M,
-            for which the traditional fringe/U of Arizona indexing is recovered.
-            Gives a single mode at m=M and a single mode at l=L and m=0.
-            Total number of modes = (M+1)*(M+2)/2 - (M-L//2+1)*(M-L//2)/2
-
-            ``'chevron'``: Beginning from the initial chevron of width M,
-            increasing L adds additional chevrons of the same width.
-            Similar to "house" but with fewer modes with high l and low m.
-            Total number of modes = (M+1)*(2*(L//2)+1)
-
-            ``'house'``: Fills in the pyramid row by row, with a maximum
-            horizontal width of M and a maximum radial resolution of L.
-            For L=M, it is equivalent to ANSI, while for L>M it takes on a
-            "house" like shape. Gives multiple modes at m=M and l=L.
+            decreasing size, ending in a diamond shape for L=2*M where
+            the traditional fringe/U of Arizona indexing is recovered.
+            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
 
         Returns
         -------
@@ -633,32 +622,30 @@ class FourierZernikeBasis(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
-        default_L = {"ansi": M, "fringe": 2 * M, "chevron": M, "house": 2 * M}
-        self._L = L if L >= 0 else default_L[spectral_indexing]
+        default_L = {"ansi": M, "fringe": 2 * M}
+        L = L if L >= 0 else default_L.get(spectral_indexing, M)
+        self._L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
-                [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
-                for d in range(0, self.L + 1, 2)
+                [(m + d, m) for m in range(0, M + 1) if m + d < L + 1]
+                for d in range(0, L + 1, 2)
             ]
 
         elif spectral_indexing == "fringe":
             pol_posm = [
                 [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
-                for d in range(0, self.L + 1, 2)
+                for d in range(0, L + 1, 2)
             ]
+            if L > 2 * M:
+                Ladd = L - 2 * M
+                pol_posm += [
+                    [(l - m, m) for m in range(0, M + 1)]
+                    for l in range(2 * M, L + 1, 2)
+                ]
 
-        elif spectral_indexing == "chevron":
-            pol_posm = [
-                (m + d, m) for m in range(0, M + 1) for d in range(0, self.L + 1, 2)
-            ]
-
-        elif spectral_indexing == "house":
-            pol_posm = [
-                [(l, m) for m in range(0, M + 1) if l >= m and (l - m) % 2 == 0]
-                for l in range(0, self.L + 1)
-            ] + [(m, m) for m in range(M + 1)]
-            pol_posm = list(dict.fromkeys(flatten_list(pol_posm)))
+        else:
+            raise ValueError("Unknown spectral_indexing: {}".format(spectral_indexing))
 
         pol = [
             [(l, m), (l, -m)] if m != 0 else [(l, m)] for l, m in flatten_list(pol_posm)
@@ -670,7 +657,7 @@ class FourierZernikeBasis(Basis):
         tor = np.atleast_2d(
             np.tile(np.arange(-N, N + 1), (num_pol, 1)).flatten(order="f")
         ).T
-        return np.hstack([pol, tor])
+        return np.unique(np.hstack([pol, tor]), axis=0)
 
     def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluates basis functions at specified nodes

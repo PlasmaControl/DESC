@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.optimize
 from termcolor import colored
-from desc.utils import equals
+from desc.utils import equals, Timer
 from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
 
@@ -177,6 +177,7 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+        timer = Timer()
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             raise ValueError(
                 colored(
@@ -202,6 +203,7 @@ class Optimizer(IOAble):
 
         if verbose > 0:
             print("Starting optimization")
+        timer.start("Solution time")
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -279,6 +281,15 @@ class Optimizer(IOAble):
                 maxiter=maxiter,
                 callback=None,
                 options=options,
+            )
+
+        timer.stop("Solution time")
+
+        if verbose > 1:
+            timer.disp("Solution time")
+            timer.pretty_print(
+                "Avg time per step",
+                timer["Solution time"] / out["nfev"],
             )
 
         return out

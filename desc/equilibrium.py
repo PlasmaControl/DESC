@@ -518,7 +518,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=1e-6,
         verbose=1,
         x_scale="auto",
-        maxiter=100,
+        maxiter=None,
         options={},
     ):
         """Solve to find the equilibrium configuration
@@ -555,7 +555,6 @@ class Equilibrium(_Configuration, IOAble):
 
         self.x0 = self.x
         x_init = self.objective.BC_constraint.project(self.x)
-        self.timer.start("Solution time")
 
         result = self.optimizer.optimize(
             self.objective,
@@ -569,14 +568,7 @@ class Equilibrium(_Configuration, IOAble):
             maxiter=maxiter,
             options=options,
         )
-        self.timer.stop("Solution time")
 
-        if verbose > 1:
-            self.timer.disp("Solution time")
-            self.timer.pretty_print(
-                "Avg time per step",
-                self.timer["Solution time"] / result["nfev"],
-            )
         if verbose > 0:
             print("Start of solver")
             self.objective.callback(x_init, *args)

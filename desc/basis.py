@@ -47,6 +47,45 @@ class Basis(IOAble, ABC):
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 
+    def get_idx(self, L=0, M=0, N=0):
+        """Get the index into the 'modes' array corresponding to a given mode number
+
+        Parameters
+        ----------
+        L : int or ndarray of int
+            radial mode number
+        M : int or ndarray of int
+            poliodal mode number
+        N : int or ndarray of int
+            toroidal mode number
+
+        Returns
+        -------
+        idx : ndarray of int
+            indices of given mode numbers
+        """
+        L = np.atleast_1d(L)
+        M = np.atleast_1d(M)
+        N = np.atleast_1d(N)
+
+        num = max(len(L), len(M), len(N))
+        L = np.broadcast_to(L, num)
+        M = np.broadcast_to(M, num)
+        N = np.broadcast_to(N, num)
+
+        idx = np.array(
+            [
+                np.where(
+                    np.logical_and(
+                        np.logical_and(l == self.modes[:, 0], m == self.modes[:, 1]),
+                        n == self.modes[:, 2],
+                    )
+                )[0]
+                for l, m, n in zip(L, M, N)
+            ]
+        )
+        return idx
+
     @abstractmethod
     def _get_modes(self):
         """ndarray: the modes numbers for the basis"""

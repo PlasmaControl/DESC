@@ -99,7 +99,7 @@ class _Configuration(IOAble, ABC):
             And the following optional keys:
                 sym : bool, is the problem stellarator symmetric or not, default is False
                 spectral_indexing : str, type of Zernike indexing scheme to use, default is 'ansi'
-                bdry_mode : str, how to calculate error at bdry, default is 'spectral'
+                bdry_mode : {'lcfs', 'poincare'}, where the BC are enforced
                 zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
                 x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
@@ -138,7 +138,7 @@ class _Configuration(IOAble, ABC):
         # optional inputs
         self._sym = inputs.get("sym", False)
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
-        self._bdry_mode = inputs.get("bdry_mode", "spectral")
+        self._bdry_mode = inputs.get("bdry_mode", "lcfs")
         self._zeta_ratio = float(inputs.get("zeta_ratio", 1.0))
 
         # keep track of where it came from
@@ -177,7 +177,7 @@ class _Configuration(IOAble, ABC):
         # default initial guess
         except:
             axis = inputs.get(
-                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 1:]
+                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 2:]
             )
             # check if R is provided
             try:
@@ -1238,7 +1238,7 @@ def format_profiles(profiles, p_basis, i_basis):
 
     Parameters
     ----------
-    profiles : ndarray, shape(Nbdry,3)
+    profiles : ndarray, shape(Nprof,3)
         array of fourier coeffs [l, p, i]
     p_basis : PowerSeries
         spectral basis for p_l coefficients
@@ -1265,7 +1265,7 @@ def format_profiles(profiles, p_basis, i_basis):
     return p_l.astype(float), i_l.astype(float)
 
 
-def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
+def format_boundary(boundary, Rb_basis, Zb_basis, mode="lcfs"):
     """Format boundary arrays and converts between real and fourier representations.
 
     Parameters
@@ -1278,7 +1278,8 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
     Zb_basis : DoubleFourierSeries
         spectral basis for Zb_mn coefficients
     mode : str
-        one of 'real', 'spectral'. Whether bdry is specified in real or spectral space.
+        one of 'lcfs', 'poincare'. Whether bdry is specified on last closed flux surface
+        or the zeta=0 poincare section.
 
     Returns
     -------
@@ -1288,48 +1289,25 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="spectral"):
         spectral coefficients for Z boundary
 
     """
-    if mode == "real":
-        rho = boundary[:, 0]
-        theta = boundary[:, 1]
-        phi = boundary[:, 2]
+    Rb_mn = np.zeros((Rb_basis.num_modes,))
+    Zb_mn = np.zeros((Zb_basis.num_modes,))
 
-        nodes = np.array([rho, theta, phi]).T
-        grid = Grid(nodes)
-        R1_tform = Transform(grid, Rb_basis, build=True, build_pinv=True)
-        Z1_tform = Transform(grid, Zb_basis, build=True, build_pinv=True)
-
-        # fit real data to spectral coefficients
-        Rb_mn = R1_tform.fit(boundary[:, 3])
-        Zb_mn = Z1_tform.fit(boundary[:, 4])
-
+    if mode == "lcfs" and np.all(boundary[:, 0] == 0):
+        # boundary is on m,n LCFS
+        for m, n, R1, Z1 in boundary[:, 1:]:
+            idx_R = np.where((Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
+            idx_Z = np.where((Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
+            Rb_mn[idx_R] = R1
+            Zb_mn[idx_Z] = Z1
+    elif mode == "poincare" and np.all(boundary[:, 2] == 0):
+        # boundary is on l,m poincare section
+        for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
+            idx_R = np.where((Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
+            idx_Z = np.where((Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
+            Rb_mn[idx_R] = R1
+            Zb_mn[idx_Z] = Z1
     else:
-        Rb_mn = np.zeros((Rb_basis.num_modes,))
-        Zb_mn = np.zeros((Zb_basis.num_modes,))
-
-        if np.all(boundary[:, 0] == 0):
-            # boundary is on m,n LCFS
-            for m, n, R1, Z1 in boundary[:, 1:]:
-                idx_R = np.where(
-                    (Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1)
-                )[0]
-                idx_Z = np.where(
-                    (Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1)
-                )[0]
-                Rb_mn[idx_R] = R1
-                Zb_mn[idx_Z] = Z1
-        elif np.all(boundary[:, 2] == 0):
-            # boundary is on l,m poincare section
-            for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
-                idx_R = np.where(
-                    (Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1)
-                )[0]
-                idx_Z = np.where(
-                    (Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1)
-                )[0]
-                Rb_mn[idx_R] = R1
-                Zb_mn[idx_Z] = Z1
-        else:
-            raise ValueError("boundary should either have l=0 or n=0")
+        raise ValueError("boundary should either have l=0 or n=0")
 
     return Rb_mn.astype(float), Zb_mn.astype(float)
 

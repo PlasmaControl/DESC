@@ -164,7 +164,7 @@ class InputReader:
             "nfev": np.atleast_1d(None),
             "optimizer": "scipy-trf",
             "objective": "force",
-            "bdry_mode": "spectral",
+            "bdry_mode": "lcfs",
             "spectral_indexing": "fringe",
             "node_pattern": "jacobi",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
@@ -281,6 +281,7 @@ class InputReader:
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_mode"] = words[0]
+                # TODO: set bdry_mode automatically based on bdry coeffs
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
                 inputs["spectral_indexing"] = words[0]

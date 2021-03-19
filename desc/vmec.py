@@ -11,7 +11,7 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
 from desc.transform import Transform
 from desc.equilibrium import Equilibrium
-from desc.boundary_conditions import BoundaryConstraint
+from desc.boundary_conditions import LCFSConstraint
 
 
 class VMECIO:
@@ -85,9 +85,9 @@ class VMECIO:
         file.close
 
         # boundary
-        m, n, Rb_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
-        m, n, Zb_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_mn, Zb_mn)).T
+        m, n, Rb_lmn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
+        m, n, Zb_lmn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
+        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
 
         # initialize Equilibrium
         eq = Equilibrium(inputs=inputs)
@@ -105,14 +105,14 @@ class VMECIO:
         eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = BoundaryConstraint(
+        BC = LCFSConstraint(
             eq.R_basis,
             eq.Z_basis,
             eq.L_basis,
             eq.Rb_basis,
             eq.Zb_basis,
-            eq.Rb_mn,
-            eq.Zb_mn,
+            eq.Rb_lmn,
+            eq.Zb_lmn,
         )
         eq.x = BC.make_feasible(eq.x)
 
@@ -1030,20 +1030,10 @@ def convert_to_sfl(equil, L=None, M=None, N=None, spectral_indexing="ansi"):
         R_sym = None
         Z_sym = None
     R_basis = FourierZernikeBasis(
-        L=L,
-        M=M,
-        N=N,
-        NFP=equil.NFP,
-        sym=R_sym,
-        indexing=spectral_indexing,
+        L=L, M=M, N=N, NFP=equil.NFP, sym=R_sym, indexing=spectral_indexing,
     )
     Z_basis = FourierZernikeBasis(
-        L=L,
-        M=M,
-        N=N,
-        NFP=equil.NFP,
-        sym=Z_sym,
-        indexing=spectral_indexing,
+        L=L, M=M, N=N, NFP=equil.NFP, sym=Z_sym, indexing=spectral_indexing,
     )
     R_transform = Transform(sfl_grid, R_basis, build_pinv=True)
     Z_transform = Transform(sfl_grid, Z_basis, build_pinv=True)

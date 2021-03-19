@@ -40,7 +40,7 @@ zeta_ratio : float
 
 
 def dot(a, b, axis):
-    """Batched vector dot product
+    """Batched vector dot product.
 
     Parameters
     ----------
@@ -61,7 +61,7 @@ def dot(a, b, axis):
 
 
 def cross(a, b, axis):
-    """Batched vector cross product
+    """Batched vector cross product.
 
     Parameters
     ----------
@@ -95,7 +95,7 @@ def compute_profiles(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic flux, pressure, and rotational transform profiles.
+    """Compute magnetic flux, pressure, and rotational transform profiles.
 
     Parameters
     ----------
@@ -166,7 +166,7 @@ def compute_toroidal_coords(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Transforms toroidal coordinates to real space.
+    """Transform toroidal coordinates to real space.
 
     Parameters
     ----------
@@ -227,7 +227,7 @@ def compute_cartesian_coords(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes cartesian coordinates from toroidal coordinates.
+    """Compute cartesian coordinates from toroidal coordinates.
 
     Parameters
     ----------
@@ -308,7 +308,7 @@ def compute_covariant_basis(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes covariant basis vectors.
+    """Compute covariant basis vectors.
 
     Parameters
     ----------
@@ -402,7 +402,7 @@ def compute_jacobian(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes coordinate system jacobian.
+    """Compute coordinate system jacobian.
 
     Parameters
     ----------
@@ -486,7 +486,7 @@ def compute_contravariant_basis(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes contravariant basis vectors.
+    """Compute contravariant basis vectors.
 
     Parameters
     ----------
@@ -580,7 +580,7 @@ def compute_magnetic_field(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic field components.
+    """Compute magnetic field components.
 
     Parameters
     ----------
@@ -704,7 +704,7 @@ def compute_magnetic_field_axis(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic field components; can handle nodes at the magnetic axis.
+    """Compute magnetic field components; can handle nodes at the magnetic axis.
 
     Parameters
     ----------
@@ -867,7 +867,7 @@ def compute_magnetic_field_magnitude(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic field magnitude.
+    """Compute magnetic field magnitude.
 
     Parameters
     ----------
@@ -971,7 +971,7 @@ def compute_magnetic_field_magnitude_axis(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic field magnitude; can handle nodes at the magnetic axis.
+    """Compute magnetic field magnitude; can handle nodes at the magnetic axis.
 
     Parameters
     ----------
@@ -1075,7 +1075,7 @@ def compute_current_density(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes current density field components.
+    """Compute current density field components.
 
     Parameters
     ----------
@@ -1351,7 +1351,7 @@ def compute_magnetic_pressure_gradient(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic pressure gradient components and its magnitude.
+    """Compute magnetic pressure gradient components and its magnitude.
 
     Parameters
     ----------
@@ -1507,7 +1507,7 @@ def compute_magnetic_tension(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes magnetic tension vector and its magnitude.
+    """Compute magnetic tension vector and its magnitude.
 
     Parameters
     ----------
@@ -1662,7 +1662,7 @@ def compute_force_error(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes force error components.
+    """Compute force error components.
 
     Parameters
     ----------
@@ -1752,9 +1752,11 @@ def compute_force_error(
         current_density["J^theta"] * magnetic_field["B^zeta"]
         - current_density["J^zeta"] * magnetic_field["B^theta"]
     )
-    force_error["F_beta"] = jacobian["g"] * current_density["J^rho"]
-    force_error["F_theta"] = force_error["F_beta"] * magnetic_field["B^zeta"]
-    force_error["F_zeta"] = -force_error["F_beta"] * magnetic_field["B^theta"]
+    force_error["F_theta"] = (
+        jacobian["g"] * current_density["J^rho"] * magnetic_field["B^zeta"]
+    )
+    force_error["F_zeta"] = -profiles["iota"] * force_error["F_theta"]
+    force_error["F_beta"] = force_error["F_theta"]
 
     return (
         force_error,
@@ -1781,7 +1783,7 @@ def compute_force_error_magnitude(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes force error magnitude.
+    """Compute force error magnitude.
 
     Parameters
     ----------
@@ -1883,10 +1885,12 @@ def compute_force_error_magnitude(
         [toroidal_coords["0"], 1 / toroidal_coords["R"], toroidal_coords["0"]]
     )
 
-    force_error["beta"] = (
-        magnetic_field["B^zeta"] * con_basis["e^theta"]
-        - magnetic_field["B^theta"] * con_basis["e^zeta"]
+    force_error["F"] = (
+        force_error["F_rho"] * con_basis["e^rho"]
+        + force_error["F_theta"] * con_basis["e^theta"]
+        + force_error["F_zeta"] * con_basis["e^zeta"]
     )
+    force_error["beta"] = con_basis["e^theta"] - profiles["iota"] * con_basis["e^zeta"]
 
     force_error["|grad(rho)|"] = jnp.sqrt(
         dot(con_basis["e^rho"], con_basis["e^rho"], 0)
@@ -1895,14 +1899,9 @@ def compute_force_error_magnitude(
         profiles["p_r"] ** 2 * force_error["|grad(rho)|"] ** 2
     )
     force_error["|beta|"] = jnp.sqrt(
-        magnetic_field["B^zeta"] ** 2
-        * dot(con_basis["e^theta"], con_basis["e^theta"], 0)
-        + magnetic_field["B^theta"] ** 2
-        * dot(con_basis["e^zeta"], con_basis["e^zeta"], 0)
-        - 2
-        * magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot(con_basis["e^theta"], con_basis["e^zeta"], 0)
+        dot(con_basis["e^theta"], con_basis["e^theta"], 0)
+        + profiles["iota"] ** 2 * dot(con_basis["e^zeta"], con_basis["e^zeta"], 0)
+        - 2 * profiles["iota"] * dot(con_basis["e^theta"], con_basis["e^zeta"], 0)
     )
 
     force_error["|F|"] = jnp.sqrt(
@@ -1936,7 +1935,9 @@ def compute_energy(
     i_transform,
     zeta_ratio=1.0,
 ):
-    """Computes MHD energy by quadrature sum. **REQUIRES 'quad' grid for correct results**
+    """Compute MHD energy by quadrature sum.
+
+    **REQUIRES 'quad' grid for correct results**
 
     Parameters
     ----------

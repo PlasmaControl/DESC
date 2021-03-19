@@ -57,11 +57,11 @@
       ~Equilibrium.R_basis
       ~Equilibrium.R_lmn
       ~Equilibrium.Rb_basis
-      ~Equilibrium.Rb_mn
+      ~Equilibrium.Rb_lmn
       ~Equilibrium.Z_basis
       ~Equilibrium.Z_lmn
       ~Equilibrium.Zb_basis
-      ~Equilibrium.Zb_mn
+      ~Equilibrium.Zb_lmn
       ~Equilibrium.bdry_mode
       ~Equilibrium.built
       ~Equilibrium.children

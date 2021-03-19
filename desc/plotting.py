@@ -657,7 +657,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             {
                 "L": 50,
                 "NFP": nfp,
-                "theta": np.linspace(0, 2 * np.pi, 9, endpoint=False),
+                "theta": np.linspace(0, 2 * np.pi, 8, endpoint=False),
                 "zeta": zeta,
             }
         )
@@ -880,7 +880,7 @@ def _format_name(name):
         "|gradB|": r"\mathrm{N}/\mathrm{m}^3",
         "Btension": r"\mathrm{N}/\mathrm{m}^3",
         "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
-        "F": r"(\mathrm{N}/\mathrm{m}^3)",
+        "F": r"(\mathrm{N}/\mathrm{m}^2)",
         "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
     }
     name_dict["units"] = units[name_dict["base"]]

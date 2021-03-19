@@ -295,13 +295,7 @@ class FourierSeries(Basis):
     """
 
     def __init__(
-        self,
-        N=0,
-        NFP=1,
-        sym=False,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, N=0, NFP=1, sym=False, load_from=None, file_format=None, obj_lib=None,
     ):
 
         self._file_format_ = file_format
@@ -511,6 +505,189 @@ class DoubleFourierSeries(Basis):
             self._sort_modes()
 
 
+class ZernikePolynomial(Basis):
+    """2D basis set for analytic functions in a unit disc.
+
+    Initializes a ZernikePolynomial
+
+    Parameters
+    ----------
+    L : int
+        maximum radial resolution
+    M : int
+        maximum poloidal resolution
+    sym : {'cos', 'sin', False}
+        * 'cos' for cos(m*t-n*z) symmetry
+        * 'sin' for sin(m*t-n*z) symmetry
+        * False for no symmetry (Default)
+    spectral_indexing : {'ansi', 'fringe'}
+        Indexing method, default value = 'fringe'
+
+        For L=0, all methods are equivalent and give a "chevron" shaped
+        basis (only the outer edge of the zernike pyramid of width M).
+        For L>0, the indexing scheme defines order of the basis functions:
+
+        ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
+        decreasing size, ending in a triagle shape. For L == M,
+        the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
+        to the bottom of the pyramid, increasing L while keeping M constant,
+        giving a "house" shape
+
+        ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
+        decreasing size, ending in a diamond shape for L=2*M where
+        the traditional fringe/U of Arizona indexing is recovered.
+        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+
+    """
+
+    def __init__(
+        self,
+        L=-1,
+        M=0,
+        sym=False,
+        spectral_indexing="fringe",
+        load_from=None,
+        file_format=None,
+        obj_lib=None,
+    ):
+
+        self._file_format_ = file_format
+
+        if load_from is None:
+            self._L = L
+            self._M = M
+            self._N = 0
+            self._NFP = 1
+            self._sym = sym
+            self._spectral_indexing = spectral_indexing
+
+            self._modes = self._get_modes(
+                L=self.L, M=self.M, spectral_indexing=self.spectral_indexing,
+            )
+
+            self._enforce_symmetry()
+            self._sort_modes()
+
+        else:
+            self._init_from_file_(
+                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            )
+
+    def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
+        """Gets mode numbers for Fourier-Zernike basis functions
+
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+        M : int
+            maximum poloidal resolution
+        spectral_indexing : {'ansi', 'fringe'}
+            Indexing method, default value = 'fringe'
+
+            For L=0, all methods are equivalent and give a "chevron" shaped
+            basis (only the outer edge of the zernike pyramid of width M).
+            For L>0, the indexing scheme defines order of the basis functions:
+
+            ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
+            decreasing size, ending in a triagle shape. For L == M,
+            the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
+            to the bottom of the pyramid, increasing L while keeping M constant,
+            giving a "house" shape
+
+            ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
+            decreasing size, ending in a diamond shape for L=2*M where
+            the traditional fringe/U of Arizona indexing is recovered.
+            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            array of mode numbers [l,m,n]
+            each row is one basis function with modes (l,m,n)
+
+        """
+        default_L = {"ansi": M, "fringe": 2 * M}
+        L = L if L >= 0 else default_L.get(spectral_indexing, M)
+        self._L = L
+
+        if spectral_indexing == "ansi":
+            pol_posm = [
+                [(m + d, m) for m in range(0, M + 1) if m + d < L + 1]
+                for d in range(0, L + 1, 2)
+            ]
+
+        elif spectral_indexing == "fringe":
+            pol_posm = [
+                [(m + d // 2, m - d // 2) for m in range(0, M + 1) if m - d // 2 >= 0]
+                for d in range(0, L + 1, 2)
+            ]
+            if L > 2 * M:
+                Ladd = L - 2 * M
+                pol_posm += [
+                    [(l - m, m) for m in range(0, M + 1)]
+                    for l in range(2 * M, L + 1, 2)
+                ]
+
+        else:
+            raise ValueError("Unknown spectral_indexing: {}".format(spectral_indexing))
+
+        pol = [
+            [(l, m), (l, -m)] if m != 0 else [(l, m)] for l, m in flatten_list(pol_posm)
+        ]
+        pol = np.array(flatten_list(pol))
+        num_pol = len(pol)
+        tor = np.zeros((num_pol, 1))
+
+        return np.hstack([pol, tor])
+
+    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluates basis functions at specified nodes
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            node coordinates, in (rho,theta,zeta)
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            order of derivatives to compute in (rho,theta,zeta)
+        modes : ndarray of int, shape(num_modes,3), optional
+            basis modes to evaluate (if None, full basis is used)
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+        if modes is None:
+            modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
+        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
+        return radial * poloidal
+
+    def change_resolution(self, L, M):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            maximum radial resolution
+        M : int
+            maximum poloidal resolution
+
+        """
+        if L != self.L or M != self.M:
+            self._L = L
+            self._M = M
+            self._modes = self._get_modes(
+                self.L, self.M, spectral_indexing=self.spectral_indexing
+            )
+            self._sort_modes()
+
+
 class FourierZernikeBasis(Basis):
     """3D basis set for analytic functions in a toroidal volume.
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
@@ -532,8 +709,8 @@ class FourierZernikeBasis(Basis):
         * 'cos' for cos(m*t-n*z) symmetry
         * 'sin' for sin(m*t-n*z) symmetry
         * False for no symmetry (Default)
-    spectral_indexing : {'ansi', 'fringe', 'chevron', 'house'}
-        Indexing method, default value = 'ansi'
+    spectral_indexing : {'ansi', 'fringe'}
+        Indexing method, default value = 'fringe'
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -559,7 +736,7 @@ class FourierZernikeBasis(Basis):
         N=0,
         NFP=1,
         sym=False,
-        spectral_indexing="ansi",
+        spectral_indexing="fringe",
         load_from=None,
         file_format=None,
         obj_lib=None,
@@ -576,10 +753,7 @@ class FourierZernikeBasis(Basis):
             self._spectral_indexing = spectral_indexing
 
             self._modes = self._get_modes(
-                L=self.L,
-                M=self.M,
-                N=self.N,
-                spectral_indexing=self.spectral_indexing,
+                L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing,
             )
 
             self._enforce_symmetry()
@@ -590,7 +764,7 @@ class FourierZernikeBasis(Basis):
                 load_from=load_from, file_format=file_format, obj_lib=obj_lib
             )
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
         """Gets mode numbers for Fourier-Zernike basis functions
 
         Parameters
@@ -602,7 +776,7 @@ class FourierZernikeBasis(Basis):
         N : int
             maximum toroidal resolution
         spectral_indexing : {'ansi', 'fringe'}
-            Indexing method, default value = 'ansi'
+            Indexing method, default value = 'fringe'
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -704,10 +878,10 @@ class FourierZernikeBasis(Basis):
             maximum toroidal resolution
 
         """
-        if M != self.M or N != self.N or L != self.L:
+        if L != self.L or M != self.M or N != self.N:
+            self._L = L
             self._M = M
             self._N = N
-            self._L = L
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
@@ -715,7 +889,7 @@ class FourierZernikeBasis(Basis):
 
 
 def polyder_vec(p, m):
-    """Vectorized version of polyder
+    """Vectorized version of polyder.
 
     For differentiating multiple polynomials of the same degree
 
@@ -748,7 +922,7 @@ def polyder_vec(p, m):
 
 
 def polyval_vec(p, x):
-    """Evaluate a polynomial at specific values
+    """Evaluate a polynomial at specific values.
 
     Vectorized for evaluating multiple polynomials of the same degree.
 
@@ -787,7 +961,7 @@ def polyval_vec(p, x):
 
 
 def power_coeffs(l):
-    """Power series
+    """Power series coefficients.
 
     Parameters
     ----------
@@ -808,7 +982,7 @@ def power_coeffs(l):
 
 
 def powers(rho, l, dr=0):
-    """Power series
+    """Power series.
 
     Parameters
     ----------
@@ -831,7 +1005,7 @@ def powers(rho, l, dr=0):
 
 
 def jacobi_coeffs(l, m):
-    """Jacobi polynomials
+    """Jacobi polynomial coefficients.
 
     Parameters
     ----------
@@ -869,7 +1043,7 @@ def jacobi_coeffs(l, m):
 
 
 def jacobi(rho, l, m, dr=0):
-    """Jacobi polynomials
+    """Jacobi polynomials.
 
     Parameters
     ----------
@@ -894,7 +1068,7 @@ def jacobi(rho, l, m, dr=0):
 
 
 def fourier(theta, m, NFP=1, dt=0):
-    """Fourier series
+    """Fourier series.
 
     Parameters
     ----------
@@ -926,7 +1100,6 @@ def fourier(theta, m, NFP=1, dt=0):
 
 def zernike_norm(l, m):
     """Norm of a Zernike polynomial with l, m indexing.
-    Returns the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
 
     Parameters
     ----------
@@ -936,7 +1109,7 @@ def zernike_norm(l, m):
     Returns
     -------
     norm : float
-        norm of Zernike polynomial over unit disk.
+        the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
 
     """
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))

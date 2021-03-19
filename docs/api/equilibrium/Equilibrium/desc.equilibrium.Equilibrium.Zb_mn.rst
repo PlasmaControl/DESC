@@ -3,4 +3,4 @@
 
 .. currentmodule:: desc.equilibrium
 
-.. autoproperty:: Equilibrium.Zb_mn
+.. autoproperty:: Equilibrium.Zb_lmn

@@ -8,7 +8,7 @@ from desc.transform import Transform
 from desc.compute_funs import compute_toroidal_coords
 from desc.equilibrium import Equilibrium
 from desc.objective_funs import ObjectiveFunction
-from desc.boundary_conditions import BoundaryConstraint
+from desc.boundary_conditions import LCFSConstraint
 
 
 class DummyFunLinear(ObjectiveFunction):
@@ -24,22 +24,16 @@ class DummyFunLinear(ObjectiveFunction):
 
     @property
     def derivatives(self):
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-            ]
-        )
+        derivatives = np.array([[0, 0, 0],])
         return derivatives
 
-    def compute(self, y, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, y, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
 
         if self.BC_constraint is not None:
-            x = self.BC_constraint.recover_from_bdry(y, Rb_mn, Zb_mn)
+            x = self.BC_constraint.recover_from_constraints(y, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
         )
 
         toroidal_coords = compute_toroidal_coords(
@@ -59,17 +53,17 @@ class DummyFunLinear(ObjectiveFunction):
 
         axis = self.R_transform.grid.axis
         R0_mn = jnp.where(
-            (self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1), Rb_mn, 0
+            (self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1), Rb_lmn, 0
         ).sum()
 
         # f = R0_x / Psi - R0_b
         residual = toroidal_coords["R"][axis] / Psi - R0_mn
         return residual * jnp.ones_like(y)
 
-    def compute_scalar(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
         pass
 
-    def callback(self, x, Rb_mn, Zb_mn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         pass
 
 
@@ -87,13 +81,7 @@ class TestPerturbations(unittest.TestCase):
             "M": 2,
             "N": 1,
             "profiles": np.zeros((1, 3)),
-            "boundary": np.array(
-                [
-                    [0, -1, 0, 0, 2],
-                    [0, 0, 0, 3, 0],
-                    [0, 1, 0, 1, 0],
-                ]
-            ),
+            "boundary": np.array([[0, -1, 0, 0, 2], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0],]),
         }
         eq_old = Equilibrium(inputs=inputs)
         grid = LinearGrid(NFP=eq_old.NFP, rho=0)
@@ -112,22 +100,22 @@ class TestPerturbations(unittest.TestCase):
             Zb_transform=Zb_transform,
             p_transform=p_transform,
             i_transform=i_transform,
-            BC_constraint=BoundaryConstraint(
+            BC_constraint=LCFSConstraint(
                 eq_old.R_basis,
                 eq_old.Z_basis,
                 eq_old.L_basis,
                 eq_old.Rb_basis,
                 eq_old.Zb_basis,
-                eq_old.Rb_mn,
-                eq_old.Zb_mn,
+                eq_old.Rb_lmn,
+                eq_old.Zb_lmn,
             ),
         )
         eq_old.objective = obj_fun
         y = eq_old.objective.BC_constraint.project(eq_old.x)
         args = (
             y,
-            eq_old.Rb_mn,
-            eq_old.Zb_mn,
+            eq_old.Rb_lmn,
+            eq_old.Zb_lmn,
             eq_old.p_l,
             eq_old.i_l,
             eq_old.Psi,
@@ -149,8 +137,8 @@ class TestPerturbations(unittest.TestCase):
         y = eq_new.objective.BC_constraint.project(eq_new.x)
         args = (
             y,
-            eq_new.Rb_mn,
-            eq_new.Zb_mn,
+            eq_new.Rb_lmn,
+            eq_new.Zb_lmn,
             eq_new.p_l,
             eq_new.i_l,
             eq_new.Psi,

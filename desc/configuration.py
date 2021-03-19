@@ -10,11 +10,12 @@ from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.grid import QuadratureGrid
 from desc.objective_funs import get_objective_function
-from desc.boundary_conditions import BoundaryConstraint
+from desc.boundary_conditions import BoundaryCondition
 from desc.basis import (
     PowerSeries,
     FourierSeries,
     DoubleFourierSeries,
+    ZernikePolynomial,
     FourierZernikeBasis,
 )
 
@@ -53,8 +54,8 @@ class _Configuration(IOAble, ABC):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
-        "_Rb_mn",
-        "_Zb_mn",
+        "_Rb_lmn",
+        "_Zb_lmn",
         "_p_l",
         "_i_l",
         "_R_basis",
@@ -77,11 +78,7 @@ class _Configuration(IOAble, ABC):
     }
 
     def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
+        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
     ):
         """Initializes a Configuration
 
@@ -95,7 +92,7 @@ class _Configuration(IOAble, ABC):
                 M : int, poloidal resolution
                 N : int, toroidal resolution
                 profiles : ndarray, array of profile coeffs [l, p_l, i_l]
-                boundary : ndarray, array of boundary coeffs [m, n, Rb_mn, Zb_mn]
+                boundary : ndarray, array of boundary coeffs [m, n, Rb_lmn, Zb_lmn]
             And the following optional keys:
                 sym : bool, is the problem stellarator symmetric or not, default is False
                 spectral_indexing : str, type of Zernike indexing scheme to use, default is 'ansi'
@@ -162,7 +159,7 @@ class _Configuration(IOAble, ABC):
         )
 
         # format boundary
-        self._Rb_mn, self._Zb_mn = format_boundary(
+        self._Rb_lmn, self._Zb_lmn = format_boundary(
             self._boundary, self._Rb_basis, self._Zb_basis, self._bdry_mode
         )
 
@@ -170,9 +167,7 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -184,14 +179,14 @@ class _Configuration(IOAble, ABC):
                 self._R_lmn = inputs["R_lmn"]
             except:
                 self._R_lmn = initial_guess(
-                    self._R_basis, self._Rb_mn, self._Rb_basis, axis[:, 0:-1]
+                    self._R_basis, self._Rb_lmn, self._Rb_basis, axis[:, 0:-1]
                 )
             # check if Z is provided
             try:
                 self._Z_lmn = inputs["Z_lmn"]
             except:
                 self._Z_lmn = initial_guess(
-                    self._Z_basis, self._Zb_mn, self._Zb_basis, axis[:, (0, -1)]
+                    self._Z_basis, self._Zb_lmn, self._Zb_basis, axis[:, (0, -1)]
                 )
             # check if lambda is provided
             try:
@@ -226,18 +221,23 @@ class _Configuration(IOAble, ABC):
             sym=self._Z_sym,
             spectral_indexing=self._spectral_indexing,
         )
-        self._Rb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._R_sym,
-        )
-        self._Zb_basis = DoubleFourierSeries(
-            M=self._M,
-            N=self._N,
-            NFP=self._NFP,
-            sym=self._Z_sym,
-        )
+
+        if np.all(self._boundary[:, 0] == 0):
+            self._Rb_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
+            )
+            self._Zb_basis = DoubleFourierSeries(
+                M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
+            )
+        elif np.all(self._boundary[:, 2] == 0):
+            self._Rb_basis = ZernikePolynomial(
+                L=self._L, M=self._M, sym=self._R_sym, index=self._spectral_indexing,
+            )
+            self._Zb_basis = ZernikePolynomial(
+                L=self._L, M=self._M, sym=self._Z_sym, index=self._spectral_indexing,
+            )
+        else:
+            raise ValueError("boundary should either have l=0 or n=0")
 
         nonzero_modes = self._boundary[
             np.argwhere(self._boundary[:, 3:] != np.array([0, 0]))[:, 0]
@@ -250,7 +250,8 @@ class _Configuration(IOAble, ABC):
             warnings.warn(
                 colored(
                     "Configuration resolution does not fully resolve boundary inputs, "
-                    + "Configuration L,M,N={},{},{},  boundary resolution L,M,N={},{},{}".format(
+                    + "Configuration L,M,N={},{},{}, "
+                    + "boundary resolution L,M,N={},{},{}".format(
                         self.L,
                         self.M,
                         self.N,
@@ -331,14 +332,14 @@ class _Configuration(IOAble, ABC):
         self._i_l = copy_coeffs(self._i_l, old_modes_i, self.p_basis.modes, full_i_l)
 
         # format boundary
-        full_Rb_mn, full_Zb_mn = format_boundary(
+        full_Rb_lmn, full_Zb_lmn = format_boundary(
             self._boundary, self._Rb_basis, self._Zb_basis, self._bdry_mode
         )
-        self._Rb_mn = copy_coeffs(
-            self._Rb_mn, old_modes_Rb, self.Rb_basis.modes, full_Rb_mn
+        self._Rb_lmn = copy_coeffs(
+            self._Rb_lmn, old_modes_Rb, self.Rb_basis.modes, full_Rb_lmn
         )
-        self._Zb_mn = copy_coeffs(
-            self._Zb_mn, old_modes_Zb, self.Zb_basis.modes, full_Zb_mn
+        self._Zb_lmn = copy_coeffs(
+            self._Zb_lmn, old_modes_Zb, self.Zb_basis.modes, full_Zb_lmn
         )
 
         self._R_lmn = copy_coeffs(self._R_lmn, old_modes_R, self._R_basis.modes)
@@ -406,9 +407,7 @@ class _Configuration(IOAble, ABC):
     def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
         )
 
     @property
@@ -442,22 +441,22 @@ class _Configuration(IOAble, ABC):
         self._x = np.concatenate([self._R_lmn, self._Z_lmn, self._L_lmn])
 
     @property
-    def Rb_mn(self):
+    def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        return self._Rb_mn
+        return self._Rb_lmn
 
-    @Rb_mn.setter
-    def Rb_mn(self, Rb_mn):
-        self._Rb_mn = Rb_mn
+    @Rb_lmn.setter
+    def Rb_lmn(self, Rb_lmn):
+        self._Rb_lmn = Rb_lmn
 
     @property
-    def Zb_mn(self):
+    def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        return self._Zb_mn
+        return self._Zb_lmn
 
-    @Zb_mn.setter
-    def Zb_mn(self, Zb_mn):
-        self._Zb_mn = Zb_mn
+    @Zb_lmn.setter
+    def Zb_lmn(self, Zb_lmn):
+        self._Zb_lmn = Zb_lmn
 
     @property
     def p_l(self):
@@ -494,12 +493,12 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Rb_basis(self):
-        """Spectral basis for R at the boundary (DoubleFourierSeries)."""
+        """Spectral basis for R at the boundary (Basis)."""
         return self._Rb_basis
 
     @property
     def Zb_basis(self):
-        """Spectral basis for Z at the boundary (DoubleFourierSeries)."""
+        """Spectral basis for Z at the boundary (Basis)."""
         return self._Zb_basis
 
     @property
@@ -1178,8 +1177,9 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         free_bdry : bool, optional
-            whether to compute free boundary stability. If False, computes fixed boundary
-            stabiltiy (ie stability to perturbations that leave the boundary fixed)
+            whether to compute free boundary stability.
+            If False, computes fixed boundary stabiltiy
+            (ie stability to perturbations that leave the boundary fixed)
         grid : Grid, optional
             grid to use for computation. If None, a QuadratureGrid is created
 
@@ -1211,14 +1211,14 @@ class _Configuration(IOAble, ABC):
             Zb_transform,
             p_transform,
             i_transform,
-            BC_constraint=BoundaryConstraint(
+            BC_constraint=BoundaryCondition(
                 self.R_basis,
                 self.Z_basis,
                 self.L_basis,
                 self.Rb_basis,
                 self.Zb_basis,
-                self.Rb_mn,
-                self.Zb_mn,
+                self.Rb_lmn,
+                self.Zb_lmn,
                 build=True,
             ),
             use_jit=False,
@@ -1228,7 +1228,7 @@ class _Configuration(IOAble, ABC):
         else:
             x = obj.BC_constraint.project(self.x)
         dW = obj.hess_x(
-            x, self.Rb_mn, self.Zb_mn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
+            x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
         )
         return dW
 
@@ -1271,76 +1271,92 @@ def format_boundary(boundary, Rb_basis, Zb_basis, mode="lcfs"):
     Parameters
     ----------
     boundary : ndarray, shape(Nbdry,5)
-        array of fourier coeffs [l, m, n, Rb_mn, Zb_mn]
+        array of fourier coeffs [l, m, n, Rb_lmn, Zb_lmn]
         or array of real space coordinates, [rho, theta, phi, R, Z]
     Rb_basis : DoubleFourierSeries
-        spectral basis for Rb_mn coefficients
+        spectral basis for Rb_lmn coefficients
     Zb_basis : DoubleFourierSeries
-        spectral basis for Zb_mn coefficients
+        spectral basis for Zb_lmn coefficients
     mode : str
-        one of 'lcfs', 'poincare'. Whether bdry is specified on last closed flux surface
-        or the zeta=0 poincare section.
+        One of 'lcfs', 'poincare'.
+        Whether the boundary condition is specified by the last closed flux surface
+        (rho=1) or the Poincare section (zeta=0).
 
     Returns
     -------
-    Rb_mn : ndarray
+    Rb_lmn : ndarray
         spectral coefficients for R boundary
-    Zb_mn : ndarray
+    Zb_lmn : ndarray
         spectral coefficients for Z boundary
 
     """
-    Rb_mn = np.zeros((Rb_basis.num_modes,))
-    Zb_mn = np.zeros((Zb_basis.num_modes,))
+    Rb_lmn = np.zeros((Rb_basis.num_modes,))
+    Zb_lmn = np.zeros((Zb_basis.num_modes,))
 
-    if mode == "lcfs" and np.all(boundary[:, 0] == 0):
+    if mode == "lcfs":
         # boundary is on m,n LCFS
         for m, n, R1, Z1 in boundary[:, 1:]:
             idx_R = np.where((Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
             idx_Z = np.where((Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            Rb_mn[idx_R] = R1
-            Zb_mn[idx_Z] = Z1
-    elif mode == "poincare" and np.all(boundary[:, 2] == 0):
+            Rb_lmn[idx_R] = R1
+            Zb_lmn[idx_Z] = Z1
+    elif mode == "poincare":
         # boundary is on l,m poincare section
         for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
             idx_R = np.where((Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
             idx_Z = np.where((Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
-            Rb_mn[idx_R] = R1
-            Zb_mn[idx_Z] = Z1
+            Rb_lmn[idx_R] = R1
+            Zb_lmn[idx_Z] = Z1
     else:
-        raise ValueError("boundary should either have l=0 or n=0")
+        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
-    return Rb_mn.astype(float), Zb_mn.astype(float)
+    return Rb_lmn.astype(float), Zb_lmn.astype(float)
 
 
-def initial_guess(x_basis, b_mn, b_basis, axis):
+def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
     """Create an initial guess from the boundary coefficients and magnetic axis guess.
 
     Parameters
     ----------
     x_basis : FourierZernikeBais
-        Basis of the flux surfaces (for R, Z, or Lambda).
-    b_mn : ndarray, shape(b_basis.num_modes,)
-        Vector of boundary coefficients associated with b_basis.
-    b_basis : DoubleFourierSeries
-        Basis of the boundary surface (for Rb or Zb)
+        basis of the flux surfaces (for R, Z, or Lambda).
+    b_lmn : ndarray, shape(b_basis.num_modes,)
+        vector of boundary coefficients associated with b_basis.
+    b_basis : Basis
+        basis of the boundary surface (for Rb or Zb)
     axis : ndarray, shape(num_modes,2)
-        Coefficients of the magnetic axis. axis[i, :] = [n, x0]
+        coefficients of the magnetic axis. axis[i, :] = [n, x0].
+        Only used for 'lcfs' boundary mode.
+    mode : str
+        One of 'lcfs', 'poincare'.
+        Whether the boundary condition is specified by the last closed flux surface
+        (rho=1) or the Poincare section (zeta=0).
 
     Returns
     -------
-    x_lmn : TYPE
-        Vector of flux surface coefficients associated with x_basis.
+    x_lmn : ndarray
+        vector of flux surface coefficients associated with x_basis.
 
     """
     x_lmn = np.zeros((x_basis.num_modes,))
-    for k, (l, m, n) in enumerate(b_basis.modes):
-        idx = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-        if m == 0:
-            idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-            x0 = np.where(axis[:, 0] == n, axis[:, 1], b_mn[k])[0]
-            x_lmn[idx] = x0
-            x_lmn[idx2] = b_mn[k] - x0
-        else:
-            x_lmn[idx] = b_mn[k]
+
+    if mode == "lcfs":
+        for k, (l, m, n) in enumerate(b_basis.modes):
+            idx = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+            if m == 0:
+                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
+                x0 = np.where(axis[:, 0] == n, axis[:, 1], b_lmn[k])[0]
+                x_lmn[idx] = x0
+                x_lmn[idx2] = b_lmn[k] - x0
+            else:
+                x_lmn[idx] = b_lmn[k]
+
+    elif mode == "poincare":
+        for k, (l, m, n) in enumerate(b_basis.modes):
+            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
+            x_lmn[idx] = b_lmn[k]
+
+    else:
+        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
     return x_lmn

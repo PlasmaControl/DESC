@@ -462,8 +462,8 @@ class InputReader:
         if np.sum(inputs["N_grid"]) == 0:
             inputs["N_grid"] = np.rint(1.5 * inputs["N"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
-            axis_idx = np.where(inputs["boundary"][:, 0] == 0)[0]
-            inputs["axis"] = inputs["boundary"][axis_idx, 1:]
+            axis_idx = np.where(inputs["boundary"][:, 1] == 0)[0]
+            inputs["axis"] = inputs["boundary"][axis_idx, 2:]
         if None in inputs["L"]:
             default_L = {
                 "ansi": inputs["M"],
@@ -488,10 +488,10 @@ class InputReader:
             inputs_ii["profiles"][:, 1] *= inputs_ii["pres_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
-                inputs_ii["boundary"][:, 1] != 0, inputs_ii["bdry_ratio"], 1
+                inputs_ii["boundary"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
             )
-            inputs_ii["boundary"][:, 2] *= bdry_factor
             inputs_ii["boundary"][:, 3] *= bdry_factor
+            inputs_ii["boundary"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
         return inputs_list

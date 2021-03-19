@@ -13,8 +13,13 @@ __all__ = ["perturb"]
 
 def perturb(
     eq,
-    deltas,
-    order=0,
+    dRb=None,
+    dZb=None,
+    dp=None,
+    di=None,
+    dPsi=None,
+    dzeta_ratio=None,
+    order=2,
     tr_ratio=0.1,
     cutoff=1e-6,
     Jx=None,
@@ -27,10 +32,10 @@ def perturb(
     ----------
     eq : Equilibrium
         equilibrium to perturb
-    deltas : dict
-        dictionary of ndarray of objective function parameters to perturb.
-        Allowed keys are: ``'Rb_mn'``, ``'Zb_mn'``, ``'p_l'``, ``'i_l'``,
-        ``'Psi'``, ``'zeta_ratio'``
+    dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
+        deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
+        toroidal flux, and zeta ratio.. Setting to None or zero ignores that term
+        in the expansion.
     order : int, optional
         order of perturbation (0=none, 1=linear, 2=quadratic)
     tr_ratio : float or array of float
@@ -60,6 +65,28 @@ def perturb(
                 "yellow",
             )
         )
+    if not eq.objective:
+        raise AttributeError(
+            "Equilibrium must have objective defined before perturbing"
+        )
+    if eq.objective.scalar:
+        raise AttributeError(
+            "Cannot perturb with a scalar objective {}".format(eq.objective)
+        )
+
+    deltas = {}
+    if dRb is not None and not np.all(dRb == 0):
+        deltas["Rb_mn"] = dRb
+    if dZb is not None and not np.all(dZb == 0):
+        deltas["Zb_mn"] = dZb
+    if dp is not None and not np.all(dp == 0):
+        deltas["p_l"] = dp
+    if di is not None and not np.all(di == 0):
+        deltas["i_l"] = di
+    if dPsi is not None and not np.all(dPsi == 0):
+        deltas["Psi"] = dPsi
+    if dzeta_ratio is not None and not np.all(dzeta_ratio == 0):
+        deltas["zeta_ratio"] = dzeta_ratio
 
     timer = Timer()
     timer.start("Total perturbation")

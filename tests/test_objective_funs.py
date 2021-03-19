@@ -90,13 +90,8 @@ class TestIsNested(unittest.TestCase):
             "profiles": np.array([[0, 0, 0.23]]),
             "boundary": np.array(
                 [
-                    [
-                        0,
-                        0,
-                        10,
-                        0,
-                    ],
-                    [1, 0, 1, 0],
+                    [0, 0, 0, 10, 0],
+                    [0, 1, 0, 1, 0],
                 ]
             ),
             "index": "fringe",

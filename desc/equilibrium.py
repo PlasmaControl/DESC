@@ -581,15 +581,28 @@ class Equilibrium(_Configuration, IOAble):
         return result
 
     def perturb(
-        self, deltas, order, tr_ratio=0.1, cutoff=1e-6, Jx=None, verbose=1, copy=True
+        self,
+        dRb=None,
+        dZb=None,
+        dp=None,
+        di=None,
+        dPsi=None,
+        dzeta_ratio=None,
+        order=2,
+        tr_ratio=0.1,
+        cutoff=1e-6,
+        Jx=None,
+        verbose=1,
+        copy=True,
     ):
         """Perturb the equilibrium while maintaining equilibrium
 
         Parameters
         ----------
-        deltas : dict
-            dictionary of ndarray of objective function parameters to perturb.
-            Allowed keys are: 'Rb_mn', 'Zb_mn', 'p_l', 'i_l', 'Psi', 'zeta_ratio'
+        dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
+            deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
+            toroidal flux, and zeta ratio.. Setting to None or zero ignores that term
+            in the expansion.
         order : int, optional
             order of perturbation (0=none, 1=linear, 2=quadratic)
         Jx : ndarray, optional
@@ -607,7 +620,12 @@ class Equilibrium(_Configuration, IOAble):
         """
         equil = perturb(
             self,
-            deltas,
+            dRb,
+            dZb,
+            dp,
+            di,
+            dPsi,
+            dzeta_ratio,
             order=order,
             tr_ratio=tr_ratio,
             cutoff=cutoff,
@@ -689,18 +707,18 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil.bdry_mode,
         )
         if not np.allclose(Rb_mn, equil.Rb_mn):
-            deltas["Rb_mn"] = Rb_mn - equil.Rb_mn
+            deltas["dRb"] = Rb_mn - equil.Rb_mn
         if not np.allclose(Zb_mn, equil.Zb_mn):
-            deltas["Zb_mn"] = Zb_mn - equil.Zb_mn
+            deltas["dZb"] = Zb_mn - equil.Zb_mn
         p_l, i_l = format_profiles(inputs["profiles"], equil.p_basis, equil.i_basis)
         if not np.allclose(p_l, equil.p_l):
-            deltas["p_l"] = p_l - equil.p_l
+            deltas["dp"] = p_l - equil.p_l
         if not np.allclose(i_l, equil.i_l):
-            deltas["i_l"] = i_l - equil.i_l
+            deltas["di"] = i_l - equil.i_l
         if not np.allclose(inputs["zeta_ratio"], inputs_prev["zeta_ratio"]):
-            deltas["zeta_ratio"] = inputs["zeta_ratio"] - inputs_prev["zeta_ratio"]
+            deltas["dzeta_ratio"] = inputs["zeta_ratio"] - inputs_prev["zeta_ratio"]
         if not np.allclose(inputs["Psi"], inputs_prev["Psi"]):
-            deltas["Psi"] = inputs["Psi"] - inputs_prev["Psi"]
+            deltas["dPsi"] = inputs["Psi"] - inputs_prev["Psi"]
         return deltas
 
     def _print_iteration(self, ii, equil):
@@ -797,7 +815,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         print("Perturbing equilibrium")
 
                     equil.perturb(
-                        deltas,
+                        **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,
                         copy=False,

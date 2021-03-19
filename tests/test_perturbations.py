@@ -89,9 +89,9 @@ class TestPerturbations(unittest.TestCase):
             "profiles": np.zeros((1, 3)),
             "boundary": np.array(
                 [
-                    [-1, 0, 0, 2],
-                    [0, 0, 3, 0],
-                    [1, 0, 1, 0],
+                    [0, -1, 0, 0, 2],
+                    [0, 0, 0, 3, 0],
+                    [0, 1, 0, 1, 0],
                 ]
             ),
         }
@@ -136,16 +136,16 @@ class TestPerturbations(unittest.TestCase):
         res_old = eq_old.objective.compute(*args)
 
         deltas = {
-            "Rb_mn": np.zeros((eq_old.Rb_basis.num_modes,)),
-            "Zb_mn": np.zeros((eq_old.Zb_basis.num_modes,)),
-            "Psi": 0.2,
+            "dRb": np.zeros((eq_old.Rb_basis.num_modes,)),
+            "dZb": np.zeros((eq_old.Zb_basis.num_modes,)),
+            "dPsi": 0.2,
         }
         idx_R = np.where((eq_old.Rb_basis.modes == [0, 2, 1]).all(axis=1))[0]
         idx_Z = np.where((eq_old.Zb_basis.modes == [0, -2, 1]).all(axis=1))[0]
-        deltas["Rb_mn"][idx_R] = 0.5
-        deltas["Zb_mn"][idx_Z] = -0.3
+        deltas["dRb"][idx_R] = 0.5
+        deltas["dZb"][idx_Z] = -0.3
 
-        eq_new = eq_old.perturb(deltas, order=1, tr_ratio=100)
+        eq_new = eq_old.perturb(**deltas, order=1, tr_ratio=100)
         y = eq_new.objective.BC_constraint.project(eq_new.x)
         args = (
             y,

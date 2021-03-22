@@ -259,3 +259,39 @@ class TestTransform(unittest.TestCase):
                 atol=1e-12,
                 err_msg="failed on double fourier after change, d={}".format(d),
             )
+
+    def test_project(self):
+        """tests projection method"""
+
+        basis = FourierZernikeBasis(M=5, N=3)
+        grid = ConcentricGrid(M=2, N=5)
+        transform = Transform(grid, basis, method="fft")
+        dtransform = Transform(grid, basis, method="direct")
+        transform.build()
+        dtransform.build()
+
+        y = np.random.random(grid.num_nodes)
+
+        np.testing.assert_allclose(transform.project(y), dtransform.project(y))
+
+        basis = FourierZernikeBasis(M=5, N=3, sym="cos")
+        grid = ConcentricGrid(M=2, N=5)
+        transform = Transform(grid, basis, method="fft")
+        dtransform = Transform(grid, basis, method="direct")
+        transform.build()
+        dtransform.build()
+
+        y = np.random.random(grid.num_nodes)
+
+        np.testing.assert_allclose(transform.project(y), dtransform.project(y))
+
+        basis = FourierZernikeBasis(M=5, N=0, sym="sin")
+        grid = ConcentricGrid(M=2, N=5, sym=True)
+        transform = Transform(grid, basis, method="fft")
+        dtransform = Transform(grid, basis, method="direct")
+        transform.build()
+        dtransform.build()
+
+        y = np.random.random(grid.num_nodes)
+
+        np.testing.assert_allclose(transform.project(y), dtransform.project(y))

@@ -444,6 +444,59 @@ class Transform(IOAble):
             self.build_pinv()
         return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
 
+    def project(self, y):
+        """Project vector y onto basis
+
+        Equivalent to dotting the transpose of the transform matrix into y, but
+        somewhat more efficient in some cases by using FFT instead of full transform
+
+        Parameters
+        ----------
+        y : ndarray
+            vector to project. Should be of size (self.grid.num_nodes,)
+
+        Returns
+        -------
+        b : ndarray
+            vector y projected onto basis, shape (self.basis.num_modes)
+        """
+        if not self.built:
+            self.build()
+
+        if self.method == "direct":
+            A = self.matrices[0][0][0]
+            if self.grid.num_nodes != y.size:
+                raise ValueError(
+                    colored(
+                        "y dimension ({}) is incompatible with the number of grid nodes({})".format(
+                            y.size, self.grid.num_nodes
+                        ),
+                        "red",
+                    )
+                )
+            return jnp.matmul(A.T, y)
+
+        elif self.method == "fft":
+            A = self.matrices[0][0][0]
+            if self.grid.num_nodes != y.size:
+                raise ValueError(
+                    colored(
+                        "y dimension ({}) is incompatible with the number of grid nodes({})".format(
+                            y.size, self.grid.num_nodes
+                        ),
+                        "red",
+                    )
+                )
+            # this was derived by trial and error, but seems to work correctly
+            # there might be a more efficient way...
+            a = jnp.fft.fft(A.T @ y.reshape((A.shape[0], -1), order="F"))
+            cdn = a[:, 0]
+            cr = a[:, 1 : 1 + self.N]
+            b = jnp.hstack(
+                [-cr.imag[:, ::-1], cdn.real[:, np.newaxis], cr.real]
+            ).flatten()[self.fft_index]
+            return b
+
     def change_resolution(
         self,
         grid=None,

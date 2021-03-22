@@ -579,6 +579,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             force_error,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -598,11 +599,12 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][:, 0]
-        F_Z = force_error["F"][:, 2]
+        F_R = force_error["F"][0, :]
+        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
-        f_R = jnp.dot(self.R_transform._matrices[0][0][0].T, F_R * weights)
-        f_Z = jnp.dot(self.Z_transform._matrices[0][0][0].T, F_Z * weights)
+
+        f_R = self.R_transform.project(F_R * weights)
+        f_Z = self.Z_transform.project(F_Z * weights)
 
         residual = jnp.concatenate([f_R.flatten(), f_Z.flatten()])
         return residual
@@ -649,6 +651,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             force_error,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -668,8 +671,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][:, 0]
-        F_Z = force_error["F"][:, 2]
+        F_R = force_error["F"][0, :]
+        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
         return jnp.sum((jnp.abs(F_R) + jnp.abs(F_Z)) * weights)
 
@@ -708,6 +711,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             force_error,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -727,8 +731,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][:, 0]
-        F_Z = force_error["F"][:, 2]
+        F_R = force_error["F"][0, :]
+        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
         F_R_int = jnp.sum(jnp.abs(F_R) * weights)
         F_Z_int = jnp.sum(jnp.abs(F_Z) * weights)

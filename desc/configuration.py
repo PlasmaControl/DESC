@@ -78,7 +78,11 @@ class _Configuration(IOAble, ABC):
     }
 
     def __init__(
-        self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None,
+        self,
+        inputs=None,
+        load_from=None,
+        file_format="hdf5",
+        obj_lib=None,
     ):
         """Initializes a Configuration
 
@@ -167,7 +171,9 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+                self._x,
+                self._R_basis.num_modes,
+                self._Z_basis.num_modes,
             )
         # default initial guess
         except:
@@ -224,17 +230,29 @@ class _Configuration(IOAble, ABC):
 
         if np.all(self._boundary[:, 0] == 0):
             self._Rb_basis = DoubleFourierSeries(
-                M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym,
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
+                sym=self._R_sym,
             )
             self._Zb_basis = DoubleFourierSeries(
-                M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym,
+                M=self._M,
+                N=self._N,
+                NFP=self._NFP,
+                sym=self._Z_sym,
             )
         elif np.all(self._boundary[:, 2] == 0):
             self._Rb_basis = ZernikePolynomial(
-                L=self._L, M=self._M, sym=self._R_sym, index=self._spectral_indexing,
+                L=self._L,
+                M=self._M,
+                sym=self._R_sym,
+                index=self._spectral_indexing,
             )
             self._Zb_basis = ZernikePolynomial(
-                L=self._L, M=self._M, sym=self._Z_sym, index=self._spectral_indexing,
+                L=self._L,
+                M=self._M,
+                sym=self._Z_sym,
+                index=self._spectral_indexing,
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
@@ -407,7 +425,9 @@ class _Configuration(IOAble, ABC):
     def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x, self._R_basis.num_modes, self._Z_basis.num_modes,
+            self._x,
+            self._R_basis.num_modes,
+            self._Z_basis.num_modes,
         )
 
     @property
@@ -1176,10 +1196,6 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        free_bdry : bool, optional
-            whether to compute free boundary stability.
-            If False, computes fixed boundary stabiltiy
-            (ie stability to perturbations that leave the boundary fixed)
         grid : Grid, optional
             grid to use for computation. If None, a QuadratureGrid is created
 
@@ -1211,22 +1227,10 @@ class _Configuration(IOAble, ABC):
             Zb_transform,
             p_transform,
             i_transform,
-            BC_constraint=BoundaryCondition(
-                self.R_basis,
-                self.Z_basis,
-                self.L_basis,
-                self.Rb_basis,
-                self.Zb_basis,
-                self.Rb_lmn,
-                self.Zb_lmn,
-                build=True,
-            ),
+            BC_constraint=None,
             use_jit=False,
         )
-        if free_bdry:
-            x = self.x
-        else:
-            x = obj.BC_constraint.project(self.x)
+        x = self.x
         dW = obj.hess_x(
             x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
         )

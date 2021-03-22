@@ -8,7 +8,11 @@ from desc.utils import unpack_state, equals, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.transform import Transform
-from desc.boundary_conditions import BoundaryCondition
+from desc.boundary_conditions import (
+    LCFSConstraint,
+    PoincareConstraint,
+    UmbilicConstraint,
+)
 from desc.compute_funs import (
     compute_force_error_magnitude,
     dot,
@@ -62,7 +66,12 @@ class ObjectiveFunction(IOAble, ABC):
         "BC_constraint",
     ]
 
-    _object_lib_ = {"Transform": Transform, "BoundaryCondition": BoundaryCondition}
+    _object_lib_ = {
+        "Transform": Transform,
+        "LCFSConstraint": LCFSConstraint,
+        "PoincareConstraint": PoincareConstraint,
+        "UmbilicConstraint": UmbilicConstraint,
+    }
     _object_lib_.update(Transform._object_lib_)
 
     arg_names = {
@@ -561,7 +570,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -629,7 +640,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -686,7 +699,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -818,7 +833,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -923,7 +940,9 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1103,7 +1122,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (
@@ -1187,7 +1208,9 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes,
+            x,
+            self.R_transform.basis.num_modes,
+            self.Z_transform.basis.num_modes,
         )
 
         (

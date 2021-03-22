@@ -5,7 +5,7 @@ from termcolor import colored
 
 from desc.utils import Timer
 from desc.backend import use_jax
-from desc.boundary_conditions import BoundaryCondition
+from desc.boundary_conditions import get_boundary_condition
 from desc.optimize.tr_subproblems import trust_region_step_exact
 
 __all__ = ["perturb"]
@@ -214,8 +214,9 @@ def perturb(
         setattr(eq_new, key, getattr(eq_new, key) + dc)
 
     # update boundary constraint
-    if "dRb" in deltas or "dZb" in deltas:
-        eq_new.objective.BC_constraint = BoundaryCondition(
+    if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
+        eq_new.objective.BC_constraint = get_boundary_condition(
+            eq.objective.BC_constraint.name,
             eq_new.R_basis,
             eq_new.Z_basis,
             eq_new.L_basis,

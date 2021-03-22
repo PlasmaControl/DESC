@@ -104,9 +104,7 @@ class Equilibrium(_Configuration, IOAble):
         ObjectiveFunction._object_lib_
     )  # need the lower level object libs available at higher level for some reason
 
-    def __init__(
-        self, inputs=None, load_from=None, file_format=None, obj_lib=None,
-    ):
+    def __init__(self, inputs=None, load_from=None, file_format=None, obj_lib=None):
         self.timer = Timer()
         self.optimizer_results = {}
         self._transforms = {}
@@ -206,8 +204,11 @@ class Equilibrium(_Configuration, IOAble):
                 axis=False,
             )
         elif self.node_pattern in ["quad"]:
+            L_grid = (
+                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
+            )
             self._grid = QuadratureGrid(
-                L=np.ceil((self.L + 1) / 2),
+                L=L_grid + 1,
                 M=2 * self.M_grid + 1,
                 N=2 * self.N_grid + 1,
                 NFP=self.NFP,
@@ -514,10 +515,10 @@ class Equilibrium(_Configuration, IOAble):
 
         y = self.objective.BC_constraint.project(self.x)
         f = self.objective.compute(
-            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi,
+            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
         )
         jac = self.objective.jac_x(
-            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi,
+            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
         )
         return f, jac
 
@@ -561,14 +562,7 @@ class Equilibrium(_Configuration, IOAble):
                 "Equilibrium must have objective and optimizer defined before solving."
             )
 
-        args = (
-            self.Rb_lmn,
-            self.Zb_lmn,
-            self.p_l,
-            self.i_l,
-            self.Psi,
-            self.zeta_ratio,
-        )
+        args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio)
 
         self.x0 = self.x
         x_init = self.objective.BC_constraint.project(self.x)
@@ -722,7 +716,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         """
         deltas = {}
         Rb_lmn, Zb_lmn = format_boundary(
-            inputs["boundary"], equil.Rb_basis, equil.Zb_basis, equil.bdry_mode,
+            inputs["boundary"], equil.Rb_basis, equil.Zb_basis, equil.bdry_mode
         )
         p_l, i_l = format_profiles(inputs["profiles"], equil.p_basis, equil.i_basis)
         if not np.allclose(Rb_lmn, equil.Rb_lmn):

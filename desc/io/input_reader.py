@@ -99,7 +99,7 @@ class InputReader:
         if args.output:
             self._output_path = args.output
         else:
-            self._output_path = self.input_path + ".output"
+            self._output_path = self.input_path + "_output.h5"
 
         if args.numpy:
             os.environ["DESC_USE_NUMPY"] = "True"

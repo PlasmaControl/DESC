@@ -108,7 +108,7 @@ def main(cl_args=None):
 
     # solve equilibrium
     equil_fam.solve_continuation(
-        verbose=ir.args.verbose, checkpoint_path=ir.output_path, device=device
+        verbose=ir.args.verbose, checkpoint_path=ir.output_path
     )
 
     if ir.args.plot > 1:

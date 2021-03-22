@@ -1030,10 +1030,10 @@ def convert_to_sfl(equil, L=None, M=None, N=None, spectral_indexing="ansi"):
         R_sym = None
         Z_sym = None
     R_basis = FourierZernikeBasis(
-        L=L, M=M, N=N, NFP=equil.NFP, sym=R_sym, indexing=spectral_indexing,
+        L=L, M=M, N=N, NFP=equil.NFP, sym=R_sym, indexing=spectral_indexing
     )
     Z_basis = FourierZernikeBasis(
-        L=L, M=M, N=N, NFP=equil.NFP, sym=Z_sym, indexing=spectral_indexing,
+        L=L, M=M, N=N, NFP=equil.NFP, sym=Z_sym, indexing=spectral_indexing
     )
     R_transform = Transform(sfl_grid, R_basis, build_pinv=True)
     Z_transform = Transform(sfl_grid, Z_basis, build_pinv=True)

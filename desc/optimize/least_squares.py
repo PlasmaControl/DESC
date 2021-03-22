@@ -156,22 +156,10 @@ def lsqtr(
         jac_recompute_iters = jac_recompute_freq
 
     if jac == "broyden":
-        jac = SVDJacobian(
-            m,
-            n,
-            init_jac,
-            jacfun=None,
-            jacfun_args=(),
-        )
+        jac = SVDJacobian(m, n, init_jac, jacfun=None, jacfun_args=())
 
     elif callable(jac):
-        jac = SVDJacobian(
-            m,
-            n,
-            init_jac,
-            jacfun=jac,
-            jacfun_args=tuple(args),
-        )
+        jac = SVDJacobian(m, n, init_jac, jacfun=jac, jacfun_args=tuple(args))
     else:
         raise ValueError(colored("jac should either be a callable or 'broyden'", "red"))
 

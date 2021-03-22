@@ -31,9 +31,7 @@ class Optimizer(IOAble):
 
     """
 
-    _io_attrs_ = [
-        "_method",
-    ]
+    _io_attrs_ = ["_method"]
 
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
@@ -57,20 +55,9 @@ class Optimizer(IOAble):
         + _desc_least_squares_methods
     )
 
-    def __init__(
-        self,
-        method=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, method):
 
-        if load_from is None:
-            self.method = method
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self.method = method
 
     def __eq__(self, other):
         """Overloads the == operator
@@ -288,8 +275,7 @@ class Optimizer(IOAble):
         if verbose > 1:
             timer.disp("Solution time")
             timer.pretty_print(
-                "Avg time per step",
-                timer["Solution time"] / out["nfev"],
+                "Avg time per step", timer["Solution time"] / out["nfev"]
             )
 
         return out

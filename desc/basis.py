@@ -197,27 +197,19 @@ class PowerSeries(Basis):
 
     """
 
-    def __init__(self, L=0, load_from=None, file_format=None, obj_lib=None):
+    def __init__(self, L):
 
-        self._file_format_ = file_format
+        self._L = L
+        self._M = 0
+        self._N = 0
+        self._NFP = 1
+        self._sym = False
+        self._spectral_indexing = "linear"
 
-        if load_from is None:
-            self._L = L
-            self._M = 0
-            self._N = 0
-            self._NFP = 1
-            self._sym = False
-            self._spectral_indexing = "linear"
+        self._modes = self._get_modes(L=self.L)
 
-            self._modes = self._get_modes(L=self.L)
-
-            self._enforce_symmetry()
-            self._sort_modes()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_modes()
 
     def _get_modes(self, L=0):
         """Gets mode numbers for power series
@@ -294,29 +286,19 @@ class FourierSeries(Basis):
 
     """
 
-    def __init__(
-        self, N=0, NFP=1, sym=False, load_from=None, file_format=None, obj_lib=None,
-    ):
+    def __init__(self, N, NFP=1, sym=False):
 
-        self._file_format_ = file_format
+        self._L = 0
+        self._M = 0
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._spectral_indexing = "linear"
 
-        if load_from is None:
-            self._L = 0
-            self._M = 0
-            self._N = N
-            self._NFP = NFP
-            self._sym = sym
-            self._spectral_indexing = "linear"
+        self._modes = self._get_modes(N=self.N)
 
-            self._modes = self._get_modes(N=self.N)
-
-            self._enforce_symmetry()
-            self._sort_modes()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_modes()
 
     def _get_modes(self, N=0):
         """Gets mode numbers for double fourier series
@@ -397,36 +379,19 @@ class DoubleFourierSeries(Basis):
 
     """
 
-    def __init__(
-        self,
-        M=0,
-        N=0,
-        NFP=1,
-        sym=False,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, M, N, NFP=1, sym=False):
 
-        self._file_format_ = file_format
+        self._L = 0
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._spectral_indexing = "linear"
 
-        if load_from is None:
-            self._L = 0
-            self._M = M
-            self._N = N
-            self._NFP = NFP
-            self._sym = sym
-            self._spectral_indexing = "linear"
+        self._modes = self._get_modes(M=self.M, N=self.N)
 
-            self._modes = self._get_modes(M=self.M, N=self.N)
-
-            self._enforce_symmetry()
-            self._sort_modes()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_modes()
 
     def _get_modes(self, M=0, N=0):
         """Gets mode numbers for double fourier series
@@ -513,7 +478,7 @@ class ZernikePolynomial(Basis):
     Parameters
     ----------
     L : int
-        maximum radial resolution
+        maximum radial resolution. Use L=-1 for default based on M
     M : int
         maximum poloidal resolution
     sym : {'cos', 'sin', False}
@@ -540,38 +505,21 @@ class ZernikePolynomial(Basis):
 
     """
 
-    def __init__(
-        self,
-        L=-1,
-        M=0,
-        sym=False,
-        spectral_indexing="fringe",
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, L, M, sym=False, spectral_indexing="fringe"):
 
-        self._file_format_ = file_format
+        self._L = L
+        self._M = M
+        self._N = 0
+        self._NFP = 1
+        self._sym = sym
+        self._spectral_indexing = spectral_indexing
 
-        if load_from is None:
-            self._L = L
-            self._M = M
-            self._N = 0
-            self._NFP = 1
-            self._sym = sym
-            self._spectral_indexing = spectral_indexing
+        self._modes = self._get_modes(
+            L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
+        )
 
-            self._modes = self._get_modes(
-                L=self.L, M=self.M, spectral_indexing=self.spectral_indexing,
-            )
-
-            self._enforce_symmetry()
-            self._sort_modes()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_modes()
 
     def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
         """Gets mode numbers for Fourier-Zernike basis functions
@@ -698,7 +646,7 @@ class FourierZernikeBasis(Basis):
     Parameters
     ----------
     L : int
-        maximum radial resolution
+        maximum radial resolution. Use L=-1 for default based on M
     M : int
         maximum poloidal resolution
     N : int
@@ -729,40 +677,21 @@ class FourierZernikeBasis(Basis):
 
     """
 
-    def __init__(
-        self,
-        L=-1,
-        M=0,
-        N=0,
-        NFP=1,
-        sym=False,
-        spectral_indexing="fringe",
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="fringe"):
 
-        self._file_format_ = file_format
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._spectral_indexing = spectral_indexing
 
-        if load_from is None:
-            self._L = L
-            self._M = M
-            self._N = N
-            self._NFP = NFP
-            self._sym = sym
-            self._spectral_indexing = spectral_indexing
+        self._modes = self._get_modes(
+            L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
+        )
 
-            self._modes = self._get_modes(
-                L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing,
-            )
-
-            self._enforce_symmetry()
-            self._sort_modes()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_modes()
 
     def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
         """Gets mode numbers for Fourier-Zernike basis functions

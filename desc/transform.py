@@ -42,13 +42,7 @@ class Transform(IOAble):
           spectral bases.
     """
 
-    _io_attrs_ = [
-        "_grid",
-        "_basis",
-        "_derivatives",
-        "_rcond",
-        "_method",
-    ]
+    _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
     _object_lib_ = {
         "PowerSeries": PowerSeries,
         "FourierSeries": FourierSeries,
@@ -62,50 +56,43 @@ class Transform(IOAble):
 
     def __init__(
         self,
-        grid=None,
-        basis=None,
+        grid,
+        basis,
         derivs=0,
         rcond=None,
         build=False,
         build_pinv=False,
         method="fft",
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
-        self._file_format_ = file_format
+        self._grid = grid
+        self._basis = basis
+        self._rcond = rcond if rcond is not None else "auto"
 
-        if load_from is None:
-            self._grid = grid
-            self._basis = basis
-            self._rcond = rcond if rcond is not None else "auto"
-
-            self._derivatives = self._get_derivatives(derivs)
-            self._sort_derivatives()
-            if method in ["direct", "fft"]:
-                self._method = method
-            else:
-                raise ValueError(
-                    colored("Unknown Transform method '{}'".format(method), "red")
-                )
+        self._derivatives = self._get_derivatives(derivs)
+        self._sort_derivatives()
+        if method in ["direct", "fft"]:
+            self._method = method
         else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
+            raise ValueError(
+                colored("Unknown Transform method '{}'".format(method), "red")
             )
-
-        if self.method == "fft":
-            self._check_inputs_fft(self.grid, self.basis)
-
         self._built = False
         self._built_pinv = False
-        self._matrices = {
-            i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
-        }
+        self._set_up()
         if build:
             self.build()
         if build_pinv:
             self.build_pinv()
+
+    def _set_up(self):
+
+        if self.method == "fft":
+            self._check_inputs_fft(self.grid, self.basis)
+
+        self._matrices = {
+            i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+        }
 
     def __eq__(self, other):
         """Overloads the == operator
@@ -497,13 +484,7 @@ class Transform(IOAble):
             ).flatten()[self.fft_index]
             return b
 
-    def change_resolution(
-        self,
-        grid=None,
-        basis=None,
-        build=True,
-        build_pinv=False,
-    ):
+    def change_resolution(self, grid=None, basis=None, build=True, build_pinv=False):
         """Re-builds the matrices with a new grid and basis
 
         Parameters

@@ -114,8 +114,6 @@ class AutoDiffDerivative(_Derivative):
         Default = 'fwd'
     use_jit : bool, optional
         whether to use just-in-time compilation
-    devices : jax.device or list of jax.device
-        device to jit compile to
 
     Raises
     ------
@@ -123,26 +121,22 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(
-        self, fun, argnum=0, mode="fwd", use_jit=False, devices=None, **kwargs
-    ):
+    def __init__(self, fun, argnum=0, mode="fwd", use_jit=False, **kwargs):
 
         self._fun = fun
         self._argnum = argnum
         self._use_jit = use_jit
-        if not isinstance(devices, (list, tuple)):
-            devices = [devices]
 
         if ("block_size" in kwargs or "num_blocks" in kwargs) and mode in [
             "fwd",
             "rev",
             "hess",
         ]:
-            self._init_blocks(mode, devices, kwargs)
+            self._init_blocks(mode, kwargs)
         else:
-            self._set_mode(mode, devices[0])
+            self._set_mode(mode)
 
-    def _init_blocks(self, mode, devices, kwargs):
+    def _init_blocks(self, mode, kwargs):
 
         try:
             self.shape = kwargs["shape"]
@@ -161,7 +155,7 @@ class AutoDiffDerivative(_Derivative):
             )
         if block_size is not None and M <= block_size:
             # if its a small matrix we don't need to break it up
-            self._set_mode(mode, devices[0])
+            self._set_mode(mode)
             return
         elif block_size is not None:
             self._block_size = block_size
@@ -171,7 +165,7 @@ class AutoDiffDerivative(_Derivative):
             self._block_size = np.ceil(N / num_blocks).astype(int)
         else:
             # didn't specify num_blocks or block_size, don't break it up
-            self._set_mode(mode, devices[0])
+            self._set_mode(mode)
             return
 
         if mode in ["fwd", "rev"]:
@@ -196,10 +190,7 @@ class AutoDiffDerivative(_Derivative):
             # (plus, these blocks should be wide and short)
             if self._use_jit:
                 self._jac_blocks.append(
-                    jax.jit(
-                        jax.jacrev(self._f_blocks[i], self._argnum),
-                        device=devices[i % len(devices)],
-                    )
+                    jax.jit(jax.jacrev(self._f_blocks[i], self._argnum))
                 )
             else:
                 self._jac_blocks.append(jax.jacrev(self._f_blocks[i], self._argnum))
@@ -302,7 +293,7 @@ class AutoDiffDerivative(_Derivative):
     def _compute_jvp(self, v, *args):
         return self.compute_jvp(self._fun, self.argnum, v, *args)
 
-    def _set_mode(self, mode, device=None) -> None:
+    def _set_mode(self, mode) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
@@ -311,21 +302,13 @@ class AutoDiffDerivative(_Derivative):
         self._mode = mode
         if self._use_jit:
             if self._mode == "fwd":
-                self._compute = jax.jit(
-                    jax.jacfwd(self._fun, self._argnum), device=device
-                )
+                self._compute = jax.jit(jax.jacfwd(self._fun, self._argnum))
             elif self._mode == "rev":
-                self._compute = jax.jit(
-                    jax.jacrev(self._fun, self._argnum), device=device
-                )
+                self._compute = jax.jit(jax.jacrev(self._fun, self._argnum))
             elif self._mode == "grad":
-                self._compute = jax.jit(
-                    jax.grad(self._fun, self._argnum), device=device
-                )
+                self._compute = jax.jit(jax.grad(self._fun, self._argnum))
             elif self._mode == "hess":
-                self._compute = jax.jit(
-                    jax.hessian(self._fun, self._argnum), device=device
-                )
+                self._compute = jax.jit(jax.hessian(self._fun, self._argnum))
             elif self._mode == "jvp":
                 self._compute = self._compute_jvp
         else:

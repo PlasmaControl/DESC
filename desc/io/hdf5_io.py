@@ -130,7 +130,7 @@ class hdf5Reader(hdf5IO, Reader):
                     setattr(
                         obj,
                         attr,
-                        self.obj_lib[name](
+                        self.obj_lib[name].load(
                             load_from=loc[attr],
                             file_format=self._file_format_,
                             obj_lib=self.obj_lib,
@@ -171,7 +171,7 @@ class hdf5Reader(hdf5IO, Reader):
                         continue
 
                     # initialized an object from object_lib
-                    thedict[key] = self.obj_lib[name](
+                    thedict[key] = self.obj_lib[name].load(
                         load_from=loc[key],
                         file_format=self._file_format_,
                         obj_lib=self.obj_lib,
@@ -214,7 +214,7 @@ class hdf5Reader(hdf5IO, Reader):
 
                     # initialized an object from object_lib
                     thelist.append(
-                        self.obj_lib[name](
+                        self.obj_lib[name].load(
                             load_from=loc[str(i)],
                             file_format=self._file_format_,
                             obj_lib=self.obj_lib,

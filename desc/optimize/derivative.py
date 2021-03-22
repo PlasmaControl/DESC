@@ -255,14 +255,7 @@ class CholeskyHessian(OptimizerDerivative):
 
 
 class SVDJacobian(OptimizerDerivative):
-    def __init__(
-        self,
-        m,
-        n,
-        init_jac=None,
-        jacfun=None,
-        jacfun_args=(),
-    ):
+    def __init__(self, m, n, init_jac=None, jacfun=None, jacfun_args=()):
         self._m = m
         self._n = n
         self._shape = (m, n)
@@ -413,14 +406,7 @@ def compute_jac_scale(A, prev_scale_inv=None):
 
 # TODO: pivoting QR for rank deficient jacobian
 class QRJacobian(OptimizerDerivative):  # pragma: no cover
-    def __init__(
-        self,
-        m,
-        n,
-        init_jac=None,
-        jacfun=None,
-        jacfun_args=(),
-    ):
+    def __init__(self, m, n, init_jac=None, jacfun=None, jacfun_args=()):
         self._m = m
         self._n = n
         self._shape = (m, n)

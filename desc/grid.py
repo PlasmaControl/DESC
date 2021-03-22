@@ -34,28 +34,20 @@ class Grid(IOAble):
         "_node_pattern",
     ]
 
-    def __init__(self, nodes, load_from=None, file_format=None, obj_lib=None):
+    def __init__(self, nodes):
 
-        self._file_format_ = file_format
+        self._L = np.unique(nodes[:, 0]).size
+        self._M = np.unique(nodes[:, 1]).size
+        self._N = np.unique(nodes[:, 2]).size
+        self._NFP = 1
+        self._sym = False
+        self._node_pattern = "custom"
 
-        if load_from is None:
-            self._L = np.unique(nodes[:, 0]).size
-            self._M = np.unique(nodes[:, 1]).size
-            self._N = np.unique(nodes[:, 2]).size
-            self._NFP = 1
-            self._sym = False
-            self._node_pattern = "custom"
+        self._nodes, self._weights = self._create_nodes(nodes)
 
-            self._nodes, self._weights = self._create_nodes(nodes)
-
-            self._enforce_symmetry()
-            self._sort_nodes()
-            self._find_axis()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_nodes()
+        self._find_axis()
 
     def __eq__(self, other):
         """Overloads the == operator
@@ -247,43 +239,32 @@ class LinearGrid(Grid):
         rho=None,
         theta=None,
         zeta=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
-        self._file_format_ = file_format
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._axis = axis
+        self._sym = sym
+        self._endpoint = endpoint
+        self._node_pattern = "linear"
 
-        if load_from is None:
-            self._L = L
-            self._M = M
-            self._N = N
-            self._NFP = NFP
-            self._axis = axis
-            self._sym = sym
-            self._endpoint = endpoint
-            self._node_pattern = "linear"
+        self._nodes, self._weights = self._create_nodes(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            axis=self.axis,
+            endpoint=self.endpoint,
+            rho=rho,
+            theta=theta,
+            zeta=zeta,
+        )
 
-            self._nodes, self._weights = self._create_nodes(
-                L=self.L,
-                M=self.M,
-                N=self.N,
-                NFP=self.NFP,
-                axis=self.axis,
-                endpoint=self.endpoint,
-                rho=rho,
-                theta=theta,
-                zeta=zeta,
-            )
-
-            self._enforce_symmetry()
-            self._sort_nodes()
-            self._find_axis()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_nodes()
+        self._find_axis()
 
     def _create_nodes(
         self,
@@ -398,12 +379,7 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L,
-                M=M,
-                N=N,
-                NFP=self.NFP,
-                axis=self.axis,
-                endpoint=self.endpoint,
+                L=L, M=M, N=N, NFP=self.NFP, axis=self.axis, endpoint=self.endpoint
             )
             self._sort_nodes()
 
@@ -435,51 +411,24 @@ class QuadratureGrid(Grid):
 
     """
 
-    def __init__(
-        self,
-        L=1,
-        M=1,
-        N=1,
-        NFP=1,
-        sym=False,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, L, M, N, NFP=1, sym=False):
 
-        self._file_format_ = file_format
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._node_pattern = "quad"
 
-        if load_from is None:
-            self._L = L
-            self._M = M
-            self._N = N
-            self._NFP = NFP
-            self._sym = sym
-            self._node_pattern = "quad"
+        self._nodes, self._weights = self._create_nodes(
+            L=self.L, M=self.M, N=self.N, NFP=self.NFP
+        )
 
-            self._nodes, self._weights = self._create_nodes(
-                L=self.L,
-                M=self.M,
-                N=self.N,
-                NFP=self.NFP,
-            )
+        self._enforce_symmetry()
+        self._sort_nodes()
+        self._find_axis()
 
-            self._enforce_symmetry()
-            self._sort_nodes()
-            self._find_axis()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
-
-    def _create_nodes(
-        self,
-        L=1,
-        M=1,
-        N=1,
-        NFP=1,
-    ):
+    def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """
 
         Parameters
@@ -590,56 +539,39 @@ class ConcentricGrid(Grid):
 
     def __init__(
         self,
-        M=1,
-        N=0,
+        M,
+        N,
         NFP=1,
         sym=False,
         axis=False,
         spectral_indexing="fringe",
         node_pattern="jacobi",
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
-        self._file_format_ = file_format
+        self._L = M + 1
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._axis = axis
+        self._spectral_indexing = spectral_indexing
+        self._node_pattern = node_pattern
 
-        if load_from is None:
-            self._L = M + 1
-            self._M = M
-            self._N = N
-            self._NFP = NFP
-            self._sym = sym
-            self._axis = axis
-            self._spectral_indexing = spectral_indexing
-            self._node_pattern = node_pattern
+        self._nodes, self._weights = self._create_nodes(
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            axis=self.axis,
+            spectral_indexing=self.spectral_indexing,
+            node_pattern=self.node_pattern,
+        )
 
-            self._nodes, self._weights = self._create_nodes(
-                M=self.M,
-                N=self.N,
-                NFP=self.NFP,
-                axis=self.axis,
-                spectral_indexing=self.spectral_indexing,
-                node_pattern=self.node_pattern,
-            )
-
-            self._enforce_symmetry()
-            self._sort_nodes()
-            self._find_axis()
-
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._enforce_symmetry()
+        self._sort_nodes()
+        self._find_axis()
 
     def _create_nodes(
-        self,
-        M,
-        N,
-        NFP=1,
-        axis=False,
-        spectral_indexing="fringe",
-        node_pattern="jacobi",
+        self, M, N, NFP=1, axis=False, spectral_indexing="fringe", node_pattern="jacobi"
     ):
         """
 

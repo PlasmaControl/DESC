@@ -13,11 +13,7 @@ from desc.boundary_conditions import (
     PoincareConstraint,
     UmbilicConstraint,
 )
-from desc.compute_funs import (
-    compute_force_error_magnitude,
-    dot,
-    compute_energy,
-)
+from desc.compute_funs import compute_force_error_magnitude, dot, compute_energy
 
 __all__ = [
     "ForceErrorNodes",
@@ -50,8 +46,6 @@ class ObjectiveFunction(IOAble, ABC):
             linear constraint to enforce boundary conditions
     use_jit : bool, optional
         whether to just-in-time compile the objective and derivatives
-    devices : jax.device or list of jax.device, optional
-        devices to jit compile to. If None, use the default devices
 
     """
 
@@ -64,6 +58,7 @@ class ObjectiveFunction(IOAble, ABC):
         "p_transform",
         "i_transform",
         "BC_constraint",
+        "use_jit",
     ]
 
     _object_lib_ = {
@@ -85,35 +80,29 @@ class ObjectiveFunction(IOAble, ABC):
 
     def __init__(
         self,
-        R_transform=None,
-        Z_transform=None,
-        L_transform=None,
-        Rb_transform=None,
-        Zb_transform=None,
-        p_transform=None,
-        i_transform=None,
-        BC_constraint=None,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
         use_jit=True,
-        devices=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
-        if load_from is None:
-            self.R_transform = R_transform
-            self.Z_transform = Z_transform
-            self.L_transform = L_transform
-            self.Rb_transform = Rb_transform
-            self.Zb_transform = Zb_transform
-            self.p_transform = p_transform
-            self.i_transform = i_transform
-            self.BC_constraint = BC_constraint
+        self.R_transform = R_transform
+        self.Z_transform = Z_transform
+        self.L_transform = L_transform
+        self.Rb_transform = Rb_transform
+        self.Zb_transform = Zb_transform
+        self.p_transform = p_transform
+        self.i_transform = i_transform
+        self.BC_constraint = BC_constraint
+        self.use_jit = use_jit
+        self._set_up()
 
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+    def _set_up(self):
         self.dimx = (
             self.R_transform.num_modes
             + self.Z_transform.num_modes
@@ -121,12 +110,10 @@ class ObjectiveFunction(IOAble, ABC):
         )
         self.dimy = self.dimx if self.BC_constraint is None else self.BC_constraint.dimy
         self.dimf = self.R_transform.num_nodes + self.Z_transform.num_nodes
-        if not isinstance(devices, (list, tuple)):
-            devices = [devices]
         self._check_transforms()
-        self.set_derivatives(use_jit, devices)
+        self.set_derivatives(self.use_jit)
         self.compiled = False
-        if not use_jit:
+        if not self.use_jit:
             self.compiled = True
 
     def _check_transforms(self):
@@ -160,32 +147,24 @@ class ObjectiveFunction(IOAble, ABC):
         ):
             self.i_transform.change_derivatives(self.derivatives, build=False)
 
-    def set_derivatives(self, use_jit=True, devices=[None], block_size="auto"):
+    def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.
 
         Parameters
         ----------
         use_jit : bool, optional
             whether to just-in-time compile the objective and derivatives
-        devices : jax.device or list of jax.device, optional
-            devices to jit compile to. If None, use the default devices
 
         """
         if block_size == "auto":
             block_size = np.inf  # TODO: correct automatic sizing based on avail mem
 
-        if not isinstance(devices, (list, tuple)):
-            devices = [devices]
-
-        self._grad = Derivative(
-            self.compute_scalar, mode="grad", use_jit=use_jit, device=devices[0]
-        )
+        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
 
         self._hess = Derivative(
             self.compute_scalar,
             mode="hess",
             use_jit=use_jit,
-            devices=devices,
             block_size=block_size,
             shape=(self.dimy, self.dimy),
         )
@@ -193,14 +172,13 @@ class ObjectiveFunction(IOAble, ABC):
             self.compute,
             mode="fwd",
             use_jit=use_jit,
-            devices=devices,
             block_size=block_size,
             shape=(self.dimf, self.dimy),
         )
 
         if use_jit:
-            self.compute = jit(self.compute, device=devices[0])
-            self.compute_scalar = jit(self.compute_scalar, device=devices[0])
+            self.compute = jit(self.compute)
+            self.compute_scalar = jit(self.compute_scalar)
 
     def compile(self, x, args, verbose=1, mode="auto"):
         """Call the necessary functions to ensure the function is compiled.
@@ -287,13 +265,7 @@ class ObjectiveFunction(IOAble, ABC):
         """
         if self.__class__ != other.__class__:
             return False
-        ignore_keys = [
-            "_grad",
-            "_jac",
-            "_hess",
-            "compute",
-            "compute_scalar",
-        ]
+        ignore_keys = ["_grad", "_jac", "_hess", "compute", "compute_scalar"]
         dict1 = {
             key: val for key, val in self.__dict__.items() if key not in ignore_keys
         }
@@ -460,26 +432,20 @@ class ForceErrorGalerkin(ObjectiveFunction):
         linear constraint to enforce boundary conditions
     use_jit : bool, optional
         whether to just-in-time compile the objective and derivatives
-    devices : jax.device or list of jax.device, optional
-        devices to jit compile to. If None, use the default devices
 
     """
 
     def __init__(
         self,
-        R_transform=None,
-        Z_transform=None,
-        L_transform=None,
-        Rb_transform=None,
-        Zb_transform=None,
-        p_transform=None,
-        i_transform=None,
-        BC_constraint=None,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
         use_jit=True,
-        devices=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
         super().__init__(
@@ -492,10 +458,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             i_transform,
             BC_constraint,
             use_jit,
-            devices,
-            load_from,
-            file_format,
-            obj_lib,
         )
 
         if self.R_transform.grid.node_pattern != "quad":
@@ -570,9 +532,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -642,9 +602,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -702,9 +660,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -769,8 +725,6 @@ class ForceErrorNodes(ObjectiveFunction):
         linear constraint to enforce boundary conditions
     use_jit : bool, optional
         whether to just-in-time compile the objective and derivatives
-    devices : jax.device or list of jax.device, optional
-        devices to jit compile to. If None, use the default devices
 
     """
 
@@ -837,9 +791,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -944,9 +896,7 @@ class ForceErrorNodes(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -1031,26 +981,20 @@ class EnergyVolIntegral(ObjectiveFunction):
         linear constraint to enforce boundary conditions
     use_jit : bool, optional
         whether to just-in-time compile the objective and derivatives
-    devices : jax.device or list of jax.device, optional
-        devices to jit compile to. If None, use the default devices
 
     """
 
     def __init__(
         self,
-        R_transform=None,
-        Z_transform=None,
-        L_transform=None,
-        Rb_transform=None,
-        Zb_transform=None,
-        p_transform=None,
-        i_transform=None,
-        BC_constraint=None,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
         use_jit=True,
-        devices=None,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
     ):
 
         super().__init__(
@@ -1063,10 +1007,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             i_transform,
             BC_constraint,
             use_jit,
-            devices,
-            load_from,
-            file_format,
-            obj_lib,
         )
 
         if self.R_transform.grid.node_pattern != "quad":
@@ -1126,9 +1066,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -1212,9 +1150,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
 
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x,
-            self.R_transform.basis.num_modes,
-            self.Z_transform.basis.num_modes,
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
         (
@@ -1258,7 +1194,6 @@ def get_objective_function(
     i_transform,
     BC_constraint=None,
     use_jit=True,
-    devices=None,
 ):
     """Get an objective function by name.
 
@@ -1284,8 +1219,6 @@ def get_objective_function(
         linear constraint to enforce boundary conditions
     use_jit : bool
         whether to just-in-time compile the objective and derivatives
-    devices : jax.device or list of jax.device, optional
-        devices to jit compile to
 
     Returns
     -------
@@ -1304,7 +1237,6 @@ def get_objective_function(
             i_transform=i_transform,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
-            devices=devices,
         )
     elif objective == "galerkin":
         obj_fun = ForceErrorGalerkin(
@@ -1317,7 +1249,6 @@ def get_objective_function(
             i_transform=i_transform,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
-            devices=devices,
         )
     elif objective == "energy":
         obj_fun = EnergyVolIntegral(
@@ -1330,7 +1261,6 @@ def get_objective_function(
             i_transform=i_transform,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
-            devices=devices,
         )
     else:
         raise ValueError(

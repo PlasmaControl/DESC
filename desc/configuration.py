@@ -77,13 +77,7 @@ class _Configuration(IOAble, ABC):
         "FourierZernikeBasis": FourierZernikeBasis,
     }
 
-    def __init__(
-        self,
-        inputs=None,
-        load_from=None,
-        file_format="hdf5",
-        obj_lib=None,
-    ):
+    def __init__(self, inputs):
         """Initializes a Configuration
 
         Parameters
@@ -107,24 +101,9 @@ class _Configuration(IOAble, ABC):
                 R_lmn : ndarray, spectral coefficients of R
                 Z_lmn : ndarray, spectral coefficients of Z
                 L_lmn : ndarray, spectral coefficients of lambda
-        load_from : str file path OR file instance
-            file to initialize from
-        file_format : str
-            file format of file initializing from. Default is 'hdf5'
 
         """
-        self._file_format_ = file_format
-        if load_from is None:
-            self.inputs = inputs
-            self._init_from_inputs_(inputs=inputs)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
-        self._make_labels()
-
-    def _init_from_inputs_(self, inputs=None):
-        # required inputs
+        self.inputs = inputs
         try:
             self._Psi = float(inputs["Psi"])
             self._NFP = inputs["NFP"]
@@ -171,9 +150,7 @@ class _Configuration(IOAble, ABC):
         try:
             self._x = inputs["x"]
             self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self._x,
-                self._R_basis.num_modes,
-                self._Z_basis.num_modes,
+                self._x, self._R_basis.num_modes, self._Z_basis.num_modes
             )
         # default initial guess
         except:
@@ -230,29 +207,17 @@ class _Configuration(IOAble, ABC):
 
         if np.all(self._boundary[:, 0] == 0):
             self._Rb_basis = DoubleFourierSeries(
-                M=self._M,
-                N=self._N,
-                NFP=self._NFP,
-                sym=self._R_sym,
+                M=self._M, N=self._N, NFP=self._NFP, sym=self._R_sym
             )
             self._Zb_basis = DoubleFourierSeries(
-                M=self._M,
-                N=self._N,
-                NFP=self._NFP,
-                sym=self._Z_sym,
+                M=self._M, N=self._N, NFP=self._NFP, sym=self._Z_sym
             )
         elif np.all(self._boundary[:, 2] == 0):
             self._Rb_basis = ZernikePolynomial(
-                L=self._L,
-                M=self._M,
-                sym=self._R_sym,
-                index=self._spectral_indexing,
+                L=self._L, M=self._M, sym=self._R_sym, index=self._spectral_indexing
             )
             self._Zb_basis = ZernikePolynomial(
-                L=self._L,
-                M=self._M,
-                sym=self._Z_sym,
-                index=self._spectral_indexing,
+                L=self._L, M=self._M, sym=self._Z_sym, index=self._spectral_indexing
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
@@ -425,9 +390,7 @@ class _Configuration(IOAble, ABC):
     def x(self, x):
         self._x = x
         self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self._x,
-            self._R_basis.num_modes,
-            self._Z_basis.num_modes,
+            self._x, self._R_basis.num_modes, self._Z_basis.num_modes
         )
 
     @property

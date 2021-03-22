@@ -31,30 +31,17 @@ class LinearEqualityConstraint(IOAble):
 
     _io_attrs_ = ["_A", "_b", "_dimx"]
 
-    def __init__(
-        self,
-        A=None,
-        b=None,
-        build=True,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
-    ):
+    def __init__(self, A, b, build=True):
 
-        if load_from is None:
-            self._A = np.atleast_2d(A)
-            self._b = np.atleast_1d(b)
-            self._built = False
-            self._Z = None
-            self._Ainv = None
-            self._dimx = self.A.shape[1]
-            self._dimy = None
-            if build:
-                self.build()
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        self._A = np.atleast_2d(A)
+        self._b = np.atleast_1d(b)
+        self._built = False
+        self._Z = None
+        self._Ainv = None
+        self._dimx = self.A.shape[1]
+        self._dimy = None
+        if build:
+            self.build()
 
     def __add__(self, other):
         if not isinstance(other, LinearEqualityConstraint):

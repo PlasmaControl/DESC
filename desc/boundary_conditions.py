@@ -43,18 +43,7 @@ class BoundaryCondition(LinearEqualityConstraint, ABC):
 
     @abstractmethod
     def __init__(
-        self,
-        R_basis=None,
-        Z_basis=None,
-        L_basis=None,
-        Rb_basis=None,
-        Zb_basis=None,
-        Rb_lmn=None,
-        Zb_lmn=None,
-        build=True,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
         pass
 
@@ -125,40 +114,26 @@ class LCFSConstraint(BoundaryCondition):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
+    _io_attrs_ = BoundaryCondition._io_attrs_ + ["_dim_lcfs", "_dim_axis", "_dim_gauge"]
+
     def __init__(
-        self,
-        R_basis=None,
-        Z_basis=None,
-        L_basis=None,
-        Rb_basis=None,
-        Zb_basis=None,
-        Rb_lmn=None,
-        Zb_lmn=None,
-        build=True,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
 
-        if load_from is None:
-            A_lcfs, b_lcfs = _get_lcfs_bc(
-                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-            )
-            A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
-            A_gauge, b_gauge = _get_gauge_bc(R_basis, Z_basis, L_basis)
+        A_lcfs, b_lcfs = _get_lcfs_bc(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+        )
+        A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
+        A_gauge, b_gauge = _get_gauge_bc(R_basis, Z_basis, L_basis)
 
-            self._dim_lcfs = b_lcfs.size
-            self._dim_axis = b_axis.size
-            self._dim_gauge = b_gauge.size
+        self._dim_lcfs = b_lcfs.size
+        self._dim_axis = b_axis.size
+        self._dim_gauge = b_gauge.size
 
-            A = np.vstack([A_lcfs, A_axis, A_gauge])
-            b = np.concatenate([b_lcfs, b_axis, b_gauge])
+        A = np.vstack([A_lcfs, A_axis, A_gauge])
+        b = np.concatenate([b_lcfs, b_axis, b_gauge])
 
-            super(BoundaryCondition, self).__init__(A, b, build)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        super(BoundaryCondition, self).__init__(A, b, build)
 
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
@@ -207,40 +182,26 @@ class PoincareConstraint(BoundaryCondition):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
+    _io_attrs_ = BoundaryCondition._io_attrs_ + ["_dim_poincare", "_dim_sfl"]
+
     def __init__(
-        self,
-        R_basis=None,
-        Z_basis=None,
-        L_basis=None,
-        Rb_basis=None,
-        Zb_basis=None,
-        Rb_lmn=None,
-        Zb_lmn=None,
-        build=True,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
 
-        if load_from is None:
-            A_poincare, b_poincare = _get_poincare_bc(
-                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-            )
-            A_sfl, b_sfl = _get_sfl_bc(
-                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-            )
+        A_poincare, b_poincare = _get_poincare_bc(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+        )
+        A_sfl, b_sfl = _get_sfl_bc(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+        )
 
-            self._dim_poincare = b_poincare.size
-            self._dim_sfl = b_sfl.size
+        self._dim_poincare = b_poincare.size
+        self._dim_sfl = b_sfl.size
 
-            A = np.vstack([A_poincare, A_sfl])
-            b = np.concatenate([b_poincare, b_sfl])
+        A = np.vstack([A_poincare, A_sfl])
+        b = np.concatenate([b_poincare, b_sfl])
 
-            LinearEqualityConstraint.__init__(A, b, build)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        super(BoundaryCondition, self).__init__(A, b, build)
 
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
@@ -290,40 +251,26 @@ class UmbilicConstraint(BoundaryCondition):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
+    _io_attrs_ = BoundaryCondition._io_attrs_ + ["_dim_umbilic", "_dim_sfl"]
+
     def __init__(
-        self,
-        R_basis=None,
-        Z_basis=None,
-        L_basis=None,
-        Rb_basis=None,
-        Zb_basis=None,
-        Rb_lmn=None,
-        Zb_lmn=None,
-        build=True,
-        load_from=None,
-        file_format=None,
-        obj_lib=None,
+        self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
 
-        if load_from is None:
-            A_umbilic, b_umbilic = _get_umbilic_bc(
-                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-            )
-            A_sfl, b_sfl = _get_sfl_bc(
-                R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-            )
+        A_umbilic, b_umbilic = _get_umbilic_bc(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+        )
+        A_sfl, b_sfl = _get_sfl_bc(
+            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+        )
 
-            self._dim_umbilic = b_umbilic.size
-            self._dim_sfl = b_sfl.size
+        self._dim_umbilic = b_umbilic.size
+        self._dim_sfl = b_sfl.size
 
-            A = np.vstack([A_umbilic, A_sfl])
-            b = np.concatenate([b_umbilic, b_sfl])
+        A = np.vstack([A_umbilic, A_sfl])
+        b = np.concatenate([b_umbilic, b_sfl])
 
-            LinearEqualityConstraint.__init__(A, b, build)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
+        super(BoundaryCondition, self).__init__(A, b, build)
 
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
@@ -345,15 +292,7 @@ class UmbilicConstraint(BoundaryCondition):
 
 
 def get_boundary_condition(
-    condition,
-    R_basis,
-    Z_basis,
-    L_basis,
-    Rb_basis,
-    Zb_basis,
-    Rb_lmn,
-    Zb_lmn,
-    build=True,
+    condition, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
 ):
     """Get a boundary condition by name.
 
@@ -535,7 +474,7 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
     for i, (l, m, n) in enumerate(Rb_basis.modes):
         j = np.where(
             np.logical_and(
-                (R_basis.modes[:, :2] == [l, m]).all(axis=1), R_basis.modes[:, -1] >= 0,
+                (R_basis.modes[:, :2] == [l, m]).all(axis=1), R_basis.modes[:, -1] >= 0
             )
         )[0]
         AR[i, j] = 1
@@ -543,7 +482,7 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
     for i, (l, m, n) in enumerate(Zb_basis.modes):
         j = np.where(
             np.logical_and(
-                (Z_basis.modes[:, :2] == [l, m]).all(axis=1), Z_basis.modes[:, -1] >= 0,
+                (Z_basis.modes[:, :2] == [l, m]).all(axis=1), Z_basis.modes[:, -1] >= 0
             )
         )[0]
         AZ[i, j] = 1
@@ -775,7 +714,7 @@ class RadialConstraint:
 
     def compute(self, x, *args):
         R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self._R_transform.basis.num_modes, self._Z_transform.basis.num_modes,
+            x, self._R_transform.basis.num_modes, self._Z_transform.basis.num_modes
         )
         R = self._R_transform.transform(R_lmn)
         Z = self._R_transform.transform(Z_lmn)

@@ -331,11 +331,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     else:  # theta & zeta
         data = data[:, 0, :].T
 
-    imshow_kwargs = {
-        "origin": "lower",
-        "interpolation": "bilinear",
-        "aspect": "auto",
-    }
+    imshow_kwargs = {"origin": "lower", "interpolation": "bilinear", "aspect": "auto"}
     if log:
         imshow_kwargs["norm"] = matplotlib.colors.LogNorm()
     imshow_kwargs["extent"] = [
@@ -821,14 +817,7 @@ def _format_name(name):
     parsed name : dict
 
     """
-    name_dict = {
-        "base": "",
-        "sups": "",
-        "subs": "",
-        "power": "",
-        "d": "",
-        "units": "",
-    }
+    name_dict = {"base": "", "sups": "", "subs": "", "power": "", "d": "", "units": ""}
     if "**" in name:
         parsename, power = name.split("**")
         if "_" in power or "^" in power:

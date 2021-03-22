@@ -6,26 +6,38 @@ from .hdf5_io import hdf5Reader, hdf5Writer
 
 
 class IOAble(ABC):
-    """Abstract Base Class for savable and loadable objects."""
+    """Abstract Base Class for savable and loadable objects.
 
-    def _init_from_file_(self, load_from=None, file_format=None, obj_lib=None):
+    Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
+    To save properly, each object should have an attribute `_io_attrs_` which 
+    is a list of strings of the object attributes or properties that should be 
+    saved and loaded. If any of these attributes are custom types (ie, not 
+    standard python containers or numpy arrays), an attribute called 
+    `_object_lib_` should also be defined. `_object_lib_` is a dictionary, 
+    where the keys are the class names of any custom types, and the values are 
+    instances of the class.
+
+    For saved objects to be loaded correctly, the __init__ method of any custom 
+    types being saved should only assign attributes that are listed in `_io_attrs_`.
+    Other attributes or other initialization should be done in a separate 
+    `set_up()` method that can be called during __init__. The loading process 
+    will involve creating an empty object, bypassing init, then setting any `_io_attrs_`
+    of the object, then calling `_set_up()` without any arguments, if it exists.
+
+    """
+
+    @classmethod
+    def load(cls, load_from, file_format=None, obj_lib=None):
         """Initialize from file.
 
         Parameters
         ----------
-        load_from : str or path-like or file instance (Default self.load_from)
+        load_from : str or path-like or file instance
             file to initialize from
-        file_format : str (Default self._file_format_)
+        file_format : {'hdf5', 'pickle'} (Default: infer from file name)
             file format of file initializing from
 
         """
-        if load_from is None:
-            raise RuntimeError(
-                colored(
-                    "_init_from_file_ should only be called when load_from is given",
-                    "red",
-                )
-            )
 
         if file_format is None and isinstance(load_from, (str, os.PathLike)):
             name = str(load_from)
@@ -40,9 +52,15 @@ class IOAble(ABC):
                         "red",
                     )
                 )
-
+        self = cls.__new__(cls)  # create a blank object bypassing init
         reader = reader_factory(load_from, file_format)
         reader.read_obj(self, obj_lib=obj_lib)
+
+        # to set other secondary stuff that wasnt saved possibly:
+        if hasattr(self, "_set_up"):
+            self._set_up()
+
+        return self
 
     def save(self, file_name, file_format=None, file_mode="w"):
         """Save the object.

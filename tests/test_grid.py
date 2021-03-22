@@ -116,10 +116,7 @@ class TestGrid(unittest.TestCase):
 
         np.testing.assert_allclose(grid.nodes, nodes, atol=1e-8)
 
-        self.assertAlmostEqual(
-            np.sum(grid.weights),
-            (2 * np.pi) ** 2 / NFP,
-        )
+        self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2 / NFP)
 
     def test_concentric_grid(self):
 
@@ -176,14 +173,8 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, atol=1e-8)
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
-        self.assertAlmostEqual(
-            np.sum(grid_ansi.weights),
-            (2 * np.pi) ** 2 / NFP,
-        )
-        self.assertAlmostEqual(
-            np.sum(grid_fringe.weights),
-            (2 * np.pi) ** 2 / NFP,
-        )
+        self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
+        self.assertAlmostEqual(np.sum(grid_fringe.weights), (2 * np.pi) ** 2 / NFP)
 
     def test_quadrature_grid(self):
 
@@ -192,13 +183,7 @@ class TestGrid(unittest.TestCase):
         N = 1
         NFP = 1
 
-        grid_quad = QuadratureGrid(
-            L,
-            M,
-            N,
-            NFP,
-            sym=False,
-        )
+        grid_quad = QuadratureGrid(L, M, N, NFP, sym=False)
 
         roots, weights = special.js_roots(L, 2, 2)
 

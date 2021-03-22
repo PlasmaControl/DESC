@@ -2037,11 +2037,4 @@ def compute_energy(
     W = W_B - W_p
     energy["W"] = W
 
-    return (
-        energy,
-        magnetic_field,
-        jacobian,
-        cov_basis,
-        toroidal_coords,
-        profiles,
-    )
+    return (energy, magnetic_field, jacobian, cov_basis, toroidal_coords, profiles)

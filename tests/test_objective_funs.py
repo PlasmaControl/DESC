@@ -23,9 +23,9 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
     def test_obj_fxn_types(self):
         """test the correct objective function is returned for 'force', 'energy', and unimplemented"""
         RZ_grid = ConcentricGrid(M=2, N=0)
-        R_basis = FourierZernikeBasis(M=2, N=0)
-        Z_basis = FourierZernikeBasis(M=2, N=0)
-        L_basis = FourierZernikeBasis(M=2, N=0)
+        R_basis = FourierZernikeBasis(L=-1, M=2, N=0)
+        Z_basis = FourierZernikeBasis(L=-1, M=2, N=0)
+        L_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         RZb_basis = DoubleFourierSeries(M=3, N=1)
         PI_basis = PowerSeries(L=3)
 
@@ -88,12 +88,7 @@ class TestIsNested(unittest.TestCase):
             "NFP": 1,
             "Psi": 1.0,
             "profiles": np.array([[0, 0, 0.23]]),
-            "boundary": np.array(
-                [
-                    [0, 0, 0, 10, 0],
-                    [0, 1, 0, 1, 0],
-                ]
-            ),
+            "boundary": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
             "index": "fringe",
         }
 

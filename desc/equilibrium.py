@@ -62,13 +62,6 @@ class Equilibrium(_Configuration, IOAble):
         * ``'node_pattern'`` : str, node pattern, default is "cheb1"
         * ``'objective'`` : str, mode for equilibrium solution
         * ``'optimizer'`` : str, optimizer to use
-
-    load_from : str file path OR file instance
-        file to initialize from
-    file_format : str
-        file format of file initializing from. Default is 'hdf5'
-
-
     """
 
     # TODO: make this ^ format correctly with sphinx, dont show it as init method
@@ -98,23 +91,15 @@ class Equilibrium(_Configuration, IOAble):
             "ForceErrorNodes": ForceErrorNodes,
             "ForceErrorGalerkin": ForceErrorGalerkin,
             "EnergyVolIntegral": EnergyVolIntegral,
+            "BoundaryCondition": BoundaryCondition,
+            "LCFSConstraint": LCFSConstraint,
+            "PoincareConstraint": PoincareConstraint,
         }
     )
-    _object_lib_.update(
-        ObjectiveFunction._object_lib_
-    )  # need the lower level object libs available at higher level for some reason
 
-    def __init__(self, inputs=None, load_from=None, file_format=None, obj_lib=None):
-        self.timer = Timer()
-        self.optimizer_results = {}
-        self._transforms = {}
+    def __init__(self, inputs):
 
-        super().__init__(
-            inputs=inputs, load_from=load_from, file_format=file_format, obj_lib=obj_lib
-        )
-
-    def _init_from_inputs_(self, inputs=None):
-        super()._init_from_inputs_(inputs=inputs)
+        super().__init__(inputs=inputs)
         self._x0 = self._x
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
@@ -125,10 +110,13 @@ class Equilibrium(_Configuration, IOAble):
         self._objective = None
         self._optimizer = None
         self._set_grid()
+        self._transforms = {}
         self._set_transforms()
         self.constraint = inputs.get("bdry_mode", None)
         self.objective = inputs.get("objective", None)
         self.optimizer = inputs.get("optimizer", None)
+        self.timer = Timer()
+        self.optimizer_results = {}
 
     @property
     def x0(self):
@@ -669,10 +657,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
         either a dictionary of inputs or list of dictionaries. For more information
         see inputs required by ``'Equilibrium'``.
         If solving using continuation method, a list should be given.
-    load_from : str file path OR file instance
-        file to initialize from
-    file_format : str
-        file format of file initializing from. Default is 'hdf5'
 
     """
 
@@ -680,16 +664,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _object_lib_ = Equilibrium._object_lib_
     _object_lib_.update({"Equilibrium": Equilibrium})
 
-    def __init__(self, inputs=None, load_from=None, file_format="hdf5", obj_lib=None):
+    def __init__(self, inputs):
         self.timer = Timer()
-        if load_from is None:
-            self._init_from_inputs_(inputs=inputs)
-        else:
-            self._init_from_file_(
-                load_from=load_from, file_format=file_format, obj_lib=obj_lib
-            )
-
-    def _init_from_inputs_(self, inputs=None):
         # did we get 1 set of inputs or several?
         if isinstance(inputs, (list, tuple)):
             self.equilibria = [Equilibrium(inputs[0])]
@@ -751,9 +727,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
         print("================")
 
-    def solve_continuation(
-        self, start_from=0, verbose=None, checkpoint_path=None, device=None
-    ):
+    def solve_continuation(self, start_from=0, verbose=None, checkpoint_path=None):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -772,8 +746,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
-        device : jax.device or None
-            device handle to JIT compile to (Default value = None)
 
         """
         if verbose is None:
@@ -871,7 +843,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 i_transform=equil.transforms["i"],
                 BC_constraint=equil.constraint,
                 use_jit=True,
-                devices=device,
             )
             equil.objective = objective
 

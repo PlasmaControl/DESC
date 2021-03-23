@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from scipy import special
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.equilibrium import Equilibrium
 
 
 class TestGrid(unittest.TestCase):
@@ -183,7 +184,7 @@ class TestGrid(unittest.TestCase):
         N = 1
         NFP = 1
 
-        grid_quad = QuadratureGrid(L, M, N, NFP, sym=False)
+        grid_quad = QuadratureGrid(L, M, N, NFP)
 
         roots, weights = special.js_roots(L, 2, 2)
 
@@ -196,3 +197,28 @@ class TestGrid(unittest.TestCase):
         ).T
 
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes, atol=1e-8)
+
+    def test_quad_grid_volume_integration(self):
+
+        r = 1
+        R = 10
+        vol = 2 * (np.pi ** 2) * (r ** 2) * R
+
+        inputs = {
+            "L": 1,
+            "M": 1,
+            "N": 0,
+            "NFP": 1,
+            "Psi": 1.0,
+            "profiles": np.array([[0, 0, 0]]),
+            "boundary": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
+            "spectral_indexing": "ansi",
+            "bdry_mode": "lcfs",
+            "node_pattern": "quad",
+        }
+
+        eq = Equilibrium(inputs)
+        g = eq.compute_jacobian(eq.grid)
+        vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
+
+        self.assertAlmostEqual(vol, vol_quad)

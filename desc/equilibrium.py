@@ -200,7 +200,6 @@ class Equilibrium(_Configuration, IOAble):
                 M=2 * self.M_grid + 1,
                 N=2 * self.N_grid + 1,
                 NFP=self.NFP,
-                sym=self.sym,
             )
         else:
             raise ValueError(

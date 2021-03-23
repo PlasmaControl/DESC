@@ -1170,9 +1170,7 @@ class _Configuration(IOAble, ABC):
 
         """
         if grid is None:
-            grid = QuadratureGrid(
-                L=2 * self.L + 1, M=2 * self.M + 1, N=2 * self.N + 1, sym=self.sym
-            )
+            grid = QuadratureGrid(L=2 * self.L + 1, M=2 * self.M + 1, N=2 * self.N + 1)
         R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="direct")

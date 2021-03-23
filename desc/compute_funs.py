@@ -2015,26 +2015,16 @@ def compute_energy(
         zeta_ratio,
     )
 
-    pressure = profiles["p"]
-    g_abs = jnp.abs(jacobian["g"])
-    mag_B_sq = magnetic_field["|B|"] ** 2
-
     NFP = R_transform.grid.NFP
-
     weights = R_transform.grid.weights
 
     energy = {}
-
-    W_p = jnp.sum(pressure * weights * g_abs) * NFP
-    W_B = jnp.sum(mag_B_sq * weights * g_abs) / 2 / mu_0 * NFP
-
-    if R_transform.grid.sym:  # double to account for symmetric grid being used
-        W_p = 2 * W_p
-        W_B = 2 * W_B
-
-    energy["W_p"] = -W_p
-    energy["W_B"] = W_B
-    W = W_B - W_p
-    energy["W"] = W
+    energy["W_p"] = -jnp.sum(profiles["p"] * jnp.abs(jacobian["g"]) * weights) * NFP
+    energy["W_B"] = (
+        jnp.sum(magnetic_field["|B|"] ** 2 * jnp.abs(jacobian["g"]) * weights)
+        / (2 * mu_0)
+        * NFP
+    )
+    energy["W"] = energy["W_B"] - energy["W_p"]
 
     return (energy, magnetic_field, jacobian, cov_basis, toroidal_coords, profiles)

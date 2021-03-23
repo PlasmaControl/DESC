@@ -393,8 +393,10 @@ class LinearGrid(Grid):
 
 class QuadratureGrid(Grid):
     """Grid used for numerical quadrature.
+
     To exactly integrate a Fourier-Zernike basis of resolution L', M', N', a quadrature
     grid with L=(L'+1)/2, M=2*M'+1, N=2*N'+1 should be used.
+    This grid is never symmetric.
 
     Parameters
     ----------
@@ -411,20 +413,20 @@ class QuadratureGrid(Grid):
 
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False):
+    def __init__(self, L, M, N, NFP=1):
 
         self._L = L
         self._M = M
         self._N = N
         self._NFP = NFP
-        self._sym = sym
+        self._sym = False
         self._node_pattern = "quad"
 
         self._nodes, self._weights = self._create_nodes(
             L=self.L, M=self.M, N=self.N, NFP=self.NFP
         )
 
-        self._enforce_symmetry()
+        self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
 
@@ -475,8 +477,8 @@ class QuadratureGrid(Grid):
         wr = wr.flatten()
         wt = wt.flatten()
         wz = wz.flatten()
-        wr = np.ones_like(wr) * wr / r # get rid of the r weight fxn associated with the shifted Jacobi weights 
-        
+        wr /= r  # remove r weight function associated with the shifted Jacobi weights
+
         nodes = np.stack([r, t, z]).T
         weights = wr * wt * wz
 

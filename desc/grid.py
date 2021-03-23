@@ -475,7 +475,8 @@ class QuadratureGrid(Grid):
         wr = wr.flatten()
         wt = wt.flatten()
         wz = wz.flatten()
-
+        wr = np.ones_like(wr) * wr / r # get rid of the r weight fxn associated with the shifted Jacobi weights 
+        
         nodes = np.stack([r, t, z]).T
         weights = wr * wt * wz
 

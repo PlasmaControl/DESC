@@ -6,6 +6,7 @@ import re
 import numpy as np
 from datetime import datetime
 from termcolor import colored
+from desc import set_device
 
 
 class InputReader:
@@ -102,14 +103,14 @@ class InputReader:
             self._output_path = self.input_path + "_output.h5"
 
         if args.numpy:
-            os.environ["DESC_USE_NUMPY"] = "True"
+            os.environ["DESC_BACKEND"] = "numpy"
         else:
-            os.environ["DESC_USE_NUMPY"] = ""
+            os.environ["DESC_BACKEND"] = "jax"
 
-        if args.gpu is True:
-            args.gpu = 0
-        elif args.gpu is not False:
-            args.gpu = int(args.gpu)
+        if args.gpu:
+            set_device("gpu")
+        else:
+            set_device("cpu")
 
         return args
 
@@ -1058,15 +1059,9 @@ def get_parser():
     parser.add_argument(
         "--gpu",
         "-g",
-        action="store",
-        nargs="?",
-        default=False,
-        const=True,
-        metavar="gpuID",
-        help="Use GPU if available, and an optional device ID to use a specific GPU. "
-        + "If no ID is given, default is to select the GPU with most available memory. "
-        + "Note that not all of the computation will be done on the gpu, "
-        + "only the most expensive parts where the I/O efficiency is worth it.",
+        action="store_true",
+        help="Use GPU if available. If more than one are available, selects the "
+        + "GPU with most available memory. ",
     )
     parser.add_argument(
         "--numpy",

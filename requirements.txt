@@ -4,7 +4,8 @@ matplotlib >= 3.0.0
 jaxlib <= 0.1.55
 jax <= 0.1.77
 numba
-nvidia-ml-py3
+nvgpu
+psutil
 h5py
 netcdf4
 colorama

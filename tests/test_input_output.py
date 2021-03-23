@@ -62,8 +62,8 @@ class TestInputReader(unittest.TestCase):
         # self.assertFalse(ir.args.gpuID, 'gpu argument was given')
         self.assertFalse(ir.args.numpy, "numpy is not default False")
         self.assertEqual(
-            os.environ["DESC_USE_NUMPY"],
-            "",
+            os.environ["DESC_BACKEND"],
+            "jax",
             "numpy environment " "variable incorrect with default argument",
         )
         self.assertFalse(ir.args.version, "version is not default False")
@@ -78,8 +78,8 @@ class TestInputReader(unittest.TestCase):
         argv = self.argv2 + ["--numpy"]
         InputReader(cl_args=argv)
         self.assertEqual(
-            os.environ["DESC_USE_NUMPY"],
-            "True",
+            os.environ["DESC_BACKEND"],
+            "numpy",
             "numpy " "environment variable incorrect on use",
         )
 

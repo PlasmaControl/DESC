@@ -4,61 +4,6 @@ from termcolor import colored
 from desc.io import InputReader
 
 
-def get_device(gpuID=False):
-    """Checks available GPUs and selects the one with the most available memory
-
-    Parameters
-    ----------
-    gpuID: bool or int
-        whether to use GPU, or the device ID of a specific GPU to use. If False,
-        use only CPU. If True, attempts to find the GPU with most available memory.
-
-    Returns
-    -------
-    device : jax.device
-        handle to gpu or cpu device selected
-
-    """
-
-    import jax
-
-    if gpuID is False:
-        return jax.devices("cpu")[0]
-
-    try:
-        gpus = jax.devices("gpu")
-        # did the user request a specific GPU?
-        if isinstance(gpuID, int) and gpuID < len(gpus):
-            return gpus[gpuID]
-        if isinstance(gpuID, int):
-            # ID was not valid
-            warnings.warn(
-                colored(
-                    "gpuID did not match any found devices, trying default gpu option",
-                    "yellow",
-                )
-            )
-        # find all available options and see which has the most space
-        import nvidia_smi
-
-        nvidia_smi.nvmlInit()
-        maxmem = 0
-        gpu = gpus[0]
-        for i in range(len(gpus)):
-            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(i)
-            info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
-            if info.free > maxmem:
-                maxmem = info.free
-                gpu = gpus[i]
-
-        nvidia_smi.nvmlShutdown()
-        return gpu
-
-    except:
-        warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
-        return jax.devices("cpu")[0]
-
-
 def main(cl_args=None):
     """Runs the main DESC code from the command line.
     Reads and parses user input from command line, runs the code,
@@ -83,13 +28,6 @@ def main(cl_args=None):
 
     from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
-
-    if use_jax:
-        device = get_device(ir.args.gpu)
-        if ir.args.verbose:
-            print("Using device: " + str(device))
-    else:
-        device = None
 
     # initialize
     equil_fam = EquilibriaFamily(ir.inputs)

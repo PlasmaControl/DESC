@@ -562,9 +562,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
         F_R = force_error["F"][0, :]
         F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
-
-        f_R = self.R_transform.project(F_R * weights)
-        f_Z = self.Z_transform.project(F_Z * weights)
+        g_weights = weights * jacobian["g"]
+        f_R = self.R_transform.project(F_R * g_weights)
+        f_Z = self.Z_transform.project(F_Z * g_weights)
 
         residual = jnp.concatenate([f_R.flatten(), f_Z.flatten()])
         return residual

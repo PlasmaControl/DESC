@@ -257,6 +257,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
 
     if log:
         ax.semilogy(grid.nodes[:, plot_axes[0]], data)
+        data = np.abs(data)  # ensure its positive for log plot
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data)
 
@@ -310,7 +311,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        if name not in ["F", "|F|"]:
+        if name_dict["base"] not in ["F", "|F|"]:
             return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
             if (
@@ -335,6 +336,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     imshow_kwargs = {"origin": "lower", "interpolation": "bilinear", "aspect": "auto"}
     if log:
         imshow_kwargs["norm"] = matplotlib.colors.LogNorm()
+        data = np.abs(data)  # ensure its positive for log plot
     imshow_kwargs["extent"] = [
         grid.nodes[0, plot_axes[1]],
         grid.nodes[-1, plot_axes[1]],
@@ -421,10 +423,12 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
         Y = Y[:, 0, :].T
         Z = Z[:, 0, :].T
 
-    minn, maxx = data.min().min(), data.max().max()
     if log:
+        data = np.abs(data)  # ensure its positive for log plot
+        minn, maxx = data.min().min(), data.max().max()
         norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
     else:
+        minn, maxx = data.min().min(), data.max().max()
         norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
     m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
     m.set_array([])
@@ -537,7 +541,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
     if norm_F:
-        if name not in ["F", "|F|"]:
+        if name_dict["base"] not in ["F", "|F|"]:
             return ValueError(colored("Can only normalize F or |F|", "red"))
         else:
             if (
@@ -564,6 +568,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     if log:
         norm = matplotlib.colors.LogNorm()
         levels = 100
+        data = np.abs(data)  # ensure its positive for log plot
     else:
         norm = matplotlib.colors.Normalize()
         levels = np.linspace(data.min(), data.max(), 100)

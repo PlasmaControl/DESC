@@ -308,9 +308,7 @@ class _Configuration(IOAble, ABC):
         # previous resolution may have left off some coeffs, so we should add them back
         # in but need to check if "profiles" is still accurate, might have been
         # perturbed so we reuse the old coeffs up to the old resolution
-        full_p_l, full_i_l = format_profiles(
-            self._profiles, self.p_basis, self.i_basis
-        )
+        full_p_l, full_i_l = format_profiles(self._profiles, self.p_basis, self.i_basis)
         self._p_l = copy_coeffs(self.p_l, old_modes_p, self.p_basis.modes, full_p_l)
         self._i_l = copy_coeffs(self.i_l, old_modes_i, self.p_basis.modes, full_i_l)
 
@@ -568,11 +566,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         profiles = compute_profiles(
             self.Psi,
@@ -609,11 +607,11 @@ class _Configuration(IOAble, ABC):
         """
 
         # TODO: option to return intermediate variables for all these
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
 
         toroidal_coords = compute_toroidal_coords(
             self.Psi,
@@ -648,11 +646,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self.Psi,
@@ -688,11 +686,11 @@ class _Configuration(IOAble, ABC):
             the x direction, differentiated wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self.Psi,
@@ -728,11 +726,11 @@ class _Configuration(IOAble, ABC):
             system jacobian g.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -768,11 +766,11 @@ class _Configuration(IOAble, ABC):
             in the x direction, differentiated wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self.Psi,
@@ -809,11 +807,11 @@ class _Configuration(IOAble, ABC):
             derivative wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=1, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             magnetic_field,
@@ -855,11 +853,11 @@ class _Configuration(IOAble, ABC):
             component of the current, with the derivative wrt to y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             current_density,
@@ -902,11 +900,11 @@ class _Configuration(IOAble, ABC):
             magnetic pressure gradient.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             magnetic_pressure,
@@ -950,11 +948,11 @@ class _Configuration(IOAble, ABC):
             magnitude.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             magnetic_tension,
@@ -998,11 +996,11 @@ class _Configuration(IOAble, ABC):
             force error.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             force_error,
@@ -1049,11 +1047,11 @@ class _Configuration(IOAble, ABC):
             MHD energy (W_B + W_p)
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
 
         (
             energy,
@@ -1171,13 +1169,13 @@ class _Configuration(IOAble, ABC):
         """
         if grid is None:
             grid = QuadratureGrid(L=2 * self.L + 1, M=2 * self.M + 1, N=2 * self.N + 1)
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="direct")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="direct")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="direct")
-        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="direct")
-        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="direct")
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=1, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
+        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="fft")
+        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="fft")
 
         obj = get_objective_function(
             "energy",

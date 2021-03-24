@@ -4,6 +4,7 @@ import matplotlib
 import numpy as np
 import re
 from termcolor import colored
+import warnings
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import FourierZernikeBasis, jacobi, fourier
@@ -396,8 +397,9 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
     fig, ax = _format_ax(ax, is3d=True)
-
-    coords = eq.compute_cartesian_coords(grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute_cartesian_coords(grid)
     X = coords["X"].reshape((grid.M, grid.L, grid.N), order="F")
     Y = coords["Y"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
@@ -505,11 +507,13 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             nfp = 1
             rows = 1
             cols = 1
+            downsample = 1
         else:
-            N = 6
+            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
             nfp = eq.NFP
             rows = 2
             cols = 3
+            downsample = (2 * eq.N + 1) // 6 + 1
         if kwargs == {}:
             kwargs.update(
                 {
@@ -526,6 +530,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     else:
         zeta = np.unique(grid.nodes[:, 2])
         N = zeta.size
+        downsample = 1
         rows = np.floor(np.sqrt(N)).astype(int)
         cols = np.ceil(N / rows).astype(int)
 
@@ -549,7 +554,9 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute_toroidal_coords(grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute_toroidal_coords(grid)
     R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
@@ -563,13 +570,13 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    for i in range(N):
+    for i in range(rows * cols):
         divider = make_axes_locatable(ax[i])
 
         cntr = ax[i].contourf(
-            R[:, :, i],
-            Z[:, :, i],
-            data[:, :, i],
+            R[:, :, i * downsample],
+            Z[:, :, i * downsample],
+            data[:, :, i * downsample],
             levels=levels,
             cmap="jet",
             norm=norm,
@@ -585,7 +592,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
         ax[i].set_title(
             _name_label(name_dict)
             + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                eq.NFP * zeta[i] / (2 * np.pi)
+                eq.NFP * zeta[i * downsample] / (2 * np.pi)
             )
         )
         if norm_F:
@@ -594,7 +601,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
                 % (
                     name_dict["base"],
                     _name_label(norm_name_dict),
-                    eq.NFP * zeta[i] / (2 * np.pi),
+                    eq.NFP * zeta[i * downsample] / (2 * np.pi),
                 )
             )
     fig.set_tight_layout(True)
@@ -633,11 +640,13 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             nfp = 1
             rows = 1
             cols = 1
+            downsample = 1
         else:
-            N = 6
+            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
             nfp = eq.NFP
             rows = 2
             cols = 3
+            downsample = (2 * eq.N + 1) // 6 + 1
         if kwargs == {}:
             kwargs.update(
                 {
@@ -654,7 +663,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                 "L": 50,
                 "NFP": nfp,
                 "theta": np.linspace(0, 2 * np.pi, 8, endpoint=False),
-                "zeta": zeta,
+                "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
             }
         )
         t_grid = _get_grid(**kwargs)
@@ -667,7 +676,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         r_grid = _get_grid(**kwargs)
         rows = np.floor(np.sqrt(N)).astype(int)
         cols = np.ceil(N / rows).astype(int)
-
+        downsample = 1
     elif t_grid is None:
         zeta = np.unique(r_grid.nodes[:, 2])
         N = zeta.size
@@ -676,13 +685,14 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         r_grid = _get_grid(**kwargs)
         rows = np.floor(np.sqrt(zeta.size)).astype(int)
         cols = np.ceil(N / rows).astype(int)
-
+        downsample = 1
     else:
         zeta = np.unique(r_grid.nodes[:, 2])
         t_zeta = np.unique(t_grid.nodes[:, 2])
         N = zeta.size
         rows = np.floor(np.sqrt(N)).astype(int)
         cols = np.ceil(N / rows).astype(int)
+        downsample = 1
         if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
             raise ValueError(
                 colored(
@@ -692,15 +702,18 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                     "red",
                 )
             )
-
-    r_coords = eq.compute_toroidal_coords(r_grid)
-    t_coords = eq.compute_toroidal_coords(t_grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r_coords = eq.compute_toroidal_coords(r_grid)
+        t_coords = eq.compute_toroidal_coords(t_grid)
 
     # theta coordinates cooresponding to linearly spaced vartheta angles
     v_nodes = t_grid.nodes
     v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
     v_grid = Grid(v_nodes)
-    v_coords = eq.compute_toroidal_coords(v_grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        v_coords = eq.compute_toroidal_coords(v_grid)
 
     # rho contours
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
@@ -715,19 +728,36 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
     ax = np.atleast_1d(ax).flatten()
 
-    for i in range(N):
+    for i in range(rows * cols):
         ax[i].plot(
-            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":"
+            Rv[:, :, i * downsample].T,
+            Zv[:, :, i * downsample].T,
+            color=colorblind_colors[2],
+            linestyle=":",
         )
-        ax[i].plot(Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0])
-        ax[i].plot(Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1])
-        ax[i].scatter(Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3])
+        ax[i].plot(
+            Rr[:, :, i * downsample],
+            Zr[:, :, i * downsample],
+            color=colorblind_colors[0],
+        )
+        ax[i].plot(
+            Rr[:, -1, i * downsample],
+            Zr[:, -1, i * downsample],
+            color=colorblind_colors[1],
+        )
+        ax[i].scatter(
+            Rr[0, 0, i * downsample],
+            Zr[0, 0, i * downsample],
+            color=colorblind_colors[3],
+        )
 
         ax[i].axis("equal")
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].set_title(
-            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                nfp * zeta[i * downsample] / (2 * np.pi)
+            )
         )
 
     fig.set_tight_layout(True)
@@ -757,34 +787,35 @@ def _compute(eq, name, grid):
     else:
         name_dict = name
 
-    # primary calculations
-    if name_dict["base"] in ["rho", "theta", "zeta"]:
-        idx = ["rho", "theta", "zeta"].index(name_dict["base"])
-        out = grid.nodes[:, idx]
-    elif name_dict["base"] == "vartheta":
-        lmbda = eq.compute_toroidal_coords(grid)["lambda"]
-        out = grid.nodes[:, 1] + lmbda
-    elif name_dict["base"] in ["psi", "p", "iota"]:
-        out = eq.compute_profiles(grid)[_name_key(name_dict)]
-    elif name_dict["base"] in ["R", "Z", "lambda"]:
-        out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
-    elif name_dict["base"] == "g":
-        out = eq.compute_jacobian(grid)[_name_key(name_dict)]
-    elif name_dict["base"] in ["B", "|B|"]:
-        out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
-    elif name_dict["base"] == "J":
-        out = eq.compute_current_density(grid)[_name_key(name_dict)]
-    elif name_dict["base"] in ["gradB", "|gradB|"]:
-        out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-    elif name_dict["base"] in ["Btension", "|Btension|"]:
-        out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-    elif name_dict["base"] in ["F", "|F|"]:
-        out = eq.compute_force_error(grid)[_name_key(name_dict)]
-
-    else:
-        raise NotImplementedError(
-            "No output for base named '{}'.".format(name_dict["base"])
-        )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # primary calculations
+        if name_dict["base"] in ["rho", "theta", "zeta"]:
+            idx = ["rho", "theta", "zeta"].index(name_dict["base"])
+            out = grid.nodes[:, idx]
+        elif name_dict["base"] == "vartheta":
+            lmbda = eq.compute_toroidal_coords(grid)["lambda"]
+            out = grid.nodes[:, 1] + lmbda
+        elif name_dict["base"] in ["psi", "p", "iota"]:
+            out = eq.compute_profiles(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["R", "Z", "lambda"]:
+            out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "g":
+            out = eq.compute_jacobian(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["B", "|B|"]:
+            out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "J":
+            out = eq.compute_current_density(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["gradB", "|gradB|"]:
+            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["Btension", "|Btension|"]:
+            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["F", "|F|"]:
+            out = eq.compute_force_error(grid)[_name_key(name_dict)]
+        else:
+            raise NotImplementedError(
+                "No output for base named '{}'.".format(name_dict["base"])
+            )
 
     # secondary calculations
     power = name_dict["power"]

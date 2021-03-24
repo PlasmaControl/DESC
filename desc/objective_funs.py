@@ -821,20 +821,9 @@ class ForceErrorNodes(ObjectiveFunction):
         weights = self.R_transform.grid.weights
 
         f_rho = (
-            force_error["F_rho"]
-            * force_error["|grad(rho)|"]
-            * jacobian["g"]
-            * weights
-            * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
         )
-        f_beta = (
-            force_error["F_beta"]
-            * force_error["|beta|"]
-            * jacobian["g"]
-            * weights
-            * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
-            * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
-        )
+        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
 
         return residual
@@ -926,20 +915,9 @@ class ForceErrorNodes(ObjectiveFunction):
         weights = self.R_transform.grid.weights
 
         f_rho = (
-            force_error["F_rho"]
-            * force_error["|grad(rho)|"]
-            * jacobian["g"]
-            * weights
-            * jnp.sign(dot(con_basis["e^rho"], cov_basis["e_rho"], 0))
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
         )
-        f_beta = (
-            force_error["F_beta"]
-            * force_error["|beta|"]
-            * jacobian["g"]
-            * weights
-            * jnp.sign(dot(force_error["beta"], cov_basis["e_theta"], 0))
-            * jnp.sign(dot(force_error["beta"], cov_basis["e_zeta"], 0))
-        )
+        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
 
         f_rho_rms = jnp.sqrt(jnp.sum(f_rho ** 2))
         f_beta_rms = jnp.sqrt(jnp.sum(f_beta ** 2))

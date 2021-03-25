@@ -115,7 +115,6 @@ class Equilibrium(_Configuration, IOAble):
         self.constraint = inputs.get("bdry_mode", None)
         self.objective = inputs.get("objective", None)
         self.optimizer = inputs.get("optimizer", None)
-        self.timer = Timer()
         self.optimizer_results = {}
 
     @property
@@ -137,7 +136,7 @@ class Equilibrium(_Configuration, IOAble):
         return self._M_grid
 
     @M_grid.setter
-    def M_grid(self, new: Grid):
+    def M_grid(self, new):
         if self.M_grid != new:
             self._M_grid = new
             self._set_grid()
@@ -151,7 +150,7 @@ class Equilibrium(_Configuration, IOAble):
         return self._N_grid
 
     @N_grid.setter
-    def N_grid(self, new: Grid):
+    def N_grid(self, new):
         if self.N_grid != new:
             self._N_grid = new
             self._set_grid()
@@ -258,25 +257,26 @@ class Equilibrium(_Configuration, IOAble):
             level of output
 
         """
-        self.timer.start("Transform computation")
+        timer = Timer()
+        timer.start("Transform computation")
         if verbose > 0:
             print("Precomputing Transforms")
         self._set_transforms()
         for tr in self.transforms.values():
             tr.build()
 
-        self.timer.stop("Transform computation")
+        timer.stop("Transform computation")
         if verbose > 1:
-            self.timer.disp("Transform computation")
+            timer.disp("Transform computation")
 
-        self.timer.start("Boundary constraint factorization")
+        timer.start("Boundary constraint factorization")
         if verbose > 0:
             print("Factorizing boundary constraint")
         if self.objective is not None and self.objective.BC_constraint is not None:
             self.objective.BC_constraint.build()
-        self.timer.stop("Boundary constraint factorization")
+        timer.stop("Boundary constraint factorization")
         if verbose > 1:
-            self.timer.disp("Boundary constraint factorization")
+            timer.disp("Boundary constraint factorization")
 
     def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
         """Set the spectral and real space resolution.
@@ -664,7 +664,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _object_lib_.update({"Equilibrium": Equilibrium})
 
     def __init__(self, inputs):
-        self.timer = Timer()
         # did we get 1 set of inputs or several?
         if isinstance(inputs, (list, tuple)):
             self.equilibria = [Equilibrium(inputs[0])]
@@ -747,9 +746,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             file to save checkpoint data (Default value = None)
 
         """
+        timer = Timer()
         if verbose is None:
             verbose = self.inputs[0]["verbose"]
-        self.timer.start("Total time")
+        timer.start("Total time")
 
         if (
             not (
@@ -769,7 +769,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
         for ii in range(start_from, len(self.inputs)):
-            self.timer.start("Iteration {} total".format(ii + 1))
+            timer.start("Iteration {} total".format(ii + 1))
             if ii == start_from:
                 equil = self[ii]
                 if verbose > 0:
@@ -862,9 +862,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 if verbose > 0:
                     print("Saving latest iteration")
                 self.save(checkpoint_path)
-            self.timer.stop("Iteration {} total".format(ii + 1))
+            timer.stop("Iteration {} total".format(ii + 1))
             if verbose > 1:
-                self.timer.disp("Iteration {} total".format(ii + 1))
+                timer.disp("Iteration {} total".format(ii + 1))
 
             if not equil.is_nested():
                 warnings.warn(
@@ -877,11 +877,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 )
                 break
 
-        self.timer.stop("Total time")
+        timer.stop("Total time")
         print("====================")
         print("Done")
         if verbose > 1:
-            self.timer.disp("Total time")
+            timer.disp("Total time")
         if checkpoint_path is not None:
             print("Output written to {}".format(checkpoint_path))
         print("====================")

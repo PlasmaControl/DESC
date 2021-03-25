@@ -1447,19 +1447,19 @@ def compute_magnetic_pressure_gradient(
     ) + dot(magnetic_field["B"], cov_basis["e_zeta_z"], 0)
 
     # contravariant components of magnetic pressure gradient
-    magnetic_pressure["gradB^rho"] = (1 / 2 / mu_0) * (
+    magnetic_pressure["grad(B)^rho"] = (1 / 2 / mu_0) * (
         magnetic_field["B^theta"] * magnetic_field["B_theta_r"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_r"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_r"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_r"]
     )
-    magnetic_pressure["gradB^theta"] = (1 / 2 / mu_0) * (
+    magnetic_pressure["grad(B)^theta"] = (1 / 2 / mu_0) * (
         magnetic_field["B^theta"] * magnetic_field["B_theta_t"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_t"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_t"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_t"]
     )
-    magnetic_pressure["gradB^zeta"] = (1 / 2 / mu_0) * (
+    magnetic_pressure["grad(B)^zeta"] = (1 / 2 / mu_0) * (
         magnetic_field["B^theta"] * magnetic_field["B_theta_z"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_z"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_z"]
@@ -1467,20 +1467,20 @@ def compute_magnetic_pressure_gradient(
     )
 
     # magnetic pressure vector
-    magnetic_pressure["gradB"] = (
-        magnetic_pressure["gradB^rho"] * cov_basis["e_rho"]
-        + magnetic_pressure["gradB^theta"] * cov_basis["e_theta"]
-        + magnetic_pressure["gradB^zeta"] * cov_basis["e_zeta"]
+    magnetic_pressure["grad(B)"] = (
+        magnetic_pressure["grad(B)^rho"] * cov_basis["e_rho"]
+        + magnetic_pressure["grad(B)^theta"] * cov_basis["e_theta"]
+        + magnetic_pressure["grad(B)^zeta"] * cov_basis["e_zeta"]
     )
 
     # magnitude of magnetic pressure gradient
-    magnetic_pressure["|gradB|"] = jnp.sqrt(
-        magnetic_pressure["gradB^rho"]
-        * dot(magnetic_pressure["gradB"], cov_basis["e_rho"], 0)
-        + magnetic_pressure["gradB^theta"]
-        * dot(magnetic_pressure["gradB"], cov_basis["e_theta"], 0)
-        + magnetic_pressure["gradB^zeta"]
-        * dot(magnetic_pressure["gradB"], cov_basis["e_zeta"], 0)
+    magnetic_pressure["|grad(B)|"] = jnp.sqrt(
+        magnetic_pressure["grad(B)^rho"]
+        * dot(magnetic_pressure["grad(B)"], cov_basis["e_rho"], 0)
+        + magnetic_pressure["grad(B)^theta"]
+        * dot(magnetic_pressure["grad(B)"], cov_basis["e_theta"], 0)
+        + magnetic_pressure["grad(B)^zeta"]
+        * dot(magnetic_pressure["grad(B)"], cov_basis["e_zeta"], 0)
     )
     return (
         magnetic_pressure,

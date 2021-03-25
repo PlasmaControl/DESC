@@ -6,9 +6,8 @@ from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.grid import QuadratureGrid
 from desc.objective_funs import get_objective_function
 from desc.boundary_conditions import BoundaryCondition
 from desc.basis import (
@@ -1200,6 +1199,114 @@ class _Configuration(IOAble, ABC):
             x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
         )
         return dW
+
+    def to_sfl(
+        self,
+        L=None,
+        M=None,
+        N=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        rcond=None,
+        in_place=False,
+    ):
+        """Transform this equilibrium to use straight field line coordinates.
+
+        Uses a least squares fit to find FourierZernike coefficients of R,Z,Rb,Zb with
+        respect to the straight field line coordinates, rather than the boundary coordinates.
+        The new lambda value will be zero.
+
+        NOTE: Though the converted equilibrium will have flux surfaces that look correct, the
+        force balance error will likely be significantly higher than the original equilibrium.
+
+        Parameters
+        ----------
+        L : int, optional
+            radial resolution to use for SFL equilibrium. Default = self.L
+        M : int, optional
+            poloidal resolution to use for SFL equilibrium. Default = self.M
+        N : int, optional
+            toroidal resolution to use for SFL equilibrium. Default = self.N
+        L_grid : int, optional
+            radial spatial resolution to use for fit to new basis. Default = 4*self.L+1
+        M_grid : int, optional
+            poloidal spatial resolution to use for fit to new basis. Default = 4*self.M+1
+        N_grid : int, optional
+            toroidal spatial resolution to use for fit to new basis. Default = 4*self.N+1
+        rcond : float, optional
+            cutoff for small singular values in least squares fit.
+        in_place : bool, optional
+            whether to return a new equilibriumor modify in place
+
+        Returns
+        -------
+        eq_sfl : Equilibrium
+            Equilibrium transformed to a straight field line coordinate representation.
+            Only returned if "copy" is True, otherwise modifies the current equilibrium in place.
+        """
+
+        L = L or self.L
+        M = M or self.M
+        N = N or self.N
+        L_grid = L_grid or 2 * self.L
+        M_grid = M_grid or 2 * self.M
+        N_grid = N_grid or 2 * self.N
+
+        grid = ConcentricGrid(M_grid, N_grid, spectral_indexing=self.spectral_indexing)
+        bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
+
+        toroidal_coords = self.compute_toroidal_coords(grid)
+        theta = grid.nodes[:, 1]
+        vartheta = theta + toroidal_coords["lambda"]
+        sfl_grid = grid
+        sfl_grid.nodes[:, 1] = vartheta
+
+        bdry_coords = self.compute_toroidal_coords(bdry_grid)
+        bdry_theta = bdry_grid.nodes[:, 1]
+        bdry_vartheta = bdry_theta + bdry_coords["lambda"]
+        bdry_sfl_grid = bdry_grid
+        bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
+
+        if in_place:
+            eq_sfl = self
+        else:
+            eq_sfl = self.copy()
+        eq_sfl.change_resolution(L, M, N)
+
+        R_sfl_transform = Transform(
+            sfl_grid, eq_sfl.R_basis, build_pinv=True, rcond=rcond
+        )
+        R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
+        del R_sfl_transform  # these can take up a lot of memory so delete when done.
+
+        Z_sfl_transform = Transform(
+            sfl_grid, eq_sfl.Z_basis, build_pinv=True, rcond=rcond
+        )
+        Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
+        del Z_sfl_transform
+        L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
+
+        R_sfl_bdry_transform = Transform(
+            bdry_sfl_grid, eq_sfl.Rb_basis, build_pinv=True, rcond=rcond
+        )
+        Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
+        del R_sfl_bdry_transform
+
+        Z_sfl_bdry_transform = Transform(
+            bdry_sfl_grid, eq_sfl.Zb_basis, build_pinv=True, rcond=rcond
+        )
+        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
+        del Z_sfl_bdry_transform
+
+        eq_sfl.Rb_lmn = Rb_lmn_sfl
+        eq_sfl.Zb_lmn = Zb_lmn_sfl
+        eq_sfl.R_lmn = R_lmn_sfl
+        eq_sfl.Z_lmn = Z_lmn_sfl
+        eq_sfl.L_lmn = L_lmn_sfl
+
+        if not in_place:
+            return eq_sfl
 
 
 def format_profiles(profiles, p_basis, i_basis):

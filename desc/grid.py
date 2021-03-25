@@ -330,6 +330,8 @@ class LinearGrid(Grid):
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
         dr = (1 - r0) / self.L
+        if dr == 0:
+            dr = 1
 
         # theta/vartheta
         if theta is not None:

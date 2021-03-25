@@ -45,6 +45,8 @@ class _Configuration(IOAble, ABC):
 
     _io_attrs_ = [
         "_sym",
+        "_R_sym",
+        "_Z_sym",
         "_Psi",
         "_NFP",
         "_L",
@@ -251,11 +253,15 @@ class _Configuration(IOAble, ABC):
     @property
     def parent(self):
         """Pointer to the equilibrium this was derived from."""
+        if not hasattr(self, "_parent"):
+            self._parent = None
         return self._parent
 
     @property
     def children(self):
         """List of configurations that were derived from this one."""
+        if not hasattr(self, "_children"):
+            self._children = []
         return self._children
 
     def copy(self, deepcopy=True):
@@ -265,7 +271,7 @@ class _Configuration(IOAble, ABC):
         else:
             new = copy.copy(self)
         new._parent = self
-        self._children.append(new)
+        self.children.append(new)
         return new
 
     def change_resolution(self, L=None, M=None, N=None, *args, **kwargs):
@@ -1152,7 +1158,7 @@ class _Configuration(IOAble, ABC):
 
         return rline.is_simple and vline.is_simple
 
-    def compute_dW(self, free_bdry=True, grid=None):
+    def compute_dW(self, grid=None):
         """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.
 
         Parameters

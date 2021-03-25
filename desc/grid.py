@@ -396,22 +396,19 @@ class LinearGrid(Grid):
 class QuadratureGrid(Grid):
     """Grid used for numerical quadrature.
 
-    To exactly integrate a Fourier-Zernike basis of resolution L', M', N', a quadrature
-    grid with L=(L'+1)/2, M=2*M'+1, N=2*N'+1 should be used.
+    Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
     This grid is never symmetric.
 
     Parameters
     ----------
     L : int
-        radial grid resolution (L radial nodes, Defualt = 1)
+        radial grid resolution (exactly integrates radial modes up to order L)
     M : int
-        poloidal grid resolution (M poloidal nodes, Default = 1)
+        poloidal grid resolution (exactly integrates poloidal modes up to order M)
     N : int
-        toroidal grid resolution (N toroidal nodes, Default = 1)
+        toroidal grid resolution (exactly integrates toroidal modes up to order N)
     NFP : int
         number of field periods (Default = 1)
-    sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
 
     """
 
@@ -459,16 +456,20 @@ class QuadratureGrid(Grid):
         self._N = N
         self._NFP = NFP
 
+        L = self.L + 1
+        M = 2 * self.M + 1
+        N = 2 * self.N + 1
+
         # rho
-        r, wr = special.js_roots(self.L, 2, 2)
+        r, wr = special.js_roots(L, 2, 2)
 
         # theta/vartheta
-        t = np.linspace(0, 2 * np.pi, self.M, endpoint=False)
-        wt = 2 * np.pi / self.M * np.ones_like(t)
+        t = np.linspace(0, 2 * np.pi, M, endpoint=False)
+        wt = 2 * np.pi / M * np.ones_like(t)
 
         # zeta/phi
-        z = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=False)
-        wz = 2 * np.pi / self.N * np.ones_like(z)
+        z = np.linspace(0, 2 * np.pi / self.NFP, N, endpoint=False)
+        wz = 2 * np.pi / N * np.ones_like(z)
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()

@@ -180,19 +180,21 @@ class TestGrid(unittest.TestCase):
     def test_quadrature_grid(self):
 
         L = 2
-        M = 4
-        N = 1
+        M = 2
+        N = 0
         NFP = 1
 
         grid_quad = QuadratureGrid(L, M, N, NFP)
 
-        roots, weights = special.js_roots(L, 2, 2)
+        roots, weights = special.js_roots(3, 2, 2)
 
         quadrature_nodes = np.stack(
             [
-                np.array([roots[0]] * 4 + [roots[1]] * 4),
-                np.array([0, np.pi / 2, np.pi, 3 * np.pi / 2] * 2),
-                np.zeros((2 * 2 * (L),)),
+                np.array([roots[0]] * 5 + [roots[1]] * 5 + [roots[2]] * 5),
+                np.array(
+                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 3
+                ),
+                np.zeros(15),
             ]
         ).T
 

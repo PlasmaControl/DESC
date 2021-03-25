@@ -195,9 +195,9 @@ class Equilibrium(_Configuration, IOAble):
                 self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
             )
             self._grid = QuadratureGrid(
-                L=L_grid + 1,
-                M=2 * self.M_grid + 1,
-                N=2 * self.N_grid + 1,
+                L=L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
                 NFP=self.NFP,
             )
         else:

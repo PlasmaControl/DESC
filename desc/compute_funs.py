@@ -1477,12 +1477,16 @@ def compute_magnetic_pressure_gradient(
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_z"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_z"]
     )
+    magnetic_pressure["Bpressure_rho"] = magnetic_pressure["grad(|B|^2)_rho"]
+    magnetic_pressure["Bpressure_theta"] = magnetic_pressure["grad(|B|^2)_theta"]
+    magnetic_pressure["Bpressure_zeta"] = magnetic_pressure["grad(|B|^2)_zeta"]
+    
 
     # magnetic pressure gradient
     magnetic_pressure["grad(|B|^2)"] = (
-        magnetic_pressure["grad(B)_rho"] * con_basis["e^rho"]
-        + magnetic_pressure["grad(B)_theta"] * con_basis["e^theta"]
-        + magnetic_pressure["grad(B)_zeta"] * con_basis["e^zeta"]
+        magnetic_pressure["grad(|B|^2)_rho"] * con_basis["e^rho"]
+        + magnetic_pressure["grad(|B|^2)_theta"] * con_basis["e^theta"]
+        + magnetic_pressure["grad(|B|^2)_zeta"] * con_basis["e^zeta"]
     )
 
     # magnetic pressure gradient magnitude

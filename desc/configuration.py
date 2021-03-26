@@ -557,12 +557,12 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute_profiles(self, grid):
+    def compute_profiles(self, grid=None):
         """Compute magnetic flux, pressure, and rotational transform profiles.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -573,6 +573,9 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
@@ -596,12 +599,12 @@ class _Configuration(IOAble, ABC):
 
         return profiles
 
-    def compute_toroidal_coords(self, grid):
+    def compute_toroidal_coords(self, grid=None):
         """Compute toroidal coordinates from polar coordinates.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -612,6 +615,8 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
 
         # TODO: option to return intermediate variables for all these
         R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
@@ -637,12 +642,12 @@ class _Configuration(IOAble, ABC):
 
         return toroidal_coords
 
-    def compute_cartesian_coords(self, grid):
+    def compute_cartesian_coords(self, grid=None):
         """Compute cartesian coordinates from toroidal coordinates.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -653,6 +658,9 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=0, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
@@ -676,12 +684,12 @@ class _Configuration(IOAble, ABC):
 
         return cartesian_coords
 
-    def compute_covariant_basis(self, grid):
+    def compute_covariant_basis(self, grid=None):
         """Compute covariant basis vectors.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -693,6 +701,9 @@ class _Configuration(IOAble, ABC):
             the x direction, differentiated wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
@@ -716,12 +727,12 @@ class _Configuration(IOAble, ABC):
 
         return cov_basis
 
-    def compute_jacobian(self, grid):
+    def compute_jacobian(self, grid=None):
         """Compute coordinate system jacobian.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -733,6 +744,9 @@ class _Configuration(IOAble, ABC):
             system jacobian g.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
@@ -756,12 +770,12 @@ class _Configuration(IOAble, ABC):
 
         return jacobian
 
-    def compute_contravariant_basis(self, grid):
+    def compute_contravariant_basis(self, grid=None):
         """Compute contravariant basis vectors.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -773,6 +787,9 @@ class _Configuration(IOAble, ABC):
             in the x direction, differentiated wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
@@ -796,12 +813,12 @@ class _Configuration(IOAble, ABC):
 
         return con_basis
 
-    def compute_magnetic_field(self, grid):
+    def compute_magnetic_field(self, grid=None):
         """Compute magnetic field components.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -814,6 +831,9 @@ class _Configuration(IOAble, ABC):
             derivative wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="fft")
@@ -843,12 +863,12 @@ class _Configuration(IOAble, ABC):
 
         return magnetic_field
 
-    def compute_current_density(self, grid):
+    def compute_current_density(self, grid=None):
         """Compute current density field components.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -860,6 +880,9 @@ class _Configuration(IOAble, ABC):
             component of the current, with the derivative wrt to y.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
@@ -890,12 +913,12 @@ class _Configuration(IOAble, ABC):
 
         return current_density
 
-    def compute_magnetic_pressure_gradient(self, grid):
+    def compute_magnetic_pressure_gradient(self, grid=None):
         """Compute magnetic pressure gradient components and its magnitude.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -907,6 +930,9 @@ class _Configuration(IOAble, ABC):
             magnetic pressure gradient.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
@@ -939,12 +965,12 @@ class _Configuration(IOAble, ABC):
 
         return magnetic_pressure
 
-    def compute_magnetic_tension(self, grid):
+    def compute_magnetic_tension(self, grid=None):
         """Compute magnetic tension vector and its magnitude.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -956,6 +982,9 @@ class _Configuration(IOAble, ABC):
             magnitude.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
@@ -988,12 +1017,12 @@ class _Configuration(IOAble, ABC):
 
         return magnetic_tension
 
-    def compute_force_error(self, grid):
+    def compute_force_error(self, grid=None):
         """Compute force errors and magnitude.
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -1005,6 +1034,9 @@ class _Configuration(IOAble, ABC):
             force error.
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
@@ -1037,14 +1069,14 @@ class _Configuration(IOAble, ABC):
 
         return force_error
 
-    def compute_energy(self, grid):
+    def compute_energy(self, grid=None):
         """Compute total MHD energy.
 
         Also computes the individual components (magnetic and pressure)
 
         Parameters
         ----------
-        grid : Grid
+        grid : Grid, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1056,6 +1088,9 @@ class _Configuration(IOAble, ABC):
             MHD energy (W_B + W_p)
 
         """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
         R_transform = Transform(grid, self.R_basis, derivs=2, method="fft")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="fft")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="fft")
@@ -1085,6 +1120,45 @@ class _Configuration(IOAble, ABC):
         )
 
         return energy
+
+    def compute_volume(self, grid=None):
+        """Compute total plasma volume.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Quadrature grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at
+
+        Returns
+        -------
+        volume : float
+            plasma volume in m^3
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="fft")
+
+        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
+            self.Psi,
+            self.R_lmn,
+            self.Z_lmn,
+            self.L_lmn,
+            self.p_l,
+            self.i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+            self.zeta_ratio,
+        )
+        vol_quad = np.sum(np.abs(jacobian["g"]) * grid.weights)
 
     def compute_axis_location(self, zeta=0):
         """Find the axis location on specified zeta plane(s).

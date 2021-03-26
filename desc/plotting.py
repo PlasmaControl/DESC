@@ -547,7 +547,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name("|grad(B)|")
+                norm_name_dict = _format_name("Bpressure")
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
@@ -811,9 +811,9 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
         elif name_dict["base"] == "J":
             out = eq.compute_current_density(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["grad(B)", "|grad(B)|"]:
+        elif name_dict["base"] in ["Bpressure"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["Btension", "|Btension|"]:
+        elif name_dict["base"] in ["Btension"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]

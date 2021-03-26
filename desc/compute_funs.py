@@ -1275,19 +1275,19 @@ def compute_current_density(
         magnetic_field["B0_z"] * (1 + toroidal_coords["lambda_t"])
         + magnetic_field["B0"] * toroidal_coords["lambda_tz"]
     )
-    magnetic_field["B_con_r"] = (
+    magnetic_field["B_r"] = (
         magnetic_field["B^theta_r"] * cov_basis["e_theta"]
         + magnetic_field["B^theta"] * cov_basis["e_theta_r"]
         + magnetic_field["B^zeta_r"] * cov_basis["e_zeta"]
         + magnetic_field["B^zeta"] * cov_basis["e_zeta_r"]
     )
-    magnetic_field["B_con_t"] = (
+    magnetic_field["B_t"] = (
         magnetic_field["B^theta_t"] * cov_basis["e_theta"]
         + magnetic_field["B^theta"] * cov_basis["e_theta_t"]
         + magnetic_field["B^zeta_t"] * cov_basis["e_zeta"]
         + magnetic_field["B^zeta"] * cov_basis["e_zeta_t"]
     )
-    magnetic_field["B_con_z"] = (
+    magnetic_field["B_z"] = (
         magnetic_field["B^theta_z"] * cov_basis["e_theta"]
         + magnetic_field["B^theta"] * cov_basis["e_theta_z"]
         + magnetic_field["B^zeta_z"] * cov_basis["e_zeta"]
@@ -1295,23 +1295,23 @@ def compute_current_density(
     )
 
     # B covariant component derivatives
-    magnetic_field["B_rho_t"] = dot(
-        magnetic_field["B_con_t"], cov_basis["e_rho"], 0
-    ) + dot(magnetic_field["B"], cov_basis["e_rho_t"], 0)
-    magnetic_field["B_rho_z"] = dot(
-        magnetic_field["B_con_z"], cov_basis["e_rho"], 0
-    ) + dot(magnetic_field["B"], cov_basis["e_rho_z"], 0)
+    magnetic_field["B_rho_t"] = dot(magnetic_field["B_t"], cov_basis["e_rho"], 0) + dot(
+        magnetic_field["B"], cov_basis["e_rho_t"], 0
+    )
+    magnetic_field["B_rho_z"] = dot(magnetic_field["B_z"], cov_basis["e_rho"], 0) + dot(
+        magnetic_field["B"], cov_basis["e_rho_z"], 0
+    )
     magnetic_field["B_theta_r"] = dot(
-        magnetic_field["B_con_r"], cov_basis["e_theta"], 0
+        magnetic_field["B_r"], cov_basis["e_theta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_theta_r"], 0)
     magnetic_field["B_theta_z"] = dot(
-        magnetic_field["B_con_z"], cov_basis["e_theta"], 0
+        magnetic_field["B_z"], cov_basis["e_theta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_theta_z"], 0)
     magnetic_field["B_zeta_r"] = dot(
-        magnetic_field["B_con_r"], cov_basis["e_zeta"], 0
+        magnetic_field["B_r"], cov_basis["e_zeta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_zeta_r"], 0)
     magnetic_field["B_zeta_t"] = dot(
-        magnetic_field["B_con_t"], cov_basis["e_zeta"], 0
+        magnetic_field["B_t"], cov_basis["e_zeta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_zeta_t"], 0)
 
     current_density = {}
@@ -1386,8 +1386,8 @@ def compute_magnetic_pressure_gradient(
     -------
     magnetic_pressure : dict
         dictionary of ndarray, shape(num_nodes,), of magnetic pressure gradient components.
-        Keys are of the form 'gradB^x' meaning the contravariant (gradB^x) component of the
-        magnetic pressure gradient.
+        Keys are of the form 'grad(B)^x' meaning the contravariant (grad(B)^x)
+        component of the magnetic pressure gradient.
     current_density : dict
         dictionary of ndarray, shape(num_nodes,), of current density components.
         Keys are of the form 'J^x_y' meaning the contravariant (J^x)
@@ -1436,56 +1436,73 @@ def compute_magnetic_pressure_gradient(
         zeta_ratio,
     )
 
+    # contravariant basis vectors
+    con_basis = {}
+    con_basis["e^rho"] = (
+        cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0) / jacobian["g"]
+    )
+    con_basis["e^theta"] = (
+        cross(cov_basis["e_zeta"], cov_basis["e_rho"], 0) / jacobian["g"]
+    )
+    con_basis["e^zeta"] = jnp.array(
+        [toroidal_coords["0"], 1 / toroidal_coords["R"], toroidal_coords["0"]]
+    )
+
     magnetic_pressure = {}
 
     # B covariant component derivatives
     magnetic_field["B_theta_t"] = dot(
-        magnetic_field["B_con_t"], cov_basis["e_theta"], 0
+        magnetic_field["B_t"], cov_basis["e_theta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_theta_t"], 0)
     magnetic_field["B_zeta_z"] = dot(
-        magnetic_field["B_con_z"], cov_basis["e_zeta"], 0
+        magnetic_field["B_z"], cov_basis["e_zeta"], 0
     ) + dot(magnetic_field["B"], cov_basis["e_zeta_z"], 0)
 
-    # contravariant components of magnetic pressure gradient
-    magnetic_pressure["grad(B)^rho"] = (1 / 2 / mu_0) * (
+    # magnetic pressure gradient covariant components
+    magnetic_pressure["grad(|B|^2)_rho"] = (
         magnetic_field["B^theta"] * magnetic_field["B_theta_r"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_r"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_r"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_r"]
     )
-    magnetic_pressure["grad(B)^theta"] = (1 / 2 / mu_0) * (
+    magnetic_pressure["grad(|B|^2)_theta"] = (
         magnetic_field["B^theta"] * magnetic_field["B_theta_t"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_t"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_t"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_t"]
     )
-    magnetic_pressure["grad(B)^zeta"] = (1 / 2 / mu_0) * (
+    magnetic_pressure["grad(|B|^2)_zeta"] = (
         magnetic_field["B^theta"] * magnetic_field["B_theta_z"]
         + magnetic_field["B_theta"] * magnetic_field["B^theta_z"]
         + magnetic_field["B^zeta"] * magnetic_field["B_zeta_z"]
         + magnetic_field["B_zeta"] * magnetic_field["B^zeta_z"]
     )
 
-    # magnetic pressure vector
-    magnetic_pressure["grad(B)"] = (
-        magnetic_pressure["grad(B)^rho"] * cov_basis["e_rho"]
-        + magnetic_pressure["grad(B)^theta"] * cov_basis["e_theta"]
-        + magnetic_pressure["grad(B)^zeta"] * cov_basis["e_zeta"]
+    # magnetic pressure gradient
+    magnetic_pressure["grad(|B|^2)"] = (
+        magnetic_pressure["grad(B)_rho"] * con_basis["e^rho"]
+        + magnetic_pressure["grad(B)_theta"] * con_basis["e^theta"]
+        + magnetic_pressure["grad(B)_zeta"] * con_basis["e^zeta"]
     )
 
-    # magnitude of magnetic pressure gradient
-    magnetic_pressure["|grad(B)|"] = jnp.sqrt(
-        magnetic_pressure["grad(B)^rho"]
-        * dot(magnetic_pressure["grad(B)"], cov_basis["e_rho"], 0)
-        + magnetic_pressure["grad(B)^theta"]
-        * dot(magnetic_pressure["grad(B)"], cov_basis["e_theta"], 0)
-        + magnetic_pressure["grad(B)^zeta"]
-        * dot(magnetic_pressure["grad(B)"], cov_basis["e_zeta"], 0)
+    # magnetic pressure gradient magnitude
+    magnetic_pressure["|grad(|B|^2)|"] = jnp.sqrt(
+        magnetic_pressure["grad(|B|^2)_rho"] ** 2
+        * dot(con_basis["e^rho"], con_basis["e^rho"], 0)
+        + magnetic_pressure["grad(|B|^2)_theta"] ** 2
+        * dot(con_basis["e^theta"], con_basis["e^theta"], 0)
+        + magnetic_pressure["grad(|B|^2)_zeta"] ** 2
+        * dot(con_basis["e^zeta"], con_basis["e^zeta"], 0)
     )
+
+    # scaled magnetic pressure
+    magnetic_pressure["Bpressure"] = magnetic_pressure["|grad(|B|^2)|"] / (2 * mu_0)
+
     return (
         magnetic_pressure,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -1542,7 +1559,7 @@ def compute_magnetic_tension(
     -------
     magnetic_tension : dict
         dictionary of ndarray, shape(num_nodes,), of magnetic tension vector.
-        Keys are of the form 'gradB' for the vector form and '|gradB|' for its
+        Keys are of the form 'grad(B)' for the vector form and '|grad(B)|' for its
         magnitude.
     current_density : dict
         dictionary of ndarray, shape(num_nodes,), of current density components.
@@ -1592,10 +1609,22 @@ def compute_magnetic_tension(
         zeta_ratio,
     )
 
+    # contravariant basis vectors
+    con_basis = {}
+    con_basis["e^rho"] = (
+        cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0) / jacobian["g"]
+    )
+    con_basis["e^theta"] = (
+        cross(cov_basis["e_zeta"], cov_basis["e_rho"], 0) / jacobian["g"]
+    )
+    con_basis["e^zeta"] = jnp.array(
+        [toroidal_coords["0"], 1 / toroidal_coords["R"], toroidal_coords["0"]]
+    )
+
     magnetic_tension = {}
 
-    # magnetic tension vector
-    magnetic_tension["Btension"] = (1 / 2 / mu_0) * (
+    # magnetic tension contravariant vector
+    magnetic_tension["(B*grad(|B|))B"] = (
         (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
@@ -1606,41 +1635,42 @@ def compute_magnetic_tension(
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
         )
         * cov_basis["e_zeta"]
-        + (magnetic_field["B^theta"] ** 2) * cov_basis["e_theta_t"]
-        + (magnetic_field["B^zeta"] ** 2) * cov_basis["e_zeta_z"]
+        + magnetic_field["B^theta"] ** 2 * cov_basis["e_theta_t"]
+        + magnetic_field["B^zeta"] ** 2 * cov_basis["e_zeta_z"]
         + magnetic_field["B^theta"]
         * magnetic_field["B^zeta"]
         * (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"])
     )
 
-    # magnitude of magnetic tension
-    magnetic_tension["|Btension|"] = jnp.sqrt(
-        (
-            magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
-            + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        )
-        * dot(magnetic_tension["Btension"], cov_basis["e_theta"], 0)
-        + (
-            magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
-            + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        )
-        * dot(magnetic_tension["Btension"], cov_basis["e_zeta"], 0)
-        + (magnetic_field["B^theta"] ** 2)
-        * dot(magnetic_tension["Btension"], cov_basis["e_theta_t"], 0)
-        + (magnetic_field["B^zeta"] ** 2)
-        * dot(magnetic_tension["Btension"], cov_basis["e_zeta_z"], 0)
-        + magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot(
-            magnetic_tension["Btension"],
-            cov_basis["e_theta_z"] + cov_basis["e_zeta_t"],
-            0,
-        )
+    # magnetic tension contravariant components
+    magnetic_tension["((B*grad(|B|))B)^rho"] = dot(
+        magnetic_tension["(B*grad(|B|))B"], con_basis["e^rho"], 0
     )
+    magnetic_tension["((B*grad(|B|))B)^theta"] = dot(
+        magnetic_tension["(B*grad(|B|))B"], con_basis["e^theta"], 0
+    )
+    magnetic_tension["((B*grad(|B|))B)^zeta"] = dot(
+        magnetic_tension["(B*grad(|B|))B"], con_basis["e^zeta"], 0
+    )
+
+    # magnetic tension magnitude
+    magnetic_tension["|(B*grad(|B|))B|"] = jnp.sqrt(
+        magnetic_tension["((B*grad(|B|))B)^rho"] ** 2
+        * dot(cov_basis["e_rho"], cov_basis["e_rho"], 0)
+        + magnetic_tension["((B*grad(|B|))B)^theta"] ** 2
+        * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+        + magnetic_tension["((B*grad(|B|))B)^zeta"] ** 2
+        * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+    )
+
+    # scaled magnetic tension
+    magnetic_tension["Btension"] = magnetic_tension["|(B*grad(|B|))B|"] / (2 * mu_0)
+
     return (
         magnetic_tension,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -1905,7 +1935,7 @@ def compute_force_error_magnitude(
     )
 
     force_error["|F|"] = jnp.sqrt(
-        force_error["F_rho"] ** 2 * dot(con_basis["e^rho"], con_basis["e^rho"], 0)
+        force_error["F_rho"] ** 2 * force_error["|grad(rho)|"] ** 2
         + force_error["F_beta"] ** 2 * force_error["|beta|"] ** 2
     )
 

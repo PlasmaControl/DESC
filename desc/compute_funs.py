@@ -2056,5 +2056,6 @@ def compute_energy(
         * NFP
     )
     energy["W"] = energy["W_B"] - energy["W_p"]
+    energy["beta"] = jnp.abs(energy["W_p"] / energy["W_B"])
 
     return (energy, magnetic_field, jacobian, cov_basis, toroidal_coords, profiles)

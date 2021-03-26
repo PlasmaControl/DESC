@@ -158,37 +158,18 @@ def perturb(
 
         # 2nd partial derivatives wrt state vector (x)
         if verbose > 0:
-            print("Computing d^2f/dx^2")
-        timer.start("d^2f/dx^2 computation")
-        temp = 0.5 * eq.objective.jvp2(0, 0, dx1, dx1, *args)
+            print("Computing d^2f")
+        timer.start("d^2f computation")
+        inds = tuple([arg_idx[key] for key in deltas])
+        tangents = tuple([val for val in deltas.values()])
+        inds = (0, *inds)
+        tangents = (dx1, *tangents)
+        temp = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
         RHS = temp
 
-        timer.stop("d^2f/dx^2 computation")
+        timer.stop("d^2f computation")
         if verbose > 1:
-            timer.disp("d^2f/dx^2 computation")
-
-        keys = ", ".join(deltas.keys())
-        inds = tuple([arg_idx[key] for key in deltas])
-        dc = tuple([val for val in deltas.values()])
-        timer.start("d^2f/dc^2 computation ({})".format(keys))
-        temp = 0.5 * eq.objective.jvp2(inds, inds, dc, dc, *args)
-        RHS += temp
-
-        timer.stop("d^2f/dc^2 computation ({})".format(keys))
-        if verbose > 1:
-            timer.disp("d^2f/dc^2 computation ({})".format(keys))
-
-        # mixed partials wrt to x, c
-        keys = ", ".join(deltas.keys())
-        inds = tuple([arg_idx[key] for key in deltas])
-        dc = tuple([val for val in deltas.values()])
-        timer.start("d^2f/dxdc computation ({})".format(keys))
-        temp = eq.objective.jvp2(0, inds, dx1, dc, *args)
-        RHS += temp
-
-        timer.stop("d^2f/dxdc computation ({})".format(keys))
-        if verbose > 1:
-            timer.disp("d^2f/dxdc computation ({})".format(keys))
+            timer.disp("d^2f computation")
 
         dx2, hit, alpha = trust_region_step_exact(
             n,

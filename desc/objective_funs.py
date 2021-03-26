@@ -366,6 +366,31 @@ class ObjectiveFunction(IOAble, ABC):
         f = Derivative.compute_jvp2(self.compute, argnum1, argnum2, v1, v2, *args)
         return f
 
+    def jvp3(self, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+        """Compute 3rd derivative jacobian-vector product of the objective function.
+
+        Eg, d^3f/d3^2*v1*v2*v3
+
+        Parameters
+        ----------
+        argnum1, argnum2, argnum2 : int or tuple of int
+            integer describing which argument of the objective should be differentiated.
+        v1, v2, v3 : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        d3f : ndarray
+            Jacobian vector product
+
+        """
+        f = Derivative.compute_jvp3(
+            self.compute, argnum1, argnum2, argnum3, v1, v2, v3, *args
+        )
+        return f
+
     def derivative(self, argnums, *args):
         """Compute arbitrary derivatives of the objective function.
 

@@ -290,6 +290,54 @@ class AutoDiffDerivative(_Derivative):
         d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
         return d2fdx2(v1, v2)
 
+    @classmethod
+    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+        """Compute d^3f/dx^3*v1*v2*v3
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum1, argnum2, argnum3 : int or tuple of int
+            arguments to differentiate with respect to. First entry corresponds to v1,
+            second to v2 etc
+        v1,v2,v3 : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp3 : array-like
+            third derivative times vectors v2, v3, v3, summed over different argnums
+        """
+        if np.isscalar(argnum1):
+            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            argnum1 = (argnum1,)
+        else:
+            v1 = tuple(v1)
+
+        if np.isscalar(argnum2):
+            argnum2 = (argnum2 + 1,)
+            v2 = (v2,) if not isinstance(v2, tuple) else v2
+        else:
+            argnum2 = tuple([i + 1 for i in argnum2])
+            v2 = tuple(v2)
+
+        if np.isscalar(argnum3):
+            argnum3 = (argnum3 + 2,)
+            v3 = (v3,) if not isinstance(v3, tuple) else v3
+        else:
+            argnum3 = tuple([i + 2 for i in argnum3])
+            v3 = tuple(v3)
+
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
+        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        d3fdx3 = lambda dx1, dx2, dx3: cls.compute_jvp(
+            d2fdx2, argnum3, dx3, dx2, dx1, *args
+        )
+        return d3fdx3(v1, v2, v3)
+
     def _compute_jvp(self, v, *args):
         return self.compute_jvp(self._fun, self.argnum, v, *args)
 
@@ -512,6 +560,54 @@ class FiniteDiffDerivative(_Derivative):
         dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
         d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
         return d2fdx2(v1, v2)
+
+    @classmethod
+    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+        """Compute d^3f/dx^3*v1*v2*v3
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum1, argnum2, argnum3 : int or tuple of int
+            arguments to differentiate with respect to. First entry corresponds to v1,
+            second to v2 etc
+        v1,v2,v3 : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to f
+
+        Returns
+        -------
+        jvp3 : array-like
+            third derivative times vectors v2, v3, v3, summed over different argnums
+        """
+        if np.isscalar(argnum1):
+            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            argnum1 = (argnum1,)
+        else:
+            v1 = tuple(v1)
+
+        if np.isscalar(argnum2):
+            argnum2 = (argnum2 + 1,)
+            v2 = (v2,) if not isinstance(v2, tuple) else v2
+        else:
+            argnum2 = tuple([i + 1 for i in argnum2])
+            v2 = tuple(v2)
+
+        if np.isscalar(argnum3):
+            argnum3 = (argnum3 + 2,)
+            v3 = (v3,) if not isinstance(v3, tuple) else v3
+        else:
+            argnum3 = tuple([i + 2 for i in argnum3])
+            v3 = tuple(v3)
+
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
+        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        d3fdx3 = lambda dx1, dx2, dx3: cls.compute_jvp(
+            d2fdx2, argnum3, dx3, dx2, dx1, *args
+        )
+        return d3fdx3(v1, v2, v3)
 
     def _compute_jvp(self, v, *args):
         return self.compute_jvp(

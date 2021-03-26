@@ -317,12 +317,12 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name("|gradB|")
+                norm_name_dict = _format_name("Bpressure")
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
-            data = data / np.abs(norm_data).mean()  # normalize
+            data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -552,7 +552,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
-            data = data / np.abs(norm_data).mean()  # normalize
+            data = data / np.nanmean(np.abs(norm_data))  # normalize
     figw = 5 * cols
     figh = 5 * rows
     fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
@@ -901,8 +901,8 @@ def _format_name(name):
         "B": r"(\mathrm{T})",
         "|B|": r"(\mathrm{T})",
         "J": r"(\mathrm{A}/\mathrm{m}^2)",
-        "grad(B)": r"\mathrm{N}/\mathrm{m}^3",
-        "|grad(B)|": r"\mathrm{N}/\mathrm{m}^3",
+        "Bpressure": r"\mathrm{N}/\mathrm{m}^3",
+        "|Bpressure|": r"\mathrm{N}/\mathrm{m}^3",
         "Btension": r"\mathrm{N}/\mathrm{m}^3",
         "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
         "F": r"(\mathrm{N}/\mathrm{m}^2)",
@@ -935,7 +935,7 @@ def _name_label(name_dict):
 
     if "mag" in name_dict["base"]:
         base = "|" + re.sub("mag", "", name_dict["base"]) + "|"
-    elif "gradB" in name_dict["base"]:
+    elif "Bpressure" in name_dict["base"]:
         base = "\\nabla(B^2 /(2\mu_0))"
     elif "Btension" in name_dict["base"]:
         base = "(B \\cdot \\nabla)B"

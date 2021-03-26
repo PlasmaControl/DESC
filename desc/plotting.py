@@ -156,7 +156,7 @@ def _get_grid(**kwargs):
 
 
 def _get_plot_axes(grid):
-    """Find which axes are being plotted
+    """Find which axes are being plotted.
 
     Parameters
     ----------
@@ -179,7 +179,7 @@ def _get_plot_axes(grid):
 
 
 def plot_coefficients(eq, ax=None):
-    """Plots 1D profiles.
+    """Plot 1D profiles.
 
     Parameters
     ----------
@@ -215,7 +215,7 @@ def plot_coefficients(eq, ax=None):
 
 
 def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
-    """Plots 1D profiles.
+    """Plot 1D profiles.
 
     Parameters
     ----------
@@ -268,7 +268,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
 
 
 def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
-    """Plots 2D cross-sections.
+    """Plot 2D cross-sections.
 
     Parameters
     ----------
@@ -360,7 +360,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
 
 def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
-    """Plots 3D surfaces.
+    """Plot 3D surfaces.
 
     Parameters
     ----------
@@ -476,7 +476,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
 
 
 def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
-    """Plots Poincare sections.
+    """Plot Poincare sections.
 
     Parameters
     ----------
@@ -547,7 +547,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name("|gradB|")
+                norm_name_dict = _format_name("|grad(B)|")
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("p_r")
             norm_name_dict["units"] = ""  # make unitless
@@ -614,7 +614,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
 
 
 def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
-    """Plots flux surfaces.
+    """Plot flux surfaces.
 
     Parameters
     ----------
@@ -811,11 +811,11 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
         elif name_dict["base"] == "J":
             out = eq.compute_current_density(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["gradB", "|gradB|"]:
+        elif name_dict["base"] in ["grad(B)", "|grad(B)|"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["Btension", "|Btension|"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["F", "|F|"]:
+        elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
         else:
             raise NotImplementedError(
@@ -875,7 +875,7 @@ def _format_name(name):
             name_dict["d"] = split[1]
         elif len(split) == 2:
             name_dict["base"], other = split
-            if other in ["rho", "theta", "zeta"]:
+            if other in ["rho", "theta", "zeta", "beta"]:
                 name_dict["subs"] = other
             else:
                 name_dict["d"] = other
@@ -901,12 +901,15 @@ def _format_name(name):
         "B": r"(\mathrm{T})",
         "|B|": r"(\mathrm{T})",
         "J": r"(\mathrm{A}/\mathrm{m}^2)",
-        "gradB": r"\mathrm{N}/\mathrm{m}^3",
-        "|gradB|": r"\mathrm{N}/\mathrm{m}^3",
+        "grad(B)": r"\mathrm{N}/\mathrm{m}^3",
+        "|grad(B)|": r"\mathrm{N}/\mathrm{m}^3",
         "Btension": r"\mathrm{N}/\mathrm{m}^3",
         "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
         "F": r"(\mathrm{N}/\mathrm{m}^2)",
         "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
+        "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
+        "|grad(rho)|": r"(\mathrm{m}^{-1})",
+        "|beta|": r"(\mathrm{m}^{-1})",
     }
     name_dict["units"] = units[name_dict["base"]]
     if name_dict["power"]:
@@ -939,6 +942,9 @@ def _name_label(name_dict):
     else:
         base = name_dict["base"]
 
+    if "grad" in base:
+        idx = base.index("grad")
+        base = base[:idx] + "\\nabla" + base[idx + 4 :]
     if "rho" in base:
         idx = base.index("rho")
         base = base[:idx] + "\\" + base[idx:]
@@ -959,6 +965,9 @@ def _name_label(name_dict):
         base = base[:idx] + "\\" + base[idx:]
     if "psi" in base:
         idx = base.index("psi")
+        base = base[:idx] + "\\" + base[idx:]
+    if "beta" in base:
+        idx = base.index("beta")
         base = base[:idx] + "\\" + base[idx:]
 
     if name_dict["d"] != "":
@@ -1022,7 +1031,7 @@ def _name_key(name_dict):
 
 
 def plot_logo(savepath=None, **kwargs):
-    """Plots the DESC logo
+    """Plot the DESC logo.
 
     Parameters
     ----------
@@ -1034,7 +1043,6 @@ def plot_logo(savepath=None, **kwargs):
         options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta',
         'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -1043,7 +1051,6 @@ def plot_logo(savepath=None, **kwargs):
         handle to the axis used for plotting
 
     """
-
     eq = np.array(
         [
             [0, 0, 0, 3.62287349e00, 0.00000000e00],
@@ -1241,7 +1248,7 @@ def plot_logo(savepath=None, **kwargs):
 
 
 def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
-    """Plots spectral basis of zernike basis functions
+    """Plot spectral basis of zernike basis functions.
 
     Parameters
     ----------
@@ -1254,7 +1261,6 @@ def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
     **kwargs :
         additional plot formatting arguments
 
-
     Returns
     -------
     fig : matplotlib.figure
@@ -1264,7 +1270,6 @@ def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
         axis for radial mode l, poloidal mode m
 
     """
-
     cmap = kwargs.get("cmap", "coolwarm")
     scale = kwargs.get("scale", 1)
     npts = kwargs.get("npts", 100)

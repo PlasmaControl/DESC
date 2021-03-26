@@ -584,14 +584,17 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][0, :]
-        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
-        g_weights = weights * jacobian["g"]
-        f_R = self.R_transform.project(F_R * g_weights)
-        f_Z = self.Z_transform.project(F_Z * g_weights)
 
-        residual = jnp.concatenate([f_R.flatten(), f_Z.flatten()])
+        # XXX: probably need to use full (not symmetric) bases for these projections
+        f_rho = self.R_transform.project(
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = self.Z_transform.project(
+            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        )
+
+        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
         return residual
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
@@ -654,10 +657,12 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][0, :]
-        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
-        return jnp.sum((jnp.abs(F_R) + jnp.abs(F_Z)) * weights)
+
+        # XXX: probably need to use full (not symmetric) basis for this projection
+        f = self.R_transform.project(force_error["|F|"] * jacobian["g"] * weights)
+
+        return f.flatten()
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         """Print the integral errors for toroidal components of the force balance.
@@ -712,16 +717,20 @@ class ForceErrorGalerkin(ObjectiveFunction):
             zeta_ratio,
         )
 
-        F_R = force_error["F"][0, :]
-        F_Z = force_error["F"][2, :]
         weights = self.R_transform.grid.weights
-        F_R_int = jnp.sum(jnp.abs(F_R) * weights)
-        F_Z_int = jnp.sum(jnp.abs(F_Z) * weights)
-        F_T_int = jnp.sum((jnp.abs(F_R) + jnp.abs(F_Z)) * weights)
+
+        # XXX: probably need to use full (not symmetric) bases for these projections
+        f_rho = self.R_transform.project(
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = self.Z_transform.project(
+            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        )
+        f_tot = self.R_transform.project(force_error["|F|"] * jacobian["g"] * weights)
 
         print(
-            "int(|F_R|+|F_Z|): {:10.3e}  ".format(F_T_int)
-            + "int(|F_R|): {:10.3e}  int(|F_Z|): {:10.3e}".format(F_R_int, F_Z_int)
+            "int(|F|): {:10.3e}  ".format(f_tot)
+            + "int(|F_rho|): {:10.3e}  int(|F_beta|): {:10.3e}".format(f_rho, f_beta)
         )
 
         return None

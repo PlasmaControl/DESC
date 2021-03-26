@@ -9,18 +9,18 @@ class IOAble(ABC):
     """Abstract Base Class for savable and loadable objects.
 
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
-    To save properly, each object should have an attribute `_io_attrs_` which 
-    is a list of strings of the object attributes or properties that should be 
-    saved and loaded. If any of these attributes are custom types (ie, not 
-    standard python containers or numpy arrays), an attribute called 
-    `_object_lib_` should also be defined. `_object_lib_` is a dictionary, 
-    where the keys are the class names of any custom types, and the values are 
+    To save properly, each object should have an attribute `_io_attrs_` which
+    is a list of strings of the object attributes or properties that should be
+    saved and loaded. If any of these attributes are custom types (ie, not
+    standard python containers or numpy arrays), an attribute called
+    `_object_lib_` should also be defined. `_object_lib_` is a dictionary,
+    where the keys are the class names of any custom types, and the values are
     instances of the class.
 
-    For saved objects to be loaded correctly, the __init__ method of any custom 
+    For saved objects to be loaded correctly, the __init__ method of any custom
     types being saved should only assign attributes that are listed in `_io_attrs_`.
-    Other attributes or other initialization should be done in a separate 
-    `set_up()` method that can be called during __init__. The loading process 
+    Other attributes or other initialization should be done in a separate
+    `set_up()` method that can be called during __init__. The loading process
     will involve creating an empty object, bypassing init, then setting any `_io_attrs_`
     of the object, then calling `_set_up()` without any arguments, if it exists.
 

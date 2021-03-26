@@ -195,10 +195,11 @@ class Optimizer(IOAble):
         if self.method in Optimizer._scipy_scalar_methods:
 
             allx = []
-            def jac_wrapped(x,*args):
+
+            def jac_wrapped(x, *args):
                 allx.append(x)
-                return objective.grad_x(x,*args)
-            
+                return objective.grad_x(x, *args)
+
             out = scipy.optimize.minimize(
                 objective.compute_scalar,
                 x0=x_init,
@@ -209,16 +210,17 @@ class Optimizer(IOAble):
                 tol=gtol,
                 options={"maxiter": maxiter, "disp": disp, **options},
             )
-            out['allx'] = allx
+            out["allx"] = allx
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
             x_scale = "jac" if x_scale == "auto" else x_scale
             allx = []
-            def jac_wrapped(x,*args):
+
+            def jac_wrapped(x, *args):
                 allx.append(x)
-                return objective.jac_x(x,*args)
-            
+                return objective.jac_x(x, *args)
+
             out = scipy.optimize.least_squares(
                 objective.compute,
                 x0=x_init,
@@ -232,7 +234,7 @@ class Optimizer(IOAble):
                 max_nfev=maxiter,
                 verbose=disp,
             )
-            out['allx'] = allx
+            out["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
 

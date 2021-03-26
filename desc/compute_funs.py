@@ -1480,7 +1480,6 @@ def compute_magnetic_pressure_gradient(
     magnetic_pressure["Bpressure_rho"] = magnetic_pressure["grad(|B|^2)_rho"]
     magnetic_pressure["Bpressure_theta"] = magnetic_pressure["grad(|B|^2)_theta"]
     magnetic_pressure["Bpressure_zeta"] = magnetic_pressure["grad(|B|^2)_zeta"]
-    
 
     # magnetic pressure gradient
     magnetic_pressure["grad(|B|^2)"] = (

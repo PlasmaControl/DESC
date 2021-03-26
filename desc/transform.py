@@ -149,7 +149,9 @@ class Transform(IOAble):
                         derivatives = np.vstack([derivatives, np.array(perm)])
                     else:
                         derivatives = np.array([perm])
-            derivatives = derivatives[derivatives.sum(axis=1)<=derivs] #remove higher orders
+            derivatives = derivatives[
+                derivatives.sum(axis=1) <= derivs
+            ]  # remove higher orders
         elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
         elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:

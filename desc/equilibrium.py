@@ -484,8 +484,13 @@ class Equilibrium(_Configuration, IOAble):
         }
         return Equilibrium(inputs=inputs)
 
-    def evaluate(self):
+    def evaluate(self, jac=False):
         """Evaluate the objective function.
+
+        Parameters
+        ----------
+        jac : bool
+            whether to compute and return the jacobian df/dx as well
 
         Returns
         -------
@@ -504,10 +509,13 @@ class Equilibrium(_Configuration, IOAble):
         f = self.objective.compute(
             y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
         )
-        jac = self.objective.jac_x(
-            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
-        )
-        return f, jac
+        if jac:
+            jac = self.objective.jac_x(
+                y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
+            )
+            return f, jac
+        else:
+            return f
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""

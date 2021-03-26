@@ -36,12 +36,12 @@ def perturb(
         deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
         toroidal flux, and zeta ratio.. Setting to None or zero ignores that term
         in the expansion.
-    order : int, optional
-        order of perturbation (0=none, 1=linear, 2=quadratic)
+    order : {0,1,2,3}
+        order of perturbation (0=none, 1=linear, 2=quadratic, etc)
     tr_ratio : float or array of float
         radius of the trust region, as a fraction of ||x||.
         enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||
-        if a scalar uses same ratio for both steps, if an array uses the first element
+        if a scalar uses same ratio for all steps, if an array uses the first element
         for the first step and so on
     cutoff : float
         relative cutoff for small singular values in pseudoinverse
@@ -99,12 +99,19 @@ def perturb(
     args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
     dx1 = 0
     dx2 = 0
+    dx3 = 0
 
-    try:
-        tr_ratio1, tr_ratio2 = tr_ratio
-    except TypeError:
-        tr_ratio1 = tr_ratio
-        tr_ratio2 = tr_ratio
+    if np.isscalar(tr_ratio):
+        tr_ratio = tr_ratio * np.ones(order)
+    elif len(tr_ratio) < order:
+        raise ValueError(
+            "Got only {} tr_ratios for order {} perturbations".format(
+                len(tr_ratio), order
+            )
+        )
+    keys = ", ".join(deltas.keys())
+    if verbose > 0:
+        print("Perturbing {}".format(keys))
 
     # 1st order
     if order > 0:
@@ -112,12 +119,12 @@ def perturb(
         # partial derivatives wrt state vector (x)
         if Jx is None:
             if verbose > 0:
-                print("Computing df/dx")
-            timer.start("df/dx computation")
+                print("Computing df")
+            timer.start("df computation")
             Jx = eq.objective.jac_x(*args)
-            timer.stop("df/dx computation")
+            timer.stop("df computation")
             if verbose > 1:
-                timer.disp("df/dx computation")
+                timer.disp("df computation")
         u, s, vt = np.linalg.svd(Jx, full_matrices=False)
         m, n = Jx.shape
         #  cutoff = np.finfo(s.dtype).eps * m * np.amax(s, axis=-1, keepdims=True)
@@ -128,11 +135,9 @@ def perturb(
         RHS = eq.objective.compute(*args)
 
         # partial derivatives wrt input parameters (c)
-        keys = ", ".join(deltas.keys())
+
         inds = tuple([arg_idx[key] for key in deltas])
         dc = tuple([val for val in deltas.values()])
-        if verbose > 0:
-            print("Perturbing {}".format(keys))
         timer.start("df/dc computation ({})".format(keys))
         temp = eq.objective.jvp(inds, dc, *args)
         RHS += temp
@@ -146,7 +151,7 @@ def perturb(
             u,
             s,
             vt.T,
-            tr_ratio * np.linalg.norm(y),
+            tr_ratio[0] * np.linalg.norm(y),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -178,7 +183,42 @@ def perturb(
             u,
             s,
             vt.T,
-            tr_ratio * np.linalg.norm(dx1),
+            tr_ratio[1] * np.linalg.norm(dx1),
+            initial_alpha=None,
+            rtol=0.01,
+            max_iter=10,
+            threshold=1e-6,
+        )
+
+    # 3rd order
+    if order > 2:
+
+        # 3nd partial derivatives wrt state vector (x)
+        if verbose > 0:
+            print("Computing d^3f")
+        timer.start("d^3f computation")
+        inds = tuple([arg_idx[key] for key in deltas])
+        tangents = tuple([val for val in deltas.values()])
+        inds = (0, *inds)
+        tangents = (dx1, *tangents)
+        RHS = (
+            1
+            / 6
+            * eq.objective.jvp3(inds, inds, inds, tangents, tangents, tangents, *args)
+        )
+        RHS += eq.objective.jvp2(0, inds, dx2, tangents, *args)
+        timer.stop("d^3f computation")
+        if verbose > 1:
+            timer.disp("d^3f computation")
+
+        dx2, hit, alpha = trust_region_step_exact(
+            n,
+            m,
+            RHS,
+            u,
+            s,
+            vt.T,
+            tr_ratio[2] * np.linalg.norm(dx2),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -207,10 +247,8 @@ def perturb(
             eq_new.Zb_lmn,
         )
 
-    # perturbation
-    if order > 0:
-        dy = dx1 + dx2
-        eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
+    dy = dx1 + dx2 + dx3
+    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")
     if verbose > 1:

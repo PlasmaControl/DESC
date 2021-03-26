@@ -69,6 +69,8 @@ class _Configuration(IOAble, ABC):
         "_spectral_indexing",
         "_bdry_mode",
         "_zeta_ratio",
+        "_boundary",
+        "_profiles",
     ]
 
     _object_lib_ = {

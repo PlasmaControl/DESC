@@ -132,22 +132,21 @@ def perturb(
         large = s > cutoff
         s_inv = np.divide(1, s, where=large)
         s_inv[~large] = 0
-        RHS = eq.objective.compute(*args)
+        RHS1 = eq.objective.compute(*args)
 
         # partial derivatives wrt input parameters (c)
 
         inds = tuple([arg_idx[key] for key in deltas])
         dc = tuple([val for val in deltas.values()])
         timer.start("df/dc computation ({})".format(keys))
-        temp = eq.objective.jvp(inds, dc, *args)
-        RHS += temp
+        RHS1 += eq.objective.jvp(inds, dc, *args)
         timer.stop("df/dc computation ({})".format(keys))
         if verbose > 1:
             timer.disp("df/dc computation ({})".format(keys))
         dx1, hit, alpha = trust_region_step_exact(
             n,
             m,
-            RHS,
+            RHS1,
             u,
             s,
             vt.T,
@@ -169,8 +168,7 @@ def perturb(
         tangents = tuple([val for val in deltas.values()])
         inds = (0, *inds)
         tangents = (dx1, *tangents)
-        temp = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
-        RHS = temp
+        RHS2 = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
 
         timer.stop("d^2f computation")
         if verbose > 1:
@@ -179,7 +177,7 @@ def perturb(
         dx2, hit, alpha = trust_region_step_exact(
             n,
             m,
-            RHS,
+            RHS2,
             u,
             s,
             vt.T,
@@ -201,20 +199,20 @@ def perturb(
         tangents = tuple([val for val in deltas.values()])
         inds = (0, *inds)
         tangents = (dx1, *tangents)
-        RHS = (
+        RHS3 = (
             1
             / 6
             * eq.objective.jvp3(inds, inds, inds, tangents, tangents, tangents, *args)
         )
-        RHS += eq.objective.jvp2(0, inds, dx2, tangents, *args)
+        RHS3 += eq.objective.jvp2(0, inds, dx2, tangents, *args)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx2, hit, alpha = trust_region_step_exact(
+        dx3, hit, alpha = trust_region_step_exact(
             n,
             m,
-            RHS,
+            RHS3,
             u,
             s,
             vt.T,

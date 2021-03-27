@@ -43,21 +43,21 @@ def fmintr(
         initial guess
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
-    hess : callable or 'bfgs', optional:
-        function to compute hessian matrix of fun, or 'bfgs' in which case the BFGS method
+    hess : callable or ``'bfgs'``, optional:
+        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS method
         will be used to approximate the hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
-    method : 'dogleg' or 'subspace'
+    method : ``'dogleg'`` or ``'subspace'``
         method to use for trust region subproblem
-    x_scale : array_like or 'hess', optional
-        Characteristic scale of each variable. Setting `x_scale` is equivalent
+    x_scale : array_like or ``'hess'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         An alternative view is that the size of a trust region along jth
         dimension is proportional to ``x_scale[j]``. Improved convergence may
-        be achieved by setting `x_scale` such that a step of a given size
+        be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
-        function. If set to 'hess', the scale is iteratively updated using the
+        function. If set to ``'hess'``, the scale is iteratively updated using the
         inverse norms of the columns of the hessian matrix.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function. Default
@@ -87,7 +87,7 @@ def fmintr(
             ``callback(xk, OptimizeResult state) -> bool``
 
         where ``xk`` is the current parameter vector. and ``state``
-        is an `OptimizeResult` object, with the same fields
+        is an ``OptimizeResult`` object, with the same fields
         as the ones from the return. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional

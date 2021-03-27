@@ -75,7 +75,7 @@ class Timer:
         Raises
         ------
         ValueError
-            if timer 'name' has not been started
+            if timer ``'name'`` has not been started
 
         """
 
@@ -143,7 +143,7 @@ class Timer:
         Raises
         ------
         ValueError
-            if timer 'name' has not been started
+            if timer ``'name'`` has not been started
 
         """
 

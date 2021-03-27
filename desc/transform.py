@@ -35,10 +35,10 @@ class Transform(IOAble):
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {'fft', 'direct'}
-        * 'fft' uses fast fourier transforms in the zeta direction, and so must have
+    method : {``'fft'``, ``'direct'``}
+        * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
           equally spaced toroidal nodes, and the same node pattern on each zeta plane
-        * 'direct' uses full matrices and can handle arbitrary node patterns and
+        * ``'direct'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
     """
 
@@ -655,7 +655,7 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{'direct', 'fft'}: method of computing transform"""
+        """{``'direct'``, ``'fft'``}: method of computing transform"""
         if not hasattr(self, "_method"):
             self._method = "direct"
         return self._method

@@ -34,7 +34,7 @@ class IOAble(ABC):
         ----------
         load_from : str or path-like or file instance
             file to initialize from
-        file_format : {'hdf5', 'pickle'} (Default: infer from file name)
+        file_format : {``'hdf5'``, ``'pickle'``} (Default: infer from file name)
             file format of file initializing from
 
         """

@@ -47,7 +47,6 @@ rcParams["lines.dash_capstyle"] = "round"
 rcParams["lines.dash_joinstyle"] = "round"
 rcParams["xtick.labelsize"] = "x-small"
 rcParams["ytick.labelsize"] = "x-small"
-# rcParams['text.usetex'] = True
 color_cycle = cycler(color=colorblind_colors)
 dash_cycle = cycler(dashes=dashes)
 rcParams["axes.prop_cycle"] = color_cycle
@@ -1040,8 +1039,8 @@ def plot_logo(savepath=None, **kwargs):
         File format is inferred from the filename (Default value = None)
     **kwargs :
         additional plot formatting parameters.
-        options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta',
-        'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
+        options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
+        ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
 
     Returns
     -------
@@ -1257,7 +1256,7 @@ def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
     L : int
         maximum difference between radial mode l and poloidal mode m
     spectral_indexing : str
-        zernike indexing method. One of 'fringe', 'ansi', 'house', 'chevron'
+        zernike indexing method. One of ``'fringe'``, ``'ansi'``
     **kwargs :
         additional plot formatting arguments
 

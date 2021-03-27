@@ -63,7 +63,7 @@ class _Derivative(ABC):
 
     @property
     def mode(self):
-        """str : the kind of derivative being computed (eg 'grad', 'hess', etc)"""
+        """str : the kind of derivative being computed (eg ``'grad'``, ``'hess'``, etc)"""
         return self._mode
 
     def __call__(self, *args):
@@ -108,10 +108,10 @@ class AutoDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-        or 'jvp' (jacobian vector product)
-        Default = 'fwd'
+        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        ``'grad'`` (gradient of a scalar function), ``'hess'`` (hessian of a scalar function),
+        or ``'jvp'`` (jacobian vector product)
+        Default = ``'fwd'``
     use_jit : bool, optional
         whether to use just-in-time compilation
 
@@ -383,10 +383,10 @@ class FiniteDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of 'fwd' (forward mode jacobian), 'rev' (reverse mode jacobian),
-        'grad' (gradient of a scalar function), 'hess' (hessian of a scalar function),
-        or 'jvp' (jacobian vector product)
-        Default = 'fwd'
+        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        ``'grad'`` (gradient of a scalar function), ``'hess'`` (hessian of a scalar function),
+        or ``'jvp'`` (jacobian vector product)
+        Default = ``'fwd'``
     rel_step : float, optional
         Relative step size: dx = max(1, abs(x))*rel_step
         Default = 1e-3

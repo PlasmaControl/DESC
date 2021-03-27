@@ -4,7 +4,13 @@ from scipy.special import factorial
 from desc.utils import sign, flatten_list, equals
 from desc.io import IOAble
 
-__all__ = ["PowerSeries", "FourierSeries", "DoubleFourierSeries", "FourierZernikeBasis"]
+__all__ = [
+    "PowerSeries",
+    "FourierSeries",
+    "DoubleFourierSeries",
+    "ZernikePolynomial",
+    "FourierZernikeBasis",
+]
 
 
 class Basis(IOAble, ABC):
@@ -48,7 +54,7 @@ class Basis(IOAble, ABC):
         self._modes = self.modes[sort_idx]
 
     def get_idx(self, L=0, M=0, N=0):
-        """Get the index into the 'modes' array corresponding to a given mode number
+        """Get the index into the ``'modes'`` array corresponding to a given mode number
 
         Parameters
         ----------
@@ -144,7 +150,7 @@ class Basis(IOAble, ABC):
 
     @property
     def sym(self):
-        """str: {'cos', 'sin', False} type of symmetry"""
+        """str: {``'cos'``, ``'sin'``, ``False``} type of symmetry"""
         if not hasattr(self, "_sym"):
             self._sym = False
         return self._sym
@@ -279,10 +285,10 @@ class FourierSeries(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', False}
-        * 'cos' for cos(m*t-n*z) symmetry
-        * 'sin' for sin(m*t-n*z) symmetry
-        * False for no symmetry (Default)
+    sym : {``'cos'``, ``'sin'``, False}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
 
     """
 
@@ -372,10 +378,10 @@ class DoubleFourierSeries(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', False}
-        * 'cos' for cos(m*t-n*z) symmetry
-        * 'sin' for sin(m*t-n*z) symmetry
-        * False for no symmetry (Default)
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
 
     """
 
@@ -481,12 +487,12 @@ class ZernikePolynomial(Basis):
         maximum radial resolution. Use L=-1 for default based on M
     M : int
         maximum poloidal resolution
-    sym : {'cos', 'sin', False}
-        * 'cos' for cos(m*t-n*z) symmetry
-        * 'sin' for sin(m*t-n*z) symmetry
-        * False for no symmetry (Default)
-    spectral_indexing : {'ansi', 'fringe'}
-        Indexing method, default value = 'fringe'
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+    spectral_indexing : {``'ansi'``, ``'fringe'``}
+        Indexing method, default value = ``'fringe'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -530,8 +536,8 @@ class ZernikePolynomial(Basis):
             maximum radial resolution
         M : int
             maximum poloidal resolution
-        spectral_indexing : {'ansi', 'fringe'}
-            Indexing method, default value = 'fringe'
+        spectral_indexing : {``'ansi'``, ``'fringe'``}
+            Indexing method, default value = ``'fringe'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -653,12 +659,12 @@ class FourierZernikeBasis(Basis):
         maximum toroidal resolution
     NFP : int
         number of field periods
-    sym : {'cos', 'sin', False}
-        * 'cos' for cos(m*t-n*z) symmetry
-        * 'sin' for sin(m*t-n*z) symmetry
-        * False for no symmetry (Default)
-    spectral_indexing : {'ansi', 'fringe'}
-        Indexing method, default value = 'fringe'
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+    spectral_indexing : {``'ansi'``, ``'fringe'``}
+        Indexing method, default value = ``'fringe'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -704,8 +710,8 @@ class FourierZernikeBasis(Basis):
             maximum poloidal resolution
         N : int
             maximum toroidal resolution
-        spectral_indexing : {'ansi', 'fringe'}
-            Indexing method, default value = 'fringe'
+        spectral_indexing : {``'ansi'``, ``'fringe'``}
+            Indexing method, default value = ``'fringe'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).

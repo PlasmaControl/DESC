@@ -527,16 +527,16 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    spectral_indexing : {'ansi', 'chevron', 'fringe', 'house'}
+    spectral_indexing : {``'ansi'``, ``'fringe'``}
         Zernike indexing scheme
-    node_pattern : {'cheb1', 'cheb2', 'quad', None}
+    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
         pattern for radial coordinates
 
-            * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-            * 'cheb2': Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-            * 'quad': Radial nodes are roots of Shifted Jacobi polynomial of degree
+            * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+            * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+            * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
               M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
-            * None : linear spacing in r=[0,1]
+            * ``None`` : linear spacing in r=[0,1]
 
 
     """
@@ -591,16 +591,16 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        spectral_indexing : {'ansi', 'chevron', 'fringe', 'house'}
+        spectral_indexing : {``'ansi'``, ``'fringe'``}
             Zernike indexing scheme
-        node_pattern : {'cheb1', 'cheb2', 'jacobi', None}
+        node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
 
-                * 'cheb1': Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
-                * 'cheb2': Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                * 'jacobi': Radial nodes are roots of Shifted Jacobi polynomial of degree
+                * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
+                * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
+                * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
                 M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
-                * None : linear spacing in r=[0,1]
+                * ``None`` : linear spacing in r=[0,1]
 
         Returns
         -------

@@ -29,14 +29,14 @@ config = {"device": None, "avail_mem": None}
 def set_device(kind="cpu"):
     """Sets the device to use for computation.
 
-    If kind=='gpu', checks available GPUs and selects the one with the most
+    If kind==``'gpu'``, checks available GPUs and selects the one with the most
     available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
     available GPUs
 
     Parameters
     ----------
-    kind : {'cpu', 'gpu'}
+    kind : {``'cpu'``, ``'gpu'``}
         whether to use CPU or GPU.
 
     """

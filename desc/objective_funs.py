@@ -586,7 +586,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
 
         weights = self.R_transform.grid.weights
 
-        # XXX: probably need to use full (not symmetric) bases for these projections
         f_rho = self.R_transform.project(
             force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
         )
@@ -658,11 +657,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
         )
 
         weights = self.R_transform.grid.weights
-
-        # XXX: probably need to use full (not symmetric) basis for this projection
-        f = self.R_transform.project(force_error["|F|"] * jacobian["g"] * weights)
-
-        return f.flatten()
+        f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
+        return f
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
         """Print the integral errors for toroidal components of the force balance.
@@ -719,14 +715,13 @@ class ForceErrorGalerkin(ObjectiveFunction):
 
         weights = self.R_transform.grid.weights
 
-        # XXX: probably need to use full (not symmetric) bases for these projections
-        f_rho = self.R_transform.project(
+        f_rho = jnp.sum(
             force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
         )
-        f_beta = self.Z_transform.project(
+        f_beta = jnp.sum(
             force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
         )
-        f_tot = self.R_transform.project(force_error["|F|"] * jacobian["g"] * weights)
+        f_tot = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
 
         print(
             "int(|F|): {:10.3e}  ".format(f_tot)

@@ -1029,6 +1029,207 @@ def _name_key(name_dict):
     return out
 
 
+def plot_grid(grid, **kwargs):
+    """Plot the location of collocation nodes on the zeta=0 plane
+
+    Parameters
+    ----------
+    grid : Grid
+        grid to plot
+
+    Returns
+    -------
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        handle to the figure used for plotting
+    ax : matplotlib.axes.Axes
+        handle to the axis used for plotting
+    """
+    fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
+    ax = plt.subplot(projection="polar")
+
+    # node locations
+    nodes = grid.nodes[np.where(grid.nodes[:, 2] == 0)]
+    ax.scatter(nodes[:, 1], nodes[:, 0], s=4)
+    ax.set_ylim(0, 1)
+    ax.set_xticks(
+        [
+            0,
+            np.pi / 4,
+            np.pi / 2,
+            3 / 4 * np.pi,
+            np.pi,
+            5 / 4 * np.pi,
+            3 / 2 * np.pi,
+            7 / 4 * np.pi,
+        ]
+    )
+    ax.set_xticklabels(
+        [
+            "$0$",
+            r"$\frac{\pi}{4}$",
+            r"$\frac{\pi}{2}$",
+            r"$\frac{3\pi}{4}$",
+            r"$\pi$",
+            r"$\frac{4\pi}{4}$",
+            r"$\frac{3\pi}{2}$",
+            r"$2\pi$",
+        ]
+    )
+    ax.set_yticklabels([])
+    if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
+        ax.set_title(
+            "{}, $L={}$, $M={}$, $\zeta=0$ plane".format(
+                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
+            ),
+            pad=20,
+        )
+    if grid.__class__.__name__ in ["ConcentricGrid"]:
+        ax.set_title(
+            "{}, $M={}$, node pattern: {}, $\zeta=0$ plane".format(
+                grid.__class__.__name__, grid.M, grid.node_pattern, grid.node_pattern
+            ),
+            pad=20,
+        )
+
+    return fig, ax
+
+
+def plot_basis(basis, **kwargs):
+    """Plot basis functions
+
+    Parameters
+    ----------
+    basis : Basis
+        basis to plot
+
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to figure
+    ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
+        axes used for plotting. A single axis is used for 1d basis functions,
+        2d or 3d bases return an ndarray or dict of axes
+    """
+
+    if basis.__class__.__name__ == "PowerSeries":
+        lmax = abs(basis.modes[:, 0]).max()
+        grid = LinearGrid(100, 1, 1, endpoint=True)
+        r = grid.nodes[:, 0]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (4, 4)))
+
+        f = basis.evaluate(grid.nodes)
+        for fi, l in zip(f.T, basis.modes[:, 0]):
+            ax.plot(r, fi, label="$l={:d}$".format(int(l)))
+        ax.set_xlabel("$\\rho$")
+        ax.set_ylabel("$f_l(\\rho)$")
+        ax.legend()
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+        fig.suptitle("{}, $L={}$".format(basis.__class__.__name__, basis.L), y=1.02)
+        return fig, ax
+
+    elif basis.__class__.__name__ == "FourierSeries":
+        nmax = abs(basis.modes[:, 2]).max()
+        grid = LinearGrid(1, 1, 100, NFP=basis.NFP, endpoint=True)
+        z = grid.nodes[:, 2]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (4, 4)))
+
+        f = basis.evaluate(grid.nodes)
+        for fi, n in zip(f.T, basis.modes[:, 2]):
+            ax.plot(z, fi, label="$n={:d}$".format(int(n)))
+        ax.set_xlabel("$\zeta$")
+        ax.set_ylabel("$f_n(\zeta)$")
+        ax.legend()
+        ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
+        ax.set_xticklabels(["$0$", "$\pi/NFP$", "$2\pi/NFP$"])
+        ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        fig.suptitle(
+            "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
+            y=1.02,
+        )
+        return fig, ax
+
+    elif basis.__class__.__name__ == "DoubleFourierSeries":
+        nmax = abs(basis.modes[:, 2]).max()
+        mmax = abs(basis.modes[:, 1]).max()
+        grid = LinearGrid(1, 100, 100, NFP=basis.NFP, endpoint=True)
+        t = grid.nodes[:, 1].reshape((100, 100))
+        z = grid.nodes[:, 2].reshape((100, 100))
+        fig, ax = plt.subplots(
+            2 * mmax + 1,
+            2 * nmax + 1,
+            figsize=kwargs.get("figsize", (nmax * 4, mmax * 4)),
+        )
+
+        f = basis.evaluate(grid.nodes)
+        for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
+            im = ax[mmax + m, nmax + n].contourf(
+                t, z, fi.reshape((100, 100)).T, levels=100, vmin=-1, vmax=1
+            )
+            ax[mmax + m, nmax + n].set_xlabel("$\zeta$")
+            ax[mmax + m, nmax + n].set_ylabel("$\\theta$")
+            ax[mmax + m, nmax + n].set_xticks(
+                [0, np.pi / basis.NFP, 2 * np.pi / basis.NFP]
+            )
+            ax[mmax + m, nmax + n].set_xticklabels(["$0$", "$\pi/NFP$", "$2\pi/NFP$"])
+            ax[mmax + m, nmax + n].set_yticks([0, np.pi, 2 * np.pi])
+            ax[mmax + m, nmax + n].set_yticklabels(["$0$", "$\pi$", "$2\pi$"])
+            ax[mmax + m, nmax + n].set_title("$m={}, n={}$".format(m, n))
+        cb_ax = fig.add_axes([1, 0.1, 0.02, 0.8])
+        cbar = fig.colorbar(im, cax=cb_ax)
+        cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
+        fig.suptitle(
+            "{}, $M={}$, $N={}$, $NFP={}$".format(
+                basis.__class__.__name__, basis.M, basis.N, basis.NFP
+            ),
+            y=1.02,
+        )
+
+        return fig, ax
+
+    elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
+        lmax = abs(basis.modes[:, 0]).max().astype(int)
+        mmax = abs(basis.modes[:, 1]).max().astype(int)
+
+        grid = LinearGrid(100, 100, 1, endpoint=True)
+        r = np.unique(grid.nodes[:, 0])
+        v = np.unique(grid.nodes[:, 1])
+
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
+
+        ax = {i: {} for i in range(lmax + 1)}
+        ratios = np.ones(2 * (mmax + 1) + 1)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        gs = matplotlib.gridspec.GridSpec(
+            lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios
+        )
+
+        modes = basis.modes[np.where(basis.modes[:, 2] == 0)]
+        Zs = basis.evaluate(grid.nodes, modes=modes)
+        for i, (l, m) in enumerate(
+            zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
+        ):
+            Z = Zs[:, i].reshape((100, 100))
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            ax[l][m].axis("off")
+            im = ax[l][m].contourf(v, r, Z, levels=np.linspace(-1, 1, 100))
+
+        cb_ax = plt.subplot(gs[:, -1])
+        plt.subplots_adjust(right=0.8)
+        cbar = fig.colorbar(im, cax=cb_ax)
+        cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.suptitle(
+            "{}, $L={}$, $M={}$, spectral indexing = {}".format(
+                basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
+            ),
+            y=1.02,
+        )
+        return fig, ax
+
+
 def plot_logo(savepath=None, **kwargs):
     """Plot the DESC logo.
 
@@ -1242,65 +1443,5 @@ def plot_logo(savepath=None, **kwargs):
 
     if savepath is not None:
         fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor="none")
-
-    return fig, ax
-
-
-def plot_zernike_basis(M, L, spectral_indexing, **kwargs):
-    """Plot spectral basis of zernike basis functions.
-
-    Parameters
-    ----------
-    M : int
-        maximum poloidal resolution
-    L : int
-        maximum difference between radial mode l and poloidal mode m
-    spectral_indexing : str
-        zernike indexing method. One of ``'fringe'``, ``'ansi'``
-    **kwargs :
-        additional plot formatting arguments
-
-    Returns
-    -------
-    fig : matplotlib.figure
-        handle to figure
-    ax : dict of matplotlib.axes
-        nested dictionary, ax[l][m] is the handle to the
-        axis for radial mode l, poloidal mode m
-
-    """
-    cmap = kwargs.get("cmap", "coolwarm")
-    scale = kwargs.get("scale", 1)
-    npts = kwargs.get("npts", 100)
-    levels = kwargs.get("levels", np.linspace(-1, 1, npts))
-
-    basis = FourierZernikeBasis(L=L, M=M, N=0, spectral_indexing=spectral_indexing)
-    lmax = abs(basis.modes[:, 0]).max()
-    mmax = abs(basis.modes[:, 1]).max()
-
-    grid = LinearGrid(npts, npts, 1, endpoint=True)
-    r = np.unique(grid.nodes[:, 0])
-    v = np.unique(grid.nodes[:, 1])
-
-    fig = plt.figure(figsize=(scale * mmax, scale * lmax / 2))
-
-    ax = {i: {} for i in range(lmax + 1)}
-    ratios = np.ones(2 * (mmax + 1) + 1)
-    ratios[-1] = kwargs.get("cbar_ratio", 0.25)
-    gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios)
-
-    Zs = basis.evaluate(grid.nodes)
-
-    for i, (l, m) in enumerate(zip(basis.modes[:, 0], basis.modes[:, 1])):
-        Z = Zs[:, i].reshape((npts, npts))
-        ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
-        ax[l][m].set_title("$\mathcal{Z}_{" + str(l) + "}^{" + str(m) + "}$")
-        ax[l][m].axis("off")
-        im = ax[l][m].contourf(v, r, Z, levels=levels, cmap=cmap)
-
-    cb_ax = plt.subplot(gs[:, -1])
-    plt.subplots_adjust(right=0.8)
-    cbar = fig.colorbar(im, cax=cb_ax)
-    cbar.set_ticks(np.linspace(-1, 1, 9))
 
     return fig, ax

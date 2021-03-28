@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-
+import pytest
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.basis import (
     PowerSeries,
@@ -16,7 +16,7 @@ class TestTransform(unittest.TestCase):
 
     def test_eq(self):
         """Tests equals operator overload method"""
-        grid_1 = LinearGrid(L=11, endpoint=True)
+        grid_1 = LinearGrid(L=11, N=3)
         grid_2 = LinearGrid(M=5, N=5)
         grid_3 = ConcentricGrid(M=2, N=2)
 
@@ -137,9 +137,10 @@ class TestTransform(unittest.TestCase):
         grid_3 = LinearGrid(L=3, M=1, N=1)
         grid_5 = LinearGrid(L=5, M=1, N=1)
 
-        transf_1 = Transform(grid_1, basis)
-        transf_3 = Transform(grid_3, basis)
-        transf_5 = Transform(grid_5, basis)
+        with pytest.warns(UserWarning):
+            transf_1 = Transform(grid_1, basis)
+            transf_3 = Transform(grid_3, basis)
+            transf_5 = Transform(grid_5, basis)
 
         transf_3.grid = grid_5
         self.assertTrue(transf_3 == transf_5)

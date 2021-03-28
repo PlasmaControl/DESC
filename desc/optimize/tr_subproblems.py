@@ -266,7 +266,7 @@ def trust_region_step_exact(
         threshold *= s[0]
     large = s > threshold
     s_inv = np.divide(1, s, where=large)
-    s_inv[tuple(~large)] = 0
+    s_inv[~large] = 0
 
     p = -v.dot(uf * s_inv)
     if np.linalg.norm(p) <= Delta:

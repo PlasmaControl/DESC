@@ -8,7 +8,7 @@
    :caption: Theory
 
    theory_general
-   theory_zernike
+   notebooks/basis_grid
 
 .. toctree::
    :maxdepth: 1
@@ -23,7 +23,7 @@
    :maxdepth: 1
    :caption: Examples
 	     
-   examples
+   notebooks/hands_on
 
 .. toctree::
    :maxdepth: 1

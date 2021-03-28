@@ -61,7 +61,7 @@ _axis_labels_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _axis_labels_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
-def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=(6, 6)):
+def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=(4, 4)):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
     Parameters
@@ -1166,7 +1166,13 @@ def plot_basis(basis, **kwargs):
         f = basis.evaluate(grid.nodes)
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             im = ax[mmax + m, nmax + n].contourf(
-                t, z, fi.reshape((100, 100)).T, levels=100, vmin=-1, vmax=1
+                z,
+                t,
+                fi.reshape((100, 100)),
+                levels=100,
+                vmin=-1,
+                vmax=1,
+                cmap=kwargs.get("cmap", "coolwarm"),
             )
             ax[mmax + m, nmax + n].set_xlabel("$\zeta$")
             ax[mmax + m, nmax + n].set_ylabel("$\\theta$")
@@ -1215,7 +1221,13 @@ def plot_basis(basis, **kwargs):
             ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
             ax[l][m].set_title("$l={}, m={}$".format(l, m))
             ax[l][m].axis("off")
-            im = ax[l][m].contourf(v, r, Z, levels=np.linspace(-1, 1, 100))
+            im = ax[l][m].contourf(
+                v,
+                r,
+                Z,
+                levels=np.linspace(-1, 1, 100),
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
 
         cb_ax = plt.subplot(gs[:, -1])
         plt.subplots_adjust(right=0.8)

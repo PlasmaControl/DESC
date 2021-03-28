@@ -567,9 +567,16 @@ class ZernikePolynomial(Basis):
 
         if spectral_indexing == "ansi":
             pol_posm = [
-                [(m + d, m) for m in range(0, M + 1) if m + d < L + 1]
+                [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
                 for d in range(0, L + 1, 2)
             ]
+            if L > M:
+                pol_posm += [
+                    (l, m)
+                    for l in range(M + 1, L + 1)
+                    for m in range(0, M + 1)
+                    if (l - m) % 2 == 0
+                ]
 
         elif spectral_indexing == "fringe":
             pol_posm = [
@@ -741,9 +748,16 @@ class FourierZernikeBasis(Basis):
 
         if spectral_indexing == "ansi":
             pol_posm = [
-                [(m + d, m) for m in range(0, M + 1) if m + d < L + 1]
+                [(m + d, m) for m in range(0, M + 1) if m + d < M + 1]
                 for d in range(0, L + 1, 2)
             ]
+            if L > M:
+                pol_posm += [
+                    (l, m)
+                    for l in range(M + 1, L + 1)
+                    for m in range(0, M + 1)
+                    if (l - m) % 2 == 0
+                ]
 
         elif spectral_indexing == "fringe":
             pol_posm = [

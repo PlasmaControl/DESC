@@ -43,10 +43,11 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    # 'numpydoc',
+    'nbsphinx',
     'sphinx.ext.napoleon',
     'sphinx.ext.autosummary',
-    'sphinxarg.ext'
+    'sphinxarg.ext',
+    'sphinx_copybutton'    
 ]
 # numpydoc_class_members_toctree = False
 # Napoleon settings

@@ -1209,14 +1209,17 @@ class _Configuration(IOAble, ABC):
         """
         r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
         t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
-
-        r_coords = self.compute_toroidal_coords(r_grid)
-        t_coords = self.compute_toroidal_coords(t_grid)
+        with warnings.catch_warnings():  # ignore warning about not using fft
+            warnings.simplefilter("ignore")
+            r_coords = self.compute_toroidal_coords(r_grid)
+            t_coords = self.compute_toroidal_coords(t_grid)
 
         v_nodes = t_grid.nodes
         v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
         v_grid = Grid(v_nodes)
-        v_coords = self.compute_toroidal_coords(v_grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            v_coords = self.compute_toroidal_coords(v_grid)
 
         # rho contours
         Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]

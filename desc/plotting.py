@@ -61,7 +61,7 @@ _axis_labels_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _axis_labels_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
-def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=(4, 4)):
+def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
     Parameters
@@ -85,6 +85,8 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=(4, 4)):
         axes being plotted to
 
     """
+    if figsize is None:
+        figsize = (4, 4)
     if ax is None:
         if is3d:
             fig = plt.figure(figsize=figsize)
@@ -213,7 +215,7 @@ def plot_coefficients(eq, ax=None):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
+def plot_1d(eq, name, grid=None, ax=None, log=False, grid_kwargs={}, **kwargs):
     """Plot 1D profiles.
 
     Parameters
@@ -228,8 +230,8 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
         axis to plot on
     log : bool, optional
         whether to use a log scale
-    kwargs
-        any arguments taken by LinearGrid
+    grid_kwargs : dict
+        keyword args passed to LinearGrid
 
     Returns
     -------
@@ -240,16 +242,16 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
 
     """
     if grid is None:
-        if kwargs == {}:
-            kwargs.update({"L": 100, "NFP": eq.NFP})
-        grid = _get_grid(**kwargs)
+        if grid_kwargs == {}:
+            grid_kwargs.update({"L": 100, "NFP": eq.NFP})
+        grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
-    fig, ax = _format_ax(ax)
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", None))
 
     # reshape data to 1D
     data = data.flatten()
@@ -266,7 +268,9 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     return fig, ax
 
 
-def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_2d(
+    eq, name, grid=None, ax=None, log=False, norm_F=False, grid_kwargs={}, **kwargs
+):
     """Plot 2D cross-sections.
 
     Parameters
@@ -285,7 +289,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         whether to normalize a plot of force error to be unitless. A vacuum
         equilibrium force error is normalized by the gradient of magnetic pressure,
         while an equilibrium solved with pressure is normalized by pressure gradient.
-    kwargs
+    grid_kwargs
         any arguments taken by LinearGrid
 
     Returns
@@ -297,16 +301,16 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
     """
     if grid is None:
-        if kwargs == {}:
-            kwargs.update({"L": 25, "M": 25, "NFP": eq.NFP})
-        grid = _get_grid(**kwargs)
+        if grid_kwargs == {}:
+            grid_kwargs.update({"L": 25, "M": 25, "NFP": eq.NFP})
+        grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
-    fig, ax = _format_ax(ax)
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", None))
     divider = make_axes_locatable(ax)
 
     if norm_F:
@@ -358,7 +362,16 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     return fig, ax
 
 
-def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
+def plot_3d(
+    eq,
+    name,
+    grid=None,
+    ax=None,
+    log=False,
+    all_field_periods=True,
+    grid_kwargs={},
+    **kwargs
+):
     """Plot 3D surfaces.
 
     Parameters
@@ -375,7 +388,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
         whether to use a log scale
     all_field_periods : bool, optional
         whether to plot full torus or just one field period. Ignored if grid is specified
-    kwargs
+    grid_kwargs
         any arguments taken by LinearGrid
 
     Returns
@@ -388,16 +401,16 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        if kwargs == {}:
-            kwargs.update({"M": 46, "N": 46, "NFP": nfp})
-        grid = _get_grid(**kwargs)
+        if grid_kwargs == {}:
+            grid_kwargs.update({"M": 46, "N": 46, "NFP": nfp})
+        grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
-    fig, ax = _format_ax(ax, is3d=True)
+    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute_cartesian_coords(grid)
@@ -474,7 +487,9 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     return fig, ax
 
 
-def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_section(
+    eq, name, grid=None, ax=None, log=False, norm_F=False, grid_kwargs={}, **kwargs
+):
     """Plot Poincare sections.
 
     Parameters
@@ -493,7 +508,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
         whether to normalize a plot of force error to be unitless. A vacuum
         equilibrium force error is normalized by the gradient of magnetic pressure,
         while an equilibrium solved with pressure is normalized by pressure gradient.
-    kwargs
+    grid_kwargs
         any arguments taken by LinearGrid
 
     Returns
@@ -517,8 +532,8 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             rows = 2
             cols = 3
             downsample = (2 * eq.N + 1) // 6 + 1
-        if kwargs == {}:
-            kwargs.update(
+        if grid_kwargs == {}:
+            grid_kwargs.update(
                 {
                     "L": 25,
                     "NFP": nfp,
@@ -527,7 +542,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
                     "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
                 }
             )
-        grid = _get_grid(**kwargs)
+        grid = _get_grid(**grid_kwargs)
         zeta = np.unique(grid.nodes[:, 2])
 
     else:
@@ -612,7 +627,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     return fig, ax
 
 
-def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
+def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, grid_kwargs={}, **kwargs):
     """Plot flux surfaces.
 
     Parameters
@@ -627,7 +642,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         grid of coordinates to plot theta coordinates at
     ax : matplotlib AxesSubplot, optional
         axis to plot on
-    kwargs
+    grid_kwargs
         any arguments taken by LinearGrid
 
     Returns
@@ -651,8 +666,8 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             rows = 2
             cols = 3
             downsample = (2 * eq.N + 1) // 6 + 1
-        if kwargs == {}:
-            kwargs.update(
+        if grid_kwargs == {}:
+            grid_kwargs.update(
                 {
                     "L": 8,
                     "NFP": nfp,
@@ -660,9 +675,9 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                     "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
                 }
             )
-        r_grid = _get_grid(**kwargs)
+        r_grid = _get_grid(**grid_kwargs)
         zeta = np.unique(r_grid.nodes[:, 2])
-        kwargs.update(
+        grid_kwargs.update(
             {
                 "L": 50,
                 "NFP": nfp,
@@ -670,23 +685,23 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                 "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
             }
         )
-        t_grid = _get_grid(**kwargs)
+        t_grid = _get_grid(**grid_kwargs)
 
     elif r_grid is None:
         zeta = np.unique(t_grid.nodes[:, 2])
         N = zeta.size
-        if kwargs == {}:
-            kwargs.update({"L": 8, "M": 180, "zeta": zeta})
-        r_grid = _get_grid(**kwargs)
+        if grid_kwargs == {}:
+            grid_kwargs.update({"L": 8, "M": 180, "zeta": zeta})
+        r_grid = _get_grid(**grid_kwargs)
         rows = np.floor(np.sqrt(N)).astype(int)
         cols = np.ceil(N / rows).astype(int)
         downsample = 1
     elif t_grid is None:
         zeta = np.unique(r_grid.nodes[:, 2])
         N = zeta.size
-        if kwargs == {}:
-            kwargs.update({"L": 50, "M": 8, "zeta": zeta})
-        r_grid = _get_grid(**kwargs)
+        if grid_kwargs == {}:
+            grid_kwargs.update({"L": 50, "M": 8, "zeta": zeta})
+        r_grid = _get_grid(**grid_kwargs)
         rows = np.floor(np.sqrt(zeta.size)).astype(int)
         cols = np.ceil(N / rows).astype(int)
         downsample = 1

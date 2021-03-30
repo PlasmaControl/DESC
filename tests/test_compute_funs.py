@@ -10,7 +10,9 @@ def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the partial derivatives of B and |B| match with numerical derivatives
     for a dummy stellarator example."""
 
-    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
 
     # partial derivatives wrt rho
     L = 101
@@ -486,7 +488,9 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     """Test that the components of grad(|B|^2)) match with numerical gradients
     for a dummy stellarator example."""
 
-    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
 
     # partial derivative wrt rho
     L = 101
@@ -545,7 +549,9 @@ def test_quasisymmetry(DummyStellarator):
     """Test that the components of grad(B*grad(|B|)) match with numerical gradients
     for a dummy stellarator example."""
 
-    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
 
     # partial derivative wrt theta
     M = 360

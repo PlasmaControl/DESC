@@ -106,6 +106,7 @@ def DummyStellarator(tmpdir_factory):
         ),
     }
     eq = Equilibrium(inputs=inputs)
+    eq.build()
     eq.save(output_path)
 
     DummyStellarator_out = {

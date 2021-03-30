@@ -8,22 +8,38 @@ Basis
 *****
 
 .. autosummary::
-   :toctree: api/basis/
-   :recursive:
-	     
+    :toctree: _api/basis/
+    :recursive:
+    :template: class.rst
+	      
     desc.basis.PowerSeries
     desc.basis.FourierSeries
     desc.basis.DoubleFourierSeries
     desc.basis.FourierZernikeBasis
 
+Boundary Conditions
+*******************
+
+.. autosummary:: 
+    :toctree: _api/boundary_conditions/
+    :recursive:
+    :template: class.rst
+	       
+    desc.boundary_conditions.LCFSConstraint
+    desc.boundary_conditions.PoincareConstraint
+    desc.boundary_conditions.UmbilicConstraint
+
+
+    
 Derivatives
 ***********
 Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
 
 .. autosummary::
-    :toctree: api/derivatives
+    :toctree: _api/derivatives
     :recursive:
-
+    :template: class.rst
+	       
     desc.derivatives.AutoDiffDerivative
     desc.derivatives.FiniteDiffDerivative
 
@@ -32,9 +48,10 @@ Equilibrium
 ***********
 
 .. autosummary:: 
-    :toctree: api/equilibrium
+    :toctree: _api/equilibrium
     :recursive:
-
+    :template: class.rst
+	       
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
@@ -43,11 +60,13 @@ Grid
 ****
 
 .. autosummary::
-   :toctree: api/grid/
-   :recursive:
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst      
 
     desc.grid.Grid
     desc.grid.LinearGrid
+    desc.grid.QuadratureGrid
     desc.grid.ConcentricGrid
 
 
@@ -55,29 +74,33 @@ IO
 ***
 
 .. autosummary::
-   :toctree: api/io/
-   :recursive:
+    :toctree: _api/io/
+    :recursive:
+    :template: class.rst      
       
-   desc.io.InputReader
+    desc.io.InputReader
     
 Objective Functions
 *******************
 
 .. autosummary::
-    :toctree: api/objective_funs
+    :toctree: _api/objective_funs
     :recursive:
-
+    :template: class.rst
+	       
     desc.objective_funs.get_objective_function
     desc.objective_funs.ForceErrorNodes
+    desc.objective_funs.ForceErrorGalerkin
     desc.objective_funs.EnergyVolIntegral
 
 Optimize
 ********
 
 .. autosummary:: 
-   :toctree: api/optimize
+   :toctree: _api/optimize
    :recursive:
-
+   :template: class.rst
+	      
    desc.optimize.Optimizer
    desc.optimize.fmintr
    desc.optimize.lsqtr
@@ -87,7 +110,7 @@ Perturbations
 *************
 
 .. autosummary:: 
-    :toctree: api/perturbations
+    :toctree: _api/perturbations
     :recursive:
 
     desc.perturbations.perturb
@@ -97,7 +120,7 @@ Plotting
 ********
 
 .. autosummary:: 
-    :toctree: api/plotting
+    :toctree: _api/plotting
     :recursive:
 
     desc.plotting.plot_1d
@@ -105,32 +128,26 @@ Plotting
     desc.plotting.plot_3d
     desc.plotting.plot_surfaces
     desc.plotting.plot_section   
-   
+
 
 Transform
 *********
 
 .. autosummary::
-   :toctree: api/transform/
+   :toctree: _api/transform/
    :recursive:
-      
+   :template: class.rst
+	      
    desc.transform.Transform
 
    
-Boundary Conditions
-*******************
-
-.. automodule:: desc.boundary_conditions
-    :members:
-    :undoc-members:
-    :inherited-members:    
-
-
-
 
 VMEC
 ****
 
-.. automodule:: desc.vmec
-    :members:
-    :undoc-members:
+.. autosummary:: 
+    :toctree: _api/vmec/
+    :recursive:
+    :template: class.rst       
+
+    desc.vmec.VMECIO

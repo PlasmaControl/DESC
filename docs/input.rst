@@ -39,10 +39,10 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    nfev = 250
    
    # solver methods
-   errr_mode = force
-   bdry_mode = spectral
-   zern_mode = fringe
-   node_mode = cheb1
+   objective = force
+   optimizer = scipy-trf
+   spectral_indexing = fringe
+   node_pattern = jacobi
    
    # pressure and rotational transform profiles
    l:   0   p =  1.80000000E+04   i =  1.00000000E+00
@@ -93,7 +93,7 @@ Spectral Resolution
    M_grid =  [9, 12, 15, 15, 16, 17, 18]
    N_grid =  [0;  2;  3;  3;  4;  5;  6]
 
-- ``L_rad`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``zern_mode`` is ``ansi`` or ``chevron``, or ``2M`` if ``zern_mode`` is ``fringe`` or ``house``. For more information see :ref:`theory_zernike_indexing`. 
+- ``L_rad`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``spectral_indexing`` is ``ansi``, or ``2M`` if ``spectral_indexing`` is ``fringe``. For more information see `Basis functions and collocation nodes`_.
 - ``M_pol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
 - ``N_tor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
 - ``M_grid`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
@@ -150,28 +150,17 @@ Solver Methods
 
 .. code-block:: text
 
-   errr_mode = force
-   bdry_mode = spectral
-   zern_mode = fringe
-   node_mode = cheb1
+   objective         = force
+   optimizer         = scipy-trf
+   spectral_indexing = ansi
+   node_pattern      = jacobi
 
-- ``errr_mode`` (string): Form of equations to use for solving the equilibrium force balance. Options are ``'force'`` (Default) or ``'accel'``. 
-- ``bdry_mode`` (string): Form of equations to use for solving the boundary condition. Options are ``'spectral'`` (Default) or ``'real'``. 
-- ``zern_mode`` (string): Zernike polynomial index ordering. Options are ``ansi``, ``chevron``, ``house``,  or ``fringe`` (Default). For more information see :ref:`theory_zernike_indexing`. 
-- ``node_mode`` (string): Pattern of collocation nodes. Options are ``'cheb1'`` (Default), ``'cheb2'``, or ``'linear'`` (not recommended). 
+- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``'force'`` (Default) or ``'energy'``. 
+- ``optimizer`` (string): Type of optimizer to use. For more details and options see :py:class:`desc.optimize.Optimizer`.
+- ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ansi`` or ``fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
+- ``node_pattern`` (string): Pattern of collocation nodes. Options are ``'jacobi`` (Default), ``cheb1``, ``'cheb2`` or ``'quad``. For more information see `Basis functions and collocation nodes`_.
 
-The ``errr_mode`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'accel'`` option uses units of m/radian^2. 
-The ``bdry_mode`` option ``'spectral'`` evaluates the error in the boundary condition in Fourier space, while the ``'real'`` option evaluates the error in real space. 
-
-The ``zern_mode`` option ``'ansi'`` uses the OSA/ANSI standard indicies, which has a radial resolution of :math:`M` (the highest radial polynomial term is :math:`\rho^{M}`). 
-The ``'fringe'`` option uses the Fringe/University of Arizona indicies, which has a radial resolution of :math:`2M` (the highest radial polynomial term is :math:`\rho^{2M}`). 
-
-All of the node patters use linear spacing in the poloidal and toroidal dimensions. 
-The ``'cheb1'`` option places the radial coordinates at the Chebyshev extreme points scaled to the domain [0,1]. 
-In this case the collocation nodes are clustered near the magnetic axis and the last closed flux surface. 
-The ``'cheb2'`` option places the radial coordinates at the Chebyshev extreme points on the usual domain [-1,1]. 
-In this case the collocation nodes are least dense near the magnetic axis and clustered near the last closed flux surface. 
-The ``'linear'`` option uses linear spacing for the radial coordinates. 
+The ``objective`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'energy'`` minimizes the total plasma energy :math:`B^2/2\mu_0 + p`. 
 
 Pressure & Rotational Transform Profiles
 ****************************************
@@ -293,3 +282,5 @@ The generated DESC input file will be stored at the same file path as the VMEC i
 The resulting input file will not contain any of the options that are specific to DESC, and therefore will depend on many default values. 
 This is a convenient first-attempt, but may not converge to the desired result for all equilibria. 
 It is recommended that the automatically generated DESC input file be manually edited to improve performance. 
+
+.. _Basis functions and collocation nodes: notebooks/basis_grid.ipynb

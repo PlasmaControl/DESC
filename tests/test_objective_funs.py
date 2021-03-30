@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-
+import pytest
 from desc.grid import LinearGrid, ConcentricGrid
 from desc.equilibrium import Equilibrium
 from desc.basis import (
@@ -26,7 +26,7 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
         R_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         Z_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         L_basis = FourierZernikeBasis(L=-1, M=2, N=0)
-        RZb_basis = DoubleFourierSeries(M=3, N=1)
+        RZb_basis = DoubleFourierSeries(M=3, N=0)
         PI_basis = PowerSeries(L=3)
 
         R_transform = Transform(RZ_grid, R_basis)
@@ -47,19 +47,19 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
             i_transform=PI_transform,
         )
         self.assertIsInstance(obj_fun, ForceErrorNodes)
-
-        errr_mode = "energy"
-        obj_fun = get_objective_function(
-            errr_mode,
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            Rb_transform=RZb_transform,
-            Zb_transform=RZb_transform,
-            p_transform=PI_transform,
-            i_transform=PI_transform,
-        )
-        self.assertIsInstance(obj_fun, EnergyVolIntegral)
+        with pytest.warns(UserWarning):
+            errr_mode = "energy"
+            obj_fun = get_objective_function(
+                errr_mode,
+                R_transform=R_transform,
+                Z_transform=Z_transform,
+                L_transform=L_transform,
+                Rb_transform=RZb_transform,
+                Zb_transform=RZb_transform,
+                p_transform=PI_transform,
+                i_transform=PI_transform,
+            )
+            self.assertIsInstance(obj_fun, EnergyVolIntegral)
 
         # test unimplemented errr_mode
         with self.assertRaises(ValueError):

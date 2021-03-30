@@ -8,8 +8,16 @@ from desc.plotting import (
     plot_surfaces,
     plot_section,
     plot_logo,
+    plot_grid,
+    plot_basis,
 )
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.basis import (
+    PowerSeries,
+    FourierSeries,
+    DoubleFourierSeries,
+    FourierZernikeBasis,
+)
 from desc import plotting as dplt
 
 
@@ -267,4 +275,67 @@ def test_plot_surfaces(plot_eq):
 @pytest.mark.mpl_image_compare
 def test_plot_logo():
     fig, ax = plot_logo()
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_grid_linear():
+    grid = LinearGrid(L=10, M=10, N=1)
+    fig, ax = plot_grid(grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_grid_quad():
+    grid = QuadratureGrid(L=10, M=10, N=1)
+    fig, ax = plot_grid(grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_grid_jacobi():
+    grid = ConcentricGrid(M=10, N=1, node_pattern="jacobi")
+    fig, ax = plot_grid(grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_grid_cheb1():
+    grid = ConcentricGrid(M=10, N=1, node_pattern="cheb1")
+    fig, ax = plot_grid(grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_grid_cheb2():
+    grid = ConcentricGrid(M=10, N=1, node_pattern="cheb2")
+    fig, ax = plot_grid(grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_basis_powerseries():
+    basis = PowerSeries(L=6)
+    fig, ax = plot_basis(basis)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_basis_fourierseries():
+    basis = FourierSeries(N=3)
+    fig, ax = plot_basis(basis)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_basis_doublefourierseries():
+    basis = DoubleFourierSeries(M=3, N=2)
+    fig, ax = plot_basis(basis)
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_plot_basis_fourierzernike():
+    basis = FourierZernikeBasis(L=8, M=3, N=2)
+    fig, ax = plot_basis(basis)
     return fig

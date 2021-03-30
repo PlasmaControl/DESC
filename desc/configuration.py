@@ -97,8 +97,8 @@ class _Configuration(IOAble, ABC):
                 boundary : ndarray, array of boundary coeffs [m, n, Rb_lmn, Zb_lmn]
             And the following optional keys:
                 sym : bool, is the problem stellarator symmetric or not, default is False
-                spectral_indexing : str, type of Zernike indexing scheme to use, default is 'ansi'
-                bdry_mode : {'lcfs', 'poincare'}, where the BC are enforced
+                spectral_indexing : str, type of Zernike indexing scheme to use, default is ``'ansi'``
+                bdry_mode : {``'lcfs'``, ``'poincare'``}, where the BC are enforced
                 zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
                 x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
@@ -571,7 +571,7 @@ class _Configuration(IOAble, ABC):
         -------
         profiles : dict
             dictionary of ndarray, shape(num_nodes,) of profiles.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
         if grid is None:
@@ -613,7 +613,7 @@ class _Configuration(IOAble, ABC):
         -------
         toroidal_coords : dict
             dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
         if grid is None:
@@ -656,7 +656,7 @@ class _Configuration(IOAble, ABC):
         -------
         toroidal_coords : dict
             dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
         if grid is None:
@@ -698,7 +698,7 @@ class _Configuration(IOAble, ABC):
         -------
         cov_basis : dict
             dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
-            Keys are of the form 'e_x_y', meaning the covariant basis vector in
+            Keys are of the form ``'e_x_y'``, meaning the covariant basis vector in
             the x direction, differentiated wrt to y.
 
         """
@@ -741,7 +741,7 @@ class _Configuration(IOAble, ABC):
         -------
         jacobian : dict
             dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
-            Keys are of the form 'g_x' meaning the x derivative of the coordinate
+            Keys are of the form ``'g_x'`` meaning the x derivative of the coordinate
             system jacobian g.
 
         """
@@ -784,7 +784,7 @@ class _Configuration(IOAble, ABC):
         -------
         con_basis : dict
             dictionary of ndarray, shape(3,num_nodes), of contravariant basis vectors.
-            Keys are of the form 'e^x_y', meaning the contravariant basis vector
+            Keys are of the form ``'e^x_y'``, meaning the contravariant basis vector
             in the x direction, differentiated wrt to y.
 
         """
@@ -827,7 +827,7 @@ class _Configuration(IOAble, ABC):
         -------
         magnetic_field: dict
             dictionary of ndarray, shape(num_nodes,) of magnetic field components.
-            Keys are of the form 'B_x_y' or 'B^x_y', meaning the covariant (B_x)
+            Keys are of the form ``'B_x_y'`` or ``'B^x_y'``, meaning the covariant (B_x)
             or contravariant (B^x) component of the magnetic field, with the
             derivative wrt to y.
 
@@ -877,7 +877,7 @@ class _Configuration(IOAble, ABC):
         -------
         current_density : dict
             dictionary of ndarray, shape(num_nodes,), of current density components.
-            Keys are of the form 'J^x_y' meaning the contravariant (J^x)
+            Keys are of the form ``'J^x_y'`` meaning the contravariant (J^x)
             component of the current, with the derivative wrt to y.
 
         """
@@ -927,7 +927,7 @@ class _Configuration(IOAble, ABC):
         -------
         magnetic_pressure : dict
             dictionary of ndarray, shape(num_nodes,), of magnetic pressure gradient components.
-            Keys are of the form 'grad_B^x' meaning the contravariant (grad_B^x) component of the
+            Keys are of the form ``'grad_B^x'`` meaning the contravariant (grad_B^x) component of the
             magnetic pressure gradient.
 
         """
@@ -979,7 +979,7 @@ class _Configuration(IOAble, ABC):
         -------
         magnetic_tension : dict
             dictionary of ndarray, shape(num_nodes,), of magnetic tension vector.
-            Keys are of the form 'gradB' for the vector form and '|gradB|' for its
+            Keys are of the form `gradB` for the vector form and `|gradB|` for its
             magnitude.
 
         """
@@ -1031,7 +1031,7 @@ class _Configuration(IOAble, ABC):
         -------
         force_error : dict
             dictionary of ndarray, shape(num_nodes,), of force error components.
-            Keys are of the form 'F_x' meaning the covariant (F_x) component of the
+            Keys are of the form ``'F_x'`` meaning the covariant (F_x) component of the
             force error.
 
         """
@@ -1084,8 +1084,8 @@ class _Configuration(IOAble, ABC):
         Returns
         -------
         energy : dict
-            Keys are 'W_B' for magnetic energy (B**2 / 2mu0 integrated over volume),
-            'W_p' for pressure energy (-p integrated over volume), and 'W' for total
+            Keys are ``'W_B'`` for magnetic energy (B**2 / 2mu0 integrated over volume),
+            ``'W_p'`` for pressure energy (-p integrated over volume), and ``'W'`` for total
             MHD energy (W_B + W_p)
 
         """
@@ -1261,14 +1261,17 @@ class _Configuration(IOAble, ABC):
         """
         r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
         t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
-
-        r_coords = self.compute_toroidal_coords(r_grid)
-        t_coords = self.compute_toroidal_coords(t_grid)
+        with warnings.catch_warnings():  # ignore warning about not using fft
+            warnings.simplefilter("ignore")
+            r_coords = self.compute_toroidal_coords(r_grid)
+            t_coords = self.compute_toroidal_coords(t_grid)
 
         v_nodes = t_grid.nodes
         v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
         v_grid = Grid(v_nodes)
-        v_coords = self.compute_toroidal_coords(v_grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            v_coords = self.compute_toroidal_coords(v_grid)
 
         # rho contours
         Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]

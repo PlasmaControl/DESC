@@ -49,8 +49,8 @@ class Equilibrium(_Configuration, IOAble):
         And the following optional keys:
 
         * ``'sym'`` : bool, is the problem stellarator symmetric or not, default is False
-        * ``'spectral_indexing'`` : str, type of Zernike indexing scheme to use, default is 'ansi'
-        * ``'bdry_mode'`` : str, how to calculate error at bdry, default is 'spectral'
+        * ``'spectral_indexing'`` : str, type of Zernike indexing scheme to use, default is ``'ansi'``
+        * ``'bdry_mode'`` : str, how to calculate error at bdry, default is ``'spectral'``
         * ``'zeta_ratio'`` : float, Multiplier on the toroidal derivatives. Default = 1.0.
         * ``'axis'`` : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
         * ``'x'`` : ndarray, state vector [R_lmn, Z_lmn, L_lmn]

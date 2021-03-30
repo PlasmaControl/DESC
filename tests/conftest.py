@@ -10,7 +10,7 @@ from desc.__main__ import main
 
 @pytest.fixture
 def plot_eq():
-    eq = EquilibriaFamily.load(load_from="./tests/inputs/SOLOVEV.h5")[-1]
+    eq = EquilibriaFamily.load(load_from="./tests/inputs/SOLOVEV_output.h5")[-1]
     return eq
 
 

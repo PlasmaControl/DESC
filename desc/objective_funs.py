@@ -599,7 +599,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Compute the integral of the force balance residual by quadrature.
 
-        eg int(|F_R| + |F_Z|)
+        eg int(`|F_R|` + `|F_Z|`)
 
         Parameters
         ----------
@@ -1207,7 +1207,7 @@ def get_objective_function(
     Parameters
     ----------
     objective : str
-        name of the desired objective function, eg 'force' or 'energy'
+        name of the desired objective function, eg ``'force'`` or ``'energy'``
     R_transform : Transform
         transforms R_lmn coefficients to real space
     Z_transform : Transform

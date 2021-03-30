@@ -119,14 +119,14 @@ class Optimizer(IOAble):
             initial guess. Should satisfy any constraints on x
         args : tuple, optional
             additional arguments passed to objective fun and derivatives
-        x_scale : array_like or 'auto', optional
-            Characteristic scale of each variable. Setting `x_scale` is equivalent
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
-            be achieved by setting `x_scale` such that a step of a given size
+            be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to 'auto', the scale is iteratively updated using the
+            function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the jacobian or hessian matrix.
         ftol : float or None, optional
             Tolerance for termination by the change of the cost function. Default
@@ -195,10 +195,11 @@ class Optimizer(IOAble):
         if self.method in Optimizer._scipy_scalar_methods:
 
             allx = []
-            def jac_wrapped(x,*args):
+
+            def jac_wrapped(x, *args):
                 allx.append(x)
-                return objective.grad_x(x,*args)
-            
+                return objective.grad_x(x, *args)
+
             out = scipy.optimize.minimize(
                 objective.compute_scalar,
                 x0=x_init,
@@ -209,16 +210,17 @@ class Optimizer(IOAble):
                 tol=gtol,
                 options={"maxiter": maxiter, "disp": disp, **options},
             )
-            out['allx'] = allx
+            out["allx"] = allx
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
             x_scale = "jac" if x_scale == "auto" else x_scale
             allx = []
-            def jac_wrapped(x,*args):
+
+            def jac_wrapped(x, *args):
                 allx.append(x)
-                return objective.jac_x(x,*args)
-            
+                return objective.jac_x(x, *args)
+
             out = scipy.optimize.least_squares(
                 objective.compute,
                 x0=x_init,
@@ -232,7 +234,7 @@ class Optimizer(IOAble):
                 max_nfev=maxiter,
                 verbose=disp,
             )
-            out['allx'] = allx
+            out["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
 

@@ -21,9 +21,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.append(os.path.abspath('../'))
-
-if True:
-    import desc
+import desc
 
 project = 'DESC'
 copyright = '2020, Plasma Control Group at Princeton University'
@@ -45,16 +43,17 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    # 'numpydoc',
+    'nbsphinx',
     'sphinx.ext.napoleon',
     'sphinx.ext.autosummary',
-    'sphinxarg.ext'
+    'sphinxarg.ext',
+    'sphinx_copybutton'    
 ]
 # numpydoc_class_members_toctree = False
 # Napoleon settings
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = True
+napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
 napoleon_include_special_with_doc = False
 napoleon_use_admonition_for_examples = False
@@ -65,7 +64,7 @@ napoleon_use_param = True
 napoleon_use_rtype = False
 
 autosummary_generate = True
-autosummary_generate_overwrite = False
+autosummary_generate_overwrite = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

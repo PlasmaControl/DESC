@@ -89,10 +89,11 @@ class LCFSConstraint(BoundaryCondition):
     """Fixed-boundary constraint where the rho=1 surface is given.
 
     enforces:
-    R(1,theta,zeta) = Rb(theta,zeta)
-    Z(1,theta,zeta) = Zb(theta,zeta)
-    lambda(0,theta,zeta) == 0
-    lambda(rho,0,0) == 0
+
+    * R(1,theta,zeta) = Rb(theta,zeta)
+    * Z(1,theta,zeta) = Zb(theta,zeta)
+    * lambda(0,theta,zeta) == 0
+    * lambda(rho,0,0) == 0
 
     Parameters
     ----------
@@ -158,9 +159,10 @@ class PoincareConstraint(BoundaryCondition):
     """Boundary condition where the Poincare section at zeta=0 is given.
 
     enforces:
-    R(rho,theta,0) = Rb(rho,theta)
-    Z(rho,theta,0) = Zb(rho,theta)
-    lambda(rho,theta,zeta) = 0
+
+    * R(rho,theta,0) = Rb(rho,theta)
+    * Z(rho,theta,0) = Zb(rho,theta)
+    * lambda(rho,theta,zeta) = 0
 
     Parameters
     ----------
@@ -225,11 +227,12 @@ class UmbilicConstraint(BoundaryCondition):
     """Boundary condition for umbilic-type stellarators.
 
     enforces:
-    R(rho,theta,zeta) = a(rho)*cos(m*theta)*cos(zeta) + b(rho)*cos(2*m*theta)*cos(zeta)
-                      - a(rho)*sin(m*theta)*sin(zeta) + b(rho)*sin(2*m*theta)*sin(zeta)
-    Z(rho,theta,zeta) = a(rho)*cos(m*theta)*sin(zeta) + b(rho)*cos(2*m*theta)*sin(zeta)
-                      + a(rho)*sin(m*theta)*cos(zeta) - b(rho)*sin(2*m*theta)*cos(zeta)
-    lambda(rho,theta,zeta) = 0
+
+    * R(rho,theta,zeta) = a(rho)*cos(m*theta)*cos(zeta) + b(rho)*cos(2*m*theta)*cos(zeta)
+      - a(rho)*sin(m*theta)*sin(zeta) + b(rho)*sin(2*m*theta)*sin(zeta)
+    * Z(rho,theta,zeta) = a(rho)*cos(m*theta)*sin(zeta) + b(rho)*cos(2*m*theta)*sin(zeta)
+      + a(rho)*sin(m*theta)*cos(zeta) - b(rho)*sin(2*m*theta)*cos(zeta)
+    * lambda(rho,theta,zeta) = 0
 
     Parameters
     ----------
@@ -299,7 +302,7 @@ def get_boundary_condition(
     Parameters
     ----------
     condition : str
-        name of the desired boundary condition, eg 'lcfs' or 'poincare'
+        name of the desired boundary condition, eg ``'lcfs'`` or ``'poincare'``
     R_basis : Basis
         Fourier-Zernike basis for R
     Z_basis : Basis

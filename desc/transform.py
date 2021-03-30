@@ -149,7 +149,9 @@ class Transform(IOAble):
                         derivatives = np.vstack([derivatives, np.array(perm)])
                     else:
                         derivatives = np.array([perm])
-            derivatives = derivatives[derivatives.sum(axis=1)<=derivs] #remove higher orders
+            derivatives = derivatives[
+                derivatives.sum(axis=1) <= derivs
+            ]  # remove higher orders
         elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
         elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
@@ -179,6 +181,16 @@ class Transform(IOAble):
             return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
+
+        if len(zeta_vals) % 2 == 0:
+            warnings.warn(
+                colored(
+                    "fft method requires an odd number of toroidal nodes, falling back to direct method",
+                    "yellow",
+                )
+            )
+            self._method = "direct"
+            return
 
         if not issorted(grid.nodes[:, 2]):
             warnings.warn(

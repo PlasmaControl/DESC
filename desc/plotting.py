@@ -817,6 +817,8 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["QS", "B*grad(|B|)"]:
+            out = eq.compute_quasisymmetry(grid)[_name_key(name_dict)]
         else:
             raise NotImplementedError(
                 "No output for base named '{}'.".format(name_dict["base"])
@@ -910,6 +912,8 @@ def _format_name(name):
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(rho)|": r"(\mathrm{m}^{-1})",
         "|beta|": r"(\mathrm{m}^{-1})",
+        "QS": r"(\mathrm{T}^4/\mathrm{m}^2)",
+        "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
     }
     name_dict["units"] = units[name_dict["base"]]
     if name_dict["power"]:

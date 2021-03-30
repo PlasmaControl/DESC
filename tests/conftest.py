@@ -1,8 +1,10 @@
 import pytest
 import subprocess
 import os
-from desc.equilibrium import EquilibriaFamily
 import h5py
+import numpy as np
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.__main__ import main
 
 
@@ -14,16 +16,14 @@ def plot_eq():
 
 @pytest.fixture(scope="session")
 def TmpDir(tmpdir_factory):
-    """Creates a temporary directory to store testing files."""
-
+    """Create a temporary directory to store testing files."""
     dir_path = tmpdir_factory.mktemp("test_results")
     return dir_path
 
 
 @pytest.fixture(scope="session")
 def SOLOVEV(tmpdir_factory):
-    max_time = 2 * 60  # 2 minute max run time
-
+    """Run SOLOVEV example."""
     input_path = "examples//DESC//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
     output_path = output_dir.join("SOLOVEV_out")
@@ -34,7 +34,7 @@ def SOLOVEV(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running SOLOVEV test")
+    print("Running SOLOVEV test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -52,8 +52,7 @@ def SOLOVEV(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def DSHAPE(tmpdir_factory):
-    max_time = 2 * 60  # 2 minute max run time
-
+    """Run DSHAPE example."""
     input_path = "examples//DESC//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     output_path = output_dir.join("DSHAPE_out")
@@ -64,32 +63,69 @@ def DSHAPE(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running DSHAPE test")
+    print("Running DSHAPE test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
     args = ["-o", str(output_path), input_filename]
     main(args)
 
-    SOLOVEV_out = {
+    DSHAPE_out = {
         "input_path": input_path,
         "output_path": output_path,
         "desc_nc_path": desc_nc_path,
         "vmec_nc_path": vmec_nc_path,
     }
-    return SOLOVEV_out
+    return DSHAPE_out
+
+
+@pytest.fixture(scope="session")
+def DummyStellarator(tmpdir_factory):
+    """Create and save a dummy stellarator configuration for testing."""
+    output_dir = tmpdir_factory.mktemp("result")
+    output_path = output_dir.join("DummyStellarator")
+
+    inputs = {
+        "sym": True,
+        "NFP": 1,
+        "Psi": 1.0,
+        "L": 2,
+        "M": 2,
+        "N": 1,
+        "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0],]),
+        "boundary": np.array(
+            [
+                [0, 0, 0, 3, 0],
+                [0, 1, 0, 1, 0],
+                [0, -1, 0, 0, 1],
+                [0, 1, 1, 0.3, 0],
+                [0, -1, -1, -0.3, 0],
+                [0, 1, -1, -0.3, 0],
+                [0, -1, 1, -0.3, 0],
+            ]
+        ),
+    }
+    eq = Equilibrium(inputs=inputs)
+    eq.save(output_path)
+
+    DummyStellarator_out = {
+        "output_path": output_path,
+    }
+    return DummyStellarator_out
 
 
 @pytest.fixture(scope="session")
 def writer_test_file(tmpdir_factory):
+    """Create temporary output directory."""
     output_dir = tmpdir_factory.mktemp("writer")
     return output_dir.join("writer_test_file")
 
 
 @pytest.fixture(scope="session")
 def reader_test_file(tmpdir_factory):
-    output_dir = tmpdir_factory.mktemp("reader")
-    filename = output_dir.join("reader_test_file")
+    """Create temporary input directory."""
+    input_dir = tmpdir_factory.mktemp("reader")
+    filename = input_dir.join("reader_test_file")
     thedict = {"a": "a", "b": "b", "c": "c"}
     f = h5py.File(filename, "w")
     subgroup = "subgroup"

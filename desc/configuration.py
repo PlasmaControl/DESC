@@ -31,6 +31,7 @@ from desc.compute_funs import (
     compute_magnetic_tension,
     compute_force_error_magnitude,
     compute_energy,
+    compute_quasisymmetry,
 )
 
 
@@ -1121,6 +1122,56 @@ class _Configuration(IOAble, ABC):
 
         return energy
 
+    def compute_quasisymmetry(self, grid=None):
+        """Compute quasisymmetry (triple product and flux function metrics).
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Quadrature grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at
+
+        Returns
+        -------
+        quasisymmetry: dict
+            dictionary of ndarray, shape(num_nodes,), of quasisymmetry components.
+            The triple product metric has the key 'QS_TP',
+        and the flux function metric has the key 'QS_FF'.
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
+        R_transform = Transform(grid, self.R_basis, derivs=3, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=3, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=3, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            self.Psi,
+            self.R_lmn,
+            self.Z_lmn,
+            self.L_lmn,
+            self.p_l,
+            self.i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+            self.zeta_ratio,
+        )
+
+        return quasisymmetry
+
     def compute_volume(self, grid=None):
         """Compute total plasma volume.
 
@@ -1158,7 +1209,8 @@ class _Configuration(IOAble, ABC):
             i_transform,
             self.zeta_ratio,
         )
-        vol_quad = np.sum(np.abs(jacobian["g"]) * grid.weights)
+
+        return np.sum(np.abs(jacobian["g"]) * grid.weights)
 
     def compute_axis_location(self, zeta=0):
         """Find the axis location on specified zeta plane(s).

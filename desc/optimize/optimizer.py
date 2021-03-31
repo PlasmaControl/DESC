@@ -4,6 +4,7 @@ from termcolor import colored
 from desc.utils import equals, Timer
 from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
+from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 
 
 class Optimizer(IOAble):
@@ -19,8 +20,8 @@ class Optimizer(IOAble):
     method : str
         name of the optimizer to use. Options are:
 
-        * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-dogleg'``,
-          ``'scipy-trust-exact'``, ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
+        * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-trust-exact'``,
+          ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
         * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
         * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
           ``'subspace-bfgs'``
@@ -36,7 +37,6 @@ class Optimizer(IOAble):
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
-        "scipy-dogleg",
         "scipy-trust-exact",
         "scipy-trust-ncg",
         "scipy-trust-krylov",
@@ -195,22 +195,86 @@ class Optimizer(IOAble):
         if self.method in Optimizer._scipy_scalar_methods:
 
             allx = []
+            allf = []
+            msg = [""]
 
-            def jac_wrapped(x, *args):
-                allx.append(x)
-                return objective.grad_x(x, *args)
+            def callback(x):
+                fx = objective.compute_scalar(x, *args)
+                if len(allx) > 1:
+                    dx = allx[-1] - x
+                    df = allf[-1] - fx
+                    allx.append(x)
+                    allf.append(fx)
+                    dx_norm = np.linalg.norm(dx)
+                    x_norm = np.linalg.norm(x)
+                    if verbose > 2:
+                        print_iteration_nonlinear(
+                            len(allx), None, fx, df, dx_norm, None
+                        )
+                    success, message = check_termination(
+                        df,
+                        fx,
+                        dx_norm,
+                        x_norm,
+                        np.inf,
+                        1,
+                        ftol,
+                        xtol,
+                        0,
+                        len(x),
+                        maxiter,
+                        0,
+                        np.inf,
+                        0,
+                        np.inf,
+                        0,
+                        np.inf,
+                    )
+                    if success and dx_norm > 0:
+                        msg[0] = message
+                        raise StopIteration
+                else:
+                    dx = None
+                    df = None
+                    allx.append(x)
+                    allf.append(fx)
+                    dx_norm = None
+                    x_norm = np.linalg.norm(x)
+                    if verbose > 2:
+                        print_iteration_nonlinear(
+                            len(allx), None, fx, df, dx_norm, None
+                        )
 
-            out = scipy.optimize.minimize(
-                objective.compute_scalar,
-                x0=x_init,
-                args=args,
-                method=self.method[len("scipy-") :],
-                jac=jac_wrapped,
-                hess=objective.hess_x,
-                tol=gtol,
-                options={"maxiter": maxiter, "disp": disp, **options},
-            )
-            out["allx"] = allx
+            print_header_nonlinear()
+            # print_iteration_nonlinear(1, None, allf[0], None, None, None)
+            try:
+                result = scipy.optimize.minimize(
+                    objective.compute_scalar,
+                    x0=x_init,
+                    args=args,
+                    method=self.method[len("scipy-") :],
+                    jac=objective.grad_x,
+                    hess=objective.hess_x,
+                    tol=gtol,
+                    callback=callback,
+                    options={"maxiter": maxiter, "disp": disp, **options},
+                )
+                result["allx"] = allx
+            except StopIteration:
+                result = {
+                    "x": allx[-1],
+                    "allx": allx,
+                    "fun": allf[-1],
+                    "message": msg[0],
+                    "nit": len(allx),
+                    "success": True,
+                }
+                if verbose > 1:
+                    print(msg[0])
+                    print(
+                        "         Current function value: {:.3e}".format(result["fun"])
+                    )
+                    print("         Iterations: {:d}".format(result["nit"]))
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
@@ -221,7 +285,7 @@ class Optimizer(IOAble):
                 allx.append(x)
                 return objective.jac_x(x, *args)
 
-            out = scipy.optimize.least_squares(
+            result = scipy.optimize.least_squares(
                 objective.compute,
                 x0=x_init,
                 args=args,
@@ -234,7 +298,7 @@ class Optimizer(IOAble):
                 max_nfev=maxiter,
                 verbose=disp,
             )
-            out["allx"] = allx
+            result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
 
@@ -243,7 +307,7 @@ class Optimizer(IOAble):
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
             hess = objective.hess_x if "bfgs" not in self.method else "bfgs"
-            out = fmintr(
+            result = fmintr(
                 objective.compute_scalar,
                 x0=x_init,
                 grad=objective.grad_x,
@@ -266,7 +330,7 @@ class Optimizer(IOAble):
                 x_scale = 1
             method = self.method.split("-")[1]
             jac = objective.jac_x if "broyden" not in self.method else "broyden"
-            out = lsqtr(
+            result = lsqtr(
                 objective.compute,
                 x0=x_init,
                 grad=objective.grad_x,
@@ -288,7 +352,10 @@ class Optimizer(IOAble):
         if verbose > 1:
             timer.disp("Solution time")
             timer.pretty_print(
-                "Avg time per step", timer["Solution time"] / out["nfev"]
+                "Avg time per step",
+                timer["Solution time"] / result.get("nit", result.get("nfev")),
             )
+        for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
+            _ = result.pop(key, None)
 
-        return out
+        return result

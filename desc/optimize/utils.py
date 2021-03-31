@@ -141,6 +141,21 @@ def print_header_nonlinear():
 def print_iteration_nonlinear(
     iteration, nfev, cost, cost_reduction, step_norm, optimality
 ):
+    if iteration is None:
+        iteration = " " * 15
+    else:
+        iteration = "{:^15}".format(iteration)
+
+    if nfev is None:
+        nfev = " " * 15
+    else:
+        nfev = "{:^15}".format(nfev)
+
+    if cost is None:
+        cost = " " * 15
+    else:
+        cost = "{0:^15.2e}".format(cost)
+
     if cost_reduction is None:
         cost_reduction = " " * 15
     else:
@@ -151,8 +166,13 @@ def print_iteration_nonlinear(
     else:
         step_norm = "{0:^15.2e}".format(step_norm)
 
+    if optimality is None:
+        optimality = " " * 15
+    else:
+        step_norm = "{0:^15.2e}".format(optimality)
+
     print(
-        "{0:^15}{1:^15}{2:^15.4e}{3}{4}{5:^15.2e}".format(
+        "{0}{1}{2}{3}{4}{5}".format(
             iteration, nfev, cost, cost_reduction, step_norm, optimality
         )
     )

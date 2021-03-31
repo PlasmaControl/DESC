@@ -185,6 +185,7 @@ class InputReader:
         file = open(fname, "r")
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
+        flag = False
         for line in file:
 
             # check if VMEC input file format
@@ -218,77 +219,98 @@ class InputReader:
             match = re.search(r"sym", argument, re.IGNORECASE)
             if match:
                 inputs["sym"] = int(numbers[0])
+                flag = True
             match = re.search(r"Psi", argument, re.IGNORECASE)
             if match:
                 inputs["Psi"] = numbers[0]
+                flag = True
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
                 inputs["NFP"] = numbers[0]
                 if len(numbers) > 1:
                     inputs["NFP"] /= numbers[1]
+                flag = True
 
             # spectral resolution
             match = re.search(r"L_rad", argument, re.IGNORECASE)
             if match:
                 inputs["L"] = np.array(numbers).astype(int)
+                flag = True
             match = re.search(r"M_pol", argument, re.IGNORECASE)
             if match:
                 inputs["M"] = np.array(numbers).astype(int)
+                flag = True
             match = re.search(r"N_tor", argument, re.IGNORECASE)
             if match:
                 inputs["N"] = np.array(numbers).astype(int)
+                flag = True
             match = re.search(r"M_grid", argument, re.IGNORECASE)
             if match:
                 inputs["M_grid"] = np.array(numbers).astype(int)
+                flag = True
             match = re.search(r"N_grid", argument, re.IGNORECASE)
             if match:
                 inputs["N_grid"] = np.array(numbers).astype(int)
+                flag = True
 
             # continuation parameters
             match = re.search(r"bdry_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_ratio"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"pres_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["pres_ratio"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"zeta_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["zeta_ratio"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"pert_order", argument, re.IGNORECASE)
             if match:
                 inputs["pert_order"] = np.array(numbers).astype(int)
+                flag = True
 
             # solver tolerances
             match = re.search(r"ftol", argument, re.IGNORECASE)
             if match:
                 inputs["ftol"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"xtol", argument, re.IGNORECASE)
             if match:
                 inputs["xtol"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"gtol", argument, re.IGNORECASE)
             if match:
                 inputs["gtol"] = np.array(numbers).astype(float)
+                flag = True
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
                 inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
+                flag = True
 
             # solver methods
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
                 inputs["optimizer"] = words[0]
+                flag = True
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
                 inputs["objective"] = words[0]
+                flag = True
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_mode"] = words[0]
+                flag = True
                 # TODO: set bdry_mode automatically based on bdry coeffs
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
                 inputs["spectral_indexing"] = words[0]
+                flag = True
             match = re.search(r"node_pattern", argument, re.IGNORECASE)
             if match:
                 inputs["node_pattern"] = words[0]
+                flag = True
 
             # coefficient indicies
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -318,6 +340,7 @@ class InputReader:
                 ][0]
             else:
                 n = 0
+
             # profile coefficients
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -334,6 +357,7 @@ class InputReader:
                     )
                     inputs["profiles"][prof_idx[0], 0] = l
                 inputs["profiles"][prof_idx[0], 1] = p_l
+                flag = True
             match = re.search(r"\si\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 i_l = [
@@ -349,6 +373,7 @@ class InputReader:
                     )
                     inputs["profiles"][prof_idx[0], 0] = l
                 inputs["profiles"][prof_idx[0], 2] = i_l
+                flag = True
 
             # boundary surface coefficients
             match = re.search(r"R1\s*=\s*" + num_form, command, re.IGNORECASE)
@@ -370,6 +395,7 @@ class InputReader:
                     inputs["boundary"][bdry_idx[0], 1] = m
                     inputs["boundary"][bdry_idx[0], 2] = n
                 inputs["boundary"][bdry_idx[0], 3] = R1
+                flag = True
             match = re.search(r"Z1\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 Z1 = [
@@ -389,6 +415,7 @@ class InputReader:
                     inputs["boundary"][bdry_idx[0], 1] = m
                     inputs["boundary"][bdry_idx[0], 2] = n
                 inputs["boundary"][bdry_idx[0], 4] = Z1
+                flag = True
 
             # magnetic axis coefficients
             match = re.search(r"R0\s*=\s*" + num_form, command, re.IGNORECASE)
@@ -406,6 +433,7 @@ class InputReader:
                     )
                     inputs["axis"][axis_idx[0], 0] = n
                 inputs["axis"][axis_idx[0], 1] = R0_n
+                flag = True
             match = re.search(r"Z0\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 Z0_n = [
@@ -421,6 +449,15 @@ class InputReader:
                     )
                     inputs["axis"][axis_idx[0], 0] = n
                 inputs["axis"][axis_idx[0], 2] = Z0_n
+                flag = True
+
+            # catch lines that don't match a valid command
+            if not flag and command not in ["", " "]:
+                raise IOError(
+                    colored(
+                        "The following line is not a valid input:\n" + command, "red"
+                    )
+                )
 
         # error handling
         if np.any(inputs["M"] == 0):

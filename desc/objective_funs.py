@@ -265,7 +265,15 @@ class ObjectiveFunction(IOAble, ABC):
         """
         if self.__class__ != other.__class__:
             return False
-        ignore_keys = ["_grad", "_jac", "_hess", "compute", "compute_scalar"]
+        ignore_keys = [
+            "_grad",
+            "_jac",
+            "_hess",
+            "compute",
+            "compute_scalar",
+            "compiled",
+            "use_jit",
+        ]
         dict1 = {
             key: val for key, val in self.__dict__.items() if key not in ignore_keys
         }

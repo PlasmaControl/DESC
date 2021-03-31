@@ -851,7 +851,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 BC_constraint=equil.constraint,
                 use_jit=True,
             )
-            equil.objective = objective
+            # reuse old objective if possible to avoid recompiling
+            if objective.eq(self[ii - 1].objective):
+                equil.objective = self[ii - 1].objective
+            else:
+                equil.objective = objective
 
             # optimization algorithm
             optimizer = Optimizer(self.inputs[ii]["optimizer"])

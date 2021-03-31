@@ -185,7 +185,6 @@ class InputReader:
         file = open(fname, "r")
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
-        flag = False
         for line in file:
 
             # check if VMEC input file format
@@ -214,6 +213,7 @@ class InputReader:
                 float(x) for x in re.findall(num_form, command) if re.search(r"\d", x)
             ]
             words = command[equals + 1 :].split()
+            flag = False
 
             # global parameters
             match = re.search(r"sym", argument, re.IGNORECASE)

@@ -64,7 +64,7 @@ def set_device(kind="cpu"):
         gpu_ids = [dev["index"] for dev in devices]
         if "CUDA_VISIBLE_DEVICES" in os.environ:
             cuda_ids = [
-                int(s)
+                s
                 for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
             ]
             # check that the visible devices actually exist and are gpus
@@ -73,7 +73,7 @@ def set_device(kind="cpu"):
             # cuda visible devices = '' -> don't use any gpu
             warnings.warn(
                 colored(
-                    "CUDA_VISIBLE_DEVICES did not match any physical GPU, falling back to CPU",
+                    "CUDA_VISIBLE_DEVICES={} did not match any physical GPU (id={}), falling back to CPU".format(os.environ['CUDA_VISIBLE_DEVICES'], [dev["index"] for dev in devices]),
                     "yellow",
                 )
             )

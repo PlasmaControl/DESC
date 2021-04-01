@@ -199,43 +199,45 @@ class Optimizer(IOAble):
             msg = [""]
 
             def callback(x):
-                fx = objective.compute_scalar(x, *args)
-                if len(allx) > 1:
+                if len(allx) > 0:
                     dx = allx[-1] - x
-                    df = allf[-1] - fx
-                    allx.append(x)
-                    allf.append(fx)
                     dx_norm = np.linalg.norm(dx)
-                    x_norm = np.linalg.norm(x)
-                    if verbose > 2:
-                        print_iteration_nonlinear(
-                            len(allx), None, fx, df, dx_norm, None
+                    if dx_norm > 0:
+                        fx = objective.compute_scalar(x, *args)
+                        df = allf[-1] - fx
+                        allx.append(x)
+                        allf.append(fx)
+                        x_norm = np.linalg.norm(x)
+                        if verbose > 2:
+                            print_iteration_nonlinear(
+                                len(allx), None, fx, df, dx_norm, None
+                            )
+                        success, message = check_termination(
+                            df,
+                            fx,
+                            dx_norm,
+                            x_norm,
+                            np.inf,
+                            1,
+                            ftol,
+                            xtol,
+                            0,
+                            len(allx),
+                            maxiter,
+                            0,
+                            np.inf,
+                            0,
+                            np.inf,
+                            0,
+                            np.inf,
                         )
-                    success, message = check_termination(
-                        df,
-                        fx,
-                        dx_norm,
-                        x_norm,
-                        np.inf,
-                        1,
-                        ftol,
-                        xtol,
-                        0,
-                        len(x),
-                        maxiter,
-                        0,
-                        np.inf,
-                        0,
-                        np.inf,
-                        0,
-                        np.inf,
-                    )
-                    if success and dx_norm > 0:
-                        msg[0] = message
-                        raise StopIteration
+                        if success:
+                            msg[0] = message
+                            raise StopIteration
                 else:
                     dx = None
                     df = None
+                    fx = objective.compute_scalar(x, *args)
                     allx.append(x)
                     allf.append(fx)
                     dx_norm = None

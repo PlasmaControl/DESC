@@ -2342,6 +2342,14 @@ def compute_quasisymmetry(
         )
     )
 
+    # B covariant component derivatives
+    magnetic_field["B_theta_t"] = dot(
+        magnetic_field["B_t"], cov_basis["e_theta"], 0
+    ) + dot(magnetic_field["B"], cov_basis["e_theta_t"], 0)
+    magnetic_field["B_zeta_z"] = dot(
+        magnetic_field["B_z"], cov_basis["e_zeta"], 0
+    ) + dot(magnetic_field["B"], cov_basis["e_zeta_z"], 0)
+
     # B contravariant component derivatives
     magnetic_field["B0_tt"] = -(
         profiles["psi_r"]
@@ -2717,7 +2725,26 @@ def compute_quasisymmetry(
         - magnetic_field["|B|_t"] * magnetic_field["|B|_z"] / magnetic_field["|B|"]
     )
 
+    # contravariant basis vectors
+    con_basis = {}
+    con_basis["e^rho"] = (
+        cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0) / jacobian["g"]
+    )
+    con_basis["e^theta"] = (
+        cross(cov_basis["e_zeta"], cov_basis["e_rho"], 0) / jacobian["g"]
+    )
+    con_basis["e^zeta"] = jnp.array(
+        [toroidal_coords["0"], 1 / toroidal_coords["R"], toroidal_coords["0"]]
+    )
+
     quasisymmetry = {}
+
+    quasisymmetry["|grad(rho)|"] = jnp.sqrt(
+        dot(con_basis["e^rho"], con_basis["e^rho"], 0)
+    )
+    quasisymmetry["|grad(psi)|"] = jnp.sqrt(
+        profiles["psi_r"] ** 2 * quasisymmetry["|grad(rho)|"] ** 2
+    )
 
     # B * grad(|B|) and derivatives
     quasisymmetry["B*grad(|B|)"] = (
@@ -2737,23 +2764,43 @@ def compute_quasisymmetry(
         + magnetic_field["B^zeta"] * magnetic_field["|B|_zz"]
     )
 
-    # Triple Product QS metric
-    quasisymmetry["QS_TP"] = (profiles["psi_r"] / jacobian["g"]) * (
+    # Triple Product QS metric (dimensionless)
+    quasisymmetry["QS_TP"] = (
+        jacobian["g"] / (quasisymmetry["|grad(psi)|"] ** 2 * magnetic_field["|B|"])
+    ) * (
         magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
         - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
     )
     quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0,)
 
-    # Flux Function QS metric
+    # Flux Function QS metrics (dimensionless)
     quasisymmetry["QS_FF"] = (
-        (profiles["psi_r"] / jacobian["g"])
-        * (
-            magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-            - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-        )
-        / quasisymmetry["B*grad(|B|)"]
+        +magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+        - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+    ) / (jacobian["g"] * quasisymmetry["B*grad(|B|)"] * quasisymmetry["|grad(rho)|"])
+    quasisymmetry["QS_FF_t"] = (
+        magnetic_field["B_zeta_t"] * magnetic_field["|B|_t"]
+        - magnetic_field["B_theta_t"] * magnetic_field["|B|_z"]
+        + magnetic_field["B_zeta"] * magnetic_field["|B|_tt"]
+        - magnetic_field["B_theta"] * magnetic_field["|B|_tz"]
+    ) / (jacobian["g"] * quasisymmetry["B*grad(|B|)"] * quasisymmetry["|grad(rho)|"])
+    -(quasisymmetry["F"] / quasisymmetry["|grad(psi)|"]) * (
+        jacobian["g_t"] / jacobian["g"]
+        + quasisymmetry["B*grad(|B|)_t"] / quasisymmetry["B*grad(|B|)"]
+    )
+    quasisymmetry["QS_FF_z"] = (
+        magnetic_field["B_zeta_z"] * magnetic_field["|B|_t"]
+        - magnetic_field["B_theta_z"] * magnetic_field["|B|_z"]
+        + magnetic_field["B_zeta"] * magnetic_field["|B|_tz"]
+        - magnetic_field["B_theta"] * magnetic_field["|B|_zz"]
+    ) / (jacobian["g"] * quasisymmetry["B*grad(|B|)"] * quasisymmetry["|grad(rho)|"])
+    -(quasisymmetry["F"] / quasisymmetry["|grad(psi)|"]) * (
+        jacobian["g_z"] / jacobian["g"]
+        + quasisymmetry["B*grad(|B|)_z"] / quasisymmetry["B*grad(|B|)"]
     )
     quasisymmetry["QS_FF"] = put(quasisymmetry["QS_FF"], axis, 0,)
+    quasisymmetry["QS_FF_t"] = put(quasisymmetry["QS_FF_t"], axis, 0,)
+    quasisymmetry["QS_FF_z"] = put(quasisymmetry["QS_FF_z"], axis, 0,)
 
     return (
         quasisymmetry,

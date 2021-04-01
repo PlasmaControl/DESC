@@ -92,7 +92,7 @@ def DummyStellarator(tmpdir_factory):
         "L": 2,
         "M": 2,
         "N": 1,
-        "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0],]),
+        "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0]]),
         "boundary": np.array(
             [
                 [0, 0, 0, 3, 0],

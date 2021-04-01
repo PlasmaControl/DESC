@@ -890,7 +890,7 @@ def _format_name(name):
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(rho)|": r"(\mathrm{m}^{-1})",
         "|beta|": r"(\mathrm{m}^{-1})",
-        "QS": r"(\mathrm{T}^4/\mathrm{m}^2)",
+        "QS": "",
         "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
     }
     name_dict["units"] = units[name_dict["base"]]

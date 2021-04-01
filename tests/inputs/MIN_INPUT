@@ -4,7 +4,7 @@
 M_pol = 6
 
 # pressure and rotational transform profiles
-l:   0  cI =   1.61800000E+00
+l:   0  i =   1.61800000E+00
 
 # fixed-boundary surface shape
 m:   0  n:   0  R1 =   5.00000000E+00

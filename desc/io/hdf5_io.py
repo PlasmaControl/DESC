@@ -1,4 +1,5 @@
 import warnings
+import numpy as np
 import h5py
 from .core_io import IO, Reader, Writer
 
@@ -260,7 +261,13 @@ class hdf5Writer(hdf5IO, Writer):
         loc.create_dataset("name", data=type(obj).__name__)
         for attr in obj._io_attrs_:
             try:
-                loc.create_dataset(attr, data=getattr(obj, attr))
+                data = getattr(obj, attr)
+                compression = (
+                    "gzip"
+                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
+                    else None
+                )
+                loc.create_dataset(attr, data=data, compression=compression)
             except AttributeError:
                 warnings.warn(
                     "Save attribute '{}' was not saved as it does "
@@ -301,7 +308,13 @@ class hdf5Writer(hdf5IO, Writer):
         loc.create_dataset("name", data="dict")
         for key in thedict.keys():
             try:
-                loc.create_dataset(key, data=thedict[key])
+                data = thedict[key]
+                compression = (
+                    "gzip"
+                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
+                    else None
+                )
+                loc.create_dataset(key, data=data, compression=compression)
             except TypeError:
                 group = loc.create_group(key)
                 self.write_obj(thedict[key], group)
@@ -321,7 +334,13 @@ class hdf5Writer(hdf5IO, Writer):
         loc.create_dataset("name", data="list")
         for i in range(len(thelist)):
             try:
-                loc.create_dataset(str(i), data=thelist[i])
+                data = thelist[i]
+                compression = (
+                    "gzip"
+                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
+                    else None
+                )
+                loc.create_dataset(str(i), data=data, compression=compression)
             except TypeError:
                 subloc = loc.create_group(str(i))
                 self.write_obj(thelist[i], where=subloc)

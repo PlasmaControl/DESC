@@ -107,6 +107,9 @@ class InputReader:
         else:
             os.environ["DESC_BACKEND"] = "jax"
 
+        if args.quiet:
+            args.verbose = 0
+
         if args.gpu:
             set_device("gpu")
         else:

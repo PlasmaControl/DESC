@@ -4,14 +4,18 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
-from scipy.optimize import fsolve
 
-from desc.utils import sign
-from desc.grid import Grid, LinearGrid, QuadratureGrid
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, jacobi
+from desc.grid import Grid, LinearGrid
+from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.equilibrium import Equilibrium
 from desc.boundary_conditions import LCFSConstraint
+from desc.vmec_utils import (
+    ptolemy_identity_fwd,
+    ptolemy_identity_rev,
+    fourier_to_zernike,
+    zernike_to_fourier,
+)
 
 
 class VMECIO:
@@ -19,7 +23,7 @@ class VMECIO:
 
     @classmethod
     def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi"):
-        """Loads a VMEC netCDF file as a Equilibrium.
+        """Load a VMEC netCDF file as a Equilibrium.
 
         Parameters
         ----------
@@ -85,24 +89,24 @@ class VMECIO:
         file.close
 
         # boundary
-        m, n, Rb_lmn = cls._ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
-        m, n, Zb_lmn = cls._ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
+        m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
+        m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
         inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
 
         # initialize Equilibrium
         eq = Equilibrium(inputs=inputs)
 
         # R
-        m, n, R_mn = cls._ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
-        eq.R_lmn = cls._fourier_to_zernike(m, n, R_mn, eq.R_basis)
+        m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
+        eq.R_lmn = fourier_to_zernike(m, n, R_mn, eq.R_basis)
 
         # Z
-        m, n, Z_mn = cls._ptolemy_identity_fwd(xm, xn, s=zmns, c=zmnc)
-        eq.Z_lmn = cls._fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
+        m, n, Z_mn = ptolemy_identity_fwd(xm, xn, s=zmns, c=zmnc)
+        eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
 
         # lambda
-        m, n, L_mn = cls._ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.L_lmn = cls._fourier_to_zernike(m, n, L_mn, eq.L_basis)
+        m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
+        eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
         BC = LCFSConstraint(
@@ -120,7 +124,7 @@ class VMECIO:
 
     @classmethod
     def save(cls, eq, path, surfs=128):
-        """Saves an Equilibrium as a netCDF file in the VMEC format.
+        """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
         ----------
@@ -320,8 +324,8 @@ class VMECIO:
             rmns = file.createVariable("rmns", np.float64, ("radius", "mn_mode"))
             rmns.long_name = "sin(m*t-n*p) component of cylindrical R, on full mesh"
             rmns.units = "m"
-        m, n, x_mn = cls._zernike_to_fourier(eq.R_lmn, basis=eq.R_basis, rho=r_full)
-        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        m, n, x_mn = zernike_to_fourier(eq.R_lmn, basis=eq.R_basis, rho=r_full)
+        xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         rmnc[:] = c
         if not eq.sym:
             rmns[:] = s
@@ -334,8 +338,8 @@ class VMECIO:
             zmnc = file.createVariable("zmnc", np.float64, ("radius", "mn_mode"))
             zmnc.long_name = "cos(m*t-n*p) component of cylindrical Z, on full mesh"
             zmnc.units = "m"
-        m, n, x_mn = cls._zernike_to_fourier(eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
-        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        m, n, x_mn = zernike_to_fourier(eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
+        xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         zmns[:] = s
         if not eq.sym:
             zmnc[:] = c
@@ -348,8 +352,8 @@ class VMECIO:
             lmnc = file.createVariable("lmnc", np.float64, ("radius", "mn_mode"))
             lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
-        m, n, x_mn = cls._zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
-        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        m, n, x_mn = zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
+        xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         lmns[1:, :] = s
         if not eq.sym:
             lmnc[1:, :] = c
@@ -389,7 +393,7 @@ class VMECIO:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
-        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[1:, :] = c
         if not eq.sym:
             gmns[1:, :] = s
@@ -414,247 +418,16 @@ class VMECIO:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
-        xm, xn, s, c = cls._ptolemy_identity_rev(m, n, x_mn)
+        xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bmnc[1:, :] = c
         if not eq.sym:
             bmns[1:, :] = s
 
         file.close
 
-    @staticmethod
-    def _ptolemy_identity_fwd(m_0, n_0, s, c):
-        """Converts from double-angle form:
-            s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
-        to a double Fourier series of the form:
-            ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-            cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
-        using Ptolemy's sum and difference formulas.
-
-        Parameters
-        ----------
-        m_0 : ndarray
-            Poloidal mode numbers of the double-angle Fourier basis.
-        n_0 : ndarray
-            Toroidal mode numbers of the double-angle Fourier basis.
-        s : ndarray, shape(surfs,num_modes), optional
-            Coefficients of sin(m*theta-n*phi) terms.
-            Each row is a separate flux surface.
-        c : ndarray, shape(surfs,num_modes), optional
-            Coefficients of cos(m*theta-n*phi) terms.
-            Each row is a separate flux surface.
-
-        Returns
-        -------
-        m_1 : ndarray, shape(num_modes,)
-            Poloidal mode numbers of the double Fourier basis.
-        n_1 : ndarray, shape(num_modes,)
-            Toroidal mode numbers of the double Fourier basis.
-        x : ndarray, shape(surfs,num_modes,)
-            Spectral coefficients in the double Fourier basis.
-
-        """
-        s = np.atleast_2d(s)
-        c = np.atleast_2d(c)
-
-        M = int(np.max(np.abs(m_0)))
-        N = int(np.max(np.abs(n_0)))
-
-        mn_1 = np.array(
-            [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
-        )
-        m_1 = mn_1[:, 0]
-        n_1 = mn_1[:, 1]
-        x = np.zeros((s.shape[0], m_1.size))
-
-        for k in range(len(m_0)):
-            # sin(m*theta)*cos(n*phi)
-            sin_mn_1 = np.where(
-                (mn_1 == [-np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1)
-            )[0][0]
-            # cos(m*theta)*sin(n*phi)
-            sin_mn_2 = np.where(
-                (mn_1 == [np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1)
-            )[0][0]
-            # cos(m*theta)*cos(n*phi)
-            cos_mn_1 = np.where((mn_1 == [np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[
-                0
-            ][0]
-            # sin(m*theta)*sin(n*phi)
-            cos_mn_2 = np.where(
-                (mn_1 == [-np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1)
-            )[0][0]
-
-            if np.sign(m_0[k]) != 0:
-                x[:, sin_mn_1] += s[:, k]
-            x[:, cos_mn_1] += c[:, k]
-            if np.sign(n_0[k]) > 0:
-                x[:, sin_mn_2] -= s[:, k]
-                if np.sign(m_0[k]) != 0:
-                    x[:, cos_mn_2] += c[:, k]
-            elif np.sign(n_0[k]) < 0:
-                x[:, sin_mn_2] += s[:, k]
-                if np.sign(m_0[k]) != 0:
-                    x[:, cos_mn_2] -= c[:, k]
-
-        return m_1, n_1, x
-
-    @staticmethod
-    def _ptolemy_identity_rev(m_1, n_1, x):
-        """Converts from a double Fourier series of the form:
-            ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-            cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
-        to the double-angle form:
-            s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
-        using Ptolemy's sum and difference formulas.
-
-        Parameters
-        ----------
-        m_1 : ndarray, shape(num_modes,)
-            Poloidal mode numbers of the double Fourier basis.
-        n_1 : ndarray, shape(num_modes,)
-            Toroidal mode numbers of the double Fourier basis.
-        x : ndarray, shape(surfs,num_modes,)
-            Spectral coefficients in the double Fourier basis.
-
-        Returns
-        -------
-        m_0 : ndarray
-            Poloidal mode numbers of the double-angle Fourier basis.
-        n_0 : ndarray
-            Toroidal mode numbers of the double-angle Fourier basis.
-        s : ndarray, shape(surfs,num_modes)
-            Coefficients of sin(m*theta-n*phi) terms.
-            Each row is a separate flux surface.
-        c : ndarray, shape(surfs,num_modes)
-            Coefficients of cos(m*theta-n*phi) terms.
-            Each row is a separate flux surface.
-
-        """
-        x = np.atleast_2d(x)
-
-        M = int(np.max(np.abs(m_1)))
-        N = int(np.max(np.abs(n_1)))
-
-        mn_0 = np.array([[m, n - N] for m in range(M + 1) for n in range(2 * N + 1)])
-        mn_0 = mn_0[N:, :]
-        m_0 = mn_0[:, 0]
-        n_0 = mn_0[:, 1]
-
-        s = np.zeros((x.shape[0], m_0.size))
-        c = np.zeros_like(s)
-
-        for k in range(len(m_1)):
-            # (|m|*theta + |n|*phi)
-            idx_pos = np.where((mn_0 == [np.abs(m_1[k]), -np.abs(n_1[k])]).all(axis=1))[
-                0
-            ]
-            # (|m|*theta - |n|*phi)
-            idx_neg = np.where((mn_0 == [np.abs(m_1[k]), np.abs(n_1[k])]).all(axis=1))[
-                0
-            ]
-
-            # if m == 0 and n != 0, p = 0; otherwise p = 1
-            p = int(bool(m_1[k])) ** int(bool(n_1[k]))
-
-            if sign(m_1[k]) * sign(n_1[k]) < 0:
-                # sin_mn terms
-                if idx_pos.size:
-                    s[:, idx_pos[0]] += x[:, k] / (2 ** p)
-                if idx_neg.size:
-                    s[:, idx_neg[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
-            else:
-                # cos_mn terms
-                if idx_pos.size:
-                    c[:, idx_pos[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
-                if idx_neg.size:
-                    c[:, idx_neg[0]] += x[:, k] / (2 ** p)
-
-        return m_0, n_0, s, c
-
-    @staticmethod
-    def _fourier_to_zernike(m, n, x_mn, basis):
-        """Converts from a double Fourier series at each flux surface to a
-        Fourier-Zernike basis.
-
-        Parameters
-        ----------
-        m : ndarray, shape(num_modes,)
-            Poloidal mode numbers.
-        n : ndarray, shape(num_modes,)
-            Toroidal mode numbers.
-        x_mn : ndarray, shape(surfs,num_modes)
-            Spectral coefficients in the double Fourier basis.
-            Each row is a separate flux surface, increasing from the magnetic
-            axis to the boundary.
-        basis : FourierZernikeBasis
-            Basis set for x_lmn
-
-        Returns
-        -------
-        x_lmn : ndarray, shape(num_modes,)
-            Fourier-Zernike spectral coefficients.
-
-        """
-        x_lmn = np.zeros((basis.num_modes,))
-        surfs = x_mn.shape[0]
-        rho = np.sqrt(np.linspace(0, 1, surfs))
-
-        for k in range(len(m)):
-            idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
-            if len(idx):
-                A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
-                c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
-                x_lmn[idx] = c
-
-        return x_lmn
-
-    @staticmethod
-    def _zernike_to_fourier(x_lmn, basis, rho):
-        """Converts from a Fourier-Zernike basis to a double Fourier series at each
-        flux surface.
-
-        Parameters
-        ----------
-        x_lmn : ndarray, shape(num_modes,)
-            Fourier-Zernike spectral coefficients.
-        basis : FourierZernikeBasis
-            Basis set for x_lmn.
-        rho : ndarray
-            Radial coordinates of flux surfaces, rho = sqrt(psi).
-
-        Returns
-        -------
-        m : ndarray, shape(num_modes,)
-            Poloidal mode numbers.
-        n : ndarray, shape(num_modes,)
-            Toroidal mode numbers.
-        x_mn : ndarray, shape(surfs,num_modes)
-            Spectral coefficients in the double Fourier basis.
-            Each row is a separate flux surface, increasing from the magnetic
-            axis to the boundary.
-
-        """
-        M = basis.M
-        N = basis.N
-
-        mn = np.array(
-            [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
-        )
-        m = mn[:, 0]
-        n = mn[:, 1]
-
-        x_mn = np.zeros((rho.size, m.size))
-        for k in range(len(m)):
-            idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
-            if len(idx):
-                A = jacobi(rho, basis.modes[idx, 0], basis.modes[idx, 1])
-                x_mn[:, k] = np.matmul(A, x_lmn[idx])
-
-        return m, n, x_mn
-
     @classmethod
     def read_vmec_output(cls, fname):
-        """Reads VMEC data from wout nc file
+        """Read VMEC data from wout NetCDF file.
 
         Parameters
         ----------
@@ -665,8 +438,8 @@ class VMECIO:
         -------
         vmec_data : dict
             the VMEC data fields
-        """
 
+        """
         file = Dataset(fname, mode="r")
 
         vmec_data = {
@@ -690,7 +463,7 @@ class VMECIO:
 
     @staticmethod
     def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, lam=None, sym=True):
-        """Interpolates VMEC data on a flux surface
+        """Interpolate VMEC data on a flux surface.
 
         Parameters
         ----------
@@ -749,7 +522,7 @@ class VMECIO:
 
     @classmethod
     def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Computes the average normalized area difference between vmec and desc equilibria
+        """Compute average normalized area difference between VMEC and DESC equilibria.
 
         Parameters
         ----------
@@ -765,13 +538,13 @@ class VMECIO:
         Returns
         -------
         area : float
-            the average normalized area difference between flux surfaces
-            area between flux surfaces is defined as the symmetric difference between
-            the two shapes, and each is normalized to the nominal area of the flux surface,
-            and finally averaged over the total number of flux surfaces being compared
-        """
+            the average normalized area difference between flux surfaces area between
+            flux surfaces is defined as the symmetric difference between the two shapes,
+            and each is normalized to the nominal area of the flux surface, and finally
+            averaged over the total number of flux surfaces being compared
 
-        # 1e-3 seems like a reasonable tolerance for testing, similar to comparison by eye
+        """
+        # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
 
@@ -810,7 +583,7 @@ class VMECIO:
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Computes the average normalized area difference between vmec and desc equilibria
+        """Compute ???.
 
         Parameters
         ----------
@@ -915,7 +688,7 @@ class VMECIO:
 
     @classmethod
     def plot_vmec_comparison(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Plots a comparison to VMEC flux surfaces
+        """Plot a comparison to VMEC flux surfaces.
 
         Parameters
         ----------

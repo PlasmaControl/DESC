@@ -1185,6 +1185,7 @@ class _Configuration(IOAble, ABC):
         -------
         volume : float
             plasma volume in m^3
+
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)

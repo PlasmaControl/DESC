@@ -1139,6 +1139,7 @@ class _Configuration(IOAble, ABC):
             dictionary of ndarray, shape(num_nodes,), of quasisymmetry components.
             The triple product metric has the key 'QS_TP',
         and the flux function metric has the key 'QS_FF'.
+ 
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)
@@ -1187,6 +1188,7 @@ class _Configuration(IOAble, ABC):
         -------
         volume : float
             plasma volume in m^3
+
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)

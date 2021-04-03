@@ -1,5 +1,4 @@
 import numpy as np
-import functools
 import warnings
 from termcolor import colored
 
@@ -8,7 +7,7 @@ from termcolor import colored
 
 
 class Timer:
-    """Simple object for organizing timing info
+    """Simple object for organizing timing info.
 
     Create a Timer object, which can then keep track of
     multiple concurrent performance timers, each associated with
@@ -53,7 +52,7 @@ class Timer:
             self.op = time.perf_counter
 
     def start(self, name):
-        """Starts a timer
+        """Start a timer.
 
         Parameters
         ----------
@@ -61,11 +60,10 @@ class Timer:
             name to associate with timer
 
         """
-
         self._timers[name] = [self.op()]
 
     def stop(self, name):
-        """Stops a running timer:
+        """Stop a running timer.
 
         Parameters
         ----------
@@ -78,7 +76,6 @@ class Timer:
             if timer ``'name'`` has not been started
 
         """
-
         try:
             self._timers[name].append(self.op())
         except KeyError:
@@ -92,7 +89,7 @@ class Timer:
 
     @staticmethod
     def pretty_print(name, time):
-        """Pretty prints time interval
+        """Pretty print time interval.
 
         Does not modify or use any internal timer data,
         this is just a helper for pretty printing arbitrary time data
@@ -129,7 +126,7 @@ class Timer:
         print(colored("Timer: {} = {}".format(name, out), "green"))
 
     def disp(self, name):
-        """Pretty prints elapsed time
+        """Pretty print elapsed time.
 
         If the timer has been stopped, it reports the time delta between
         start and stop. If it has not been stopped, it reports the current
@@ -170,6 +167,7 @@ class Timer:
 
 class _Indexable:
     """Helper object for building indexes for indexed update functions.
+
     This is a singleton object that overrides the ``__getitem__`` method
     to return the index it is passed.
     >>> opsindex[1:2, 3, None, ..., ::2]
@@ -198,7 +196,7 @@ opsindex = _Indexable()
 
 
 def unpack_state(x, nR, nZ):
-    """Unpacks the state vector x into R_lmn, Z_lmn, L_lmn components
+    """Unpack the state vector x into R_lmn, Z_lmn, L_lmn components.
 
     Parameters
     ----------
@@ -226,7 +224,7 @@ def unpack_state(x, nR, nZ):
 
 
 def equals(a, b):
-    """Compares dictionaries that have numpy array values
+    """Compare dictionaries that have numpy array values.
 
     Parameters
     ----------
@@ -254,7 +252,7 @@ def equals(a, b):
 
 
 def flatten_list(x):
-    """Flattens a nested list
+    """Flatten a nested list.
 
     Parameters
     ----------
@@ -274,7 +272,7 @@ def flatten_list(x):
 
 
 def issorted(x, axis=None, tol=1e-12):
-    """Checks if an array is sorted, within a given tolerance
+    """Check if an array is sorted, within a given tolerance.
 
     Checks whether x[i+1] - x[i] > tol
 
@@ -303,7 +301,7 @@ def issorted(x, axis=None, tol=1e-12):
 
 
 def isalmostequal(x, axis=-1, tol=1e-12):
-    """Checks if all values of an array are equal, to within a given tolerance
+    """Check if all values of an array are equal, to within a given tolerance.
 
     Parameters
     ----------
@@ -312,7 +310,8 @@ def isalmostequal(x, axis=-1, tol=1e-12):
     axis : int
         axis along which to make comparison. If None, the flattened array is used
     tol : float
-        tolerance for comparison. Array is considered equal if std(x)*len(x)< tol along axis
+        tolerance for comparison.
+        Array is considered equal if std(x)*len(x)< tol along axis
 
     Returns
     -------
@@ -328,7 +327,7 @@ def isalmostequal(x, axis=-1, tol=1e-12):
 
 
 def islinspaced(x, axis=-1, tol=1e-12):
-    """Checks if all values of an array are linearly spaced, to within a given tolerance
+    """Check if all values of an array are linearly spaced, to within a given tolerance.
 
     Parameters
     ----------
@@ -337,7 +336,8 @@ def islinspaced(x, axis=-1, tol=1e-12):
     axis : int
         axis along which to make comparison. If None, the flattened array is used
     tol : float
-        tolerance for comparison. Array is considered linearly spaced if std(diff(x)) < tol along axis
+        tolerance for comparison.
+        Array is considered linearly spaced if std(diff(x)) < tol along axis
 
     Returns
     -------
@@ -353,7 +353,7 @@ def islinspaced(x, axis=-1, tol=1e-12):
 
 
 def sign(x):
-    """Sign function, but returns 1 for x==0
+    """Sign function, but returns 1 for x==0.
 
     Parameters
     ----------
@@ -372,8 +372,7 @@ def sign(x):
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
-    """copy coefficients from one resolution to another"""
-
+    """Copy coefficients from one resolution to another."""
     num_modes = modes_new.shape[0]
     if c_new is None:
         c_new = np.zeros((num_modes,))
@@ -386,8 +385,7 @@ def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
 
 
 def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
-    """copies a state vector from one resolution to another"""
-
+    """Copy a state vector from one resolution to another."""
     R_lmn, Z_lmn, L_lmn = unpack_state(x, len(old_R), len(old_Z))
     R_lmn = copy_coeffs(R_lmn, old_R, new_R)
     Z_lmn = copy_coeffs(Z_lmn, old_Z, new_Z)

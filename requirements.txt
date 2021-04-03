@@ -8,6 +8,7 @@ nvgpu
 psutil
 h5py
 netcdf4
+booz_xform
 colorama
 termcolor
 shapely

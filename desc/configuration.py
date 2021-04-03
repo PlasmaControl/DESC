@@ -1,15 +1,17 @@
 import numpy as np
+import booz_xform as bx
 import copy
 import warnings
+import math
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
+
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
-from desc.boundary_conditions import BoundaryCondition
 from desc.basis import (
     PowerSeries,
     FourierSeries,
@@ -17,7 +19,6 @@ from desc.basis import (
     ZernikePolynomial,
     FourierZernikeBasis,
 )
-
 from desc.compute_funs import (
     compute_profiles,
     compute_toroidal_coords,
@@ -32,6 +33,10 @@ from desc.compute_funs import (
     compute_force_error_magnitude,
     compute_energy,
     compute_quasisymmetry,
+)
+from desc.vmec_utils import (
+    ptolemy_identity_rev,
+    zernike_to_fourier,
 )
 
 
@@ -82,7 +87,7 @@ class _Configuration(IOAble, ABC):
     }
 
     def __init__(self, inputs):
-        """Initializes a Configuration
+        """Initialize a Configuration.
 
         Parameters
         ----------
@@ -237,11 +242,8 @@ class _Configuration(IOAble, ABC):
             warnings.warn(
                 colored(
                     "Configuration resolution does not fully resolve boundary inputs, "
-                    + "Configuration L,M,N={},{},{}, "
+                    + "Configuration L,M,N={},{},{}, ".format(self.L, self.M, self.N)
                     + "boundary resolution L,M,N={},{},{}".format(
-                        self.L,
-                        self.M,
-                        self.N,
                         int(np.max(abs(nonzero_modes[:, 0]))),
                         int(np.max(abs(nonzero_modes[:, 1]))),
                         int(np.max(abs(nonzero_modes[:, 2]))),
@@ -1137,6 +1139,7 @@ class _Configuration(IOAble, ABC):
             dictionary of ndarray, shape(num_nodes,), of quasisymmetry components.
             The triple product metric has the key 'QS_TP',
         and the flux function metric has the key 'QS_FF'.
+ 
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)
@@ -1185,6 +1188,7 @@ class _Configuration(IOAble, ABC):
         -------
         volume : float
             plasma volume in m^3
+
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)
@@ -1211,6 +1215,50 @@ class _Configuration(IOAble, ABC):
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
+
+    def compute_dW(self, grid=None):
+        """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            grid to use for computation. If None, a QuadratureGrid is created
+
+        Returns
+        -------
+        dW : ndarray
+            symmetric matrix whose eigenvalues determine mhd stability and eigenvectors
+            describe the shape of unstable perturbations
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(L=self.L, M=self.M, N=self.N)
+
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
+        L_transform = Transform(grid, self.L_basis, derivs=1, method="fft")
+        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
+        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
+        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="fft")
+        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="fft")
+
+        obj = get_objective_function(
+            "energy",
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint=None,
+            use_jit=False,
+        )
+        x = self.x
+        dW = obj.hess_x(
+            x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
+        )
+        return dW
 
     def compute_axis_location(self, zeta=0):
         """Find the axis location on specified zeta plane(s).
@@ -1290,49 +1338,6 @@ class _Configuration(IOAble, ABC):
 
         return rline.is_simple and vline.is_simple
 
-    def compute_dW(self, grid=None):
-        """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.
-
-        Parameters
-        ----------
-        grid : Grid, optional
-            grid to use for computation. If None, a QuadratureGrid is created
-
-        Returns
-        -------
-        dW : ndarray
-            symmetric matrix whose eigenvalues determine mhd stability and eigenvectors
-            describe the shape of unstable perturbations
-
-        """
-        if grid is None:
-            grid = QuadratureGrid(L=2 * self.L + 1, M=2 * self.M + 1, N=2 * self.N + 1)
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="fft")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="fft")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="fft")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="fft")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="fft")
-        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="fft")
-        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="fft")
-
-        obj = get_objective_function(
-            "energy",
-            R_transform,
-            Z_transform,
-            L_transform,
-            Rb_transform,
-            Zb_transform,
-            p_transform,
-            i_transform,
-            BC_constraint=None,
-            use_jit=False,
-        )
-        x = self.x
-        dW = obj.hess_x(
-            x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
-        )
-        return dW
-
     def to_sfl(
         self,
         L=None,
@@ -1377,8 +1382,8 @@ class _Configuration(IOAble, ABC):
         eq_sfl : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
             Only returned if "copy" is True, otherwise modifies the current equilibrium in place.
-        """
 
+        """
         L = L or self.L
         M = M or self.M
         N = N or self.N
@@ -1440,6 +1445,135 @@ class _Configuration(IOAble, ABC):
 
         if not in_place:
             return eq_sfl
+
+    def run_booz_xform(
+        self, M_nyq=None, N_nyq=None, M_boz=None, N_boz=None, rho=None, verbose=True
+    ):
+        """Convert to Boozer coordinates by running booz_xform.
+
+        Parameters
+        ----------
+        M_nyq : int
+            DESCRIPTION. The default is None.
+        N_nyq : int
+            DESCRIPTION. The default is None.
+        M_b : int
+            DESCRIPTION. The default is None.
+        N_b : int
+            DESCRIPTION. The default is None.
+        rho : ndarray
+            Radial coordinates of the flux surfaces to evaluate at.
+        verbose : bool
+            Set False to suppress output of Booz_xform calculations.
+
+        Returns
+        -------
+        b : Booz_xform
+            Booz_xform object that contains the transformed quantities.
+
+        """
+        if M_nyq is None:
+            M_nyq = math.ceil(1.5 * self.M)
+        if N_nyq is None:
+            N_nyq = math.ceil(1.5 * self.N)
+        if M_boz is None:
+            M_boz = 2 * self.M
+        if N_boz is None:
+            N_boz = 2 * self.N
+        if rho is None:
+            rho = np.linspace(0.01, 1, num=100)
+
+        # Booz_xform object
+        b = bx.Booz_xform()
+        b.verbose = verbose
+        b.asym = not self.sym
+        b.nfp = int(self.NFP)
+        b.ns_in = len(rho)
+        b.s_in = rho ** 2
+        b.compute_surfs = np.arange(0, b.ns_in)
+
+        # equilibrium resolution
+        b.mpol = self.M + 1
+        b.ntor = self.N
+        b.mnmax = (2 * self.N + 1) * self.M + self.N + 1
+        b.xm = np.tile(
+            np.linspace(0, self.M, self.M + 1), (2 * self.N + 1, 1)
+        ).T.flatten()[-b.mnmax :]
+        b.xn = np.tile(
+            np.linspace(-self.N, self.N, 2 * self.N + 1) * self.NFP, self.M + 1
+        )[-b.mnmax :]
+
+        # Nyquist resolution
+        b.mpol_nyq = M_nyq
+        b.ntor_nyq = N_nyq
+        b.mnmax_nyq = (2 * N_nyq + 1) * M_nyq + N_nyq + 1
+        b.xm_nyq = np.tile(
+            np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
+        ).T.flatten()[-b.mnmax :]
+        b.xn_nyq = np.tile(
+            np.linspace(-N_nyq, N_nyq, 2 * N_nyq + 1) * self.NFP, M_nyq + 1
+        )[-b.mnmax :]
+
+        # Boozer resolution
+        b.mboz = M_boz
+        b.nboz = N_boz
+
+        # R, Z, lambda
+        m, n, R_mn = zernike_to_fourier(self.R_lmn, basis=self.R_basis, rho=rho)
+        m, n, Z_mn = zernike_to_fourier(self.Z_lmn, basis=self.Z_basis, rho=rho)
+        m, n, L_mn = zernike_to_fourier(self.L_lmn, basis=self.L_basis, rho=rho)
+        xm, xn, R_s, R_c = ptolemy_identity_rev(m, n, R_mn)
+        xm, xn, Z_s, Z_c = ptolemy_identity_rev(m, n, Z_mn)
+        xm, xn, L_s, L_c = ptolemy_identity_rev(m, n, L_mn)
+        b.rmnc = R_c.T
+        b.zmns = Z_s.T
+        b.lmns = L_s.T
+        if not self.sym:
+            b.rmns = R_s.T
+            b.zmnc = Z_c.T
+            b.lmnc = L_c.T
+
+        # Nyquist grid for computing derived quantities
+        grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP)
+        if self.sym:
+            basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym="cos")
+        else:
+            basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym=None)
+        transform = Transform(grid, basis, build_pinv=True)
+        m = basis.modes[:, 1]
+        n = basis.modes[:, 2]
+
+        # |B|, B_theta, B_zeta
+        B_mn = np.zeros((b.ns_in, b.mnmax_nyq))
+        Bt_mn = np.zeros((b.ns_in, b.mnmax_nyq))
+        Bz_mn = np.zeros((b.ns_in, b.mnmax_nyq))
+        for k in range(b.ns_in):
+            grid = LinearGrid(
+                M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP, rho=rho[k]
+            )
+            data = self.compute_magnetic_field(grid)
+            B_mn[k, :] = transform.fit(data["|B|"])
+            Bt_mn[k, :] = transform.fit(data["B_theta"])
+            Bz_mn[k, :] = transform.fit(data["B_zeta"])
+        xm, xn, B_s, B_c = ptolemy_identity_rev(m, n, B_mn)
+        xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(m, n, Bt_mn)
+        xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(m, n, Bz_mn)
+        b.bmnc = B_c.T
+        b.bsubumnc = Bt_c.T
+        b.bsubvmnc = Bz_c.T
+        if not self.sym:
+            b.bmns = B_s.T
+            b.bsubumns = Bt_s.T
+            b.bsubvmns = Bz_s.T
+
+        # rotational transform
+        grid = LinearGrid(rho=rho)
+        transform = Transform(grid, self.i_basis)
+        b.iota = transform.transform(self.i_l)
+
+        # run booz_xform
+        b.run()
+        return b
 
 
 def format_profiles(profiles, p_basis, i_basis):

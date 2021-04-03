@@ -178,7 +178,6 @@ class Transform(IOAble):
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # this is the trivial case where we just return all zeros, so it doesn't matter
             self._method = "fft"
-            return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 

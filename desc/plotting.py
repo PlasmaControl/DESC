@@ -855,7 +855,7 @@ def _format_name(name):
             name_dict["d"] = split[1]
         elif len(split) == 2:
             name_dict["base"], other = split
-            if other in ["rho", "theta", "zeta", "beta"]:
+            if other in ["rho", "theta", "zeta", "beta", "TP", "FF"]:
                 name_dict["subs"] = other
             else:
                 name_dict["d"] = other
@@ -890,7 +890,7 @@ def _format_name(name):
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(rho)|": r"(\mathrm{m}^{-1})",
         "|beta|": r"(\mathrm{m}^{-1})",
-        "QS": r"(\mathrm{T}^4/\mathrm{m}^2)",
+        "QS": "",
         "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
     }
     name_dict["units"] = units[name_dict["base"]]
@@ -980,7 +980,10 @@ def _name_label(name_dict):
         supstr = ""
 
     if name_dict["subs"] != "":
-        substr = "_{" + esc + name_dict["subs"] + "}"
+        if name_dict["subs"] in ["TP", "FF"]:
+            substr = "_{" + name_dict["subs"] + "}"
+        else:
+            substr = "_{" + esc + name_dict["subs"] + "}"
     else:
         substr = ""
     label = (

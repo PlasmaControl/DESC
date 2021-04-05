@@ -2797,11 +2797,6 @@ def compute_quasisymmetry(
     quasisymmetry["QS_FF"] = put(
         quasisymmetry["QS_FF"], singular, quasisymmetry["QS_FF_0"][singular]
     )
-    # dimensionless
-    # quasisymmetry["QS_FF"] = (
-    #     quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
-    # )
-    # quasisymmetry["QS_FF"] = put(quasisymmetry["QS_FF"], axis, 0)
 
     return (
         quasisymmetry,

@@ -13,7 +13,12 @@ from desc.boundary_conditions import (
     PoincareConstraint,
     UmbilicConstraint,
 )
-from desc.compute_funs import compute_force_error_magnitude, dot, compute_energy
+from desc.compute_funs import (
+    compute_force_error_magnitude,
+    dot,
+    compute_energy,
+    compute_quasisymmetry,
+)
 
 __all__ = [
     "ForceErrorNodes",
@@ -525,11 +530,11 @@ class ForceErrorGalerkin(ObjectiveFunction):
                 [0, 1, 0],
                 [0, 0, 1],
                 [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
                 [1, 1, 0],
                 [1, 0, 1],
-                [0, 2, 0],
                 [0, 1, 1],
-                [0, 0, 2],
             ]
         )
         return derivatives
@@ -668,7 +673,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
         f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
         return f
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Print the integral errors for toroidal components of the force balance.
 
         Parameters
@@ -735,7 +740,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             "int(|F|): {:10.3e}  ".format(f_tot)
             + "int(|F_rho|): {:10.3e}  int(|F_beta|): {:10.3e}".format(f_rho, f_beta)
         )
-
         return None
 
 
@@ -788,11 +792,11 @@ class ForceErrorNodes(ObjectiveFunction):
                 [0, 1, 0],
                 [0, 0, 1],
                 [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
                 [1, 1, 0],
                 [1, 0, 1],
-                [0, 2, 0],
                 [0, 1, 1],
-                [0, 0, 2],
             ]
         )
         return derivatives
@@ -896,7 +900,7 @@ class ForceErrorNodes(ObjectiveFunction):
         residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Print the rms errors for radial and helical force balance.
 
         Parameters
@@ -967,7 +971,6 @@ class ForceErrorNodes(ObjectiveFunction):
                 resid_rms, f_rho_rms, f_beta_rms
             )
         )
-
         return None
 
 
@@ -1028,7 +1031,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             warnings.warn(
                 colored(
                     "Energy method requires 'quad' pattern nodes, "
-                    + "force error calculated will be incorrect",
+                    + "force error calculated will be incorrect.",
                     "yellow",
                 )
             )
@@ -1139,7 +1142,7 @@ class EnergyVolIntegral(ObjectiveFunction):
         residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
         """Print the MHD energy.
 
         Parameters
@@ -1196,6 +1199,404 @@ class EnergyVolIntegral(ObjectiveFunction):
                 energy["W_B"], energy["W_p"]
             )
         )
+        return None
+
+
+class QuasisymmetryTripleProduct(ObjectiveFunction):
+    """Maximizes quasisymmetry with the triple product definition.
+
+    Parameters
+    ----------
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
+
+    """
+
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "qs_tp"
+
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+                [0, 3, 0],
+                [0, 0, 3],
+                [1, 1, 1],
+                [1, 2, 0],
+                [1, 0, 2],
+                [0, 2, 1],
+                [0, 1, 2],
+            ]
+        )
+        return derivatives
+
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute quasisymmetry error.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        return quasisymmetry["QS_TP"]
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total quasisymetry error.
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total quasisymmetry error
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the rms errors for quasisymmetry.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
+
+        print("Residual: {:10.3e}".format(resid_rms))
+        return None
+
+
+class QuasisymmetryFluxFunction(ObjectiveFunction):
+    """Maximizes quasisymmetry with the flux function definition.
+
+    Parameters
+    ----------
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
+
+    """
+
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
+        use_jit=True,
+    ):
+
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+            use_jit,
+        )
+
+        rho_vals = np.unique(self.R_transform.grid.nodes[:, 0])
+        if rho_vals.size != 1:
+            warnings.warn(
+                colored(
+                    "QS Flux Function requires nodes on a single flux surface, "
+                    + "quasisymmetry error calculated will be incorrect.",
+                    "yellow",
+                )
+            )
+
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "qs_ff"
+
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+                [0, 3, 0],
+                [0, 0, 3],
+                [1, 1, 1],
+                [1, 2, 0],
+                [1, 0, 2],
+                [0, 2, 1],
+                [0, 1, 2],
+            ]
+        )
+        return derivatives
+
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute quasisymmetry error.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        # normalize to flux surface average
+        QS_FF = quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
+        return QS_FF
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total quasisymetry error.
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total quasisymmetry error
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the rms errors for quasisymmetry.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
+
+        print("Residual: {:10.3e}".format(resid_rms))
+        return None
 
 
 def get_objective_function(

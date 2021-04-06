@@ -131,7 +131,7 @@ def perturb(
         cutoff = cutoff * s[0]
         large = s > cutoff
         s_inv = np.divide(1, s, where=large)
-        s_inv[~large] = 0
+        s_inv[(~large,)] = 0
         RHS1 = eq.objective.compute(*args)
 
         # partial derivatives wrt input parameters (c)

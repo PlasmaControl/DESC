@@ -141,35 +141,35 @@ def print_header_nonlinear():
 def print_iteration_nonlinear(
     iteration, nfev, cost, cost_reduction, step_norm, optimality
 ):
-    if iteration is None:
+    if iteration is None or abs(iteration) == np.inf:
         iteration = " " * 15
     else:
         iteration = "{:^15}".format(iteration)
 
-    if nfev is None:
+    if nfev is None or abs(nfev) == np.inf:
         nfev = " " * 15
     else:
         nfev = "{:^15}".format(nfev)
 
-    if cost is None:
+    if cost is None or abs(cost) == np.inf:
         cost = " " * 15
     else:
-        cost = "{0:^15.2e}".format(cost)
+        cost = "{0:^15.4e}".format(cost)
 
-    if cost_reduction is None:
+    if cost_reduction is None or abs(cost_reduction) == np.inf:
         cost_reduction = " " * 15
     else:
         cost_reduction = "{0:^15.2e}".format(cost_reduction)
 
-    if step_norm is None:
+    if step_norm is None or abs(step_norm) == np.inf:
         step_norm = " " * 15
     else:
         step_norm = "{0:^15.2e}".format(step_norm)
 
-    if optimality is None:
+    if optimality is None or abs(optimality) == np.inf:
         optimality = " " * 15
     else:
-        step_norm = "{0:^15.2e}".format(optimality)
+        optimality = "{0:^15.2e}".format(optimality)
 
     print(
         "{0}{1}{2}{3}{4}{5}".format(
@@ -247,3 +247,48 @@ def check_termination(
         message = None
 
     return success, message
+
+
+def compute_jac_scale(A, prev_scale_inv=None):
+    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
+
+
+def evaluate_quadratic(J, g, s, diag=None):
+    """Compute values of a quadratic function arising in least squares.
+    The function is 0.5 * s.T * (J.T * J + diag) * s + g.T * s.
+    Parameters
+    ----------
+    J : ndarray, sparse matrix or LinearOperator, shape (m, n)
+        Jacobian matrix, affects the quadratic term.
+    g : ndarray, shape (n,)
+        Gradient, defines the linear term.
+    s : ndarray, shape (k, n) or (n,)
+        Array containing steps as rows.
+    diag : ndarray, shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
+    Returns
+    -------
+    values : ndarray with shape (k,) or float
+        Values of the function. If `s` was 2-D, then ndarray is
+        returned, otherwise, float is returned.
+    """
+    if s.ndim == 1:
+        Js = J.dot(s)
+        q = jnp.dot(Js, Js)
+        if diag is not None:
+            q += jnp.dot(s * diag, s)
+    else:
+        Js = J.dot(s.T)
+        q = jnp.sum(Js ** 2, axis=0)
+        if diag is not None:
+            q += jnp.sum(diag * s ** 2, axis=1)
+
+    l = jnp.dot(s, g)
+
+    return 0.5 * q + l

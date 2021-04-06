@@ -302,8 +302,6 @@ def fmintr(
                 tr_increase_ratio,
                 tr_decrease_threshold,
                 tr_decrease_ratio,
-                ga_ratio,
-                ga_accept_threshold,
             )
             if return_tr:
                 alltr.append(trust_radius)

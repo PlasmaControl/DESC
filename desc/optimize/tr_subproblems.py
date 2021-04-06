@@ -266,7 +266,7 @@ def trust_region_step_exact(
         threshold *= s[0]
     large = s > threshold
     s_inv = np.divide(1, s, where=large)
-    s_inv[~large] = 0
+    s_inv[(~large,)] = 0
 
     p = -v.dot(uf * s_inv)
     if np.linalg.norm(p) <= Delta:
@@ -318,8 +318,6 @@ def update_tr_radius(
     increase_ratio=2,
     decrease_threshold=0.25,
     decrease_ratio=0.25,
-    ga_ratio=0,
-    ga_accept_threshold=1,
 ):
     """Update the radius of a trust region based on the cost reduction.
 
@@ -343,11 +341,6 @@ def update_tr_radius(
         if ratio > inrease_threshold, trust radius is increased by a factor of increase_ratio
     decrease_threshold, decrease_ratio : float
         if ratio < decrease_threshold, trust radius is decreased by a factor of decrease_ratio
-    ga_ratio : float
-        ratio of geodesic acceleration step size to original step size
-    ga_accept_threshold: float
-        only accept step if ga_ratio < ga_accept_threshold
-
 
     Returns
     -------

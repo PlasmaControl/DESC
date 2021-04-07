@@ -1,5 +1,4 @@
 import numpy as np
-import booz_xform as bx
 import copy
 import warnings
 import math
@@ -1472,6 +1471,8 @@ class _Configuration(IOAble, ABC):
             Booz_xform object that contains the transformed quantities.
 
         """
+        import booz_xform as bx
+
         if M_nyq is None:
             M_nyq = math.ceil(1.5 * self.M)
         if N_nyq is None:

@@ -119,11 +119,11 @@ def perturb(
         if Jx is None:
             if verbose > 0:
                 print("Computing df")
-            timer.start("df computation")
+            timer.start("df/dx computation")
             Jx = eq.objective.jac_x(*args)
-            timer.stop("df computation")
+            timer.stop("df/dx computation")
             if verbose > 1:
-                timer.disp("df computation")
+                timer.disp("df/dx computation")
 
         u, s, vt = np.linalg.svd(Jx, full_matrices=False)
         m, n = Jx.shape
@@ -385,14 +385,14 @@ def optimal_perturb(
         g = objective.compute(*args)  # secondary objective residual
 
         # Jacobian of primary objective (f) wrt state vector (x)
+        if verbose > 0:
+            print("Computing df")
         if Jx is None:
-            if verbose > 0:
-                print("Computing df")
-            timer.start("df computation")
+            timer.start("df/dx computation")
             Jx = eq.objective.jac_x(*args)
-            timer.stop("df computation")
+            timer.stop("df/dx computation")
             if verbose > 1:
-                timer.disp("df computation")
+                timer.disp("df/dx computation")
         Jx_inv = np.linalg.pinv(Jx, rcond=cutoff)
 
         # Jacobian of primary objective (f) wrt input parameters (c)
@@ -411,11 +411,11 @@ def optimal_perturb(
         # Jacobian of secondary objective (g) wrt state vector (x)
         if verbose > 0:
             print("Computing dg")
-        timer.start("dg computation")
+        timer.start("dg/dx computation")
         Gx = objective.jac_x(*args)
-        timer.stop("dg computation")
+        timer.stop("dg/dx computation")
         if verbose > 1:
-            timer.disp("dg computation")
+            timer.disp("dg/dx computation")
 
         # Jacobian of secondary objective (g) wrt input parameters (c)
         Gc = np.array([])
@@ -487,8 +487,10 @@ def optimal_perturb(
     # update input parameters
     idx0 = 0
     for key, idx in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + idx.size][idx])
-        idx0 += idx.size
+        dc_i = np.zeros((getattr(eq_new, key).size,))
+        dc_i[idx] = dc[idx0 : idx0 + np.sum(idx)]
+        setattr(eq_new, key, getattr(eq_new, key) + dc_i)
+        idx0 += np.sum(idx)
 
     # update boundary constraint
     if "Rb_lmn" in deltas or "Zb_lmn" in deltas:

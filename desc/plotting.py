@@ -553,9 +553,9 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
 
     imshow_kwargs = {}
     if log:
+        data = np.abs(data)  # ensure its positive for log plot
         norm = matplotlib.colors.LogNorm()
         levels = 100
-        data = np.abs(data)  # ensure its positive for log plot
     else:
         norm = matplotlib.colors.Normalize()
         levels = np.linspace(data.min(), data.max(), 100)

@@ -2771,6 +2771,9 @@ def compute_quasisymmetry(
     ) / (quasisymmetry["|grad(rho)|"] * magnetic_field["|B|"] ** 3)
     quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
 
+    # FIXME: singular points of QS Flux Function cause JAX issues
+    # Singular points (where B*grad(|B|)=0) are not known a-priori.
+    """
     # Flux Function QS metric (T*m)
     quasisymmetry["QS_FF"] = (
         profiles["psi_r"]
@@ -2797,6 +2800,7 @@ def compute_quasisymmetry(
     quasisymmetry["QS_FF"] = put(
         quasisymmetry["QS_FF"], singular, quasisymmetry["QS_FF_0"][singular]
     )
+    """
 
     return (
         quasisymmetry,

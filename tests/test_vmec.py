@@ -5,6 +5,12 @@ from netCDF4 import Dataset
 from desc.backend import put
 from desc.vmec import VMECIO
 from desc.basis import FourierZernikeBasis
+from desc.vmec_utils import (
+    ptolemy_identity_fwd,
+    ptolemy_identity_rev,
+    fourier_to_zernike,
+    zernike_to_fourier,
+)
 
 
 class TestVMECIO(unittest.TestCase):
@@ -29,7 +35,7 @@ class TestVMECIO(unittest.TestCase):
         n_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
         x_correct = np.array([[a3 - a2, a3, a1, -a0, a0, 0, a1, 0, a2 + a3]])
 
-        m_1, n_1, x = VMECIO._ptolemy_identity_fwd(m_0, n_0, s, c)
+        m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
 
         np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
@@ -54,7 +60,7 @@ class TestVMECIO(unittest.TestCase):
         s_correct = np.array([[0, a0, a1, a3, 0]])
         c_correct = np.array([[a0, 0, a2, 0, a3]])
 
-        m_0, n_0, s, c = VMECIO._ptolemy_identity_rev(m_1, n_1, x)
+        m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
 
         np.testing.assert_allclose(m_0, m_0_correct, atol=1e-8)
         np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
@@ -83,7 +89,7 @@ class TestVMECIO(unittest.TestCase):
             x
         )
         basis = FourierZernikeBasis(L=-1, M=M, N=N, spectral_indexing="ansi")
-        x_lmn = VMECIO._fourier_to_zernike(m, n, x_mn, basis)
+        x_lmn = fourier_to_zernike(m, n, x_mn, basis)
 
         x_lmn_correct = np.zeros((basis.num_modes,))
         for k in range(basis.num_modes):
@@ -124,7 +130,7 @@ class TestVMECIO(unittest.TestCase):
             )[0]
             x_lmn[idx] = x[k]
 
-        m, n, x_mn = VMECIO._zernike_to_fourier(x_lmn, basis, rho)
+        m, n, x_mn = zernike_to_fourier(x_lmn, basis, rho)
 
         np.testing.assert_allclose(m, m_correct, atol=1e-8)
         np.testing.assert_allclose(n, n_correct, atol=1e-8)

@@ -1138,7 +1138,7 @@ class _Configuration(IOAble, ABC):
             dictionary of ndarray, shape(num_nodes,), of quasisymmetry components.
             The triple product metric has the key 'QS_TP',
         and the flux function metric has the key 'QS_FF'.
- 
+
         """
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N)
@@ -1471,7 +1471,16 @@ class _Configuration(IOAble, ABC):
             Booz_xform object that contains the transformed quantities.
 
         """
-        import booz_xform as bx
+        try:
+            import booz_xform as bx
+        except ImportError as exc:
+            raise ImportError(
+                colored(
+                    "booz_xform not installed, details for installation can be found at "
+                    + "https://hiddensymmetries.github.io/booz_xform/getting_started.html",
+                    "red",
+                )
+            ) from exc
 
         if M_nyq is None:
             M_nyq = math.ceil(1.5 * self.M)

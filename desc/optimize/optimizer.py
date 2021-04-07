@@ -25,7 +25,7 @@ class Optimizer(IOAble):
         * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
         * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
           ``'subspace-bfgs'``
-        * desc least squares routines: ``'lsq-exact'``, ``'lsq-dogleg'``, ``'lsq-subspace'``
+        * desc least squares routines: ``'lsq-exact'``
 
     objective : ObjectiveFunction
         objective to be optimized
@@ -42,7 +42,7 @@ class Optimizer(IOAble):
         "scipy-trust-krylov",
     ]
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
-    _desc_least_squares_methods = ["lsq-dogleg", "lsq-subspace", "lsq-exact"]
+    _desc_least_squares_methods = ["lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scalar_methods = _desc_scalar_methods + _scipy_scalar_methods
     _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
@@ -328,17 +328,11 @@ class Optimizer(IOAble):
 
         elif self.method in Optimizer._desc_least_squares_methods:
 
-            if "exact" in self.method:
-                x_scale = 1
-            method = self.method.split("-")[1]
-            jac = objective.jac_x if "broyden" not in self.method else "broyden"
             result = lsqtr(
                 objective.compute,
                 x0=x_init,
-                grad=objective.grad_x,
-                jac=jac,
+                jac=objective.jac_x,
                 args=args,
-                method=method,
                 x_scale=x_scale,
                 ftol=ftol,
                 xtol=xtol,

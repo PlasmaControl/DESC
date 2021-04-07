@@ -9,11 +9,11 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
     status_messages,
+    compute_jac_scale,
+    evaluate_quadratic,
 )
 from .tr_subproblems import (
-    solve_trust_region_dogleg,
-    solve_trust_region_2d_subspace,
-    solve_lsq_trust_region_exact,
+    trust_region_step_exact,
     update_tr_radius,
 )
 
@@ -21,10 +21,8 @@ from .tr_subproblems import (
 def lsqtr(
     fun,
     x0,
-    grad,
     jac,
     args=(),
-    method="dogleg",
     x_scale=1,
     ftol=1e-6,
     xtol=1e-6,
@@ -42,15 +40,11 @@ def lsqtr(
         objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
     x0 : array-like
         initial guess
-    grad : callable
-        function to compute gradient of 1/2fun**2. Should take the same arguments as fun
     jac : callable or ``'broyden'``, optional:
         function to compute jacobian matrix of fun, or ``'broyden'`` in which case Broyden's
         method will be used to approximate the jacobian.
     args : tuple
         additional arguments passed to fun, grad, and jac
-    method : ``'exact'``, ``'dogleg'`` or ``'subspace'``
-        method to use for trust region subproblem
     x_scale : array_like or ``'jac'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -106,7 +100,6 @@ def lsqtr(
     """
 
     nfev = 0
-    ngev = 0
     njev = 0
     iteration = 0
 
@@ -115,64 +108,31 @@ def lsqtr(
     f = fun(x, *args)
     m = f.size
     nfev += 1
-    g = grad(x, *args)
-    ngev += 1
-
-    if method == "dogleg":
-        subproblem = solve_trust_region_dogleg
-    elif method == "subspace":
-        subproblem = solve_trust_region_2d_subspace
-    elif method == "exact":
-        subproblem = solve_lsq_trust_region_exact
-    else:
-        raise ValueError(
-            colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
-        )
-
     cost = 0.5 * jnp.dot(f, f)
+    J = jac(x, *args)
+    njev += 1
+    g = jnp.dot(J.T, f)
 
     if maxiter is None:
         maxiter = n * 100
     max_nfev = options.pop("max_nfev", maxiter)
-    max_ngev = options.pop("max_ngev", max_nfev)
     max_njev = options.pop("max_njev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    step_accept_threshold = options.pop("step_accept_threshold", 0.15)
-    init_jac = options.pop("init_jac", "auto")
-    jac_recompute_freq = options.pop(
-        "jac_recompute_interval", 1 if callable(jac) else 0
-    )
-    ga_fd_step = options.pop("ga_fd_step", 0.1)
-    ga_accept_threshold = options.pop("ga_accept_threshold", 0)
+
+    ga_fd_step = options.pop("ga_fd_step", 1e-3)
+    ga_tr_ratio = options.pop("ga_tr_ratio", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
 
-    if np.size(jac_recompute_freq) == 1 and jac_recompute_freq > 0 and callable(jac):
-        jac_recompute_iters = np.arange(0, maxiter, jac_recompute_freq)
-    elif np.size(jac_recompute_freq) == 1 or not callable(jac):  # never recompute
-        jac_recompute_iters = []
-    else:
-        jac_recompute_iters = jac_recompute_freq
-
-    if jac == "broyden":
-        jac = SVDJacobian(m, n, init_jac, jacfun=None, jacfun_args=())
-
-    elif callable(jac):
-        jac = SVDJacobian(m, n, init_jac, jacfun=jac, jacfun_args=tuple(args))
-    else:
-        raise ValueError(colored("jac should either be a callable or 'broyden'", "red"))
-
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
-        scale, scale_inv = jac.get_scale()
+        scale, scale_inv = compute_jac_scale(J)
     else:
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
     # initial trust region radius
-    g_norm = np.linalg.norm(g, ord=gnorm_ord)
-    x_norm = np.linalg.norm(x, ord=xnorm_ord)
     trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
@@ -188,6 +148,7 @@ def lsqtr(
             colored("Unknown options: {}".format([key for key in options]), "red")
         )
 
+    x_norm = np.linalg.norm(x, ord=xnorm_ord)
     success = None
     step_norm = np.inf
     actual_reduction = np.inf
@@ -195,7 +156,6 @@ def lsqtr(
 
     if verbose > 1:
         print_header_nonlinear()
-        print_iteration_nonlinear(iteration, nfev, cost, None, None, g_norm)
 
     if return_all:
         allx = [x]
@@ -206,33 +166,19 @@ def lsqtr(
 
     while True:
 
-        if iteration in jac_recompute_iters:
-            jac.recompute(x)
-            njev += 1
-            if jac_scale:
-                scale, scale_inv = jac.get_scale(scale_inv)
-
+        g_norm = np.linalg.norm(g, ord=gnorm_ord)
+        if g_norm < gtol:
+            success = True
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, cost, actual_reduction, step_norm, g_norm
+            )
         if success is not None:
             break
-        success, message = check_termination(
-            actual_reduction,
-            cost,
-            step_norm,
-            x_norm,
-            g_norm,
-            ratio,
-            ftol,
-            xtol,
-            gtol,
-            iteration,
-            maxiter,
-            nfev,
-            max_nfev,
-            ngev,
-            max_ngev,
-            njev,
-            max_njev,
-        )
+
+        g_h = g * scale
+        J_h = J * scale
+        U, s, Vt = jnp.linalg.svd(J_h, full_matrices=False)
 
         actual_reduction = -1
         while actual_reduction <= 0 and nfev < max_nfev:
@@ -241,45 +187,38 @@ def lsqtr(
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             try:
-                step_h, hits_boundary, alpha = subproblem(
-                    g, jac, scale, trust_radius, f, alpha
+                step_h, hits_boundary, alpha = trust_region_step_exact(
+                    n, m, f, U, s, Vt.T, trust_radius, alpha
                 )
-
-            except np.linalg.linalg.LinAlgError:
+            except jnp.linalg.linalg.LinAlgError:
                 success = (False,)
                 message = (status_messages["err"],)
                 break
-
+            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
             # geodesic acceleration
-            if ga_accept_threshold > 0:
+            if ga_tr_ratio > 0:
                 f0 = f
                 f1 = fun(x + ga_fd_step * step_h * scale, *args)
                 nfev += 1
-                df = (f1 - f0) / ga_fd_step ** 2
-                ga_step_h = -scale_inv * jac.solve(df) + 1 / ga_fd_step * step_h
-                ga_ratio = np.linalg.norm(
-                    scale * ga_step_h, ord=xnorm_ord
-                ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
-                if ga_ratio < ga_accept_threshold:
-                    step_h += ga_step_h
-            else:
-                ga_ratio = -1
-                ga_step_h = np.zeros_like(step_h)
+                df = (f1 - f0) / ga_fd_step
+                RHS = 2 / ga_fd_step * (df - J.dot(step_h * scale))
+                ga_step_h, _, _ = trust_region_step_exact(
+                    n, m, RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
+                )
+                step_h += ga_step_h
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic_form(
-                step_h, 0, g, jac, scale=scale
-            )
+            predicted_reduction = -evaluate_quadratic(J_h, g_h, step_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
             step_norm = np.linalg.norm(step, ord=xnorm_ord)
-            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+
             x_new = x + step
             f_new = fun(x_new, *args)
+            nfev += 1
 
             cost_new = 0.5 * np.dot(f_new, f_new)
-            nfev += 1
             actual_reduction = cost - cost_new
 
             # update the trust radius according to the actual/predicted ratio
@@ -296,8 +235,6 @@ def lsqtr(
                 tr_increase_ratio,
                 tr_decrease_threshold,
                 tr_decrease_ratio,
-                ga_ratio,
-                ga_accept_threshold,
             )
             if return_tr:
                 alltr.append(trust_radius)
@@ -317,8 +254,8 @@ def lsqtr(
                 maxiter,
                 nfev,
                 max_nfev,
-                ngev,
-                max_ngev,
+                0,
+                np.inf,
                 njev,
                 max_njev,
             )
@@ -329,23 +266,18 @@ def lsqtr(
         if actual_reduction > 0:
             x_old = x
             x = x_new
+            if return_all:
+                allx.append(x)
             f_old = f
             f = f_new
             cost = cost_new
-            g = grad(x, *args)
-            ngev += 1
-            g_norm = np.linalg.norm(g, ord=gnorm_ord)
+            J = jac(x, *args)
+            njev += 1
+            g = jnp.dot(J.T, f)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
-            # don't update the jacobian if we're going to recompute on the next iteration
-            if iteration + 1 not in jac_recompute_iters:
-                jac.update(x_new, x_old, f, f_old)
 
             if jac_scale:
-                scale, scale_inv = jac.get_scale(scale_inv)
-            if verbose > 1:
-                print_iteration_nonlinear(
-                    iteration, nfev, cost, actual_reduction, step_norm, g_norm
-                )
+                scale, scale_inv = compute_jac_scale(J, scale_inv)
 
             if callback is not None:
                 stop = callback(np.copy(x), *args)
@@ -354,8 +286,6 @@ def lsqtr(
                     message = status_messages["callback"]
                     break
 
-            if return_all:
-                allx.append(x)
         else:
             step_norm = 0
             actual_reduction = 0
@@ -368,10 +298,9 @@ def lsqtr(
         cost=cost,
         fun=f,
         grad=g,
-        jac=jac.get_matrix(),
+        jac=J,
         optimality=g_norm,
         nfev=nfev,
-        ngev=ngev,
         njev=njev,
         nit=iteration,
         message=message,
@@ -384,7 +313,6 @@ def lsqtr(
         print("         Current function value: {:.3e}".format(result["cost"]))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:

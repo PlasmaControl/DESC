@@ -147,44 +147,13 @@ class TestLSQTR(unittest.TestCase):
         rando = default_rng(seed=0)
         p0 = p + 1 * (rando.random(p.size) - 0.5)
 
-        grad = Derivative(lambda x: np.sum(res(x) ** 2), 0, "grad")
         jac = Derivative(res, 0, "fwd")
 
         out = lsqtr(
             res,
             p0,
-            grad,
             jac,
             verbose=0,
-            method="exact",
             x_scale=1,
-            options={"jac_recompute_interval": 1},
-        )
-        np.testing.assert_allclose(out["x"], p)
-
-    def test_lsqtr_dogleg(self):
-
-        p = np.array([1.5, 2.5, 3.5, 4.5, 1.5, 2.5])
-        x = np.linspace(-1, 1, 100)
-        y = fun(x, p)
-
-        def res(p):
-            return fun(x, p) - y
-
-        rando = default_rng(seed=0)
-        p0 = p + 1 * (rando.random(p.size) - 0.5)
-
-        grad = Derivative(lambda x: np.sum(res(x) ** 2), 0, "grad")
-        jac = Derivative(res, 0, "fwd")
-
-        out = lsqtr(
-            res,
-            p0,
-            grad,
-            jac,
-            verbose=0,
-            method="dogleg",
-            x_scale=1,
-            options={"jac_recompute_interval": 1},
         )
         np.testing.assert_allclose(out["x"], p)

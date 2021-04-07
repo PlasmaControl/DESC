@@ -104,7 +104,7 @@ class LinearEqualityConstraint(IOAble):
         uk = u[:, :K]
         vhk = vh[:K, :]
         s = np.divide(1, s, where=large, out=s)
-        s[~large] = 0
+        s[(~large,)] = 0
         Ainv = np.matmul(
             np.transpose(vhk), np.multiply(s[..., np.newaxis], np.transpose(uk))
         )

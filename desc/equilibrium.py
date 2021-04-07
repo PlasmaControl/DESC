@@ -22,7 +22,7 @@ from desc.objective_funs import (
 from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.perturbations import perturb
+from desc.perturbations import perturb, optimal_perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -196,10 +196,7 @@ class Equilibrium(_Configuration, IOAble):
                 self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
             )
             self._grid = QuadratureGrid(
-                L=L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
+                L=L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
             )
         else:
             raise ValueError(
@@ -592,6 +589,7 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
+        objective=None,
         dRb=None,
         dZb=None,
         dp=None,
@@ -609,10 +607,15 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
+        objective : ObjectiveFunction
+            objective to optimize during the perturbation (optional)
         dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
-            deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
-            toroidal flux, and zeta ratio.. Setting to None or zero ignores that term
-            in the expansion.
+            If objective not given: deltas for perturbations of
+            R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
+            Setting to None or zero ignores that term in the expansion.
+            If objective is given: indicies of modes to include in the perturbations of
+            R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
+            Setting to True (False/None) includes (excludes) all modes.
         order : int, optional
             order of perturbation (0=none, 1=linear, 2=quadratic)
         Jx : ndarray, optional
@@ -629,21 +632,42 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        equil = perturb(
-            self,
-            dRb,
-            dZb,
-            dp,
-            di,
-            dPsi,
-            dzeta_ratio,
-            order=order,
-            tr_ratio=tr_ratio,
-            cutoff=cutoff,
-            Jx=Jx,
-            verbose=verbose,
-            copy=copy,
-        )
+        if objective is None:
+            # perturb with the given input parameter deltas
+            equil = perturb(
+                self,
+                dRb,
+                dZb,
+                dp,
+                di,
+                dPsi,
+                dzeta_ratio,
+                order=order,
+                tr_ratio=tr_ratio,
+                cutoff=cutoff,
+                Jx=Jx,
+                verbose=verbose,
+                copy=copy,
+            )
+        else:
+            equil = optimal_perturb(
+                # find the deltas that optimize the objective, then perturb
+                self,
+                objective,
+                dRb,
+                dZb,
+                dp,
+                di,
+                dPsi,
+                dzeta_ratio,
+                order=order,
+                tr_ratio=tr_ratio,
+                cutoff=cutoff,
+                Jx=Jx,
+                verbose=verbose,
+                copy=copy,
+            )
+
         equil.solved = False
         equil.optimizer_results = {}
 

@@ -223,10 +223,6 @@ def perturb(
     else:
         eq_new = eq
 
-    # update state vector
-    dy = dx1 + dx2 + dx3
-    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
-
     # update input parameters
     for key, dc in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + dc)
@@ -243,6 +239,10 @@ def perturb(
             eq_new.Rb_lmn,
             eq_new.Zb_lmn,
         )
+
+    # update state vector
+    dy = dx1 + dx2 + dx3
+    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")
     if verbose > 1:
@@ -484,9 +484,6 @@ def optimal_perturb(
         print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
         print("||dx||/||x|| = {}".format(np.linalg.norm(dy) / np.linalg.norm(y)))
 
-    # update state vector
-    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
-
     # update input parameters
     idx0 = 0
     for key, idx in deltas.items():
@@ -505,6 +502,9 @@ def optimal_perturb(
             eq_new.Rb_lmn,
             eq_new.Zb_lmn,
         )
+
+    # update state vector
+    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
 
     timer.stop("Total perturbation")
     if verbose > 1:

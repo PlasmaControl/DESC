@@ -1,6 +1,7 @@
+import versioneer
 from setuptools import setup, find_packages
 import os
-import versioneer
+
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -11,6 +12,9 @@ with open(os.path.join(here, 'README.rst'), encoding='utf-8') as f:
 with open(os.path.join(here, 'requirements.txt'), encoding='utf-8') as f:
     requirements = f.read().splitlines()
 
+with open(os.path.join(here, 'requirements_optional.txt'), encoding='utf-8') as f:
+    requirements_optional = f.read().splitlines()
+    
 with open(os.path.join(here, 'docs/requirements.txt'), encoding='utf-8') as f:
     docs_requirements = f.read().splitlines()
 
@@ -46,7 +50,8 @@ setup(name='desc',
       packages=find_packages(exclude=['docs', 'tests', 'local', 'report']),
       install_requires=requirements,
       extras_require={'docs': docs_requirements,
-                      'test': test_requirements},
+                      'test': test_requirements,
+                      'opt': requirements_optional},
       python_requires='~=3.6',
       entry_points={'console_scripts': ['desc=desc.__main__:main']},
       project_urls={'Issues Tracker': 'https://github.com/ddudt/DESC/issues',

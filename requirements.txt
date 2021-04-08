@@ -6,7 +6,7 @@ jax <= 0.2.10
 numba
 nvgpu
 psutil
-h5py
+h5py < 3.0.0
 netcdf4
 colorama
 termcolor

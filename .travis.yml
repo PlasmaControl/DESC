@@ -10,7 +10,8 @@ branches:
   - dev
   - v1.0
   - dev1.0
-
+  - /v\d+\.\d+[a-z]/
+  
 install:
 - pip install -r requirements.txt
 - pip install -r tests/requirements.txt

@@ -298,9 +298,9 @@ def trust_region_step_exact(
 
     p = -v.dot(suf / (s ** 2 + alpha))
 
-    # Make the norm of p equal to Delta, p is changed only slightly during
-    # this. It is done to prevent p lie outside the trust region (which can
-    # cause problems later).
+    # Make the norm of p equal to Delta; p is changed only slightly during this.
+    # This is done to prevent p from lying outside the trust region
+    # (which can cause problems later).
     p *= Delta / np.linalg.norm(p)
 
     return p, True, alpha

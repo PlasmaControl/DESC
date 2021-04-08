@@ -10,7 +10,7 @@ branches:
   - dev
   - v1.0
   - dev1.0
-  - /v\d+\.\d+[a-z]/
+  - /v\d+\.\d+\.\d+/
   
 install:
 - pip install -r requirements.txt

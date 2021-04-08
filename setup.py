@@ -21,7 +21,7 @@ with open(os.path.join(here, 'docs/requirements.txt'), encoding='utf-8') as f:
 with open(os.path.join(here, 'tests/requirements.txt'), encoding='utf-8') as f:
     test_requirements = f.read().splitlines()
 
-setup(name='desc',
+setup(name='desc-opt',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
       description='Computes, analyzes and optimizes 3D MHD equilibria for stellarators and tokamaks',

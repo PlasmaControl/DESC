@@ -92,9 +92,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
             fig = plt.figure(figsize=figsize)
             ax = np.array(
                 [
-                    fig.add_subplot(
-                        str(rows) + str(cols) + str(r * cols + c + 1), projection="3d"
-                    )
+                    fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
                     for r in range(rows)
                     for c in range(cols)
                 ]

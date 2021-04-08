@@ -102,8 +102,11 @@ def DummyStellarator(tmpdir_factory):
                 [0, -1, -1, -0.3, 0],
                 [0, 1, -1, -0.3, 0],
                 [0, -1, 1, -0.3, 0],
-            ]
+            ],
         ),
+        "bdry_mode": "lcfs",
+        "objective": "force",
+        "optimizer": "scipy-trf",
     }
     eq = Equilibrium(inputs=inputs)
     eq.build()

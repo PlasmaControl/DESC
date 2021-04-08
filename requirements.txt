@@ -1,9 +1,13 @@
 numpy >= 1.17.0
 scipy >= 1.3.0
 matplotlib >= 3.0.0
-jaxlib <= 0.1.56
-jax <= 0.2.5
+jaxlib <= 0.1.62
+jax <= 0.2.10
 numba
-nvidia-ml-py3
+nvgpu
+psutil
 h5py
 netcdf4
+colorama
+termcolor
+shapely

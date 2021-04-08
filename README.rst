@@ -30,6 +30,10 @@ DESC requires an input file to specify the equilibrium and solver options, and c
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
 
+As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :bash:'desc' directory is 
+:bash:`python -u -m desc -p examples/DESC/DSHAPE`
+Where the :bash:`-u` flag is so Python prints the output of the optimization in real time as opposed to storing in a buffer, and the :bash:`-p` flag tells DESC to plot the results once it finishes.
+
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
 .. _Inputs: https://desc-docs.readthedocs.io/en/latest/input.html
@@ -61,12 +65,12 @@ Contribute
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License
 
-.. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
+.. |Docs| image:: https://img.shields.io/readthedocs/desc-apc524?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
 .. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
-    :target: https://travis-ci.org/ddudt/DESC
+    :target: https://travis-ci.org/ddudt/DESC.svg?branch=master
     :alt: Build
 
 .. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg

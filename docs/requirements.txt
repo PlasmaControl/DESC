@@ -1,3 +1,5 @@
 sphinx
 sphinx-rtd-theme
 sphinx-argparse
+nbsphinx
+sphinx_copybutton

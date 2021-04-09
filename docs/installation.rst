@@ -6,6 +6,14 @@ Follow these instructions to install DESC and its dependencies.
 On Your Local Machine
 *********************
 
+Install from Pypi:
+
+.. code-block:: bash
+
+    pip install desc-opt
+    
+Or from github (for development builds)
+
 .. code-block:: bash
 
     git clone https://github.com/dpanici/DESC.git
@@ -16,6 +24,14 @@ On Your Local Machine
 On PPPL's Sunfire Cluster
 *************************
 Other linux based clusters should follow a similar process but may differ. 
+
+Install from Pypi:
+
+.. code-block:: bash
+
+    pip install desc-opt
+    
+Or from github (for development builds)
 
 .. code-block:: bash
 
@@ -34,6 +50,14 @@ Other linux based clusters should follow a similar process but may differ.
 On Princeton's Adroit Cluster
 *****************************
 Other linux based clusters should follow a similar process but may differ. 
+
+Install from Pypi:
+
+.. code-block:: bash
+
+    pip install desc-opt
+    
+Or from github (for development builds)
 
 .. code-block:: bash
 

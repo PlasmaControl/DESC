@@ -312,7 +312,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
             ):  # normalize vacuum force by B pressure gradient
                 norm_name_dict = _format_name("Bpressure")
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name("p_r")
+                norm_name_dict = _format_name("|grad(p)|")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
@@ -534,7 +534,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             ):  # normalize vacuum force by B pressure gradient
                 norm_name_dict = _format_name("Bpressure")
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name("p_r")
+                norm_name_dict = _format_name("|grad(p)|")
             norm_name_dict["units"] = ""  # make unitless
             norm_data = _compute(eq, norm_name_dict, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize

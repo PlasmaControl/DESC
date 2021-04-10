@@ -1,560 +1,1261 @@
 import os
 from matplotlib import rcParams, cycler
 import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
-from desc.nodes import get_nodes_grid
-from desc.zernike import ZernikeTransform, axis_posn, get_zern_basis_idx_dense, zern
-from desc.backend import get_needed_derivatives, iotafun, presfun, TextColors
-from desc.input_output import read_desc
-from desc.vmec import vmec_interpolate
-from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
-from desc.field_components import compute_contravariant_basis, compute_jacobian
-from desc.field_components import compute_magnetic_field, compute_plasma_current, compute_force_magnitude
+import re
+from termcolor import colored
+import warnings
 
+from desc.grid import Grid, LinearGrid
+from desc.basis import FourierZernikeBasis, jacobi, fourier
 
-colorblind_colors = [(0.0000, 0.4500, 0.7000),  # blue
-                     (0.8359, 0.3682, 0.0000),  # vermillion
-                     (0.0000, 0.6000, 0.5000),  # bluish green
-                     (0.9500, 0.9000, 0.2500),  # yellow
-                     (0.3500, 0.7000, 0.9000),  # sky blue
-                     (0.8000, 0.6000, 0.7000),  # reddish purple
-                     (0.9000, 0.6000, 0.0000)]  # orange
-dashes = [(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),  # solid
-          (3.7, 1.6, 0.0, 0.0, 0.0, 0.0),  # dashed
-          (1.0, 1.6, 0.0, 0.0, 0.0, 0.0),  # dotted
-          (6.4, 1.6, 1.0, 1.6, 0.0, 0.0),  # dot dash
-          (3.0, 1.6, 1.0, 1.6, 1.0, 1.6),  # dot dot dash
-          (6.0, 4.0, 0.0, 0.0, 0.0, 0.0),  # long dash
-          (1.0, 1.6, 3.0, 1.6, 3.0, 1.6)]  # dash dash dot
+__all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
+
+colorblind_colors = [
+    (0.0000, 0.4500, 0.7000),  # blue
+    (0.8359, 0.3682, 0.0000),  # vermillion
+    (0.0000, 0.6000, 0.5000),  # bluish green
+    (0.9500, 0.9000, 0.2500),  # yellow
+    (0.3500, 0.7000, 0.9000),  # sky blue
+    (0.8000, 0.6000, 0.7000),  # reddish purple
+    (0.9000, 0.6000, 0.0000),
+]  # orange
+dashes = [
+    (1.0, 0.0, 0.0, 0.0, 0.0, 0.0),  # solid
+    (3.7, 1.6, 0.0, 0.0, 0.0, 0.0),  # dashed
+    (1.0, 1.6, 0.0, 0.0, 0.0, 0.0),  # dotted
+    (6.4, 1.6, 1.0, 1.6, 0.0, 0.0),  # dot dash
+    (3.0, 1.6, 1.0, 1.6, 1.0, 1.6),  # dot dot dash
+    (6.0, 4.0, 0.0, 0.0, 0.0, 0.0),  # long dash
+    (1.0, 1.6, 3.0, 1.6, 3.0, 1.6),
+]  # dash dash dot
 matplotlib.rcdefaults()
-rcParams['font.family'] = 'DejaVu Serif'
-rcParams['mathtext.fontset'] = 'cm'
-rcParams['font.size'] = 10
-rcParams['figure.facecolor'] = (1, 1, 1, 1)
-rcParams['figure.figsize'] = (6, 4)
-rcParams['figure.dpi'] = 141
-rcParams['axes.spines.top'] = False
-rcParams['axes.spines.right'] = False
-rcParams['axes.labelsize'] = 'small'
-rcParams['axes.titlesize'] = 'medium'
-rcParams['lines.linewidth'] = 1
-rcParams['lines.solid_capstyle'] = 'round'
-rcParams['lines.dash_capstyle'] = 'round'
-rcParams['lines.dash_joinstyle'] = 'round'
-rcParams['xtick.labelsize'] = 'x-small'
-rcParams['ytick.labelsize'] = 'x-small'
-# rcParams['text.usetex']=True
+rcParams["font.family"] = "DejaVu Serif"
+rcParams["mathtext.fontset"] = "cm"
+rcParams["font.size"] = 10
+rcParams["figure.facecolor"] = (1, 1, 1, 1)
+rcParams["figure.figsize"] = (6, 4)
+rcParams["figure.dpi"] = 141
+rcParams["figure.autolayout"] = True
+rcParams["axes.spines.top"] = False
+rcParams["axes.spines.right"] = False
+rcParams["axes.labelsize"] = "small"
+rcParams["axes.titlesize"] = "medium"
+rcParams["lines.linewidth"] = 1
+rcParams["lines.solid_capstyle"] = "round"
+rcParams["lines.dash_capstyle"] = "round"
+rcParams["lines.dash_joinstyle"] = "round"
+rcParams["xtick.labelsize"] = "x-small"
+rcParams["ytick.labelsize"] = "x-small"
 color_cycle = cycler(color=colorblind_colors)
 dash_cycle = cycler(dashes=dashes)
-rcParams['axes.prop_cycle'] = color_cycle
+rcParams["axes.prop_cycle"] = color_cycle
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.mplot3d import Axes3D
 
 
-def print_coeffs(cR, cZ, cL, zern_idx, lambda_idx):
-    """prints coeffs to the terminal
-
-    Parameters
-    ----------
-    cR,cZ,cL :
-        spectral coefficients for R, Z, and lambda
-    zern_idx, lambda_idx :
-        mode numbers for zernike and fourier spectral basis.       
-
-    Returns
-    -------
-
-    """
-
-    print('Fourier-Zernike coefficients:')
-    for k, lmn in enumerate(zern_idx):
-        print('l: {:3d}, m: {:3d}, n: {:3d}, cR: {:16.8e}, cZ: {:16.8e}'.format(
-            lmn[0], lmn[1], lmn[2], cR[k], cZ[k]))
-
-    print('Lambda coefficients')
-    for k, mn in enumerate(lambda_idx):
-        print('m: {:3d}, n: {:3d}, cL: {:16.8e}'.format(mn[0], mn[1], cL[k]))
+_axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
+_axis_labels_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
+_axis_labels_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
-def plot_coeffs(cR, cZ, cL, zern_idx, lambda_idx, cR_init=None, cZ_init=None, cL_init=None, **kwargs):
-    """Scatter plots of zernike and lambda coefficients, before and after solving
+def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
+    """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
     Parameters
     ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cL : ndarray
-        spectral coefficients of lambda
-    zern_idx : ndarray
-        array of (l,m,n) indices for each spectral R,Z coeff
-    lambda_idx : ndarray
-        indices for lambda spectral basis, ie an array of [m,n] for each spectral coefficient
-    cR_init : ndarray
-        initial spectral coefficients of R (Default value = None)
-    cZ_init : ndarray
-        initial spectral coefficients of Z (Default value = None)
-    cL_init : ndarray
-        initial spectral coefficients of lambda (Default value = None)
-    **kwargs :
-        additional plot formatting parameters
+    ax : None or matplotlib AxesSubplot instance
+        axis to plot to
+    is3d: bool
+        default is False
+    rows : int, optional
+        number of rows of subplots to create
+    cols : int, optional
+        number of columns of subplots to create
+    figsize : tuple of 2 floats
+        figure size (width, height) in inches
 
     Returns
     -------
-    fig : matplotlib.figure
-        handle to the figure
-    ax : ndarray of matplotlib.axes
-        handle to axes
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
-    nRZ = len(cR)
-    nL = len(cL)
-    fig, ax = plt.subplots(1, 3, figsize=(cR.size//5, 6))
-    ax = ax.flatten()
-
-    ax[0].scatter(cR, np.arange(nRZ), s=2, label='Final')
-    if cR_init is not None:
-        ax[0].scatter(cR_init, np.arange(nRZ), s=2, label='Init')
-    ax[0].set_yticks(np.arange(nRZ))
-    ax[0].set_yticklabels([str(i) for i in zern_idx])
-    ax[0].set_xlabel('$R$')
-    ax[0].set_ylabel('[l,m,n]')
-    ax[0].axvline(0, c='k', lw=.25)
-    ax[0].legend(loc='upper right')
-
-    ax[1].scatter(cZ, np.arange(nRZ), s=2, label='Final')
-    if cZ_init is not None:
-        ax[1].scatter(cZ_init, np.arange(nRZ), s=2, label='Init')
-    ax[1].set_yticks(np.arange(nRZ))
-    ax[1].set_yticklabels([str(i) for i in zern_idx])
-    ax[1].set_xlabel('$Z$')
-    ax[1].set_ylabel('[l,m,n]')
-    ax[1].axvline(0, c='k', lw=.25)
-    ax[1].legend()
-
-    ax[2].scatter(cL, np.arange(nL), s=2, label='Final')
-    if cL_init is not None:
-        ax[2].scatter(cL_init, np.arange(nL), s=2, label='Init')
-    ax[2].set_yticks(np.arange(nL))
-    ax[2].set_yticklabels([str(i) for i in lambda_idx])
-    ax[2].set_xlabel('$\lambda$')
-    ax[2].set_ylabel('[m,n]')
-    ax[2].axvline(0, c='k', lw=.25)
-    ax[2].legend()
-
-    plt.subplots_adjust(wspace=.5)
-
-    return fig, ax
-
-
-def plot_coord_surfaces(cR, cZ, zern_idx, NFP, nr=10, nt=12, ax=None, bdryR=None, bdryZ=None, **kwargs):
-    """Plots solutions (currently only zeta=0 plane)
-
-    Parameters
-    ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    zern_idx : ndarray
-        indices for R,Z spectral basis, ie an array of [l,m,n] for each spectral coefficient
-    NFP : int
-        number of field periods
-    nr : int
-        number of flux surfaces to show (Default value = 10)
-    nt : int
-        number of theta lines to show (Default value = 12)
-    ax : matplotlib.axes
-        axes to plot on. If None, a new figure is created. (Default value = None)
-    bdryR :
-         R values of last closed flux surface (Default value = None)
-    bdryZ :
-         Z values of last closed flux surface (Default value = None)
-    **kwargs :
-        additional plot formatting parameters
-
-    Returns
-    -------
-    ax : matplotlib.axes
-        handle to axes used for the plot
-
-    """
-
-    Nr = 100
-    Nt = 361
-    rstep = Nr//nr
-    tstep = Nt//nt
-    zeta = kwargs.get('zeta', 0)
-    r = np.linspace(0, 1, Nr)
-    t = np.linspace(0, 2*np.pi, Nt)
-    r, t = np.meshgrid(r, t, indexing='ij')
-    r = r.flatten()
-    t = t.flatten()
-    z = zeta*np.ones_like(r)
-    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
-
-    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
-    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
-
+    if figsize is None:
+        figsize = (6, 6)
     if ax is None:
-        fig, ax = plt.subplots()
-    # plot desired bdry
-    if (bdryR is not None) and (bdryZ is not None):
-        ax.plot(
-            bdryR, bdryZ, color=colorblind_colors[1], lw=2, alpha=.5, dashes=(None, None))
-    # plot r contours
-    ax.plot(R.T[:, ::rstep], Z.T[:, ::rstep],
-            color=colorblind_colors[0], lw=.5, dashes=(None, None))
-    # plot actual bdry
-    ax.plot(R.T[:, -1], Z.T[:, -1], color=colorblind_colors[0],
-            lw=.5, dashes=(None, None))
-    # plot theta contours
-    ax.plot(R[:, ::tstep], Z[:, ::tstep],
-            color=colorblind_colors[0], lw=.5, dashes=dashes[2])
-    ax.axis('equal')
-    ax.set_xlabel('$R$')
-    ax.set_ylabel('$Z$')
-    ax.set_title(kwargs.get('title'))
-    return ax
+        if is3d:
+            fig = plt.figure(figsize=figsize)
+            ax = np.array(
+                [
+                    fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
+                    for r in range(rows)
+                    for c in range(cols)
+                ]
+            ).reshape((rows, cols))
+            if ax.size == 1:
+                ax = ax.flatten()[0]
+            return fig, ax
+        else:
+            fig, ax = plt.subplots(rows, cols, figsize=figsize, squeeze=False)
+            if ax.size == 1:
+                ax = ax.flatten()[0]
+            return fig, ax
+
+    elif isinstance(ax, matplotlib.axes.Axes):
+        return plt.gcf(), ax
+    else:
+        ax = np.atleast_1d(ax)
+        if isinstance(ax.flatten()[0], matplotlib.axes.Axes):
+            return plt.gcf(), ax
+        else:
+            raise TypeError(
+                colored(
+                    "ax agument must be None or an axis instance or array of axes",
+                    "red",
+                )
+            )
 
 
-def plot_IC(cR_init, cZ_init, zern_idx, NFP, nodes, cP, cI, **kwargs):
-    """Plot initial conditions, such as the initial guess for flux surfaces,
-    node locations, and profiles.
+def _get_grid(**kwargs):
+    """Get grid for plotting.
 
     Parameters
     ----------
-    cR_init : ndarray
-        spectral coefficients of R
-    cZ_init : ndarray
-        spectral coefficients of Z
-    zern_idx : ndarray
-        array of (l,m,n) indices for each spectral R,Z coeff
-    NFP : int
-        number of field periods
-    nodes : ndarray
-        locations of nodes in SFL coordinates
-    cI : array-like
-        paramters to pass to rotational transform function
-    cP : array-like
-        parameters to pass to pressure function
-    **kwargs :
-        additional plot formatting parameters
-
+    kwargs
+        any arguments taken by LinearGrid (Default L=1, M=1, N=1)
 
     Returns
     -------
-    fig : matplotlib.figure
-        handle to figure used for plotting
-    ax : ndarray of matplotlib.axes
-        handles to axes used for plotting
+    LinearGrid
 
     """
+    grid_args = {
+        "L": 1,
+        "M": 1,
+        "N": 1,
+        "NFP": 1,
+        "sym": False,
+        "axis": True,
+        "endpoint": True,
+        "rho": None,
+        "theta": None,
+        "zeta": None,
+    }
+    for key in kwargs.keys():
+        if key in grid_args.keys():
+            grid_args[key] = kwargs[key]
+    grid = LinearGrid(**grid_args)
 
-    fig = plt.figure(figsize=kwargs.get('figsize', (9, 3)))
-    gs = matplotlib.gridspec.GridSpec(2, 3)
-    ax0 = plt.subplot(gs[:, 0])
-    ax1 = plt.subplot(gs[:, 1], projection='polar')
-    ax2 = plt.subplot(gs[0, 2])
-    ax3 = plt.subplot(gs[1, 2])
+    return grid
 
-    # coordinate surfaces
-    plot_coord_surfaces(cR_init, cZ_init, zern_idx, NFP, nr=10, nt=12, ax=ax0)
-    ax0.axis('equal')
-    ax0.set_title(r'Initial guess, $\zeta=0$ plane')
 
-    # node locations
-    ax1.scatter(nodes[1], nodes[0], s=1)
-    ax1.set_ylim(0, 1)
-    ax1.set_xticks([0, np.pi/4, np.pi/2, 3/4*np.pi,
-                    np.pi, 5/4*np.pi, 3/2*np.pi, 7/4*np.pi])
-    ax1.set_xticklabels(['$0$', r'$\frac{\pi}{4}$', r'$\frac{\pi}{2}$', r'$\frac{3\pi}{4}$',
-                         r'$\pi$', r'$\frac{4\pi}{4}$', r'$\frac{3\pi}{2}$', r'$2\pi$'])
-    ax1.set_yticklabels([])
-    ax1.set_title(r'Node locations, $\zeta=0$ plane', pad=20)
+def _get_plot_axes(grid):
+    """Find which axes are being plotted.
 
-    # profiles
-    xx = np.linspace(0, 1, 100)
-    ax2.plot(xx, presfun(xx, 0, cP), lw=1)
-    ax2.set_ylabel(r'$p$')
-    ax2.set_xticklabels([])
-    ax2.set_title('Profiles')
-    ax3.plot(xx, iotafun(xx, 0, cI), lw=1)
-    ax3.set_ylabel(r'$\iota$')
-    ax3.set_xlabel(r'$\rho$')
-    plt.subplots_adjust(wspace=0.5, hspace=0.3)
-    ax = np.array([ax0, ax1, ax2, ax3])
+    Parameters
+    ----------
+    grid : Grid
 
+    Returns
+    -------
+    tuple
+
+    """
+    plot_axes = [0, 1, 2]
+    if np.unique(grid.nodes[:, 0]).size == 1:
+        plot_axes.remove(0)
+    if np.unique(grid.nodes[:, 1]).size == 1:
+        plot_axes.remove(1)
+    if np.unique(grid.nodes[:, 2]).size == 1:
+        plot_axes.remove(2)
+
+    return tuple(plot_axes)
+
+
+def plot_coefficients(eq, ax=None):
+    """Plot 1D profiles.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    fig, ax = _format_ax(ax, rows=1, cols=3)
+
+    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
+    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
+    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+
+    ax[0, 0].set_xlabel("l + |m| + |n|")
+    ax[0, 1].set_xlabel("l + |m| + |n|")
+    ax[0, 2].set_xlabel("l + |m| + |n|")
+
+    ax[0, 0].set_title("$|R_{lmn}|$")
+    ax[0, 1].set_title("$|Z_{lmn}|$")
+    ax[0, 2].set_title("$|\\lambda_{lmn}|$")
+
+    fig.set_tight_layout(True)
     return fig, ax
 
 
-def plot_fb_err(equil, domain='real', normalize='local', log=True, cmap='plasma', **kwargs):
-    """Plots force balance error
+def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
+    """Plot 1D profiles.
 
     Parameters
     ----------
-    equil : dict
-        dictionary of equilibrium solution quantities
-    domain : str
-        one of 'real', 'sfl'. What basis to use for plotting,
-        real (R,Z) coordinates or straight field line (rho,vartheta) (Default value = 'real')
-    normalize : str
-        Whether and how to normalize values
-        None, False - no normalization, values plotted are force error in Newtons/m^3
-        'local' - normalize by local pressure gradient
-        'global' - normalize by pressure gradient at rho=0.5
-        True - same as 'global' (Default value = 'local')
-    log : bool
-        plot logarithm of error or absolute value (Default value = True)
-    cmap : str
-        colormap to use (Default value = 'plasma')
-    **kwargs :
-        additional plot formatting parameters
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    grid : Grid, optional
+        grid of coordinates to plot at
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+    log : bool, optional
+        whether to use a log scale
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
+    if grid is None:
+        grid_kwargs = {"L": 100, "NFP": eq.NFP}
+        grid = _get_grid(**grid_kwargs)
+    plot_axes = _get_plot_axes(grid)
+    if len(plot_axes) != 1:
+        return ValueError(colored("Grid must be 1D", "red"))
 
-    cR = equil['cR']
-    cZ = equil['cZ']
-    cP = equil['cP']
-    cI = equil['cI']
-    Psi_lcfs = equil['Psi_lcfs']
-    NFP = equil['NFP']
-    zern_idx = equil['zern_idx']
+    name_dict = _format_name(name)
+    data = _compute(eq, name_dict, grid)
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
-    if np.max(zern_idx[:, 2]) == 0:
-        Nz = 1
-        rows = 1
-    else:
-        Nz = 6
-        rows = 2
-
-    Nr = kwargs.get('Nr', 51)
-    Nv = kwargs.get('Nv', 90)
-    Nlevels = kwargs.get('Nlevels', 100)
-
-    nodes, vols = get_nodes_grid(NFP, nr=Nr, nt=Nv, nz=Nz)
-    derivatives = get_needed_derivatives('all')
-    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP, derivatives)
-
-    # compute fields components
-    coord_der = compute_coordinate_derivatives(cR, cZ, zernike_transform)
-    cov_basis = compute_covariant_basis(coord_der, zernike_transform)
-    jacobian = compute_jacobian(coord_der, cov_basis, zernike_transform)
-    con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, zernike_transform)
-    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
-                                            Psi_lcfs, zernike_transform)
-    plasma_current = compute_plasma_current(coord_der, cov_basis,
-                                            jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
-    force_magnitude, p_mag = compute_force_magnitude(
-        coord_der, cov_basis, con_basis, jacobian, magnetic_field, plasma_current, cP, cI, Psi_lcfs, zernike_transform)
-
-    if domain == 'real':
-        xlabel = r'R'
-        ylabel = r'Z'
-        R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nv, Nz))
-        Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nv, Nz))
-    elif domain == 'sfl':
-        xlabel = r'$\vartheta$'
-        ylabel = r'$\rho$'
-        R = nodes[1].reshape((Nr, Nv, Nz))
-        Z = nodes[0].reshape((Nr, Nv, Nz))
-    else:
-        raise ValueError(
-            TextColors.FAIL + "domain must be either 'real' or 'sfl'" + TextColors.ENDC)
-
-    if normalize == 'local':
-        label = r'||F||/$\nabla$p'
-        norm_errF = force_magnitude / p_mag
-    elif normalize == 'global':
-        label = r'||F||/$\nabla$p($\rho$=0.5)'
-        halfn = np.where(nodes[0] == 0.5)[0][0]
-        norm_errF = force_magnitude / p_mag[halfn]
-    else:
-        label = r'||F||'
-        norm_errF = force_magnitude
+    # reshape data to 1D
+    data = data.flatten()
 
     if log:
-        label = r'$\mathregular{log}_{10}$('+label+')'
-        norm_errF = np.log10(norm_errF)
+        ax.semilogy(grid.nodes[:, plot_axes[0]], data)
+        data = np.abs(data)  # ensure its positive for log plot
+    else:
+        ax.plot(grid.nodes[:, plot_axes[0]], data)
 
-    norm_errF = norm_errF.reshape((Nr, Nv, Nz))
-
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-        cf = ax.contourf(R[:, :, k], Z[:, :, k], norm_errF[:, :, k],
-                         cmap=cmap, extend='both', levels=Nlevels)
-        if domain == 'real':
-            ax.axis('equal')
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        cbar = plt.colorbar(cf)
-        if k == 0:
-            cbar.ax.set_ylabel(label)
-    plt.show()
+    ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
+    ax.set_ylabel(_name_label(name_dict))
+    fig.set_tight_layout(True)
+    return fig, ax
 
 
-def plot_comparison(equil0, equil1, label0='x0', label1='x1', **kwargs):
-    """Plots force balance error
+def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+    """Plot 2D cross-sections.
 
     Parameters
     ----------
-    equil0, equil1 : dict
-        dictionary of two equilibrium solution quantities
-    label0, label1 : str
-        labels for each equilibria
-    **kwargs :
-        additional plot formatting parameters
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    grid : Grid, optional
+        grid of coordinates to plot at
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+    log : bool, optional
+        whether to use a log scale
+    norm_F : bool,optional
+        whether to normalize a plot of force error to be unitless. A vacuum
+        equilibrium force error is normalized by the gradient of magnetic pressure,
+        while an equilibrium solved with pressure is normalized by pressure gradient.
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
+    if grid is None:
+        grid_kwargs = {"L": 25, "M": 25, "NFP": eq.NFP}
+        grid = _get_grid(**grid_kwargs)
+    plot_axes = _get_plot_axes(grid)
+    if len(plot_axes) != 2:
+        return ValueError(colored("Grid must be 2D", "red"))
 
-    cR0 = equil0['cR']
-    cZ0 = equil0['cZ']
-    NFP0 = equil0['NFP']
-    zern_idx0 = equil0['zern_idx']
+    name_dict = _format_name(name)
+    data = _compute(eq, name_dict, grid)
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    divider = make_axes_locatable(ax)
 
-    cR1 = equil1['cR']
-    cZ1 = equil1['cZ']
-    NFP1 = equil1['NFP']
-    zern_idx1 = equil1['zern_idx']
+    if norm_F:
+        if name_dict["base"] not in ["F", "|F|"]:
+            return ValueError(colored("Can only normalize F or |F|", "red"))
+        else:
+            if (
+                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+            ):  # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name("Bpressure")
+            else:  # normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name("|grad(p)|")
+            norm_name_dict["units"] = ""  # make unitless
+            norm_data = _compute(eq, norm_name_dict, grid)
+            data = data / np.nanmean(np.abs(norm_data))  # normalize
 
-    if NFP0 == NFP1:
-        NFP = NFP0
-    else:
-        raise ValueError(
-            TextColors.FAIL + "NFP must be the same for both solutions" + TextColors.ENDC)
+    # reshape data to 2D
+    if 0 in plot_axes:
+        if 1 in plot_axes:  # rho & theta
+            data = data[:, :, 0]
+        else:  # rho & zeta
+            data = data[0, :, :].T
+    else:  # theta & zeta
+        data = data[:, 0, :].T
 
-    if max(np.max(zern_idx0[:, 2]), np.max(zern_idx1[:, 2])) == 0:
-        Nz = 1
-        rows = 1
-    else:
-        Nz = 6
-        rows = 2
+    imshow_kwargs = {"origin": "lower", "interpolation": "bilinear", "aspect": "auto"}
+    if log:
+        imshow_kwargs["norm"] = matplotlib.colors.LogNorm()
+        data = np.abs(data)  # ensure its positive for log plot
+    imshow_kwargs["extent"] = [
+        grid.nodes[0, plot_axes[1]],
+        grid.nodes[-1, plot_axes[1]],
+        grid.nodes[0, plot_axes[0]],
+        grid.nodes[-1, plot_axes[0]],
+    ]
+    cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    Nr = kwargs.get('Nr', 8)
-    Nv = kwargs.get('Nv', 13)
+    im = ax.imshow(data.T, cmap="jet", **imshow_kwargs)
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
 
-    NNr = 100
-    NNv = 360
-
-    # constant rho surfaces
-    nodes_r, vols = get_nodes_grid(NFP, nr=Nr, nt=NNv, nz=Nz)
-    zernike_transform0_r = ZernikeTransform(nodes_r, zern_idx0, NFP)
-    zernike_transform1_r = ZernikeTransform(nodes_r, zern_idx1, NFP)
-
-    # constant theta surfaces
-    nodes_v, vols = get_nodes_grid(NFP, nr=NNr, nt=Nv, nz=Nz)
-    zernike_transform0_v = ZernikeTransform(nodes_v, zern_idx0, NFP)
-    zernike_transform1_v = ZernikeTransform(nodes_v, zern_idx1, NFP)
-
-    R0r = zernike_transform0_r.transform(cR0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z0r = zernike_transform0_r.transform(cZ0, 0, 0, 0).reshape((Nr, NNv, Nz))
-    R1r = zernike_transform1_r.transform(cR1, 0, 0, 0).reshape((Nr, NNv, Nz))
-    Z1r = zernike_transform1_r.transform(cZ1, 0, 0, 0).reshape((Nr, NNv, Nz))
-
-    R0v = zernike_transform0_v.transform(cR0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z0v = zernike_transform0_v.transform(cZ0, 0, 0, 0).reshape((NNr, Nv, Nz))
-    R1v = zernike_transform1_v.transform(cR1, 0, 0, 0).reshape((NNr, Nv, Nz))
-    Z1v = zernike_transform1_v.transform(cZ1, 0, 0, 0).reshape((NNr, Nv, Nz))
-
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-
-        ax.plot(R0r[0, 0, k], Z0r[0, 0, k], 'bo')
-        s0 = ax.plot(R0r[:, :, k].T, Z0r[:, :, k].T, 'b-')
-        ax.plot(R0v[:, :, k], Z0v[:, :, k], 'b:')
-
-        ax.plot(R1r[0, 0, k], Z1r[0, 0, k], 'ro')
-        s1 = ax.plot(R1r[:, :, k].T, Z1r[:, :, k].T, 'r-')
-        ax.plot(R1v[:, :, k], Z1v[:, :, k], 'r:')
-
-        ax.axis('equal')
-        ax.set_xlabel('R')
-        ax.set_ylabel('Z')
-        if k == 0:
-            s0[0].set_label(label0)
-            s1[0].set_label(label1)
-            ax.legend(fontsize='xx-small')
-    plt.show()
+    ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
+    ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
+    ax.set_title(_name_label(name_dict))
+    if norm_F:
+        ax.set_title("%s / |%s|" % (name_dict["base"], _name_label(norm_name_dict)))
+    fig.set_tight_layout(True)
+    return fig, ax
 
 
-def plot_vmec_comparison(vmec_data, equil):
-    """Plots comparison of VMEC and DESC solutions
+def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
+    """Plot 3D surfaces.
 
     Parameters
     ----------
-    vmec_data : dict
-        dictionary of VMEC solution quantities.
-    equil : dict
-        dictionary of DESC equilibrium solution quantities.
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    grid : Grid, optional
+        grid of coordinates to plot at
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+    log : bool, optional
+        whether to use a log scale
+    all_field_periods : bool, optional
+        whether to plot full torus or just one field period. Ignored if grid is specified
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
 
     """
+    nfp = 1 if all_field_periods else eq.NFP
+    if grid is None:
+        grid_kwargs = {"M": 46, "N": 46, "NFP": nfp}
+        grid = _get_grid(**grid_kwargs)
+    plot_axes = _get_plot_axes(grid)
+    if len(plot_axes) != 2:
+        return ValueError(colored("Grid must be 2D", "red"))
 
-    cR = equil['cR']
-    cZ = equil['cZ']
-    NFP = equil['NFP']
-    zern_idx = equil['zern_idx']
+    name_dict = _format_name(name)
+    data = _compute(eq, name_dict, grid)
+    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute_cartesian_coords(grid)
+    X = coords["X"].reshape((grid.M, grid.L, grid.N), order="F")
+    Y = coords["Y"].reshape((grid.M, grid.L, grid.N), order="F")
+    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
-    Nr = 8
-    Nv = 360
-    if np.max(zern_idx[:, 2]) == 0:
-        Nz = 1
-        rows = 1
+    if 0 in plot_axes:
+        if 1 in plot_axes:  # rho & theta
+            data = data[:, :, 0]
+            X = X[:, :, 0]
+            Y = Y[:, :, 0]
+            Z = Z[:, :, 0]
+        else:  # rho & zeta
+            data = data[0, :, :].T
+            X = X[0, :, :].T
+            Y = Y[0, :, :].T
+            Z = Z[0, :, :].T
+    else:  # theta & zeta
+        data = data[:, 0, :].T
+        X = X[:, 0, :].T
+        Y = Y[:, 0, :].T
+        Z = Z[:, 0, :].T
+
+    if log:
+        data = np.abs(data)  # ensure its positive for log plot
+        minn, maxx = data.min().min(), data.max().max()
+        norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
     else:
-        Nz = 6
-        rows = 2
+        minn, maxx = data.min().min(), data.max().max()
+        norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
+    m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
+    m.set_array([])
 
-    Nr_vmec = vmec_data['rmnc'].shape[0]-1
-    s_idx = Nr_vmec % np.floor(Nr_vmec/(Nr-1))
-    idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
-    if s_idx != 0:
-        idxes = np.pad(idxes, (1, 0), mode='constant')
-    r = np.sqrt(idxes/Nr_vmec)
-    v = np.linspace(0, 2*np.pi, Nv)
-    z = np.linspace(0, 2*np.pi/NFP, Nz)
-    rr, vv, zz = np.meshgrid(r, v, z, indexing='ij')
-    rr = rr.flatten()
-    vv = vv.flatten()
-    zz = zz.flatten()
-    nodes = [rr, vv, zz]
-    zernike_transform = ZernikeTransform(nodes, zern_idx, NFP)
+    ax.plot_surface(
+        X,
+        Y,
+        Z,
+        cmap="jet",
+        facecolors=plt.cm.jet(norm(data)),
+        vmin=minn,
+        vmax=maxx,
+        rstride=1,
+        cstride=1,
+    )
+    fig.colorbar(m)
 
-    R_desc = zernike_transform.transform(cR, 0, 0, 0).reshape((r.size, Nv, Nz))
-    Z_desc = zernike_transform.transform(cZ, 0, 0, 0).reshape((r.size, Nv, Nz))
+    ax.set_xlabel(_axis_labels_XYZ[0])
+    ax.set_ylabel(_axis_labels_XYZ[1])
+    ax.set_zlabel(_axis_labels_XYZ[2])
+    ax.set_title(_name_label(name_dict))
+    fig.set_tight_layout(True)
 
-    R_vmec, Z_vmec = vmec_interpolate(
-        vmec_data['rmnc'][idxes], vmec_data['zmns'][idxes], vmec_data['xm'], vmec_data['xn'], v, z)
+    # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
 
-    plt.figure()
-    for k in range(Nz):
-        ax = plt.subplot(rows, int(Nz/rows), k+1)
-        ax.plot(R_vmec[0, 0, k], Z_vmec[0, 0, k], 'bo')
-        s_vmec = ax.plot(R_vmec[:, :, k].T, Z_vmec[:, :, k].T, 'b-')
-        ax.plot(R_desc[0, 0, k], Z_desc[0, 0, k], 'ro')
-        s_desc = ax.plot(R_desc[:, :, k].T, Z_desc[:, :, k].T, 'r--')
-        ax.axis('equal')
-        ax.set_xlabel('R')
-        ax.set_ylabel('Z')
-        if k == 0:
-            s_vmec[0].set_label('VMEC')
-            s_desc[0].set_label('DESC')
-            ax.legend(fontsize='xx-small')
-    plt.show()
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    return fig, ax
+
+
+def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+    """Plot Poincare sections.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    grid : Grid, optional
+        grid of coordinates to plot at
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+    log : bool, optional
+        whether to use a log scale
+    norm_F : bool,optional
+        whether to normalize a plot of force error to be unitless. A vacuum
+        equilibrium force error is normalized by the gradient of magnetic pressure,
+        while an equilibrium solved with pressure is normalized by pressure gradient.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    if grid is None:
+        if eq.N == 0:
+            N = 1
+            nfp = 1
+            rows = 1
+            cols = 1
+            downsample = 1
+        else:
+            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
+            nfp = eq.NFP
+            rows = 2
+            cols = 3
+            downsample = (2 * eq.N + 1) // 6 + 1
+        grid_kwargs = {
+            "L": 25,
+            "NFP": nfp,
+            "axis": False,
+            "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+        }
+        grid = _get_grid(**grid_kwargs)
+        zeta = np.unique(grid.nodes[:, 2])
+
+    else:
+        zeta = np.unique(grid.nodes[:, 2])
+        N = zeta.size
+        downsample = 1
+        rows = np.floor(np.sqrt(N)).astype(int)
+        cols = np.ceil(N / rows).astype(int)
+
+    name_dict = _format_name(name)
+    data = _compute(eq, name_dict, grid)
+    if norm_F:
+        if name_dict["base"] not in ["F", "|F|"]:
+            return ValueError(colored("Can only normalize F or |F|", "red"))
+        else:
+            if (
+                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+            ):  # normalize vacuum force by B pressure gradient
+                norm_name_dict = _format_name("Bpressure")
+            else:  # normalize force balance with pressure by gradient of pressure
+                norm_name_dict = _format_name("|grad(p)|")
+            norm_name_dict["units"] = ""  # make unitless
+            norm_data = _compute(eq, norm_name_dict, grid)
+            data = data / np.nanmean(np.abs(norm_data))  # normalize
+    figw = 5 * cols
+    figh = 5 * rows
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
+    ax = np.atleast_1d(ax).flatten()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute_toroidal_coords(grid)
+    R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
+    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+
+    imshow_kwargs = {}
+    if log:
+        data = np.abs(data)  # ensure its positive for log plot
+        norm = matplotlib.colors.LogNorm()
+        levels = 100
+    else:
+        norm = matplotlib.colors.Normalize()
+        levels = np.linspace(data.min(), data.max(), 100)
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+
+    for i in range(rows * cols):
+        divider = make_axes_locatable(ax[i])
+
+        cntr = ax[i].contourf(
+            R[:, :, i * downsample],
+            Z[:, :, i * downsample],
+            data[:, :, i * downsample],
+            levels=levels,
+            cmap="jet",
+            norm=norm,
+            **imshow_kwargs
+        )
+        cax = divider.append_axes("right", **cax_kwargs)
+        cbar = fig.colorbar(cntr, cax=cax)
+        cbar.update_ticks()
+
+        ax[i].axis("equal")
+        ax[i].set_xlabel(_axis_labels_RPZ[0])
+        ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].set_title(
+            _name_label(name_dict)
+            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                eq.NFP * zeta[i * downsample] / (2 * np.pi)
+            )
+        )
+        if norm_F:
+            ax[i].set_title(
+                "%s / |%s| $\\zeta \\cdot NFP/2\\pi = %3.3f$ "
+                % (
+                    name_dict["base"],
+                    _name_label(norm_name_dict),
+                    eq.NFP * zeta[i * downsample] / (2 * np.pi),
+                )
+            )
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
+    """Plot flux surfaces.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    r_grid : Grid, optional
+        grid of coordinates to plot rho contours at
+    t_grid : Grid, optional
+        grid of coordinates to plot theta coordinates at
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    if r_grid is None and t_grid is None:
+        if eq.N == 0:
+            N = 1
+            nfp = 1
+            rows = 1
+            cols = 1
+            downsample = 1
+        else:
+            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
+            nfp = eq.NFP
+            rows = 2
+            cols = 3
+            downsample = (2 * eq.N + 1) // 6 + 1
+        grid_kwargs = {
+            "L": 8,
+            "NFP": nfp,
+            "theta": np.linspace(0, 2 * np.pi, 180, endpoint=True),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+        }
+        r_grid = _get_grid(**grid_kwargs)
+        zeta = np.unique(r_grid.nodes[:, 2])
+        grid_kwargs = {
+            "L": 50,
+            "NFP": nfp,
+            "theta": np.linspace(0, 2 * np.pi, 8, endpoint=False),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+        }
+        t_grid = _get_grid(**grid_kwargs)
+
+    elif r_grid is None:
+        zeta = np.unique(t_grid.nodes[:, 2])
+        N = zeta.size
+        grid_kwargs = {"L": 8, "M": 180, "zeta": zeta}
+        r_grid = _get_grid(**grid_kwargs)
+        rows = np.floor(np.sqrt(N)).astype(int)
+        cols = np.ceil(N / rows).astype(int)
+        downsample = 1
+    elif t_grid is None:
+        zeta = np.unique(r_grid.nodes[:, 2])
+        N = zeta.size
+        grid_kwargs = {"L": 50, "M": 8, "zeta": zeta}
+        t_grid = _get_grid(**grid_kwargs)
+        rows = np.floor(np.sqrt(zeta.size)).astype(int)
+        cols = np.ceil(N / rows).astype(int)
+        downsample = 1
+    else:
+        zeta = np.unique(r_grid.nodes[:, 2])
+        t_zeta = np.unique(t_grid.nodes[:, 2])
+        N = zeta.size
+        rows = np.floor(np.sqrt(N)).astype(int)
+        cols = np.ceil(N / rows).astype(int)
+        downsample = 1
+        if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
+            raise ValueError(
+                colored(
+                    "r_grid and t_grid should have the same zeta planes, got r_grid={}, t_grid{}".format(
+                        zeta, t_zeta
+                    ),
+                    "red",
+                )
+            )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r_coords = eq.compute_toroidal_coords(r_grid)
+        t_coords = eq.compute_toroidal_coords(t_grid)
+
+    # theta coordinates cooresponding to linearly spaced vartheta angles
+    v_nodes = t_grid.nodes
+    v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
+    v_grid = Grid(v_nodes)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        v_coords = eq.compute_toroidal_coords(v_grid)
+
+    # rho contours
+    Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+
+    # theta contours
+    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+
+    figw = 4 * cols
+    figh = 5 * rows
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
+    ax = np.atleast_1d(ax).flatten()
+
+    for i in range(rows * cols):
+        ax[i].plot(
+            Rv[:, :, i * downsample].T,
+            Zv[:, :, i * downsample].T,
+            color=colorblind_colors[2],
+            linestyle=":",
+        )
+        ax[i].plot(
+            Rr[:, :, i * downsample],
+            Zr[:, :, i * downsample],
+            color=colorblind_colors[0],
+        )
+        ax[i].plot(
+            Rr[:, -1, i * downsample],
+            Zr[:, -1, i * downsample],
+            color=colorblind_colors[1],
+        )
+        ax[i].scatter(
+            Rr[0, 0, i * downsample],
+            Zr[0, 0, i * downsample],
+            color=colorblind_colors[3],
+        )
+
+        ax[i].axis("equal")
+        ax[i].set_xlabel(_axis_labels_RPZ[0])
+        ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].set_title(
+            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                nfp * zeta[i * downsample] / (2 * np.pi)
+            )
+        )
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def _compute(eq, name, grid):
+    """Compute value specified by name on grid for equilibrium eq.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    name : str
+        name of variable to plot
+    grid : Grid
+        grid of coordinates to calcuulate at
+
+    Returns
+    -------
+    out, float array of shape (M, L, N)
+        computed values
+
+    """
+    if not isinstance(name, dict):
+        name_dict = _format_name(name)
+    else:
+        name_dict = name
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # primary calculations
+        if name_dict["base"] in ["rho", "theta", "zeta"]:
+            idx = ["rho", "theta", "zeta"].index(name_dict["base"])
+            out = grid.nodes[:, idx]
+        elif name_dict["base"] == "vartheta":
+            lmbda = eq.compute_toroidal_coords(grid)["lambda"]
+            out = grid.nodes[:, 1] + lmbda
+        elif name_dict["base"] in ["psi", "p", "iota"]:
+            out = eq.compute_profiles(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["R", "Z", "lambda"]:
+            out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "g":
+            out = eq.compute_jacobian(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["B", "|B|"]:
+            out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "J":
+            out = eq.compute_current_density(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["Bpressure"]:
+            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["Btension"]:
+            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
+            out = eq.compute_force_error(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["QS", "B*grad(|B|)"]:
+            out = eq.compute_quasisymmetry(grid)[_name_key(name_dict)]
+        else:
+            raise NotImplementedError(
+                "No output for base named '{}'.".format(name_dict["base"])
+            )
+
+    # secondary calculations
+    power = name_dict["power"]
+    if power != "":
+        try:
+            power = float(power)
+        except ValueError:
+            # handle fractional exponents
+            if "/" in power:
+                frac = power.split("/")
+                power = frac[0] / frac[1]
+            else:
+                raise ValueError(
+                    "Could not convert string to float: '{}'".format(power)
+                )
+        out = out ** power
+
+    return out.reshape((grid.M, grid.L, grid.N), order="F")
+
+
+def _format_name(name):
+    """Parse name string into dictionary.
+
+    Parameters
+    ----------
+    name : str
+
+    Returns
+    -------
+    parsed name : dict
+
+    """
+    name_dict = {"base": "", "sups": "", "subs": "", "power": "", "d": "", "units": ""}
+    if "**" in name:
+        parsename, power = name.split("**")
+        if "_" in power or "^" in power:
+            raise SyntaxError(
+                "Power operands must come after components and derivatives."
+            )
+    else:
+        power = ""
+        parsename = name
+    name_dict["power"] += power
+    if "_" in parsename:
+        split = parsename.split("_")
+        if len(split) == 3:
+            name_dict["base"] += split[0]
+            name_dict["subs"] += split[1]
+            name_dict["d"] += split[2]
+        elif "^" in split[0]:
+            name_dict["base"], name_dict["sups"] = split[0].split("^")
+            name_dict["d"] = split[1]
+        elif len(split) == 2:
+            name_dict["base"], other = split
+            if other in ["rho", "theta", "zeta", "beta", "TP", "FF"]:
+                name_dict["subs"] = other
+            else:
+                name_dict["d"] = other
+        else:
+            raise SyntaxError("String format is not valid.")
+    elif "^" in parsename:
+        name_dict["base"], name_dict["sups"] = parsename.split("^")
+    else:
+        name_dict["base"] = parsename
+
+    units = {
+        "rho": "",
+        "theta": r"(\mathrm{rad})",
+        "zeta": r"(\mathrm{rad})",
+        "vartheta": r"(\mathrm{rad})",
+        "psi": r"(\mathrm{Webers})",
+        "p": r"(\mathrm{Pa})",
+        "iota": "",
+        "R": r"(\mathrm{m})",
+        "Z": r"(\mathrm{m})",
+        "lambda": "",
+        "g": r"(\mathrm{m}^3)",
+        "B": r"(\mathrm{T})",
+        "|B|": r"(\mathrm{T})",
+        "J": r"(\mathrm{A}/\mathrm{m}^2)",
+        "Bpressure": r"\mathrm{N}/\mathrm{m}^3",
+        "|Bpressure|": r"\mathrm{N}/\mathrm{m}^3",
+        "Btension": r"\mathrm{N}/\mathrm{m}^3",
+        "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
+        "F": r"(\mathrm{N}/\mathrm{m}^2)",
+        "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
+        "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
+        "|grad(rho)|": r"(\mathrm{m}^{-1})",
+        "|beta|": r"(\mathrm{m}^{-1})",
+        "QS": "",
+        "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
+    }
+    name_dict["units"] = units[name_dict["base"]]
+    if name_dict["power"]:
+        name_dict["units"] += "^" + name_dict["power"]
+
+    return name_dict
+
+
+def _name_label(name_dict):
+    """Create label for name dictionary.
+
+    Parameters
+    ----------
+    name_dict : dict
+        name dictionary created by format_name method
+
+    Returns
+    -------
+    label : str
+
+    """
+    esc = r"\\"[:-1]
+
+    if "mag" in name_dict["base"]:
+        base = "|" + re.sub("mag", "", name_dict["base"]) + "|"
+    elif "Bpressure" in name_dict["base"]:
+        base = "\\nabla(B^2 /(2\\mu_0))"
+    elif "Btension" in name_dict["base"]:
+        base = "(B \\cdot \\nabla)B"
+    else:
+        base = name_dict["base"]
+
+    if "grad" in base:
+        idx = base.index("grad")
+        base = base[:idx] + "\\nabla" + base[idx + 4 :]
+    if "rho" in base:
+        idx = base.index("rho")
+        base = base[:idx] + "\\" + base[idx:]
+    if "vartheta" in base:
+        idx = base.index("vartheta")
+        base = base[:idx] + "\\" + base[idx:]
+    elif "theta" in base:
+        idx = base.index("theta")
+        base = base[:idx] + "\\" + base[idx:]
+    if "zeta" in base:
+        idx = base.index("zeta")
+        base = base[:idx] + "\\" + base[idx:]
+    if "lambda" in base:
+        idx = base.index("lambda")
+        base = base[:idx] + "\\" + base[idx:]
+    if "iota" in base:
+        idx = base.index("iota")
+        base = base[:idx] + "\\" + base[idx:]
+    if "psi" in base:
+        idx = base.index("psi")
+        base = base[:idx] + "\\" + base[idx:]
+    if "beta" in base:
+        idx = base.index("beta")
+        base = base[:idx] + "\\" + base[idx:]
+
+    if name_dict["d"] != "":
+        dstr0 = "d"
+        dstr1 = "/d" + name_dict["d"]
+        if name_dict["power"] != "":
+            dstr0 = "(" + dstr0
+            dstr1 = dstr1 + ")^{" + name_dict["power"] + "}"
+        else:
+            pass
+    else:
+        dstr0 = ""
+        dstr1 = ""
+
+    if name_dict["power"] != "":
+        if name_dict["d"] != "":
+            pstr = ""
+        else:
+            pstr = name_dict["power"]
+    else:
+        pstr = ""
+
+    if name_dict["sups"] != "":
+        supstr = "^{" + esc + name_dict["sups"] + " " + pstr + "}"
+    elif pstr != "":
+        supstr = "^{" + pstr + "}"
+    else:
+        supstr = ""
+
+    if name_dict["subs"] != "":
+        if name_dict["subs"] in ["TP", "FF"]:
+            substr = "_{" + name_dict["subs"] + "}"
+        else:
+            substr = "_{" + esc + name_dict["subs"] + "}"
+    else:
+        substr = ""
+    label = (
+        r"$" + dstr0 + base + supstr + substr + dstr1 + "~" + name_dict["units"] + "$"
+    )
+    return label
+
+
+def _name_key(name_dict):
+    """Reconstruct name for dictionary key used in Equilibrium compute methods.
+
+    Parameters
+    ----------
+    name_dict : dict
+        name dictionary created by format_name method
+
+    Returns
+    -------
+    name_key : str
+
+    """
+    out = name_dict["base"]
+    if name_dict["sups"] != "":
+        out += "^" + name_dict["sups"]
+    if name_dict["subs"] != "":
+        out += "_" + name_dict["subs"]
+    if name_dict["d"] != "":
+        out += "_" + name_dict["d"]
+    return out
+
+
+def plot_grid(grid, **kwargs):
+    """Plot the location of collocation nodes on the zeta=0 plane
+
+    Parameters
+    ----------
+    grid : Grid
+        grid to plot
+
+    Returns
+    -------
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        handle to the figure used for plotting
+    ax : matplotlib.axes.Axes
+        handle to the axis used for plotting
+    """
+    fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
+    ax = plt.subplot(projection="polar")
+
+    # node locations
+    nodes = grid.nodes[np.where(grid.nodes[:, 2] == 0)]
+    ax.scatter(nodes[:, 1], nodes[:, 0], s=4)
+    ax.set_ylim(0, 1)
+    ax.set_xticks(
+        [
+            0,
+            np.pi / 4,
+            np.pi / 2,
+            3 / 4 * np.pi,
+            np.pi,
+            5 / 4 * np.pi,
+            3 / 2 * np.pi,
+            7 / 4 * np.pi,
+        ]
+    )
+    ax.set_xticklabels(
+        [
+            "$0$",
+            r"$\frac{\pi}{4}$",
+            r"$\frac{\pi}{2}$",
+            r"$\frac{3\pi}{4}$",
+            r"$\pi$",
+            r"$\frac{4\pi}{4}$",
+            r"$\frac{3\pi}{2}$",
+            r"$2\pi$",
+        ]
+    )
+    ax.set_yticklabels([])
+    if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
+        ax.set_title(
+            "{}, $L={}$, $M={}$".format(
+                grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
+            ),
+            pad=20,
+        )
+    if grid.__class__.__name__ in ["ConcentricGrid"]:
+        ax.set_title(
+            "{}, $M={}$, \n node pattern: {}".format(
+                grid.__class__.__name__, grid.M, grid.node_pattern, grid.node_pattern
+            ),
+            pad=20,
+        )
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_basis(basis, **kwargs):
+    """Plot basis functions
+
+    Parameters
+    ----------
+    basis : Basis
+        basis to plot
+
+    Returns
+    -------
+    fig : matplotlib.figure
+        handle to figure
+    ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
+        axes used for plotting. A single axis is used for 1d basis functions,
+        2d or 3d bases return an ndarray or dict of axes
+    """
+
+    if basis.__class__.__name__ == "PowerSeries":
+        lmax = abs(basis.modes[:, 0]).max()
+        grid = LinearGrid(100, 1, 1, endpoint=True)
+        r = grid.nodes[:, 0]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
+
+        f = basis.evaluate(grid.nodes)
+        for fi, l in zip(f.T, basis.modes[:, 0]):
+            ax.plot(r, fi, label="$l={:d}$".format(int(l)))
+        ax.set_xlabel("$\\rho$")
+        ax.set_ylabel("$f_l(\\rho)$")
+        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+        ax.set_title("{}, $L={}$".format(basis.__class__.__name__, basis.L))
+        fig.set_tight_layout(True)
+        return fig, ax
+
+    elif basis.__class__.__name__ == "FourierSeries":
+        nmax = abs(basis.modes[:, 2]).max()
+        grid = LinearGrid(1, 1, 100, NFP=basis.NFP, endpoint=True)
+        z = grid.nodes[:, 2]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
+
+        f = basis.evaluate(grid.nodes)
+        for fi, n in zip(f.T, basis.modes[:, 2]):
+            ax.plot(z, fi, label="$n={:d}$".format(int(n)))
+        ax.set_xlabel("$\\zeta$")
+        ax.set_ylabel("$f_n(\\zeta)$")
+        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+        ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
+        ax.set_xticklabels(["$0$", "$\\pi/NFP$", "$2\\pi/NFP$"])
+        ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        ax.set_title(
+            "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
+        )
+        fig.set_tight_layout(True)
+        return fig, ax
+
+    elif basis.__class__.__name__ == "DoubleFourierSeries":
+        nmax = abs(basis.modes[:, 2]).max()
+        mmax = abs(basis.modes[:, 1]).max()
+        grid = LinearGrid(1, 100, 100, NFP=basis.NFP, endpoint=True)
+        t = grid.nodes[:, 1].reshape((100, 100))
+        z = grid.nodes[:, 2].reshape((100, 100))
+        fig = plt.figure(
+            # 2 * mmax + 1,
+            # 2 * nmax + 1,
+            figsize=kwargs.get("figsize", (nmax * 4 + 1, mmax * 4 + 1)),
+            # sharex=True,
+            # sharey=True,
+        )
+        wratios = np.ones(2 * nmax + 2)
+        wratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        hratios = np.ones(2 * mmax + 2)
+        hratios[0] = kwargs.get("title_ratio", 0.1)
+        gs = matplotlib.gridspec.GridSpec(
+            2 * mmax + 2, 2 * nmax + 2, width_ratios=wratios, height_ratios=hratios
+        )
+        ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
+        f = basis.evaluate(grid.nodes)
+        for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
+            ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])
+            ax[mmax + m, nmax + n].set_xticks(
+                [
+                    0,
+                    np.pi / basis.NFP / 2,
+                    np.pi / basis.NFP,
+                    3 / 2 * np.pi / basis.NFP,
+                    2 * np.pi / basis.NFP,
+                ]
+            )
+            ax[mmax + m, 0].set_yticks([0, np.pi / 2, np.pi, 3 / 2 * np.pi, 2 * np.pi])
+            ax[mmax + m, nmax + n].set_xticklabels([])
+            ax[mmax + m, nmax + n].set_yticklabels([])
+            im = ax[mmax + m, nmax + n].contourf(
+                z,
+                t,
+                fi.reshape((100, 100)),
+                levels=100,
+                vmin=-1,
+                vmax=1,
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
+            if m == mmax:
+                ax[mmax + m, nmax + n].set_xlabel(
+                    "$\\zeta$ \n $n={}$".format(n), fontsize=10
+                )
+                ax[mmax + m, nmax + n].set_xticklabels(
+                    ["$0$", None, "$\\pi/NFP$", None, "$2\\pi/NFP$"], fontsize=8
+                )
+            if n + nmax == 0:
+                ax[mmax + m, 0].set_ylabel("$m={}$ \n $\\theta$".format(m), fontsize=10)
+                ax[mmax + m, 0].set_yticklabels(
+                    ["$0$", None, "$\\pi$", None, "$2\\pi$"], fontsize=8
+                )
+        cb_ax = plt.subplot(gs[:, -1])
+        cbar = fig.colorbar(im, cax=cb_ax)
+        cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
+        fig.suptitle(
+            "{}, $M={}$, $N={}$, $NFP={}$".format(
+                basis.__class__.__name__, basis.M, basis.N, basis.NFP
+            ),
+            y=0.98,
+        )
+        return fig, ax
+
+    elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
+        lmax = abs(basis.modes[:, 0]).max().astype(int)
+        mmax = abs(basis.modes[:, 1]).max().astype(int)
+
+        grid = LinearGrid(100, 100, 1, endpoint=True)
+        r = np.unique(grid.nodes[:, 0])
+        v = np.unique(grid.nodes[:, 1])
+
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
+
+        ax = {i: {} for i in range(lmax + 1)}
+        ratios = np.ones(2 * (mmax + 1) + 1)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        gs = matplotlib.gridspec.GridSpec(
+            lmax + 2, 2 * (mmax + 1) + 1, width_ratios=ratios
+        )
+
+        modes = basis.modes[np.where(basis.modes[:, 2] == 0)]
+        Zs = basis.evaluate(grid.nodes, modes=modes)
+        for i, (l, m) in enumerate(
+            zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
+        ):
+            Z = Zs[:, i].reshape((100, 100))
+            ax[l][m] = plt.subplot(
+                gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
+            )
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            ax[l][m].axis("off")
+            im = ax[l][m].contourf(
+                v,
+                r,
+                Z,
+                levels=np.linspace(-1, 1, 100),
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
+
+        cb_ax = plt.subplot(gs[:, -1])
+        plt.subplots_adjust(right=0.8)
+        cbar = fig.colorbar(im, cax=cb_ax)
+        cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.suptitle(
+            "{}, $L={}$, $M={}$, spectral indexing = {}".format(
+                basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
+            ),
+            y=0.98,
+        )
+        fig.set_tight_layout(True)
+        return fig, ax
 
 
 def plot_logo(savepath=None, **kwargs):
-    """Plots the DESC logo
+    """Plot the DESC logo.
 
     Parameters
     ----------
@@ -563,49 +1264,95 @@ def plot_logo(savepath=None, **kwargs):
         File format is inferred from the filename (Default value = None)
     **kwargs :
         additional plot formatting parameters.
-        options include 'Dcolor', 'Dcolor_rho', 'Dcolor_theta',
-        'Ecolor', 'Scolor', 'Ccolor', 'BGcolor', 'fig_width'
-
+        options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
+        ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
 
     Returns
     -------
-    fig : matplotlib.figure
+    fig : matplotlib.figure.Figure
         handle to the figure used for plotting
-    ax : matplotlib.axes
+    ax : matplotlib.axes.Axes
         handle to the axis used for plotting
 
     """
-    onlyD = kwargs.get('onlyD', False)
-    Dcolor = kwargs.get('Dcolor', 'xkcd:neon purple')
-    Dcolor_rho = kwargs.get('Dcolor_rho', 'xkcd:neon pink')
-    Dcolor_theta = kwargs.get('Dcolor_theta', 'xkcd:neon pink')
-    Ecolor = kwargs.get('Ecolor', 'deepskyblue')
-    Scolor = kwargs.get('Scolor', 'deepskyblue')
-    Ccolor = kwargs.get('Ccolor', 'deepskyblue')
-    BGcolor = kwargs.get('BGcolor', 'clear')
-    fig_width = kwargs.get('fig_width', 3)
-    fig_height = fig_width/2
-    contour_lw_ratio = kwargs.get('contour_lw_ratio', 0.3)
-    lw = fig_width**.5
+    eq = np.array(
+        [
+            [0, 0, 0, 3.62287349e00, 0.00000000e00],
+            [1, -1, 0, 0.00000000e00, 1.52398053e00],
+            [1, 1, 0, 8.59865670e-01, 0.00000000e00],
+            [2, -2, 0, 0.00000000e00, 1.46374759e-01],
+            [2, 0, 0, -4.33377700e-01, 0.00000000e00],
+            [2, 2, 0, 6.09609205e-01, 0.00000000e00],
+            [3, -3, 0, 0.00000000e00, 2.13664220e-01],
+            [3, -1, 0, 0.00000000e00, 1.29776568e-01],
+            [3, 1, 0, -1.67706961e-01, 0.00000000e00],
+            [3, 3, 0, 2.32179123e-01, 0.00000000e00],
+            [4, -4, 0, 0.00000000e00, 3.30174283e-02],
+            [4, -2, 0, 0.00000000e00, -5.80394864e-02],
+            [4, 0, 0, -3.10228782e-02, 0.00000000e00],
+            [4, 2, 0, -2.43905484e-03, 0.00000000e00],
+            [4, 4, 0, 1.81292185e-01, 0.00000000e00],
+            [5, -5, 0, 0.00000000e00, 5.37223061e-02],
+            [5, -3, 0, 0.00000000e00, 2.65199520e-03],
+            [5, -1, 0, 0.00000000e00, 1.63010516e-02],
+            [5, 1, 0, 2.73622502e-02, 0.00000000e00],
+            [5, 3, 0, -3.62812195e-02, 0.00000000e00],
+            [5, 5, 0, 7.88069456e-02, 0.00000000e00],
+            [6, -6, 0, 0.00000000e00, 3.50372526e-03],
+            [6, -4, 0, 0.00000000e00, -1.82814700e-02],
+            [6, -2, 0, 0.00000000e00, -1.62703504e-02],
+            [6, 0, 0, 9.37285472e-03, 0.00000000e00],
+            [6, 2, 0, 3.32793660e-03, 0.00000000e00],
+            [6, 4, 0, -9.90606341e-03, 0.00000000e00],
+            [6, 6, 0, 6.00068129e-02, 0.00000000e00],
+            [7, -7, 0, 0.00000000e00, 1.28853330e-02],
+            [7, -5, 0, 0.00000000e00, -2.28268526e-03],
+            [7, -3, 0, 0.00000000e00, -1.04698799e-02],
+            [7, -1, 0, 0.00000000e00, -5.15951605e-03],
+            [7, 1, 0, 2.29082701e-02, 0.00000000e00],
+            [7, 3, 0, -1.19760934e-02, 0.00000000e00],
+            [7, 5, 0, -1.43418200e-02, 0.00000000e00],
+            [7, 7, 0, 2.27668988e-02, 0.00000000e00],
+            [8, -8, 0, 0.00000000e00, -2.53055423e-03],
+            [8, -6, 0, 0.00000000e00, -7.15955981e-03],
+            [8, -4, 0, 0.00000000e00, -6.54397837e-03],
+            [8, -2, 0, 0.00000000e00, -4.08366006e-03],
+            [8, 0, 0, 1.17264567e-02, 0.00000000e00],
+            [8, 2, 0, -1.24364476e-04, 0.00000000e00],
+            [8, 4, 0, -8.59425384e-03, 0.00000000e00],
+            [8, 6, 0, -7.11934473e-03, 0.00000000e00],
+            [8, 8, 0, 1.68974668e-02, 0.00000000e00],
+        ]
+    )
+
+    onlyD = kwargs.get("onlyD", False)
+    Dcolor = kwargs.get("Dcolor", "xkcd:neon purple")
+    Dcolor_rho = kwargs.get("Dcolor_rho", "xkcd:neon pink")
+    Dcolor_theta = kwargs.get("Dcolor_theta", "xkcd:neon pink")
+    Ecolor = kwargs.get("Ecolor", "deepskyblue")
+    Scolor = kwargs.get("Scolor", "deepskyblue")
+    Ccolor = kwargs.get("Ccolor", "deepskyblue")
+    BGcolor = kwargs.get("BGcolor", "clear")
+    fig_width = kwargs.get("fig_width", 3)
+    fig_height = fig_width / 2
+    contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
+    lw = fig_width ** 0.5
 
     transparent = False
-    if BGcolor == 'dark':
-        BGcolor = 'xkcd:charcoal grey'
-    elif BGcolor == 'light':
-        BGcolor = 'white'
-    elif BGcolor == 'clear':
-        BGcolor = 'white'
+    if BGcolor == "dark":
+        BGcolor = "xkcd:charcoal grey"
+    elif BGcolor == "light":
+        BGcolor = "white"
+    elif BGcolor == "clear":
+        BGcolor = "white"
         transparent = True
 
-    path = os.path.dirname(os.path.abspath(__file__))
-    equil = read_desc(path + '/../examples/DESC/outputs/LOGO_m12x18_n0x0')
-
     if onlyD:
-        fig_width = fig_width/2
+        fig_width = fig_width / 2
     fig = plt.figure(figsize=(fig_width, fig_height))
-    ax = fig.add_axes([0.1, 0.1, .8, .8])
-    ax.axis('equal')
-    ax.axis('off')
+    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8])
+    ax.axis("equal")
+    ax.axis("off")
     ax.set_facecolor(BGcolor)
     fig.set_facecolor(BGcolor)
     if transparent:
@@ -616,9 +1363,9 @@ def plot_logo(savepath=None, **kwargs):
     top = 10
     Dleft = 0
     Dw = 8
-    Dh = top-bottom + 2
-    DX = Dleft + Dw/2
-    DY = (top-bottom)/2
+    Dh = top - bottom + 2
+    DX = Dleft + Dw / 2
+    DY = (top - bottom) / 2
     Dright = Dleft + Dw
 
     Eleft = Dright + 0.5
@@ -629,143 +1376,96 @@ def plot_logo(savepath=None, **kwargs):
     Sw = 5
     Sright = Sleft + Sw
 
-    Ctheta = np.linspace(np.pi/4, 2*np.pi-np.pi/4, 1000)
+    Ctheta = np.linspace(np.pi / 4, 2 * np.pi - np.pi / 4, 1000)
     Cleft = Sright + 0.75
     Cw = 4
     Ch = 11
-    Cx0 = Cleft + Cw/2
-    Cy0 = (top-bottom)/2
+    Cx0 = Cleft + Cw / 2
+    Cy0 = (top - bottom) / 2
 
     # D
-    cR = equil['cR']
-    cZ = equil['cZ']
-    zern_idx = equil['zern_idx']
-    NFP = equil['NFP']
-    R0, Z0 = axis_posn(cR, cZ, zern_idx, NFP)
+    cR = eq[:, 3]
+    cZ = eq[:, 4]
+    zern_idx = eq[:, :3]
+    ls, ms, ns = zern_idx.T
+    axis_jacobi = jacobi(0, ls, ms)
+    R0 = axis_jacobi.dot(cR)
+    Z0 = axis_jacobi.dot(cZ)
 
-    nr = kwargs.get('nr', 5)
-    nt = kwargs.get('nt', 8)
+    nr = kwargs.get("nr", 5)
+    nt = kwargs.get("nt", 8)
     Nr = 100
     Nt = 361
-    rstep = Nr//nr
-    tstep = Nt//nt
-    zeta = 0
+    rstep = Nr // nr
+    tstep = Nt // nt
     r = np.linspace(0, 1, Nr)
-    t = np.linspace(0, 2*np.pi, Nt)
-    r, t = np.meshgrid(r, t, indexing='ij')
+    t = np.linspace(0, 2 * np.pi, Nt)
+    r, t = np.meshgrid(r, t, indexing="ij")
     r = r.flatten()
     t = t.flatten()
-    z = zeta*np.ones_like(r)
-    zernike_transform = ZernikeTransform([r, t, z], zern_idx, NFP)
-    bdry_nodes = np.array(
-        [np.ones(Nt), np.linspace(0, 2*np.pi, Nt), np.ones(Nt)])
-    bdry_zernike_transform = ZernikeTransform(bdry_nodes, zern_idx, NFP)
 
-    R = zernike_transform.transform(cR, 0, 0, 0).reshape((Nr, Nt))
-    Z = zernike_transform.transform(cZ, 0, 0, 0).reshape((Nr, Nt))
-    bdryR = bdry_zernike_transform.transform(cR, 0, 0, 0)
-    bdryZ = bdry_zernike_transform.transform(cZ, 0, 0, 0)
+    radial = jacobi(r, ls, ms)
+    poloidal = fourier(t, ms)
+    zern = radial * poloidal
+    bdry = poloidal
 
-    R = (R-R0)/(R.max()-R.min())*Dw + DX
-    Z = (Z-Z0)/(Z.max()-Z.min())*Dh + DY
-    bdryR = (bdryR-R0)/(bdryR.max()-bdryR.min())*Dw + DX
-    bdryZ = (bdryZ-Z0)/(bdryZ.max()-bdryZ.min())*Dh + DY
+    R = zern.dot(cR).reshape((Nr, Nt))
+    Z = zern.dot(cZ).reshape((Nr, Nt))
+    bdryR = bdry.dot(cR)
+    bdryZ = bdry.dot(cZ)
+
+    R = (R - R0) / (R.max() - R.min()) * Dw + DX
+    Z = (Z - Z0) / (Z.max() - Z.min()) * Dh + DY
+    bdryR = (bdryR - R0) / (bdryR.max() - bdryR.min()) * Dw + DX
+    bdryZ = (bdryZ - Z0) / (bdryZ.max() - bdryZ.min()) * Dh + DY
 
     # plot r contours
-    ax.plot(R.T[:, ::rstep], Z.T[:, ::rstep],
-            color=Dcolor_rho, lw=lw*contour_lw_ratio, ls='-')
+    ax.plot(
+        R.T[:, ::rstep],
+        Z.T[:, ::rstep],
+        color=Dcolor_rho,
+        lw=lw * contour_lw_ratio,
+        ls="-",
+    )
     # plot theta contours
-    ax.plot(R[:, ::tstep], Z[:, ::tstep],
-            color=Dcolor_theta, lw=lw*contour_lw_ratio, ls='-')
+    ax.plot(
+        R[:, ::tstep],
+        Z[:, ::tstep],
+        color=Dcolor_theta,
+        lw=lw * contour_lw_ratio,
+        ls="-",
+    )
     ax.plot(bdryR, bdryZ, color=Dcolor, lw=lw)
 
     if onlyD:
         if savepath is not None:
-            fig.savefig(savepath, facecolor=fig.get_facecolor(),
-                        edgecolor='none')
+            fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor="none")
 
         return fig, ax
 
     # E
-    ax.plot([Eleft, Eleft+1], [bottom, top],
-            lw=lw, color=Ecolor, linestyle='-')
-    ax.plot([Eleft, Eright], [bottom, bottom],
-            lw=lw, color=Ecolor, linestyle='-')
-    ax.plot([Eleft+1/2, Eright], [bottom+(top+bottom)/2, bottom +
-                                  (top+bottom)/2], lw=lw, color=Ecolor, linestyle='-')
-    ax.plot([Eleft+1, Eright], [top, top], lw=lw, color=Ecolor, linestyle='-')
+    ax.plot([Eleft, Eleft + 1], [bottom, top], lw=lw, color=Ecolor, linestyle="-")
+    ax.plot([Eleft, Eright], [bottom, bottom], lw=lw, color=Ecolor, linestyle="-")
+    ax.plot(
+        [Eleft + 1 / 2, Eright],
+        [bottom + (top + bottom) / 2, bottom + (top + bottom) / 2],
+        lw=lw,
+        color=Ecolor,
+        linestyle="-",
+    )
+    ax.plot([Eleft + 1, Eright], [top, top], lw=lw, color=Ecolor, linestyle="-")
 
     # S
-    Sy = np.linspace(bottom, top+Soffset, 1000)
-    Sx = Sw*np.cos(Sy*3/2*np.pi/(Sy.max()-Sy.min())-np.pi)**2 + Sleft
-    ax.plot(Sx, Sy[::-1]-Soffset/2, lw=lw, color=Scolor, linestyle='-')
+    Sy = np.linspace(bottom, top + Soffset, 1000)
+    Sx = Sw * np.cos(Sy * 3 / 2 * np.pi / (Sy.max() - Sy.min()) - np.pi) ** 2 + Sleft
+    ax.plot(Sx, Sy[::-1] - Soffset / 2, lw=lw, color=Scolor, linestyle="-")
 
     # C
-    Cx = Cw/2*np.cos(Ctheta)+Cx0
-    Cy = Ch/2*np.sin(Ctheta)+Cy0
-    ax.plot(Cx, Cy, lw=lw, color=Ccolor, linestyle='-')
+    Cx = Cw / 2 * np.cos(Ctheta) + Cx0
+    Cy = Ch / 2 * np.sin(Ctheta) + Cy0
+    ax.plot(Cx, Cy, lw=lw, color=Ccolor, linestyle="-")
 
     if savepath is not None:
-        fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor='none')
-
-    return fig, ax
-
-
-def plot_zernike_basis(M, delta_lm, indexing, **kwargs):
-    """Plots spectral basis of zernike basis functions
-
-    Parameters
-    ----------
-    M : int
-        maximum poloidal resolution
-    delta_lm : int
-        maximum difference between radial mode l and poloidal mode m
-    indexing : str
-        zernike indexing method. One of 'fringe', 'ansi', 'house', 'chevron'
-    **kwargs :
-        additional plot formatting arguments
-
-
-    Returns
-    -------
-    fig : matplotlib.figure
-        handle to figure
-    ax : dict of matplotlib.axes
-        nested dictionary, ax[l][m] is the handle to the
-        axis for radial mode l, poloidal mode m
-
-    """
-
-    cmap = kwargs.get('cmap', 'coolwarm')
-    scale = kwargs.get('scale', 1)
-    npts = kwargs.get('npts', 100)
-    levels = kwargs.get('levels', np.linspace(-1, 1, npts))
-
-    ls, ms, ns = get_zern_basis_idx_dense(M, 0, delta_lm, indexing).T
-    lmax = np.max(ls)
-    mmax = np.max(ms)
-
-    r = np.linspace(0, 1, npts)
-    v = np.linspace(0, 2*np.pi, npts)
-    rr, vv = np.meshgrid(r, v, indexing='ij')
-
-    fig = plt.figure(figsize=(scale*mmax, scale*lmax/2))
-
-    ax = {i: {} for i in range(lmax+1)}
-    gs = matplotlib.gridspec.GridSpec(lmax+1, 2*(mmax+1))
-
-    Zs = zern(rr.flatten(), vv.flatten(), ls, ms, 0, 0)
-
-    for i, (l, m) in enumerate(zip(ls, ms)):
-        Z = Zs[:, i].reshape((npts, npts))
-        ax[l][m] = plt.subplot(gs[l, m+mmax:m+mmax+2], projection='polar')
-        ax[l][m].set_title('$\mathcal{Z}_{' + str(l) + '}^{' + str(m) + '}$')
-        ax[l][m].axis('off')
-        im = ax[l][m].contourf(v, r, Z, levels=levels, cmap=cmap)
-
-    cb_ax = fig.add_axes([0.83, 0.1, 0.02, 0.8])
-    plt.subplots_adjust(right=.8)
-    cbar = fig.colorbar(im, cax=cb_ax)
-    cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.savefig(savepath, facecolor=fig.get_facecolor(), edgecolor="none")
 
     return fig, ax

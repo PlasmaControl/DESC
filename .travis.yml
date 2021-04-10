@@ -1,27 +1,43 @@
 language: python
 python:
-  - "3.6"
-  - "3.7"
-  - "3.8"
+- '3.6'
+- '3.7'
+- '3.8'
 
-# command to install dependencies
-install:
-  - pip install -r requirements.txt
-  - pip install -r tests/requirements.txt
+branches:
+  only:
+  - master
+  - dev
+  - v1.0
+  - dev1.0
+  - /v\d+\.\d+\.\d+/
   
-# command to run tests
+install:
+- pip install -r requirements.txt
+- pip install -r tests/requirements.txt
+
 script:
-  - python -m pytest --cov=desc/
+- python -m pytest --cov=desc/ --mpl
 
-# code coverage
 after_script:
-  - codecov
+- codecov
 
-# send notifications of results
+deploy:
+  provider: pypi
+  username: __token__
+  password:
+    secure: liDLrA6O3ABrb3XTX1sHiHHDdr1nbdDlWDM8UlRBJx+Cb4/eeozebJtLGCPVE6r0vjBhdnZo3f+Hbv/4WiZtZU71hkWeIsRWuX5VgHjVAaOxEgojSw78uthXtfVQZ7UuJl9NIrovBKJ6jOIv1Rixf9Jv/JILL9ZS73CKkxtmsCE2U52JNHiDS3rPjU3o59BJBaVRggNWiWskwLWSBg7bOB1AwbMphhXV02SOa4exnSZnESQ0W+inTSJGzfCgAXA2MeByeUVD2Ug9HFOsIW1QMMXyl5h1brju9gcKmhwEU61nAheqXqVixv8mhuSfCA7RN6xCQwy6CdEoMtg79tkNcNhaZoVBfM+Z9tU0ryys4OLjUR/fRPXKrvSL23jPY4c0scr9Tl1UUqhXRZyp/XXxTh9Ols7WKCDKdFqEUNCcsxpg9lL+VQR/cG/W1p+HIYjqAPQUt5lQK2iss81n0n+WKDKNnS++Q3B6KRLRX63KgsEqOZ4cre2hlSV579CdpcHD6F/ui4fqyD1OH0i49H+jl+5yw8XNdyR+xrbIPN9octjbiqP3rcqFOHekH8uMT7FcXfHVxrG+LUHi6epGfWPLlJ9atT0ZQXZ1twRwUoHXk3pn7NdC8ITxByzgM5HCTtg04y+VKh2XKabbQkqA15gqM+wCRcT/uiEP7mS+fQ+Z41U=
+  on:
+    tags: true
+    all_branches: true
+  distributions: "sdist bdist_wheel"    
+  skip_existing: true
+  
 notifications:
-  email: 
+  email:
     on_failure: always
     on_success: change
-    recipients: 
-      - ddudt@pppl.gov
-      - wconlin@princeton.edu
+    recipients:
+    - ddudt@pppl.gov
+    - wconlin@princeton.edu
+    - dpanici@princeton.edu

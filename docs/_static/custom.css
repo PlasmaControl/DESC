@@ -1,3 +1,6 @@
 .wy-nav-side {
     background: #4b006e
 }
+.wy-nav-content {
+    max-width: 1200px !important;
+}

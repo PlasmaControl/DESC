@@ -856,12 +856,15 @@ def polyder_vec(p, m):
         polynomial coefficients for derivative in descending order
 
     """
+    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
-    n = p.shape[1] - 1  # order of polynomials
+    order = p.shape[1] - 1
 
-    D = np.arange(n, -1, -1)
-    D = factorial(D) / factorial(D - m)
+    D = np.arange(order, -1, -1)
+    num = np.array([factorial(i) for i in D], dtype=object)
+    den = np.array([factorial(max(i - m, 0)) for i in D], dtype=object)
+    D = (num // den).astype(p.dtype)
 
     p = np.roll(D * p, m, axis=1)
     idx = np.arange(p.shape[1])
@@ -906,7 +909,7 @@ def polyval_vec(p, x):
     for k in range(order):
         y = y * x + np.atleast_2d(p[:, k]).T
 
-    return y
+    return y.astype(float)
 
 
 def power_coeffs(l):
@@ -953,7 +956,7 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-def jacobi_coeffs(l, m):
+def jacobi_coeffs(l, m, exact=False):
     """Jacobi polynomial coefficients.
 
     Parameters
@@ -962,10 +965,19 @@ def jacobi_coeffs(l, m):
         radial mode number(s)
     m : ndarray of int, shape(K,)
         azimuthal mode number(s)
+    exact : bool
+        whether to return exact coefficients with `object` dtype
+        or return integer or floating point approximation
 
     Returns
     -------
     coeffs : ndarray
+
+
+    Notes:
+        integer representation is exact up to l~54, so
+        leaving `exact` arg as False can speed up
+        evaluation with no loss in accuracy
 
     """
     factorial = np.math.factorial
@@ -973,22 +985,28 @@ def jacobi_coeffs(l, m):
     m = np.atleast_1d(np.abs(m)).astype(int)
     npoly = len(l)
     lmax = np.max(l)
-    coeffs = np.zeros((npoly, lmax + 1))
+    coeffs = np.zeros((npoly, lmax + 1), dtype=object)
     lm_even = ((l - m) % 2 == 0)[:, np.newaxis]
     for ii in range(npoly):
         ll = l[ii]
         mm = m[ii]
         for s in range(mm, ll + 1, 2):
             coeffs[ii, s] = (
-                (-1) ** ((ll - s) / 2)
-                * factorial((ll + s) / 2)
-                / (
-                    factorial((ll - s) / 2)
-                    * factorial((s + mm) / 2)
-                    * factorial((s - mm) / 2)
+                (-1) ** ((ll - s) // 2)
+                * factorial((ll + s) // 2)
+                // (
+                    factorial((ll - s) // 2)
+                    * factorial((s + mm) // 2)
+                    * factorial((s - mm) // 2)
                 )
             )
-    return np.fliplr(np.where(lm_even, coeffs, 0))
+    c = np.fliplr(np.where(lm_even, coeffs, 0))
+    if not exact:
+        try:
+            c = c.astype(int)
+        except OverflowError:
+            c = c.astype(float)
+    return c
 
 
 def jacobi(rho, l, m, dr=0):

@@ -529,7 +529,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             nzeta = int(kwargs.get("nzeta", 1))
         else:
             nzeta = int(kwargs.get("nzeta", 6))
-        N = ((2 * eq.N + 1) // nzeta + 1) * nzeta
+        N = ((2 * eq.N + 1) // nzeta + 1) * nzeta + 1
         nfp = eq.NFP
         downsample = N // nzeta
         grid_kwargs = {
@@ -566,12 +566,12 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             data = data / np.nanmean(np.abs(norm_data))  # normalize
     figw = 5 * cols
     figh = 5 * rows
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh), equal=True)
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=kwargs.get('figsize',(figw, figh)), equal=True)
     ax = np.atleast_1d(ax).flatten()
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        coords = eq.compute_toroidal_coords(grid)
+#     with warnings.catch_warnings():
+#         warnings.simplefilter("ignore")
+    coords = eq.compute_toroidal_coords(grid)
     R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
@@ -662,7 +662,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             nzeta = int(kwargs.get("nzeta", 1))
         else:
             nzeta = int(kwargs.get("nzeta", 6))
-        N = ((2 * eq.N + 1) // nzeta + 1) * nzeta
+        N = ((2 * eq.N + 1) // nzeta + 1) * nzeta + 1
         nfp = eq.NFP
         downsample = N // nzeta
         grid_kwargs = {
@@ -710,10 +710,8 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        r_coords = eq.compute_toroidal_coords(r_grid)
-        t_coords = eq.compute_toroidal_coords(t_grid)
+    r_coords = eq.compute_toroidal_coords(r_grid)
+    t_coords = eq.compute_toroidal_coords(t_grid)
 
     # theta coordinates cooresponding to linearly spaced vartheta angles
     v_nodes = t_grid.nodes
@@ -733,7 +731,7 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     figw = 4 * cols
     figh = 5 * rows
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh), equal=True)
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=kwargs.get('figsize',(figw, figh)), equal=True)
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):

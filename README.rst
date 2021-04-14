@@ -1,4 +1,4 @@
-.. image:: docs/_static/images/logo_med_clear.png
+.. image:: https://raw.githubusercontent.com/ddudt/DESC/master/docs/_static/images/logo_med_clear.png
 
 .. inclusion-marker-do-not-remove
 	   
@@ -6,6 +6,7 @@
 Stellarator Equilibrium Solver
 ##############################
 |License| |Docs| |Travis| |Codecov|
+|Issues| |Pypi|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
 It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.
@@ -24,11 +25,17 @@ Quick Start
 .. role:: bash(code)
    :language: bash
 
-For instructions on installing DESC and its dependencies, see Installation_. 
-The code is run using the syntax :bash:`python -m desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. 
+The easiest way to install DESC is from pypi: :bash:`pip install desc-opt`
+	      
+For more detailed instructions on installing DESC and its dependencies, see Installation_. 
+The code is run using the syntax :bash:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that if you may have to prepend the command with :bash:`python -m`)
 DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
 Refer to Inputs_ for documentation on how to format the input file.
-The equilibrium solution is output in both an ASCII text file and a HDF5 binary file, whose formats are detailed in Outputs_. 
+The equilibrium solution is output in a HDF5 binary file, whose format is detailed in Outputs_. 
+
+As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :bash:`DESC` directory is 
+:bash:`desc -p examples/DESC/DSHAPE`
+Where the :bash:`-p` flag tells DESC to plot the results once it finishes.
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
@@ -38,7 +45,7 @@ The equilibrium solution is output in both an ASCII text file and a HDF5 binary 
 Repository Contents
 ===================
 
-- desc_ contains the source code including the main script and supplemental files. Refer to the API_ documentation for details on all of the available functions. 
+- desc_ contains the source code including the main script and supplemental files. Refer to the API_ documentation for details on all of the available functions and classes. 
 - docs_ contains the documentation files. 
 - examples_ contains example input files along with corresponding VMEC solutions. 
 - tests_ contains routines for automatic testing. 
@@ -61,19 +68,22 @@ Contribute
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License
 
-.. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
+.. |Docs| image:: https://img.shields.io/readthedocs/desc-apc524?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
 .. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
-    :target: https://travis-ci.org/ddudt/DESC
+    :target: https://travis-ci.org/ddudt/DESC.svg?branch=master
     :alt: Build
 
 .. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/ddudt/DESC
     :alt: Coverage
 
+.. |Issues| image:: https://img.shields.io/github/issues/ddudt/DESC
+    :target: https://github.com/ddudt/DESC/issues
+    :alt: GitHub issues
 
-
-
-
+.. |Pypi| image:: https://img.shields.io/pypi/v/desc-opt
+    :target: https://pypi.org/project/desc-opt/
+    :alt: Pypi

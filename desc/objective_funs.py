@@ -1,591 +1,1721 @@
 import numpy as np
-import matplotlib.pyplot
-from desc.field_components import compute_coordinate_derivatives, compute_covariant_basis
-from desc.field_components import compute_contravariant_basis, compute_jacobian
-from desc.field_components import compute_magnetic_field, compute_plasma_current, compute_magnetic_field_magnitude
-from desc.boundary_conditions import compute_bdry_err_RZ, compute_bdry_err_four, compute_lambda_err
-from desc.zernike import symmetric_x, double_fourier_basis, fourzern
-from desc.backend import jnp, put, cross, dot, presfun, iotafun, unpack_x, TextColors
+from abc import ABC, abstractmethod
+from termcolor import colored
+import warnings
+
+from desc.backend import jnp, jit, use_jax
+from desc.utils import unpack_state, equals, Timer
+from desc.io import IOAble
+from desc.derivatives import Derivative
+from desc.transform import Transform
+from desc.boundary_conditions import (
+    LCFSConstraint,
+    PoincareConstraint,
+    UmbilicConstraint,
+)
+from desc.compute_funs import (
+    compute_force_error_magnitude,
+    dot,
+    compute_energy,
+    compute_quasisymmetry,
+)
+
+__all__ = [
+    "ForceErrorNodes",
+    "ForceErrorGalerkin",
+    "EnergyVolIntegral",
+    "get_objective_function",
+]
 
 
-def get_equil_obj_fun(stell_sym, errr_mode, bdry_mode, M, N, NFP, zernike_transform, bdry_zernike_transform, zern_idx, lambda_idx, bdryM, bdryN, scalar=False):
-    """Gets the equilibrium objective function
+class ObjectiveFunction(IOAble, ABC):
+    """Objective function used in the optimization of an Equilibrium.
 
     Parameters
     ----------
-    stell_sym : bool
-        True if stellarator symmetry is enforced
-    errr_mode : string
-        'force' or 'accel'. Method to use for calculating equilibrium error.
-    bdry_mode : string
-        'real' or 'spectral'. Method to use for calculating boundary error.
-    M : int
-        maximum poloidal resolution
-    N : int
-        maximum toroidal resolution
-    NFP : int
-        number of field periods
-    zernike_transform : ZernikeTransform
-        object with transform method to go from spectral to physical space with derivatives
-    bdry_zernike_transform : ZernikeTransform
-        zernike transform object for boundary conditions
-    zern_idx : ndarray of int, shape(N_coeffs,3)
-        mode numbers for Zernike basis
-    lambda_idx : ndarray of int, shape(N_lambda,2)
-        mode numbers for Fourier basis
-    bdryM : ndarray of int
-        poloidal mode numbers for boundary
-    bdryN : ndarray of int
-        toroidal mode numbers for boundary
-    scalar : bool
-         whether to have objective compute scalar or vector error (Default value = False)
-
-    Returns
-    -------
-    equil_obj : function
-        equilibrium objective function
-    callback : function
-        function that prints equilibrium errors
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+            linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
 
     """
 
-    # stellarator symmetry
-    if stell_sym:
-        sym_mat = symmetric_x(zern_idx, lambda_idx)
-    else:
-        sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
+    _io_attrs_ = [
+        "R_transform",
+        "Z_transform",
+        "L_transform",
+        "Rb_transform",
+        "Zb_transform",
+        "p_transform",
+        "i_transform",
+        "BC_constraint",
+        "use_jit",
+    ]
 
-    if errr_mode == 'force':
-        equil_fun = compute_force_error_nodes
-    elif errr_mode == 'accel':
-        equil_fun = compute_accel_error_spectral
+    _object_lib_ = {
+        "Transform": Transform,
+        "LCFSConstraint": LCFSConstraint,
+        "PoincareConstraint": PoincareConstraint,
+        "UmbilicConstraint": UmbilicConstraint,
+    }
+    _object_lib_.update(Transform._object_lib_)
 
-    if bdry_mode == 'real':
-        raise ValueError(TextColors.FAIL + "evaluating bdry error in real space coordinates is currently broken." +
-                         " Please yell at one of the developers and we will fix it" + TextColors.ENDC)
-        bdry_fun = compute_bdry_err_RZ
-    elif bdry_mode == 'spectral':
-        bdry_fun = compute_bdry_err_four
+    arg_names = {
+        "Rb_lmn": 1,
+        "Zb_lmn": 2,
+        "p_l": 3,
+        "i_l": 4,
+        "Psi": 5,
+        "zeta_ratio": 6,
+    }
 
-    def equil_obj(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
+        use_jit=True,
+    ):
 
-        cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
-        errRf, errZf = equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernike_transform)
-        errRb, errZb = bdry_fun(
-            cR, cZ, cL, bdry_ratio, bdry_zernike_transform, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, stell_sym)
+        self.R_transform = R_transform
+        self.Z_transform = Z_transform
+        self.L_transform = L_transform
+        self.Rb_transform = Rb_transform
+        self.Zb_transform = Zb_transform
+        self.p_transform = p_transform
+        self.i_transform = i_transform
+        self.BC_constraint = BC_constraint
+        self.use_jit = use_jit
+        self._set_up()
 
-        residual = jnp.concatenate([errRf.flatten(),
-                                    errZf.flatten(),
-                                    errRb.flatten()/errr_ratio,
-                                    errZb.flatten()/errr_ratio])
+    def _set_up(self):
+        self.dimx = (
+            self.R_transform.num_modes
+            + self.Z_transform.num_modes
+            + self.L_transform.num_modes
+        )
+        self.dimy = self.dimx if self.BC_constraint is None else self.BC_constraint.dimy
+        self.dimf = self.R_transform.num_nodes + self.Z_transform.num_nodes
+        self._check_transforms()
+        self.set_derivatives(self.use_jit)
+        self.compiled = False
+        if not self.use_jit:
+            self.compiled = True
 
-        if not stell_sym:
-            errL0 = compute_lambda_err(cL, lambda_idx, NFP)
-            residual = jnp.concatenate([residual, errL0.flatten()/errr_ratio])
+    def _check_transforms(self):
+        """Make sure transforms can compute the correct derivatives."""
+        if not all(
+            (self.derivatives[:, None] == self.R_transform.derivatives).all(-1).any(-1)
+        ):
+            self.R_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.Z_transform.derivatives).all(-1).any(-1)
+        ):
+            self.Z_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.L_transform.derivatives).all(-1).any(-1)
+        ):
+            self.L_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.Rb_transform.derivatives).all(-1).any(-1)
+        ):
+            self.Rb_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
+        ):
+            self.Zb_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.p_transform.derivatives).all(-1).any(-1)
+        ):
+            self.p_transform.change_derivatives(self.derivatives, build=False)
+        if not all(
+            (self.derivatives[:, None] == self.i_transform.derivatives).all(-1).any(-1)
+        ):
+            self.i_transform.change_derivatives(self.derivatives, build=False)
 
-        if scalar:
-            residual = jnp.log1p(jnp.sum(residual**2))
+    def set_derivatives(self, use_jit=True, block_size="auto"):
+        """Set up derivatives of the objective function.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            whether to just-in-time compile the objective and derivatives
+
+        """
+        if block_size == "auto":
+            block_size = np.inf  # TODO: correct automatic sizing based on avail mem
+
+        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
+
+        self._hess = Derivative(
+            self.compute_scalar,
+            mode="hess",
+            use_jit=use_jit,
+            block_size=block_size,
+            shape=(self.dimy, self.dimy),
+        )
+        self._jac = Derivative(
+            self.compute,
+            mode="fwd",
+            use_jit=use_jit,
+            block_size=block_size,
+            shape=(self.dimf, self.dimy),
+        )
+
+        if use_jit:
+            self.compute = jit(self.compute)
+            self.compute_scalar = jit(self.compute_scalar)
+
+    def compile(self, x, args, verbose=1, mode="auto"):
+        """Call the necessary functions to ensure the function is compiled.
+
+        Parameters
+        ----------
+        x : ndarray
+            any array of the correct shape to trigger jit compilation
+        args : tuple
+            additional arguments passed to objective function and derivatives
+        verbose : int, optional
+            level of output
+        mode : {"auto", "lsq", "scalar", "all"}
+            whether to compile for least squares optimization or scalar optimization.
+            "auto" compiles based on the type of objective,
+            "all" compiles all derivatives
+
+        """
+        if not hasattr(self, "_grad"):
+            self.set_derivatives()
+        if not use_jax:
+            self.compiled = True
+            return
+
+        timer = Timer()
+        if mode == "auto" and self.scalar:
+            mode = "scalar"
+        elif mode == "auto":
+            mode = "lsq"
+
+        if verbose > 0:
+            print("Compiling objective function and derivatives")
+        timer.start("Total compilation time")
+
+        if mode in ["scalar", "all"]:
+            timer.start("Objective compilation time")
+            f0 = self.compute_scalar(x, *args).block_until_ready()
+            timer.stop("Objective compilation time")
+            if verbose > 1:
+                timer.disp("Objective compilation time")
+            timer.start("Gradient compilation time")
+            g0 = self.grad_x(x, *args).block_until_ready()
+            timer.stop("Gradient compilation time")
+            if verbose > 1:
+                timer.disp("Gradient compilation time")
+            timer.start("Hessian compilation time")
+            H0 = self.hess_x(x, *args).block_until_ready()
+            timer.stop("Hessian compilation time")
+            if verbose > 1:
+                timer.disp("Hessian compilation time")
+        if mode in ["lsq", "all"]:
+            timer.start("Objective compilation time")
+            f0 = self.compute(x, *args).block_until_ready()
+            timer.stop("Objective compilation time")
+            if verbose > 1:
+                timer.disp("Objective compilation time")
+            timer.start("Jacobian compilation time")
+            J0 = self.jac_x(x, *args).block_until_ready()
+            timer.stop("Jacobian compilation time")
+            if verbose > 1:
+                timer.disp("Jacobian compilation time")
+
+        timer.stop("Total compilation time")
+        if verbose > 1:
+            timer.disp("Total compilation time")
+        self.compiled = True
+
+    # note: we can't override __eq__ here because that breaks the hashing that jax uses
+    # when jitting functions
+    def eq(self, other):
+        """Test for equivalence between objectives.
+
+        Parameters
+        ----------
+        other : ObjectiveFunction
+            another ObjectiveFunction object to compare to
+
+        Returns
+        -------
+        bool
+            True if other is an ObjectiveFunction with the same attributes as self
+            False otherwise
+
+        """
+        if self.__class__ != other.__class__:
+            return False
+        ignore_keys = [
+            "_grad",
+            "_jac",
+            "_hess",
+            "compute",
+            "compute_scalar",
+            "compiled",
+            "use_jit",
+        ]
+        dict1 = {
+            key: val for key, val in self.__dict__.items() if key not in ignore_keys
+        }
+        dict2 = {
+            key: val for key, val in other.__dict__.items() if key not in ignore_keys
+        }
+        return equals(dict1, dict2)
+
+    @property
+    @abstractmethod
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+
+    @property
+    @abstractmethod
+    def name(self):
+        """Name of objective function (str)."""
+
+    @property
+    @abstractmethod
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+
+    @abstractmethod
+    def compute(self, *args):
+        """Compute the objective function.
+
+        Parameters
+        ----------
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        """
+
+    @abstractmethod
+    def compute_scalar(self, *args):
+        """Compute the scalar form of the objective."""
+
+    @abstractmethod
+    def callback(self, *args):
+        """Print the value of the objective."""
+
+    def grad_x(self, *args):
+        """Compute gradient vector of scalar form of the objective wrt to x."""
+        return self._grad.compute(*args)
+
+    def hess_x(self, *args):
+        """Compute hessian matrix of scalar form of the objective wrt to x."""
+        return self._hess.compute(*args)
+
+    def jac_x(self, *args):
+        """Compute jacobian matrx of vector form of the objective wrt to x."""
+        return self._jac.compute(*args)
+
+    def jvp(self, argnum, v, *args):
+        """Compute jacobian-vector product of the objective function.
+
+        Eg, df/dx*v
+
+        Parameters
+        ----------
+        argnum : int or tuple of int
+            integer describing which argument of the objective should be differentiated.
+        v : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        df : ndarray
+            Jacobian vector product, summed over different argnums
+
+        """
+        f = Derivative.compute_jvp(self.compute, argnum, v, *args)
+        return f
+
+    def jvp2(self, argnum1, argnum2, v1, v2, *args):
+        """Compute 2nd derivative jacobian-vector product of the objective function.
+
+        Eg, d^2f/dx^2*v1*v2
+
+        Parameters
+        ----------
+        argnum1, argnum2 : int or tuple of int
+            integer describing which argument of the objective should be differentiated.
+        v1, v2 : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        d2f : ndarray
+            Jacobian vector product
+
+        """
+        f = Derivative.compute_jvp2(self.compute, argnum1, argnum2, v1, v2, *args)
+        return f
+
+    def jvp3(self, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+        """Compute 3rd derivative jacobian-vector product of the objective function.
+
+        Eg, d^3f/d3^2*v1*v2*v3
+
+        Parameters
+        ----------
+        argnum1, argnum2, argnum2 : int or tuple of int
+            integer describing which argument of the objective should be differentiated.
+        v1, v2, v3 : ndarray or tuple of ndarray
+            vector to multiply the jacobian matrix by, one per argnum
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        d3f : ndarray
+            Jacobian vector product
+
+        """
+        f = Derivative.compute_jvp3(
+            self.compute, argnum1, argnum2, argnum3, v1, v2, v3, *args
+        )
+        return f
+
+    def derivative(self, argnums, *args):
+        """Compute arbitrary derivatives of the objective function.
+
+        Parameters
+        ----------
+        argnums : int, str, tuple
+            integer or str or tuple of integers/strings describing which arguments
+            of the objective should be differentiated.
+            Passing a tuple with multiple values will compute a higher order derivative.
+            Eg, argnums=(0,0) would compute the 2nd derivative with respect to the
+            zeroth argument, while argnums=(3,5) would compute a mixed second
+            derivative, first with respect to the third argument and then with
+            respect to the fifth.
+        args : list
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+
+        Returns
+        -------
+        df : ndarray
+            specified derivative of the objective
+
+        """
+        if not isinstance(argnums, tuple):
+            argnums = (argnums,)
+
+        f = self.compute
+        dims = [f(*args).size]
+        for a in argnums:
+            if isinstance(a, int) and a < 7:
+                f = Derivative(f, argnum=a)
+            elif isinstance(a, str) and a in ObjectiveFunction.arg_names:
+                a = ObjectiveFunction.arg_names.get(a)
+                f = Derivative(f, argnum=a)
+            else:
+                raise ValueError(
+                    "argnums should be integers between 0 and 6 "
+                    + "or one of {}, got {}".format(ObjectiveFunction.arg_names, a)
+                )
+            dims.append(args[a].size)
+
+        return f(*args).reshape(tuple(dims))
+
+
+class ForceErrorGalerkin(ObjectiveFunction):
+    """Minimizes spectral coefficients of force balance residual.
+
+    Parameters
+    ----------
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
+
+    """
+
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
+        use_jit=True,
+    ):
+
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+            use_jit,
+        )
+
+        if self.R_transform.grid.node_pattern != "quad":
+            warnings.warn(
+                colored(
+                    "Galerkin method requires 'quad' pattern nodes, "
+                    + "force error calculated will be incorrect",
+                    "yellow",
+                )
+            )
+
+    @property
+    def scalar(self):
+        """Wether default "compute" method is a scalar or vector (bool)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "galerkin"
+
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        # TODO: different derivatives for R,Z,L,p,i ?
+        # old axis derivatives
+        # axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+            ]
+        )
+        return derivatives
+
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute spectral coefficients of force balance residual by quadrature.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        weights = self.R_transform.grid.weights
+
+        f_rho = self.R_transform.project(
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = self.Z_transform.project(
+            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        )
+
+        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
         return residual
 
-    def callback(x, bdryR, bdryZ, cP, cI, Psi_lcfs, bdry_ratio=1.0, pres_ratio=1.0, zeta_ratio=1.0, errr_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the integral of the force balance residual by quadrature.
 
-        cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
-        errRf, errZf = equil_fun(
-            cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernike_transform)
-        errRb, errZb = bdry_fun(
-            cR, cZ, cL, bdry_ratio, bdry_zernike_transform, lambda_idx, bdryR, bdryZ, bdryM, bdryN, NFP, stell_sym)
-        errL0 = compute_lambda_err(cL, lambda_idx, NFP)
+        eg int(`|F_R|` + `|F_Z|`)
 
-        errRf_rms = jnp.sqrt(jnp.sum(errRf**2))
-        errZf_rms = jnp.sqrt(jnp.sum(errZf**2))
-        errRb_rms = jnp.sqrt(jnp.sum(errRb**2))
-        errZb_rms = jnp.sqrt(jnp.sum(errZb**2))
-        errL0_rms = jnp.sqrt(jnp.sum(errL0**2))
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
 
-        residual = jnp.concatenate([errRf.flatten(),
-                                    errZf.flatten(),
-                                    errRb.flatten()/errr_ratio,
-                                    errZb.flatten()/errr_ratio,
-                                    errL0.flatten()/errr_ratio])
-        resid_rms = 1/2*jnp.sum(residual**2)
-        if errr_mode == 'force':
-            print('Weighted Loss: {:10.3e}  errFrho: {:10.3e}  errFbeta: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
-                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
-        elif errr_mode == 'accel':
-            print('Weighted Loss: {:10.3e}  errRf: {:10.3e}  errZf: {:10.3e}  errRb: {:10.3e}  errZb: {:10.3e}  errL0: {:10.3e}'.format(
-                resid_rms, errRf_rms, errZf_rms, errRb_rms, errZb_rms, errL0_rms))
+        Returns
+        -------
+        f : float
+            total force balance error
 
-    return equil_obj, callback
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        weights = self.R_transform.grid.weights
+        f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
+        return f
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the integral errors for toroidal components of the force balance.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        weights = self.R_transform.grid.weights
+
+        f_rho = jnp.sum(
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = jnp.sum(
+            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        )
+        f_tot = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
+
+        print(
+            "int(|F|): {:10.3e}  ".format(f_tot)
+            + "int(|F_rho|): {:10.3e}  int(|F_beta|): {:10.3e}".format(f_rho, f_beta)
+        )
+        return None
 
 
-def get_qisym_obj_fun(stell_sym, M, N, NFP, zernike_transform, zern_idx, lambda_idx, modes_pol, modes_tor):
-    """Gets the quasisymmetry objective function
+class ForceErrorNodes(ObjectiveFunction):
+    """Minimizes equilibrium force balance error in physical space.
 
     Parameters
     ----------
-    stell_sym : bool
-        True if stellarator symmetry is enforced
-    M : int
-        maximum poloidal resolution
-    N : int
-        maximum toroidal resolution
-    NFP : int
-        number of field periods
-    zernike_transform : ZernikeTransform
-        object with transform method to go from spectral to physical space with derivatives
-    zern_idx : ndarray of int
-        mode numbers for Zernike basis
-    lambda_idx : ndarray of int
-        mode numbers for Fourier basis
-    modes_pol : ndarray
-        poloidal Fourier mode numbers
-    modes_tor : ndarray
-        toroidal Fourier mode numbers
-
-    Returns
-    -------
-    qsym_obj : function
-        quasisymmetry objective function
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
 
     """
 
-    # stellarator symmetry
-    if stell_sym:
-        sym_mat = symmetric_x(zern_idx, lambda_idx)
-    else:
-        sym_mat = np.eye(2*zern_idx.shape[0] + lambda_idx.shape[0])
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return False
 
-    def qisym_obj(x, cI, Psi_lcfs):
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "force"
 
-        cR, cZ, cL = unpack_x(jnp.matmul(sym_mat, x), len(zern_idx))
-        errQS = compute_qs_error_spectral(
-            cR, cZ, cI, Psi_lcfs, NFP, zernike_transform, modes_pol, modes_tor, 1.0)
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        # TODO: different derivatives for R,Z,L,p,i ?
+        # old axis derivatives
+        # axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+            ]
+        )
+        return derivatives
 
-        # normalize weighting by numper of nodes
-        residual = errQS.flatten()/jnp.sqrt(errQS.size)
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute force balance error.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        weights = self.R_transform.grid.weights
+
+        f_rho = (
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
+
         return residual
 
-    return qisym_obj
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total force balance error.
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total force balance error
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the rms errors for radial and helical force balance.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            force_error,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_force_error_magnitude(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        weights = self.R_transform.grid.weights
+
+        f_rho = (
+            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
+        )
+        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+
+        f_rho_rms = jnp.sqrt(jnp.sum(f_rho ** 2))
+        f_beta_rms = jnp.sqrt(jnp.sum(f_beta ** 2))
+
+        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
+
+        print(
+            "Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}".format(
+                resid_rms, f_rho_rms, f_beta_rms
+            )
+        )
+        return None
 
 
-def curve_self_intersects(x, y):
-    """Checks if a curve intersects itself
+class EnergyVolIntegral(ObjectiveFunction):
+    """Minimizes the volume integral of MHD energy in physical space.
 
-    Parameters
-    ----------
-    x,y : ndarray
-        x and y coordinates of points along the curve
-
-    Returns
-    -------
-    is_intersected : bool
-        whether the curve intersects itself
-
-    """
-
-    pts = np.array([x, y])
-    pts1 = pts[:, 0:-1]
-    pts2 = pts[:, 1:]
-
-    # [start/stop, x/y, segment]
-    segments = np.array([pts1, pts2])
-    s1, s2 = np.meshgrid(np.arange(len(x)-1), np.arange(len(y)-1))
-    idx = np.array([s1.flatten(), s2.flatten()])
-    a, b = segments[:, :, idx[0, :]]
-    c, d = segments[:, :, idx[1, :]]
-
-    def signed_2d_area(a, b, c): return (
-        a[0] - c[0])*(b[1] - c[1]) - (a[1] - c[1])*(b[0] - c[0])
-
-    # signs of areas correspond to which side of ab points c and d are
-    a1 = signed_2d_area(a, b, d)  # Compute winding of abd (+ or -)
-    a2 = signed_2d_area(a, b, c)  # To intersect, must have sign opposite of a1
-    a3 = signed_2d_area(c, d, a)  # Compute winding of cda (+ or -)
-    a4 = a3 + a2 - a1  # Since area is constant a1 - a2 = a3 - a4, or a4 = a3 + a2 - a1
-
-    return np.any(np.where(np.logical_and(a1*a2 < 0, a3*a4 < 0), True, False))
-
-
-def is_nested(cR, cZ, zern_idx, NFP, nsurfs=10, zeta=0, Nt=361):
-    """Checks that an equilibrium has properly nested flux surfaces
-        in a given toroidal plane
-
-    Parameters
-    ----------
-    cR : ndarray
-        R coefficients
-    cZ : ndarray
-        Z coefficients
-    zern_idx : ndarray
-        zernike basis mode numbers
-    NFP : int
-        number of field periods
-    nsurfs : int
-        number of surfaces to check (Default value = 10)
-    zeta : float
-        toroidal plane to check (Default value = 0)
-    Nt : int
-        number of theta points to use for the test (Default value = 361)
-
-    Returns
-    -------
-    is_nested : bool
-        whether or not the surfaces are nested
-
-    """
-
-    surfs = np.linspace(0, 1, nsurfs)[::-1]
-    t = np.tile(np.linspace(0, 2*np.pi, Nt), [nsurfs, 1])
-    r = surfs[:, np.newaxis]*np.ones_like(t)
-    z = zeta*np.ones_like(t)
-
-    bdry_interp = fourzern(r.flatten(), t.flatten(), z.flatten(),
-                           zern_idx[:, 0], zern_idx[:, 1], zern_idx[:, 2],
-                           NFP, 0, 0, 0)
-
-    Rs = np.matmul(bdry_interp, cR).reshape((nsurfs, -1))
-    Zs = np.matmul(bdry_interp, cZ).reshape((nsurfs, -1))
-
-    p = [matplotlib.path.Path(np.stack([R, Z]).T, closed=True)
-         for R, Z in zip(Rs, Zs)]
-    nested = np.all([p[i].contains_path(p[i+1]) for i in range(len(p)-1)])
-    intersects = np.any([curve_self_intersects(R, Z) for R, Z in zip(Rs, Zs)])
-    return nested and not intersects
-
-
-def compute_force_error_nodes(cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernike_transform):
-    """Computes force balance error at each node, in radial / helical components
-
-    Parameters
-    ----------
-    cR : ndarray, shape(N_coeffs,)
-        spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
-        spectral coefficients of Z
-    cP : array-like
-        parameters to pass to pressure function
-    cI : array-like
-        parameters to pass to rotational transform function
-    Psi_lcfs : float
-        total toroidal flux within LCFS
-    pres_ratio : float
-        fraction in range [0,1] of the full pressure profile to use
-    zeta_ratio : float
-        fraction in range [0,1] of the full toroidal (zeta) derivatives to use
-    zernike_transform : ZernikeTransform
-        object with tranform method to convert from spectral basis to physical basis at nodes
-
-    Returns
-    -------
-    F_rho : ndarray, shape(N_nodes,)
-        radial force balance error at each node
-    F_beta : ndarray, shape(N_nodes,)
-        helical force balance error at each node
-
-    """
-
-    mu0 = 4*jnp.pi*1e-7
-    nodes = zernike_transform.nodes
-    volumes = zernike_transform.volumes
-    axn = zernike_transform.axn
-    r = nodes[0]
-    pres_r = presfun(r, 1, cP) * pres_ratio
-
-    # compute fields components
-    coord_der = compute_coordinate_derivatives(
-        cR, cZ, zernike_transform, zeta_ratio)
-    cov_basis = compute_covariant_basis(coord_der, zernike_transform)
-    jacobian = compute_jacobian(coord_der, cov_basis, zernike_transform)
-    con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, zernike_transform)
-    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
-                                            Psi_lcfs, zernike_transform)
-    plasma_current = compute_plasma_current(coord_der, cov_basis,
-                                            jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
-
-    # force balance error components
-    F_rho = jacobian['g']*(plasma_current['J^theta']*magnetic_field['B^zeta'] -
-                           plasma_current['J^zeta']*magnetic_field['B^theta']) - pres_r
-    F_beta = jacobian['g']*plasma_current['J^rho']
-
-    # radial and helical directions
-    beta = magnetic_field['B^zeta']*con_basis['e^theta'] - \
-        magnetic_field['B^theta']*con_basis['e^zeta']
-    radial = jnp.sqrt(
-        con_basis['g^rr']) * jnp.sign(dot(con_basis['e^rho'], cov_basis['e_rho'], 0))
-    helical = jnp.sqrt(con_basis['g^vv']*magnetic_field['B^zeta']**2 + con_basis['g^zz']*magnetic_field['B^theta']**2 - 2*con_basis['g^vz']*magnetic_field['B^theta']*magnetic_field['B^zeta']) \
-        * jnp.sign(dot(beta, cov_basis['e_theta'], 0)) * jnp.sign(dot(beta, cov_basis['e_zeta'], 0))
-
-    # axis terms
-    if len(axn):
-        Jsup_theta = (magnetic_field['B_rho_z'] -
-                      magnetic_field['B_zeta_r']) / mu0
-        Jsup_zeta = (magnetic_field['B_theta_r'] -
-                     magnetic_field['B_rho_v']) / mu0
-        F_rho = put(F_rho, axn, Jsup_theta[axn]*magnetic_field['B^zeta']
-                    [axn] - Jsup_zeta[axn]*magnetic_field['B^theta'][axn])
-        grad_theta = cross(cov_basis['e_zeta'], cov_basis['e_rho'], 0)
-        gsup_vv = dot(grad_theta, grad_theta, 0)
-        F_beta = put(F_beta, axn, plasma_current['J^rho'][axn])
-        helical = put(helical, axn, jnp.sqrt(
-            gsup_vv[axn]*magnetic_field['B^zeta'][axn]**2) * jnp.sign(magnetic_field['B^zeta'][axn]))
-
-    # scalar errors
-    f_rho = F_rho * radial
-    f_beta = F_beta*helical
-
-    # weight by local volume
-    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
-    if len(axn):
-        r1 = jnp.min(r[r != 0])  # value of r one step out from axis
-        r1_g = jnp.where(r == r1, jacobian['g'], 0)
-        cnt = jnp.count_nonzero(r1_g)
-        # volume of axis is zero, but we want to account for nonzero volume in cell around axis
-        vol = put(vol, axn, jnp.sum(
-            r1_g/2*volumes[0, :]*volumes[1, :]*volumes[2, :])/cnt)
-    f_rho = f_rho * vol
-    f_beta = f_beta*vol
-
-    return f_rho, f_beta
-
-
-def compute_force_error_RphiZ(cR, cZ, zernike_transform, cP, cI, Psi_lcfs):
-    """Computes force balance error at each node, in R, phi, Z components
+    W = integral of (B^2 / (2*mu0) - p) dV
 
     Parameters
     ----------
-    cR : ndarray, shape(N_coeffs,)
-        spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
-        spectral coefficients of Z
-    zernike_transform : ZernikeTransform
-        object with tranform method to convert from spectral basis to physical basis at nodes
-    cP : array-like
-        coefficients to pass to pressure function
-    cI : array-like
-        coefficients to pass to rotational transform function
-    Psi_lcfs : float
-        total toroidal flux within LCFS
-
-    Returns
-    -------
-    F_err : ndarray, shape(3,N_nodes,)
-        F_R, F_phi, F_Z at each node
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
 
     """
 
-    nodes = zernike_transform.nodes
-    volumes = zernike_transform.volumes
-    axn = zernike_transform.axn
-    r = nodes[0]
-    # value of r one step out from axis
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
+        use_jit=True,
+    ):
 
-    mu0 = 4*jnp.pi*1e-7
-    presr = presfun(r, 1, cP)
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+            use_jit,
+        )
 
-    # compute fields components
-    coord_der = compute_coordinate_derivatives(cR, cZ, zernike_transform)
-    cov_basis = compute_covariant_basis(coord_der, zernike_transform)
-    jacobian = compute_jacobian(coord_der, cov_basis, zernike_transform)
-    con_basis = compute_contravariant_basis(
-        coord_der, cov_basis, jacobian, zernike_transform)
-    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
-                                            Psi_lcfs, zernike_transform)
-    plasma_current = compute_plasma_current(coord_der, cov_basis,
-                                            jacobian, magnetic_field, cI, Psi_lcfs, zernike_transform)
+        if self.R_transform.grid.node_pattern != "quad":
+            warnings.warn(
+                colored(
+                    "Energy method requires 'quad' pattern nodes, "
+                    + "force error calculated will be incorrect.",
+                    "yellow",
+                )
+            )
 
-    # helical basis vector
-    beta = magnetic_field['B^zeta']*con_basis['e^theta'] - \
-        magnetic_field['B^theta']*con_basis['e^zeta']
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return True
 
-    # force balance error in radial and helical direction
-    f_rho = mu0*(plasma_current['J^theta']*magnetic_field['B^zeta'] -
-                 plasma_current['J^zeta']*magnetic_field['B^theta']) - mu0*presr
-    f_beta = mu0*plasma_current['J^rho']
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "energy"
 
-    F_err = f_rho * con_basis['grad_rho'] + f_beta * beta
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        # TODO: different derivatives for R,Z,L,p,i ?
+        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        return derivatives
 
-    # weight by local volume
-    vol = jacobian['g']*volumes[0]*volumes[1]*volumes[2]
-    if len(axn):
-        r1 = jnp.min(r[r != 0])
-        r1idx = jnp.where(r == r1)[0]
-        vol = put(vol, axn, jnp.mean(
-            jacobian['g'][r1idx])/2*volumes[0, axn]*volumes[1, axn]*volumes[2, axn])
-    F_err = F_err*vol
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute MHD energy.
 
-    return F_err
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        W : float
+            total MHD energy in the plasma volume
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        residual = energy["W"]
+
+        return residual
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute MHD energy.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        W : float
+            total MHD energy in the plasma volume
+
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the MHD energy.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            energy,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_energy(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        print(
+            "Total MHD energy: {:10.3e}, ".format(energy["W"])
+            + "Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e}".format(
+                energy["W_B"], energy["W_p"]
+            )
+        )
+        return None
 
 
-def compute_force_error_RddotZddot(cR, cZ, zernike_transform, cP, cI, Psi_lcfs):
-    """Computes force balance error at each node, projected back onto zernike 
-    coefficients for R and Z.
+class QuasisymmetryTripleProduct(ObjectiveFunction):
+    """Maximizes quasisymmetry with the triple product definition.
 
     Parameters
     ----------
-    cR : ndarray, shape(N_coeffs,)
-        spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
-        spectral coefficients of Z
-    zernike_transform : ZernikeTransform
-        object with tranform method to convert from spectral basis to physical basis at nodes
-    cP : array-like
-        coefficients to pass to pressure function
-    cI : array-like
-        coefficients to pass to rotational transform function
-    Psi_lcfs : float
-        total toroidal flux within LCFS
-
-    Returns
-    -------
-    cRddot : ndarray, shape(N_coeffs,)
-        spectral coefficients for d^2R/dt^2
-    cZddot : ndarray, shape(N_coeffs,)
-        spectral coefficients for d^2Z/dt^2
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
 
     """
 
-    coord_der = compute_coordinate_derivatives(cR, cZ, zernike_transform)
-    F_err = compute_force_error_RphiZ(
-        cR, cZ, zernike_transform, cP, cI, Psi_lcfs)
-    num_nodes = len(zernike_transform.nodes[0])
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return False
 
-    AR = jnp.stack([jnp.ones(num_nodes), -coord_der['R_z'],
-                    jnp.zeros(num_nodes)], axis=1)
-    AZ = jnp.stack([jnp.zeros(num_nodes), -coord_der['Z_z'],
-                    jnp.ones(num_nodes)], axis=1)
-    A = jnp.stack([AR, AZ], axis=1)
-    Rddot, Zddot = jnp.squeeze(jnp.matmul(A, F_err.T[:, :, jnp.newaxis])).T
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "qs_tp"
 
-    cRddot, cZddot = zernike_transform.fit(jnp.array([Rddot, Zddot]).T).T
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+                [0, 3, 0],
+                [0, 0, 3],
+                [1, 1, 1],
+                [1, 2, 0],
+                [1, 0, 2],
+                [0, 2, 1],
+                [0, 1, 2],
+            ]
+        )
+        return derivatives
 
-    return cRddot, cZddot
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute quasisymmetry error.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        return quasisymmetry["QS_TP"]
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total quasisymetry error.
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total quasisymmetry error
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the rms errors for quasisymmetry.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
+
+        print("Residual: {:10.3e}".format(resid_rms))
+        return None
 
 
-def compute_accel_error_spectral(cR, cZ, cP, cI, Psi_lcfs, pres_ratio, zeta_ratio, zernike_transform):
-    """Computes acceleration error in spectral space
+class QuasisymmetryFluxFunction(ObjectiveFunction):
+    """Maximizes quasisymmetry with the flux function definition.
 
     Parameters
     ----------
-    cR : ndarray, shape(N_coeffs,)
-        spectral coefficients of R
-    cZ : ndarray, shape(N_coeffs,)
-        spectral coefficients of Z
-    cP : array-like
-        parameters to pass to pressure function
-    cI : array-like
-        parameters to pass to rotational transform function
-    Psi_lcfs : float
-        total toroidal flux within LCFS
-    pres_ratio : float
-        fraction in range [0,1] of the full pressure profile to use
-    zeta_ratio : float
-        fraction in range [0,1] of the full toroidal (zeta) derivatives to use
-    zernike_transform : ZernikeTransform
-        object with tranform method to convert from spectral basis to physical basis at nodes
-
-    Returns
-    -------
-    cR_zz_err : ndarray, shape(N_coeffs,)
-        error in cR_zz
-    cZ_zz_err : ndarray, shape(N_coeffs,)
-        error in cZ_zz
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool, optional
+        whether to just-in-time compile the objective and derivatives
 
     """
 
-    mu0 = 4*jnp.pi*1e-7
-    nodes = zernike_transform.nodes
-    axn = zernike_transform.axn
-    r = nodes[0]
-    presr = presfun(r, 1, cP) * pres_ratio
-    iota = iotafun(r, 0, cI)
-    iotar = iotafun(r, 1, cI)
+    def __init__(
+        self,
+        R_transform,
+        Z_transform,
+        L_transform,
+        Rb_transform,
+        Zb_transform,
+        p_transform,
+        i_transform,
+        BC_constraint,
+        use_jit=True,
+    ):
 
-    coord_der = compute_coordinate_derivatives(
-        cR, cZ, zernike_transform, zeta_ratio)
+        super().__init__(
+            R_transform,
+            Z_transform,
+            L_transform,
+            Rb_transform,
+            Zb_transform,
+            p_transform,
+            i_transform,
+            BC_constraint,
+            use_jit,
+        )
 
-    R_zz = -(Psi_lcfs**2*coord_der['R_r']**2*coord_der['Z_v']**2*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_z']**2*r**2 - Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['Z_v']**2*r + Psi_lcfs**2*coord_der['R_r']**2*coord_der['Z_v']**4*r**2*iota**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_rr']*coord_der['Z_v']**2*r**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_vv']*coord_der['Z_r']**2*r**2 - Psi_lcfs**2*coord_der['R']**2*coord_der['R_r']**2*coord_der['Z_v']**2*r**2 - Psi_lcfs**2*coord_der['R']**2*coord_der['R_v']**2*coord_der['Z_r']**2*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**4*r*iota**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*r + Psi_lcfs**2*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_v']**2*r**2*iota**2 - coord_der['R']**3*coord_der['R_r']**3*coord_der['Z_v']**4*mu0*jnp.pi**2*presr + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['Z_v']**4*r**2*iota**2 + 2*Psi_lcfs**2*coord_der['R_r']**2*coord_der['Z_v']**3*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_z']**2*coord_der['Z_v']**2*r - Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['Z_r']*coord_der['Z_vv']*r**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['Z_rv']*coord_der['Z_v']*r**2 - 2*Psi_lcfs**2*coord_der['R']**3*coord_der['R_rv']*coord_der['Z_r']*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_rv']*r**2 - Psi_lcfs**2*coord_der['R']**3*coord_der['R_v']*coord_der['Z_rr']*coord_der['Z_v']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**2*coord_der['Z_z']**2*r + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_z']**2*coord_der['Z_v']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_vv']*coord_der['R_z']**2*coord_der['Z_r']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['Z_v']**2*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_vv']*coord_der['Z_r']**2*coord_der['Z_z']**2*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**3*coord_der['Z_z']*r*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']**2*coord_der['Z_v']**2*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_vv']*coord_der['Z_v']**2*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_vv']*coord_der['Z_r']**2*coord_der['Z_v']**2*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**3*coord_der['Z_z']*r**2*iotar + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**3*r*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['Z_r']*coord_der['Z_v']*r*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**3*coord_der['Z_rz']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['Z_v']**3*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['Z_r']*coord_der['Z_rz']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_r']*coord_der['Z_v']*r + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']**2*r + coord_der['R']**3*coord_der['R_v']**3*coord_der['Z_r']**3*coord_der['Z_v']*mu0*jnp.pi**2*presr - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**4*r**2*iota*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_v']**2*r*iota**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_vz']*coord_der['Z_v']**2*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['Z_r']*coord_der['Z_v']**3*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_rr']*coord_der['Z_v']**3*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['Z_rr']*coord_der['Z_v']*r**2*iota**2 - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**3*r**2*iota**2 + 2*Psi_lcfs**2*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_v']*coord_der['Z_z']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_z']*coord_der['R_rz']*coord_der['Z_v']**2*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_z']*coord_der['R_vz']*coord_der['Z_r']**2*r**2 + 2*Psi_lcfs**2*coord_der['R']**2*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_z']**2*coord_der['Z_r']*coord_der['Z_vv']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_z']**2*coord_der['Z_rv']*coord_der['Z_v']*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_z']**2*coord_der['Z_r']*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_r']*coord_der['Z_rv']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_rr']*coord_der['Z_v']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_rz']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_z']*coord_der['Z_v']*coord_der['Z_vz']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_r']*coord_der['Z_vv']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_rv']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_rv']*coord_der['Z_z']**2*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_rr']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_v']**2*coord_der['Z_z']*coord_der['Z_rz']*r**2 -
-             Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']**2*coord_der['Z_z']*coord_der['Z_vz']*r**2 - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['R_v']*coord_der['Z_v']**2*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**3*r**2*iota*iotar + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['Z_r']*coord_der['Z_v']*r**2*iota*iotar + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_rv']*coord_der['Z_v']*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']*coord_der['Z_v']*coord_der['Z_vv']*r**2*iota**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_rv']*coord_der['Z_v']**2*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']**2*coord_der['Z_v']*coord_der['Z_vv']*r**2*iota**2 - 3*coord_der['R']**3*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_v']**2*mu0*jnp.pi**2*presr - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_v']**2*r*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']*r*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_z']*r*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_v']**2*r**2*iota*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_v']**2*r**2*iotar + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']*r**2*iotar + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iotar - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['R_z']*coord_der['Z_v']**2*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_rz']*coord_der['Z_v']**2*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_v']**2*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_vz']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_rv']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_v']*coord_der['Z_rz']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_rr']*coord_der['Z_v']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_rz']*coord_der['Z_r']*coord_der['Z_v']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']*coord_der['Z_v']*coord_der['Z_vz']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_z']*coord_der['Z_v']*coord_der['Z_vv']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_vz']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_rv']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota - 4*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_rz']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_rr']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']**2*coord_der['Z_v']*coord_der['Z_vz']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']**2*coord_der['Z_vv']*coord_der['Z_z']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_vv']*coord_der['Z_r']**2*coord_der['Z_v']*coord_der['Z_z']*r**2*iota - 4*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_vz']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_z']*coord_der['R_vz']*coord_der['Z_r']*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_v']*coord_der['Z_rz']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_z']*coord_der['R_rz']*coord_der['Z_r']*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*coord_der['Z_vz']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*coord_der['Z_rz']*r**2 + 3*coord_der['R']**3*coord_der['R_r']**2*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**3*mu0*jnp.pi**2*presr - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_vv']*r**2*iota + 3*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_rv']*coord_der['Z_v']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_vz']*coord_der['Z_r']*coord_der['Z_v']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vv']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_vv']*coord_der['Z_z']*r**2*iota + 3*Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_rv']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota) / (Psi_lcfs**2*coord_der['R']*r**2*(coord_der['R_r']*coord_der['Z_v'] - coord_der['R_v']*coord_der['Z_r'])**2)
+        rho_vals = np.unique(self.R_transform.grid.nodes[:, 0])
+        if rho_vals.size != 1:
+            warnings.warn(
+                colored(
+                    "QS Flux Function requires nodes on a single flux surface, "
+                    + "quasisymmetry error calculated will be incorrect.",
+                    "yellow",
+                )
+            )
 
-    Z_zz = (Psi_lcfs**2*coord_der['R']**3*coord_der['R_v']**2*coord_der['Z_r']*r - Psi_lcfs**2*coord_der['R']**3*coord_der['R_v']**2*coord_der['Z_rr']*r**2 - Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']**2*coord_der['Z_vv']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**4*coord_der['Z_r']*r*iota**2 - Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']*r + coord_der['R']**3*coord_der['R_v']**4*coord_der['Z_r']**3*mu0*jnp.pi**2*presr - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**4*coord_der['Z_rr']*r**2*iota**2 + Psi_lcfs**2*coord_der['R_r']**2*coord_der['R_z']*coord_der['Z_v']**3*r**2*iota + Psi_lcfs**2*coord_der['R_v']**3*coord_der['Z_r']**2*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['R_rv']*coord_der['Z_v']*r**2 + 2*Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['R_v']*coord_der['Z_rv']*r**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_r']*coord_der['R_vv']*coord_der['Z_r']*r**2 - Psi_lcfs**2*coord_der['R']**3*coord_der['R_rv']*coord_der['R_v']*coord_der['Z_r']*r**2 + Psi_lcfs**2*coord_der['R']**3*coord_der['R_rr']*coord_der['R_v']*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']**2*coord_der['Z_r']*r + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_z']**2*r + Psi_lcfs**2*coord_der['R_r']**2*coord_der['R_v']*coord_der['Z_v']**3*r**2*iota**2 + Psi_lcfs**2*coord_der['R_v']**3*coord_der['Z_r']**2*coord_der['Z_v']*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']**2*coord_der['Z_rr']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_z']**2*coord_der['Z_vv']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_rr']*coord_der['Z_z']**2*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['Z_vv']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R_r']**2*coord_der['R_z']*coord_der['Z_v']**2*coord_der['Z_z']*r**2 + Psi_lcfs**2*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']**2*coord_der['Z_z']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['R_z']*coord_der['Z_r']*r*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']**2*coord_der['Z_vv']*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_rr']*coord_der['Z_v']**2*r**2*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_vv']*r**2*iota**2 - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['R_z']*coord_der['Z_r']*r**2*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']**3*r*iota**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**3*coord_der['Z_v']*r*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rz']*coord_der['Z_v']**3*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['R_z']*coord_der['Z_rr']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**3*coord_der['R_rz']*coord_der['Z_r']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_v']*r - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']*coord_der['Z_z']**2*r - coord_der['R']**3*coord_der['R_r']**3*coord_der['R_v']*coord_der['Z_v']**3*mu0*jnp.pi**2*presr + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**4*coord_der['Z_r']*r**2*iota*iotar + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**3*coord_der['Z_rv']*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']*coord_der['Z_v']**3*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']**3*coord_der['Z_v']*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']**2*r*iota**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']**2*coord_der['Z_vz']*r**2*iota + Psi_lcfs**2*coord_der['R_r']**2*coord_der['R_v']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota + Psi_lcfs**2*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']**2*coord_der['Z_v']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['R_z']**2*coord_der['Z_v']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_rv']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vv']*coord_der['R_z']**2*coord_der['Z_r']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_r']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']*coord_der['R_z']**2*coord_der['Z_v']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['R_z']*coord_der['R_rz']*coord_der['Z_r']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_z']*coord_der['R_vz']*coord_der['Z_v']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_rv']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vv']*coord_der['Z_r']*coord_der['Z_z']**2*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']*coord_der['Z_v']*coord_der['Z_z']**2*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rz']*coord_der['Z_v']**2*coord_der['Z_z']*r**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_vz']*coord_der['Z_r']**2*coord_der['Z_z']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_z']*coord_der['Z_rz']*r**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['Z_v']*coord_der['Z_z'] *
-            coord_der['Z_vz']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']**3*r**2*iota*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**3*coord_der['Z_v']*r**2*iota*iotar - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['R_v']**2*coord_der['Z_v']*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']*coord_der['R_vv']*coord_der['Z_v']*r**2*iota**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota**2 + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_vv']*coord_der['Z_r']**2*coord_der['Z_v']*r**2*iota**2 + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_rv']*coord_der['Z_v']*r**2*iota**2 + 3*coord_der['R']**3*coord_der['R_r']**2*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']**2*mu0*jnp.pi**2*presr - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_v']*r*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']**2*coord_der['Z_z']*r*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_v']*r**2*iotar - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iotar + Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2*iotar + 4*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_rv']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['R_vz']*coord_der['Z_r']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_r']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']**2*coord_der['R_rz']*coord_der['Z_v']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']**2*coord_der['R_z']*coord_der['Z_v']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']*coord_der['R_z']*coord_der['Z_vv']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_v']*coord_der['R_vz']*coord_der['Z_v']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']**2*coord_der['R_vv']*coord_der['R_z']*coord_der['Z_v']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vz']*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']**2*coord_der['Z_rz']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_rr']*coord_der['R_v']*coord_der['Z_v']**2*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_rz']*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_vv']*coord_der['Z_r']**2*coord_der['Z_z']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_vz']*coord_der['Z_r']**2*coord_der['Z_v']*r**2*iota - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']**2*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_rv']*coord_der['Z_z']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_rz']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_v']**2*coord_der['Z_rr']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']**2*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['R_vz']*coord_der['Z_r']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['R_rz']*coord_der['Z_v']*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_z']*coord_der['Z_vz']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vz']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2 - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_v']*coord_der['Z_z']*coord_der['Z_rz']*r**2 - Psi_lcfs**2*coord_der['R']*coord_der['R_v']*coord_der['R_rz']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2 - 2*Psi_lcfs**2*coord_der['R_r']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2 - 3*coord_der['R']**3*coord_der['R_r']*coord_der['R_v']**3*coord_der['Z_r']**2*coord_der['Z_v']*mu0*jnp.pi**2*presr - 3*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_rv']*coord_der['R_v']*coord_der['R_z']*coord_der['Z_v']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['R_vv']*coord_der['R_z']*coord_der['Z_r']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_vz']*r**2*iota - 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_vv']*coord_der['Z_z']*r**2*iota + 2*Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_v']*coord_der['Z_rv']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota + Psi_lcfs**2*coord_der['R']*coord_der['R_r']*coord_der['R_vv']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota - 3*Psi_lcfs**2*coord_der['R']*coord_der['R_rv']*coord_der['R_v']*coord_der['Z_r']*coord_der['Z_v']*coord_der['Z_z']*r**2*iota) / (Psi_lcfs**2*coord_der['R']*r**2*(coord_der['R_r']*coord_der['Z_v'] - coord_der['R_v']*coord_der['Z_r'])**2)
+    @property
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+        return False
 
-    if len(axn):
-        R_zz = put(R_zz, axn, (24*Psi_lcfs**2*coord_der['R_rv'][axn]**2*coord_der['Z_r'][axn]**2*coord_der['R'][axn]**2 - 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]**2 - 24*Psi_lcfs**2*coord_der['R_rv'][axn]**2*coord_der['Z_z'][axn]**2*coord_der['Z_r'][axn]**2 + 24*Psi_lcfs**2*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]**2*coord_der['R'][axn]**2 - 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R'][axn]**3 - 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn] - 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]**2 - 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn] - 72*Psi_lcfs**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn]**2 + 72*Psi_lcfs**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn]*coord_der['R'][axn]**2 + 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_rr'][axn]*coord_der['Z_rv'][axn]*coord_der['R'][axn]**3 - 12*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 - 48*Psi_lcfs**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['Z_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 - 12*Psi_lcfs**2*coord_der['Z_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 - 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rr'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]**2*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]**2 - 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['R_z'][axn]**2*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]**3*coord_der['R_r'][axn]*coord_der['R'][axn] + 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['R_z'][axn]**2*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['R_rvz'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rz'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rv'][axn]*coord_der['Z_rr'][axn]*coord_der['Z_rv'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn] + 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['Z_z'][axn]**2*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rvz'][axn]*coord_der['R_r'][axn]**2*coord_der['R']
-                               [axn] + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['Z_rv'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rvz'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rz'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_rv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**2 + 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**2*coord_der['Z_rz'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]**2*coord_der['Z_rz'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**2*coord_der['Z_rv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]**2*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rz'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rz'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rz'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] - 48*Psi_lcfs**2*iota[axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]) / (24*Psi_lcfs**2*(coord_der['R_rv'][axn]*coord_der['Z_r'][axn] - coord_der['Z_rv'][axn]*coord_der['R_r'][axn])**2*coord_der['R'][axn]))
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "qs_ff"
 
-        Z_zz = put(Z_zz, axn, (24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn] - 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**3 - 24*Psi_lcfs**2*coord_der['R_rv'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R'][axn]**3 - 72*Psi_lcfs**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**3*coord_der['R'][axn]**2 - 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn]**3 - 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**3 - 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['Z_z'][axn]**2*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 72*Psi_lcfs**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn]*coord_der['R'][axn]**2 + 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rv'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 - 48*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 - 12*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 + 24*Psi_lcfs**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 - 12*Psi_lcfs**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn]**3 - 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rv'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_rv'][axn]**2*coord_der['Z_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['Z_r'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]**2 + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**2*coord_der['Z_z'][axn]*coord_der['Z_r'][axn]**2 - 12*Psi_lcfs**2*coord_der['Z_rrvv'][axn]*coord_der['R_z'][axn]**2*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**3*coord_der['Z_r'][axn]*coord_der['R'][axn] + 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['R_z'][axn]**2*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rr'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rv'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rr'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['R_rv'][axn]*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 12*Psi_lcfs**2*coord_der['R_rrvv'][axn]*coord_der['Z_z'][axn]**2*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvz'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rr'][axn]*coord_der['Z_z'][axn]**2*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_rr'][axn]
-                               * coord_der['Z_z'][axn]**2*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['R_rrv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]**2*coord_der['Z_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rr'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 12*Psi_lcfs**2*coord_der['Z_z'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_rrv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['R_rvz'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rvz'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rz'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**2*coord_der['R_rz'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['R_rv'][axn]**2*coord_der['Z_z'][axn]*coord_der['Z_rz'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn] - 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]**2*coord_der['Z_rv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]**2*coord_der['R_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]**2*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rv'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['R_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['R_z'][axn]*coord_der['R_rz'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['R_rz'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['Z_rz'][axn]*coord_der['R_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 24*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvz'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 48*Psi_lcfs**2*coord_der['Z_z'][axn]*coord_der['Z_rz'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['R_rvv'][axn]*coord_der['Z_r'][axn]**2*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['R_z'][axn]*coord_der['R_rv'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] - 48*Psi_lcfs**2*iota[axn]*coord_der['R_rv'][axn]*coord_der['Z_z'][axn]*coord_der['Z_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn] + 24*Psi_lcfs**2*iota[axn]*coord_der['Z_z'][axn]*coord_der['Z_rv'][axn]*coord_der['R_rvv'][axn]*coord_der['R_r'][axn]*coord_der['Z_r'][axn]*coord_der['R'][axn]) / (24*Psi_lcfs**2*(coord_der['R_rv'][axn]*coord_der['Z_r'][axn] - coord_der['Z_rv'][axn]*coord_der['R_r'][axn])**2*coord_der['R'][axn]))
+    @property
+    def derivatives(self):
+        """Which derivatives are needed to compute (ndarray)."""
+        derivatives = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+                [1, 1, 0],
+                [1, 0, 1],
+                [0, 1, 1],
+                [0, 3, 0],
+                [0, 0, 3],
+                [1, 1, 1],
+                [1, 2, 0],
+                [1, 0, 2],
+                [0, 2, 1],
+                [0, 1, 2],
+            ]
+        )
+        return derivatives
 
-    R_zz_err = coord_der['R_zz'] - R_zz
-    Z_zz_err = coord_der['Z_zz'] - Z_zz
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute quasisymmetry error.
 
-    cR_zz_err = zernike_transform.fit(R_zz_err)
-    cZ_zz_err = zernike_transform.fit(Z_zz_err)
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
 
-    return cR_zz_err, cZ_zz_err
+        Returns
+        -------
+        f : ndarray
+            force error in radial and helical directions at each node
+
+        """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+            zeta_ratio,
+        )
+
+        # normalize to flux surface average
+        QS_FF = quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
+        return QS_FF
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Compute the total quasisymetry error.
+
+        eg 1/2 sum(f**2)
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        Returns
+        -------
+        f : float
+            total quasisymmetry error
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+        """Print the rms errors for quasisymmetry.
+
+        Parameters
+        ----------
+        x : ndarray
+            optimization state vector
+        Rb_lmn : ndarray
+            array of fourier coefficients for R boundary
+        Zb_lmn : ndarray
+            array of fourier coefficients for Z boundary
+        p_l : ndarray
+            series coefficients for pressure profile
+        i_l : ndarray
+            series coefficients for iota profile
+        Psi : float
+            toroidal flux within the last closed flux surface in webers
+        zeta_ratio : float
+            multiplier on the toroidal derivatives.
+
+        """
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
+
+        print("Residual: {:10.3e}".format(resid_rms))
+        return None
 
 
-def compute_qs_error_spectral(cR, cZ, cI, Psi_lcfs, NFP, zernike_transform, modes_pol, modes_tor, zeta_ratio):
-    """Computes quasisymmetry error in spectral space
+def get_objective_function(
+    objective,
+    R_transform,
+    Z_transform,
+    L_transform,
+    Rb_transform,
+    Zb_transform,
+    p_transform,
+    i_transform,
+    BC_constraint=None,
+    use_jit=True,
+):
+    """Get an objective function by name.
 
     Parameters
     ----------
-    cR : ndarray
-        spectral coefficients of R
-    cZ : ndarray
-        spectral coefficients of Z
-    cI : array-like
-        coefficients to pass to rotational transform function
-    Psi_lcfs : float
-        total toroidal flux within LCFS
-    NFP : int
-        number of field periods
-    zernike_transform : ZernikeTransform
-        object with tranform method to convert from spectral basis to physical basis at nodes
-    modes_pol : ndarray
-        poloidal Fourier mode numbers
-    modes_tor : ndarray
-        toroidal Fourier mode numbers
-    zeta_ratio : float
-        fraction in range [0,1] of the full toroidal (zeta) derivatives to use
+    objective : str
+        name of the desired objective function, eg ``'force'`` or ``'energy'``
+    R_transform : Transform
+        transforms R_lmn coefficients to real space
+    Z_transform : Transform
+        transforms Z_lmn coefficients to real space
+    L_transform : Transform
+        transforms L_lmn coefficients to real space
+    Rb_transform : Transform
+        transforms Rb_lmn coefficients to real space
+    Zb_transform : Transform
+        transforms Zb_lmn coefficients to real space
+    p_transform : Transform
+        transforms p_l coefficients to real space
+    i_transform : Transform
+        transforms i_l coefficients to real space
+    BC_constraint : BoundaryCondition
+        linear constraint to enforce boundary conditions
+    use_jit : bool
+        whether to just-in-time compile the objective and derivatives
 
     Returns
     -------
-    cQS : ndarray
-        quasisymmetry error Fourier coefficients
+    obj_fun : ObjectiveFunction
+        objective initialized with the given transforms and constraints
 
     """
+    if objective == "force":
+        obj_fun = ForceErrorNodes(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+            use_jit=use_jit,
+        )
+    elif objective == "galerkin":
+        obj_fun = ForceErrorGalerkin(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+            use_jit=use_jit,
+        )
+    elif objective == "energy":
+        obj_fun = EnergyVolIntegral(
+            R_transform=R_transform,
+            Z_transform=Z_transform,
+            L_transform=L_transform,
+            Rb_transform=Rb_transform,
+            Zb_transform=Zb_transform,
+            p_transform=p_transform,
+            i_transform=i_transform,
+            BC_constraint=BC_constraint,
+            use_jit=use_jit,
+        )
+    else:
+        raise ValueError(
+            colored(
+                "Requested Objective Function is not implemented. "
+                + "Available objective functions are: "
+                + "'force', 'lambda', 'galerkin', 'energy'",
+                "red",
+            )
+        )
 
-    nodes = zernike_transform.nodes
-    r = nodes[0]
-    iota = iotafun(r, 0, cI)
+    return obj_fun
 
-    coord_der = compute_coordinate_derivatives(
-        cR, cZ, zernike_transform, zeta_ratio, mode='qs')
-    cov_basis = compute_covariant_basis(
-        coord_der, zernike_transform, mode='qs')
-    jacobian = compute_jacobian(
-        coord_der, cov_basis, zernike_transform, mode='qs')
-    magnetic_field = compute_magnetic_field(cov_basis, jacobian, cI,
-                                            Psi_lcfs, zernike_transform, mode='qs')
-    B_mag = compute_magnetic_field_magnitude(
-        cov_basis, magnetic_field, cI, zernike_transform)
 
-    # B-tilde derivatives
-    Bt_v = magnetic_field['B^zeta_v']*(iota*B_mag['|B|_v']+B_mag['|B|_z']) + \
-        magnetic_field['B^zeta']*(iota*B_mag['|B|_vv']+B_mag['|B|_vz'])
-    Bt_z = magnetic_field['B^zeta_z']*(iota*B_mag['|B|_v']+B_mag['|B|_z']) + \
-        magnetic_field['B^zeta']*(iota*B_mag['|B|_vz']+B_mag['|B|_zz'])
-
-    # quasisymmetry
-    QS = B_mag['|B|_v']*Bt_z - B_mag['|B|_z']*Bt_v
-
-    theta = nodes[1]
-    zeta = nodes[2]
-
-    four_interp = double_fourier_basis(theta, zeta, modes_pol, modes_tor, NFP)
-    cQS = jnp.linalg.lstsq(four_interp, jnp.array([QS]).T, rcond=None)[0].T
-
-    return cQS
+"""
+QS derivatives (just here so we don't loose them)
+            derivatives = np.array(
+                [
+                    [0, 0, 0],
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1],
+                    [2, 0, 0],
+                    [1, 1, 0],
+                    [1, 0, 1],
+                    [0, 2, 0],
+                    [0, 1, 1],
+                    [0, 0, 2],
+                    [3, 0, 0],
+                    [2, 1, 0],
+                    [2, 0, 1],
+                    [1, 2, 0],
+                    [1, 1, 1],
+                    [1, 0, 2],
+                    [0, 3, 0],
+                    [0, 2, 1],
+                    [0, 1, 2],
+                    [0, 0, 3],
+                    [2, 2, 0],
+                ]
+            )
+"""

@@ -35,11 +35,15 @@ class Transform(IOAble):
         whether to precompute the transforms now or do it later
     build_pinv : bool
         whether to precompute the pseudoinverse now or do it later
-    method : {``'fft'``, ``'direct'``}
+    method : {```'auto'``, `'fft'``, ``'direct1'``, ``'direct2'``}
         * ``'fft'`` uses fast fourier transforms in the zeta direction, and so must have
           equally spaced toroidal nodes, and the same node pattern on each zeta plane
-        * ``'direct'`` uses full matrices and can handle arbitrary node patterns and
+        * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
+        * ``'direct2'`` uses a DFT instead of FFT that while in theory slower in practice
+           can be somewhat faster
+        * ``'auto'`` selects the method based on the grid and basis resolution
+
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
@@ -59,10 +63,10 @@ class Transform(IOAble):
         grid,
         basis,
         derivs=0,
-        rcond=None,
+        rcond="auto",
         build=False,
         build_pinv=False,
-        method="fft",
+        method="auto",
     ):
 
         self._grid = grid
@@ -71,12 +75,8 @@ class Transform(IOAble):
 
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
-        if method in ["direct", "fft"]:
-            self._method = method
-        else:
-            raise ValueError(
-                colored("Unknown Transform method '{}'".format(method), "red")
-            )
+        self.method = method
+
         self._built = False
         self._built_pinv = False
         self._set_up()
@@ -87,11 +87,12 @@ class Transform(IOAble):
 
     def _set_up(self):
 
-        if self.method == "fft":
-            self._check_inputs_fft(self.grid, self.basis)
-
         self._matrices = {
-            i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+            "direct1": {
+                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+            },
+            "fft": {i: {j: {} for j in range(4)} for i in range(4)},
+            "direct2": {i: {} for i in range(4)},
         }
 
     def __eq__(self, other):
@@ -181,102 +182,103 @@ class Transform(IOAble):
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
-        if len(zeta_vals) % 2 == 0:
-            warnings.warn(
-                colored(
-                    "fft method requires an odd number of toroidal nodes, falling back to direct method",
-                    "yellow",
-                )
-            )
-            self._method = "direct"
-            return
-
-        if not issorted(grid.nodes[:, 2]):
-            warnings.warn(
-                colored(
-                    "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct method",
-                    "yellow",
-                )
-            )
-            self._method = "direct"
-            return
-
         if not isalmostequal(zeta_cts):
             warnings.warn(
                 colored(
-                    "fft method requires the same number of nodes on each zeta plane, falling back to direct method",
+                    "fft method requires the same number of nodes on each zeta plane, falling back to direct1 method",
                     "yellow",
                 )
             )
-            self._method = "direct"
+            self.method = "direct1"
             return
 
-        if len(zeta_vals) > 1:
-            if not islinspaced(zeta_vals):
-                warnings.warn(
-                    colored(
-                        "fft method requires nodes to be equally spaced in zeta, falling back to direct method",
-                        "yellow",
-                    )
+        if not isalmostequal(
+            grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        ):
+            warnings.warn(
+                colored(
+                    "fft method requires that node pattern is the same on each zeta plane, falling back to direct1 method",
+                    "yellow",
                 )
-                self._method = "direct"
-                return
-
-            if not isalmostequal(
-                grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
-            ):
-                warnings.warn(
-                    colored(
-                        "fft method requires that node pattern is the same on each zeta plane, falling back to direct method",
-                        "yellow",
-                    )
-                )
-                self._method = "direct"
-                return
-
-            if not abs((zeta_vals[-1] + zeta_vals[1]) * grid.NFP - 2 * np.pi) < 1e-14:
-                warnings.warn(
-                    colored(
-                        "fft method requires that nodes complete 1 full field period, falling back to direct method",
-                        "yellow",
-                    )
-                )
-                self._method = "direct"
-                return
+            )
+            self.method = "direct1"
+            return
 
         id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
         if not issorted(id2):
             warnings.warn(
                 colored(
-                    "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct method",
+                    "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct1 method",
                     "yellow",
                 )
             )
-            self._method = "direct"
+            self.method = "direct1"
+            return
+
+        if (
+            len(zeta_vals) > 1
+            and not abs((zeta_vals[-1] + zeta_vals[1]) * grid.NFP - 2 * np.pi) < 1e-14
+        ):
+            warnings.warn(
+                colored(
+                    "fft method requires that nodes complete 1 full field period, falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
             return
 
         n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
-        if len(n_vals) > 1:
-            if not islinspaced(n_vals):
-                warnings.warn(
-                    colored(
-                        "fft method requires the toroidal modes are equally spaced in n, falling back to direct method",
-                        "yellow",
-                    )
-                )
-                self._method = "direct"
-                return
-
-        if not len(zeta_vals) >= len(n_vals):
+        if len(n_vals) > 1 and not islinspaced(n_vals):
             warnings.warn(
                 colored(
-                    "fft method can not undersample in zeta, num_toroidal_modes={}, num_toroidal_angles={}, falling back to direct method".format(
+                    "fft method requires the toroidal modes are equally spaced in n, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if len(zeta_vals) < len(n_vals):
+            warnings.warn(
+                colored(
+                    "fft method can not undersample in zeta, num_toroidal_modes={}, num_toroidal_angles={}, falling back to direct2 method".format(
                         len(n_vals), len(zeta_vals)
                     ),
                     "yellow",
                 )
             )
-            self._method = "direct"
+            self.method = "direct2"
+            return
+
+        if len(zeta_vals) % 2 == 0:
+            warnings.warn(
+                colored(
+                    "fft method requires an odd number of toroidal nodes, falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        if not issorted(grid.nodes[:, 2]):
+            warnings.warn(
+                colored(
+                    "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        if len(zeta_vals) > 1 and not islinspaced(zeta_vals):
+            warnings.warn(
+                colored(
+                    "fft method requires nodes to be equally spaced in zeta, falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
             return
 
         self._method = "fft"
@@ -299,6 +301,84 @@ class Transform(IOAble):
             ]
         )
 
+    def _check_inputs_direct2(self, grid, basis):
+        """helper function to check that inputs are formatted correctly for direct2 method"""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # this is the trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct2"
+            return
+
+        zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
+
+        if not issorted(grid.nodes[:, 2]):
+            warnings.warn(
+                colored(
+                    "direct2 method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if not isalmostequal(zeta_cts):
+            warnings.warn(
+                colored(
+                    "direct2 method requires the same number of nodes on each zeta plane, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if len(zeta_vals) > 1 and not isalmostequal(
+            grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        ):
+            warnings.warn(
+                colored(
+                    "direct2 method requires that node pattern is the same on each zeta plane, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
+        if not issorted(id2):
+            warnings.warn(
+                colored(
+                    "direct2 method requires zernike indices to be sorted by toroidal mode number, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
+
+        self._method = "direct2"
+        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
+        self.n_modes = n_vals
+        self.zeta_nodes = zeta_vals
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = self.n_modes.size  # number of toroidal modes
+        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
+        self.N = basis.N  # toroidal resolution of basis
+
+        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+        for k in range(basis.num_modes):
+            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
+            col = np.where(basis.modes[k, 2] == n_vals)[0]
+            self.fft_index[k] = self.num_n_modes * row + col
+        self.fft_nodes = np.hstack(
+            [
+                grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
+                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
+            ]
+        )
+        self.dft_nodes = np.hstack(
+            [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
+        )
+
     def build(self):
         """Builds the transform matrices for each derivative order"""
         if self.built:
@@ -308,20 +388,31 @@ class Transform(IOAble):
             self._built = True
             return
 
-        if self.method == "direct":
+        if self.method == "direct1":
             for d in self.derivatives:
-                self._matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
+                self._matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
                     self.grid.nodes, d
                 )
 
-        elif self.method == "fft":
+        if self.method in ["fft", "direct2"]:
             temp_d = np.hstack(
                 [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
             )
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
-                self.matrices[d[0]][d[1]][d[2]] = self.basis.evaluate(
+                self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
                     self.fft_nodes, d, modes=temp_modes
+                )
+        if self.method == "direct2":
+            temp_d = np.hstack(
+                [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
+            )
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            for d in temp_d:
+                self.matrices["direct2"][d[2]] = self.basis.evaluate(
+                    self.dft_nodes, d, modes=temp_modes
                 )
 
         self._built = True
@@ -362,40 +453,46 @@ class Transform(IOAble):
         if not self.built:
             self.build()
 
+        if self.basis.num_modes != c.size:
+            raise ValueError(
+                colored(
+                    "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
+                        c.size, self.basis.num_modes
+                    ),
+                    "red",
+                )
+            )
+
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
-        if self.method == "direct":
-            A = self.matrices[dr][dt][dz]
+        if self.method == "direct1":
+            A = self.matrices["direct1"][dr][dt][dz]
             if isinstance(A, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
-                )
-            if self.basis.num_modes != c.size:
-                raise ValueError(
-                    colored(
-                        "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
-                            c.size, self.basis.num_modes
-                        ),
-                        "red",
-                    )
                 )
             return jnp.matmul(A, c)
 
-        elif self.method == "fft":
-            A = self.matrices[dr][dt][0]
-            if isinstance(A, dict):
+        elif self.method == "direct2":
+            A = self.matrices["fft"][dr][dt]
+            B = self.matrices["direct2"][dz]
+
+            if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
-            if self.basis.num_modes != c.size:
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+
+            cc = jnp.matmul(A, c_mtrx)
+            return jnp.matmul(cc, B.T).flatten(order="F")
+
+        elif self.method == "fft":
+            A = self.matrices["fft"][dr][dt]
+            if isinstance(A, dict):
                 raise ValueError(
-                    colored(
-                        "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
-                            c.size, self.basis.num_modes
-                        ),
-                        "red",
-                    )
+                    colored("Derivative orders are out of initialized bounds", "red")
                 )
 
             # reshape coefficients
@@ -461,30 +558,28 @@ class Transform(IOAble):
         if not self.built:
             self.build()
 
-        if self.method == "direct":
-            A = self.matrices[0][0][0]
-            if self.grid.num_nodes != y.size:
-                raise ValueError(
-                    colored(
-                        "y dimension ({}) is incompatible with the number of grid nodes({})".format(
-                            y.size, self.grid.num_nodes
-                        ),
-                        "red",
-                    )
+        if self.grid.num_nodes != y.size:
+            raise ValueError(
+                colored(
+                    "y dimension ({}) is incompatible with the number of grid nodes({})".format(
+                        y.size, self.grid.num_nodes
+                    ),
+                    "red",
                 )
+            )
+
+        if self.method == "direct1":
+            A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
+        elif self.method == "direct2":
+            A = self.matrices["fft"][0][0]
+            B = self.matrices["direct2"][0]
+            yy = jnp.matmul(A.T, y.reshape((-1, self.num_z_nodes), order="F"))
+            return jnp.matmul(yy, B).flatten()[self.fft_index]
+
         elif self.method == "fft":
-            A = self.matrices[0][0][0]
-            if self.grid.num_nodes != y.size:
-                raise ValueError(
-                    colored(
-                        "y dimension ({}) is incompatible with the number of grid nodes({})".format(
-                            y.size, self.grid.num_nodes
-                        ),
-                        "red",
-                    )
-                )
+            A = self.matrices["fft"][0][0]
             # this was derived by trial and error, but seems to work correctly
             # there might be a more efficient way...
             a = jnp.fft.fft(A.T @ y.reshape((A.shape[0], -1), order="F"))
@@ -495,7 +590,9 @@ class Transform(IOAble):
             ).flatten()[self.fft_index]
             return b
 
-    def change_resolution(self, grid=None, basis=None, build=True, build_pinv=False):
+    def change_resolution(
+        self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
+    ):
         """Re-builds the matrices with a new grid and basis
 
         Parameters
@@ -506,6 +603,8 @@ class Transform(IOAble):
             Spectral basis of modes
         build : bool
             whether to recompute matrices now or wait until requested
+        method : {"auto", "direct1", "direct2", "fft"}
+            method to use for computing transforms
 
         """
         if grid is None:
@@ -521,8 +620,7 @@ class Transform(IOAble):
             self._basis = basis
             self._built = False
             self._built_pinv = False
-        if self.method == "fft":
-            self._check_inputs_fft(self.grid, self.basis)
+        self.method = method
         if build:
             self.build()
         if build_pinv:
@@ -541,6 +639,8 @@ class Transform(IOAble):
             self._grid = grid
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
+            if self.method == "direct2":
+                self._check_inputs_direct2(self.grid, self.basis)
             if self.built:
                 self._built = False
                 self.build()
@@ -561,6 +661,8 @@ class Transform(IOAble):
             self._basis = basis
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
+            if self.method == "direct2":
+                self._check_inputs_direct2(self.grid, self.basis)
             if self.built:
                 self._built = False
                 self.build()
@@ -617,7 +719,12 @@ class Transform(IOAble):
         """dict of ndarray : transform matrices such that x=A*c"""
         if not hasattr(self, "_matrices"):
             self._matrices = {
-                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+                "direct1": {
+                    i: {j: {k: {} for k in range(4)} for j in range(4)}
+                    for i in range(4)
+                },
+                "fft": {i: {j: {} for j in range(4)} for i in range(4)},
+                "direct2": {i: {} for i in range(4)},
             }
         return self._matrices
 
@@ -664,10 +771,30 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct'``, ``'fft'``}: method of computing transform"""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform"""
         if not hasattr(self, "_method"):
-            self._method = "direct"
+            self._method = "direct1"
         return self._method
+
+    @method.setter
+    def method(self, method):
+        old_method = self.method
+        if method == "auto" and self.basis.N == 0:
+            self.method = "direct1"
+        elif method == "auto":
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.method = "fft"
+        elif method == "fft":
+            self._check_inputs_fft(self.grid, self.basis)
+        elif method == "direct2":
+            self._check_inputs_direct2(self.grid, self.basis)
+        elif method == "direct1":
+            self._method = "direct1"
+        else:
+            raise ValueError("Unknown transform method: {}".format(method))
+        if self.method != old_method:
+            self._built = False
 
     def __repr__(self):
         """string form of the object"""

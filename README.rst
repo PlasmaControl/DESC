@@ -68,12 +68,12 @@ Contribute
     :target: https://github.com/ddudt/DESC/blob/master/LICENSE
     :alt: License
 
-.. |Docs| image:: https://img.shields.io/readthedocs/desc-apc524?logo=Read-the-Docs
+.. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Travis| image:: https://img.shields.io/travis/ddudt/DESC?logo=travis   
-    :target: https://travis-ci.org/ddudt/DESC.svg?branch=master
+.. |Travis| image:: https://img.shields.io/travis/ddudt/DESC/master?logo=travis   
+    :target: https://travis-ci.org/github/ddudt/DESC/branches
     :alt: Build
 
 .. |Codecov| image:: https://codecov.io/gh/ddudt/DESC/branch/master/graph/badge.svg

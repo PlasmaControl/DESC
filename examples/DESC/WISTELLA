@@ -6,22 +6,23 @@ NFP = 4
 Psi = 6.14553547E-01
 
 # spectral resolution
-M_pol = 8
-N_tor = 8
-M_grid = 12
-N_grid = 12
+L_rad =   6, 12, 18, 24, 24
+M_pol =   6, 12, 12, 12, 12
+N_tor =   0,  0,  6,  6,  6
+M_grid = 12, 16, 16, 16, 16
+N_grid =  0,  0,  9,  9,  9
 
 # continuation parameters
-bdry_ratio = 1
-pres_ratio = 1
+bdry_ratio = 0, 0, 0.33, 0.66, 1
+pres_ratio = 0
 zeta_ratio = 1
 pert_order = 2
 
 # solver tolerances
-ftol = 1e-6
+ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 100
+nfev = 50
 
 # solver methods
 optimizer         = lsq-exact

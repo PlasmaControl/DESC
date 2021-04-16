@@ -1,4 +1,4 @@
-# this is for the ARIES-CS stellarator
+# this is for the ARIES compact stellarator pilot plant
 
 # global parameters
 sym = 1
@@ -6,25 +6,26 @@ NFP = 3
 Psi = 4.93317661E-01
 
 # spectral resolution
-M_pol = 9
-N_tor = 5
-M_grid = 12
-N_grid = 8
+L_rad =  6, 12, 18, 24, 24, 24, 24
+M_pol =  6,  9, 12, 12, 12, 12, 12
+N_tor =  0,  0,  0,  0, 12, 12, 12
+M_grid = 9, 12, 16, 16, 16, 16, 16
+N_grid = 0,  0,  0,  0, 16, 16, 16
 
 # continuation parameters
-bdry_ratio = 1
-pres_ratio = 1
+bdry_ratio = 0, 0, 0,   0, 0.33, 0.66, 1
+pres_ratio = 0, 0, 0.5, 1, 1,    1,    1
 zeta_ratio = 1
 pert_order = 2
 
 # solver tolerances
-ftol = 1e-6
+ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 100
+nfev = 50
 
 # solver methods
-optimizer         = scipy-trf
+optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
 node_pattern      = jacobi

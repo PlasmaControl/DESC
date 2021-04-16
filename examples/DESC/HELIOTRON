@@ -7,9 +7,9 @@ NFP = 19
 Psi = 1.00000000E+00
 
 # spectral resolution
-M_pol  =  8, 12, 16
+M_pol  =  6,  9, 12
 N_tor  =  0,  0,  2
-M_grid = 12, 18, 24
+M_grid = 12, 18, 18
 N_grid =  0,  0,  4
 
 # continuation parameters
@@ -25,9 +25,9 @@ gtol = 1e-6
 nfev = 50
 
 # solver methods
-optimizer         = scipy-trf
+optimizer         = lsq-exact
 objective         = force
-spectral_indexing = ansi
+spectral_indexing = fringe
 node_pattern      = jacobi
 
 # pressure and rotational transform profiles

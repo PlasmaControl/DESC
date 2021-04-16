@@ -1,4 +1,4 @@
-# This DESC input file for W7-X in standard configuration with beta = 2%
+# This DESC input file for W7-X in standard configuration, beta ~ 2%
 
 # global parameters
 sym =  1
@@ -6,29 +6,29 @@ NFP =  5
 Psi = -2.13300000E+00
 
 # spectral resolution
-L_rad  =  6,  8, 10, 12, 12 
-M_pol  = 12, 12, 12, 12, 12
-N_tor  =  0,  0,  0,  0, 12
-M_grid = 12, 13, 14, 15, 16
-N_grid =  0,  0,  0,  0, 16
+L_rad  =  6, 12, 18, 24, 24, 24, 24, 24, 24
+M_pol  = 12, 12, 12, 12, 12, 12, 12, 12, 12
+N_tor  =  0,  0,  0,  0,  0,  0, 12, 12, 12
+M_grid = 12, 16, 16, 16, 16, 16, 16, 16, 16
+N_grid =  0,  0,  0,  0,  0,  0, 16, 16, 16
 
 # continuation parameters
-bdry_ratio = 0, 0, 0, 0, 1
-pres_ratio = 0
+bdry_ratio = 0, 0, 0, 0, 0, 0, 0.33, 0.66, 1
+pres_ratio = 0, 0, 0, 0.33, 0.66, 1, 1, 1, 1
 zeta_ratio = 1
 pert_order = 2
 
 # solver tolerances
-ftol = 1e-4
+ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-4
-nfev = 100
+nfev = 50
 
 # solver methods
-optimizer = scipy-trf
-objective = force
-spectral_indexing = ansi
-node_pattern = jacobi
+optimizer         = lst-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0	p =   1.85596929e+05	i =   8.56047021e-01

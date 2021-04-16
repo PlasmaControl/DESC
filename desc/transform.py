@@ -75,7 +75,7 @@ class Transform(IOAble):
 
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
-        self.method = method
+        self._method = method
 
         self._built = False
         self._built_pinv = False
@@ -87,6 +87,7 @@ class Transform(IOAble):
 
     def _set_up(self):
 
+        self.method = self._method
         self._matrices = {
             "direct1": {
                 i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)

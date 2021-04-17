@@ -19,10 +19,10 @@ zeta_ratio = 1
 pert_order = 2
 
 # solver tolerances
-ftol = 1e-6
+ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 100
+nfev = 50
 
 # solver methods
 optimizer         = lsq-exact

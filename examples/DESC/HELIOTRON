@@ -7,6 +7,7 @@ NFP = 19
 Psi = 1.00000000E+00
 
 # spectral resolution
+L_rad  = 12, 18, 24
 M_pol  =  6,  9, 12
 N_tor  =  0,  0,  2
 M_grid = 12, 18, 18
@@ -19,7 +20,7 @@ zeta_ratio = 1
 pert_order = 2
 
 # solver tolerances
-ftol = 1e-6
+ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
 nfev = 50

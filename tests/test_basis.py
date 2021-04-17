@@ -1,8 +1,8 @@
 import unittest
 import numpy as np
-
+import mpmath
 from desc.grid import LinearGrid
-from desc.basis import polyder_vec, polyval_vec, powers, jacobi, fourier
+from desc.basis import polyder_vec, polyval_vec, powers, jacobi, fourier, jacobi_coeffs
 from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 
 
@@ -30,6 +30,28 @@ class TestBasis(unittest.TestCase):
         values = polyval_vec(p, x)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    def test_polyval_exact(self):
+        basis = FourierZernikeBasis(L=80, M=2, N=0)
+        l, m = basis.modes[:, 0], basis.modes[:, 1]
+        coeffs = jacobi_coeffs(l, m, exact=True)
+        grid = LinearGrid(L=20)
+        r = grid.nodes[:, 0]
+        mpmath.mp.dps = 100
+        exact = np.array(
+            [
+                np.asarray(mpmath.polyval(list(ci), r, derivative=True), dtype=float)
+                for ci in coeffs
+            ]
+        )
+        mpmath.mp.dps = 15
+        exactf = exact[:, 0, :].T
+        exactdf = exact[:, 1, :].T
+        approxf = jacobi(r, l, m)
+        approxdf = jacobi(r, l, m, dr=1)
+
+        np.testing.assert_allclose(approxf, exactf, atol=1e-12)
+        np.testing.assert_allclose(approxdf, exactdf, atol=1e-12)
 
     def test_powers(self):
         """Tests powers function"""

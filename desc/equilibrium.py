@@ -1,7 +1,7 @@
 import numpy as np
 from termcolor import colored
 import warnings
-from collections import MutableSequence
+from collections.abc import MutableSequence
 from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration, format_boundary, format_profiles

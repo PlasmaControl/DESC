@@ -13,7 +13,7 @@ N_tor  =  2
 bdry_ratio = 1
 pres_ratio = 1
 zeta_ratio = 1
-pert_order = 1
+pert_order = 2
 
 # solver tolerances
 ftol = 1e-6

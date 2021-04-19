@@ -17,7 +17,7 @@
   BLOAT = 1
   EXTCUR = 10722
   SPRES_PED = 1
-  AI = 0 0
+  AI =   1.04776646e+00  2.70945704e-02 -1.13103741e-01  5.19669398e-01 -8.57773107e-01  6.85247912e-01 -2.10208439e-01
   AM = 0 0
   CURTOR = 0
   AC = 0  0
@@ -959,28 +959,4 @@ ZAXIS=  0.0000E+00 -1.6660E-01 -1.6391E-02 -2.1468E-04 1.6267E-04 -8.8917E-05 -2
   RBC( 15, 31) =  -2.075242E-07   RBS( 15, 31) =   0.000000E+00   ZBC( 15, 31) =   0.000000E+00   ZBS( 15, 31) =  -2.075242E-07
   RBC( 16, 31) =  -3.289984E-07   RBS( 16, 31) =   0.000000E+00   ZBC( 16, 31) =   0.000000E+00   ZBS( 16, 31) =  -3.289984E-07
   RBC( 17, 31) =  -2.120149E-07   RBS( 17, 31) =   0.000000E+00   ZBC( 17, 31) =   0.000000E+00   ZBS( 17, 31) =  -2.120149E-07
-/
-&BOOTIN
-!  NRHO is obsolete
-  NRHO=0
-!  Number of poloidal modes
-  MBUSE=32
-!  Number of toroidal modes
-  NBUSE=32
-!  Effective Ion Charge
-  ZEFF1=1.000000000000000E+00
-!  Damping factor for resonance
-  DAMP_BS=-1.000000000000000
-! Temperature/Density Data
-!    ATE   : Electron temperature (10th order polynomial, keV)
-!    ATI   : Ion temperature (10th order polynomial, keV)
-!    TEMPRES:  Scale temperatures as P^tempres (if tempres >=0)
-!    TETI  : Temperature ratio Te/Ti (if tempres >=0)
-!    DENS0 : Central electron density in 10^20 [m^-3] (if tempres >=0)
-! Electron Temperature (10th order polynomial, keV)
-  ATE=1.0 -1.0
-  ATI=1.0 -1.0
-  TEMPRES = -1.0  ! Set to 1 to use P profile for te/ti
-  TETI    = 1.0
-  DENS0   = 1.0
 /

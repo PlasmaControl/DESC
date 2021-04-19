@@ -7,7 +7,7 @@ mpmath >= 1.0.0
 numba
 nvgpu
 psutil
-h5py < 3.0.0
+h5py >= 3.0.0
 netcdf4 >= 1.5.4
 colorama
 termcolor

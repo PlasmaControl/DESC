@@ -17,7 +17,7 @@ bdry_ratio = 1
 pres_ratio = 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 2 3 4 5 6  ! approximate beta %
 zeta_ratio = 1
 errr_ratio = 1.0E-4
-pert_order = 1
+pert_order = 2
 
 # solver tolerances
 ftol = 1e-6

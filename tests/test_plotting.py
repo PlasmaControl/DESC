@@ -118,32 +118,32 @@ class TestPlot(unittest.TestCase):
         )
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(plot_eq):
     fig, ax = plot_1d(plot_eq, "p")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_dpdr(plot_eq):
     fig, ax = plot_1d(plot_eq, "p_r")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_iota(plot_eq):
     grid = LinearGrid(rho=0.5, theta=np.linspace(0, 2 * np.pi, 100), zeta=0, axis=True)
     fig, ax = plot_1d(plot_eq, "iota", grid=grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_logpsi(plot_eq):
     fig, ax = plot_1d(plot_eq, "psi", log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_logF(plot_eq):
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
@@ -155,7 +155,7 @@ def test_2d_logF(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_tz(plot_eq):
     grid = LinearGrid(
         rho=0.5,
@@ -167,7 +167,7 @@ def test_2d_g_tz(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_rz(plot_eq):
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
@@ -179,19 +179,19 @@ def test_2d_g_rz(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_lambda(plot_eq):
     fig, ax = plot_2d(plot_eq, "lambda")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_B(plot_eq):
     fig, ax = plot_3d(plot_eq, "B^zeta")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_J(plot_eq):
     grid = LinearGrid(
         rho=1,
@@ -203,7 +203,7 @@ def test_3d_J(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_tz(plot_eq):
     grid = LinearGrid(
         rho=0.5,
@@ -215,7 +215,7 @@ def test_3d_tz(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rz(plot_eq):
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
@@ -227,7 +227,7 @@ def test_3d_rz(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rt(plot_eq):
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100), theta=np.linspace(0, 2 * np.pi, 100), zeta=0
@@ -236,105 +236,105 @@ def test_3d_rt(plot_eq):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_J(plot_eq):
     fig, ax = plot_section(plot_eq, "J^rho")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_Z(plot_eq):
     fig, ax = plot_section(plot_eq, "Z")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_R(plot_eq):
     fig, ax = plot_section(plot_eq, "R")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_F(plot_eq):
     fig, ax = plot_section(plot_eq, "F_rho")
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_logF(plot_eq):
     fig, ax = plot_section(plot_eq, "|F|", log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces(plot_eq):
     fig, ax = plot_surfaces(plot_eq)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_logo():
     fig, ax = plot_logo()
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_linear():
     grid = LinearGrid(L=10, M=10, N=1)
     fig, ax = plot_grid(grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_quad():
     grid = QuadratureGrid(L=10, M=10, N=1)
     fig, ax = plot_grid(grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_jacobi():
     grid = ConcentricGrid(M=10, N=1, node_pattern="jacobi")
     fig, ax = plot_grid(grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_cheb1():
     grid = ConcentricGrid(M=10, N=1, node_pattern="cheb1")
     fig, ax = plot_grid(grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_cheb2():
     grid = ConcentricGrid(M=10, N=1, node_pattern="cheb2")
     fig, ax = plot_grid(grid)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_basis_powerseries():
     basis = PowerSeries(L=6)
     fig, ax = plot_basis(basis)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_basis_fourierseries():
     basis = FourierSeries(N=3)
     fig, ax = plot_basis(basis)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_basis_doublefourierseries():
     basis = DoubleFourierSeries(M=3, N=2)
     fig, ax = plot_basis(basis)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_basis_fourierzernike():
     basis = FourierZernikeBasis(L=8, M=3, N=2)
     fig, ax = plot_basis(basis)

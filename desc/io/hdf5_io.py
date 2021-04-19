@@ -107,7 +107,10 @@ class hdf5Reader(hdf5IO, Reader):
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):
-                setattr(obj, attr, loc[attr][()])
+                if isinstance(loc[attr][()], bytes):
+                    setattr(obj, attr, loc[attr][()].decode("utf-8"))
+                else:
+                    setattr(obj, attr, loc[attr][()])
             elif isinstance(loc[attr], h5py.Group):
                 if "name" not in loc[attr].keys():
                     warnings.warn(
@@ -115,7 +118,7 @@ class hdf5Reader(hdf5IO, Reader):
                         RuntimeWarning,
                     )
                     continue
-                name = loc[attr]["name"][()]
+                name = loc[attr]["name"][()].decode("utf-8")
                 if name == "list":
                     setattr(obj, attr, self.read_list(where=loc[attr]))
                 elif name == "dict":
@@ -150,8 +153,15 @@ class hdf5Reader(hdf5IO, Reader):
         thedict = {}
         loc = self.resolve_where(where)
         for key in loc.keys():
-            if isinstance(loc[key], h5py.Dataset) and key != "name":
-                thedict[key] = loc[key][()]
+            if isinstance(loc[key], h5py.Dataset):
+                if (
+                    isinstance(loc[key][()], bytes)
+                    and loc[key][()].decode("utf-8") != "name"
+                ):
+                    thedict[key] = loc[key][()].decode("utf-8")
+                elif not isinstance(loc[key][()], bytes):
+                    thedict[key] = loc[key][()]
+
             elif isinstance(loc[key], h5py.Group):
                 if "name" not in loc[key].keys():
                     warnings.warn(
@@ -159,7 +169,7 @@ class hdf5Reader(hdf5IO, Reader):
                         RuntimeWarning,
                     )
                     continue
-                name = loc[key]["name"][()]
+                name = loc[key]["name"][()].decode("utf-8")
                 if name == "list":
                     thedict[name] = self.read_list(where=loc[key])
                 elif name == "dict":
@@ -193,7 +203,13 @@ class hdf5Reader(hdf5IO, Reader):
         i = 0
         while str(i) in loc.keys():
             if isinstance(loc[str(i)], h5py.Dataset):
-                thelist.append(loc[str(i)][()])
+                if (
+                    isinstance(loc[str(i)][()], bytes)
+                    and loc[str(i)][()].decode("utf-8") != "name"
+                ):
+                    thelist.append(loc[str(i)][()].decode("utf-8"))
+                elif not isinstance(loc[attr][()], bytes):
+                    thelist.append(loc[str(i)][()])
             elif isinstance(loc[str(i)], h5py.Group):
                 if "name" not in loc[str(i)].keys():
                     warnings.warn(
@@ -201,7 +217,7 @@ class hdf5Reader(hdf5IO, Reader):
                         RuntimeWarning,
                     )
                     continue
-                name = loc[str(i)]["name"][()]
+                name = loc[str(i)]["name"][()].decode("utf-8")
                 if name == "list":
                     thelist.append(self.read_list(where=loc[key]))
                 elif name == "dict":

@@ -17,7 +17,6 @@ def perturb(
     dp=None,
     di=None,
     dPsi=None,
-    dzeta_ratio=None,
     order=2,
     tr_ratio=0.1,
     cutoff=1e-6,
@@ -31,9 +30,9 @@ def perturb(
     ----------
     eq : Equilibrium
         equilibrium to perturb
-    dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
-        deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
-        toroidal flux, and zeta ratio.
+    dRb, dZb, dp, di, dPsi : ndarray or float
+        deltas for perturbations of R_boundary, Z_boundary, pressure, iota, and
+        toroidal flux.
         Setting to None or zero ignores that term in the expansion.
     order : {0,1,2,3}
         order of perturbation (0=none, 1=linear, 2=quadratic, etc)
@@ -93,8 +92,6 @@ def perturb(
         deltas["i_l"] = di
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
-    if dzeta_ratio is not None and np.any(dzeta_ratio):
-        deltas["zeta_ratio"] = dzeta_ratio
 
     keys = ", ".join(deltas.keys())
     if verbose > 0:
@@ -103,11 +100,11 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
-    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dx1 = 0
     dx2 = 0
     dx3 = 0
@@ -259,7 +256,6 @@ def optimal_perturb(
     dp=False,
     di=False,
     dPsi=False,
-    dzeta_ratio=False,
     order=1,
     tr_ratio=0.1,
     cutoff=1e-6,
@@ -275,9 +271,9 @@ def optimal_perturb(
         equilibrium to optimize
     objective : ObjectiveFunction
         objective to optimize
-    dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or bool
+    dRb, dZb, dp, di, dPsi : ndarray or bool
         array of indicies of modes to include in the perturbations of
-        R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
+        R_boundary, Z_boundary, pressure, iota, and toroidal flux.
         Setting to True (False) includes (excludes) all modes.
     order : {0,1,2,3}
         order of perturbation (0=none, 1=linear, 2=quadratic, etc)
@@ -350,9 +346,6 @@ def optimal_perturb(
     if type(dPsi) is bool or dPsi is None:
         if dPsi is True:
             deltas["Psi"] = np.array([True])
-    if type(dzeta_ratio) is bool or dzeta_ratio is None:
-        if dzeta_ratio is True:
-            deltas["zeta_ratio"] = np.array([True])
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
@@ -363,14 +356,14 @@ def optimal_perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
     c = np.array([])
     for key, dc in deltas.items():
         c = np.concatenate((c, getattr(eq, key)))
-    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dc1 = 0
     dc2 = 0
     dc3 = 0

@@ -29,8 +29,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    # continuation parameters
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
    pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
-   zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   pert_order = 1
+   pert_order = 2
    
    # solver tolerances
    ftol = 1e-6
@@ -114,16 +113,14 @@ Continuation Parameters
 
    bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
    pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
-   zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   pert_order = 1
+   pert_order = 2
 
 - ``bdry_ratio`` (float): Multiplier on the 3D boundary modes. Default = 1.0. 
 - ``pres_ratio`` (float): Multiplier on the pressure profile. Default = 1.0. 
-- ``zeta_ratio`` (float): Multiplier on the toroidal derivatives. Default = 1.0. 
 - ``pert_order`` (int): Order of the perturbation approximation: 0 = no perturbation, 1 = linear, 2 = quadratic. Default = 1. 
 
 When all of the ``_ratio`` parameters are set to 1.0, the equilibrium is solved using the exact boundary modes and pressure profile as was input. 
-``bdry_ratio = 0`` ignores all of the non-axisymmetric modes, ``pres_ratio = 0`` assumes a vacuum pressure profile, and ``zeta_ratio = 0`` is equivalent to solving a tokamak equilibrium at each toroidal cross-section. 
+``bdry_ratio = 0`` ignores all of the non-axisymmetric modes, and ``pres_ratio = 0`` assumes a vacuum pressure profile. 
 
 These arguments are also passed as arrays for each iteration. 
 If only one value is given, as with ``pert_order`` in this example, that value will be used for all iterations. 

@@ -73,7 +73,6 @@ class _Configuration(IOAble, ABC):
         "_i_basis",
         "_spectral_indexing",
         "_bdry_mode",
-        "_zeta_ratio",
         "_boundary",
         "_profiles",
     ]
@@ -103,7 +102,6 @@ class _Configuration(IOAble, ABC):
                 sym : bool, is the problem stellarator symmetric or not, default is False
                 spectral_indexing : str, type of Zernike indexing scheme to use, default is ``'ansi'``
                 bdry_mode : {``'lcfs'``, ``'poincare'``}, where the BC are enforced
-                zeta_ratio : float, Multiplier on the toroidal derivatives. Default = 1.0.
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
                 x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
                 R_lmn : ndarray, spectral coefficients of R
@@ -127,7 +125,6 @@ class _Configuration(IOAble, ABC):
         self._sym = inputs.get("sym", False)
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
         self._bdry_mode = inputs.get("bdry_mode", "lcfs")
-        self._zeta_ratio = float(inputs.get("zeta_ratio", 1.0))
 
         # keep track of where it came from
         self._parent = None
@@ -501,15 +498,6 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for rotational transform (PowerSeries)."""
         return self._i_basis
 
-    @property
-    def zeta_ratio(self):
-        """Multiplier on toroidal derivatives (float)."""
-        return self._zeta_ratio
-
-    @zeta_ratio.setter
-    def zeta_ratio(self, zeta_ratio):
-        self._zeta_ratio = zeta_ratio
-
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
@@ -596,7 +584,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return profiles
@@ -639,7 +626,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return toroidal_coords
@@ -681,7 +667,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return cartesian_coords
@@ -724,7 +709,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return cov_basis
@@ -767,7 +751,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return jacobian
@@ -810,7 +793,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return con_basis
@@ -860,7 +842,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return magnetic_field
@@ -910,7 +891,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return current_density
@@ -962,7 +942,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return magnetic_pressure
@@ -1014,7 +993,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return magnetic_tension
@@ -1066,7 +1044,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return force_error
@@ -1118,7 +1095,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return energy
@@ -1169,7 +1145,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return quasisymmetry
@@ -1210,7 +1185,6 @@ class _Configuration(IOAble, ABC):
             L_transform,
             p_transform,
             i_transform,
-            self.zeta_ratio,
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
@@ -1254,9 +1228,7 @@ class _Configuration(IOAble, ABC):
             use_jit=False,
         )
         x = self.x
-        dW = obj.hess_x(
-            x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio
-        )
+        dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
     def compute_axis_location(self, zeta=0):

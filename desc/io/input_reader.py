@@ -160,7 +160,6 @@ class InputReader:
             "N_grid": np.atleast_1d(0),
             "bdry_ratio": np.atleast_1d(1.0),
             "pres_ratio": np.atleast_1d(1.0),
-            "zeta_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
             "ftol": np.atleast_1d(1e-6),
             "xtol": np.atleast_1d(1e-6),
@@ -264,10 +263,6 @@ class InputReader:
             match = re.search(r"pres_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["pres_ratio"] = np.array(numbers).astype(float)
-                flag = True
-            match = re.search(r"zeta_ratio", argument, re.IGNORECASE)
-            if match:
-                inputs["zeta_ratio"] = np.array(numbers).astype(float)
                 flag = True
             match = re.search(r"pert_order", argument, re.IGNORECASE)
             if match:
@@ -475,7 +470,6 @@ class InputReader:
             "N_grid",
             "bdry_ratio",
             "pres_ratio",
-            "zeta_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -572,7 +566,7 @@ class InputReader:
             )
 
         f.write("\n# continuation parameters \n")
-        for key in ["bdry_ratio", "pres_ratio", "zeta_ratio", "pert_order"]:
+        for key in ["bdry_ratio", "pres_ratio", "pert_order"]:
             f.write(
                 key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )

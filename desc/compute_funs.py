@@ -31,10 +31,6 @@ p_transform : Transform
     transforms p_l coefficients to real space
 i_transform : Transform
     transforms i_l coefficients to real space
-zeta_ratio : float
-    scale factor for zeta derivatives. Setting to zero effectively solves
-    for individual tokamak solutions at each toroidal plane,
-    setting to 1 solves for a stellarator. (Default value = 1.0)
 
 """
 
@@ -93,7 +89,6 @@ def compute_profiles(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic flux, pressure, and rotational transform profiles.
 
@@ -121,10 +116,6 @@ def compute_profiles(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -164,7 +155,6 @@ def compute_toroidal_coords(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Transform toroidal coordinates to real space.
 
@@ -192,10 +182,6 @@ def compute_toroidal_coords(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -225,7 +211,6 @@ def compute_cartesian_coords(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute cartesian coordinates from toroidal coordinates.
 
@@ -253,10 +238,6 @@ def compute_cartesian_coords(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -282,7 +263,6 @@ def compute_cartesian_coords(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     cartesian_coords = {}
@@ -306,7 +286,6 @@ def compute_covariant_basis(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute covariant basis vectors.
 
@@ -334,10 +313,6 @@ def compute_covariant_basis(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -363,7 +338,6 @@ def compute_covariant_basis(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # toroidal coordinate 1st derivatives
@@ -371,8 +345,8 @@ def compute_covariant_basis(
     toroidal_coords["Z_r"] = Z_transform.transform(Z_lmn, 1, 0, 0)
     toroidal_coords["R_t"] = R_transform.transform(R_lmn, 0, 1, 0)
     toroidal_coords["Z_t"] = Z_transform.transform(Z_lmn, 0, 1, 0)
-    toroidal_coords["R_z"] = R_transform.transform(R_lmn, 0, 0, 1) * zeta_ratio
-    toroidal_coords["Z_z"] = Z_transform.transform(Z_lmn, 0, 0, 1) * zeta_ratio
+    toroidal_coords["R_z"] = R_transform.transform(R_lmn, 0, 0, 1)
+    toroidal_coords["Z_z"] = Z_transform.transform(Z_lmn, 0, 0, 1)
 
     cov_basis = {}
     cov_basis["e_rho"] = jnp.array(
@@ -400,7 +374,6 @@ def compute_jacobian(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute coordinate system jacobian.
 
@@ -428,10 +401,6 @@ def compute_jacobian(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -461,7 +430,6 @@ def compute_jacobian(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     jacobian = {}
@@ -484,7 +452,6 @@ def compute_contravariant_basis(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute contravariant basis vectors.
 
@@ -512,10 +479,6 @@ def compute_contravariant_basis(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -549,7 +512,6 @@ def compute_contravariant_basis(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     con_basis = {}
@@ -578,7 +540,6 @@ def compute_magnetic_field(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic field components.
 
@@ -606,10 +567,6 @@ def compute_magnetic_field(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -647,7 +604,6 @@ def compute_magnetic_field(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
     jacobian, cov_basis, toroidal_coords = compute_jacobian(
         Psi,
@@ -661,12 +617,11 @@ def compute_magnetic_field(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # lambda derivatives
     toroidal_coords["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
-    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1) * zeta_ratio
+    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1)
 
     magnetic_field = {}
     magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
@@ -702,7 +657,6 @@ def compute_magnetic_field_axis(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic field components; can handle nodes at the magnetic axis.
 
@@ -730,10 +684,6 @@ def compute_magnetic_field_axis(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -771,7 +721,6 @@ def compute_magnetic_field_axis(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
     jacobian, cov_basis, toroidal_coords = compute_jacobian(
         Psi,
@@ -785,14 +734,13 @@ def compute_magnetic_field_axis(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     axis = i_transform.grid.axis
 
     # lambda derivatives
     toroidal_coords["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
-    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1) * zeta_ratio
+    toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1)
 
     # toroidal coordinate 2nd derivatives
     toroidal_coords["R_rr"] = R_transform.transform(R_lmn, 2, 0, 0)
@@ -865,7 +813,6 @@ def compute_magnetic_field_magnitude(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic field magnitude.
 
@@ -893,10 +840,6 @@ def compute_magnetic_field_magnitude(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -940,7 +883,6 @@ def compute_magnetic_field_magnitude(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     magnetic_field["|B|"] = jnp.sqrt(
@@ -969,7 +911,6 @@ def compute_magnetic_field_magnitude_axis(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic field magnitude; can handle nodes at the magnetic axis.
 
@@ -997,10 +938,6 @@ def compute_magnetic_field_magnitude_axis(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1044,7 +981,6 @@ def compute_magnetic_field_magnitude_axis(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     magnetic_field["|B|"] = jnp.sqrt(
@@ -1073,7 +1009,6 @@ def compute_current_density(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute current density field components.
 
@@ -1101,10 +1036,6 @@ def compute_current_density(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1152,7 +1083,6 @@ def compute_current_density(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # toroidal coordinate 2nd derivatives
@@ -1160,21 +1090,21 @@ def compute_current_density(
     toroidal_coords["Z_rr"] = Z_transform.transform(Z_lmn, 2, 0, 0)
     toroidal_coords["R_rt"] = R_transform.transform(R_lmn, 1, 1, 0)
     toroidal_coords["Z_rt"] = Z_transform.transform(Z_lmn, 1, 1, 0)
-    toroidal_coords["R_rz"] = R_transform.transform(R_lmn, 1, 0, 1) * zeta_ratio
-    toroidal_coords["Z_rz"] = Z_transform.transform(Z_lmn, 1, 0, 1) * zeta_ratio
+    toroidal_coords["R_rz"] = R_transform.transform(R_lmn, 1, 0, 1)
+    toroidal_coords["Z_rz"] = Z_transform.transform(Z_lmn, 1, 0, 1)
     toroidal_coords["R_tt"] = R_transform.transform(R_lmn, 0, 2, 0)
     toroidal_coords["Z_tt"] = Z_transform.transform(Z_lmn, 0, 2, 0)
-    toroidal_coords["R_tz"] = R_transform.transform(R_lmn, 0, 1, 1) * zeta_ratio
-    toroidal_coords["Z_tz"] = Z_transform.transform(Z_lmn, 0, 1, 1) * zeta_ratio
-    toroidal_coords["R_zz"] = R_transform.transform(R_lmn, 0, 0, 2) * zeta_ratio
-    toroidal_coords["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2) * zeta_ratio
+    toroidal_coords["R_tz"] = R_transform.transform(R_lmn, 0, 1, 1)
+    toroidal_coords["Z_tz"] = Z_transform.transform(Z_lmn, 0, 1, 1)
+    toroidal_coords["R_zz"] = R_transform.transform(R_lmn, 0, 0, 2)
+    toroidal_coords["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2)
 
     # lambda derivatives
     toroidal_coords["lambda_rt"] = L_transform.transform(L_lmn, 1, 1, 0)
-    toroidal_coords["lambda_rz"] = L_transform.transform(L_lmn, 1, 0, 1) * zeta_ratio
+    toroidal_coords["lambda_rz"] = L_transform.transform(L_lmn, 1, 0, 1)
     toroidal_coords["lambda_tt"] = L_transform.transform(L_lmn, 0, 2, 0)
-    toroidal_coords["lambda_tz"] = L_transform.transform(L_lmn, 0, 1, 1) * zeta_ratio
-    toroidal_coords["lambda_zz"] = L_transform.transform(L_lmn, 0, 0, 2) * zeta_ratio
+    toroidal_coords["lambda_tz"] = L_transform.transform(L_lmn, 0, 1, 1)
+    toroidal_coords["lambda_zz"] = L_transform.transform(L_lmn, 0, 0, 2)
 
     # covariant basis derivatives
     cov_basis["e_rho_r"] = jnp.array(
@@ -1351,7 +1281,6 @@ def compute_magnetic_pressure_gradient(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic pressure gradient components and its magnitude.
 
@@ -1379,10 +1308,6 @@ def compute_magnetic_pressure_gradient(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1439,7 +1364,6 @@ def compute_magnetic_pressure_gradient(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # contravariant basis vectors
@@ -1528,7 +1452,6 @@ def compute_magnetic_tension(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute magnetic tension vector and its magnitude.
 
@@ -1556,10 +1479,6 @@ def compute_magnetic_tension(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1616,7 +1535,6 @@ def compute_magnetic_tension(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # contravariant basis vectors
@@ -1700,7 +1618,6 @@ def compute_force_error(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute force error components.
 
@@ -1728,10 +1645,6 @@ def compute_force_error(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1784,7 +1697,6 @@ def compute_force_error(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     force_error = {}
@@ -1821,7 +1733,6 @@ def compute_force_error_magnitude(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute force error magnitude.
 
@@ -1849,10 +1760,6 @@ def compute_force_error_magnitude(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -1910,7 +1817,6 @@ def compute_force_error_magnitude(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     # contravariant basis vectors
@@ -1973,7 +1879,6 @@ def compute_energy(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute MHD energy by quadrature sum.
 
@@ -2003,10 +1908,6 @@ def compute_energy(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -2052,7 +1953,6 @@ def compute_energy(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     NFP = R_transform.grid.NFP
@@ -2083,7 +1983,6 @@ def compute_quasisymmetry(
     L_transform,
     p_transform,
     i_transform,
-    zeta_ratio=1.0,
 ):
     """Compute quasisymmetry metrics.
 
@@ -2111,10 +2010,6 @@ def compute_quasisymmetry(
         transforms p_l coefficients to real space
     i_transform : Transform
         transforms i_l coefficients to real space
-    zeta_ratio : float
-        scale factor for zeta derivatives. Setting to zero effectively solves
-        for individual tokamak solutions at each toroidal plane,
-        setting to 1 solves for a stellarator. (Default value = 1.0)
 
     Returns
     -------
@@ -2167,7 +2062,6 @@ def compute_quasisymmetry(
         L_transform,
         p_transform,
         i_transform,
-        zeta_ratio,
     )
 
     axis = i_transform.grid.axis
@@ -2175,24 +2069,24 @@ def compute_quasisymmetry(
     # toroidal coordinate 2nd derivatives
     toroidal_coords["R_rtt"] = R_transform.transform(R_lmn, 1, 2, 0)
     toroidal_coords["Z_rtt"] = Z_transform.transform(Z_lmn, 1, 2, 0)
-    toroidal_coords["R_rtz"] = R_transform.transform(R_lmn, 1, 1, 1) * zeta_ratio
-    toroidal_coords["Z_rtz"] = Z_transform.transform(Z_lmn, 1, 1, 1) * zeta_ratio
-    toroidal_coords["R_rzz"] = R_transform.transform(R_lmn, 1, 0, 2) * zeta_ratio
-    toroidal_coords["Z_rzz"] = Z_transform.transform(Z_lmn, 1, 0, 2) * zeta_ratio
+    toroidal_coords["R_rtz"] = R_transform.transform(R_lmn, 1, 1, 1)
+    toroidal_coords["Z_rtz"] = Z_transform.transform(Z_lmn, 1, 1, 1)
+    toroidal_coords["R_rzz"] = R_transform.transform(R_lmn, 1, 0, 2)
+    toroidal_coords["Z_rzz"] = Z_transform.transform(Z_lmn, 1, 0, 2)
     toroidal_coords["R_ttt"] = R_transform.transform(R_lmn, 0, 3, 0)
     toroidal_coords["Z_ttt"] = Z_transform.transform(Z_lmn, 0, 3, 0)
-    toroidal_coords["R_ttz"] = R_transform.transform(R_lmn, 0, 2, 1) * zeta_ratio
-    toroidal_coords["Z_ttz"] = Z_transform.transform(Z_lmn, 0, 2, 1) * zeta_ratio
-    toroidal_coords["R_tzz"] = R_transform.transform(R_lmn, 0, 1, 2) * zeta_ratio
-    toroidal_coords["Z_tzz"] = Z_transform.transform(Z_lmn, 0, 1, 2) * zeta_ratio
-    toroidal_coords["R_zzz"] = R_transform.transform(R_lmn, 0, 0, 3) * zeta_ratio
-    toroidal_coords["Z_zzz"] = Z_transform.transform(Z_lmn, 0, 0, 3) * zeta_ratio
+    toroidal_coords["R_ttz"] = R_transform.transform(R_lmn, 0, 2, 1)
+    toroidal_coords["Z_ttz"] = Z_transform.transform(Z_lmn, 0, 2, 1)
+    toroidal_coords["R_tzz"] = R_transform.transform(R_lmn, 0, 1, 2)
+    toroidal_coords["Z_tzz"] = Z_transform.transform(Z_lmn, 0, 1, 2)
+    toroidal_coords["R_zzz"] = R_transform.transform(R_lmn, 0, 0, 3)
+    toroidal_coords["Z_zzz"] = Z_transform.transform(Z_lmn, 0, 0, 3)
 
     # lambda derivatives
     toroidal_coords["lambda_ttt"] = L_transform.transform(L_lmn, 0, 3, 0)
-    toroidal_coords["lambda_ttz"] = L_transform.transform(L_lmn, 0, 2, 1) * zeta_ratio
-    toroidal_coords["lambda_tzz"] = L_transform.transform(L_lmn, 0, 1, 2) * zeta_ratio
-    toroidal_coords["lambda_zzz"] = L_transform.transform(L_lmn, 0, 0, 3) * zeta_ratio
+    toroidal_coords["lambda_ttz"] = L_transform.transform(L_lmn, 0, 2, 1)
+    toroidal_coords["lambda_tzz"] = L_transform.transform(L_lmn, 0, 1, 2)
+    toroidal_coords["lambda_zzz"] = L_transform.transform(L_lmn, 0, 0, 3)
 
     # covariant basis derivatives
     cov_basis["e_rho_tt"] = jnp.array(
@@ -2635,95 +2529,95 @@ def compute_quasisymmetry(
         )
     ) / magnetic_field["|B|"] - magnetic_field["|B|_z"] ** 2 / magnetic_field["|B|"]
     magnetic_field["|B|_tz"] = (
-        magnetic_field["B^theta_z"]
-        * (
-            magnetic_field["B^zeta_t"]
-            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-            + magnetic_field["B^theta_t"]
-            * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
-            + magnetic_field["B^theta"]
-            * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
-        )
-        + magnetic_field["B^theta"]
-        * (
-            magnetic_field["B^zeta_tz"]
-            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-            + magnetic_field["B^theta_tz"]
-            * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
-            + magnetic_field["B^theta_z"]
-            * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
-        )
-        + magnetic_field["B^theta"]
-        * (
-            magnetic_field["B^zeta_t"]
+        (
+            magnetic_field["B^theta_z"]
             * (
-                dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
-                + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
+                magnetic_field["B^zeta_t"]
+                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^theta_t"]
+                * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+                + magnetic_field["B^theta"]
+                * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
             )
-            + 2
-            * magnetic_field["B^theta_t"]
-            * dot(cov_basis["e_theta_z"], cov_basis["e_theta"], 0)
             + magnetic_field["B^theta"]
             * (
-                dot(cov_basis["e_theta_tz"], cov_basis["e_theta"], 0)
-                + dot(cov_basis["e_theta_t"], cov_basis["e_theta_z"], 0)
+                magnetic_field["B^zeta_tz"]
+                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^theta_tz"]
+                * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+                + magnetic_field["B^theta_z"]
+                * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
             )
-        )
-        + magnetic_field["B^zeta_z"]
-        * (
-            magnetic_field["B^theta_t"]
-            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-            + magnetic_field["B^zeta_t"]
-            * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
-            + magnetic_field["B^zeta"]
-            * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
-        )
-        + magnetic_field["B^zeta"]
-        * (
-            magnetic_field["B^theta_tz"]
-            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-            + magnetic_field["B^zeta_tz"]
-            * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^theta"]
+            * (
+                magnetic_field["B^zeta_t"]
+                * (
+                    dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
+                    + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
+                )
+                + 2
+                * magnetic_field["B^theta_t"]
+                * dot(cov_basis["e_theta_z"], cov_basis["e_theta"], 0)
+                + magnetic_field["B^theta"]
+                * (
+                    dot(cov_basis["e_theta_tz"], cov_basis["e_theta"], 0)
+                    + dot(cov_basis["e_theta_t"], cov_basis["e_theta_z"], 0)
+                )
+            )
             + magnetic_field["B^zeta_z"]
-            * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
-        )
-        + magnetic_field["B^zeta"]
-        * (
-            magnetic_field["B^theta_t"]
             * (
-                dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
-                + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
+                magnetic_field["B^theta_t"]
+                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^zeta_t"]
+                * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^zeta"]
+                * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
             )
-            + 2
-            * magnetic_field["B^zeta_t"]
-            * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
             + magnetic_field["B^zeta"]
             * (
-                dot(cov_basis["e_zeta_tz"], cov_basis["e_zeta"], 0)
-                + dot(cov_basis["e_zeta_t"], cov_basis["e_zeta_z"], 0)
+                magnetic_field["B^theta_tz"]
+                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^zeta_tz"]
+                * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^zeta_z"]
+                * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
+            )
+            + magnetic_field["B^zeta"]
+            * (
+                magnetic_field["B^theta_t"]
+                * (
+                    dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
+                    + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
+                )
+                + 2
+                * magnetic_field["B^zeta_t"]
+                * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
+                + magnetic_field["B^zeta"]
+                * (
+                    dot(cov_basis["e_zeta_tz"], cov_basis["e_zeta"], 0)
+                    + dot(cov_basis["e_zeta_t"], cov_basis["e_zeta_z"], 0)
+                )
+            )
+            + (
+                magnetic_field["B^theta_z"] * magnetic_field["B^zeta"]
+                + magnetic_field["B^theta"] * magnetic_field["B^zeta_z"]
+            )
+            * (
+                dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
+                + dot(cov_basis["e_zeta_t"], cov_basis["e_theta"], 0)
+            )
+            + magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * (
+                dot(cov_basis["e_theta_tz"], cov_basis["e_zeta"], 0)
+                + dot(cov_basis["e_zeta_tz"], cov_basis["e_theta"], 0)
+                + dot(cov_basis["e_theta_t"], cov_basis["e_zeta_z"], 0)
+                + dot(cov_basis["e_zeta_t"], cov_basis["e_theta_z"], 0)
             )
         )
-        + (
-            magnetic_field["B^theta_z"] * magnetic_field["B^zeta"]
-            + magnetic_field["B^theta"] * magnetic_field["B^zeta_z"]
-        )
-        * (
-            dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
-            + dot(cov_basis["e_zeta_t"], cov_basis["e_theta"], 0)
-        )
-        + magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * (
-            dot(cov_basis["e_theta_tz"], cov_basis["e_zeta"], 0)
-            + dot(cov_basis["e_zeta_tz"], cov_basis["e_theta"], 0)
-            + dot(cov_basis["e_theta_t"], cov_basis["e_zeta_z"], 0)
-            + dot(cov_basis["e_zeta_t"], cov_basis["e_theta_z"], 0)
-        )
-    ) / magnetic_field["|B|"] - magnetic_field["|B|_t"] * magnetic_field[
-        "|B|_z"
-    ] / magnetic_field[
-        "|B|"
-    ]
+        / magnetic_field["|B|"]
+        - magnetic_field["|B|_t"] * magnetic_field["|B|_z"] / magnetic_field["|B|"]
+    )
 
     # contravariant basis vectors
     con_basis = {}

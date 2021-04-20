@@ -18,7 +18,7 @@ class TestTransform(unittest.TestCase):
         """Tests equals operator overload method"""
         grid_1 = LinearGrid(L=11, N=3)
         grid_2 = LinearGrid(M=5, N=5)
-        grid_3 = ConcentricGrid(M=2, N=2)
+        grid_3 = ConcentricGrid(L=4, M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
         basis_2 = FourierZernikeBasis(L=-1, M=1, N=1)
@@ -104,7 +104,7 @@ class TestTransform(unittest.TestCase):
 
     def test_volume(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume"""
-        grid = ConcentricGrid(M=2, N=2)
+        grid = ConcentricGrid(L=4, M=2, N=2)
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
@@ -150,7 +150,7 @@ class TestTransform(unittest.TestCase):
 
     def test_set_basis(self):
         """Tests the basis setter method"""
-        grid = ConcentricGrid(M=2, N=1)
+        grid = ConcentricGrid(L=4, M=2, N=1)
 
         basis_20 = FourierZernikeBasis(L=-1, M=2, N=0)
         basis_21 = FourierZernikeBasis(L=-1, M=2, N=1)
@@ -172,11 +172,12 @@ class TestTransform(unittest.TestCase):
         L = 4
         M = 3
         N = 2
+        Lnodes = 8
         Mnodes = 4
         Nnodes = 3
         NFP = 4
 
-        grid = ConcentricGrid(Mnodes, Nnodes, NFP)
+        grid = ConcentricGrid(Lnodes, Mnodes, Nnodes, NFP)
         basis1 = FourierZernikeBasis(L, M, N, NFP)
         basis2 = FourierSeries(N, NFP)
         basis3 = DoubleFourierSeries(M, N, NFP)
@@ -217,7 +218,7 @@ class TestTransform(unittest.TestCase):
         Mnodes += 1
         Nnodes += 1
 
-        grid = ConcentricGrid(Mnodes, Nnodes, NFP, sym=True)
+        grid = ConcentricGrid(Lnodes, Mnodes, Nnodes, NFP, sym=True)
         basis1 = FourierZernikeBasis(L, M, N, NFP, sym="cos")
         basis2 = FourierSeries(N, NFP, sym="sin")
         basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
@@ -265,7 +266,7 @@ class TestTransform(unittest.TestCase):
         """tests projection method"""
 
         basis = FourierZernikeBasis(L=-1, M=5, N=3)
-        grid = ConcentricGrid(M=2, N=5)
+        grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform = Transform(grid, basis, method="direct")
         transform.build()
@@ -276,7 +277,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(transform.project(y), dtransform.project(y))
 
         basis = FourierZernikeBasis(L=-1, M=5, N=3, sym="cos")
-        grid = ConcentricGrid(M=2, N=5)
+        grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform = Transform(grid, basis, method="direct")
         transform.build()
@@ -287,7 +288,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(transform.project(y), dtransform.project(y))
 
         basis = FourierZernikeBasis(L=-1, M=5, N=0, sym="sin")
-        grid = ConcentricGrid(M=2, N=5, sym=True)
+        grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
         dtransform = Transform(grid, basis, method="direct")
         transform.build()

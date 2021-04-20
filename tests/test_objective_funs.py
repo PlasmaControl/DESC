@@ -22,7 +22,7 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
 
     def test_obj_fxn_types(self):
         """test the correct objective function is returned for 'force', 'energy', and unimplemented"""
-        RZ_grid = ConcentricGrid(M=2, N=0)
+        RZ_grid = ConcentricGrid(L=4, M=2, N=0)
         R_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         Z_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         L_basis = FourierZernikeBasis(L=-1, M=2, N=0)

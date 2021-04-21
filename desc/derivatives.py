@@ -153,16 +153,22 @@ class AutoDiffDerivative(_Derivative):
             raise ValueError(
                 colored("can specify either block_size or num_blocks, not both", "red")
             )
+        if block_size == "auto":
+            from desc import config
+
+            mem = config.get("avail_mem", 4)
+            # 150 modes per gig of GPU memory is fairly conservative, could possibly go as high as 250-300
+            block_size = int(150 * mem)
         if block_size is not None and M <= block_size:
             # if its a small matrix we don't need to break it up
             self._set_mode(mode)
             return
         elif block_size is not None:
             self._block_size = block_size
-            self._num_blocks = np.ceil(N / block_size).astype(int)
+            self._num_blocks = np.ceil(M / block_size).astype(int)
         elif num_blocks is not None:
             self._num_blocks = num_blocks
-            self._block_size = np.ceil(N / num_blocks).astype(int)
+            self._block_size = np.ceil(M / num_blocks).astype(int)
         else:
             # didn't specify num_blocks or block_size, don't break it up
             self._set_mode(mode)
@@ -170,35 +176,33 @@ class AutoDiffDerivative(_Derivative):
 
         if mode in ["fwd", "rev"]:
             self._block_fun = self._fun
-            self._mode = "blocked-rev"
+            self._mode = "blocked-fwd"
         elif mode in ["hess"]:
             self._block_fun = jax.grad(self._fun, self._argnum)
             self._mode = "blocked-hess"
 
-        self._f_blocks = []
-        self._jac_blocks = []
+        _jvp = lambda v, *args: self.compute_jvp(
+            self._block_fun, self._argnum, v, *args
+        )
+        _I = np.eye(M, self._block_size * self._num_blocks)
 
-        for i in range(self._num_blocks):
-            # need the i=i in the lambda signature, otherwise i is scoped to
-            # the loop and get overwritten, making each function compute the same subset
-            self._f_blocks.append(
-                lambda *args, i=i: self._block_fun(*args)[
-                    i * self._block_size : (i + 1) * self._block_size
+        @jax.jit
+        def _jacblockfun(v, *args):
+            in_axes = [1] + [None for i in args]
+            vjvp = jax.vmap(_jvp, in_axes)
+            return vjvp(v, *args).T
+
+        def _jacfun(*args):
+            return jnp.hstack(
+                [
+                    _jacblockfun(
+                        _I[:, i * self._block_size : (i + 1) * self._block_size], *args
+                    )
+                    for i in range(self._num_blocks)
                 ]
-            )
-            # need to use jacrev here to actually get memory savings
-            # (plus, these blocks should be wide and short)
-            if self._use_jit:
-                self._jac_blocks.append(
-                    jax.jit(jax.jacrev(self._f_blocks[i], self._argnum))
-                )
-            else:
-                self._jac_blocks.append(jax.jacrev(self._f_blocks[i], self._argnum))
+            )[:, : self.shape[1]]
 
-        self._compute = self._compute_blocks
-
-    def _compute_blocks(self, *args):
-        return jnp.vstack([jac(*args) for jac in self._jac_blocks])
+        self._compute = _jacfun
 
     def compute(self, *args):
         """Computes the derivative matrix

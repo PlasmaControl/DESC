@@ -74,13 +74,7 @@ class ObjectiveFunction(IOAble, ABC):
     }
     _object_lib_.update(Transform._object_lib_)
 
-    arg_names = {
-        "Rb_lmn": 1,
-        "Zb_lmn": 2,
-        "p_l": 3,
-        "i_l": 4,
-        "Psi": 5,
-    }
+    arg_names = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
 
     def __init__(
         self,
@@ -160,9 +154,6 @@ class ObjectiveFunction(IOAble, ABC):
             whether to just-in-time compile the objective and derivatives
 
         """
-        if block_size == "auto":
-            block_size = np.inf  # TODO: correct automatic sizing based on avail mem
-
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
 
         self._hess = Derivative(

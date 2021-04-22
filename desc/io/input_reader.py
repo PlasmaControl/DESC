@@ -158,8 +158,8 @@ class InputReader:
             "N": np.atleast_1d(0),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
-            "bdry_ratio": np.atleast_1d(1.0),
             "pres_ratio": np.atleast_1d(1.0),
+            "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
             "ftol": np.atleast_1d(1e-6),
             "xtol": np.atleast_1d(1e-6),
@@ -334,6 +334,11 @@ class InputReader:
             if match:
                 inputs["node_pattern"] = words[0]
                 flag = True
+            match = re.search(r"bdry_mode", argument, re.IGNORECASE)
+            if match:
+                inputs["bdry_mode"] = words[0]
+                flag = True
+                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indicies
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -570,7 +575,7 @@ class InputReader:
         f.write("# global parameters \n")
         f.write("sym = {} \n".format(inputs[0]["sym"]))
         f.write("NFP = {} \n".format(inputs[0]["NFP"]))
-        f.write("Psi_lcfs = {} \n".format(inputs[0]["Psi"]))
+        f.write("Psi = {} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution \n")
         for key, val in {

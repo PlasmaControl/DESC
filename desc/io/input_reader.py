@@ -223,9 +223,10 @@ class InputReader:
                         for x in re.findall(num_form, txt)
                         if re.search(r"\d", x)
                     ]
-                    numbers = np.append(
-                        numbers, np.arange(nums[0], nums[2] + nums[1], nums[1])
-                    )
+                    if len(nums):
+                        numbers = np.append(
+                            numbers, np.arange(nums[0], nums[2] + nums[1], nums[1])
+                        )
                 # format like 12x4 = 12,12,12,12
                 elif re.search(num_form + "x" + num_form, txt):
                     nums = [
@@ -233,15 +234,17 @@ class InputReader:
                         for x in re.findall(num_form, txt)
                         if re.search(r"\d", x)
                     ]
-                    numbers = np.append(numbers, np.tile(nums[0], int(nums[1])))
+                    if len(nums):
+                        numbers = np.append(numbers, np.tile(nums[0], int(nums[1])))
                 # individual numbers
                 else:
-                    num = [
+                    nums = [
                         float(x)
                         for x in re.findall(num_form, txt)
                         if re.search(r"\d", x)
                     ]
-                    numbers = np.append(numbers, num)
+                    if len(nums):
+                        numbers = np.append(numbers, nums)
             flag = False
 
             # global parameters

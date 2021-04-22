@@ -1,4 +1,5 @@
-# This DESC input file for the Quasi-Axisymmetric Stellarator (aka NCSX)
+# This DESC input file for the Quasi-Axisymmetric Stellarator (QAS),
+# also known as the National Compact Stellarator eXperiment (NCSX)
 
 # global parameters
 sym = 1
@@ -6,15 +7,15 @@ NFP = 3
 Psi = 4.97070206E-01
 
 # spectral resolution
-L_rad  =  6, 12, 18, 24, 24, 24, 24, 24
-M_pol  = 10, 12, 12, 12, 12, 12, 12, 12
-N_tor  =  0,  0,  0,  0,  0,  9,  9,  9
-M_grid = 12, 16, 16, 16, 16, 16, 16, 16
-N_grid =  0,  0,  0,  0,  0, 12, 12, 12
+L_rad  =  6:6:24
+M_pol  = 10, 12
+N_tor  =  0x5,  9
+M_grid = 12, 16
+N_grid =  0x5, 12
 
 # continuation parameters
-bdry_ratio = 0, 0, 0,     0,    0, 0.33, 0.66, 1
-pres_ratio = 0, 0, 0.33,, 0.66, 1, 1,    1,    1
+bdry_ratio = 0x5, 0.33, 0.66, 1
+pres_ratio = 0x2, 0.33, 0.66, 1
 pert_order = 2
 
 # solver tolerances

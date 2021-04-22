@@ -6,8 +6,8 @@ NFP = 4
 Psi = -3.94180000E-02
 
 # spectral resolution
-M_pol = 18
-N_tor = 24
+M_pol  = 18
+N_tor  = 24
 M_grid = 18
 N_grid = 24
 

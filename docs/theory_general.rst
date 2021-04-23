@@ -50,23 +50,20 @@ By assuming nested flux surfaces, :math:`\mathbf{B} \cdot \nabla \rho = 0`, and 
 The current density is then calculated from Ampere's Law, :math:`\nabla \times \mathbf{B} = \mu_0 \mathbf{J}`, 
 
 .. math::
-  J^\rho = \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}}
-
-.. math::
-  J^\theta = \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}}
-
-.. math::
-  J^\zeta = \frac{\partial_\rho B_\theta - \partial_\theta B_\rho}{\mu_0 \sqrt{g}}
+  \begin{aligned}
+  J^\rho &= \frac{\partial_\theta B_\zeta - \partial_\zeta B_\theta}{\mu_0 \sqrt{g}} \\
+  J^\theta &= \frac{\partial_\zeta B_\rho - \partial_\rho B_\zeta}{\mu_0 \sqrt{g}} \\
+  J^\zeta &= \frac{\partial_\rho B_\theta - \partial_\theta B_\rho}{\mu_0 \sqrt{g}}
+  \end{aligned}
 
 where :math:`B_i = \mathbf{B} \cdot \mathbf{e}_i`. 
-[Note: this does not enforce :math:`\nabla \cdot \mathbf{J} = 0` numerically.] 
 This allows the magnetic field and current density to be computed from the independent variables and inputs: 
 
 .. math::
-  \mathbf{B}(\rho, \theta, \zeta) = \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho))
-
-.. math::
-  \mathbf{J}(\rho, \theta, \zeta) = \mathbf{J}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho))
+  \begin{aligned}
+  \mathbf{B}(\rho, \theta, \zeta) &= \mathbf{B}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho)) \\
+  \mathbf{J}(\rho, \theta, \zeta) &= \mathbf{J}(R(\rho, \theta, \zeta), Z(\rho, \theta, \zeta), \lambda(\rho, \theta, \zeta), \iota(\rho))
+  \end{aligned}
 
 Equilibrium Force Balance
 *************************
@@ -79,25 +76,21 @@ The ideal magnetohydrodynamic equilibrium force balance is defined as
 When written in flux coordinates there are only two independent components: 
 
 .. math::
-  \mathbf{F} = F_\rho \nabla \rho + F_\beta \mathbf{\beta}
-
-.. math::
-  F_\rho = \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p
-
-.. math::
-  F_\beta = \sqrt{g} B^\zeta J^\rho
-
-.. math::
-  \mathbf{\beta} = \nabla \theta - \iota \nabla \zeta
+  \begin{aligned}
+  \mathbf{F} &= F_\rho \nabla \rho + F_\beta \mathbf{\beta} \\
+  F_\rho &= \sqrt{g} (B^\zeta J^\theta - B^\theta J^\zeta) - \partial_\rho p \\
+  F_\beta &= \sqrt{g} B^\zeta J^\rho \\
+  \mathbf{\beta} &= \nabla \theta - \iota \nabla \zeta
+  \end{aligned}
 
 These forces in both the radial and helical directions must vanish in equilibrium. 
 DESC solves this force balance locally by evaluating the residual errors at discrete points in real space: 
 
 .. math::
-  f_\rho = F_\rho ||\nabla \rho|| \Delta V
-
-.. math::
+  \begin{aligned}
+  f_\rho = F_\rho ||\nabla \rho|| \Delta V \\
   f_\beta = F_\beta ||\mathbf{\beta}|| \Delta V
+  \end{aligned}
 
 These equations :math:`f_\rho` and :math:`f_\beta` represent the force errors (in Newtons) in the unit of volume :math:`\Delta V = \sqrt{g} \Delta \rho \Delta \theta \Delta \zeta` surrounding a collocation point :math:`(\rho, \theta, \zeta)`. 
 [Note: this definition of :math:`\mathbf{\beta}` is slightly different from that given in the original paper, but the resulting equation for :math:`f_\beta` is equivalent. 

@@ -151,8 +151,8 @@ class InputReader:
         # default values
         inputs = {
             "sym": False,
-            "Psi": 1.0,
             "NFP": 1,
+            "Psi": 1.0,
             "L": np.atleast_1d(None),
             "M": np.atleast_1d(0),
             "N": np.atleast_1d(0),
@@ -161,15 +161,15 @@ class InputReader:
             "pres_ratio": np.atleast_1d(1.0),
             "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
-            "ftol": np.atleast_1d(1e-6),
+            "ftol": np.atleast_1d(1e-2),
             "xtol": np.atleast_1d(1e-6),
             "gtol": np.atleast_1d(1e-6),
             "nfev": np.atleast_1d(None),
-            "optimizer": "scipy-trf",
             "objective": "force",
-            "bdry_mode": "lcfs",
+            "optimizer": "lsq-exact",
             "spectral_indexing": "fringe",
             "node_pattern": "jacobi",
+            "bdry_mode": "lcfs",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
             "boundary": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
@@ -318,13 +318,13 @@ class InputReader:
                 flag = True
 
             # solver methods
-            match = re.search(r"optimizer", argument, re.IGNORECASE)
-            if match:
-                inputs["optimizer"] = words[0]
-                flag = True
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
                 inputs["objective"] = words[0]
+                flag = True
+            match = re.search(r"optimizer", argument, re.IGNORECASE)
+            if match:
+                inputs["optimizer"] = words[0]
                 flag = True
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:

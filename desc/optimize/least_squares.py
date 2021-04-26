@@ -12,10 +12,7 @@ from .utils import (
     compute_jac_scale,
     evaluate_quadratic,
 )
-from .tr_subproblems import (
-    trust_region_step_exact,
-    update_tr_radius,
-)
+from .tr_subproblems import trust_region_step_exact_svd, update_tr_radius
 
 
 def lsqtr(
@@ -187,10 +184,10 @@ def lsqtr(
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             try:
-                step_h, hits_boundary, alpha = trust_region_step_exact(
-                    n, m, f, U, s, Vt.T, trust_radius, alpha
+                step_h, hits_boundary, alpha = trust_region_step_exact_svd(
+                    f, U, s, Vt.T, trust_radius, alpha
                 )
-            except jnp.linalg.linalg.LinAlgError:
+            except np.linalg.LinAlgError:
                 success = (False,)
                 message = (status_messages["err"],)
                 break
@@ -202,8 +199,8 @@ def lsqtr(
                 nfev += 1
                 df = (f1 - f0) / ga_fd_step
                 RHS = 2 / ga_fd_step * (df - J.dot(step_h * scale))
-                ga_step_h, _, _ = trust_region_step_exact(
-                    n, m, RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
+                ga_step_h, _, _ = trust_region_step_exact_svd(
+                    RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
                 )
                 step_h += ga_step_h
 

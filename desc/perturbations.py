@@ -4,7 +4,7 @@ from termcolor import colored
 from desc.utils import Timer
 from desc.backend import use_jax, jnp
 from desc.boundary_conditions import get_boundary_condition
-from desc.optimize.tr_subproblems import trust_region_step_exact
+from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
 
@@ -143,9 +143,7 @@ def perturb(
         if verbose > 1:
             timer.disp("df/dc computation ({})".format(keys))
 
-        dx1, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx1, hit, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
@@ -173,15 +171,13 @@ def perturb(
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx2, hit, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
             vt.T,
             tr_ratio[1] * np.linalg.norm(dx1),
-            initial_alpha=None,
+            initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -208,15 +204,13 @@ def perturb(
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx3, hit, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
             vt.T,
             tr_ratio[2] * np.linalg.norm(dx2),
-            initial_alpha=None,
+            initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,

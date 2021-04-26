@@ -61,7 +61,7 @@ _axis_labels_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _axis_labels_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
-def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
+def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
     Parameters
@@ -76,6 +76,8 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
         number of columns of subplots to create
     figsize : tuple of 2 floats
         figure size (width, height) in inches
+    equal : bool
+        whether axes should have equal scales for x and y
 
     Returns
     -------
@@ -101,7 +103,15 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None):
                 ax = ax.flatten()[0]
             return fig, ax
         else:
-            fig, ax = plt.subplots(rows, cols, figsize=figsize, squeeze=False)
+            fig, ax = plt.subplots(
+                rows,
+                cols,
+                figsize=figsize,
+                squeeze=False,
+                sharex=True,
+                sharey=True,
+                subplot_kw=dict(aspect="equal") if equal else None,
+            )
             if ax.size == 1:
                 ax = ax.flatten()[0]
             return fig, ax
@@ -292,7 +302,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
     """
     if grid is None:
-        grid_kwargs = {"L": 25, "M": 25, "NFP": eq.NFP}
+        grid_kwargs = {"L": 25, "M": 25, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -322,23 +332,44 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         if 1 in plot_axes:  # rho & theta
             data = data[:, :, 0]
         else:  # rho & zeta
-            data = data[0, :, :].T
+            data = data[0, :, :]
     else:  # theta & zeta
-        data = data[:, 0, :].T
+        data = data[:, 0, :]
 
-    imshow_kwargs = {"origin": "lower", "interpolation": "bilinear", "aspect": "auto"}
+    contourf_kwargs = {}
     if log:
-        imshow_kwargs["norm"] = matplotlib.colors.LogNorm()
         data = np.abs(data)  # ensure its positive for log plot
-    imshow_kwargs["extent"] = [
-        grid.nodes[0, plot_axes[1]],
-        grid.nodes[-1, plot_axes[1]],
-        grid.nodes[0, plot_axes[0]],
-        grid.nodes[-1, plot_axes[0]],
-    ]
+        contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
+        if norm_F:
+            contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
+        else:
+            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+            contourf_kwargs["levels"] = kwargs.get(
+                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+            )
+    else:
+        contourf_kwargs["norm"] = matplotlib.colors.Normalize()
+        contourf_kwargs["levels"] = kwargs.get(
+            "levels", np.linspace(np.nanmin(data), np.nanmax(data), 100)
+        )
+    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["extend"] = "both"
+
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    im = ax.imshow(data.T, cmap="jet", **imshow_kwargs)
+    xx = (
+        grid.nodes[:, plot_axes[1]]
+        .reshape((grid.M, grid.L, grid.N), order="F")
+        .squeeze()
+    )
+    yy = (
+        grid.nodes[:, plot_axes[0]]
+        .reshape((grid.M, grid.L, grid.N), order="F")
+        .squeeze()
+    )
+
+    im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -495,33 +526,25 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     """
     if grid is None:
         if eq.N == 0:
-            N = 1
-            nfp = 1
-            rows = 1
-            cols = 1
-            downsample = 1
+            nzeta = int(kwargs.get("nzeta", 1))
         else:
-            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
-            nfp = eq.NFP
-            rows = 2
-            cols = 3
-            downsample = (2 * eq.N + 1) // 6 + 1
+            nzeta = int(kwargs.get("nzeta", 6))
+        nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
             "NFP": nfp,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
         }
         grid = _get_grid(**grid_kwargs)
         zeta = np.unique(grid.nodes[:, 2])
 
     else:
         zeta = np.unique(grid.nodes[:, 2])
-        N = zeta.size
-        downsample = 1
-        rows = np.floor(np.sqrt(N)).astype(int)
-        cols = np.ceil(N / rows).astype(int)
+        nzeta = zeta.size
+    rows = np.floor(np.sqrt(nzeta)).astype(int)
+    cols = np.ceil(nzeta / rows).astype(int)
 
     name_dict = _format_name(name)
     data = _compute(eq, name_dict, grid)
@@ -540,49 +563,56 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             data = data / np.nanmean(np.abs(norm_data))  # normalize
     figw = 5 * cols
     figh = 5 * rows
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=kwargs.get("figsize", (figw, figh)),
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        coords = eq.compute_toroidal_coords(grid)
+    coords = eq.compute_toroidal_coords(grid)
     R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
-    imshow_kwargs = {}
+    contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure its positive for log plot
-        norm = matplotlib.colors.LogNorm()
-        levels = 100
+        contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
+        if norm_F:
+            contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
+        else:
+            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+            contourf_kwargs["levels"] = kwargs.get(
+                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+            )
     else:
-        norm = matplotlib.colors.Normalize()
-        levels = np.linspace(data.min(), data.max(), 100)
+        contourf_kwargs["norm"] = matplotlib.colors.Normalize()
+        contourf_kwargs["levels"] = kwargs.get(
+            "levels", np.linspace(data.min(), data.max(), 100)
+        )
+    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["extend"] = "both"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    for i in range(rows * cols):
+    for i in range(nzeta):
         divider = make_axes_locatable(ax[i])
 
-        cntr = ax[i].contourf(
-            R[:, :, i * downsample],
-            Z[:, :, i * downsample],
-            data[:, :, i * downsample],
-            levels=levels,
-            cmap="jet",
-            norm=norm,
-            **imshow_kwargs
-        )
+        cntr = ax[i].contourf(R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs)
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(cntr, cax=cax)
         cbar.update_ticks()
 
-        ax[i].axis("equal")
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             _name_label(name_dict)
             + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                eq.NFP * zeta[i * downsample] / (2 * np.pi)
+                eq.NFP * zeta[i] / (2 * np.pi)
             )
         )
         if norm_F:
@@ -591,7 +621,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
                 % (
                     name_dict["base"],
                     _name_label(norm_name_dict),
-                    eq.NFP * zeta[i * downsample] / (2 * np.pi),
+                    eq.NFP * zeta[i] / (2 * np.pi),
                 )
             )
     fig.set_tight_layout(True)
@@ -623,23 +653,17 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     """
     if r_grid is None and t_grid is None:
+
         if eq.N == 0:
-            N = 1
-            nfp = 1
-            rows = 1
-            cols = 1
-            downsample = 1
+            nzeta = int(kwargs.get("nzeta", 1))
         else:
-            N = ((2 * eq.N + 1) // 6 + 1) * 6 + 1
-            nfp = eq.NFP
-            rows = 2
-            cols = 3
-            downsample = (2 * eq.N + 1) // 6 + 1
+            nzeta = int(kwargs.get("nzeta", 6))
+        nfp = eq.NFP
         grid_kwargs = {
             "L": 8,
             "NFP": nfp,
             "theta": np.linspace(0, 2 * np.pi, 180, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
         }
         r_grid = _get_grid(**grid_kwargs)
         zeta = np.unique(r_grid.nodes[:, 2])
@@ -647,33 +671,24 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
             "L": 50,
             "NFP": nfp,
             "theta": np.linspace(0, 2 * np.pi, 8, endpoint=False),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, N, endpoint=False),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
         }
         t_grid = _get_grid(**grid_kwargs)
 
     elif r_grid is None:
         zeta = np.unique(t_grid.nodes[:, 2])
-        N = zeta.size
+        nzeta = zeta.size
         grid_kwargs = {"L": 8, "M": 180, "zeta": zeta}
         r_grid = _get_grid(**grid_kwargs)
-        rows = np.floor(np.sqrt(N)).astype(int)
-        cols = np.ceil(N / rows).astype(int)
-        downsample = 1
     elif t_grid is None:
         zeta = np.unique(r_grid.nodes[:, 2])
-        N = zeta.size
+        nzeta = zeta.size
         grid_kwargs = {"L": 50, "M": 8, "zeta": zeta}
         t_grid = _get_grid(**grid_kwargs)
-        rows = np.floor(np.sqrt(zeta.size)).astype(int)
-        cols = np.ceil(N / rows).astype(int)
-        downsample = 1
     else:
         zeta = np.unique(r_grid.nodes[:, 2])
         t_zeta = np.unique(t_grid.nodes[:, 2])
-        N = zeta.size
-        rows = np.floor(np.sqrt(N)).astype(int)
-        cols = np.ceil(N / rows).astype(int)
-        downsample = 1
+        nzeta = zeta.size
         if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
             raise ValueError(
                 colored(
@@ -683,10 +698,11 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                     "red",
                 )
             )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        r_coords = eq.compute_toroidal_coords(r_grid)
-        t_coords = eq.compute_toroidal_coords(t_grid)
+    rows = np.floor(np.sqrt(nzeta)).astype(int)
+    cols = np.ceil(nzeta / rows).astype(int)
+
+    r_coords = eq.compute_toroidal_coords(r_grid)
+    t_coords = eq.compute_toroidal_coords(t_grid)
 
     # theta coordinates cooresponding to linearly spaced vartheta angles
     v_nodes = t_grid.nodes
@@ -706,39 +722,43 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     figw = 4 * cols
     figh = 5 * rows
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=(figw, figh))
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=kwargs.get("figsize", (figw, figh)),
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
 
-    for i in range(rows * cols):
+    for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i * downsample].T,
-            Zv[:, :, i * downsample].T,
+            Rv[:, :, i].T,
+            Zv[:, :, i].T,
             color=colorblind_colors[2],
             linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i * downsample],
-            Zr[:, :, i * downsample],
+            Rr[:, :, i],
+            Zr[:, :, i],
             color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i * downsample],
-            Zr[:, -1, i * downsample],
+            Rr[:, -1, i],
+            Zr[:, -1, i],
             color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i * downsample],
-            Zr[0, 0, i * downsample],
+            Rr[0, 0, i],
+            Zr[0, 0, i],
             color=colorblind_colors[3],
         )
 
-        ax[i].axis("equal")
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                nfp * zeta[i * downsample] / (2 * np.pi)
-            )
+            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
         )
 
     fig.set_tight_layout(True)

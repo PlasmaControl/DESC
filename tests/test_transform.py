@@ -138,9 +138,9 @@ class TestTransform(unittest.TestCase):
         grid_5 = LinearGrid(L=5, M=1, N=1)
 
         with pytest.warns(UserWarning):
-            transf_1 = Transform(grid_1, basis)
-            transf_3 = Transform(grid_3, basis)
-            transf_5 = Transform(grid_5, basis)
+            transf_1 = Transform(grid_1, basis, method="fft")
+            transf_3 = Transform(grid_3, basis, method="fft")
+            transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
         self.assertTrue(transf_3 == transf_5)
@@ -156,9 +156,9 @@ class TestTransform(unittest.TestCase):
         basis_21 = FourierZernikeBasis(L=-1, M=2, N=1)
         basis_31 = FourierZernikeBasis(L=-1, M=3, N=1)
 
-        transf_20 = Transform(grid, basis_20)
-        transf_21 = Transform(grid, basis_21)
-        transf_31 = Transform(grid, basis_31)
+        transf_20 = Transform(grid, basis_20, method="fft")
+        transf_21 = Transform(grid, basis_21, method="fft")
+        transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
         self.assertTrue(transf_21 == transf_31)
@@ -186,9 +186,13 @@ class TestTransform(unittest.TestCase):
         t2f = Transform(grid, basis2, method="fft")
         t3f = Transform(grid, basis3, method="fft")
 
-        t1d = Transform(grid, basis1, method="direct")
-        t2d = Transform(grid, basis2, method="direct")
-        t3d = Transform(grid, basis3, method="direct")
+        t1d1 = Transform(grid, basis1, method="direct1")
+        t2d1 = Transform(grid, basis2, method="direct1")
+        t3d1 = Transform(grid, basis3, method="direct1")
+
+        t1d2 = Transform(grid, basis1, method="direct2")
+        t2d2 = Transform(grid, basis2, method="direct2")
+        t3d2 = Transform(grid, basis3, method="direct2")
 
         for d in t1f.derivatives:
             dr = d[0]
@@ -196,21 +200,33 @@ class TestTransform(unittest.TestCase):
             dz = d[2]
             x = np.random.random(basis1.num_modes)
             y1 = t1f.transform(x, dr, dv, dz)
-            y2 = t1d.transform(x, dr, dv, dz)
+            y2 = t1d1.transform(x, dr, dv, dz)
+            y3 = t1d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
             )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
+            )
             x = np.random.random(basis2.num_modes)
             y1 = t2f.transform(x, dr, dv, dz)
-            y2 = t2d.transform(x, dr, dv, dz)
+            y2 = t2d1.transform(x, dr, dv, dz)
+            y3 = t2d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
             )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
+            )
             x = np.random.random(basis3.num_modes)
             y1 = t3f.transform(x, dr, dv, dz)
-            y2 = t3d.transform(x, dr, dv, dz)
+            y2 = t3d1.transform(x, dr, dv, dz)
+            y3 = t3d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
+            )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
             )
 
         M += 1
@@ -226,9 +242,12 @@ class TestTransform(unittest.TestCase):
         t1f.change_resolution(grid, basis1)
         t2f.change_resolution(grid, basis2)
         t3f.change_resolution(grid, basis3)
-        t1d.change_resolution(grid, basis1)
-        t2d.change_resolution(grid, basis2)
-        t3d.change_resolution(grid, basis3)
+        t1d1.change_resolution(grid, basis1)
+        t2d1.change_resolution(grid, basis2)
+        t3d1.change_resolution(grid, basis3)
+        t1d2.change_resolution(grid, basis1)
+        t2d2.change_resolution(grid, basis2)
+        t3d2.change_resolution(grid, basis3)
 
         for d in t1f.derivatives:
             dr = d[0]
@@ -236,27 +255,48 @@ class TestTransform(unittest.TestCase):
             dz = d[2]
             x = np.random.random(basis1.num_modes)
             y1 = t1f.transform(x, dr, dv, dz)
-            y2 = t1d.transform(x, dr, dv, dz)
+            y2 = t1d1.transform(x, dr, dv, dz)
+            y3 = t1d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1,
                 y2,
                 atol=1e-12,
                 err_msg="failed on zernike after change, d={}".format(d),
             )
+            np.testing.assert_allclose(
+                y3,
+                y2,
+                atol=1e-12,
+                err_msg="failed on zernike after change, d={}".format(d),
+            )
             x = np.random.random(basis2.num_modes)
             y1 = t2f.transform(x, dr, dv, dz)
-            y2 = t2d.transform(x, dr, dv, dz)
+            y2 = t2d1.transform(x, dr, dv, dz)
+            y3 = t2d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1,
                 y2,
                 atol=1e-12,
                 err_msg="failed on fourier after change, d={}".format(d),
             )
+            np.testing.assert_allclose(
+                y3,
+                y2,
+                atol=1e-12,
+                err_msg="failed on fourier after change, d={}".format(d),
+            )
             x = np.random.random(basis3.num_modes)
             y1 = t3f.transform(x, dr, dv, dz)
-            y2 = t3d.transform(x, dr, dv, dz)
+            y2 = t3d1.transform(x, dr, dv, dz)
+            y3 = t3d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
                 y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on double fourier after change, d={}".format(d),
+            )
+            np.testing.assert_allclose(
+                y3,
                 y2,
                 atol=1e-12,
                 err_msg="failed on double fourier after change, d={}".format(d),
@@ -268,32 +308,41 @@ class TestTransform(unittest.TestCase):
         basis = FourierZernikeBasis(L=-1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
-        dtransform = Transform(grid, basis, method="direct")
+        dtransform1 = Transform(grid, basis, method="direct1")
+        dtransform2 = Transform(grid, basis, method="direct2")
         transform.build()
-        dtransform.build()
+        dtransform1.build()
+        dtransform2.build()
 
         y = np.random.random(grid.num_nodes)
 
-        np.testing.assert_allclose(transform.project(y), dtransform.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
         basis = FourierZernikeBasis(L=-1, M=5, N=3, sym="cos")
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
-        dtransform = Transform(grid, basis, method="direct")
+        dtransform1 = Transform(grid, basis, method="direct1")
+        dtransform2 = Transform(grid, basis, method="direct2")
         transform.build()
-        dtransform.build()
+        dtransform1.build()
+        dtransform2.build()
 
         y = np.random.random(grid.num_nodes)
 
-        np.testing.assert_allclose(transform.project(y), dtransform.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
         basis = FourierZernikeBasis(L=-1, M=5, N=0, sym="sin")
         grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
-        dtransform = Transform(grid, basis, method="direct")
+        dtransform1 = Transform(grid, basis, method="direct1")
+        dtransform2 = Transform(grid, basis, method="direct2")
         transform.build()
-        dtransform.build()
+        dtransform1.build()
+        dtransform2.build()
 
         y = np.random.random(grid.num_nodes)
 
-        np.testing.assert_allclose(transform.project(y), dtransform.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
+        np.testing.assert_allclose(transform.project(y), dtransform2.project(y))

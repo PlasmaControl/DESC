@@ -51,7 +51,6 @@ class Equilibrium(_Configuration, IOAble):
         * ``'sym'`` : bool, is the problem stellarator symmetric or not, default is False
         * ``'spectral_indexing'`` : str, type of Zernike indexing scheme to use, default is ``'ansi'``
         * ``'bdry_mode'`` : str, how to calculate error at bdry, default is ``'spectral'``
-        * ``'zeta_ratio'`` : float, Multiplier on the toroidal derivatives. Default = 1.0.
         * ``'axis'`` : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
         * ``'x'`` : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
         * ``'R_lmn'`` : ndarray, spectral coefficients of R
@@ -508,7 +507,6 @@ class Equilibrium(_Configuration, IOAble):
             "N": self.N,
             "spectral_indexing": self.spectral_indexing,
             "bdry_mode": self.bdry_mode,
-            "zeta_ratio": self.zeta_ratio,
             "profiles": np.vstack((p_modes, i_modes)),
             "boundary": np.vstack((Rb_modes, Zb_modes)),
             "x": self.x0,
@@ -594,7 +592,7 @@ class Equilibrium(_Configuration, IOAble):
                 "Equilibrium must have objective and optimizer defined before solving."
             )
 
-        args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi, self.zeta_ratio)
+        args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
 
         self.x0 = self.x
         x_init = self.objective.BC_constraint.project(self.x)
@@ -619,10 +617,10 @@ class Equilibrium(_Configuration, IOAble):
             self.objective.callback(result["x"], *args)
 
         self.optimizer_results = {
-            key: val if isinstance(val, str) else np.asarray(val)
+            key: val if isinstance(val, str) else np.copy(val)
             for key, val in result.items()
         }
-        self.x = self.objective.BC_constraint.recover(result["x"])
+        self.x = np.copy(self.objective.BC_constraint.recover(result["x"]))
         self.solved = result["success"]
         return result
 
@@ -634,7 +632,6 @@ class Equilibrium(_Configuration, IOAble):
         dp=None,
         di=None,
         dPsi=None,
-        dzeta_ratio=None,
         order=2,
         tr_ratio=0.1,
         cutoff=1e-6,
@@ -648,9 +645,9 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             objective to optimize during the perturbation (optional)
-        dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
+        dRb, dZb, dp, di, dPsi : ndarray or float
             If objective not given: deltas for perturbations of
-            R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
+            R_boundary, Z_boundary, pressure, iota, and toroidal flux.
             Setting to None or zero ignores that term in the expansion.
             If objective is given: indicies of modes to include in the perturbations of
             R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
@@ -680,7 +677,6 @@ class Equilibrium(_Configuration, IOAble):
                 dp,
                 di,
                 dPsi,
-                dzeta_ratio,
                 order=order,
                 tr_ratio=tr_ratio,
                 cutoff=cutoff,
@@ -698,7 +694,6 @@ class Equilibrium(_Configuration, IOAble):
                 dp,
                 di,
                 dPsi,
-                dzeta_ratio,
                 order=order,
                 tr_ratio=tr_ratio,
                 cutoff=cutoff,
@@ -778,8 +773,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["di"] = i_l - equil.i_l
         if not np.allclose(inputs["Psi"], inputs_prev["Psi"]):
             deltas["dPsi"] = inputs["Psi"] - inputs_prev["Psi"]
-        if not np.allclose(inputs["zeta_ratio"], inputs_prev["zeta_ratio"]):
-            deltas["dzeta_ratio"] = inputs["zeta_ratio"] - inputs_prev["zeta_ratio"]
         return deltas
 
     def _print_iteration(self, ii, equil):
@@ -789,7 +782,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
         equil.resolution_summary()
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
-        print("Zeta ratio = {}".format(self.inputs[ii]["zeta_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
         print("Constraint: {}".format(equil.constraint.name))
         print("Objective: {}".format(equil.objective.name))
@@ -830,7 +822,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             not (
                 isalmostequal([inp["bdry_ratio"] for inp in self.inputs])
                 and isalmostequal([inp["pres_ratio"] for inp in self.inputs])
-                and isalmostequal([inp["zeta_ratio"] for inp in self.inputs])
             )
             and not use_jax
         ):

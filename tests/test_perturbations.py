@@ -27,7 +27,7 @@ class DummyFunLinear(ObjectiveFunction):
         derivatives = np.array([[0, 0, 0]])
         return derivatives
 
-    def compute(self, y, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, y, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
 
         if self.BC_constraint is not None:
             x = self.BC_constraint.recover_from_constraints(y, Rb_lmn, Zb_lmn)
@@ -48,7 +48,6 @@ class DummyFunLinear(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         axis = self.R_transform.grid.axis
@@ -60,10 +59,10 @@ class DummyFunLinear(ObjectiveFunction):
         residual = toroidal_coords["R"][axis] / Psi - R0_mn
         return residual * jnp.ones_like(y)
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         pass
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0) -> bool:
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi) -> bool:
         pass
 
 
@@ -119,7 +118,6 @@ class TestPerturbations(unittest.TestCase):
             eq_old.p_l,
             eq_old.i_l,
             eq_old.Psi,
-            eq_old.zeta_ratio,
         )
         res_old = eq_old.objective.compute(*args)
 
@@ -142,7 +140,6 @@ class TestPerturbations(unittest.TestCase):
             eq_new.p_l,
             eq_new.i_l,
             eq_new.Psi,
-            eq_new.zeta_ratio,
         )
 
         res_new = eq_new.objective.compute(*args)

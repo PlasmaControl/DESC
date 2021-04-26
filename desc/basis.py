@@ -1,6 +1,7 @@
 import numpy as np
+import mpmath
 from abc import ABC, abstractmethod
-from scipy.special import factorial
+from math import factorial
 from desc.utils import sign, flatten_list, equals
 from desc.io import IOAble
 
@@ -808,6 +809,7 @@ class FourierZernikeBasis(Basis):
             modes = self.modes
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
+        # TODO: avoid duplicate calculations when mixing derivatives
 
         radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
@@ -856,21 +858,32 @@ def polyder_vec(p, m):
         polynomial coefficients for derivative in descending order
 
     """
+    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
-    n = p.shape[1] - 1  # order of polynomials
+    # for modest to large arrays, faster to find unique values and
+    # only evaluate those. Have to cast to float because np.unique
+    # can't handle object types like python native int
+    _, pidx, outidx = np.unique(
+        p.astype(float), return_index=True, return_inverse=True, axis=0
+    )
+    p = p[pidx]
+    order = p.shape[1] - 1
 
-    D = np.arange(n, -1, -1)
-    D = factorial(D) / factorial(D - m)
+    D = np.arange(order, -1, -1)
+    num = np.array([factorial(i) for i in D], dtype=object)
+    den = np.array([factorial(max(i - m, 0)) for i in D], dtype=object)
+    D = (num // den).astype(p.dtype)
 
     p = np.roll(D * p, m, axis=1)
     idx = np.arange(p.shape[1])
     p = np.where(idx < m, 0, p)
+    p = p[outidx]
 
     return p
 
 
-def polyval_vec(p, x):
+def polyval_vec(p, x, prec=None):
     """Evaluate a polynomial at specific values.
 
     Vectorized for evaluating multiple polynomials of the same degree.
@@ -883,6 +896,10 @@ def polyval_vec(p, x):
     x : ndarray, shape(K,)
         A number, or 1d array of numbers at
         which to evaluate p. If greater than 1d it is flattened.
+    prec : int, optional
+        precision to use, in number of decimal places. Default is
+        double precision (~16 decimals) which should be enough for
+        most cases with L <= 24
 
     Returns
     -------
@@ -890,23 +907,118 @@ def polyval_vec(p, x):
         polynomials evaluated at x.
         Each row corresponds to a polynomial, each column to a value of x
 
-    Notes:
-        Horner's scheme is used to evaluate the polynomial. Even so,
-        for polynomials of high degree the values may be inaccurate due to
-        rounding errors. Use carefully.
-
     """
     p = np.atleast_2d(p)
     x = np.atleast_1d(x).flatten()
-    npoly = p.shape[0]  # number of polynomials
-    order = p.shape[1]  # order of polynomials
-    nx = len(x)  # number of coordinates
-    y = np.zeros((npoly, nx))
+    # for modest to large arrays, faster to find unique values and
+    # only evaluate those. Have to cast to float because np.unique
+    # can't handle object types like python native int
+    unq_x, xidx = np.unique(x, return_inverse=True)
+    _, pidx, outidx = np.unique(
+        p.astype(float), return_index=True, return_inverse=True, axis=0
+    )
+    unq_p = p[pidx]
 
-    for k in range(order):
-        y = y * x + np.atleast_2d(p[:, k]).T
+    if prec is not None and prec > 16:
+        # TODO: possibly multithread this bit
+        mpmath.mp.dps = prec
+        y = np.array([np.asarray(mpmath.polyval(list(pi), unq_x)) for pi in unq_p])
+    else:
+        npoly = unq_p.shape[0]  # number of polynomials
+        order = unq_p.shape[1]  # order of polynomials
+        nx = len(unq_x)  # number of coordinates
+        y = np.zeros((npoly, nx))
 
-    return y
+        for k in range(order):
+            y = y * unq_x + np.atleast_2d(unq_p[:, k]).T
+
+    return y[outidx][:, xidx].astype(float)
+
+
+def jacobi_coeffs(l, m, exact=True):
+    """Jacobi polynomial coefficients.
+
+    Parameters
+    ----------
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    m : ndarray of int, shape(K,)
+        azimuthal mode number(s)
+    exact : bool
+        whether to return exact coefficients with `object` dtype
+        or return integer or floating point approximation
+
+    Returns
+    -------
+    coeffs : ndarray
+
+
+    Notes:
+        integer representation is exact up to l~54, so
+        leaving `exact` arg as False can speed up
+        evaluation with no loss in accuracy
+
+    """
+    l = np.atleast_1d(l).astype(int)
+    m = np.atleast_1d(np.abs(m)).astype(int)
+    lm = np.vstack([l, m]).T
+    # for modest to large arrays, faster to find unique values and
+    # only evaluate those
+    lms, idx = np.unique(lm, return_inverse=True, axis=0)
+
+    npoly = len(lms)
+    lmax = np.max(lms[:, 0])
+    coeffs = np.zeros((npoly, lmax + 1), dtype=object)
+    lm_even = ((lms[:, 0] - lms[:, 1]) % 2 == 0)[:, np.newaxis]
+    for ii in range(npoly):
+        ll = lms[ii, 0]
+        mm = lms[ii, 1]
+        for s in range(mm, ll + 1, 2):
+            coeffs[ii, s] = (
+                (-1) ** ((ll - s) // 2)
+                * factorial((ll + s) // 2)
+                // (
+                    factorial((ll - s) // 2)
+                    * factorial((s + mm) // 2)
+                    * factorial((s - mm) // 2)
+                )
+            )
+    c = np.fliplr(np.where(lm_even, coeffs, 0))
+    if not exact:
+        try:
+            c = c.astype(int)
+        except OverflowError:
+            c = c.astype(float)
+    c = c[idx]
+    return c
+
+
+def jacobi(rho, l, m, dr=0):
+    """Jacobi polynomials.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    m : ndarray of int, shape(K,)
+        azimuthal mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    coeffs = jacobi_coeffs(l, m)
+    lmax = np.max(l)
+    coeffs = polyder_vec(coeffs, dr)
+    # this should give accuracy of ~1e-6 in the eval'd polynomials
+    prec = int(0.4 * lmax + 5.4)
+    return polyval_vec(coeffs, rho, prec=prec).T
 
 
 def power_coeffs(l):
@@ -953,69 +1065,6 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
-def jacobi_coeffs(l, m):
-    """Jacobi polynomial coefficients.
-
-    Parameters
-    ----------
-    l : ndarray of int, shape(K,)
-        radial mode number(s)
-    m : ndarray of int, shape(K,)
-        azimuthal mode number(s)
-
-    Returns
-    -------
-    coeffs : ndarray
-
-    """
-    factorial = np.math.factorial
-    l = np.atleast_1d(l).astype(int)
-    m = np.atleast_1d(np.abs(m)).astype(int)
-    npoly = len(l)
-    lmax = np.max(l)
-    coeffs = np.zeros((npoly, lmax + 1))
-    lm_even = ((l - m) % 2 == 0)[:, np.newaxis]
-    for ii in range(npoly):
-        ll = l[ii]
-        mm = m[ii]
-        for s in range(mm, ll + 1, 2):
-            coeffs[ii, s] = (
-                (-1) ** ((ll - s) / 2)
-                * factorial((ll + s) / 2)
-                / (
-                    factorial((ll - s) / 2)
-                    * factorial((s + mm) / 2)
-                    * factorial((s - mm) / 2)
-                )
-            )
-    return np.fliplr(np.where(lm_even, coeffs, 0))
-
-
-def jacobi(rho, l, m, dr=0):
-    """Jacobi polynomials.
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        radial coordiantes to evaluate basis
-    l : ndarray of int, shape(K,)
-        radial mode number(s)
-    m : ndarray of int, shape(K,)
-        azimuthal mode number(s)
-    dr : int
-        order of derivative (Default = 0)
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function(s) evaluated at specified points
-
-    """
-    coeffs = jacobi_coeffs(l, m)
-    coeffs = polyder_vec(coeffs, dr)
-    return polyval_vec(coeffs, rho).T
-
-
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series.
 
@@ -1036,15 +1085,23 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta_2d = np.atleast_2d(theta).T
-    m_2d = np.atleast_2d(m)
+    # for modest to large arrays, faster to find unique values and
+    # only evaluate those
+    unq_theta, tidx = np.unique(theta, return_inverse=True)
+    unq_m, midx = np.unique(m, return_inverse=True)
+
+    theta_2d = np.atleast_2d(unq_theta).T
+    m_2d = np.atleast_2d(unq_m)
     m_pos = (m_2d >= 0).astype(int)
     m_neg = (m_2d < 0).astype(int)
     m_abs = np.abs(m_2d) * NFP
     if dt == 0:
-        return m_pos * np.cos(m_abs * theta_2d) + m_neg * np.sin(m_abs * theta_2d)
+        out = np.where(m_pos, np.cos(m_abs * theta_2d), np.sin(m_abs * theta_2d))
     else:
-        return m_abs * (m_neg - m_pos) * fourier(theta, -m, NFP=NFP, dt=dt - 1)
+        out = m_abs * (m_neg - m_pos) * fourier(unq_theta, -unq_m, NFP=NFP, dt=dt - 1)
+    # put duplicate values back in
+    out = out[tidx][:, midx]
+    return out
 
 
 def zernike_norm(l, m):

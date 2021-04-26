@@ -74,14 +74,7 @@ class ObjectiveFunction(IOAble, ABC):
     }
     _object_lib_.update(Transform._object_lib_)
 
-    arg_names = {
-        "Rb_lmn": 1,
-        "Zb_lmn": 2,
-        "p_l": 3,
-        "i_l": 4,
-        "Psi": 5,
-        "zeta_ratio": 6,
-    }
+    arg_names = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
 
     def __init__(
         self,
@@ -161,9 +154,6 @@ class ObjectiveFunction(IOAble, ABC):
             whether to just-in-time compile the objective and derivatives
 
         """
-        if block_size == "auto":
-            block_size = np.inf  # TODO: correct automatic sizing based on avail mem
-
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
 
         self._hess = Derivative(
@@ -309,7 +299,7 @@ class ObjectiveFunction(IOAble, ABC):
         Parameters
         ----------
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
 
         """
 
@@ -345,7 +335,7 @@ class ObjectiveFunction(IOAble, ABC):
         v : ndarray or tuple of ndarray
             vector to multiply the jacobian matrix by, one per argnum
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
 
         Returns
         -------
@@ -368,7 +358,7 @@ class ObjectiveFunction(IOAble, ABC):
         v1, v2 : ndarray or tuple of ndarray
             vector to multiply the jacobian matrix by, one per argnum
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
 
         Returns
         -------
@@ -391,7 +381,7 @@ class ObjectiveFunction(IOAble, ABC):
         v1, v2, v3 : ndarray or tuple of ndarray
             vector to multiply the jacobian matrix by, one per argnum
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
 
         Returns
         -------
@@ -418,7 +408,7 @@ class ObjectiveFunction(IOAble, ABC):
             derivative, first with respect to the third argument and then with
             respect to the fifth.
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
 
         Returns
         -------
@@ -539,7 +529,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
         )
         return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute spectral coefficients of force balance residual by quadrature.
 
         Parameters
@@ -556,8 +546,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -594,7 +582,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         weights = self.R_transform.grid.weights
@@ -609,7 +596,7 @@ class ForceErrorGalerkin(ObjectiveFunction):
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
         return residual
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute the integral of the force balance residual by quadrature.
 
         eg int(`|F_R|` + `|F_Z|`)
@@ -628,8 +615,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -666,14 +651,13 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         weights = self.R_transform.grid.weights
         f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
         return f
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the integral errors for toroidal components of the force balance.
 
         Parameters
@@ -690,8 +674,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         """
         if self.BC_constraint is not None and x.size == self.dimy:
@@ -723,7 +705,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         weights = self.R_transform.grid.weights
@@ -801,7 +782,7 @@ class ForceErrorNodes(ObjectiveFunction):
         )
         return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute force balance error.
 
         Parameters
@@ -818,8 +799,6 @@ class ForceErrorNodes(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -856,7 +835,6 @@ class ForceErrorNodes(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         weights = self.R_transform.grid.weights
@@ -869,7 +847,7 @@ class ForceErrorNodes(ObjectiveFunction):
 
         return residual
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute the total force balance error.
 
         eg 1/2 sum(f**2)
@@ -888,19 +866,17 @@ class ForceErrorNodes(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
         f : float
             total force balance error
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for radial and helical force balance.
 
         Parameters
@@ -917,8 +893,6 @@ class ForceErrorNodes(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         """
         if self.BC_constraint is not None and x.size == self.dimy:
@@ -950,7 +924,6 @@ class ForceErrorNodes(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         weights = self.R_transform.grid.weights
@@ -1053,7 +1026,7 @@ class EnergyVolIntegral(ObjectiveFunction):
         derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
         return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute MHD energy.
 
         Parameters
@@ -1070,8 +1043,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -1106,14 +1077,13 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         residual = energy["W"]
 
         return residual
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute MHD energy.
 
         Parameters
@@ -1130,8 +1100,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -1139,10 +1107,10 @@ class EnergyVolIntegral(ObjectiveFunction):
             total MHD energy in the plasma volume
 
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the MHD energy.
 
         Parameters
@@ -1159,8 +1127,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         """
         if self.BC_constraint is not None and x.size == self.dimy:
@@ -1190,7 +1156,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         print(
@@ -1264,7 +1229,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         )
         return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute quasisymmetry error.
 
         Parameters
@@ -1281,8 +1246,6 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -1318,12 +1281,11 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         return quasisymmetry["QS_TP"]
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute the total quasisymetry error.
 
         eg 1/2 sum(f**2)
@@ -1342,19 +1304,17 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
         f : float
             total quasisymmetry error
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
 
         Parameters
@@ -1371,11 +1331,9 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         resid_rms = 1 / 2 * jnp.sum(residual ** 2)
 
         print("Residual: {:10.3e}".format(resid_rms))
@@ -1479,7 +1437,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         )
         return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute quasisymmetry error.
 
         Parameters
@@ -1496,8 +1454,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
@@ -1533,14 +1489,13 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.L_transform,
             self.p_transform,
             self.i_transform,
-            zeta_ratio,
         )
 
         # normalize to flux surface average
         QS_FF = quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
         return QS_FF
 
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute the total quasisymetry error.
 
         eg 1/2 sum(f**2)
@@ -1559,19 +1514,17 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         Returns
         -------
         f : float
             total quasisymmetry error
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         residual = 1 / 2 * jnp.sum(residual ** 2)
         return residual
 
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio=1.0):
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
 
         Parameters
@@ -1588,11 +1541,9 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             series coefficients for iota profile
         Psi : float
             toroidal flux within the last closed flux surface in webers
-        zeta_ratio : float
-            multiplier on the toroidal derivatives.
 
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi, zeta_ratio)
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
         resid_rms = 1 / 2 * jnp.sum(residual ** 2)
 
         print("Residual: {:10.3e}".format(resid_rms))

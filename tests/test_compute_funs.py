@@ -45,7 +45,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         p_transform,
         i_transform,
-        eq.zeta_ratio,
     )
 
     B_sup_theta_r = np.zeros_like(magnetic_field["B^theta"])
@@ -111,7 +110,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         p_transform,
         i_transform,
-        eq.zeta_ratio,
     )
 
     B_sup_theta_t = np.zeros_like(magnetic_field["B^theta"])
@@ -266,7 +264,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         p_transform,
         i_transform,
-        eq.zeta_ratio,
     )
 
     B_sup_theta_z = np.zeros_like(magnetic_field["B^theta"])
@@ -423,7 +420,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         p_transform,
         i_transform,
-        eq.zeta_ratio,
     )
 
     B_sup_theta = magnetic_field["B^theta"].reshape((N, M))

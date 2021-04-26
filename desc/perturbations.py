@@ -1,9 +1,8 @@
 import numpy as np
 import warnings
 from termcolor import colored
-
 from desc.utils import Timer
-from desc.backend import use_jax
+from desc.backend import use_jax, jnp
 from desc.boundary_conditions import get_boundary_condition
 from desc.optimize.tr_subproblems import trust_region_step_exact
 
@@ -17,7 +16,6 @@ def perturb(
     dp=None,
     di=None,
     dPsi=None,
-    dzeta_ratio=None,
     order=2,
     tr_ratio=0.1,
     cutoff=1e-6,
@@ -31,9 +29,9 @@ def perturb(
     ----------
     eq : Equilibrium
         equilibrium to perturb
-    dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or float
-        deltas for perturbations of R_boundary, Z_boundary, pressure, iota,
-        toroidal flux, and zeta ratio.
+    dRb, dZb, dp, di, dPsi : ndarray or float
+        deltas for perturbations of R_boundary, Z_boundary, pressure, iota, and
+        toroidal flux.
         Setting to None or zero ignores that term in the expansion.
     order : {0,1,2,3}
         order of perturbation (0=none, 1=linear, 2=quadratic, etc)
@@ -93,8 +91,6 @@ def perturb(
         deltas["i_l"] = di
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
-    if dzeta_ratio is not None and np.any(dzeta_ratio):
-        deltas["zeta_ratio"] = dzeta_ratio
 
     keys = ", ".join(deltas.keys())
     if verbose > 0:
@@ -103,17 +99,19 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
-    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dx1 = 0
     dx2 = 0
     dx3 = 0
 
     # 1st order
     if order > 0:
+
+        RHS1 = eq.objective.compute(*args)
 
         # 1st partial derivatives wrt state vector (x)
         if Jx is None:
@@ -125,9 +123,16 @@ def perturb(
             if verbose > 1:
                 timer.disp("df/dx computation")
 
-        u, s, vt = np.linalg.svd(Jx, full_matrices=False)
+        if verbose > 0:
+            print("Factoring df")
+        timer.start("df/dx factorization")
         m, n = Jx.shape
-        RHS1 = eq.objective.compute(*args)
+        u, s, vt = jnp.linalg.svd(Jx, full_matrices=False)
+        timer.stop("df/dx factorization")
+        if verbose > 1:
+            timer.disp("df/dx factorization")
+        # once we have the svd we don't need Jx anymore so can save some memory
+        del Jx
 
         # partial derivatives wrt input parameters (c)
         inds = tuple([arg_idx[key] for key in deltas])
@@ -164,7 +169,6 @@ def perturb(
         inds = (0, *inds)
         tangents = (dx1, *tangents)
         RHS2 = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
-
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -242,8 +246,7 @@ def perturb(
 
     # update state vector
     dy = dx1 + dx2 + dx3
-    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
-
+    eq_new.x = np.copy(eq_new.objective.BC_constraint.recover(y + dy))
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
@@ -259,7 +262,6 @@ def optimal_perturb(
     dp=False,
     di=False,
     dPsi=False,
-    dzeta_ratio=False,
     order=1,
     tr_ratio=0.1,
     cutoff=1e-6,
@@ -275,9 +277,9 @@ def optimal_perturb(
         equilibrium to optimize
     objective : ObjectiveFunction
         objective to optimize
-    dRb, dZb, dp, di, dPsi, dzeta_ratio : ndarray or bool
+    dRb, dZb, dp, di, dPsi : ndarray or bool
         array of indicies of modes to include in the perturbations of
-        R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
+        R_boundary, Z_boundary, pressure, iota, and toroidal flux.
         Setting to True (False) includes (excludes) all modes.
     order : {0,1,2,3}
         order of perturbation (0=none, 1=linear, 2=quadratic, etc)
@@ -350,9 +352,6 @@ def optimal_perturb(
     if type(dPsi) is bool or dPsi is None:
         if dPsi is True:
             deltas["Psi"] = np.array([True])
-    if type(dzeta_ratio) is bool or dzeta_ratio is None:
-        if dzeta_ratio is True:
-            deltas["zeta_ratio"] = np.array([True])
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
@@ -363,14 +362,14 @@ def optimal_perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5, "zeta_ratio": 6}
+    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
     c = np.array([])
     for key, dc in deltas.items():
         c = np.concatenate((c, getattr(eq, key)))
-    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi, eq.zeta_ratio)
+    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dc1 = 0
     dc2 = 0
     dc3 = 0

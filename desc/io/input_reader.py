@@ -151,27 +151,26 @@ class InputReader:
         # default values
         inputs = {
             "sym": False,
-            "Psi": 1.0,
             "NFP": 1,
+            "Psi": 1.0,
             "L": np.atleast_1d(None),
             "M": np.atleast_1d(0),
             "N": np.atleast_1d(0),
             "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
-            "bdry_ratio": np.atleast_1d(1.0),
             "pres_ratio": np.atleast_1d(1.0),
-            "zeta_ratio": np.atleast_1d(1.0),
+            "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
-            "ftol": np.atleast_1d(1e-6),
+            "ftol": np.atleast_1d(1e-2),
             "xtol": np.atleast_1d(1e-6),
             "gtol": np.atleast_1d(1e-6),
             "nfev": np.atleast_1d(None),
-            "optimizer": "scipy-trf",
             "objective": "force",
-            "bdry_mode": "lcfs",
+            "optimizer": "lsq-exact",
             "spectral_indexing": "fringe",
             "node_pattern": "jacobi",
+            "bdry_mode": "lcfs",
             "profiles": np.atleast_2d((0, 0.0, 0.0)),
             "boundary": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
@@ -213,10 +212,40 @@ class InputReader:
                 equals = len(line)
             command = (line.strip() + " ")[0:comment]
             argument = (command.strip() + " ")[0:equals]
-            numbers = [
-                float(x) for x in re.findall(num_form, command) if re.search(r"\d", x)
-            ]
-            words = command[equals + 1 :].split()
+            data = command[equals + 1 :]
+            words = data.split()
+            num_list = re.split(r"[\s,;]", data)
+            numbers = np.array([])
+            for txt in num_list:
+                # format like 4:2:12 = 4,6,8,10,12
+                if re.search(num_form + ":" + num_form + ":" + num_form, txt):
+                    nums = [
+                        float(x)
+                        for x in re.findall(num_form, txt)
+                        if re.search(r"\d", x)
+                    ]
+                    if len(nums):
+                        numbers = np.append(
+                            numbers, np.arange(nums[0], nums[2] + nums[1], nums[1])
+                        )
+                # format like 12x4 = 12,12,12,12
+                elif re.search(num_form + "x" + num_form, txt):
+                    nums = [
+                        float(x)
+                        for x in re.findall(num_form, txt)
+                        if re.search(r"\d", x)
+                    ]
+                    if len(nums):
+                        numbers = np.append(numbers, np.tile(nums[0], int(nums[1])))
+                # individual numbers
+                else:
+                    nums = [
+                        float(x)
+                        for x in re.findall(num_form, txt)
+                        if re.search(r"\d", x)
+                    ]
+                    if len(nums):
+                        numbers = np.append(numbers, nums)
             flag = False
 
             # global parameters
@@ -224,29 +253,29 @@ class InputReader:
             if match:
                 inputs["sym"] = int(numbers[0])
                 flag = True
-            match = re.search(r"Psi", argument, re.IGNORECASE)
-            if match:
-                inputs["Psi"] = numbers[0]
-                flag = True
             match = re.search(r"NFP", argument, re.IGNORECASE)
             if match:
                 inputs["NFP"] = numbers[0]
                 if len(numbers) > 1:
                     inputs["NFP"] /= numbers[1]
                 flag = True
+            match = re.search(r"Psi", argument, re.IGNORECASE)
+            if match:
+                inputs["Psi"] = numbers[0]
+                flag = True
 
             # spectral resolution
             match = re.search(r"L_rad", argument, re.IGNORECASE)
             if match:
-                inputs["L"] = np.array(numbers).astype(int)
+                inputs["L"] = numbers.astype(int)
                 flag = True
             match = re.search(r"M_pol", argument, re.IGNORECASE)
             if match:
-                inputs["M"] = np.array(numbers).astype(int)
+                inputs["M"] = numbers.astype(int)
                 flag = True
             match = re.search(r"N_tor", argument, re.IGNORECASE)
             if match:
-                inputs["N"] = np.array(numbers).astype(int)
+                inputs["N"] = numbers.astype(int)
                 flag = True
             match = re.search(r"L_grid", argument, re.IGNORECASE)
             if match:
@@ -254,43 +283,39 @@ class InputReader:
                 flag = True
             match = re.search(r"M_grid", argument, re.IGNORECASE)
             if match:
-                inputs["M_grid"] = np.array(numbers).astype(int)
+                inputs["M_grid"] = numbers.astype(int)
                 flag = True
             match = re.search(r"N_grid", argument, re.IGNORECASE)
             if match:
-                inputs["N_grid"] = np.array(numbers).astype(int)
+                inputs["N_grid"] = numbers.astype(int)
                 flag = True
 
             # continuation parameters
-            match = re.search(r"bdry_ratio", argument, re.IGNORECASE)
-            if match:
-                inputs["bdry_ratio"] = np.array(numbers).astype(float)
-                flag = True
             match = re.search(r"pres_ratio", argument, re.IGNORECASE)
             if match:
-                inputs["pres_ratio"] = np.array(numbers).astype(float)
+                inputs["pres_ratio"] = numbers.astype(float)
                 flag = True
-            match = re.search(r"zeta_ratio", argument, re.IGNORECASE)
+            match = re.search(r"bdry_ratio", argument, re.IGNORECASE)
             if match:
-                inputs["zeta_ratio"] = np.array(numbers).astype(float)
+                inputs["bdry_ratio"] = numbers.astype(float)
                 flag = True
             match = re.search(r"pert_order", argument, re.IGNORECASE)
             if match:
-                inputs["pert_order"] = np.array(numbers).astype(int)
+                inputs["pert_order"] = numbers.astype(int)
                 flag = True
 
             # solver tolerances
             match = re.search(r"ftol", argument, re.IGNORECASE)
             if match:
-                inputs["ftol"] = np.array(numbers).astype(float)
+                inputs["ftol"] = numbers.astype(float)
                 flag = True
             match = re.search(r"xtol", argument, re.IGNORECASE)
             if match:
-                inputs["xtol"] = np.array(numbers).astype(float)
+                inputs["xtol"] = numbers.astype(float)
                 flag = True
             match = re.search(r"gtol", argument, re.IGNORECASE)
             if match:
-                inputs["gtol"] = np.array(numbers).astype(float)
+                inputs["gtol"] = numbers.astype(float)
                 flag = True
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
@@ -298,19 +323,14 @@ class InputReader:
                 flag = True
 
             # solver methods
-            match = re.search(r"optimizer", argument, re.IGNORECASE)
-            if match:
-                inputs["optimizer"] = words[0]
-                flag = True
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
                 inputs["objective"] = words[0]
                 flag = True
-            match = re.search(r"bdry_mode", argument, re.IGNORECASE)
+            match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
-                inputs["bdry_mode"] = words[0]
+                inputs["optimizer"] = words[0]
                 flag = True
-                # TODO: set bdry_mode automatically based on bdry coeffs
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
                 inputs["spectral_indexing"] = words[0]
@@ -319,6 +339,11 @@ class InputReader:
             if match:
                 inputs["node_pattern"] = words[0]
                 flag = True
+            match = re.search(r"bdry_mode", argument, re.IGNORECASE)
+            if match:
+                inputs["bdry_mode"] = words[0]
+                flag = True
+                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indicies
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
@@ -479,9 +504,8 @@ class InputReader:
             "L_grid",
             "M_grid",
             "N_grid",
-            "bdry_ratio",
             "pres_ratio",
-            "zeta_ratio",
+            "bdry_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -492,15 +516,9 @@ class InputReader:
         for a in arrs:
             arr_len = max(arr_len, len(inputs[a]))
         for a in arrs:
-            if inputs[a].size == 1:
-                inputs[a] = np.broadcast_to(inputs[a], arr_len, subok=True).copy()
-            elif inputs[a].size != arr_len:
-                raise IOError(
-                    colored(
-                        "Continuation parameter array {} ".format(a)
-                        + "is not broadcastable to the proper length",
-                        "red",
-                    )
+            if inputs[a].size < arr_len:
+                inputs[a] = np.append(
+                    inputs[a], np.tile(inputs[a][-1], arr_len - len(inputs[a]))
                 )
 
         # unsupplied values
@@ -567,7 +585,7 @@ class InputReader:
         f.write("# global parameters \n")
         f.write("sym = {} \n".format(inputs[0]["sym"]))
         f.write("NFP = {} \n".format(inputs[0]["NFP"]))
-        f.write("Psi_lcfs = {} \n".format(inputs[0]["Psi"]))
+        f.write("Psi = {} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution \n")
         for key, val in {
@@ -583,7 +601,7 @@ class InputReader:
             )
 
         f.write("\n# continuation parameters \n")
-        for key in ["bdry_ratio", "pres_ratio", "zeta_ratio", "pert_order"]:
+        for key in ["bdry_ratio", "pres_ratio", "pert_order"]:
             f.write(
                 key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )

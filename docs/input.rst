@@ -5,8 +5,9 @@ Input File
 ==========
 
 The following is an example DESC input file, which containts all of the available input arguments. 
-More input examples are included in the repository. 
-DESC can also accept VMEC input files, which are converted to DESC inputs as explained below. 
+This example is only intended to demonstrate the input file format, and may not necessarily converge well. 
+More realistic input examples are included in the repository. 
+DESC can also accept VMEC input files, which are converted to DESC inputs as explained below (use with caution). 
 
 .. code-block:: text
    :linenos:
@@ -16,41 +17,41 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    
    # global parameters
    sym = 1
-   NFP = 19
-   Psi = 1.00000000E+00
+   NFP = 5
+   Psi = 1.0
    
    # spectral resolution
-   L_rad  =   0   4   8  12  16  20  24
-   M_pol  =   6,  8, 10, 10, 11, 11, 12
-   N_tor  =   0;  1;  2;  2;  3;  3;  4
-   M_grid =  [9, 12, 15, 15, 16, 17, 18]
-   N_grid =  [0;  2;  3;  3;  4;  5;  6]
+   L_rad  =  4:4:24
+   M_pol  =  6:2:10, 10; 11x2 12
+   N_tor  =  0  1;  2x2,  3x2;  4
+   L_grid =  8:4:32
+   M_grid =  9:3:15, 16:1:18
+   N_grid =  0  2  3,  3;  4  5  6
    
    # continuation parameters
-   bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
-   pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
-   zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   pert_order = 1
+   bdry_ratio = 0:0.5:1
+   pres_ratio = 0x2, 0:0.5:1
+   pert_order = 2
    
    # solver tolerances
-   ftol = 1e-6
+   ftol = 1e-2
    xtol = 1e-6
    gtol = 1e-6
-   nfev = 250
+   nfev = 100
    
    # solver methods
-   objective = force
-   optimizer = scipy-trf
+   objective         = force
+   optimizer         = lsq-exact
    spectral_indexing = fringe
-   node_pattern = jacobi
+   node_pattern      = jacobi
+   bdry_mode         = lcfs
    
    # pressure and rotational transform profiles
-   l:   0   p =  1.80000000E+04   i =  1.00000000E+00
-   l:   2   p = -3.60000000E+04   i =  1.50000000E+00
+   l:   0   p =  1.80000000E+04   i =  1.0
+   l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
    
-   # magnetic axis initial guess
-   n:   0  R0 =  1.00000000E+01  Z0 =  0.00000000E+00
+   n:   0  R0 =  10  Z0 =  0.0  # magnetic axis initial guess
    
    # fixed-boundary surface shape
    m:   0   n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
@@ -68,6 +69,7 @@ Both ``!`` and ``#`` are recognized to denote comments at the end of a line.
 Whitespace is always ignored, except for newline characters. 
 Multiple inputs can be given on the same line of the input file, but a single input cannot span multiple lines. 
 None of the inputs are case-sensitive; for example ``M_pol``, ``M_POL``, and ``m_Pol`` are all the same. 
+All numerical values can be given in either decimal or exponential formats. 
 
 Global Parameters
 *****************
@@ -75,11 +77,11 @@ Global Parameters
 .. code-block:: text
 
    sym = 1
-   NFP = 19
-   Psi = 1.00000000E+00
+   NFP = 5
+   Psi = 1.0
 
 - ``sym`` (bool): True (1) to assume stellarator symmetry, False (0) otherwise. Default = 0. 
-- ``NFP`` (int): Number of toroidal field periods, :math:`N_{FP}`. Default = 1. 
+- ``NFP`` (int): Number of toroidal field periods, :math:`N_{FP}` (discrete toroidal symmetry). Default = 1. 
 - ``Psi`` (float): The toroidal magnetic flux through the last closed flux surface, :math:`\psi_a` (Webers). Default = 1.0. 
 
 Spectral Resolution
@@ -87,45 +89,48 @@ Spectral Resolution
 
 .. code-block:: text
 
-   L_rad  =   0   4   8  12  16  20  24
-   M_pol  =   6,  8, 10, 10, 11, 11, 12
-   N_tor  =   0;  1;  2;  2;  3;  3;  4
-   M_grid =  [9, 12, 15, 15, 16, 17, 18]
-   N_grid =  [0;  2;  3;  3;  4;  5;  6]
+   L_rad  =  4:4:24
+   M_pol  =  6:2:10, 10; 11x2 12
+   N_tor  =  0  1;  2x2,  3x2;  4
+   L_grid =  8:4:32
+   M_grid =  9:3:15, 16:1:18
+   N_grid =  0  2  3,  3;  4  5  6
 
-- ``L_rad`` (int): Maximum difference between the radial mode number :math:`l` and the poloidal mode number :math: `m`. Default = ``M`` if ``spectral_indexing`` is ``ansi``, or ``2M`` if ``spectral_indexing`` is ``fringe``. For more information see `Basis functions and collocation nodes`_.
-- ``M_pol`` (int): Maximum poloidal mode number for the Zernike polynomial basis, :math:`M`. Required. 
-- ``N_tor`` (int): Maximum toroidal mode number for the Fourier series, :math:`N`. Default = 0. 
-- ``M_grid`` (int): Relative poloidal density of collocation nodes. Default = ``round(1.5*Mpol)``. 
-- ``N_grid`` (int): Relative toroidal density of collocation nodes. Default = ``round(1.5*Ntor)``. 
+- ``L_rad`` (int): Maximum radial mode number for the Fourier-Zernike basis, :math:`L`. Default = ``M_pol`` if ``spectral_indexing = ANSI``, or ``2*M_pol`` if ``spectral_indexing = Fringe``. For more information see `Basis functions and collocation nodes`_. 
+- ``M_pol`` (int): Maximum poloidal mode number for the Fourier-Zernike basis, :math:`M`. Required. 
+- ``N_tor`` (int): Maximum toroidal mode number for the Fourier-Zernike basis, :math:`N`. Default = 0. 
+- ``L_grid`` (int): Radial resolution of nodes in collocation grid. Default = ``M_grid`` if ``spectral_indexing = ANSI``, or ``2*M_grid`` if ``spectral_indexing = Fringe``. 
+- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``round(1.5*M_pol)``. 
+- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``round(1.5*N_tor)``. 
 
 When ``M_grid = M_pol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set. 
 When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series. 
 Convergence is typically superior when the number of nodes exceeds the number of spectral coefficients, but this adds compuational cost. 
 
-These arguments can be passed as arrays, where each index of the array denotes the value to use at that iteration. 
-In this example there will be 7 iterations, so each array must have a length of 7. 
-Note that any type of array notation or deliminator is allowed (only the numbers are extracted). 
+These arguments can be passed as arrays, where each element denotes the value to use at that iteration. 
+Array elements are deliminated by either a space `` ``, comma ``,``, or semi-colon ``;``. 
+Arrays can also be created using the shorthand notation ``start:interval:end`` and ``(value)x(repititions)``. 
+For example, the input line for ``M_pol`` shown above is equivalent to ``M_pol = 6, 8, 10, 10, 11, 11, 12``. 
+In this example there will be 7 iterations; any array with fewer than 7 elements will use its final value for the remaining iterations. 
 
 Continuation Parameters
 ***********************
 
 .. code-block:: text
 
-   bdry_ratio = 0.0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
-   pres_ratio = 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0
-   zeta_ratio = 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0
-   pert_order = 1
+   pres_ratio = 0:0.5:1
+   bdry_ratio = 0x2, 0:0.5:1
+   pert_order = 2
 
-- ``bdry_ratio`` (float): Multiplier on the 3D boundary modes. Default = 1.0. 
 - ``pres_ratio`` (float): Multiplier on the pressure profile. Default = 1.0. 
-- ``zeta_ratio`` (float): Multiplier on the toroidal derivatives. Default = 1.0. 
+- ``bdry_ratio`` (float): Multiplier on the 3D boundary modes. Default = 1.0. 
 - ``pert_order`` (int): Order of the perturbation approximation: 0 = no perturbation, 1 = linear, 2 = quadratic. Default = 1. 
 
-When all of the ``_ratio`` parameters are set to 1.0, the equilibrium is solved using the exact boundary modes and pressure profile as was input. 
-``bdry_ratio = 0`` ignores all of the non-axisymmetric modes, ``pres_ratio = 0`` assumes a vacuum pressure profile, and ``zeta_ratio = 0`` is equivalent to solving a tokamak equilibrium at each toroidal cross-section. 
+When both ``pres_ratio = 1`` and ``pres_ratio = 1``, the equilibrium is solved using the exact boundary modes and pressure profile as input. 
+``pres_ratio = 0`` assumes a vacuum pressure profile, and ``bdry_ratio = 0`` ignores all of the non-axisymmetric boundary modes (reducing the input to a tokamak). 
 
-These arguments are also passed as arrays for each iteration. 
+These arguments are also passed as arrays for each iteration, with the same notation as the other continuation parameters. 
+This example will start by solving a vacuum tokamak, then perturb the pressure profile to solve a finite-beta tokamak, and finally perturb the boundary to solve the finite-beta stellarator. 
 If only one value is given, as with ``pert_order`` in this example, that value will be used for all iterations. 
 
 Solver Tolerances
@@ -133,17 +138,18 @@ Solver Tolerances
 
 .. code-block:: text
 
-   ftol = 1e-6
+   ftol = 1e-2
    xtol = 1e-6
    gtol = 1e-6
-   nfev = 250
+   nfev = 100
 
-- ``ftol`` (float): Solver stopping tolerance on relative norm of dF. Default = 1e-6. 
-- ``xtol`` (float): Solver stopping tolerance on relative norm of dx. Default = 1e-6. 
-- ``gtol`` (float): Solver stopping tolerance on norm of the gradient. Default = 1e-6. 
-- ``nfev`` (int): Maximum number of function evaluations. Default = None (0). 
+- ``ftol`` (float): Solver stopping tolerance on the relative norm of dF. Default = 1e-2. 
+- ``xtol`` (float): Solver stopping tolerance on the relative norm of dx. Default = 1e-6. 
+- ``gtol`` (float): Solver stopping tolerance on the norm of the gradient. Default = 1e-6. 
+- ``nfev`` (int): Maximum number of function evaluations. Default = 0 (None). 
 
-These arguments are also passed as arrays for each iteration. 
+These arguments are also passed as arrays for each iteration, with the same notation as the other continuation parameters. 
+In this example, the same values are being used for all 7 iterations. 
 
 Solver Methods
 **************
@@ -151,35 +157,37 @@ Solver Methods
 .. code-block:: text
 
    objective         = force
-   optimizer         = scipy-trf
-   spectral_indexing = ansi
+   optimizer         = lsq-exact
+   spectral_indexing = fringe
    node_pattern      = jacobi
+   bdry_mode         = lcfs
 
-- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``'force'`` (Default) or ``'energy'``. 
-- ``optimizer`` (string): Type of optimizer to use. For more details and options see :py:class:`desc.optimize.Optimizer`.
-- ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ansi`` or ``fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
-- ``node_pattern`` (string): Pattern of collocation nodes. Options are ``'jacobi`` (Default), ``cheb1``, ``'cheb2`` or ``'quad``. For more information see `Basis functions and collocation nodes`_.
+- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default) or ``energy``. 
+- ``optimizer`` (string): Type of optimizer to use. Default = ``lsq-exact``. For more details and options see :py:class:`desc.optimize.Optimizer`.
+- ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ANSI`` or ``Fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
+- ``node_pattern`` (string): Pattern of collocation nodes. Options are ``jacobi`` (Default), ``cheb1``, ``cheb2`` or ``quad``. For more information see `Basis functions and collocation nodes`_.
+- ``bdry_mode`` (string): Format of boundary condition. Options are ``LCFS`` (Default) or ``Poincare``. 
 
-The ``objective`` option ``'force'`` minimizes the equilibrium force balance errors in units of Newtons, while the ``'energy'`` minimizes the total plasma energy :math:`B^2/2\mu_0 + p`. 
+The ``objective`` option ``force`` minimizes the equilibrium force balance errors in units of Newtons, while the ``energy`` option minimizes the total plasma energy in units of Joules. 
+The ``bdry_mode`` option ``LCFS`` enforces the boundary condition on the shape of the last closed flux surface, while the ``Poincare`` option constraints the shapes of the flux surfaces in the Poincare section at :math:`\zeta=0`. 
 
 Pressure & Rotational Transform Profiles
 ****************************************
 
 .. code-block:: text
 
-   l:   0   p =  1.80000000E+04   i =  1.00000000E+00
-   l:   2   p = -3.60000000E+04   i =  1.50000000E+00
+   l:   0   p =  1.80000000E+04   i =  1.0
+   l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
 
 - ``l`` (int): Radial polynomial order. 
-- ``p`` (float): Pressure profile coefficient. :math:`p_{l}` 
-- ``i`` (float): Rotational transform coefficient. :math:`\iota_{l}` 
+- ``p`` (float): Pressure profile coefficient :math:`p_{l}`. 
+- ``i`` (float): Rotational transform coefficient :math:`\iota_{l}`. 
 
 The pressure and rotational transform profiles are given as a power series in the flux surface label 
 :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
 
 .. math::
-
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
    \iota(\rho) &= \sum \iota_{l} \rho^{l}.
@@ -190,7 +198,6 @@ The radial exponent :math:`l` is given by ``l``, which must be on the same input
 The profiles given in the example are: 
 
 .. math::
-
    \begin{aligned}
    p(\rho) &= 1.8\times10^4 (1-\rho^2)^2 \\
    \iota(\rho) &= 1 + 1.5 \rho^2.
@@ -203,7 +210,7 @@ Magnetic Axis Initial Guess
 
 .. code-block:: text
 
-   n:   0  R0 =  1.00000000E+01  Z0 =  0.00000000E+00
+   n:   0  R0 =  10  Z0 =  0.0
 
 - ``n`` (int): Toroidal mode number. 
 - ``R0`` (float): Fourier coefficient of the R coordinate of the magnetic axis. :math:`R^{0}_{n}` 
@@ -212,7 +219,6 @@ Magnetic Axis Initial Guess
 An initial guess for the magnetic axis can be supplied in the form: 
 
 .. math::
-
    \begin{aligned}
    R_{0}(\phi) &= \sum_{n=-N}^{N} R^{0}_{n} \mathcal{F}_{n}(\phi) \\
    Z_{0}(\phi) &= \sum_{n=-N}^{N} Z^{0}_{n} \mathcal{F}_{n}(\phi) \\
@@ -225,6 +231,7 @@ An initial guess for the magnetic axis can be supplied in the form:
 The coefficients :math:`R^{0}_{n}` and :math:`Z^{0}_{n}` are specified by the input variables ``R0`` and ``Z0``, respectively. 
 The Fourier mode number :math:`n` is given by ``n``, which must be on the same input line as the coefficients. 
 
+The magnetic axis initial guess is optional and only used if ``bdry_mode = LCFS``. 
 If no initial guess is provided for the magnetic axis, then the :math:`m = 0` modes of the fixed-boundary surface shape input are used. 
 
 Fixed-Boundary Surface Shape
@@ -240,15 +247,15 @@ Fixed-Boundary Surface Shape
    m:   1   n:  -1  Z1 = -3.00000000E-01
    m:  -1   n:   1  Z1 = -3.00000000E-01
 
+- ``l`` (int): Radial mode number. (Only used if ``bdry_mode = Poincare``.) 
 - ``m`` (int): Poloidal mode number. 
-- ``n`` (int): Toroidal mode number. 
-- ``R1`` (float): Fourier coefficient of the R coordinate of the last closed flux surface. :math:`R^{1}_{mn}` 
-- ``Z1`` (float): Fourier coefficient of the Z coordinate of the last closed flux surface. :math:`Z^{1}_{mn}` 
+- ``n`` (int): Toroidal mode number. (Only used if ``bdry_mode = LCFS``.) 
+- ``R1`` (float): Fourier coefficient of the R coordinate of the boundary surface. :math:`R^{1}_{mn}` 
+- ``Z1`` (float): Fourier coefficient of the Z coordinate of the boundary surface. :math:`Z^{1}_{mn}` 
 
-The shape of the fixed-boundary surface is given as a double Fourier series of the form: 
+If ``bdry_mode = LCFS``, the shape of the last closed flux surface is given as a double Fourier series of the form: 
 
 .. math::
-
    \begin{aligned}
    R_{1}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} R^{1}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
    Z_{1}(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} Z^{1}_{mn} \mathcal{G}^{m}_{n}(\theta,\phi) \\
@@ -260,18 +267,27 @@ The shape of the fixed-boundary surface is given as a double Fourier series of t
    \end{cases}
    \end{aligned}
 
-The coefficients :math:`R^{1}_{mn}` and :math:`Z^{1}_{mn}` are specified by the input variables ``R1`` and ``Z1``, respectively. 
-The Fourier mode numbers :math:`m` and :math:`n` are given by ``m`` and ``n``, respectively, which must be on the same input line as the coefficients. 
-The fixed-boundary surface shape given in the example is equivalent to (using Ptolemy’s identities):
+If ``bdry_mode = Poincare``, the shape of the Poincare surface is given by a Zernike polynomial basis of the form: 
 
 .. math::
+   \begin{aligned}
+   R_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
+   Z_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
+   \mathcal{R}^{|m|}_{l}(\rho) &= \sum_{s=0}^{(l-|m|)/2} \frac{(-1)^{s} (l-s)!}{s! [\frac{1}{2}(l+|m|)-s]! [\frac{1}{2}(l-|m|)-s]!} \rho^{l-2s}. 
+   \end{cases}
+   \end{aligned}
 
+The coefficients :math:`R^{1}_{mn}` and :math:`Z^{1}_{mn}` are specified by the input variables ``R1`` and ``Z1``, respectively. 
+The spectral mode numbers :math:`l`, :math:`m`, and :math:`n` are given by ``l``, ``m``, and ``n``, respectively, which must be on the same input line as the coefficients. 
+The fixed-boundary surface shape is a required input. 
+
+The fixed-boundary surface shape given in this example is equivalent to (using Ptolemy’s identities):
+
+.. math::
    \begin{aligned}
    R_{1}(\theta,\phi) &= 10 + \cos\theta + 0.3 \cos(\theta+19\phi) \\
    Z_{1}(\theta,\phi) &= \sin\theta - 0.3 \sin(\theta+19\phi).
    \end{aligned}
-
-The fixed-boundary surface shape is a required input. 
 
 VMEC Inputs
 ***********
@@ -280,7 +296,7 @@ A VMEC input file can also be passed in place of a DESC input file.
 DESC will detect if it is a VMEC input format and automatically generate an equivalent DESC input file. 
 The generated DESC input file will be stored at the same file path as the VMEC input file, but its name will have ``_desc`` appended to it. 
 The resulting input file will not contain any of the options that are specific to DESC, and therefore will depend on many default values. 
-This is a convenient first-attempt, but may not converge to the desired result for all equilibria. 
+This is a convenient tool for converting the profiles and boundary inputs to the DESC format, but the generated input file may not converge well with the default options for all equilibria. 
 It is recommended that the automatically generated DESC input file be manually edited to improve performance. 
 
 .. _Basis functions and collocation nodes: notebooks/basis_grid.ipynb

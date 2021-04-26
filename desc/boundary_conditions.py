@@ -491,7 +491,7 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
         AZ[i, j] = 1
 
     A = np.block([[AR, np.zeros((dim_Rb, dim_Z))], [np.zeros((dim_Zb, dim_R)), AZ]])
-    b = jnp.concatenate([Rb_lmn, Zb_lmn])
+    b = np.concatenate([Rb_lmn, Zb_lmn])
 
     return A, b
 

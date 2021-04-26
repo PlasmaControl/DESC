@@ -838,7 +838,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 colored(
                     "Computing perturbations with finite differences can be "
                     + "highly innacurate, consider using JAX or setting all "
-                    + "perturbation ratios to 0",
+                    + "perturbation ratios to 1",
                     "yellow",
                 )
             )

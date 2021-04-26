@@ -156,6 +156,7 @@ class InputReader:
             "L": np.atleast_1d(None),
             "M": np.atleast_1d(0),
             "N": np.atleast_1d(0),
+            "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
             "bdry_ratio": np.atleast_1d(1.0),
@@ -246,6 +247,10 @@ class InputReader:
             match = re.search(r"N_tor", argument, re.IGNORECASE)
             if match:
                 inputs["N"] = np.array(numbers).astype(int)
+                flag = True
+            match = re.search(r"L_grid", argument, re.IGNORECASE)
+            if match:
+                inputs["L_grid"] = np.array(numbers).astype(int)
                 flag = True
             match = re.search(r"M_grid", argument, re.IGNORECASE)
             if match:
@@ -471,6 +476,7 @@ class InputReader:
             "L",
             "M",
             "N",
+            "L_grid",
             "M_grid",
             "N_grid",
             "bdry_ratio",
@@ -508,11 +514,15 @@ class InputReader:
         if None in inputs["L"]:
             default_L = {
                 "ansi": inputs["M"],
-                "chevron": inputs["M"],
                 "fringe": 2 * inputs["M"],
-                "house": 2 * inputs["M"],
             }
             inputs["L"] = default_L[inputs["spectral_indexing"]]
+        if None in inputs["L_grid"]:
+            default_L_grid = {
+                "ansi": inputs["M_grid"],
+                "fringe": 2 * inputs["M_grid"],
+            }
+            inputs["L_grid"] = default_L_grid[inputs["spectral_indexing"]]
 
         # split into list of dicts
         inputs_list = []
@@ -564,6 +574,7 @@ class InputReader:
             "L_rad": "L",
             "M_pol": "M",
             "N_tor": "N",
+            "L_grid": "L_grid",
             "M_grid": "M_grid",
             "N_grid": "N_grid",
         }.items():

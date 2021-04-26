@@ -1383,14 +1383,14 @@ class _Configuration(IOAble, ABC):
             Only returned if "copy" is True, otherwise modifies the current equilibrium in place.
 
         """
-        L = L or self.L
-        M = M or self.M
-        N = N or self.N
-        L_grid = L_grid or 2 * self.L
-        M_grid = M_grid or 2 * self.M
-        N_grid = N_grid or 2 * self.N
+        L = L or int(1.5 * self.L)
+        M = M or int(1.5 * self.M)
+        N = N or int(1.5 * self.N)
+        L_grid = L_grid or L
+        M_grid = M_grid or M
+        N_grid = N_grid or N
 
-        grid = ConcentricGrid(M_grid, N_grid, spectral_indexing=self.spectral_indexing)
+        grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
 
         toroidal_coords = self.compute_toroidal_coords(grid)

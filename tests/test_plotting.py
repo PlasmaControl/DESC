@@ -294,21 +294,21 @@ def test_plot_grid_quad():
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_jacobi():
-    grid = ConcentricGrid(M=10, N=1, node_pattern="jacobi")
+    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
     fig, ax = plot_grid(grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_cheb1():
-    grid = ConcentricGrid(M=10, N=1, node_pattern="cheb1")
+    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
     fig, ax = plot_grid(grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_grid_cheb2():
-    grid = ConcentricGrid(M=10, N=1, node_pattern="cheb2")
+    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
     fig, ax = plot_grid(grid)
     return fig
 

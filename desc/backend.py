@@ -38,7 +38,7 @@ else:
                 desc.__version__, jax.__version__, jaxlib.__version__, y.dtype
             )
         )
-
+        del x,y
     except:
         jnp = np
         x = jnp.linspace(0, 5)

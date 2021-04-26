@@ -578,10 +578,10 @@ class Equilibrium(_Configuration, IOAble):
             self.objective.callback(result["x"], *args)
 
         self.optimizer_results = {
-            key: val if isinstance(val, str) else np.asarray(val)
+            key: val if isinstance(val, str) else np.copy(val)
             for key, val in result.items()
         }
-        self.x = self.objective.BC_constraint.recover(result["x"])
+        self.x = np.copy(self.objective.BC_constraint.recover(result["x"]))
         self.solved = result["success"]
         return result
 

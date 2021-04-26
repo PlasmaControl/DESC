@@ -1,9 +1,8 @@
 import numpy as np
 import warnings
 from termcolor import colored
-
 from desc.utils import Timer
-from desc.backend import use_jax
+from desc.backend import use_jax, jnp
 from desc.boundary_conditions import get_boundary_condition
 from desc.optimize.tr_subproblems import trust_region_step_exact
 
@@ -112,6 +111,8 @@ def perturb(
     # 1st order
     if order > 0:
 
+        RHS1 = eq.objective.compute(*args)
+
         # 1st partial derivatives wrt state vector (x)
         if Jx is None:
             if verbose > 0:
@@ -122,9 +123,16 @@ def perturb(
             if verbose > 1:
                 timer.disp("df/dx computation")
 
-        u, s, vt = np.linalg.svd(Jx, full_matrices=False)
+        if verbose > 0:
+            print("Factoring df")
+        timer.start("df/dx factorization")
         m, n = Jx.shape
-        RHS1 = eq.objective.compute(*args)
+        u, s, vt = jnp.linalg.svd(Jx, full_matrices=False)
+        timer.stop("df/dx factorization")
+        if verbose > 1:
+            timer.disp("df/dx factorization")
+        # once we have the svd we don't need Jx anymore so can save some memory
+        del Jx
 
         # partial derivatives wrt input parameters (c)
         inds = tuple([arg_idx[key] for key in deltas])
@@ -161,7 +169,6 @@ def perturb(
         inds = (0, *inds)
         tangents = (dx1, *tangents)
         RHS2 = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
-
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -239,8 +246,7 @@ def perturb(
 
     # update state vector
     dy = dx1 + dx2 + dx3
-    eq_new.x = eq_new.objective.BC_constraint.recover(y + dy)
-
+    eq_new.x = np.copy(eq_new.objective.BC_constraint.recover(y + dy))
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")

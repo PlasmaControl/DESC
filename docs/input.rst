@@ -24,6 +24,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    L_rad  =  4:4:24
    M_pol  =  6:2:10, 10; 11x2 12
    N_tor  =  0  1;  2x2,  3x2;  4
+   L_grid =  8:4:32
    M_grid =  9:3:15, 16:1:18
    N_grid =  0  2  3,  3;  4  5  6
    
@@ -91,14 +92,16 @@ Spectral Resolution
    L_rad  =  4:4:24
    M_pol  =  6:2:10, 10; 11x2 12
    N_tor  =  0  1;  2x2,  3x2;  4
+   L_grid =  8:4:32
    M_grid =  9:3:15, 16:1:18
    N_grid =  0  2  3,  3;  4  5  6
 
-- ``L_rad`` (int): Maximum radial mode number for the Fourier-Zernike basis, :math:`L`. Default = ``M`` if ``spectral_indexing = ANSI``, or ``2M`` if ``spectral_indexing = Fringe``. For more information see `Basis functions and collocation nodes`_. 
+- ``L_rad`` (int): Maximum radial mode number for the Fourier-Zernike basis, :math:`L`. Default = ``M_pol`` if ``spectral_indexing = ANSI``, or ``2*M_pol`` if ``spectral_indexing = Fringe``. For more information see `Basis functions and collocation nodes`_. 
 - ``M_pol`` (int): Maximum poloidal mode number for the Fourier-Zernike basis, :math:`M`. Required. 
 - ``N_tor`` (int): Maximum toroidal mode number for the Fourier-Zernike basis, :math:`N`. Default = 0. 
-- ``M_grid`` (int): Poloidal density of nodes in collocation grid. Default = ``round(1.5*M_pol)``. 
-- ``N_grid`` (int): Toroidal density of nodes in collocation grid. Default = ``round(1.5*N_tor)``. 
+- ``L_grid`` (int): Radial resolution of nodes in collocation grid. Default = ``M_grid`` if ``spectral_indexing = ANSI``, or ``2*M_grid`` if ``spectral_indexing = Fringe``. 
+- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``round(1.5*M_pol)``. 
+- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``round(1.5*N_tor)``. 
 
 When ``M_grid = M_pol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set. 
 When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series. 

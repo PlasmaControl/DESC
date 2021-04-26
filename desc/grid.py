@@ -383,7 +383,9 @@ class LinearGrid(Grid):
             self._nodes, self._weights = self._create_nodes(
                 L=L, M=M, N=N, NFP=self.NFP, axis=self.axis, endpoint=self.endpoint
             )
+            self._enforce_symmetry()
             self._sort_nodes()
+            self._find_axis()
 
     @property
     def endpoint(self):
@@ -505,7 +507,9 @@ class QuadratureGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
+            self._enforce_symmetry()
             self._sort_nodes()
+            self._find_axis()
 
 
 class ConcentricGrid(Grid):
@@ -517,6 +521,8 @@ class ConcentricGrid(Grid):
 
     Parameters
     ----------
+    L : int
+        radial grid resolution
     M : int
         poloidal grid resolution
     N : int
@@ -527,8 +533,6 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Zernike indexing scheme
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
         pattern for radial coordinates
 
@@ -536,39 +540,29 @@ class ConcentricGrid(Grid):
             * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
             * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
               M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+            * ``'ocs'``: optimal concentric sampling to minimize the condition number
+              of the resulting transform matrix, for doing inverse transform.
             * ``None`` : linear spacing in r=[0,1]
 
 
     """
 
-    _io_attrs_ = Grid._io_attrs_ + ["_spectral_indexing"]
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
 
-    def __init__(
-        self,
-        M,
-        N,
-        NFP=1,
-        sym=False,
-        axis=False,
-        spectral_indexing="fringe",
-        node_pattern="jacobi",
-    ):
-
-        self._L = M + 1
+        self._L = L
         self._M = M
         self._N = N
         self._NFP = NFP
         self._sym = sym
         self._axis = axis
-        self._spectral_indexing = spectral_indexing
         self._node_pattern = node_pattern
 
         self._nodes, self._weights = self._create_nodes(
+            L=self.L,
             M=self.M,
             N=self.N,
             NFP=self.NFP,
             axis=self.axis,
-            spectral_indexing=self.spectral_indexing,
             node_pattern=self.node_pattern,
         )
 
@@ -576,13 +570,13 @@ class ConcentricGrid(Grid):
         self._sort_nodes()
         self._find_axis()
 
-    def _create_nodes(
-        self, M, N, NFP=1, axis=False, spectral_indexing="fringe", node_pattern="jacobi"
-    ):
+    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """
 
         Parameters
         ----------
+        L : int
+            radial grid resolution
         M : int
             poloidal grid resolution
         N : int
@@ -591,8 +585,6 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        spectral_indexing : {``'ansi'``, ``'fringe'``}
-            Zernike indexing scheme
         node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
 
@@ -600,6 +592,8 @@ class ConcentricGrid(Grid):
                 * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
                 * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
                 M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+                * ``'ocs'``: optimal concentric sampling to minimize the condition number
+                  of the resulting transform matrix, for doing inverse transform.
                 * ``None`` : linear spacing in r=[0,1]
 
         Returns
@@ -610,27 +604,23 @@ class ConcentricGrid(Grid):
             weight for each node, either exact quadrature or volume based
 
         """
-        dim_fourier = 2 * N + 1
-        if spectral_indexing in ["ansi", "chevron"]:
-            dim_zernike = int((M + 1) * (M + 2) / 2)
-            a = 1
-        elif spectral_indexing in ["fringe", "house"]:
-            dim_zernike = int((M + 1) ** 2)
-            a = 2
-        else:
-            raise ValueError(
-                colored(
-                    "Zernike indexing must be one of 'ansi', 'fringe', 'chevron', 'house'",
-                    "red",
-                )
-            )
+
+        def ocs(L):
+            # from Ramos-Lopez, et al “Optimal Sampling Patterns for Zernike Polynomials.”
+            # Applied Mathematics and Computation 274 (February 2016): 247–57.
+            # https://doi.org/10.1016/j.amc.2015.11.006.
+            j = np.arange(1, L // 2 + 2)
+            z = np.cos((2 * j - 1) * np.pi / (2 * L + 2))
+            rj = 1.1565 * z - 0.76535 * z ** 2 + 0.60517 * z ** 3
+            return np.sort(rj)
 
         pattern = {
-            "cheb1": (np.cos(np.arange(M, -1, -1) * np.pi / M) + 1) / 2,
-            "cheb2": -np.cos(np.arange(M, 2 * M + 1, 1) * np.pi / (2 * M)),
-            "jacobi": special.js_roots(M + 1, 2, 2)[0],
+            "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
+            "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
+            "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
+            "ocs": ocs(L),
         }
-        rho = pattern.get(node_pattern, np.linspace(0, 1, num=M + 1))
+        rho = pattern.get(node_pattern, np.linspace(0, 1, num=L // 2 + 1))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0
@@ -646,63 +636,66 @@ class ConcentricGrid(Grid):
             else:
                 drho[i] = (rho[i + 1] - rho[i - 1]) / 2
 
-        r = np.zeros(dim_zernike)
-        t = np.zeros(dim_zernike)
-        dr = np.zeros(dim_zernike)
-        dt = np.zeros(dim_zernike)
+        r = []
+        t = []
+        dr = []
+        dt = []
 
-        i = 0
-        for m in range(M + 1):
-            dtheta = 2 * np.pi / (a * m + 1)
+        for iring in range(L // 2 + 1, 0, -1):
+            dtheta = (
+                2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
+            )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            for j in range(a * m + 1):
-                r[i] = rho[m]
-                t[i] = theta[j]
-                dr[i] = drho[m]
-                dt[i] = dtheta
-                i += 1
+            theta = (theta + dtheta / 3) % (2 * np.pi)
+            for tk in theta:
+                r.append(rho[-iring])
+                t.append(tk)
+                dt.append(dtheta)
+                dr.append(drho[-iring])
 
-        dz = 2 * np.pi / (NFP * dim_fourier)
+        r = np.asarray(r)
+        t = np.asarray(t)
+        dr = np.asarray(dr)
+        dt = np.asarray(dt)
+        dimzern = r.size
+
+        dz = 2 * np.pi / (NFP * (2 * N + 1))
         z = np.arange(0, 2 * np.pi / NFP, dz)
 
-        r = np.tile(r, dim_fourier)
-        t = np.tile(t, dim_fourier)
-        z = np.tile(z[np.newaxis], (dim_zernike, 1)).flatten(order="F")
-        dr = np.tile(dr, dim_fourier)
-        dt = np.tile(dt, dim_fourier)
+        r = np.tile(r, 2 * N + 1)
+        t = np.tile(t, 2 * N + 1)
+        z = np.tile(z[np.newaxis], (dimzern, 1)).flatten(order="F")
+        dr = np.tile(dr, 2 * N + 1)
+        dt = np.tile(dt, 2 * N + 1)
         dz = np.ones_like(z) * dz
-
         nodes = np.stack([r, t, z]).T
         weights = dr * dt * dz
 
         return nodes, weights
 
-    def change_resolution(self, M, N):
+    def change_resolution(self, L, M, N):
         """Change the resolution of the grid
 
         Parameters
         ----------
+        L : int
+            new radial grid resolution
         M : int
             new poloidal grid resolution
         N : int
             new toroidal grid resolution
 
         """
-        if M != self.M or N != self.N:
-            self._L = M + 1
+        if L != self.L or M != self.M or N != self.N:
+            self._L = L
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                M=M, N=N, NFP=self.NFP, node_pattern=self.node_pattern
+                L=L, M=M, N=N, NFP=self.NFP, node_pattern=self.node_pattern
             )
+            self._enforce_symmetry()
             self._sort_nodes()
-
-    @property
-    def spectral_indexing(self):
-        """str: type of indexing the grid is designed for"""
-        if not hasattr(self, "_spectral_indexing"):
-            self._spectral_indexing = "ansi"
-        return self._spectral_indexing
+            self._find_axis()
 
 
 # these functions are currently unused ---------------------------------------

@@ -56,7 +56,8 @@ class Equilibrium(_Configuration, IOAble):
         * ``'R_lmn'`` : ndarray, spectral coefficients of R
         * ``'Z_lmn'`` : ndarray, spectral coefficients of Z
         * ``'L_lmn'`` : ndarray, spectral coefficients of lambda
-        * ``'M_grid'`` : int, resolution of real space nodes in poloidal/radial direction
+        * ``'L_grid'`` : int, resolution of real space nodes in radial direction
+        * ``'M_grid'`` : int, resolution of real space nodes in poloidal direction
         * ``'N_grid'`` : int, resolution of real space nodes in toroidal direction
         * ``'node_pattern'`` : str, node pattern, default is "cheb1"
         * ``'objective'`` : str, mode for equilibrium solution
@@ -68,6 +69,7 @@ class Equilibrium(_Configuration, IOAble):
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
         "_x0",
+        "_L_grid",
         "_M_grid",
         "_N_grid",
         "_grid",
@@ -101,6 +103,7 @@ class Equilibrium(_Configuration, IOAble):
 
         super().__init__(inputs=inputs)
         self._x0 = self._x
+        self._L_grid = inputs.get("L_grid", self._L)
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
@@ -127,6 +130,22 @@ class Equilibrium(_Configuration, IOAble):
     @x0.setter
     def x0(self, x0):
         self._x0 = x0
+
+    @property
+    def L_grid(self):
+        """Radial resolution of grid in real space (int)."""
+        if not hasattr(self, "_L_grid"):
+            self._L_grid = (
+                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
+            )
+        return self._L_grid
+
+    @L_grid.setter
+    def L_grid(self, new):
+        if self.L_grid != new:
+            self._L_grid = new
+            self._set_grid()
+            self._set_transforms()
 
     @property
     def M_grid(self):
@@ -171,19 +190,19 @@ class Equilibrium(_Configuration, IOAble):
         return self._transforms
 
     def _set_grid(self):
-        if self.node_pattern in ["cheb1", "cheb2", "jacobi"]:
+        if self.node_pattern in ["cheb1", "cheb2", "jacobi", "ocs"]:
             self._grid = ConcentricGrid(
+                L=self.L_grid,
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
                 sym=self.sym,
                 axis=False,
-                spectral_indexing=self.spectral_indexing,
                 node_pattern=self.node_pattern,
             )
         elif self.node_pattern in ["linear", "uniform"]:
             self._grid = LinearGrid(
-                L=2 * self.M_grid + 1,
+                L=2 * self.L_grid + 1,
                 M=2 * self.M_grid + 1,
                 N=2 * self.N_grid + 1,
                 NFP=self.NFP,
@@ -191,11 +210,11 @@ class Equilibrium(_Configuration, IOAble):
                 axis=False,
             )
         elif self.node_pattern in ["quad"]:
-            L_grid = (
-                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
-            )
             self._grid = QuadratureGrid(
-                L=L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
             )
         else:
             raise ValueError(
@@ -275,7 +294,9 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 1:
             timer.disp("Boundary constraint factorization")
 
-    def change_resolution(self, L=None, M=None, N=None, M_grid=None, N_grid=None):
+    def change_resolution(
+        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None
+    ):
         """Set the spectral and real space resolution.
 
         Parameters
@@ -286,8 +307,10 @@ class Equilibrium(_Configuration, IOAble):
             maximum poloidal fourier mode number
         N : int
             maximum toroidal fourier mode number
+        L_grid : int
+            radial real space resolution
         M_grid : int
-            poloidal/radial real space resolution
+            poloidal real space resolution
         N_grid : int
             toroidal real space resolution
 
@@ -303,18 +326,30 @@ class Equilibrium(_Configuration, IOAble):
         if any([L_change, M_change, N_change]):
             super().change_resolution(L, M, N)
 
-        M_grid_change = N_grid_change = False
+        L_grid_change = M_grid_change = N_grid_change = False
+        if L_grid is not None and L_grid != self.L_grid:
+            self._L_grid = L_grid
+            L_grid_change = True
         if M_grid is not None and M_grid != self.M_grid:
             self._M_grid = M_grid
             M_grid_change = True
         if N_grid is not None and N_grid != self.N_grid:
             self._N_grid = N_grid
             N_grid_change = True
-        if any([M_grid_change, N_grid_change]):
+        if any([L_grid_change, M_grid_change, N_grid_change]):
             self._set_grid()
         self._set_transforms()
         if (
-            any([L_change, M_change, N_change, M_grid_change, N_grid_change])
+            any(
+                [
+                    L_change,
+                    M_change,
+                    N_change,
+                    L_grid_change,
+                    M_grid_change,
+                    N_grid_change,
+                ]
+            )
             and self.objective is not None
         ):
             self.constraint = self.constraint.name
@@ -518,7 +553,11 @@ class Equilibrium(_Configuration, IOAble):
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
         print("Node pattern: {}".format(self.node_pattern))
-        print("Node resolution (M,N)=({},{})".format(self.M_grid, self.N_grid))
+        print(
+            "Node resolution (L,M,N)=({},{},{})".format(
+                self.L_grid, self.M_grid, self.N_grid
+            )
+        )
 
     def solve(
         self,
@@ -790,7 +829,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 colored(
                     "Computing perturbations with finite differences can be "
                     + "highly innacurate, consider using JAX or setting all "
-                    + "perturbation rations to 1",
+                    + "perturbation ratios to 1",
                     "yellow",
                 )
             )
@@ -811,6 +850,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     L=self.inputs[ii]["L"],
                     M=self.inputs[ii]["M"],
                     N=self.inputs[ii]["N"],
+                    L_grid=self.inputs[ii]["L_grid"],
                     M_grid=self.inputs[ii]["M_grid"],
                     N_grid=self.inputs[ii]["N_grid"],
                 )

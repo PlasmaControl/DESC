@@ -24,7 +24,7 @@ gtol = 1e-4
 nfev = 50
 
 # solver methods
-optimizer         = lst-exact
+optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
 node_pattern      = jacobi

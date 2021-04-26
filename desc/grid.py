@@ -547,16 +547,7 @@ class ConcentricGrid(Grid):
 
     """
 
-    def __init__(
-        self,
-        L,
-        M,
-        N,
-        NFP=1,
-        sym=False,
-        axis=False,
-        node_pattern="jacobi",
-    ):
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
 
         self._L = L
         self._M = M
@@ -655,6 +646,7 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
+            theta = (theta + dtheta / 3) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)

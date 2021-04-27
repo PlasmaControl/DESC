@@ -12,7 +12,11 @@ from .utils import (
     compute_jac_scale,
     evaluate_quadratic,
 )
-from .tr_subproblems import trust_region_step_exact_svd, update_tr_radius
+from .tr_subproblems import (
+    trust_region_step_exact_svd,
+    trust_region_step_exact_cho,
+    update_tr_radius,
+)
 
 
 def lsqtr(
@@ -26,6 +30,7 @@ def lsqtr(
     gtol=1e-6,
     verbose=1,
     maxiter=None,
+    tr_method="cho",
     callback=None,
     options={},
 ):
@@ -37,9 +42,8 @@ def lsqtr(
         objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
     x0 : array-like
         initial guess
-    jac : callable or ``'broyden'``, optional:
-        function to compute jacobian matrix of fun, or ``'broyden'`` in which case Broyden's
-        method will be used to approximate the jacobian.
+    jac : callable:
+        function to compute jacobian matrix of fun
     args : tuple
         additional arguments passed to fun, grad, and jac
     x_scale : array_like or ``'jac'``, optional
@@ -72,6 +76,11 @@ def lsqtr(
         * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
+    tr_method : {'cho', 'svd'}
+        method to use for solving the trust region subproblem. 'cho' uses a sequence of
+        cholesky factorizations (generally 2-3), while 'svd' uses one singular value
+        decomposition. 'cho' is generally faster for large systems, especially on GPU,
+        but may be less accurate in some cases.
     callback : callable, optional
         Called after each iteration. Should be a callable with
         the signature:
@@ -95,6 +104,16 @@ def lsqtr(
         ``OptimizeResult`` for a description of other attributes.
 
     """
+    if tr_method not in ["cho", "svd"]:
+        raise ValueError(
+            "tr_method should be one of 'cho', 'svd', got {}".format(tr_method)
+        )
+    if isinstance(x_scale, str) and x_scale not in ["jac", "auto"]:
+        raise ValueError(
+            "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(
+                x_scale
+            )
+        )
 
     nfev = 0
     njev = 0
@@ -175,7 +194,10 @@ def lsqtr(
 
         g_h = g * scale
         J_h = J * scale
-        U, s, Vt = jnp.linalg.svd(J_h, full_matrices=False)
+        if tr_method == "svd":
+            U, s, Vt = jnp.linalg.svd(J_h, full_matrices=False)
+        elif tr_method == "cho":
+            B_h = jnp.dot(J_h.T, J_h)
 
         actual_reduction = -1
         while actual_reduction <= 0 and nfev < max_nfev:
@@ -183,14 +205,15 @@ def lsqtr(
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
-            try:
+            if tr_method == "svd":
                 step_h, hits_boundary, alpha = trust_region_step_exact_svd(
                     f, U, s, Vt.T, trust_radius, alpha
                 )
-            except np.linalg.LinAlgError:
-                success = (False,)
-                message = (status_messages["err"],)
-                break
+            elif tr_method == "cho":
+                step_h, hits_boundary, alpha = trust_region_step_exact_cho(
+                    g_h, B_h, trust_radius, alpha
+                )
+
             step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
             # geodesic acceleration
             if ga_tr_ratio > 0:
@@ -199,9 +222,15 @@ def lsqtr(
                 nfev += 1
                 df = (f1 - f0) / ga_fd_step
                 RHS = 2 / ga_fd_step * (df - J.dot(step_h * scale))
-                ga_step_h, _, _ = trust_region_step_exact_svd(
-                    RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
-                )
+                if tr_method == "svd":
+                    ga_step_h, _, _ = trust_region_step_exact_svd(
+                        RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
+                    )
+                elif tr_method == "cho":
+                    RHS = jnp.dot(J_h.T, RHS)
+                    ga_step_h, _, _ = trust_region_step_exact_cho(
+                        RHS, B_h, ga_tr_ratio * step_h_norm, alpha
+                    )
                 step_h += ga_step_h
 
             # calculate the predicted value at the proposed point

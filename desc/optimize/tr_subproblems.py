@@ -149,55 +149,6 @@ def solve_trust_region_2d_subspace(
     return p, False, initial_alpha
 
 
-def solve_lsq_trust_region_exact(
-    grad, jac, scale, trust_radius, f, initial_alpha=None, **kwargs
-):
-    """Solve a trust-region problem arising in least-squares using near exact method
-
-    Parameters
-    ----------
-    grad : ndarray
-        gradient of objective function
-    jac : OptimizerDerivative
-        jacobian of objective function
-    scale : ndarray
-        scaling array for gradient and jacobian
-    trust_radius : float
-        Radius of a trust region.
-    f : ndarray
-        residual vector
-    initial_alpha : float, optional
-        Initial guess for alpha, which might be available from a previous
-        iteration. If None, determined automatically.
-
-    Returns
-    -------
-    p : ndarray, shape (n,)
-        Found solution of a trust-region problem.
-    hits_boundary : bool
-        True if the proposed step is on the boundary of the trust region.
-    alpha : float
-        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
-        Sometimes called Levenberg-Marquardt parameter.
-
-    """
-
-    rtol = kwargs.get("rtol", 0.01)
-    max_iter = kwargs.get("max_iter", 10)
-    threshold = kwargs.get("threshold", None)
-    m, n = jac.shape
-    if not hasattr(jac, "svd"):
-        raise ValueError("exact trust region method only works with svd derivative")
-    if not isalmostequal(scale):
-        raise ValueError(
-            "exact trust region method does not currently work with diagonal scaling"
-        )
-    u, s, v = jac.svd()
-    return trust_region_step_exact(
-        n, m, f, u, s, v, trust_radius, initial_alpha, rtol, max_iter, threshold
-    )
-
-
 def trust_region_step_exact_svd(
     f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
@@ -364,8 +315,6 @@ def trust_region_step_exact_cho(
         p = cho_solve((R, lower), -g)
         p_norm = np.linalg.norm(p)
         phi = p_norm - Delta
-        if np.abs(phi) < rtol * Delta:
-            break
         if phi < 0:
             alpha_upper = alpha
         if phi > 0:
@@ -375,6 +324,12 @@ def trust_region_step_exact_cho(
         q_norm = np.linalg.norm(q)
 
         alpha += (p_norm / q_norm) ** 2 * phi / Delta
+        if np.abs(phi) < rtol * Delta:
+            break
+
+    Bi = B + alpha * jnp.eye(B.shape[0])
+    R, lower = cho_factor(Bi)
+    p = cho_solve((R, lower), -g)
 
     # Make the norm of p equal to Delta; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region

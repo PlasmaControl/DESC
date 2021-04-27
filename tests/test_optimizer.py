@@ -155,5 +155,16 @@ class TestLSQTR(unittest.TestCase):
             jac,
             verbose=0,
             x_scale=1,
+            tr_method="cho",
+        )
+        np.testing.assert_allclose(out["x"], p)
+
+        out = lsqtr(
+            res,
+            p0,
+            jac,
+            verbose=0,
+            x_scale=1,
+            tr_method="svd",
         )
         np.testing.assert_allclose(out["x"], p)

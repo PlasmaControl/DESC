@@ -15,7 +15,6 @@ from desc.boundary_conditions import (
 )
 from desc.compute_funs import (
     compute_force_error_magnitude,
-    dot,
     compute_energy,
     compute_quasisymmetry,
 )
@@ -422,14 +421,14 @@ class ObjectiveFunction(IOAble, ABC):
         f = self.compute
         dims = [f(*args).size]
         for a in argnums:
-            if isinstance(a, int) and a < 7:
+            if isinstance(a, int) and a < 6:
                 f = Derivative(f, argnum=a)
             elif isinstance(a, str) and a in ObjectiveFunction.arg_names:
                 a = ObjectiveFunction.arg_names.get(a)
                 f = Derivative(f, argnum=a)
             else:
                 raise ValueError(
-                    "argnums should be integers between 0 and 6 "
+                    "argnums should be integers between 0 and 5 "
                     + "or one of {}, got {}".format(ObjectiveFunction.arg_names, a)
                 )
             dims.append(args[a].size)

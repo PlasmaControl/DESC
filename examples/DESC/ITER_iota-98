@@ -1,0 +1,51 @@
+# ITER-like equilibrium with iota=0.98 (from Plunk 2020)
+# boundary surface shape defined by Solov'ev solution with:
+# epsilon=0.32, kappa=1.7, delta=0.33 (from Pataki et al. 2013)
+
+# global parameters
+sym = 1
+NFP = 1
+Psi = 15.7
+
+# spectral resolution
+L_rad  =  8:4:24
+M_pol  =  8:2:12
+N_tor  =  0
+L_grid = 12:6:36
+M_grid = 12:3:18
+N_grid =  0
+
+# solver tolerances
+ftol = 1e-4
+xtol = 1e-6
+gtol = 1e-6
+nfev = 250
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
+
+# pressure and rotational transform profiles
+l:   0	p =   3.4E+6		i =  0.98
+l:   2	p =  -3.4E+6
+
+# fixed-boundary surface shape
+m:   0	n:   0	R1 =  6.67398248199709E+0
+m:   1	n:   0	R1 =  3.57638733611205E-1
+m:   2	n:   0	R1 =  3.16610086851214E-3
+m:   3	n:   0	R1 = -4.47681753915470E-2
+m:   4	n:   0	R1 =  4.79247597075166E-3
+m:   5	n:   0	R1 =  8.57501683231028E-3
+m:   6	n:   0	R1 = -2.69791640488949E-3
+m:   7	n:   0	R1 = -1.61574240603885E-3
+m:   8	n:   0	R1 =  1.42460679297617E-3
+m:  -1	n:   0	Z1 =  4.67394160488648E-1
+m:  -2	n:   0	Z1 = -1.51050390579266E-2
+m:  -3	n:   0	Z1 = -6.49729834610335E-2
+m:  -4	n:   0	Z1 =  1.37707639592885E-2
+m:  -5	n:   0	Z1 =  1.16781788809702E-2
+m:  -6	n:   0	Z1 = -5.74403159402340E-3
+m:  -7	n:   0	Z1 = -1.38202938169094E-3
+m:  -8	n:   0	Z1 =  2.60889740628183E-3

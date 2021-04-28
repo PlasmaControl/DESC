@@ -1668,8 +1668,8 @@ def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
             if m == 0:
                 idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
                 x0 = np.where(axis[:, 0] == n, axis[:, 1], b_lmn[k])[0]
-                x_lmn[idx] = x0
-                x_lmn[idx2] = b_lmn[k] - x0
+                x_lmn[idx] = (b_lmn[k] + x0) / 2
+                x_lmn[idx2] = (b_lmn[k] - x0) / 2
             else:
                 x_lmn[idx] = b_lmn[k]
 

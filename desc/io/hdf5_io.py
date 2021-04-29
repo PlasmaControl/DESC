@@ -154,10 +154,7 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for key in loc.keys():
             if isinstance(loc[key], h5py.Dataset):
-                if (
-                    isinstance(loc[key][()], bytes)
-                    and loc[key][()].decode("utf-8") != "name"
-                ):
+                if isinstance(loc[key][()], bytes) and key != "name":
                     thedict[key] = loc[key][()].decode("utf-8")
                 elif not isinstance(loc[key][()], bytes):
                     thedict[key] = loc[key][()]
@@ -171,7 +168,7 @@ class hdf5Reader(hdf5IO, Reader):
                     continue
                 name = loc[key]["name"][()].decode("utf-8")
                 if name == "list":
-                    thedict[name] = self.read_list(where=loc[key])
+                    thedict[key] = self.read_list(where=loc[key])
                 elif name == "dict":
                     thedict[key] = self.read_dict(where=loc[key])
                 else:

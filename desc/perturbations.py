@@ -368,11 +368,13 @@ def optimal_perturb(
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
-    c = np.array([])
-    c_idx = np.array([])
+    c = np.array([])  # only optimization parameters, not full vector
+    c_idx = np.array([], dtype=bool)  # c_full[c_idx] = c
+    c_dim = 0  # c_dim = c_full.size
     for key, idx in deltas.items():
         c = np.concatenate((c, getattr(eq, key)[idx]))
         c_idx = np.concatenate((c_idx, idx))
+        c_dim += idx.size
     args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dc1 = 0
     dc2 = 0
@@ -445,19 +447,19 @@ def optimal_perturb(
             uA,
             sA,
             vtA.T,
-            tr_ratio[0] * np.linalg.norm(c),
+            tr_ratio[0] * (np.linalg.norm(c) if np.linalg.norm(c) != 0 else 1),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
 
-        dc1 = np.zeros_like(c)
+        dc1 = np.zeros((c_dim,))
         dc1[c_idx] = dc1_opt
         inputs = {}
         idx0 = 0
         for key, idx in deltas.items():
-            inputs[key] = dc1[idx0 : len(idx)]
+            inputs[key] = dc1[idx0 : idx0 + len(idx)]
             idx0 += len(idx)
 
         RHS_1f = f + np.matmul(Fc, dc1)
@@ -495,7 +497,7 @@ def optimal_perturb(
         RHS_2g = np.matmul(Gx, np.matmul(Fx_inv, RHS_2f))
         timer.stop("d^2f computation")
         if verbose > 1:
-            timer.disp("df^2 computation")
+            timer.disp("d^2f computation")
 
         # Hessian of secondary objective (g) wrt both state vector and input parameters
         if verbose > 0:
@@ -506,9 +508,9 @@ def optimal_perturb(
         inds = (0, *inds)
         tangents = (dx1, *tangents)
         RHS_2g += -0.5 * objective.jvp2(inds, inds, tangents, tangents, *args)
-        timer.stop("d^2f computation")
+        timer.stop("d^2g computation")
         if verbose > 1:
-            timer.disp("dg^2 computation")
+            timer.disp("d^2g computation")
 
         # find optimal perturbation
         dc2_opt, hit, alpha = trust_region_step_exact(
@@ -518,18 +520,18 @@ def optimal_perturb(
             uA,
             sA,
             vtA.T,
-            tr_ratio[0] * np.linalg.norm(c),
+            tr_ratio[0] * np.linalg.norm(dc1_opt),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
 
-        dc2 = np.zeros_like(c)
+        dc2 = np.zeros((c_dim,))
         dc2[c_idx] = dc2_opt
         idx0 = 0
         for val in inputs.values():
-            val += dc2[idx0 : len(val)]
+            val += dc2[idx0 : idx0 + len(val)]
             idx0 += len(val)
 
         RHS_2f += np.matmul(Fc, dc2)

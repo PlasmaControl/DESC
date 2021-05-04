@@ -343,7 +343,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
         else:
-            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
             contourf_kwargs["levels"] = kwargs.get(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)

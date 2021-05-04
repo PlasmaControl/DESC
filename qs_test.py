@@ -8,16 +8,19 @@ from desc.grid import LinearGrid
 from desc.plotting import plot_surfaces, plot_2d
 
 
-iters = 1
-levels = np.logspace(-4, -1, num=7)
+rho = 0.75  # surface to optimize
+iters = 3  # optimization iterations
+levels = np.logspace(-3, 0, num=7)
 
-fam = EquilibriaFamily.load("examples/DESC/ITER_iota-98_output.h5")
+# fam = EquilibriaFamily.load("examples/DESC/ITER_iota-98_output.h5")
+fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_output.h5")
 eq = fam[-1]
-plot_surfaces(eq, nzeta=4)
-eq.change_resolution(N=1, N_grid=3)
 
-qs_grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N + 1, NFP=eq.NFP, rho=0.75)
-plot_grid = LinearGrid(M=100, N=100, NFP=eq.NFP, endpoint=True, rho=0.75)
+qs_grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N + 1, NFP=eq.NFP, rho=rho)
+plot_grid = LinearGrid(M=100, N=100, NFP=eq.NFP, endpoint=True, rho=rho)
+
+plot_surfaces(eq, nzeta=4)
+plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
 
 R_transform = Transform(qs_grid, eq.R_basis)
 Z_transform = Transform(qs_grid, eq.Z_basis)
@@ -38,25 +41,21 @@ qs_fun = QuasisymmetryTripleProduct(
 )
 dRb = np.invert((eq.Rb_basis.modes == [0, 0, 0]).all(axis=1))
 
-eq_opt = eq.perturb(
-    objective=qs_fun,
-    dRb=eq.Rb_basis.modes[:, 2] != 0,
-    dZb=eq.Zb_basis.modes[:, 2] != 0,
-    order=2,
-    verbose=2,
-    copy=True,
-)
-eq_opt.solve(ftol=1e-4, xtol=1e-6, gtol=1e-6, maxiter=500, verbose=2)
-
-
-# for i in range(iters):
-  #  eq = eq.copy()
-  #  fam.insert(len(fam), eq)
-  #  eq.perturb(objective=qs_fun, dRb=dRb, dZb=True, order=1, verbose=2, copy=False)
-  #  eq.solve(ftol=1e-3, xtol=1e-3, gtol=1e-3, maxiter=100, verbose=2)
-    # plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
-
-# plot_surfaces(eq, nzeta=4)
+for i in range(iters):
+    # eq = eq.copy()
+    # fam.insert(len(fam), eq)
+    eq = eq.perturb(
+        objective=qs_fun,
+        dRb=dRb,
+        dZb=True,
+        order=2,
+        verbose=2,
+        copy=True,
+    )
+    fam.insert(len(fam), eq)
+    eq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=50, verbose=3)
+    plot_surfaces(eq, nzeta=4)
+    plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
 
 
 # import matplotlib.pyplot as plt

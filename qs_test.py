@@ -5,22 +5,21 @@ from desc.equilibrium import EquilibriaFamily
 from desc.objective_funs import QuasisymmetryTripleProduct
 from desc.transform import Transform
 from desc.grid import LinearGrid
-from desc.plotting import plot_surfaces, plot_2d
+# from desc.plotting import plot_surfaces, plot_2d
 
 
-rho = 0.8  # surface to optimize
+rho = 0.9  # surface to optimize
 order = 2  # optimization order
 iters = 3  # optimization iterations
 
-"""
-fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_vacuum_output.h5")
+fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS2_r90.h5")
 eq = fam[-1]
 qs_grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=rho)
-plot_grid = LinearGrid(M=100, N=100, NFP=eq.NFP, endpoint=True, rho=rho)
+# plot_grid = LinearGrid(M=100, N=100, NFP=eq.NFP, endpoint=True, rho=rho)
 
-levels = np.logspace(-4, -1, num=7)
-plot_surfaces(eq, nzeta=4)
-plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
+# levels = np.logspace(-4, -1, num=7)
+# plot_surfaces(eq, nzeta=4)
+# plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
 
 R_transform = Transform(qs_grid, eq.R_basis)
 Z_transform = Transform(qs_grid, eq.Z_basis)
@@ -52,11 +51,12 @@ for i in range(iters):
     )
     fam.insert(len(fam), eq)
     eq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=50, verbose=3)
-    plot_surfaces(eq, nzeta=4)
-    plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
+#     plot_surfaces(eq, nzeta=4)
+#     plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
+
+fam.save("examples/DESC/HELIOTRON_QS2_r90.h5")
+
 """
-
-
 fam1 = EquilibriaFamily.load("examples/DESC/HELIOTRON_vacuum_QS1.h5")
 fam2 = EquilibriaFamily.load("examples/DESC/HELIOTRON_vacuum_QS2.h5")
 eq = fam1[-1]
@@ -120,3 +120,4 @@ ax.set_xlabel("Iteration")
 ax.set_ylabel("$\\langle g(x,c) \\rangle / \\langle g(x_0,c_0) \\rangle$")
 ax.set_title("Quasisymmetry error at $\\rho=0.9$")
 fig.set_tight_layout(True)
+"""

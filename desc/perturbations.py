@@ -160,14 +160,15 @@ def perturb(
     # 2nd order
     if order > 1:
 
-        # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing d^2f")
-        timer.start("d^2f computation")
         inds = tuple([arg_idx[key] for key in deltas])
         tangents = tuple([val for val in deltas.values()])
         inds = (0, *inds)
         tangents = (dx1, *tangents)
+
+        # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
+        if verbose > 0:
+            print("Computing d^2f")
+        timer.start("d^2f computation")
         RHS2 = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
         timer.stop("d^2f computation")
         if verbose > 1:
@@ -194,10 +195,6 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        inds = tuple([arg_idx[key] for key in deltas])
-        tangents = tuple([val for val in deltas.values()])
-        inds = (0, *inds)
-        tangents = (dx1, *tangents)
         RHS3 = (
             1
             / 6
@@ -368,13 +365,11 @@ def optimal_perturb(
     if not eq.built:
         eq.build(verbose)
     y = eq.objective.BC_constraint.project(eq.x)
-    c = np.array([])  # only optimization parameters, not full vector
-    c_idx = np.array([], dtype=bool)  # c_full[c_idx] = c
-    c_dim = 0  # c_dim = c_full.size
+    c = np.array([])
+    c_idx = np.array([], dtype=bool)
     for key, idx in deltas.items():
-        c = np.concatenate((c, getattr(eq, key)[idx]))
+        c = np.concatenate((c, getattr(eq, key)))
         c_idx = np.concatenate((c_idx, idx))
-        c_dim += idx.size
     args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
     dc1 = 0
     dc2 = 0
@@ -447,14 +442,14 @@ def optimal_perturb(
             uA,
             sA,
             vtA.T,
-            tr_ratio[0] * (np.linalg.norm(c) if np.linalg.norm(c) != 0 else 1),
+            tr_ratio[0] * np.linalg.norm(c[c_idx]),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
 
-        dc1 = np.zeros((c_dim,))
+        dc1 = np.zeros_like(c)
         dc1[c_idx] = dc1_opt
         inputs = {}
         idx0 = 0
@@ -485,14 +480,15 @@ def optimal_perturb(
     # second order
     if order > 1:
 
-        # Hessian of primary objective (f) wrt both state vector and input parameters
-        if verbose > 0:
-            print("Computing d^2f")
-        timer.start("d^2f computation")
         inds = tuple([arg_idx[key] for key in inputs])
         tangents = tuple([val for val in inputs.values()])
         inds = (0, *inds)
         tangents = (dx1, *tangents)
+
+        # Hessian of primary objective (f) wrt both state vector and input parameters
+        if verbose > 0:
+            print("Computing d^2f")
+        timer.start("d^2f computation")
         RHS_2f = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
         RHS_2g = np.matmul(Gx, np.matmul(Fx_inv, RHS_2f))
         timer.stop("d^2f computation")
@@ -503,10 +499,6 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2g")
         timer.start("d^2g computation")
-        inds = tuple([arg_idx[key] for key in inputs])
-        tangents = tuple([val for val in inputs.values()])
-        inds = (0, *inds)
-        tangents = (dx1, *tangents)
         RHS_2g += -0.5 * objective.jvp2(inds, inds, tangents, tangents, *args)
         timer.stop("d^2g computation")
         if verbose > 1:
@@ -527,7 +519,7 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc2 = np.zeros((c_dim,))
+        dc2 = np.zeros_like(c)
         dc2[c_idx] = dc2_opt
         idx0 = 0
         for val in inputs.values():
@@ -540,7 +532,7 @@ def optimal_perturb(
         dx2, hit, alpha = trust_region_step_exact(
             nJ,
             mJ,
-            RHS_1f,
+            RHS_2f,
             uJ,
             sJ,
             vtJ.T,
@@ -566,7 +558,7 @@ def optimal_perturb(
         setattr(eq_new, key, getattr(eq_new, key) + dc)
 
     # update boundary constraint
-    if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
+    if "Rb_lmn" in inputs or "Zb_lmn" in inputs:
         eq_new.objective.BC_constraint = get_boundary_condition(
             eq.objective.BC_constraint.name,
             eq_new.R_basis,
@@ -585,7 +577,7 @@ def optimal_perturb(
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
-        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
+        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c[c_idx])))
         print("||dx||/||x|| = {}".format(np.linalg.norm(dy) / np.linalg.norm(y)))
 
     return eq_new

@@ -1415,22 +1415,31 @@ class _Configuration(IOAble, ABC):
             return eq_sfl
 
     def run_booz_xform(
-        self, M_nyq=None, N_nyq=None, M_boz=None, N_boz=None, rho=None, verbose=True
+        self,
+        M_nyq=None,
+        N_nyq=None,
+        M_boz=None,
+        N_boz=None,
+        rho=None,
+        filename=None,
+        verbose=True,
     ):
         """Convert to Boozer coordinates by running booz_xform.
 
         Parameters
         ----------
         M_nyq : int
-            DESCRIPTION. The default is None.
+            Poloidal resolution for derived quantities. Default is ceil(1.5*M).
         N_nyq : int
-            DESCRIPTION. The default is None.
+            Toroidal resolution for derived quantities. Default is ceil(1.5*N).
         M_b : int
-            DESCRIPTION. The default is None.
+            Poloidal resolution of Boozer spectrum. Default is 2*M.
         N_b : int
-            DESCRIPTION. The default is None.
+            Toroidal resolution of Boozer spectrum. Default is 2*N.
         rho : ndarray
             Radial coordinates of the flux surfaces to evaluate at.
+        filename : str, Optional
+            If given, saves the results to a NetCDF file.
         verbose : bool
             Set False to suppress output of Booz_xform calculations.
 
@@ -1552,6 +1561,8 @@ class _Configuration(IOAble, ABC):
 
         # run booz_xform
         b.run()
+        if filename is not None:
+            b.write_boozmn(filename)
         return b
 
 

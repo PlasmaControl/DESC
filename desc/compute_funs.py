@@ -2658,21 +2658,25 @@ def compute_quasisymmetry(
         + magnetic_field["B^zeta"] * magnetic_field["|B|_zz"]
     )
 
+    """
     # Triple Product QS metric
     quasisymmetry["QS_TP"] = (
         magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
         - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
     )
     quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-
     """
     # Triple Product QS metric (T^4/m^2)
-    quasisymmetry["QS_TP"] = profiles["psi_r"] * (
-        magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-        - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-    ) / jacobian["g"]
+    quasisymmetry["QS_TP"] = (
+        profiles["psi_r"]
+        * (
+            magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+            - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+        )
+        / jacobian["g"]
+    )
     quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-
+    """
     # Triple Product QS metric (dimensionless)
     quasisymmetry["QS_TP"] = (
         magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]

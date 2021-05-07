@@ -5,21 +5,19 @@ from desc.equilibrium import EquilibriaFamily
 from desc.objective_funs import QuasisymmetryTripleProduct
 from desc.transform import Transform
 from desc.grid import LinearGrid
-# from desc.plotting import plot_surfaces, plot_2d
+from desc.plotting import plot_surfaces, plot_2d
+import matplotlib.pyplot as plt
 
 
 rho = 0.9  # surface to optimize
 order = 2  # optimization order
-iters = 3  # optimization iterations
+iters = 5  # optimization iterations
 
-fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS2_r90.h5")
+# optimization
+
+fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_output.h5")
 eq = fam[-1]
 qs_grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=rho)
-# plot_grid = LinearGrid(M=100, N=100, NFP=eq.NFP, endpoint=True, rho=rho)
-
-# levels = np.logspace(-4, -1, num=7)
-# plot_surfaces(eq, nzeta=4)
-# plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
 
 R_transform = Transform(qs_grid, eq.R_basis)
 Z_transform = Transform(qs_grid, eq.Z_basis)
@@ -42,29 +40,23 @@ for i in range(iters):
         eq.constraint,
     )
     eq = eq.perturb(
-        objective=qs_fun,
-        dRb=dRb,
-        dZb=True,
-        order=order,
-        verbose=2,
-        copy=True,
+        objective=qs_fun, dRb=dRb, dZb=True, order=order, verbose=2, copy=True,
     )
     fam.insert(len(fam), eq)
     eq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=50, verbose=3)
-#     plot_surfaces(eq, nzeta=4)
-#     plot_2d(eq, "QS_TP", grid=plot_grid, log=True, levels=levels)
 
 fam.save("examples/DESC/HELIOTRON_QS2_r90.h5")
 
-"""
-fam1 = EquilibriaFamily.load("examples/DESC/HELIOTRON_vacuum_QS1.h5")
-fam2 = EquilibriaFamily.load("examples/DESC/HELIOTRON_vacuum_QS2.h5")
+# plotting
+
+fam1 = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS1_nosolve.h5")
+fam2 = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS2_nosolve.h5")
 eq = fam1[-1]
 
 ii = range(iters + 1)
-err1 = np.zeros_like(ii)
-err2 = np.zeros_like(ii)
-qs_grid = LinearGrid(M=90, N=90, NFP=eq.NFP, rho=rho)
+err1 = np.zeros_like(ii, dtype="float")
+err2 = np.zeros_like(ii, dtype="float")
+qs_grid = LinearGrid(M=180, N=180, NFP=eq.NFP, rho=rho)
 
 R_transform = Transform(qs_grid, eq.R_basis)
 Z_transform = Transform(qs_grid, eq.Z_basis)
@@ -107,17 +99,19 @@ for i in ii:
     print("1st order error: {}".format(err1[i]))
     print("2nd order error: {}".format(err2[i]))
 
-import matplotlib.pyplot as plt
+levels = np.logspace(-4, -1, num=7)
+plot_surfaces(fam2[2], nzeta=4)
+plot_surfaces(fam2[-1], nzeta=4)
+plot_2d(fam2[2], "QS_TP", grid=qs_grid, log=True, levels=levels)
+plot_2d(fam2[-1], "QS_TP", grid=qs_grid, log=True, levels=levels)
 
 plt.rcParams.update({"font.size": 20})
 fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-ax.semilogy(ii, err1/err1[0], "bo-", label="1st order")
-ax.semilogy(ii, err2/err1[0], "ro-", label="2nd order")
+ax.semilogy(ii, err1, "bo-", label="1st order")
+ax.semilogy(ii, err2, "ro-", label="2nd order")
 ax.legend()
 ax.set_xticks(ii)
-ax.set_ylim(1e-3, 2e0)
 ax.set_xlabel("Iteration")
-ax.set_ylabel("$\\langle g(x,c) \\rangle / \\langle g(x_0,c_0) \\rangle$")
-ax.set_title("Quasisymmetry error at $\\rho=0.9$")
+ax.set_ylabel("$\\langle g(x,c) \\rangle$")
+ax.set_title("Quasi-symmetry error at $\\rho={}$".format(rho))
 fig.set_tight_layout(True)
-"""

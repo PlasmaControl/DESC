@@ -1129,6 +1129,7 @@ class _Configuration(IOAble, ABC):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1429,12 +1430,12 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         M_nyq : int
-            Poloidal resolution for derived quantities. Default is ceil(1.5*M).
+            Poloidal resolution for derived quantities. Default is M.
         N_nyq : int
-            Toroidal resolution for derived quantities. Default is ceil(1.5*N).
-        M_b : int
+            Toroidal resolution for derived quantities. Default is N.
+        M_boz : int
             Poloidal resolution of Boozer spectrum. Default is 2*M.
-        N_b : int
+        N_boz : int
             Toroidal resolution of Boozer spectrum. Default is 2*N.
         rho : ndarray
             Radial coordinates of the flux surfaces to evaluate at.
@@ -1461,9 +1462,9 @@ class _Configuration(IOAble, ABC):
             ) from exc
 
         if M_nyq is None:
-            M_nyq = math.ceil(1.5 * self.M)
+            M_nyq = self.M
         if N_nyq is None:
-            N_nyq = math.ceil(1.5 * self.N)
+            N_nyq = self.N
         if M_boz is None:
             M_boz = 2 * self.M
         if N_boz is None:
@@ -1492,8 +1493,8 @@ class _Configuration(IOAble, ABC):
         )[-b.mnmax :]
 
         # Nyquist resolution
-        b.mpol_nyq = M_nyq
-        b.ntor_nyq = N_nyq
+        b.mpol_nyq = int(M_nyq)
+        b.ntor_nyq = int(N_nyq)
         b.mnmax_nyq = (2 * N_nyq + 1) * M_nyq + N_nyq + 1
         b.xm_nyq = np.tile(
             np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
@@ -1503,8 +1504,8 @@ class _Configuration(IOAble, ABC):
         )[-b.mnmax :]
 
         # Boozer resolution
-        b.mboz = M_boz
-        b.nboz = N_boz
+        b.mboz = int(M_boz)
+        b.nboz = int(N_boz)
 
         # R, Z, lambda
         m, n, R_mn = zernike_to_fourier(self.R_lmn, basis=self.R_basis, rho=rho)

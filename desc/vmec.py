@@ -620,11 +620,11 @@ class VMECIO:
             idxes = np.pad(idxes, (1, 0), mode="constant")
         rr = np.sqrt(idxes / Nr_vmec)
         rt = np.linspace(0, 2 * np.pi, num_theta)
-        rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
-        tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
+        tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
 
         r_coords_desc = equil.compute_toroidal_coords(r_grid)
@@ -734,12 +734,11 @@ class VMECIO:
             )
 
             ax[k].axis("equal")
-            ax[k].set_xlabel("R")
-            ax[k].set_ylabel("Z")
-            ax[k].grid(True)
+            ax[k].set_xlabel(r"$R ~(\mathrm{m})$")
+            ax[k].set_ylabel(r"$Z ~(\mathrm{m})$")
             if k == 0:
-                s_vmec[0].set_label("VMEC")
-                s_desc[0].set_label("DESC")
-                ax[k].legend(fontsize="xx-small")
+                s_vmec[0].set_label(r"$\mathrm{VMEC}$")
+                s_desc[0].set_label(r"$\mathrm{DESC}$")
+                ax[k].legend(fontsize="x-small")
 
         return fig, ax

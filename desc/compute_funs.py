@@ -126,11 +126,11 @@ def compute_profiles(
     """
     profiles = {}
 
-    # toroidal flux
+    # toroidal flux (divided by 2 pi)
     rho = p_transform.grid.nodes[:, 0]
-    profiles["psi"] = Psi * rho ** 2
-    profiles["psi_r"] = 2 * Psi * rho
-    profiles["psi_rr"] = 2 * Psi * np.ones_like(rho)
+    profiles["psi"] = Psi * rho ** 2 / (2 * jnp.pi)
+    profiles["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
+    profiles["psi_rr"] = 2 * Psi * np.ones_like(rho) / (2 * jnp.pi)
 
     # pressure
     profiles["p"] = p_transform.transform(p_l, 0)
@@ -624,7 +624,7 @@ def compute_magnetic_field(
     toroidal_coords["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1)
 
     magnetic_field = {}
-    magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
+    magnetic_field["B0"] = profiles["psi_r"] / jacobian["g"]
 
     # contravariant components
     magnetic_field["B^rho"] = jnp.zeros_like(magnetic_field["B0"])
@@ -775,11 +775,9 @@ def compute_magnetic_field_axis(
     )
 
     magnetic_field = {}
-    magnetic_field["B0"] = profiles["psi_r"] / (2 * jnp.pi * jacobian["g"])
+    magnetic_field["B0"] = profiles["psi_r"] / jacobian["g"]
     magnetic_field["B0"] = put(
-        magnetic_field["B0"],
-        axis,
-        profiles["psi_rr"][axis] / (2 * jnp.pi * jacobian["g_r"][axis]),
+        magnetic_field["B0"], axis, profiles["psi_rr"][axis] / jacobian["g_r"][axis],
     )
 
     # contravariant components
@@ -1173,15 +1171,12 @@ def compute_current_density(
     )
 
     # B contravariant component derivatives
-    magnetic_field["B0_r"] = profiles["psi_rr"] / (2 * jnp.pi * jacobian["g"]) - (
-        profiles["psi_r"] * jacobian["g_r"]
-    ) / (2 * jnp.pi * jacobian["g"] ** 2)
-    magnetic_field["B0_t"] = -(profiles["psi_r"] * jacobian["g_t"]) / (
-        2 * jnp.pi * jacobian["g"] ** 2
+    magnetic_field["B0_r"] = (
+        profiles["psi_rr"] / jacobian["g"]
+        - (profiles["psi_r"] * jacobian["g_r"]) / jacobian["g"] ** 2
     )
-    magnetic_field["B0_z"] = -(profiles["psi_r"] * jacobian["g_z"]) / (
-        2 * jnp.pi * jacobian["g"] ** 2
-    )
+    magnetic_field["B0_t"] = -(profiles["psi_r"] * jacobian["g_t"]) / jacobian["g"] ** 2
+    magnetic_field["B0_z"] = -(profiles["psi_r"] * jacobian["g_z"]) / jacobian["g"] ** 2
     magnetic_field["B^theta_r"] = magnetic_field["B0_r"] * (
         profiles["iota"] - toroidal_coords["lambda_z"]
     ) + magnetic_field["B0"] * (profiles["iota_r"] - toroidal_coords["lambda_rz"])
@@ -2247,17 +2242,17 @@ def compute_quasisymmetry(
     # B contravariant component derivatives
     magnetic_field["B0_tt"] = -(
         profiles["psi_r"]
-        / (2 * jnp.pi * jacobian["g"] ** 2)
+        / jacobian["g"] ** 2
         * (jacobian["g_tt"] - 2 * jacobian["g_t"] ** 2 / jacobian["g"])
     )
     magnetic_field["B0_zz"] = -(
         profiles["psi_r"]
-        / (2 * jnp.pi * jacobian["g"] ** 2)
+        / jacobian["g"] ** 2
         * (jacobian["g_zz"] - 2 * jacobian["g_z"] ** 2 / jacobian["g"])
     )
     magnetic_field["B0_tz"] = -(
         profiles["psi_r"]
-        / (2 * jnp.pi * jacobian["g"] ** 2)
+        / jacobian["g"] ** 2
         * (jacobian["g_tz"] - 2 * jacobian["g_t"] * jacobian["g_z"] / jacobian["g"])
     )
     magnetic_field["B^theta_tt"] = magnetic_field["B0_tt"] * (
@@ -2633,11 +2628,8 @@ def compute_quasisymmetry(
 
     quasisymmetry = {}
 
-    quasisymmetry["|grad(rho)|"] = jnp.sqrt(
-        dot(con_basis["e^rho"], con_basis["e^rho"], 0)
-    )
     quasisymmetry["|grad(psi)|"] = jnp.sqrt(
-        profiles["psi_r"] ** 2 * quasisymmetry["|grad(rho)|"] ** 2
+        profiles["psi_r"] ** 2 * dot(con_basis["e^rho"], con_basis["e^rho"], 0)
     )
 
     # B * grad(|B|) and derivatives
@@ -2658,73 +2650,11 @@ def compute_quasisymmetry(
         + magnetic_field["B^zeta"] * magnetic_field["|B|_zz"]
     )
 
-    """
-    # Triple Product QS metric
-    quasisymmetry["QS_TP"] = (
-        magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-        - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-    )
-    quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-    """
-    # Triple Product QS metric (T^4/m^2)
-    quasisymmetry["QS_TP"] = (
-        profiles["psi_r"]
-        * (
-            magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-            - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-        )
-        / jacobian["g"]
-    )
-    quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-    """
-    # Triple Product QS metric (dimensionless)
-    quasisymmetry["QS_TP"] = (
-        magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-        - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-    ) / (quasisymmetry["|grad(rho)|"] * magnetic_field["|B|"] ** 3)
-    quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-
-    # Triple Product QS metric (dimensionless)
-    quasisymmetry["QS_TP"] = (
-        magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-        - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-    ) / jnp.mean(quasisymmetry["|grad(rho)|"] * magnetic_field["|B|"] ** 3)
-    quasisymmetry["QS_TP"] = put(quasisymmetry["QS_TP"], axis, 0)
-
-    # FIXME: singular points of QS Flux Function cause JAX issues
-    # Singular points (where B*grad(|B|)=0) are not known a-priori.
-    # Flux Function QS metric (T*m)
-    quasisymmetry["QS_FF"] = (
-        profiles["psi_r"]
-        / (jacobian["g"] * quasisymmetry["B*grad(|B|)"])
-        * (
-            +magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-            - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-        )
-    )
-    quasisymmetry["QS_FF_0"] = (
-        profiles["psi_r"]
-        * (
-            magnetic_field["B_zeta_t"] * magnetic_field["|B|_t"]
-            - magnetic_field["B_theta_t"] * magnetic_field["|B|_z"]
-            + magnetic_field["B_zeta"] * magnetic_field["|B|_tt"]
-            - magnetic_field["B_theta"] * magnetic_field["|B|_tz"]
-        )
-        / (
-            jacobian["g_t"] * quasisymmetry["B*grad(|B|)"]
-            + jacobian["g"] * quasisymmetry["B*grad(|B|)_t"]
-        )
-    )
-    singular = jnp.where(quasisymmetry["B*grad(|B|)"] == 0)[0]
-    quasisymmetry["QS_FF"] = put(
-        quasisymmetry["QS_FF"], singular, quasisymmetry["QS_FF_0"][singular]
-    )
-    """
-
     return (
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,

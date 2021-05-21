@@ -38,7 +38,7 @@ else:
                 desc.__version__, jax.__version__, jaxlib.__version__, y.dtype
             )
         )
-        del x,y
+        del x, y
     except:
         jnp = np
         x = jnp.linspace(0, 5)
@@ -60,6 +60,9 @@ print(
 if use_jax:
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
+    cond = jax.lax.cond
+    switch = jax.lax.switch
+    while_loop = jax.lax.while_loop
     from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
 
     def put(arr, inds, vals):
@@ -118,13 +121,6 @@ else:
         """Loop from lower to upper, applying body_fun to init_val
 
         This version is for the numpy backend, for jax backend see jax.lax.fori_loop
-        The semantics of ``fori_loop`` are given by this Python implementation::
-
-            def fori_loop(lower, upper, body_fun, init_val):
-                val = init_val
-                for i in range(lower, upper):
-                    val = body_fun(i, val)
-                return val
 
         Parameters
         ----------
@@ -146,4 +142,81 @@ else:
         val = init_val
         for i in np.arange(lower, upper):
             val = body_fun(i, val)
+        return val
+
+    def cond(pred, true_fun, false_fun, operand):
+        """Conditionally apply true_fun or false_fun.
+
+        This version is for the numpy backend, for jax backend see jax.lax.cond
+
+        Parameters
+        ----------
+        pred: bool
+            which branch function to apply.
+        true_fun: callable
+            Function (A -> B), to be applied if pred is True.
+        false_fun: callable
+            Function (A -> B), to be applied if pred is False.
+        operand: any
+            input to either branch depending on pred. The type can be a scalar, array,
+            or any pytree (nested Python tuple/list/dict) thereof.
+
+        Returns
+        -------
+        value: any
+            value of either true_fun(operand) or false_fun(operand), depending on the
+            value of pred. The type can be a scalar, array, or any pytree (nested
+            Python tuple/list/dict) thereof.
+
+        """
+        if pred:
+            return true_fun(operand)
+        else:
+            return false_fun(operand)
+
+    def switch(index, branches, operand):
+        """Apply exactly one of branches given by index.
+
+        If index is out of bounds, it is clamped to within bounds.
+
+        Parameters
+        ----------
+        index: int
+            which branch function to apply.
+        branches: Sequence[Callable]
+            sequence of functions (A -> B) to be applied based on index.
+        operand: any
+            input to whichever branch is applied.
+
+        Returns
+        -------
+        value: any
+            output of branches[index](operand)
+
+        """
+        index = np.clip(index, 0, len(branches) - 1)
+        return branches[index](operand)
+
+    def while_loop(cond_fun, body_fun, init_val):
+        """Call body_fun repeatedly in a loop while cond_fun is True.
+
+        Parameters
+        ----------
+        cond_fun: callable
+            function of type a -> bool.
+        body_fun: callable
+            function of type a -> a.
+        init_val: any
+            value of type a, a type that can be a scalar, array, or any pytree (nested
+            Python tuple/list/dict) thereof, representing the initial loop carry value.
+
+        Returns
+        -------
+        value: any
+            The output from the final iteration of body_fun, of type a.
+
+        """
+        val = init_val
+        while cond_fun(val):
+            val = body_fun(val)
         return val

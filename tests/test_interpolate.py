@@ -50,8 +50,8 @@ class TestInterp1D(unittest.TestCase):
 class TestInterp2D(unittest.TestCase):
     def test_interp2d(self):
 
-        xp = np.linspace(0, 4 * np.pi, 200)
-        yp = np.linspace(0, 2 * np.pi, 200)
+        xp = np.linspace(0, 4 * np.pi, 40)
+        yp = np.linspace(0, 2 * np.pi, 40)
         y = np.linspace(0, 2 * np.pi, 10000)
         x = np.linspace(0, 2 * np.pi, 10000)
         xxp, yyp = np.meshgrid(xp, yp, indexing="ij")
@@ -60,21 +60,21 @@ class TestInterp2D(unittest.TestCase):
         fp = f(xxp, yyp)
 
         fq = interp2d(x, y, xp, yp, fp)
-        np.testing.assert_allclose(fq, f(x, y), rtol=1e-6, atol=1e-5)
+        np.testing.assert_allclose(fq, f(x, y), rtol=1e-6, atol=1e-3)
 
         fq = interp2d(x, y, xp, yp, fp, method="nearest")
-        np.testing.assert_allclose(fq, f(x, y), rtol=1e-2, atol=1e-1)
+        np.testing.assert_allclose(fq, f(x, y), rtol=1e-2, atol=1)
 
         fq = interp2d(x, y, xp, yp, fp, method="linear")
-        np.testing.assert_allclose(fq, f(x, y), rtol=1e-4, atol=1e-3)
+        np.testing.assert_allclose(fq, f(x, y), rtol=1e-4, atol=1e-2)
 
 
 class TestInterp3D(unittest.TestCase):
     def test_interp3d(self):
 
-        xp = np.linspace(0, np.pi, 400)
-        yp = np.linspace(0, 2 * np.pi, 400)
-        zp = np.linspace(0, np.pi, 400)
+        xp = np.linspace(0, np.pi, 20)
+        yp = np.linspace(0, 2 * np.pi, 20)
+        zp = np.linspace(0, np.pi, 20)
         x = np.linspace(0, np.pi, 1000)
         y = np.linspace(0, 2 * np.pi, 1000)
         z = np.linspace(0, np.pi, 1000)
@@ -84,10 +84,10 @@ class TestInterp3D(unittest.TestCase):
         fp = f(xxp, yyp, zzp)
 
         fq = interp3d(x, y, z, xp, yp, zp, fp)
-        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-5, atol=1e-4)
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-5, atol=1e-2)
 
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="nearest")
-        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-2, atol=1e-1)
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-2, atol=1)
 
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="linear")
-        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-3, atol=1e-2)
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-3, atol=1e-1)

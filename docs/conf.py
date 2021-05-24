@@ -65,6 +65,8 @@ napoleon_use_rtype = False
 
 autosummary_generate = True
 autosummary_generate_overwrite = True
+# temporary fix to ignore errors raised in notebooks
+nbsphinx_allow_errors = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

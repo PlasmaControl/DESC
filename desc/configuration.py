@@ -580,8 +580,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         profiles = compute_profiles(
             self.Psi,
@@ -593,8 +595,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return profiles
@@ -622,8 +624,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         toroidal_coords = compute_toroidal_coords(
             self.Psi,
@@ -635,8 +639,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return toroidal_coords
@@ -663,8 +667,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self.Psi,
@@ -676,8 +682,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return cartesian_coords
@@ -705,8 +711,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self.Psi,
@@ -718,8 +726,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return cov_basis
@@ -747,8 +755,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -760,8 +770,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return jacobian
@@ -789,8 +799,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self.Psi,
@@ -802,8 +814,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return con_basis
@@ -832,8 +844,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_field,
@@ -851,8 +865,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return magnetic_field
@@ -880,8 +894,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             current_density,
@@ -900,8 +916,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return current_density
@@ -929,8 +945,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_pressure,
@@ -951,8 +969,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return magnetic_pressure
@@ -980,8 +998,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_tension,
@@ -1002,8 +1022,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return magnetic_tension
@@ -1031,8 +1051,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             force_error,
@@ -1053,8 +1075,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return force_error
@@ -1084,8 +1106,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             energy,
@@ -1104,8 +1128,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return energy
@@ -1133,8 +1157,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=3, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=3, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=3, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             quasisymmetry,
@@ -1154,8 +1180,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return quasisymmetry
@@ -1181,8 +1207,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1194,8 +1222,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
@@ -1221,8 +1249,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
-        self.pressure.grid = grid
-        self.iota.grid = grid
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
         Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="auto")
         Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="auto")
 
@@ -1233,8 +1263,8 @@ class _Configuration(IOAble, ABC):
             L_transform,
             Rb_transform,
             Zb_transform,
-            self.pressure,
-            self.iota,
+            pressure,
+            iota,
             BC_constraint=None,
             use_jit=False,
         )

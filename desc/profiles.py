@@ -1,6 +1,7 @@
 import numpy as np
 from termcolor import colored
 from abc import ABC, abstractmethod
+import copy
 
 from desc.backend import jnp, put
 from desc.io import IOAble
@@ -10,7 +11,6 @@ from desc.transform import Transform
 from desc.basis import PowerSeries
 
 # TODO: methods for converting between representations via fitting etc
-# TODO: copy method, for temp copies with different grids
 
 
 class Profile(IOAble, ABC):
@@ -46,6 +46,14 @@ class Profile(IOAble, ABC):
     @abstractmethod
     def compute(nodes, coeffs=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.coeffs"""
+
+    def copy(self, deepcopy=True):
+        """Return a (deep)copy of this profile."""
+        if deepcopy:
+            new = copy.deepcopy(self)
+        else:
+            new = copy.copy(self)
+        return new
 
     def __call__(self, nodes, coeffs=None, dr=0, dt=0, dz=0):
         return self.compute(nodes, coeffs, dr, dt, dz)

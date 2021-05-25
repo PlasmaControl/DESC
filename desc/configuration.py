@@ -12,7 +12,7 @@ from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
 from desc.basis import (
     PowerSeries,
     FourierSeries,
@@ -64,15 +64,13 @@ class _Configuration(IOAble, ABC):
         "_L_lmn",
         "_Rb_lmn",
         "_Zb_lmn",
-        "_p_l",
-        "_i_l",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
         "_Rb_basis",
         "_Zb_basis",
-        "_p_basis",
-        "_i_basis",
+        "_pressure",
+        "_iota",
         "_spectral_indexing",
         "_bdry_mode",
         "_boundary",
@@ -84,6 +82,9 @@ class _Configuration(IOAble, ABC):
         "FourierSeries": FourierSeries,
         "DoubleFourierSeries": DoubleFourierSeries,
         "FourierZernikeBasis": FourierZernikeBasis,
+        "PowerSeriesProfile": PowerSeriesProfile,
+        "SplineProfile": SplineProfile,
+        "MTanhProfile": MTanhProfile,
     }
 
     def __init__(self, inputs):

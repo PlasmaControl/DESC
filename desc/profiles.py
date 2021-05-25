@@ -5,7 +5,7 @@ import copy
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
 from desc.transform import Transform
 from desc.basis import PowerSeries
@@ -14,6 +14,15 @@ from desc.basis import PowerSeries
 
 
 class Profile(IOAble, ABC):
+    _io_attrs_ = ["_name", "_grid", "_coeffs"]
+
+    _object_lib_ = {
+        "Grid": Grid,
+        "LinearGrid": LinearGrid,
+        "ConcentricGrid": ConcentricGrid,
+        "QuadratureGrid": QuadratureGrid,
+    }
+
     @property
     def name(self):
         """Name of the profile"""
@@ -60,6 +69,10 @@ class Profile(IOAble, ABC):
 
 
 class PowerSeriesProfile(Profile):
+    _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
+    _object_lib_ = Profile._object_lib_
+    _object_lib_.update({"PowerSeries": PowerSeries, "Transform": Transform})
+
     def __init__(self, modes, coeffs, grid=None, name=None):
 
         self._name = name
@@ -118,6 +131,8 @@ class PowerSeriesProfile(Profile):
 
 
 class SplineProfile(Profile):
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
+
     def __init__(self, knots, values, grid=None, method="cubic2", name=None):
 
         self._name = name
@@ -178,7 +193,7 @@ class SplineProfile(Profile):
         return fq
 
 
-class MTanhhProfile(Profile):
+class MTanhProfile(Profile):
     def __init__(self, coeffs, grid=None, name=None):
 
         self._name = name

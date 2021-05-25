@@ -89,16 +89,19 @@ class TestPerturbations(unittest.TestCase):
         L_transform = Transform(grid, eq_old.L_basis)
         Rb_transform = Transform(grid, eq_old.Rb_basis)
         Zb_transform = Transform(grid, eq_old.Zb_basis)
-        p_transform = Transform(grid, eq_old.p_basis)
-        i_transform = Transform(grid, eq_old.i_basis)
+        pres = eq_old.pressure.copy()
+        pres.grid = grid
+        iota = eq_old.iota.copy()
+        iota.grid = grid
+
         obj_fun = DummyFunLinear(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_transform=pres,
+            i_transform=iota,
             BC_constraint=LCFSConstraint(
                 eq_old.R_basis,
                 eq_old.Z_basis,

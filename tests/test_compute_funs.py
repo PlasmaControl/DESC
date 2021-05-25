@@ -22,8 +22,10 @@ def test_magnetic_field_derivatives(DummyStellarator):
     R_transform = Transform(grid, eq.R_basis, derivs=3)
     Z_transform = Transform(grid, eq.Z_basis, derivs=3)
     L_transform = Transform(grid, eq.L_basis, derivs=3)
-    p_transform = Transform(grid, eq.p_basis, derivs=1)
-    i_transform = Transform(grid, eq.i_basis, derivs=1)
+    pres = eq.pressure.copy()
+    pres.grid = grid
+    iota = eq.iota.copy()
+    iota.grid = grid
 
     (
         quasisymmetry,
@@ -43,8 +45,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        pres,
+        iota,
     )
 
     B_sup_theta_r = np.zeros_like(magnetic_field["B^theta"])
@@ -87,8 +89,10 @@ def test_magnetic_field_derivatives(DummyStellarator):
     R_transform = Transform(grid, eq.R_basis, derivs=3)
     Z_transform = Transform(grid, eq.Z_basis, derivs=3)
     L_transform = Transform(grid, eq.L_basis, derivs=3)
-    p_transform = Transform(grid, eq.p_basis, derivs=1)
-    i_transform = Transform(grid, eq.i_basis, derivs=1)
+    pres = eq.pressure.copy()
+    pres.grid = grid
+    iota = eq.iota.copy()
+    iota.grid = grid
 
     (
         quasisymmetry,
@@ -108,8 +112,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        pres,
+        iota,
     )
 
     B_sup_theta_t = np.zeros_like(magnetic_field["B^theta"])
@@ -241,8 +245,10 @@ def test_magnetic_field_derivatives(DummyStellarator):
     R_transform = Transform(grid, eq.R_basis, derivs=3)
     Z_transform = Transform(grid, eq.Z_basis, derivs=3)
     L_transform = Transform(grid, eq.L_basis, derivs=3)
-    p_transform = Transform(grid, eq.p_basis, derivs=1)
-    i_transform = Transform(grid, eq.i_basis, derivs=1)
+    pres = eq.pressure.copy()
+    pres.grid = grid
+    iota = eq.iota.copy()
+    iota.grid = grid
 
     (
         quasisymmetry,
@@ -262,8 +268,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        pres,
+        iota,
     )
 
     B_sup_theta_z = np.zeros_like(magnetic_field["B^theta"])
@@ -397,8 +403,10 @@ def test_magnetic_field_derivatives(DummyStellarator):
     R_transform = Transform(grid, eq.R_basis, derivs=3)
     Z_transform = Transform(grid, eq.Z_basis, derivs=3)
     L_transform = Transform(grid, eq.L_basis, derivs=3)
-    p_transform = Transform(grid, eq.p_basis, derivs=1)
-    i_transform = Transform(grid, eq.i_basis, derivs=1)
+    pres = eq.pressure.copy()
+    pres.grid = grid
+    iota = eq.iota.copy()
+    iota.grid = grid
 
     (
         quasisymmetry,
@@ -418,8 +426,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        pres,
+        iota,
     )
 
     B_sup_theta = magnetic_field["B^theta"].reshape((N, M))

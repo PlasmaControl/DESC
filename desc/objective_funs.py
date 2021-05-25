@@ -135,14 +135,6 @@ class ObjectiveFunction(IOAble, ABC):
             (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
         ):
             self.Zb_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.p_transform.derivatives).all(-1).any(-1)
-        ):
-            self.p_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.i_transform.derivatives).all(-1).any(-1)
-        ):
-            self.i_transform.change_derivatives(self.derivatives, build=False)
 
     def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.

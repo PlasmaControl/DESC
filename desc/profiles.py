@@ -2,6 +2,7 @@ import numpy as np
 from termcolor import colored
 from abc import ABC, abstractmethod
 import copy
+import scipy.optimize
 
 from desc.backend import jnp, put
 from desc.io import IOAble
@@ -9,8 +10,6 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
 from desc.transform import Transform
 from desc.basis import PowerSeries
-
-# TODO: methods for converting between representations via fitting etc
 
 
 class Profile(IOAble, ABC):
@@ -27,6 +26,10 @@ class Profile(IOAble, ABC):
     def name(self):
         """Name of the profile"""
         return self._name
+
+    @name.setter
+    def name(self, new):
+        self._name = new
 
     @property
     @abstractmethod
@@ -103,7 +106,9 @@ class PowerSeriesProfile(Profile):
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
         else:
-            raise TypeError("grid should be a Grid or subclass, or ndarray")
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
         self._transform.grid = self.grid
 
     @property
@@ -126,8 +131,49 @@ class PowerSeriesProfile(Profile):
     def compute(self, nodes, coeffs=None, dr=0, dt=0, dz=0):
         if coeffs is None:
             coeffs = self.coeffs
+        if nodes.ndim == 1:
+            nodes = np.pad(nodes[:, np.newaxis], ((0, 0), (0, 2)))
         A = self.basis.evaluate(nodes, derivatives=[dr, dt, dz])
         return jnp.dot(A, coeffs)
+
+    @classmethod
+    def from_values(cls, x, y, order=6, rcond=None, w=None):
+        coeffs = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
+        return cls(np.arange(coeffs.size), coeffs)
+
+    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+        if len(self.coeffs) == order + 1:
+            coeffs = self.coeffs
+        elif len(self.coeffs) > order + 1:
+            coeffs = self.coeffs[: order + 1]
+        elif len(self.coeffs) < order + 1:
+            coeffs = np.pad(self.coeffs, (0, order + 1 - len(self.coeffs)))
+        modes = np.arange(order + 1)
+
+        return PowerSeriesProfile(modes, coeffs, self.grid, self.name)
+
+    def to_spline(self, knots=20, method="cubic2"):
+        if np.isscalar(knots):
+            knots = np.linspace(0, 1, knots)
+        values = self.compute(knots)
+        return SplineProfile(knots, values, self.grid, method, self.name)
+
+    def to_mtanh(self, order=4, xs=100, w=None, p0=None, pmax=np.inf, pmin=-np.inf):
+
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        ys = self.compute(xs)
+        return MTanhProfile.from_values(
+            xs,
+            ys,
+            order=order,
+            w=w,
+            p0=p0,
+            pmax=pmax,
+            pmin=pmin,
+            grid=self.grid,
+            name=self.name,
+        )
 
 
 class SplineProfile(Profile):
@@ -142,7 +188,7 @@ class SplineProfile(Profile):
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
-        self.grid = Grid
+        self.grid = grid
 
     @property
     def grid(self):
@@ -155,7 +201,9 @@ class SplineProfile(Profile):
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
         else:
-            raise TypeError("grid should be a Grid or subclass, or ndarray")
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
 
     @property
     def coeffs(self):
@@ -184,13 +232,39 @@ class SplineProfile(Profile):
         if coeffs is None:
             coeffs = self.coeffs
 
-        xq = nodes[:, 0]
+        xq = nodes[:, 0] if nodes.ndim > 1 else nodes
         if dt != 0 or dz != 0:
             return jnp.zeros_like(xq)
         x = self._knots
         f = coeffs
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
         return fq
+
+    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        fs = self.compute(xs)
+        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
+        p.grid = self.grid
+        p.name = self.name
+        return p
+
+    def to_mtanh(self, order=4, xs=100, w=None, p0=None, pmax=np.inf, pmin=-np.inf):
+
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        ys = self.compute(xs)
+        return MTanhProfile.from_values(
+            xs,
+            ys,
+            order=order,
+            w=w,
+            p0=p0,
+            pmax=pmax,
+            pmin=pmin,
+            grid=self.grid,
+            name=self.name,
+        )
 
 
 class MTanhProfile(Profile):
@@ -201,7 +275,7 @@ class MTanhProfile(Profile):
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
-        self.grid = Grid
+        self.grid = grid
 
     @property
     def grid(self):
@@ -214,7 +288,9 @@ class MTanhProfile(Profile):
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
         else:
-            raise TypeError("grid should be a Grid or subclass, or ndarray")
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
 
     @property
     def coeffs(self):
@@ -261,7 +337,7 @@ class MTanhProfile(Profile):
         # core polynomial
         p0 = jnp.polyval(core_poly, z)
         # mtanh part
-        m0 = MTanhhProfile._m(z)
+        m0 = MTanhProfile._m(z)
         # offsets + scale
         A = (height + offset) / 2
         B = (height - offset) / 2
@@ -270,14 +346,14 @@ class MTanhProfile(Profile):
         elif dx == 1:
             dzdx = -1 / width
             p1 = jnp.polyval(jnp.polyder(core_poly, 1), z)
-            m1 = MTanhhProfile._m(z, dz=1)
+            m1 = MTanhProfile._m(z, dz=1)
             y = A * dzdx * (p1 * m0 + p0 * m1)
         elif dx == 2:
             dzdx = -1 / width
             p1 = jnp.polyval(jnp.polyder(core_poly, 1), z)
-            m1 = MTanhhProfile._m(z, dz=1)
+            m1 = MTanhProfile._m(z, dz=1)
             p2 = jnp.polyval(jnp.polyder(core_poly, 2), z)
-            m2 = MTanhhProfile._m(z, dz=2)
+            m2 = MTanhProfile._m(z, dz=2)
             y = A * dzdx ** 2 * (p2 * m0 + 2 * m1 * p1 + m2 * p0)
 
         return y
@@ -287,11 +363,11 @@ class MTanhProfile(Profile):
         if dz == 0:
             m = 1 / (1 + jnp.exp(-2 * z))
         elif dz == 1:
-            m0 = MTanhhProfile._m(z, dz=0)
+            m0 = MTanhProfile._m(z, dz=0)
             m = 2 * jnp.exp(-2 * z) * m0 ** 2
         elif dz == 2:
-            m0 = MTanhhProfile._m(z, dz=0)
-            m1 = MTanhhProfile._m(z, dz=1)
+            m0 = MTanhProfile._m(z, dz=0)
+            m1 = MTanhProfile._m(z, dz=1)
             m = 4 * jnp.exp(-2 * z) * m1 * m0 - 2 * m1
         return m
 
@@ -306,7 +382,7 @@ class MTanhProfile(Profile):
         if coeffs is None:
             coeffs = self.coeffs
 
-        xq = nodes[:, 0]
+        xq = nodes[:, 0] if nodes.ndim > 1 else nodes
         height = coeffs[0]
         offset = coeffs[1]
         sym = coeffs[2]
@@ -316,5 +392,48 @@ class MTanhProfile(Profile):
         if dt != 0 or dz != 0:
             return jnp.zeros_like(xq)
 
-        y = MTanhhProfile._mtanh(xq, height, offset, sym, width, core_poly, dx=dr)
+        y = MTanhProfile._mtanh(xq, height, offset, sym, width, core_poly, dx=dr)
         return y
+
+    @classmethod
+    def from_values(
+        cls,
+        x,
+        y,
+        order=4,
+        w=None,
+        p0=None,
+        pmax=np.inf,
+        pmin=-np.inf,
+        grid=None,
+        name=None,
+    ):
+
+        fun = lambda x, *args: cls._mtanh(
+            x, args[0], args[1], args[2], args[3], args[4:]
+        )
+        if p0 is None:
+            p0 = np.zeros(order + 5)
+            p0[0] = 1.0
+            p0[1] = 1.0
+            p0[3] = 1.0
+            p0[4] = 1.0
+        coeffs, unc = scipy.optimize.curve_fit(
+            fun, x, y, p0, w, method="trf", bounds=(pmin, pmax)
+        )
+        return MTanhProfile(coeffs, grid, name)
+
+    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        fs = self.compute(xs)
+        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
+        p.grid = self.grid
+        p.name = self.name
+        return p
+
+    def to_spline(self, knots=20, method="cubic2"):
+        if np.isscalar(knots):
+            knots = np.linspace(0, 1, knots)
+        values = self.compute(knots)
+        return SplineProfile(knots, values, self.grid, method, self.name)

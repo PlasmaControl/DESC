@@ -761,8 +761,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         Rb_lmn, Zb_lmn = format_boundary(
             inputs["boundary"], equil.Rb_basis, equil.Zb_basis, equil.bdry_mode
         )
-        p_l = np.zeros_like(equil.pressure.coeffs)
-        i_l = np.zeros_like(equil.iota.coeffs)
+        p_l = np.zeros_like(equil.pressure.params)
+        i_l = np.zeros_like(equil.iota.params)
         for l, p, i in inputs["profiles"]:
             idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
             idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]

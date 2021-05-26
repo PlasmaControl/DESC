@@ -27,11 +27,11 @@ class TestProfiles(unittest.TestCase):
 
     def test_close_values(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), coeffs=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
         sp = pp.to_spline()
         x = np.linspace(0, 1, 100)
 
         np.testing.assert_allclose(pp.compute(x), sp.compute(x), rtol=1e-5, atol=1e-3)
 
         pp1 = sp.to_powerseries(order=4)
-        np.testing.assert_allclose(pp.coeffs, pp1.coeffs, rtol=1e-5, atol=1e-2)
+        np.testing.assert_allclose(pp.params, pp1.params, rtol=1e-5, atol=1e-2)

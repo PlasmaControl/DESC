@@ -146,10 +146,10 @@ class _Configuration(IOAble, ABC):
 
         # format profiles
         self._pressure = PowerSeriesProfile(
-            modes=self._profiles[:, 0], coeffs=self._profiles[:, 1], name="pressure"
+            modes=self._profiles[:, 0], params=self._profiles[:, 1], name="pressure"
         )
         self._iota = PowerSeriesProfile(
-            modes=self._profiles[:, 0], coeffs=self._profiles[:, 2], name="iota"
+            modes=self._profiles[:, 0], params=self._profiles[:, 2], name="iota"
         )
         # format boundary
         self._Rb_lmn, self._Zb_lmn = format_boundary(
@@ -456,11 +456,11 @@ class _Configuration(IOAble, ABC):
     @property
     def p_l(self):
         """Coefficients of pressure profile (ndarray)."""
-        return self.pressure.coeffs
+        return self.pressure.params
 
     @p_l.setter
     def p_l(self, p_l):
-        self.pressure.coeffs = p_l
+        self.pressure.params = p_l
 
     @property
     def iota(self):
@@ -479,11 +479,11 @@ class _Configuration(IOAble, ABC):
     @property
     def i_l(self):
         """Coefficients of iota profile (ndarray)."""
-        return self.iota.coeffs
+        return self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
-        self.iota.coeffs = i_l
+        self.iota.params = i_l
 
     @property
     def R_basis(self):

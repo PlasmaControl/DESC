@@ -439,7 +439,7 @@ class Equilibrium(_Configuration, IOAble):
             self._objective = objective
         elif isinstance(objective, str):
             self._set_transforms()
-            self._objective = get_objective_function(
+            objective = get_objective_function(
                 objective,
                 R_transform=self.transforms["R"],
                 Z_transform=self.transforms["Z"],
@@ -450,6 +450,7 @@ class Equilibrium(_Configuration, IOAble):
                 i_transform=self.iota,
                 BC_constraint=self.constraint,
             )
+            self.objective = objective
         else:
             raise ValueError(
                 "objective should be of type 'ObjectiveFunction' or string, "
@@ -588,6 +589,7 @@ class Equilibrium(_Configuration, IOAble):
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving."
             )
+        self.objective = self.objective.name
 
         args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
 

@@ -146,10 +146,10 @@ class _Configuration(IOAble, ABC):
 
         # format profiles
         self._pressure = PowerSeriesProfile(
-            self._profiles[:, 0], self._profiles[:, 1], name="pressure"
+            modes=self._profiles[:, 0], coeffs=self._profiles[:, 1], name="pressure"
         )
         self._iota = PowerSeriesProfile(
-            self._profiles[:, 0], self._profiles[:, 2], name="iota"
+            modes=self._profiles[:, 0], coeffs=self._profiles[:, 2], name="iota"
         )
         # format boundary
         self._Rb_lmn, self._Zb_lmn = format_boundary(

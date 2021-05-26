@@ -27,7 +27,7 @@ class TestProfiles(unittest.TestCase):
 
     def test_close_values(self):
 
-        pp = PowerSeriesProfile(np.array([0, 2, 4]), np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), coeffs=np.array([1, -2, 1]))
         sp = pp.to_spline()
         x = np.linspace(0, 1, 100)
 

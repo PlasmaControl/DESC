@@ -76,9 +76,11 @@ class PowerSeriesProfile(Profile):
     _object_lib_ = Profile._object_lib_
     _object_lib_.update({"PowerSeries": PowerSeries, "Transform": Transform})
 
-    def __init__(self, modes, coeffs, grid=None, name=None):
+    def __init__(self, coeffs, modes=None, grid=None, name=None):
 
         self._name = name
+        if modes is None:
+            modes = np.arange(coeffs.size)
         self._basis = PowerSeries(L=int(np.max(abs(modes))))
         self._coeffs = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, coeffs):
@@ -139,7 +141,7 @@ class PowerSeriesProfile(Profile):
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None):
         coeffs = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
-        return cls(np.arange(coeffs.size), coeffs)
+        return cls(coeffs)
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
         if len(self.coeffs) == order + 1:
@@ -150,13 +152,13 @@ class PowerSeriesProfile(Profile):
             coeffs = np.pad(self.coeffs, (0, order + 1 - len(self.coeffs)))
         modes = np.arange(order + 1)
 
-        return PowerSeriesProfile(modes, coeffs, self.grid, self.name)
+        return PowerSeriesProfile(coeffs, modes, self.grid, self.name)
 
     def to_spline(self, knots=20, method="cubic2"):
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
         values = self.compute(knots)
-        return SplineProfile(knots, values, self.grid, method, self.name)
+        return SplineProfile(values, knots, self.grid, method, self.name)
 
     def to_mtanh(self, order=4, xs=100, w=None, p0=None, pmax=np.inf, pmin=-np.inf):
 
@@ -179,8 +181,10 @@ class PowerSeriesProfile(Profile):
 class SplineProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(self, knots, values, grid=None, method="cubic2", name=None):
+    def __init__(self, values, knots=None, grid=None, method="cubic2", name=None):
 
+        if knots is None:
+            knots = np.linspace(0, 1, values.size)
         self._name = name
         self._knots = knots
         self._coeffs = values
@@ -436,4 +440,4 @@ class MTanhProfile(Profile):
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
         values = self.compute(knots)
-        return SplineProfile(knots, values, self.grid, method, self.name)
+        return SplineProfile(values, knots, self.grid, method, self.name)

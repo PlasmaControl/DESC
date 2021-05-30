@@ -65,14 +65,6 @@ class ObjectiveFunction(IOAble, ABC):
         "use_jit",
     ]
 
-    _object_lib_ = {
-        "Transform": Transform,
-        "LCFSConstraint": LCFSConstraint,
-        "PoincareConstraint": PoincareConstraint,
-        "UmbilicConstraint": UmbilicConstraint,
-    }
-    _object_lib_.update(Transform._object_lib_)
-
     arg_names = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
 
     def __init__(

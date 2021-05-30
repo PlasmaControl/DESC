@@ -80,24 +80,6 @@ class Equilibrium(_Configuration, IOAble):
         "optimizer_results",
         "_optimizer",
     ]
-    _object_lib_ = _Configuration._object_lib_
-    _object_lib_.update(
-        {
-            "_Configuration": _Configuration,
-            "Grid": Grid,
-            "LinearGrid": LinearGrid,
-            "ConcentricGrid": ConcentricGrid,
-            "QuadratureGrid": QuadratureGrid,
-            "Transform": Transform,
-            "Optimizer": Optimizer,
-            "ForceErrorNodes": ForceErrorNodes,
-            "ForceErrorGalerkin": ForceErrorGalerkin,
-            "EnergyVolIntegral": EnergyVolIntegral,
-            "BoundaryCondition": BoundaryCondition,
-            "LCFSConstraint": LCFSConstraint,
-            "PoincareConstraint": PoincareConstraint,
-        }
-    )
 
     def __init__(self, inputs):
 
@@ -730,8 +712,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
     """
 
     _io_attrs_ = ["equilibria"]
-    _object_lib_ = Equilibrium._object_lib_
-    _object_lib_.update({"Equilibrium": Equilibrium})
 
     def __init__(self, inputs):
         # did we get 1 set of inputs or several?

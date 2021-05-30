@@ -11,11 +11,7 @@ class IOAble(ABC):
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
     To save properly, each object should have an attribute `_io_attrs_` which
     is a list of strings of the object attributes or properties that should be
-    saved and loaded. If any of these attributes are custom types (ie, not
-    standard python containers or numpy arrays), an attribute called
-    `_object_lib_` should also be defined. `_object_lib_` is a dictionary,
-    where the keys are the class names of any custom types, and the values are
-    instances of the class.
+    saved and loaded.
 
     For saved objects to be loaded correctly, the __init__ method of any custom
     types being saved should only assign attributes that are listed in `_io_attrs_`.
@@ -27,7 +23,7 @@ class IOAble(ABC):
     """
 
     @classmethod
-    def load(cls, load_from, file_format=None, obj_lib=None):
+    def load(cls, load_from, file_format=None):
         """Initialize from file.
 
         Parameters
@@ -54,7 +50,7 @@ class IOAble(ABC):
                 )
         self = cls.__new__(cls)  # create a blank object bypassing init
         reader = reader_factory(load_from, file_format)
-        reader.read_obj(self, obj_lib=obj_lib)
+        reader.read_obj(self)
 
         # to set other secondary stuff that wasnt saved possibly:
         if hasattr(self, "_set_up"):

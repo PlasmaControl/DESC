@@ -47,16 +47,6 @@ class Transform(IOAble):
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
-    _object_lib_ = {
-        "PowerSeries": PowerSeries,
-        "FourierSeries": FourierSeries,
-        "DoubleFourierSeries": DoubleFourierSeries,
-        "FourierZernikeBasis": FourierZernikeBasis,
-        "Grid": Grid,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
-        "QuadratureGrid": QuadratureGrid,
-    }
 
     def __init__(
         self,

@@ -1,8 +1,61 @@
 import os
+import pickle
+import h5py
+import pydoc
 from abc import ABC
 from termcolor import colored
 from .pickle_io import PickleReader, PickleWriter
-from .hdf5_io import hdf5Reader, hdf5Writer
+from .hdf5_io import hdf5Reader, hdf5Writer, fullname
+
+
+def load(load_from, file_format=None):
+    """Load any DESC object from previously saved file
+
+    Parameters
+    ----------
+    load_from : str or path-like or file instance
+        file to initialize from
+    file_format : {``'hdf5'``, ``'pickle'``} (Default: infer from file name)
+        file format of file initializing from
+
+    Returns
+    -------
+    obj :
+        The object saved in the file
+    """
+
+    if file_format is None and isinstance(load_from, (str, os.PathLike)):
+        name = str(load_from)
+        if name.endswith(".h5") or name.endswith(".hdf5"):
+            file_format = "hdf5"
+        elif name.endswith(".pkl") or name.endswith(".pickle"):
+            file_format = "pickle"
+        else:
+            raise RuntimeError(
+                colored(
+                    "could not infer file format from file name, it should be provided as file_format",
+                    "red",
+                )
+            )
+    reader = reader_factory(load_from, file_format)
+    if file_format == "pickle":
+        obj = pickle.load(load_from)
+    elif file_format == "hdf5":
+        data = h5py.File(load_from, "r")
+        if "__class__" in data.keys():
+            cls_name = data["__class__"][()].decode("utf-8")
+            cls = pydoc.locate(cls_name)
+            obj = cls.__new__(cls)
+            reader.read_obj(obj)
+        else:
+            raise ValueError(
+                "Could not load from {}, no __class__ attribute found".format(load_from)
+            )
+
+    # to set other secondary stuff that wasnt saved possibly:
+    if hasattr(obj, "_set_up"):
+        obj._set_up()
+    return obj
 
 
 class IOAble(ABC):
@@ -48,13 +101,16 @@ class IOAble(ABC):
                         "red",
                     )
                 )
-        self = cls.__new__(cls)  # create a blank object bypassing init
-        reader = reader_factory(load_from, file_format)
-        reader.read_obj(self)
+        if isinstance(load_from, (str, os.PathLike)):  # load from top level of file
+            self = load(load_from, file_format)
+        else:  # being called from within a nested object
+            self = cls.__new__(cls)  # create a blank object bypassing init
+            reader = reader_factory(load_from, file_format)
+            reader.read_obj(self)
 
-        # to set other secondary stuff that wasnt saved possibly:
-        if hasattr(self, "_set_up"):
-            self._set_up()
+            # to set other secondary stuff that wasnt saved possibly:
+            if hasattr(self, "_set_up"):
+                self._set_up()
 
         return self
 

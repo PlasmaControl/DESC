@@ -18,6 +18,8 @@ class Grid(IOAble):
     ----------
     nodes : ndarray of float, size(num_nodes,3)
         node coordinates, in (rho,theta,zeta)
+    sort : bool
+        whether to sort the nodes for use with FFT method.
 
     """
 
@@ -34,7 +36,7 @@ class Grid(IOAble):
         "_node_pattern",
     ]
 
-    def __init__(self, nodes):
+    def __init__(self, nodes, sort=True):
 
         self._L = np.unique(nodes[:, 0]).size
         self._M = np.unique(nodes[:, 1]).size
@@ -46,7 +48,8 @@ class Grid(IOAble):
         self._nodes, self._weights = self._create_nodes(nodes)
 
         self._enforce_symmetry()
-        self._sort_nodes()
+        if sort:
+            self._sort_nodes()
         self._find_axis()
 
     def __eq__(self, other):

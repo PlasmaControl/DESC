@@ -6,6 +6,7 @@ from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
+from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
@@ -1230,6 +1231,82 @@ class _Configuration(IOAble, ABC):
         x = self.x
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
+
+    def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
+        """Finds the flux coordinates (rho, theta, zeta) that correspond to a set of
+        real space coordinates (R,phi,Z)
+
+        Parameters
+        ----------
+        real_coords : ndarray, shape(k,3)
+            2d array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+        tol : float
+            Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
+        maxiter : int > 0
+            maximum number of Newton iterations
+        rhomin : float
+            minimum allowable value of rho (to avoid singularity at rho=0)
+
+        Returns
+        -------
+        flux_coords : ndarray, shape(k,3)
+            flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
+            a given coordinate (often because it is outside the plasma boundary),
+            nan will be returned for those values
+        """
+
+        R = real_coords[:, 0]
+        phi = real_coords[:, 1]
+        Z = real_coords[:, 2]
+        if maxiter <= 0:
+            raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
+        if jnp.any(R) <= 0:
+            raise ValueError("R values must be positive")
+
+        R0, Z0 = self.compute_axis_location(zeta=phi)
+        theta = jnp.arctan2(Z - Z0, R - R0)
+        rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
+        grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
+
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
+
+        Rk = R_transform.transform(self.R_lmn)
+        Zk = Z_transform.transform(self.Z_lmn)
+        eR = R - Rk
+        eZ = Z - Zk
+
+        k = 0
+        while jnp.any(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol) and k < maxiter:
+            Rr = R_transform.transform(self.R_lmn, 1, 0, 0)
+            Rt = R_transform.transform(self.R_lmn, 0, 1, 0)
+            Zr = Z_transform.transform(self.Z_lmn, 1, 0, 0)
+            Zt = Z_transform.transform(self.Z_lmn, 0, 1, 0)
+
+            tau = Rt * Zr - Rr * Zt
+            theta += (Zr * eR - Rr * eZ) / tau
+            rho += (Rt * eZ - Zt * eR) / tau
+            # negative rho -> rotate theta instead
+            theta = jnp.where(rho < 0, -theta % (2 * np.pi), theta % (2 * np.pi))
+            rho = jnp.clip(rho, rhomin, 1)
+
+            grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
+            R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
+            Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
+
+            Rk = R_transform.transform(self.R_lmn)
+            Zk = Z_transform.transform(self.Z_lmn)
+            eR = R - Rk
+            eZ = Z - Zk
+            k += 1
+
+        if k >= maxiter:  # didn't converge for all, mark those as nan
+            i = np.where(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol)
+            rho = put(rho, i, np.nan)
+            theta = put(theta, i, np.nan)
+            phi = put(phi, i, np.nan)
+
+        return jnp.vstack([rho, theta, phi]).T
 
     def compute_axis_location(self, zeta=0):
         """Find the axis location on specified zeta plane(s).

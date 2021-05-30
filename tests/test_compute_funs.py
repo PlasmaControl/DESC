@@ -1,7 +1,7 @@
 import numpy as np
 
-from desc.grid import LinearGrid
-from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid, Grid
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.transform import Transform
 from desc.compute_funs import compute_quasisymmetry
 
@@ -582,3 +582,22 @@ def test_quasisymmetry(DummyStellarator):
     np.testing.assert_allclose(
         quasisymmetry["B*grad(|B|)_z"], Btilde_zeta, rtol=1e-2, atol=1e-4
     )
+
+
+def test_compute_flux_coords(SOLOVEV):
+
+    eq = EquilibriaFamily.load(
+        load_from=str(SOLOVEV["output_path"]), file_format="hdf5"
+    )[-1]
+
+    rho = np.linspace(0.01, 0.99, 20)
+    theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
+    zeta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
+
+    nodes = np.vstack([rho, theta, zeta]).T
+    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
+    real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
+
+    flux_coords = eq.compute_flux_coords(real_coords)
+
+    np.testing.assert_allclose(nodes, flux_coords)

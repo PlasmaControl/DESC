@@ -24,6 +24,7 @@
    :caption: Examples
 	     
    notebooks/hands_on
+   notebooks/Saving_Equilibria_in_VMEC_Format
 
 .. toctree::
    :maxdepth: 1

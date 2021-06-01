@@ -7,12 +7,6 @@ from desc.backend import jnp, jit, use_jax
 from desc.utils import unpack_state, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.transform import Transform
-from desc.boundary_conditions import (
-    LCFSConstraint,
-    PoincareConstraint,
-    UmbilicConstraint,
-)
 from desc.compute_funs import (
     compute_force_error_magnitude,
     compute_energy,

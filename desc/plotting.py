@@ -1,4 +1,3 @@
-import os
 from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
@@ -7,7 +6,7 @@ from termcolor import colored
 import warnings
 
 from desc.grid import Grid, LinearGrid
-from desc.basis import FourierZernikeBasis, jacobi, fourier
+from desc.basis import jacobi, fourier
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 

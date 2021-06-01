@@ -6,19 +6,8 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration, format_boundary, format_profiles
 from desc.io import IOAble
-from desc.boundary_conditions import (
-    get_boundary_condition,
-    BoundaryCondition,
-    LCFSConstraint,
-    PoincareConstraint,
-)
-from desc.objective_funs import (
-    get_objective_function,
-    ObjectiveFunction,
-    ForceErrorNodes,
-    ForceErrorGalerkin,
-    EnergyVolIntegral,
-)
+from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
+from desc.objective_funs import get_objective_function, ObjectiveFunction
 from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform

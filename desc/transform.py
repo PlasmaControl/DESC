@@ -7,13 +7,6 @@ import warnings
 from desc.backend import jnp, put
 from desc.utils import issorted, isalmostequal, islinspaced
 from desc.io import IOAble
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.basis import (
-    PowerSeries,
-    FourierSeries,
-    DoubleFourierSeries,
-    FourierZernikeBasis,
-)
 
 
 class Transform(IOAble):

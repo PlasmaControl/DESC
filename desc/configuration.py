@@ -14,7 +14,6 @@ from desc.transform import Transform
 from desc.objective_funs import get_objective_function
 from desc.basis import (
     PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
     ZernikePolynomial,
     FourierZernikeBasis,

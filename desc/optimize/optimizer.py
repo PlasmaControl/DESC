@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.optimize
 from termcolor import colored
-from desc.utils import equals, Timer
+from desc.utils import Timer
 from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
@@ -58,25 +58,6 @@ class Optimizer(IOAble):
     def __init__(self, method):
 
         self.method = method
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : Optimizer
-            another Optimizer object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a Optimizer with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        return equals(self.__dict__, other.__dict__)
 
     @property
     def method(self):

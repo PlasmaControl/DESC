@@ -2,7 +2,7 @@ import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import sign, flatten_list, equals
+from desc.utils import sign, flatten_list
 from desc.io import IOAble
 
 __all__ = [
@@ -18,25 +18,6 @@ class Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets"""
 
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes", "_sym", "_spectral_indexing"]
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : Basis
-            another Basis object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a Basis with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        return equals(self.__dict__, other.__dict__)
 
     def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""

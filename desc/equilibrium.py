@@ -80,24 +80,6 @@ class Equilibrium(_Configuration, IOAble):
         "optimizer_results",
         "_optimizer",
     ]
-    _object_lib_ = _Configuration._object_lib_
-    _object_lib_.update(
-        {
-            "_Configuration": _Configuration,
-            "Grid": Grid,
-            "LinearGrid": LinearGrid,
-            "ConcentricGrid": ConcentricGrid,
-            "QuadratureGrid": QuadratureGrid,
-            "Transform": Transform,
-            "Optimizer": Optimizer,
-            "ForceErrorNodes": ForceErrorNodes,
-            "ForceErrorGalerkin": ForceErrorGalerkin,
-            "EnergyVolIntegral": EnergyVolIntegral,
-            "BoundaryCondition": BoundaryCondition,
-            "LCFSConstraint": LCFSConstraint,
-            "PoincareConstraint": PoincareConstraint,
-        }
-    )
 
     def __init__(self, inputs):
 
@@ -472,9 +454,9 @@ class Equilibrium(_Configuration, IOAble):
     def optimizer(self, optimizer):
         if optimizer is None:
             self._optimizer = optimizer
-        elif isinstance(optimizer, Optimizer) and optimizer == self.optimizer:
+        elif isinstance(optimizer, Optimizer) and optimizer.eq(self.optimizer):
             return
-        elif isinstance(optimizer, Optimizer) and optimizer != self.optimizer:
+        elif isinstance(optimizer, Optimizer) and not optimizer.eq(self.optimizer):
             self._optimizer = optimizer
         elif optimizer in Optimizer._all_methods:
             self._optimizer = Optimizer(optimizer)
@@ -729,9 +711,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     """
 
-    _io_attrs_ = ["equilibria"]
-    _object_lib_ = Equilibrium._object_lib_
-    _object_lib_.update({"Equilibrium": Equilibrium})
+    _io_attrs_ = ["_equilibria"]
 
     def __init__(self, inputs):
         # did we get 1 set of inputs or several?

@@ -29,9 +29,9 @@ class TestTransform(unittest.TestCase):
         transf_32 = Transform(grid_3, basis_2)
         transf_32b = Transform(grid_3, basis_2)
 
-        self.assertFalse(transf_11 == transf_21)
-        self.assertTrue(transf_31 != transf_32)
-        self.assertTrue(transf_32 == transf_32b)
+        self.assertFalse(transf_11.eq(transf_21))
+        self.assertFalse(transf_31.eq(transf_32))
+        self.assertTrue(transf_32.eq(transf_32b))
 
     def test_transform_order_error(self):
         """Tests error handling with transform method"""
@@ -143,10 +143,10 @@ class TestTransform(unittest.TestCase):
             transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
-        self.assertTrue(transf_3 == transf_5)
+        self.assertTrue(transf_3.eq(transf_5))
 
         transf_3.grid = grid_1
-        self.assertTrue(transf_3 == transf_1)
+        self.assertTrue(transf_3.eq(transf_1))
 
     def test_set_basis(self):
         """Tests the basis setter method"""
@@ -161,10 +161,10 @@ class TestTransform(unittest.TestCase):
         transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
-        self.assertTrue(transf_21 == transf_31)
+        self.assertTrue(transf_21.eq(transf_31))
 
         transf_21.basis = basis_20
-        self.assertTrue(transf_21 == transf_20)
+        self.assertTrue(transf_21.eq(transf_20))
 
     def test_direct_fft_equal(self):
         """tests that the direct and fft method produce the same results"""

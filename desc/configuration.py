@@ -78,13 +78,6 @@ class _Configuration(IOAble, ABC):
         "_profiles",
     ]
 
-    _object_lib_ = {
-        "PowerSeries": PowerSeries,
-        "FourierSeries": FourierSeries,
-        "DoubleFourierSeries": DoubleFourierSeries,
-        "FourierZernikeBasis": FourierZernikeBasis,
-    }
-
     def __init__(self, inputs):
         """Initialize a Configuration.
 

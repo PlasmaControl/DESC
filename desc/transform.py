@@ -5,7 +5,7 @@ from termcolor import colored
 import warnings
 
 from desc.backend import jnp, put
-from desc.utils import equals, issorted, isalmostequal, islinspaced
+from desc.utils import issorted, isalmostequal, islinspaced
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -47,16 +47,6 @@ class Transform(IOAble):
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
-    _object_lib_ = {
-        "PowerSeries": PowerSeries,
-        "FourierSeries": FourierSeries,
-        "DoubleFourierSeries": DoubleFourierSeries,
-        "FourierZernikeBasis": FourierZernikeBasis,
-        "Grid": Grid,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
-        "QuadratureGrid": QuadratureGrid,
-    }
 
     def __init__(
         self,
@@ -95,32 +85,6 @@ class Transform(IOAble):
             "fft": {i: {j: {} for j in range(4)} for i in range(4)},
             "direct2": {i: {} for i in range(4)},
         }
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : Transform
-            another Transform object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a Transform with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        ignore_keys = ["_built", "_built_pinv", "_matrices"]
-        dict1 = {
-            key: val for key, val in self.__dict__.items() if key not in ignore_keys
-        }
-        dict2 = {
-            key: val for key, val in other.__dict__.items() if key not in ignore_keys
-        }
-        return equals(dict1, dict2)
 
     def _get_derivatives(self, derivs):
         """Get array of derivatives needed for calculating objective function
@@ -613,11 +577,11 @@ class Transform(IOAble):
         if basis is None:
             basis = self.basis
 
-        if self.grid != grid:
+        if not self.grid.eq(grid):
             self._grid = grid
             self._built = False
             self._built_pinv = False
-        if self.basis != basis:
+        if not self.basis.eq(basis):
             self._basis = basis
             self._built = False
             self._built_pinv = False
@@ -636,7 +600,7 @@ class Transform(IOAble):
 
     @grid.setter
     def grid(self, grid):
-        if self.grid != grid:
+        if not self.grid.eq(grid):
             self._grid = grid
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
@@ -658,7 +622,7 @@ class Transform(IOAble):
 
     @basis.setter
     def basis(self, basis):
-        if self.basis != basis:
+        if not self.basis.eq(basis):
             self._basis = basis
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)

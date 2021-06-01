@@ -147,6 +147,22 @@ class IOAble(ABC):
         writer.write_obj(self)
         writer.close()
 
+    def __getstate__(self):
+        """helper method for working with pickle io"""
+        if hasattr(self, "_io_attrs_"):
+            return {
+                attr: val
+                for attr, val in self.__dict__.items()
+                if attr in self._io_attrs_
+            }
+        return self.__dict__
+
+    def __setstate__(self, state):
+        """helper method for working with pickle io"""
+        self.__dict__.update(state)
+        if hasattr(self, "_set_up"):
+            self._set_up()
+
     def eq(self, other):
         """Compare equivalence between DESC objects
 

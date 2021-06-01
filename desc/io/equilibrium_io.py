@@ -4,6 +4,7 @@ import h5py
 import pydoc
 from abc import ABC
 from termcolor import colored
+from desc.utils import equals
 from .pickle_io import PickleReader, PickleWriter
 from .hdf5_io import hdf5Reader, hdf5Writer, fullname
 
@@ -37,15 +38,18 @@ def load(load_from, file_format=None):
                     "red",
                 )
             )
-    reader = reader_factory(load_from, file_format)
+
     if file_format == "pickle":
-        obj = pickle.load(load_from)
+        with open(load_from, "rb") as f:
+            obj = pickle.load(f)
     elif file_format == "hdf5":
-        data = h5py.File(load_from, "r")
-        if "__class__" in data.keys():
-            cls_name = data["__class__"][()].decode("utf-8")
+        f = h5py.File(load_from, "r")
+        if "__class__" in f.keys():
+            cls_name = f["__class__"][()].decode("utf-8")
             cls = pydoc.locate(cls_name)
             obj = cls.__new__(cls)
+            f.close()
+            reader = reader_factory(load_from, file_format)
             reader.read_obj(obj)
         else:
             raise ValueError(
@@ -142,6 +146,39 @@ class IOAble(ABC):
         writer = writer_factory(file_name, file_format=file_format, file_mode=file_mode)
         writer.write_obj(self)
         writer.close()
+
+    def eq(self, other):
+        """Compare equivalence between DESC objects
+
+        Two objects are considered equivalent if they will be saved and loaded
+        with the same data, (ie, they have the same data "where it counts", specifically,
+        they have the same _io_attrs_)
+
+        Parameters
+        ----------
+        other
+            object to compare to
+
+        Returns
+        -------
+        eq : bool
+            whether this and other are equivalent
+        """
+        if self.__class__ != other.__class__:
+            return False
+        if hasattr(self, "_io_attrs_"):
+            dict1 = {
+                key: val for key, val in self.__dict__.items() if key in self._io_attrs_
+            }
+            dict2 = {
+                key: val
+                for key, val in other.__dict__.items()
+                if key in self._io_attrs_
+            }
+        else:
+            dict1 = self.__dict__
+            dict2 = other.__dict__
+        return equals(dict1, dict2)
 
 
 def reader_factory(load_from, file_format):

@@ -1,6 +1,6 @@
 import numpy as np
 from termcolor import colored
-from desc.utils import equals
+
 from desc.io import IOAble
 from scipy import special
 
@@ -51,25 +51,6 @@ class Grid(IOAble):
         if sort:
             self._sort_nodes()
         self._find_axis()
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : Grid
-            another Grid object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a Grid with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        return equals(self.__dict__, other.__dict__)
 
     def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""

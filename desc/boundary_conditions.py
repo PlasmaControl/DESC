@@ -7,7 +7,7 @@ from desc.basis import jacobi_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.utils import unpack_state, equals
+from desc.utils import unpack_state
 
 
 __all__ = [
@@ -50,34 +50,6 @@ class BoundaryCondition(LinearEqualityConstraint, ABC):
     @abstractmethod
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
-
-    # note: we can't override __eq__ here because that breaks the hashing that jax uses
-    # when jitting functions
-    def eq(self, other):
-        """Test for equivalence between conditions.
-
-        Parameters
-        ----------
-        other : BoundaryCondition
-            another BoundaryCondition object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a BoundaryCondition with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        ignore_keys = []
-        dict1 = {
-            key: val for key, val in self.__dict__.items() if key not in ignore_keys
-        }
-        dict2 = {
-            key: val for key, val in other.__dict__.items() if key not in ignore_keys
-        }
-        return equals(dict1, dict2)
 
     @property
     @abstractmethod

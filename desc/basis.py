@@ -308,7 +308,7 @@ class FourierSeries(Basis):
         self._sort_modes()
 
     def _get_modes(self, N=0):
-        """Gets mode numbers for double fourier series
+        """Gets mode numbers for fourier series
 
         Parameters
         ----------

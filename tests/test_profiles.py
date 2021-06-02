@@ -1,5 +1,6 @@
 import numpy as np
 import unittest
+import pytest
 from desc.io import InputReader
 from desc.equilibrium import Equilibrium
 from desc.profiles import PowerSeriesProfile
@@ -29,9 +30,14 @@ class TestProfiles(unittest.TestCase):
 
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
         sp = pp.to_spline()
+        with pytest.warns(UserWarning):
+            mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
         x = np.linspace(0, 1, 100)
 
-        np.testing.assert_allclose(pp.compute(x), sp.compute(x), rtol=1e-5, atol=1e-3)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+        np.testing.assert_allclose(pp(x), mp(x), rtol=1e-3, atol=1e-2)
 
         pp1 = sp.to_powerseries(order=4)
         np.testing.assert_allclose(pp.params, pp1.params, rtol=1e-5, atol=1e-2)
+        pp2 = mp.to_powerseries(order=4)
+        np.testing.assert_allclose(pp.params, pp2.params, rtol=1e-5, atol=1e-2)

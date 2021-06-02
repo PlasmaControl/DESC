@@ -5,7 +5,7 @@ import pathlib
 import h5py
 import shutil
 
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.io import hdf5Writer, hdf5Reader
 from desc.utils import equals
 
@@ -225,13 +225,10 @@ def test_reader_read_obj(reader_test_file):
         assert hasattr(submo, key)
 
 
-def test_reader_read_dict(reader_test_file):
-    pass
-
-
-def test_reader_load_configuration():
-    pass
-
-
-def test_reader_load_equilibrium():
-    pass
+def test_pickle_io(SOLOVEV, tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("solovev_test.pkl")
+    eqf = load(load_from=str(SOLOVEV["output_path"]), file_format="hdf5")
+    eqf.save(tmp_path, file_format="pickle")
+    peqf = load(tmp_path, file_format="pickle")
+    assert equals(eqf, peqf)

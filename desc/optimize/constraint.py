@@ -3,7 +3,6 @@ from desc.backend import jnp
 import scipy.linalg
 from termcolor import colored
 from desc.io import IOAble
-from desc.utils import equals
 
 
 class LinearEqualityConstraint(IOAble):
@@ -57,32 +56,6 @@ class LinearEqualityConstraint(IOAble):
         newA = np.vstack([self.A, other.A])
         newb = np.concatenate([self.b, other.b])
         return LinearEqualityConstraint(newA, newb)
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : LinearEqualityConstraint
-            another LinearEqualityConstraint object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is an LinearEqualityConstraint with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        ignore_keys = ["_Z", "_Ainv", "_dimy", "_x0", "_built"]
-        dict1 = {
-            key: val for key, val in self.__dict__.items() if key not in ignore_keys
-        }
-        dict2 = {
-            key: val for key, val in other.__dict__.items() if key not in ignore_keys
-        }
-        return equals(dict1, dict2)
 
     def build(self):
         """Builds linear constraint by factorizing A to get pseudoinverse and nullspace"""

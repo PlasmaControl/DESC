@@ -278,64 +278,65 @@ def test_plot_logo():
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_grid_linear():
-    grid = LinearGrid(L=10, M=10, N=1)
-    fig, ax = plot_grid(grid)
-    return fig
+class TestPlotGrid(unittest.TestCase):
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_linear(self):
+        grid = LinearGrid(L=10, M=10, N=1)
+        fig, ax = plot_grid(grid)
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_quad(self):
+        grid = QuadratureGrid(L=10, M=10, N=1)
+        fig, ax = plot_grid(grid)
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_jacobi(self):
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        fig, ax = plot_grid(grid)
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_cheb1(self):
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
+        fig, ax = plot_grid(grid)
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_cheb2(self):
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
+        fig, ax = plot_grid(grid)
+        return fig
+
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_grid_ocs(self):
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="ocs")
+        fig, ax = plot_grid(grid)
+        return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_grid_quad():
-    grid = QuadratureGrid(L=10, M=10, N=1)
-    fig, ax = plot_grid(grid)
-    return fig
+class TestPlotBasis(unittest.TestCase):
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_basis_powerseries(self):
+        basis = PowerSeries(L=6)
+        fig, ax = plot_basis(basis)
+        return fig
 
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_basis_fourierseries(self):
+        basis = FourierSeries(N=3)
+        fig, ax = plot_basis(basis)
+        return fig
 
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_grid_jacobi():
-    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
-    fig, ax = plot_grid(grid)
-    return fig
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_basis_doublefourierseries(self):
+        basis = DoubleFourierSeries(M=3, N=2)
+        fig, ax = plot_basis(basis)
+        return fig
 
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_grid_cheb1():
-    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
-    fig, ax = plot_grid(grid)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_grid_cheb2():
-    grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
-    fig, ax = plot_grid(grid)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_basis_powerseries():
-    basis = PowerSeries(L=6)
-    fig, ax = plot_basis(basis)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_basis_fourierseries():
-    basis = FourierSeries(N=3)
-    fig, ax = plot_basis(basis)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_basis_doublefourierseries():
-    basis = DoubleFourierSeries(M=3, N=2)
-    fig, ax = plot_basis(basis)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_basis_fourierzernike():
-    basis = FourierZernikeBasis(L=8, M=3, N=2)
-    fig, ax = plot_basis(basis)
-    return fig
+    @pytest.mark.mpl_image_compare(tolerance=50)
+    def test_plot_basis_fourierzernike(self):
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax = plot_basis(basis)
+        return fig

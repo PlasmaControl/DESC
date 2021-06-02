@@ -128,8 +128,8 @@ class _Configuration(IOAble, ABC):
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
-            self._R_sym = None
-            self._Z_sym = None
+            self._R_sym = False
+            self._Z_sym = False
 
         # create bases
         self._set_basis()

@@ -630,7 +630,8 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            theta = (theta + dtheta / 3) % (2 * np.pi)
+            if self.sym:
+                theta = (theta + dtheta / 3) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)

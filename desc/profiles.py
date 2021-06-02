@@ -1,6 +1,7 @@
 import numpy as np
 from termcolor import colored
 from abc import ABC, abstractmethod
+import warnings
 import copy
 import scipy.optimize
 
@@ -31,13 +32,6 @@ class Profile(IOAble, ABC):
     """
 
     _io_attrs_ = ["_name", "_grid", "_params"]
-
-    _object_lib_ = {
-        "Grid": Grid,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
-        "QuadratureGrid": QuadratureGrid,
-    }
 
     @property
     def name(self):
@@ -108,8 +102,6 @@ class PowerSeriesProfile(Profile):
     """
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
-    _object_lib_ = Profile._object_lib_
-    _object_lib_.update({"PowerSeries": PowerSeries, "Transform": Transform})
 
     def __init__(self, params, modes=None, grid=None, name=None):
 
@@ -306,7 +298,9 @@ class PowerSeriesProfile(Profile):
         values = self.compute(knots)
         return SplineProfile(values, knots, self.grid, method, self.name)
 
-    def to_mtanh(self, order=4, xs=100, w=None, p0=None, pmax=np.inf, pmin=-np.inf):
+    def to_mtanh(
+        self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
+    ):
         """Convert this profile to modified hyperbolic tangent + poly form.
 
         Parameters
@@ -345,6 +339,7 @@ class PowerSeriesProfile(Profile):
             pmin=pmin,
             grid=self.grid,
             name=self.name,
+            **kwargs,
         )
 
 
@@ -547,7 +542,9 @@ class SplineProfile(Profile):
         values = self.compute(knots)
         return SplineProfile(values, knots, self.grid, method, self.name)
 
-    def to_mtanh(self, order=4, xs=100, w=None, p0=None, pmax=np.inf, pmin=-np.inf):
+    def to_mtanh(
+        self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
+    ):
         """Convert this profile to modified hyperbolic tangent + poly form.
 
         Parameters
@@ -586,6 +583,7 @@ class SplineProfile(Profile):
             pmin=pmin,
             grid=self.grid,
             name=self.name,
+            **kwargs,
         )
 
 
@@ -596,8 +594,8 @@ class MTanhProfile(Profile):
     Parameters
     ----------
     params: array-like
-        parameters for mtanh + poly. p = [height, offset, sym, width, *core_poly] where
-        core poly are the polynomial coefficients in ascending order
+        parameters for mtanh + poly. p = [ped, offset, sym, width, *core_poly] where
+        core poly are the polynomial coefficients in ascending order, without a constant term
     grid : Grid
         default grid to use for computing values using transform method
     name : str
@@ -641,19 +639,19 @@ class MTanhProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have at least 5 elements [height, offset, sym, width, core_poly[0]]  got only {len(new)} values"
+                f"params should have at least 5 elements [ped, offset, sym, width, *core_poly]  got only {len(new)} values"
             )
 
     # TODO: check these parameter definitions and formulas
     @staticmethod
-    def _mtanh(x, height, offset, sym, width, core_poly, dx=0):
+    def _mtanh(x, ped, offset, sym, width, core_poly, dx=0):
         """modified tanh + polynomial profile
 
         Parameters
         ----------
         x : ndarray
             evaluation locations
-        height : float
+        ped : float
             height of pedestal
         offset : float
             height of SOL
@@ -662,7 +660,7 @@ class MTanhProfile(Profile):
         width : float
             width of pedestal
         core_poly : ndarray
-            polynomial coefficients in descending order [x^n, x^n-1,...x^0]
+            polynomial coefficients in ascending order [x^1,...x^n]
         dx : int
            radial derivative order
 
@@ -671,44 +669,38 @@ class MTanhProfile(Profile):
         y : ndarray
             profile evaluated at x
         """
-        # Z shifted function
-        z = (sym - x) / width
-        # core polynomial
-        p0 = jnp.polyval(core_poly, z)
-        # mtanh part
-        m0 = MTanhProfile._m(z)
-        # offsets + scale
-        A = (height + offset) / 2
-        B = (height - offset) / 2
+        core_poly = jnp.pad(jnp.asarray(core_poly), ((1, 0)))
+        z = (x - sym) / width
+
         if dx == 0:
-            y = A * p0 * m0 + B
+            y = 1 / 2 * (ped - offset) * (1 - jnp.tanh(z)) + offset
         elif dx == 1:
-            dzdx = -1 / width
-            p1 = jnp.polyval(jnp.polyder(core_poly, 1), z)
-            m1 = MTanhProfile._m(z, dz=1)
-            y = A * dzdx * (p1 * m0 + p0 * m1)
+            y = -1 / (2 * width) * (1 - jnp.tanh(z) ** 2) * (ped - offset)
         elif dx == 2:
-            dzdx = -1 / width
-            p1 = jnp.polyval(jnp.polyder(core_poly, 1), z)
-            m1 = MTanhProfile._m(z, dz=1)
-            p2 = jnp.polyval(jnp.polyder(core_poly, 2), z)
-            m2 = MTanhProfile._m(z, dz=2)
-            y = A * dzdx ** 2 * (p2 * m0 + 2 * m1 * p1 + m2 * p0)
+            y = (ped - offset) * (jnp.tanh(-z) ** 2 - 1) * jnp.tanh(-z) / width ** 2
 
+        e2z = jnp.exp(2 * z)
+        zz = z / (1 + e2z)
+        if dx == 0:
+            f = jnp.polyval(core_poly[::-1], zz)
+        elif dx == 1:
+            dz = ((1 + e2z) - 2 * z * e2z) / (width * (1 + e2z) ** 2)
+            f = jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * dz
+        elif dx == 2:
+            dz = ((1 + e2z) - 2 * z * e2z) / (width * (1 + e2z) ** 2)
+            ddz = (
+                4
+                * (-width * (1 + e2z) + (1 - e2z) * (sym - x))
+                * e2z
+                / (width ** 3 * (e2z + 1) ** 3)
+            )
+            f = (
+                jnp.polyval(jnp.polyder(core_poly[::-1], 2)) * dz ** 2
+                + jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * ddz
+            )
+
+        y = y + f * (offset - ped) / 2
         return y
-
-    @staticmethod
-    def _m(z, dz=0):
-        if dz == 0:
-            m = 1 / (1 + jnp.exp(-2 * z))
-        elif dz == 1:
-            m0 = MTanhProfile._m(z, dz=0)
-            m = 2 * jnp.exp(-2 * z) * m0 ** 2
-        elif dz == 2:
-            m0 = MTanhProfile._m(z, dz=0)
-            m1 = MTanhProfile._m(z, dz=1)
-            m = 4 * jnp.exp(-2 * z) * m1 * m0 - 2 * m1
-        return m
 
     def transform(self, params, dr=0, dt=0, dz=0):
         """Compute values using specified coefficients
@@ -716,7 +708,7 @@ class MTanhProfile(Profile):
         Parameters
         ----------
         params: array-like
-            polynomial coefficients to use
+            coefficients to use [ped, offset, sym, width, core_poly]
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -739,8 +731,8 @@ class MTanhProfile(Profile):
         nodes : ndarray, shape(k,) or (k,3)
             locations to compute values at
         params : array-like
-            polynomial coefficients to use, in ascending order. If not given, uses the
-            values given by the params attribute
+            coefficients to use, in order. [ped, offset, sym, width, core_poly]
+            If not given, uses the values given by the params attribute
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -754,7 +746,7 @@ class MTanhProfile(Profile):
             params = self.params
 
         xq = nodes[:, 0] if nodes.ndim > 1 else nodes
-        height = params[0]
+        ped = params[0]
         offset = params[1]
         sym = params[2]
         width = params[3]
@@ -763,7 +755,7 @@ class MTanhProfile(Profile):
         if dt != 0 or dz != 0:
             return jnp.zeros_like(xq)
 
-        y = MTanhProfile._mtanh(xq, height, offset, sym, width, core_poly, dx=dr)
+        y = MTanhProfile._mtanh(xq, ped, offset, sym, width, core_poly, dx=dr)
         return y
 
     @classmethod
@@ -774,10 +766,11 @@ class MTanhProfile(Profile):
         order=4,
         w=None,
         p0=None,
-        pmax=np.inf,
-        pmin=-np.inf,
+        pmax=None,
+        pmin=None,
         grid=None,
         name=None,
+        **kwargs,
     ):
         """Fit a MTanhProfile from point data
 
@@ -792,16 +785,21 @@ class MTanhProfile(Profile):
         w : array-like, shape(M,)
             Weights to apply to the y-coordinates of the sample points. For gaussian
             uncertainties, use 1/sigma (not 1/sigma**2).
-        p0 : array-like, shape(5+order,)
-            initial guess for parameter values
-        pmin : float or array-like, shape(5+order,)
+        p0 : array-like, shape(4+order,)
+            initial guess for parameter values [ped, offset, sym, width, core_poly].
+            Use a value of "None" to use the default initial guess for that parameter
+        pmin : float or array-like, shape(4+order,)
             lower bounds for parameter values
-        pmax : float or array-like, shape(5+order,)
+            Use a value of "None" to use the default bound for that parameter
+        pmax : float or array-like, shape(4+order,)
             upper bounds for parameter values
+            Use a value of "None" to use the default bound for that parameter
         grid : Grid
             default grid to use for computing values using transform method
         name : str
             name of the profile
+        kwargs :
+            additional keyword arguments passed to scipy.optimize.least_squares
 
         Returns
         -------
@@ -809,18 +807,47 @@ class MTanhProfile(Profile):
             profile in mtanh + polynomial form.
 
         """
-        fun = lambda x, *args: cls._mtanh(
-            x, args[0], args[1], args[2], args[3], args[4:]
+        if w is None:
+            w = np.ones_like(x)
+        fun = (
+            lambda args: (
+                cls._mtanh(x, args[0], args[1], args[2], args[3], args[4:]) - y
+            )
+            / w
         )
-        if p0 is None:
-            p0 = np.zeros(order + 5)
-            p0[0] = 1.0
-            p0[1] = 1.0
-            p0[3] = 1.0
-            p0[4] = 1.0
-        params, unc = scipy.optimize.curve_fit(
-            fun, x, y, p0, w, method="trf", bounds=(pmin, pmax)
+
+        ped0 = np.clip(interp1d([0.93], x, y, "cubic2", extrap=True), 0, np.inf)[0]
+        off0 = np.clip(interp1d([0.98], x, y, "cubic2", extrap=True), 0, np.inf)[0]
+        default_pmax = np.array([np.inf, np.inf, 1.02, 0.2, np.inf])
+        default_pmin = np.array([0, 0, 0.9, 0.0, -np.inf])
+        default_p0 = np.array([ped0, off0, 0.95, 0.1, 0])
+
+        p0_ = np.atleast_1d(p0)
+        pmin_ = np.atleast_1d(pmax)
+        pmax_ = np.atleast_1d(pmin)
+        p0 = np.zeros(order + 4)
+        pmax = np.zeros(order + 4)
+        pmin = np.zeros(order + 4)
+        for i in range(order + 4):
+            if i < len(p0_) and p0_[i] is not None:
+                p0[i] = p0_[i]
+            else:
+                p0[i] = default_p0[np.clip(i, 0, len(default_p0) - 1)]
+            if i < len(pmax_) and pmax_[i] is not None:
+                pmax[i] = pmax_[i]
+            else:
+                pmax[i] = default_pmax[np.clip(i, 0, len(default_pmax) - 1)]
+            if i < len(pmin_) and pmin_[i] is not None:
+                pmin[i] = pmin_[i]
+            else:
+                pmin[i] = default_pmin[np.clip(i, 0, len(default_pmin) - 1)]
+
+        out = scipy.optimize.least_squares(
+            fun, x0=p0, method="trf", bounds=(pmin, pmax), **kwargs
         )
+        if not out.success:
+            warnings.warn("Fitting did not converge, parameters may not be correct")
+        params = out.x
         return MTanhProfile(params, grid, name)
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):

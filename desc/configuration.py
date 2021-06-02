@@ -15,7 +15,6 @@ from desc.objective_funs import get_objective_function
 from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
 from desc.basis import (
     PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
     ZernikePolynomial,
     FourierZernikeBasis,
@@ -77,16 +76,6 @@ class _Configuration(IOAble, ABC):
         "_profiles",
     ]
 
-    _object_lib_ = {
-        "PowerSeries": PowerSeries,
-        "FourierSeries": FourierSeries,
-        "DoubleFourierSeries": DoubleFourierSeries,
-        "FourierZernikeBasis": FourierZernikeBasis,
-        "PowerSeriesProfile": PowerSeriesProfile,
-        "SplineProfile": SplineProfile,
-        "MTanhProfile": MTanhProfile,
-    }
-
     def __init__(self, inputs):
         """Initialize a Configuration.
 
@@ -138,8 +127,8 @@ class _Configuration(IOAble, ABC):
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
-            self._R_sym = None
-            self._Z_sym = None
+            self._R_sym = False
+            self._Z_sym = False
 
         # create bases
         self._set_basis()

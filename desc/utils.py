@@ -1,7 +1,7 @@
 import numpy as np
 import warnings
 from termcolor import colored
-
+from desc.backend import jnp
 
 # Helper Classes -------------------------------------------------------------
 
@@ -224,14 +224,14 @@ def unpack_state(x, nR, nZ):
 
 
 def equals(a, b):
-    """Compare dictionaries that have numpy array values.
+    """Compare (possibly nested) objects, such as dicts and lists
 
     Parameters
     ----------
-    a : dict
-        reference dictionary
-    b : dict
-        comparison dictionary
+    a :
+        reference object
+    b :
+        comparison object
 
     Returns
     -------
@@ -239,16 +239,19 @@ def equals(a, b):
         a == b
 
     """
-    if a.keys() != b.keys():
-        return False
-    return all(
-        equals(a[key], b[key])
-        if isinstance(a[key], dict)
-        else np.allclose(a[key], b[key])
-        if isinstance(a[key], np.ndarray)
-        else (a[key] == b[key])
-        for key in a
-    )
+    if isinstance(a, (np.ndarray, jnp.ndarray)):
+        return np.allclose(a, b)
+    if isinstance(a, dict):
+        if a.keys() != b.keys():
+            return False
+        return all(equals(a[key], b[key]) for key in a)
+    if isinstance(a, list):
+        if len(a) != len(b):
+            return False
+        return all([equals(a[i], b[i]) for i in range(len(a))])
+    if hasattr(a, "eq"):
+        return a.eq(b)
+    return a == b
 
 
 def flatten_list(x):

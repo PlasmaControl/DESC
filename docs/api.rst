@@ -13,6 +13,7 @@ Basis
     desc.basis.PowerSeries
     desc.basis.FourierSeries
     desc.basis.DoubleFourierSeries
+    desc.basis.ZernikePolynomial
     desc.basis.FourierZernikeBasis
 
 Boundary Conditions
@@ -73,6 +74,7 @@ IO
     :template: class.rst
 
     desc.io.InputReader
+    desc.io.load
 
 Objective Functions
 *******************
@@ -86,7 +88,9 @@ Objective Functions
     desc.objective_funs.ForceErrorNodes
     desc.objective_funs.ForceErrorGalerkin
     desc.objective_funs.EnergyVolIntegral
-
+    desc.objective_funs.QuasisymmetryTripleProduct
+    desc.objective_funs.QuasisymmetryFluxFunction
+	       
 Optimize
 ********
 
@@ -107,6 +111,7 @@ Perturbations
     :recursive:
 
     desc.perturbations.perturb
+    desc.perturbations.optimal_perturb
 
 Plotting
 ********
@@ -120,6 +125,9 @@ Plotting
     desc.plotting.plot_3d
     desc.plotting.plot_surfaces
     desc.plotting.plot_section
+    desc.plotting.plot_grid
+    desc.plotting.plot_basis
+    desc.plotting.plot_logo
 
 Transform
 *********

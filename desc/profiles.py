@@ -590,19 +590,19 @@ class SplineProfile(Profile):
 class MTanhProfile(Profile):
     """Profile represented by a modified hyperbolic tangent + polynomial
 
-    Profile is parameterized by pedestal height (ped), SOL height (offset),
-    pedestal symmetry point (sym), pedestal width (width), and a polynomial:
+    Profile is parameterized by pedestal height (ped, :math:`p`), SOL height (offset, :math:`o`),
+    pedestal symmetry point (sym, :math:`s`), pedestal width (width, :math:`w`), and a polynomial:
 
     .. math::
 
         y = o + \\frac{1}{2} \\left(o - p\\right) \\left(\\tanh{\\left(z \\right)} - 1\\right) + \\frac{\\left(o - p\\right) f{\\left(\\frac{z}{e^{2 z} + 1} \\right)}}{2}
 
-    Where :math: `z=(x-s)/w` and :math:`f` is a polynomial (with no constant term)
+    Where :math:`z=(x-s)/w` and :math:`f` is a polynomial (with no constant term)
 
     Parameters
     ----------
     params: array-like
-        parameters for mtanh + poly. p = [ped, offset, sym, width, *core_poly] where
+        parameters for mtanh + poly. ``params = [ped, offset, sym, width, *core_poly]`` where
         core poly are the polynomial coefficients in ascending order, without a constant term
     grid : Grid
         default grid to use for computing values using transform method

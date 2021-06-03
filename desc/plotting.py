@@ -691,31 +691,27 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
             raise ValueError(
                 colored(
-                    "r_grid and t_grid should have the same zeta planes, got r_grid={}, t_grid{}".format(
-                        zeta, t_zeta
-                    ),
+                    "r_grid and t_grid should have the same zeta planes, "
+                    + "got r_grid={}, t_grid{}".format(zeta, t_zeta),
                     "red",
                 )
             )
+
+    # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
+    # PEST-like flux coordinates
+
+    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
     r_coords = eq.compute_toroidal_coords(r_grid)
-    t_coords = eq.compute_toroidal_coords(t_grid)
-
-    # theta coordinates cooresponding to linearly spaced vartheta angles
-    v_nodes = t_grid.nodes
-    v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-    v_grid = Grid(v_nodes)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v_coords = eq.compute_toroidal_coords(v_grid)
+    v_coords = eq.compute_toroidal_coords(v_grid)
 
     # rho contours
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
     Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
 
-    # theta contours
+    # vartheta contours
     Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
     Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
@@ -732,25 +728,16 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=colorblind_colors[2],
-            linestyle=":",
+            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=colorblind_colors[0],
+            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i],
-            Zr[:, -1, i],
-            color=colorblind_colors[1],
+            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i],
-            Zr[0, 0, i],
-            color=colorblind_colors[3],
+            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])

@@ -433,7 +433,7 @@ class SplineProfile(Profile):
         Parameters
         ----------
         params: array-like
-            polynomial coefficients to use
+            spline values to use
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -460,7 +460,7 @@ class SplineProfile(Profile):
         nodes : ndarray, shape(k,) or (k,3)
             locations to compute values at
         params : array-like
-            polynomial coefficients to use, in ascending order. If not given, uses the
+            spline values to use. If not given, uses the
             values given by the params attribute
         dr, dt, dz : int
             derivative order in rho, theta, zeta
@@ -590,6 +590,14 @@ class SplineProfile(Profile):
 class MTanhProfile(Profile):
     """Profile represented by a modified hyperbolic tangent + polynomial
 
+    Profile is parameterized by pedestal height (ped), SOL height (offset),
+    pedestal symmetry point (sym), pedestal width (width), and a polynomial:
+
+    .. math::
+
+        y = o + \\frac{1}{2} \\left(o - p\\right) \\left(\\tanh{\\left(z \\right)} - 1\\right) + \\frac{\\left(o - p\\right) f{\\left(\\frac{z}{e^{2 z} + 1} \\right)}}{2}
+
+    Where :math: `z=(x-s)/w` and :math:`f` is a polynomial (with no constant term)
 
     Parameters
     ----------

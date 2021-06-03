@@ -6,6 +6,7 @@ from netCDF4 import Dataset, stringtochar
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 import scipy.optimize
+import scipy.interpolate
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
@@ -482,10 +483,11 @@ class VMECIO:
         phi : ndarray
             toroidal angles
         s : ndarray
-            radial coordinate, in (0,1). Defaults to si (all flux surfaces)
+            radial coordinate, equivalent to normalized toroidal magnetic flux.
+            Defaults to si (all flux surfaces)
         si : ndarray
             values of radial coordinates where Cmn,Smn are defined. Defaults to linearly
-            spaced on (0,1)
+            spaced on [0,1]
         sym : bool
             stellarator symmetry (Default value = True)
 
@@ -529,7 +531,7 @@ class VMECIO:
 
     @classmethod
     def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
-        """Find theta such that theta + lambda(theta) == theta_star
+        """Find theta such that theta + lambda(theta) == theta_star.
 
         Parameters
         ----------
@@ -540,11 +542,11 @@ class VMECIO:
         xn : array-like
             toroidal mode numbers
         s : array-like
-            desired radial coordinates
+            desired radial coordinates (normalized toroidal magnetic flux)
         theta_star : array-like
-            desired SFL poloidal angles
+            desired straigh field-line poloidal angles (PEST/VMEC-like flux coordinates)
         zeta : array-like
-            desired SFL toroidal angles
+            desired toroidal angles (toroidal coordinate phi)
         si : ndarray
             values of radial coordinates where lmns are defined. Defaults to linearly
             spaced on half grid between (0,1)
@@ -553,22 +555,26 @@ class VMECIO:
         -------
         theta : ndarray
             theta such that theta + lambda(theta) == theta_star
+
         """
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
-        Lf = scipy.interpolate.CubicSpline(si, lmns)
+        lmbda_mn = scipy.interpolate.CubicSpline(si, lmns)
 
-        def root_fun(t):
-            L = np.sum(
-                Lf(s)
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # angle in PEST-like flux coordinates
+
+        def root_fun(theta):
+            lmbda = np.sum(
+                lmbda_mn(s)
                 * np.sin(
-                    xm[np.newaxis] * t[:, np.newaxis]
+                    xm[np.newaxis] * theta[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
                 axis=-1,
             )
-            theta_star_k = t + L
+            theta_star_k = theta + lmbda  # theta* = theta + lambda
             err = theta_star - theta_star_k
             return err
 
@@ -676,33 +682,41 @@ class VMECIO:
         idxes = np.linspace(s_idx, Nr_vmec, Nr).astype(int)
         if s_idx != 0:
             idxes = np.pad(idxes, (1, 0), mode="constant")
+
+        # flux surfaces to plot
         rr = np.sqrt(idxes / Nr_vmec)
         rt = np.linspace(0, 2 * np.pi, num_theta)
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
-        # SFL angles we want to plot
+
+        # straight field-line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
 
-        # find real theta that will give the angles we want
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # angle in PEST-like flux coordinates
+
+        # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
         r_coords_desc = equil.compute_toroidal_coords(r_grid)
         v_coords_desc = equil.compute_toroidal_coords(v_grid)
 
-        # r contours
+        # rho contours
         Rr_desc = r_coords_desc["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
         Zr_desc = r_coords_desc["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
 
-        # theta contours
+        # vartheta contours
         Rv_desc = v_coords_desc["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
         Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+
+        # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
+        # the DESC radial coordiante rho = sqrt(s)
 
         # convert from rho -> s
         r_nodes = r_grid.nodes
         r_nodes[:, 0] = r_nodes[:, 0] ** 2
-
         t_nodes = t_grid.nodes
         t_nodes[:, 0] = t_nodes[:, 0] ** 2
 

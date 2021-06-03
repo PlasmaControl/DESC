@@ -5,6 +5,7 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
+import scipy.optimize
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
@@ -463,7 +464,7 @@ class VMECIO:
         return vmec_data
 
     @staticmethod
-    def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, lam=None, sym=True):
+    def vmec_interpolate(Cmn, Smn, xm, xn, theta, phi, s=None, si=None, sym=True):
         """Interpolate VMEC data on a flux surface.
 
         Parameters
@@ -476,50 +477,105 @@ class VMECIO:
             poloidal mode numbers
         xn : ndarray
             toroidal mode numbers
-        theta : ndarray, shape(Nt,Nz)
+        theta : ndarray
             poloidal angles
-        phi : ndarray, shape(Nt,Nz)
+        phi : ndarray
             toroidal angles
+        s : ndarray
+            radial coordinate, in (0,1). Defaults to si (all flux surfaces)
+        si : ndarray
+            values of radial coordinates where Cmn,Smn are defined. Defaults to linearly
+            spaced on (0,1)
         sym : bool
             stellarator symmetry (Default value = True)
 
         Returns
         -------
         if sym = True
-            C, S (tuple of ndarray): VMEC data interpolated at the angles (theta,phi)
+            C, S (tuple of ndarray): VMEC data interpolated at the points (s,theta,phi)
             where C has cosine symmetry and S has sine symmetry
         if sym = False
-            X (ndarray): non-symmetric VMEC data interpolated at the angles (theta,phi)
+            X (ndarray): non-symmetric VMEC data interpolated at the points (s,theta,phi)
 
         """
-        C_arr = []
-        S_arr = []
-        dim = Cmn.shape
-        if lam is None:
-            lam = np.zeros((dim[0], *theta.shape))
+        if si is None:
+            si = np.linspace(0, 1, Cmn.shape[0])
+        if s is None:
+            s = si
+        Cf = scipy.interpolate.CubicSpline(si, Cmn)
+        Sf = scipy.interpolate.CubicSpline(si, Smn)
 
-        for j in range(dim[1]):
+        C = np.sum(
+            Cf(s)
+            * np.cos(
+                xm[np.newaxis] * theta[:, np.newaxis]
+                - xn[np.newaxis] * phi[:, np.newaxis]
+            ),
+            axis=-1,
+        )
+        S = np.sum(
+            Sf(s)
+            * np.sin(
+                xm[np.newaxis] * theta[:, np.newaxis]
+                - xn[np.newaxis] * phi[:, np.newaxis]
+            ),
+            axis=-1,
+        )
 
-            m = xm[j]
-            n = xn[j]
-
-            C = [
-                Cmn[s, j] * np.cos(m * (theta - lam[s]) - n * phi)
-                for s in range(dim[0])
-            ]
-            S = [
-                Smn[s, j] * np.sin(m * (theta - lam[s]) - n * phi)
-                for s in range(dim[0])
-            ]
-            C_arr.append(C)
-            S_arr.append(S)
-
-        C = np.sum(C_arr, axis=0)
-        S = np.sum(S_arr, axis=0)
         if sym:
             return C, S
         else:
             return C + S
+
+    @classmethod
+    def compute_theta_coords(cls, lmns, xm, xn, s, theta_star, zeta, si=None):
+        """Find theta such that theta + lambda(theta) == theta_star
+
+        Parameters
+        ----------
+        lmns : array-like
+            fourier coefficients for lambda
+        xm : array-like
+            poloidal mode numbers
+        xn : array-like
+            toroidal mode numbers
+        s : array-like
+            desired radial coordinates
+        theta_star : array-like
+            desired SFL poloidal angles
+        zeta : array-like
+            desired SFL toroidal angles
+        si : ndarray
+            values of radial coordinates where lmns are defined. Defaults to linearly
+            spaced on half grid between (0,1)
+
+        Returns
+        -------
+        theta : ndarray
+            theta such that theta + lambda(theta) == theta_star
+        """
+        if si is None:
+            si = np.linspace(0, 1, lmns.shape[0])
+            si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
+        Lf = scipy.interpolate.CubicSpline(si, lmns)
+
+        def root_fun(t):
+            L = np.sum(
+                Lf(s)
+                * np.sin(
+                    xm[np.newaxis] * t[:, np.newaxis]
+                    - xn[np.newaxis] * zeta[:, np.newaxis]
+                ),
+                axis=-1,
+            )
+            theta_star_k = t + L
+            err = theta_star - theta_star_k
+            return err
+
+        out = scipy.optimize.root(
+            root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
+        )
+        return out.x
 
     @classmethod
     def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
@@ -567,8 +623,10 @@ class VMECIO:
         ]
         vmec_poly = [
             [
-                Polygon(np.array([R[:, i], Z[:, i]]).T)
-                for R, Z in zip(coords["Rr_vmec"], coords["Zr_vmec"])
+                Polygon(np.array([R, Z]).T)
+                for R, Z in zip(
+                    coords["Rr_vmec"][:, :, i].T, coords["Zr_vmec"][:, :, i].T
+                )
             ]
             for i in range(Nz)
         ]
@@ -584,7 +642,7 @@ class VMECIO:
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Compute ???.
+        """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC
 
         Parameters
         ----------
@@ -622,18 +680,15 @@ class VMECIO:
         rt = np.linspace(0, 2 * np.pi, num_theta)
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
         r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+        # SFL angles we want to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz)
         t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
 
+        # find real theta that will give the angles we want
+        v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
         r_coords_desc = equil.compute_toroidal_coords(r_grid)
-        t_coords_desc = equil.compute_toroidal_coords(t_grid)
-
-        # theta coordinates cooresponding to linearly spaced vartheta angles
-        v_nodes = t_grid.nodes
-        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords_desc["lambda"]
-        v_grid = Grid(v_nodes)
         v_coords_desc = equil.compute_toroidal_coords(v_grid)
 
         # r contours
@@ -644,25 +699,32 @@ class VMECIO:
         Rv_desc = v_coords_desc["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
         Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
-        rtt, rzz = np.meshgrid(rt, rz, indexing="ij")
-        ttt, tzz = np.meshgrid(tt, tz, indexing="ij")
+        # convert from rho -> s
+        r_nodes = r_grid.nodes
+        r_nodes[:, 0] = r_nodes[:, 0] ** 2
 
-        _, L_vmec = cls.vmec_interpolate(
-            np.zeros_like(vmec_data["lmns"]),
+        t_nodes = t_grid.nodes
+        t_nodes[:, 0] = t_nodes[:, 0] ** 2
+
+        v_nodes = cls.compute_theta_coords(
             vmec_data["lmns"],
             vmec_data["xm"],
             vmec_data["xn"],
-            ttt,
-            tzz,
+            t_nodes[:, 0],
+            t_nodes[:, 1],
+            t_nodes[:, 2],
         )
 
+        t_nodes[:, 1] = v_nodes
+
         Rr_vmec, Zr_vmec = cls.vmec_interpolate(
-            vmec_data["rmnc"][idxes],
-            vmec_data["zmns"][idxes],
+            vmec_data["rmnc"],
+            vmec_data["zmns"],
             vmec_data["xm"],
             vmec_data["xn"],
-            rtt,
-            rzz,
+            theta=r_nodes[:, 1],
+            phi=r_nodes[:, 2],
+            s=r_nodes[:, 0],
         )
 
         Rv_vmec, Zv_vmec = cls.vmec_interpolate(
@@ -670,9 +732,9 @@ class VMECIO:
             vmec_data["zmns"],
             vmec_data["xm"],
             vmec_data["xn"],
-            ttt,
-            tzz,
-            lam=L_vmec,
+            theta=t_nodes[:, 1],
+            phi=t_nodes[:, 2],
+            s=t_nodes[:, 0],
         )
 
         coords = {
@@ -680,10 +742,10 @@ class VMECIO:
             "Zr_desc": Zr_desc,
             "Rv_desc": Rv_desc,
             "Zv_desc": Zv_desc,
-            "Rr_vmec": Rr_vmec,
-            "Zr_vmec": Zr_vmec,
-            "Rv_vmec": Rv_vmec,
-            "Zv_vmec": Zv_vmec,
+            "Rr_vmec": Rr_vmec.reshape((r_grid.M, r_grid.L, r_grid.N), order="F"),
+            "Zr_vmec": Zr_vmec.reshape((r_grid.M, r_grid.L, r_grid.N), order="F"),
+            "Rv_vmec": Rv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
+            "Zv_vmec": Zv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
         }
         return coords
 
@@ -723,9 +785,9 @@ class VMECIO:
         for k in range(len(ax)):
             ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
             s_vmec = ax[k].plot(
-                coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
+                coords["Rr_vmec"][:, :, k], coords["Zr_vmec"][:, :, k], "b-"
             )
-            ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
+            ax[k].plot(coords["Rv_vmec"][:, :, k].T, coords["Zv_vmec"][:, :, k].T, "b-")
 
             ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
             ax[k].plot(coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r:")

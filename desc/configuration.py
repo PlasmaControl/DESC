@@ -14,7 +14,6 @@ from desc.transform import Transform
 from desc.objective_funs import get_objective_function
 from desc.basis import (
     PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
     ZernikePolynomial,
     FourierZernikeBasis,
@@ -78,13 +77,6 @@ class _Configuration(IOAble, ABC):
         "_profiles",
     ]
 
-    _object_lib_ = {
-        "PowerSeries": PowerSeries,
-        "FourierSeries": FourierSeries,
-        "DoubleFourierSeries": DoubleFourierSeries,
-        "FourierZernikeBasis": FourierZernikeBasis,
-    }
-
     def __init__(self, inputs):
         """Initialize a Configuration.
 
@@ -136,8 +128,8 @@ class _Configuration(IOAble, ABC):
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
-            self._R_sym = None
-            self._Z_sym = None
+            self._R_sym = False
+            self._Z_sym = False
 
         # create bases
         self._set_basis()
@@ -1232,9 +1224,85 @@ class _Configuration(IOAble, ABC):
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
+    def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
+        """Find the theta coordinates (rho, theta, phi) that correspond to a set of
+        straight field-line coordinates (rho, theta*, zeta).
+
+        Parameters
+        ----------
+        flux_coords : ndarray, shape(k,3)
+            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
+            coordinate.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            maximum number of Newton iterations
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+
+        """
+        rho = flux_coords[:, 0]
+        theta_star = flux_coords[:, 1]
+        zeta = flux_coords[:, 2]
+        if maxiter <= 0:
+            raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
+        if jnp.any(rho) <= 0:
+            raise ValueError("rho values must be positive")
+
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # angle in PEST-like flux coordinates
+
+        theta_k = theta_star
+        grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
+
+        transform = Transform(
+            grid,
+            self.L_basis,
+            derivs=np.array([[0, 0, 0], [0, 1, 0]]),
+            method="direct1",
+        )
+
+        # theta* = theta + lambda
+        theta_star_k = theta_k + transform.transform(self.L_lmn)
+        err = theta_star - theta_star_k
+
+        # Newton method for root finding
+        k = 0
+        while jnp.any(abs(err) > tol) and k < maxiter:
+            lmbda = transform.transform(self.L_lmn, 0, 0, 0)
+            lmbda_t = transform.transform(self.L_lmn, 0, 1, 0)
+            f = theta_star - theta_k - lmbda
+            df = -1 - lmbda_t
+
+            theta_k = theta_k - f / df
+
+            grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
+            transform = Transform(
+                grid,
+                self.L_basis,
+                derivs=np.array([[0, 0, 0], [0, 1, 0]]),
+                method="direct1",
+            )
+
+            theta_star_k = theta_k + transform.transform(self.L_lmn)
+            err = theta_star - theta_star_k
+            k += 1
+
+        if k >= maxiter:  # didn't converge for all, mark those as nan
+            i = np.where(abs(err) > tol)
+            rho = put(rho, i, np.nan)
+            theta_k = put(theta_k, i, np.nan)
+            zeta = put(zeta, i, np.nan)
+
+        return jnp.vstack([rho, theta_k, zeta]).T
+
     def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
-        """Finds the flux coordinates (rho, theta, zeta) that correspond to a set of
-        real space coordinates (R,phi,Z)
+        """Find the flux coordinates (rho, theta, zeta) that correspond to a set of
+        real space coordinates (R, phi, Z).
 
         Parameters
         ----------
@@ -1253,8 +1321,8 @@ class _Configuration(IOAble, ABC):
             flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
             a given coordinate (often because it is outside the plasma boundary),
             nan will be returned for those values
-        """
 
+        """
         R = real_coords[:, 0]
         phi = real_coords[:, 1]
         Z = real_coords[:, 2]

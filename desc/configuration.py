@@ -1224,6 +1224,77 @@ class _Configuration(IOAble, ABC):
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
+    def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
+        """Finds the theta coordinates (rho, theta, phi) that correspond to a set of
+        flux coordinates (rho,theta*,zeta)
+
+        Parameters
+        ----------
+        flux_coords : ndarray, shape(k,3)
+            2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
+            coordinate.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            maximum number of Newton iterations
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            coordinates [rho,theta,zeta]. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+        """
+
+        rho = flux_coords[:, 0]
+        theta_star = flux_coords[:, 1]
+        zeta = flux_coords[:, 2]
+        if maxiter <= 0:
+            raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
+        if jnp.any(rho) <= 0:
+            raise ValueError("rho values must be positive")
+
+        theta_k = theta_star
+        grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
+
+        transform = Transform(
+            grid,
+            self.L_basis,
+            derivs=np.array([[0, 0, 0], [0, 1, 0]]),
+            method="direct1",
+        )
+
+        theta_star_k = theta_k + transform.transform(self.L_lmn)
+        err = theta_star - theta_star_k
+
+        k = 0
+        while jnp.any(abs(err) > tol) and k < maxiter:
+            L = transform.transform(self.L_lmn, 0, 0, 0)
+            Lt = transform.transform(self.L_lmn, 0, 1, 0)
+            f = theta_star - theta_k - L
+            df = -1 - Lt
+
+            theta_k = theta_k - f / df
+
+            grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
+            transform = Transform(
+                grid,
+                self.L_basis,
+                derivs=np.array([[0, 0, 0], [0, 1, 0]]),
+                method="direct1",
+            )
+
+            theta_star_k = theta_k + transform.transform(self.L_lmn)
+            err = theta_star - theta_star_k
+            k += 1
+
+        if k >= maxiter:  # didn't converge for all, mark those as nan
+            i = np.where(abs(err) > tol)
+            rho = put(rho, i, np.nan)
+            theta_k = put(theta_k, i, np.nan)
+            zeta = put(zeta, i, np.nan)
+
+        return jnp.vstack([rho, theta_k, zeta]).T
+
     def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
         """Finds the flux coordinates (rho, theta, zeta) that correspond to a set of
         real space coordinates (R,phi,Z)

@@ -697,19 +697,12 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
                     "red",
                 )
             )
+    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
     r_coords = eq.compute_toroidal_coords(r_grid)
-    t_coords = eq.compute_toroidal_coords(t_grid)
-
-    # theta coordinates cooresponding to linearly spaced vartheta angles
-    v_nodes = t_grid.nodes
-    v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-    v_grid = Grid(v_nodes)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v_coords = eq.compute_toroidal_coords(v_grid)
+    v_coords = eq.compute_toroidal_coords(v_grid)
 
     # rho contours
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")

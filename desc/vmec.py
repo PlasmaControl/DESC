@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import scipy.optimize
 import scipy.interpolate
 
+from desc.utils import Timer, sign
 from desc.grid import Grid, LinearGrid
-from desc.basis import DoubleFourierSeries
+from desc.basis import PowerSeries, DoubleFourierSeries
 from desc.transform import Transform
 from desc.equilibrium import Equilibrium
 from desc.boundary_conditions import LCFSConstraint
@@ -126,7 +127,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128):
+    def save(cls, eq, path, surfs=128, verbose=1):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -135,24 +136,33 @@ class VMECIO:
             Equilibrium to save.
         path : str
             File path of output data.
-        surfs: int (Default = 128)
-            Number of flux surfaces to interpolate at.
+        surfs: int
+            Number of flux surfaces to interpolate at (Default = 128).
+        verbose: int
+            Level of output (Default = 1).
+            * 0: no output
+            * 1: status of quantities computed
+            * 2: as above plus timing information
 
         Returns
         -------
         None
 
         """
-        file = Dataset(path, mode="w")
+        timer = Timer()
+        timer.start("Total time")
 
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
             see lines 300+ for full list of included variables
         """
+        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
         Psi = eq.Psi
         NFP = eq.NFP
         M = eq.M
         N = eq.N
+        M_nyq = M + 4
+        N_nyq = N + 2
 
         s_full = np.linspace(0, 1, surfs)
         s_half = s_full[0:-1] + 0.5 / (surfs - 1)
@@ -165,15 +175,18 @@ class VMECIO:
         p_transform_half = Transform(half_grid, eq.p_basis)
         i_transform_full = Transform(full_grid, eq.i_basis)
         i_transform_half = Transform(half_grid, eq.i_basis)
+        i_transform_chi = Transform(full_grid, PowerSeries(eq.L + 2))
 
         # dimensions
         file.createDimension("radius", surfs)  # number of flux surfaces
         file.createDimension(
             "mn_mode", (2 * N + 1) * M + N + 1
         )  # number of Fourier modes
-        file.createDimension("mn_mode_nyq", None)  # used for Nyquist quantities
-        file.createDimension("n_tor", 1)  # number of axis guess Fourier modes
-        file.createDimension("preset", 21)  # max dimension of profile inputs
+        file.createDimension(
+            "mn_mode_nyq", (2 * N_nyq + 1) * M_nyq + N_nyq + 1
+        )  # number of Nyquist Fourier modes
+        file.createDimension("n_tor", N + 1)  # number of toroidal Fourier modes
+        file.createDimension("preset", 21)  # dimension of profile inputs
         file.createDimension("ndfmax", 101)  # used for am_aux & ai_aux
         file.createDimension("time", 100)  # used for fsqrt & wdot
         file.createDimension("dim_00001", 1)
@@ -184,31 +197,31 @@ class VMECIO:
 
         # variables
 
-        lfreeb = file.createVariable("lfreeb", np.int32, ("dim_00001",))
+        lfreeb = file.createVariable("lfreeb__logical__", np.int32)
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"
         lfreeb[:] = 0
 
-        lasym = file.createVariable("lasym__logical__", np.int32, ("dim_00001",))
+        lasym = file.createVariable("lasym__logical__", np.int32)
         lasym.long_name = "asymmetry logical (0 = stellarator symmetry)"
         lasym[:] = int(not eq.sym)
 
-        nfp = file.createVariable("nfp", np.int32, ("dim_00001",))
+        nfp = file.createVariable("nfp", np.int32)
         nfp.long_name = "number of field periods"
         nfp[:] = NFP
 
-        ns = file.createVariable("ns", np.int32, ("dim_00001",))
+        ns = file.createVariable("ns", np.int32)
         ns.long_name = "number of flux surfaces"
         ns[:] = surfs
 
-        mpol = file.createVariable("mpol", np.int32, ("dim_00001",))
+        mpol = file.createVariable("mpol", np.int32)
         mpol.long_name = "number of poloidal Fourier modes"
         mpol[:] = M + 1
 
-        ntor = file.createVariable("ntor", np.int32, ("dim_00001",))
+        ntor = file.createVariable("ntor", np.int32)
         ntor.long_name = "number of positive toroidal Fourier modes"
         ntor[:] = N
 
-        mnmax = file.createVariable("mnmax", np.int32, ("dim_00001",))
+        mnmax = file.createVariable("mnmax", np.int32)
         mnmax.long_name = "total number of Fourier modes"
         mnmax[:] = file.dimensions["mn_mode"].size
 
@@ -224,13 +237,30 @@ class VMECIO:
             -file.dimensions["mn_mode"].size :
         ]
 
-        gamma = file.createVariable("gamma", np.float64, ("dim_00001",))
+        mnmax_nyq = file.createVariable("mnmax_nyq", np.int32)
+        mnmax_nyq.long_name = "total number of Nyquist Fourier modes"
+        mnmax_nyq[:] = file.dimensions["mn_mode_nyq"].size
+
+        xm_nyq = file.createVariable("xm_nyq", np.float64, ("mn_mode_nyq",))
+        xm_nyq.long_name = "poloidal Nyquist mode numbers"
+        xm_nyq[:] = np.tile(
+            np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
+        ).T.flatten()[-file.dimensions["mn_mode_nyq"].size :]
+
+        xn_nyq = file.createVariable("xn_nyq", np.float64, ("mn_mode_nyq",))
+        xn_nyq.long_name = "toroidal Nyquist mode numbers"
+        xn_nyq[:] = np.tile(np.linspace(-N_nyq, N_nyq, 2 * N_nyq + 1) * NFP, M_nyq + 1)[
+            -file.dimensions["mn_mode_nyq"].size :
+        ]
+
+        signgs = file.createVariable("signgs", np.int32)
+        signgs.long_name = "sign of coordinate system jacobian"
+        signgs[:] = sign(eq.compute_jacobian(Grid(np.array([[1, 0, 0]])))["g"])
+        # TODO: do some other quantities need to be multiplied by signgs?
+
+        gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
         gamma[:] = 0
-
-        signgs = file.createVariable("signgs", np.float64, ("dim_00001",))
-        signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = 1  # TODO: don't hard-code this
 
         am = file.createVariable("am", np.float64, ("preset",))
         am.long_name = "pressure coefficients"
@@ -251,19 +281,19 @@ class VMECIO:
 
         power_series = stringtochar(
             np.array(
-                ["power_series         "], "S" + str(file.dimensions["preset"].size)
+                ["power_series        "], "S" + str(file.dimensions["dim_00020"].size)
             )
         )
 
-        pmass_type = file.createVariable("pmass_type", "S1", ("preset",))
+        pmass_type = file.createVariable("pmass_type", "S1", ("dim_00020",))
         pmass_type.long_name = "parameterization of pressure function"
         pmass_type[:] = power_series
 
-        piota_type = file.createVariable("piota_type", "S1", ("preset",))
+        piota_type = file.createVariable("piota_type", "S1", ("dim_00020",))
         piota_type.long_name = "parameterization of rotational transform function"
         piota_type[:] = power_series
 
-        pcurr_type = file.createVariable("pcurr_type", "S1", ("preset",))
+        pcurr_type = file.createVariable("pcurr_type", "S1", ("dim_00020",))
         pcurr_type.long_name = "parameterization of current density function"
         pcurr_type[:] = power_series
 
@@ -302,24 +332,58 @@ class VMECIO:
         phipf[:] = Psi * np.ones((surfs,))
 
         phips = file.createVariable("phips", np.float64, ("radius",))
-        phips.long_name = (
-            "d(phi)/ds * sign(g)/2pi: toroidal flux derivative on half mesh"
-        )
+        phips.long_name = "d(phi)/ds * -1/2pi: toroidal flux derivative on half mesh"
         phips[0] = 0
-        phips[1:] = phipf[1:] * signgs[:] / (2 * np.pi)
+        phips[1:] = -phipf[1:] / (2 * np.pi)
 
         chi = file.createVariable("chi", np.float64, ("radius",))
         chi.long_name = "poloidal flux"
         chi.units = "Wb"
-        chi[:] = phi[:] * signgs[:]
+        chi[:] = (
+            2
+            * Psi
+            * i_transform_chi.transform(
+                np.append([0, 0], eq.i_l)
+                / [c if c != 0 else 1 for c in np.arange(0, eq.L + 3)]
+            )
+        )
 
         chipf = file.createVariable("chipf", np.float64, ("radius",))
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
         chipf[:] = phipf[:] * iotaf[:]
 
+        idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
+        R0_n = np.zeros((2 * N + 1,))
+        for k in idx:
+            (l, m, n) = eq.R_basis.modes[k, :]
+            R0_n[n + N] += (-2 * (l % 2) + 1) * eq.R_lmn[k]
+        raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
+        raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
+        raxis_cc[:] = R0_n[N:]
+        if not eq.sym:
+            raxis_cs = file.createVariable("raxis_cs", np.float64, ("n_tor",))
+            raxis_cs.long_name = "sin(n*p) component of magnetic axis R coordinate"
+            raxis_cs[1:] = R0_n[0:N]
+
+        idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
+        Z0_n = np.zeros((2 * N + 1,))
+        for k in idx:
+            (l, m, n) = eq.Z_basis.modes[k, :]
+            Z0_n[n + N] += (-2 * (l % 2) + 1) * eq.Z_lmn[k]
+        zaxis_cs = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
+        zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
+        zaxis_cs[1:] = Z0_n[0:N]
+        if not eq.sym:
+            zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
+            zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"
+            zaxis_cc[1:] = Z0_n[N:]
+
         # indepentent variables (exact conversion)
 
         # R
+        timer.start("R conversion")
+        if verbose > 0:
+            print("Saving R")
         rmnc = file.createVariable("rmnc", np.float64, ("radius", "mn_mode"))
         rmnc.long_name = "cos(m*t-n*p) component of cylindrical R, on full mesh"
         rmnc.units = "m"
@@ -332,8 +396,14 @@ class VMECIO:
         rmnc[:] = c
         if not eq.sym:
             rmns[:] = s
+        timer.stop("R conversion")
+        if verbose > 1:
+            timer.disp("R conversion")
 
         # Z
+        timer.start("Z conversion")
+        if verbose > 0:
+            print("Saving Z")
         zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
         zmns.long_name = "sin(m*t-n*p) component of cylindrical Z, on full mesh"
         zmns.units = "m"
@@ -346,8 +416,14 @@ class VMECIO:
         zmns[:] = s
         if not eq.sym:
             zmnc[:] = c
+        timer.stop("Z conversion")
+        if verbose > 1:
+            timer.disp("Z conversion")
 
         # lambda
+        timer.start("lambda conversion")
+        if verbose > 0:
+            print("Saving lambda")
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
         lmns.long_name = "sin(m*t-n*p) component of lambda, on half mesh"
         lmns.units = "rad"
@@ -360,37 +436,40 @@ class VMECIO:
         lmns[1:, :] = s
         if not eq.sym:
             lmnc[1:, :] = c
+        timer.stop("lambda conversion")
+        if verbose > 1:
+            timer.disp("lambda conversion")
 
         # derived quantities (approximate conversion)
 
-        MM = 2 * math.ceil(1.5 * M) + 1
-        NN = 2 * math.ceil(1.5 * N) + 1
-        grid = LinearGrid(M=MM, N=NN, NFP=NFP)
-
+        grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
         if eq.sym:
-            sin_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin")
-            cos_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos")
+            sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
+            cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
             sin_transform = Transform(grid=grid, basis=sin_basis, build_pinv=True)
             cos_transform = Transform(grid=grid, basis=cos_basis, build_pinv=True)
         else:
-            full_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=None)
+            full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
             full_transform = Transform(grid=grid, basis=full_basis, build_pinv=True)
 
         # g
+        timer.start("Jacobian conversion")
+        if verbose > 0:
+            print("Saving Jacobian")
         gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
-        gmnc.long_name = "cos(m*t-n*p) component of jacobian, on half mesh"
+        gmnc.long_name = "cos(m*t-n*p) component of Jacobian, on half mesh"
         gmnc.units = "m"
         m = cos_basis.modes[:, 1]
         n = cos_basis.modes[:, 2]
         if not eq.sym:
             gmns = file.createVariable("gmns", np.float64, ("radius", "mn_mode_nyq"))
-            gmns.long_name = "sin(m*t-n*p) component of jacobian, on half mesh"
+            gmns.long_name = "sin(m*t-n*p) component of Jacobian, on half mesh"
             gmns.units = "m"
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
             data = eq.compute_jacobian(grid)["g"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
@@ -400,8 +479,14 @@ class VMECIO:
         gmnc[1:, :] = c
         if not eq.sym:
             gmns[1:, :] = s
+        timer.stop("Jacobian conversion")
+        if verbose > 1:
+            timer.disp("Jacobian conversion")
 
         # |B|
+        timer.start("|B| conversion")
+        if verbose > 0:
+            print("Saving |B|")
         bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
         bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
         bmnc.units = "m"
@@ -415,7 +500,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=MM, N=NN, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["|B|"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
@@ -425,8 +510,14 @@ class VMECIO:
         bmnc[1:, :] = c
         if not eq.sym:
             bmns[1:, :] = s
+        timer.stop("|B| conversion")
+        if verbose > 1:
+            timer.disp("|B| conversion")
 
         file.close
+        timer.stop("Total time")
+        if verbose > 1:
+            timer.disp("Total time")
 
     @classmethod
     def read_vmec_output(cls, fname):

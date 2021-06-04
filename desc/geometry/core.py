@@ -1,19 +1,28 @@
 from abc import ABC, abstractmethod
 import copy
+from desc.backend import jnp
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
+
+
+def cart2pol(xyz):
+    x, y, z = xyz.T
+    r = jnp.sqrt(x ** 2 + y ** 2)
+    phi = jnp.arctan2(y, x)
+    return jnp.array([r, phi, z]).T
+
+
+def pol2cart(rpz):
+    r, p, z = rpz.T
+    x = r * jnp.cos(p)
+    y = r * jnp.sin(p)
+    return jnp.array([x, y, z]).T
 
 
 class Curve(ABC, IOAble):
     """Abstract base class for 1D curves in 3D space"""
 
     _io_attrs_ = ["_name", "_grid"]
-    _object_lib_ = {
-        "Grid": Grid,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
-        "QuadratureGrid": QuadratureGrid,
-    }
 
     @property
     def name(self):
@@ -64,12 +73,6 @@ class Surface(ABC, IOAble):
     """
 
     _io_attrs_ = ["_name", "_grid", "_sym"]
-    _object_lib_ = {
-        "Grid": Grid,
-        "LinearGrid": LinearGrid,
-        "ConcentricGrid": ConcentricGrid,
-        "QuadratureGrid": QuadratureGrid,
-    }
 
     @property
     def name(self):

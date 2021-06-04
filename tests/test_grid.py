@@ -129,7 +129,7 @@ class TestGrid(unittest.TestCase):
             M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
         )
         grid_fringe = ConcentricGrid(
-            2 * M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
+            2 * M, M, N, NFP, sym=True, axis=True, node_pattern="linear"
         )
 
         ansi_nodes = np.stack(
@@ -137,12 +137,12 @@ class TestGrid(unittest.TestCase):
                 np.array([0, 1, 1, 1, 1, 1]),
                 np.array(
                     [
-                        2 / 3 * np.pi,
-                        2 / 3 * np.pi / 5,
-                        2 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        4 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        6 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        8 * np.pi / 5 + 2 / 3 * np.pi / 5,
+                        0,
+                        0,
+                        2 * np.pi / 5,
+                        4 * np.pi / 5,
+                        6 * np.pi / 5,
+                        8 * np.pi / 5,
                     ]
                 ),
                 np.zeros((int((M + 1) * (M + 2) / 2),)),
@@ -150,21 +150,27 @@ class TestGrid(unittest.TestCase):
         ).T
         fringe_nodes = np.stack(
             [
-                np.array([0, 0.5, 0.5, 0.5, 1, 1, 1, 1, 1]),
+                np.array(
+                    [
+                        0,
+                        0.5,
+                        0.5,
+                        1,
+                        1,
+                        1,
+                    ]
+                ),
                 np.array(
                     [
                         2 / 3 * np.pi,
                         2 / 3 * np.pi / 3,
                         2 * np.pi / 3 + 2 / 3 * np.pi / 3,
-                        4 * np.pi / 3 + 2 / 3 * np.pi / 3,
                         2 / 3 * np.pi / 5,
                         2 * np.pi / 5 + 2 / 3 * np.pi / 5,
                         4 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        6 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        8 * np.pi / 5 + 2 / 3 * np.pi / 5,
                     ]
                 ),
-                np.zeros((int((M + 1) ** 2),)),
+                np.zeros((6,)),
             ]
         ).T
 
@@ -172,7 +178,6 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
         self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
-        self.assertAlmostEqual(np.sum(grid_fringe.weights), (2 * np.pi) ** 2 / NFP)
 
     def test_quadrature_grid(self):
 

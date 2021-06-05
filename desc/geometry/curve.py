@@ -2,10 +2,16 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.basis import FourierSeries
-from .core import Curve, cart2pol, pol2cart
+from .core import Curve, cart2polvec, pol2cartvec
 from desc.transform import Transform
 from desc.grid import Grid
 from desc.utils import copy_coeffs
+
+__all__ = [
+    "FourierRZCurve",
+    "FourierXYZCurve",
+    "FourierPlanarCurve",
+]
 
 
 class FourierRZCurve(Curve):
@@ -53,7 +59,7 @@ class FourierRZCurve(Curve):
 
         R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
         if modes_R is None:
-            modes_R = np.arange(-R_n.size // 2, R_n.size // 2 + 1)
+            modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
             modes_Z = modes_R
 
@@ -68,8 +74,8 @@ class FourierRZCurve(Curve):
         self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
         self._Z_basis = FourierSeries(NZ, NFP, sym="sin" if sym else False)
 
-        self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes)
-        self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes)
+        self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
+        self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
@@ -207,7 +213,7 @@ class FourierRZCurve(Curve):
         R_transform, Z_transform = self._get_transforms(grid)
         R = R_transform.transform(R_n, dz=dt)
         Z = Z_transform.transform(Z_n, dz=dt)
-        phi = R_transform.grid.nodes[:, 2] ** (dt == 1) * (dt > 1)
+        phi = R_transform.grid.nodes[:, 2] ** (dt == 0) * (dt <= 1)
 
         return jnp.stack([R, phi, Z], axis=1)
 
@@ -250,9 +256,10 @@ class FourierRZCurve(Curve):
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "xyz":
-            T = pol2cart(T)
-            N = pol2cart(N)
-            B = pol2cart(B)
+            phi = R_transform.grid.nodes[:, 2]
+            T = pol2cartvec(T, phi=phi)
+            N = pol2cartvec(N, phi=phi)
+            B = pol2cartvec(B, phi=phi)
 
         return T, N, B
 
@@ -347,7 +354,7 @@ class FourierRZCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coords(R_n, Z_n, grid)
+        coords = self.compute_coordinates(R_n, Z_n, grid)
         R, phi, Z = coords.T
         phi = phi * R
         coords = jnp.array([R, phi, Z]).T
@@ -374,21 +381,24 @@ class FourierXYZCurve(Curve):
 
     _io_attrs_ = Curve._io_attrs_ + ["_X_n", "_Y_n", "_Z_n", "_basis", "_transform"]
 
-    def __init__(self, X_n, Y_n, Z_n, modes=None, grid=None, name=None):
+    def __init__(
+        self,
+        X_n=[0, 10, 2],
+        Y_n=[0, 0, 0],
+        Z_n=[2, 0, 0],
+        modes=None,
+        grid=None,
+        name=None,
+    ):
 
         X_n, Y_n, Z_n = np.atleast_1d(X_n), np.atleast_1d(Y_n), np.atleast_1d(Z_n)
         if modes is None:
-            modes = np.arange(-X_n.size // 2, X_n.size // 2 + 1)
+            modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
         N = np.max(abs(modes))
         self._basis = FourierSeries(N, NFP=1, sym=False)
-        self._X_n = np.zeros(len(modes))
-        self._Y_n = np.zeros(len(modes))
-        self._Z_n = np.zeros(len(modes))
-        for n, cX, cY, cZ in zip(modes, X_n, Y_n, Z_n):
-            idx = np.where(self.basis.modes[:, 2] == int(n))[0]
-            self._X_n[idx] = cX
-            self._Y_n[idx] = cY
-            self._Z_n[idx] = cZ
+        self._X_n = copy_coeffs(X_n, modes, self.basis.modes[:, 2])
+        self._Y_n = copy_coeffs(Y_n, modes, self.basis.modes[:, 2])
+        self._Z_n = copy_coeffs(Z_n, modes, self.basis.modes[:, 2])
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
@@ -574,6 +584,9 @@ class FourierXYZCurve(Curve):
             Z_n = self.Z_n
 
         transform = self._get_transforms(grid)
+        X = transform.transform(X_n, dz=0)
+        Y = transform.transform(Y_n, dz=0)
+
         dX = transform.transform(X_n, dz=1)
         dY = transform.transform(Y_n, dz=1)
         dZ = transform.transform(Z_n, dz=1)
@@ -590,9 +603,9 @@ class FourierXYZCurve(Curve):
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "rpz":
-            T = cart2pol(T)
-            N = cart2pol(N)
-            B = cart2pol(B)
+            T = cart2polvec(T, x=X, y=Y)
+            N = cart2polvec(N, x=X, y=Y)
+            B = cart2polvec(B, x=X, y=Y)
 
         return T, N, B
 
@@ -698,14 +711,14 @@ class FourierXYZCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coords(X_n, Y_n, Z_n, grid)
+        coords = self.compute_coordinates(X_n, Y_n, Z_n, grid)
         dl = jnp.linalg.norm(jnp.diff(coords, axis=0), axis=1)
         return jnp.trapz(dl)
 
     # TODO: methods for converting between representations
 
 
-class PlanarFourierCurve(Curve):
+class FourierPlanarCurve(Curve):
     """Curve that lines in a plane, parameterized by a point (the center of the curve),
     a vector (normal to the plane), and a fourier series defining the radius from the
     center as a function of a polar angle theta
@@ -737,16 +750,21 @@ class PlanarFourierCurve(Curve):
 
     # We define a reference frame with center at the origin and normal in the +Z direction.
     # The curve is computed in this frame and then shifted/rotated to the correct frame
-    def __init__(self, center, normal, r_n, modes=None, grid=None, name=None):
+    def __init__(
+        self,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        grid=None,
+        name=None,
+    ):
         r_n = np.atleast_1d(r_n)
         if modes is None:
-            modes = np.arange(-r_n.size // 2, r_n.size // 2 + 1)
+            modes = np.arange(-(r_n.size // 2), r_n.size // 2 + 1)
         N = np.max(abs(modes))
         self._basis = FourierSeries(N, NFP=1, sym=False)
-        self._r_n = np.zeros(len(modes))
-        for n, cr in zip(modes, r_n):
-            idx = np.where(self.basis.modes[:, 2] == int(n))[0]
-            self._r_n[idx] = cr
+        self._r_n = copy_coeffs(r_n, modes, self.basis.modes[:, 2])
 
         self.normal = normal
         self.center = center
@@ -804,7 +822,7 @@ class PlanarFourierCurve(Curve):
     @normal.setter
     def normal(self, new):
         if len(new) == 3:
-            self._normal = np.asarray(new)
+            self._normal = np.asarray(new) / np.linalg.norm(new)
         else:
             raise ValueError(
                 "normal should be a 3 element vector [nx, ny, nz], got {}".format(new)
@@ -911,9 +929,9 @@ class PlanarFourierCurve(Curve):
         Z = np.zeros_like(r)
         coords = jnp.array([X, Y, Z])
         R = self._rotmat(normal)
-        coords = jnp.matmul(R, coords) + center
+        coords = jnp.matmul(R, coords) + center[:, np.newaxis]
 
-        return coords
+        return coords.T
 
     def compute_frenet_frame(
         self, center=None, normal=None, r_n=None, grid=None, coords="rpz"
@@ -963,20 +981,19 @@ class PlanarFourierCurve(Curve):
         Z = np.zeros_like(r)
         dcoords = jnp.array([dX, dY, Z])
         d2coords = jnp.array([d2X, d2Y, Z])
-        T = jnp.matmul(R, dcoords) + center
-        N = jnp.matmul(R, d2coords) + center
+        T = jnp.matmul(R, dcoords).T
+        N = jnp.matmul(R, d2coords).T
 
-        T = jnp.stack([dX, dY, Z], axis=1)
-        N = jnp.stack([d2X, d2Y, Z], axis=1)
-
-        T = T / jnp.linalg.norm(T, axis=1)
-        N = N / jnp.linalg.norm(T, axis=1)
+        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
+        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "rpz":
-            T = cart2pol(T)
-            N = cart2pol(N)
-            B = cart2pol(B)
+            xyz = jnp.array([r * jnp.cos(t), r * jnp.sin(t), jnp.zeros_like(r)])
+            x, y, z = jnp.matmul(R, xyz) + center[:, jnp.newaxis]
+            T = cart2polvec(T, x=x, y=y)
+            N = cart2polvec(N, x=x, y=y)
+            B = cart2polvec(B, x=x, y=y)
 
         return T, N, B
 
@@ -1014,13 +1031,10 @@ class PlanarFourierCurve(Curve):
         dr = transform.transform(r_n, dz=1)
         d2r = transform.transform(r_n, dz=2)
         t = transform.grid.nodes[:, -1]
-        R = self._rotmat(normal)
 
         d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
         d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-        Z = np.zeros_like(r)
-        d2coords = jnp.array([d2X, d2Y, Z])
-        d2X, d2Y, d2Z = jnp.matmul(R, d2coords) + center
+        d2Z = np.zeros_like(r)
 
         kappa = jnp.sqrt(d2X ** 2 + d2Y ** 2 + d2Z ** 2)
         return kappa
@@ -1047,11 +1061,7 @@ class PlanarFourierCurve(Curve):
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
         """
-        # tau = -N * B'
-        # B = TxN
-        # B' = T'xN + TxN'
-        # tau = -N*(T'xN) - N*(TxN')
-        #         ^ this is zero
+        # torsion is zero for planar curves
         if center is None:
             center = self.center
         if normal is None:
@@ -1060,46 +1070,9 @@ class PlanarFourierCurve(Curve):
             r_n = self.r_n
         transform = self._get_transforms(grid)
 
-        r = transform.transform(r_n, dz=0)
-        dr = transform.transform(r_n, dz=1)
-        d2r = transform.transform(r_n, dz=2)
-        d3r = transform.transform(r_n, dz=3)
-        t = transform.grid.nodes[:, -1]
-        R = self._rotmat(normal)
+        torsion = jnp.zeros_like(transform.grid.nodes[:, -1])
 
-        dX = dr * jnp.cos(t) - r * jnp.sin(t)
-        d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
-        d3X = (
-            d3r * jnp.cos(t)
-            - 3 * d2r * jnp.sin(t)
-            - 3 * dr * jnp.cos(t)
-            + r * jnp.sin(t)
-        )
-        dY = dr * jnp.sin(t) + r * jnp.cos(t)
-        d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-        d3Y = (
-            d3r * jnp.sin(t)
-            + 3 * d2r * jnp.cos(t)
-            - 3 * dr * jnp.sin(t)
-            - r * jnp.cos(t)
-        )
-        Z = np.zeros_like(r)
-        dcoords = jnp.array([dX, dY, Z])
-        d2coords = jnp.array([d2X, d2Y, Z])
-        d3coords = jnp.array([d3X, d3Y, Z])
-        T = jnp.matmul(R, dcoords) + center
-        N = jnp.matmul(R, d2coords) + center
-        dN = jnp.matmul(R, d3coords) + center
-
-        T = T / jnp.linalg.norm(T, axis=1)
-
-        kappa = jnp.linalg.norm(N, axis=1)
-        N = N / kappa
-        dN = dN / kappa
-
-        tau = jnp.cross(T, dN, axis=1)
-        tau = jnp.sum(-N * tau, axis=1)
-        return tau
+        return torsion
 
     def compute_length(self, center=None, normal=None, r_n=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature
@@ -1123,6 +1096,6 @@ class PlanarFourierCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coords(center, normal, r_n, grid)
+        coords = self.compute_coordinates(center, normal, r_n, grid)
         dl = jnp.linalg.norm(jnp.diff(coords, axis=0), axis=1)
         return jnp.trapz(dl)

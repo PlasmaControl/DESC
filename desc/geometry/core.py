@@ -5,21 +5,47 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
 
 
-def cart2pol(xyz):
-    x, y, z = xyz.T
+def cart2polvec(vec, x=None, y=None, r=None, phi=None):
+    """transform vectors from cartesian to polar form"""
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+    rot = jnp.array(
+        [[jnp.cos(phi), jnp.sin(phi), 0], [-jnp.sin(phi), jnp.cos(phi), 0], [0, 0, 1]]
+    )
+    rot = jnp.moveaxis(rot, -1, 0)
+    polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
+    return jnp.squeeze(polar)
+
+
+def pol2cartvec(vec, x=None, y=None, r=None, phi=None):
+    """transform vectors from polar to cartesian form"""
+    if x is not None and y is not None:
+        phi = jnp.arctan2(y, x)
+    rot = jnp.array(
+        [[jnp.cos(phi), -jnp.sin(phi), 0], [jnp.sin(phi), jnp.cos(phi), 0], [0, 0, 1]]
+    )
+    rot = jnp.moveaxis(rot, -1, 0)
+    cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
+    return jnp.squeeze(cart)
+
+
+def cart2pol(pts):
+    """transform points from cartesian [x,y,z] to polar [r,phi,z] coordinates"""
+    x, y, z = pts.T
     r = jnp.sqrt(x ** 2 + y ** 2)
     phi = jnp.arctan2(y, x)
     return jnp.array([r, phi, z]).T
 
 
-def pol2cart(rpz):
-    r, p, z = rpz.T
+def pol2cart(pts):
+    """transform points from polar [r,phi,z] to cartesian [x,y,z] coordinates"""
+    r, p, z = pts.T
     x = r * jnp.cos(p)
     y = r * jnp.sin(p)
     return jnp.array([x, y, z]).T
 
 
-class Curve(ABC, IOAble):
+class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space"""
 
     _io_attrs_ = ["_name", "_grid"]
@@ -39,7 +65,7 @@ class Curve(ABC, IOAble):
         """Default grid for computation"""
 
     @abstractmethod
-    def transform(self, params, dt=0):
+    def compute_coordinates(self, params, dt=0):
         """Compute real space coordinates on predefined grid"""
 
     @abstractmethod
@@ -67,7 +93,7 @@ class Curve(ABC, IOAble):
         return new
 
 
-class Surface(ABC, IOAble):
+class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space,
     such as flux surfaces, plasma boundaries, poincare sections
     """
@@ -94,16 +120,12 @@ class Surface(ABC, IOAble):
         """Default grid for computation"""
 
     @abstractmethod
-    def transform(self, params, dt=0, dz=0):
-        """Compute real space coordinates on predefined grid"""
+    def compute_coordinates(self, nodes, params, dt=0, dz=0):
+        """Compute coordinate values at specified nodes"""
 
     @abstractmethod
     def compute_normal(self, params):
         """Compute normal vectors to the surface on predefined grid"""
-
-    @abstractmethod
-    def compute_coordinates(self, nodes, params, dt=0, dz=0):
-        """Compute coordinate values at specified nodes"""
 
     @abstractmethod
     def compute_surface_area(self, nodes=None, params=None):

@@ -417,8 +417,8 @@ class Equilibrium(_Configuration, IOAble):
                 L_transform=self.transforms["L"],
                 Rb_transform=self.transforms["Rb"],
                 Zb_transform=self.transforms["Zb"],
-                p_transform=self.pressure,
-                i_transform=self.iota,
+                p_profile=self.pressure,
+                i_profile=self.iota,
                 BC_constraint=self.constraint,
             )
             self.objective = objective
@@ -880,8 +880,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 L_transform=equil.transforms["L"],
                 Rb_transform=equil.transforms["Rb"],
                 Zb_transform=equil.transforms["Zb"],
-                p_transform=equil.pressure,
-                i_transform=equil.iota,
+                p_profile=equil.pressure,
+                i_profile=equil.iota,
                 BC_constraint=equil.constraint,
                 use_jit=True,
             )

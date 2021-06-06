@@ -36,9 +36,9 @@ class ObjectiveFunction(IOAble, ABC):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
             linear constraint to enforce boundary conditions
@@ -53,8 +53,8 @@ class ObjectiveFunction(IOAble, ABC):
         "L_transform",
         "Rb_transform",
         "Zb_transform",
-        "p_transform",
-        "i_transform",
+        "p_profile",
+        "i_profile",
         "BC_constraint",
         "use_jit",
     ]
@@ -68,8 +68,8 @@ class ObjectiveFunction(IOAble, ABC):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -79,8 +79,8 @@ class ObjectiveFunction(IOAble, ABC):
         self.L_transform = L_transform
         self.Rb_transform = Rb_transform
         self.Zb_transform = Zb_transform
-        self.p_transform = p_transform
-        self.i_transform = i_transform
+        self.p_profile = p_profile
+        self.i_profile = i_profile
         self.BC_constraint = BC_constraint
         self.use_jit = use_jit
         self._set_up()
@@ -393,9 +393,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -411,8 +411,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -423,8 +423,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -521,8 +521,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -590,8 +590,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -644,8 +644,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -680,9 +680,9 @@ class ForceErrorNodes(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -774,8 +774,8 @@ class ForceErrorNodes(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -863,8 +863,8 @@ class ForceErrorNodes(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -905,9 +905,9 @@ class EnergyVolIntegral(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -923,8 +923,8 @@ class EnergyVolIntegral(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -935,8 +935,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -1016,8 +1016,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         residual = energy["W"]
@@ -1095,8 +1095,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         print(
@@ -1123,9 +1123,9 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1220,8 +1220,8 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         return quasisymmetry["QS_TP"]
@@ -1296,9 +1296,9 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1314,8 +1314,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -1326,8 +1326,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -1428,8 +1428,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         # normalize to flux surface average
@@ -1498,8 +1498,8 @@ def get_objective_function(
     L_transform,
     Rb_transform,
     Zb_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
     BC_constraint=None,
     use_jit=True,
 ):
@@ -1519,9 +1519,9 @@ def get_objective_function(
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1541,8 +1541,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
@@ -1553,8 +1553,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
@@ -1565,8 +1565,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )

@@ -11,6 +11,7 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
 from desc.transform import Transform
 from desc.basis import PowerSeries
+from desc.utils import copy_coeffs
 
 
 class Profile(IOAble, ABC):
@@ -63,11 +64,7 @@ class Profile(IOAble, ABC):
         """Set default params for computation"""
 
     @abstractmethod
-    def transform(self, params, dr=0, dt=0, dz=0):
-        """compute profile values on default grid using specified coefficients"""
-
-    @abstractmethod
-    def compute(nodes, params=None, dr=0, dt=0, dz=0):
+    def compute(params=None, grid=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.params"""
 
     def copy(self, deepcopy=True):
@@ -78,8 +75,8 @@ class Profile(IOAble, ABC):
             new = copy.copy(self)
         return new
 
-    def __call__(self, nodes, params=None, dr=0, dt=0, dz=0):
-        return self.compute(nodes, params, dr, dt, dz)
+    def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
+        return self.compute(params, grid, dr, dt, dz)
 
 
 class PowerSeriesProfile(Profile):
@@ -106,6 +103,7 @@ class PowerSeriesProfile(Profile):
     def __init__(self, params, modes=None, grid=None, name=None):
 
         self._name = name
+        params = np.atleast_1d(params)
         if modes is None:
             modes = np.arange(params.size)
         self._basis = PowerSeries(L=int(np.max(abs(modes))))
@@ -116,9 +114,24 @@ class PowerSeriesProfile(Profile):
         if grid is None:
             grid = Grid(np.empty((0, 3)))
         self._grid = grid
-        self._transform = Transform(
-            self.grid, self.basis, derivs=np.array([[0, 0, 0], [1, 0, 0]])
+        self._transform = self._get_transform(grid)
+
+    def _get_transform(self, grid):
+        if grid is None:
+            return self._transform
+        if not isinstance(grid, Grid):
+            if np.isscalar(grid):
+                grid = np.linspace(0, 1, grid)
+            grid = np.atleast_1d(grid)
+            if grid.ndim == 1:
+                grid = np.pad(grid[:, np.newaxis], ((0, 0), (0, 2)))
+            grid = Grid(grid, sort=False)
+        transform = Transform(
+            grid,
+            self.basis,
+            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
         )
+        return transform
 
     @property
     def basis(self):
@@ -147,7 +160,6 @@ class PowerSeriesProfile(Profile):
         """Parameter values"""
         return self._params
 
-    # TODO: methods for setting individual components, getting indices of modes etc
     @params.setter
     def params(self, new):
         if len(new) == self._basis.num_modes:
@@ -157,35 +169,46 @@ class PowerSeriesProfile(Profile):
                 f"params should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
             )
 
-    def transform(self, params, dr=0, dt=0, dz=0):
-        """Compute values using specified coefficients
+    def get_params(self, l):
+        """Get power series coefficients for given mode number(s)"""
+        l = np.atleast_1d(l).astype(int)
+        a = np.zeros_like(l).astype(float)
 
-        Parameters
-        ----------
-        params: array-like
-            polynomial coefficients to use
-        dr, dt, dz : int
-            derivative order in rho, theta, zeta
+        idx = np.where(l[:, np.newaxis] == self.basis.modes[:, 0])
 
-        Returns
-        -------
-        values : ndarray
-            values of the profile or its derivative at the points specified by the
-            grid attribute
+        a[idx[0]] = self.params[idx[1]]
+        return a
 
-        """
-        return self._transform.transform(params, dr=dr, dt=dt, dz=dz)
+    def set_params(self, l, a=None):
+        """set specific power series coefficients"""
+        l, a = np.atleast_1d(l), np.atleast_1d(a)
+        a = np.broadcast_to(a, l.shape)
+        for ll, aa in zip(l, a):
+            idx = self.basis.get_idx(ll, 0, 0)
+            if aa is not None:
+                self.params[idx] = aa
 
-    def compute(self, nodes, params=None, dr=0, dt=0, dz=0):
+    def get_idx(self, l):
+        """get index into params array for given mode number(s)"""
+        return self.basis.get_idx(L=l)
+
+    def change_resolution(self, L):
+        """set a new maximum mode number"""
+        modes_old = self.basis.modes
+        self.basis.change_resolution(L)
+        self._transform = self._get_transform(self.grid)
+        self.params = copy_coeffs(self.params, modes_old, self.basis.modes)
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes
 
         Parameters
         ----------
-        nodes : ndarray, shape(k,) or (k,3)
-            locations to compute values at
         params : array-like
             polynomial coefficients to use, in ascending order. If not given, uses the
             values given by the params attribute
+        grid : Grid or array-like
+            locations to compute values at. Defaults to self.grid
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -197,10 +220,8 @@ class PowerSeriesProfile(Profile):
         """
         if params is None:
             params = self.params
-        if nodes.ndim == 1:
-            nodes = np.pad(nodes[:, np.newaxis], ((0, 0), (0, 2)))
-        A = self.basis.evaluate(nodes, derivatives=[dr, dt, dz])
-        return jnp.dot(A, params)
+        transform = self._get_transform(grid)
+        return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=None):
@@ -295,7 +316,7 @@ class PowerSeriesProfile(Profile):
         """
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
-        values = self.compute(knots)
+        values = self.compute(grid=knots)
         return SplineProfile(values, knots, self.grid, method, self.name)
 
     def to_mtanh(
@@ -328,7 +349,7 @@ class PowerSeriesProfile(Profile):
         """
         if np.isscalar(xs):
             xs = np.linspace(0, 1, xs)
-        ys = self.compute(xs)
+        ys = self.compute(grid=xs)
         return MTanhProfile.from_values(
             xs,
             ys,
@@ -427,32 +448,19 @@ class SplineProfile(Profile):
                 f"params should have the same size as the knots, got {len(new)} values for {len(self._knots)} knots"
             )
 
-    def transform(self, params, dr=0, dt=0, dz=0):
-        """Compute values using specified coefficients
+    def _get_xq(self, grid):
+        if grid is None:
+            return self.grid.nodes[:, 0]
+        if isinstance(grid, Grid):
+            return grid.nodes[:, 0]
+        if np.isscalar(grid):
+            return np.linspace(0, 1, grid)
+        grid = np.atleast_1d(grid)
+        if grid.ndim == 1:
+            return grid
+        return grid[:, 0]
 
-        Parameters
-        ----------
-        params: array-like
-            spline values to use
-        dr, dt, dz : int
-            derivative order in rho, theta, zeta
-
-        Returns
-        -------
-        values : ndarray
-            values of the profile or its derivative at the points specified by the
-            grid attribute
-
-        """
-        xq = self.grid.nodes[:, 0]
-        if dt != 0 or dz != 0:
-            return jnp.zeros_like(xq)
-        x = self._knots
-        f = params
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
-        return fq
-
-    def compute(self, nodes, params=None, dr=0, dt=0, dz=0):
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes
 
         Parameters
@@ -473,8 +481,7 @@ class SplineProfile(Profile):
         """
         if params is None:
             params = self.params
-
-        xq = nodes[:, 0] if nodes.ndim > 1 else nodes
+        xq = self._get_xq(grid)
         if dt != 0 or dz != 0:
             return jnp.zeros_like(xq)
         x = self._knots
@@ -509,7 +516,7 @@ class SplineProfile(Profile):
         """
         if np.isscalar(xs):
             xs = np.linspace(0, 1, xs)
-        fs = self.compute(xs)
+        fs = self.compute(grid=xs)
         p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
         p.grid = self.grid
         p.name = self.name
@@ -539,7 +546,7 @@ class SplineProfile(Profile):
         """
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
-        values = self.compute(knots)
+        values = self.compute(grid=knots)
         return SplineProfile(values, knots, self.grid, method, self.name)
 
     def to_mtanh(
@@ -572,7 +579,7 @@ class SplineProfile(Profile):
         """
         if np.isscalar(xs):
             xs = np.linspace(0, 1, xs)
-        ys = self.compute(xs)
+        ys = self.compute(grid=xs)
         return MTanhProfile.from_values(
             xs,
             ys,
@@ -650,7 +657,6 @@ class MTanhProfile(Profile):
                 f"params should have at least 5 elements [ped, offset, sym, width, *core_poly]  got only {len(new)} values"
             )
 
-    # TODO: check these parameter definitions and formulas
     @staticmethod
     def _mtanh(x, ped, offset, sym, width, core_poly, dx=0):
         """modified tanh + polynomial profile
@@ -710,28 +716,19 @@ class MTanhProfile(Profile):
         y = y + f * (offset - ped) / 2
         return y
 
-    def transform(self, params, dr=0, dt=0, dz=0):
-        """Compute values using specified coefficients
+    def _get_xq(self, grid):
+        if grid is None:
+            return self.grid.nodes[:, 0]
+        if isinstance(grid, Grid):
+            return grid.nodes[:, 0]
+        if np.isscalar(grid):
+            return np.linspace(0, 1, grid)
+        grid = np.atleast_1d(grid)
+        if grid.ndim == 1:
+            return grid
+        return grid[:, 0]
 
-        Parameters
-        ----------
-        params: array-like
-            coefficients to use [ped, offset, sym, width, core_poly]
-        dr, dt, dz : int
-            derivative order in rho, theta, zeta
-
-        Returns
-        -------
-        values : ndarray
-            values of the profile or its derivative at the points specified by the
-            grid attribute
-
-        """
-        nodes = self.grid.nodes
-        y = self.compute(nodes, params, dr, dt, dz)
-        return y
-
-    def compute(self, nodes, params=None, dr=0, dt=0, dz=0):
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes
 
         Parameters
@@ -753,7 +750,7 @@ class MTanhProfile(Profile):
         if params is None:
             params = self.params
 
-        xq = nodes[:, 0] if nodes.ndim > 1 else nodes
+        xq = self._get_xq(grid)
         ped = params[0]
         offset = params[1]
         sym = params[2]
@@ -885,7 +882,7 @@ class MTanhProfile(Profile):
         """
         if np.isscalar(xs):
             xs = np.linspace(0, 1, xs)
-        fs = self.compute(xs)
+        fs = self.compute(grid=xs)
         p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
         p.grid = self.grid
         p.name = self.name
@@ -915,5 +912,5 @@ class MTanhProfile(Profile):
         """
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
-        values = self.compute(knots)
+        values = self.compute(grid=knots)
         return SplineProfile(values, knots, self.grid, method, self.name)

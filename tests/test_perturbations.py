@@ -46,8 +46,8 @@ class DummyFunLinear(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         axis = self.R_transform.grid.axis
@@ -100,8 +100,8 @@ class TestPerturbations(unittest.TestCase):
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=pres,
-            i_transform=iota,
+            p_profile=pres,
+            i_profile=iota,
             BC_constraint=LCFSConstraint(
                 eq_old.R_basis,
                 eq_old.Z_basis,

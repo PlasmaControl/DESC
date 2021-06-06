@@ -80,16 +80,7 @@ class FourierRZCurve(Curve):
         if grid is None:
             grid = Grid(np.empty((0, 3)))
         self._grid = grid
-        self._R_transform = Transform(
-            self.grid,
-            self.R_basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
-        self._Z_transform = Transform(
-            self.grid,
-            self.Z_basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
+        self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
 
     @property
@@ -184,8 +175,16 @@ class FourierRZCurve(Curve):
             if grid.ndim == 1:
                 grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
             grid = Grid(grid, sort=False)
-        R_transform = Transform(grid, self.R_basis)
-        Z_transform = Transform(grid, self.Z_basis)
+        R_transform = Transform(
+            grid,
+            self.R_basis,
+            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
+        )
+        Z_transform = Transform(
+            grid,
+            self.Z_basis,
+            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
+        )
         return R_transform, Z_transform
 
     def compute_coordinates(self, R_n=None, Z_n=None, grid=None, dt=0):
@@ -403,11 +402,7 @@ class FourierXYZCurve(Curve):
         if grid is None:
             grid = Grid(np.empty((0, 3)))
         self._grid = grid
-        self._transform = Transform(
-            self.grid,
-            self.basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
+        self._transform = self._get_transforms(grid)
         self.name = name
 
     @property
@@ -518,7 +513,11 @@ class FourierXYZCurve(Curve):
             if grid.ndim == 1:
                 grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
             grid = Grid(grid, sort=False)
-        transform = Transform(grid, self.basis)
+        transform = Transform(
+            grid,
+            self.basis,
+            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
+        )
         return transform
 
     def compute_coordinates(self, X_n=None, Y_n=None, Z_n=None, grid=None, dt=0):
@@ -771,11 +770,7 @@ class FourierPlanarCurve(Curve):
         if grid is None:
             grid = Grid(np.empty((0, 3)))
         self._grid = grid
-        self._transform = Transform(
-            self.grid,
-            self.basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
+        self._transform = self._get_transforms(grid)
         self.name = name
 
     @property
@@ -888,7 +883,11 @@ class FourierPlanarCurve(Curve):
             if grid.ndim == 1:
                 grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
             grid = Grid(grid, sort=False)
-        transform = Transform(grid, self.basis)
+        transform = Transform(
+            grid,
+            self.basis,
+            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
+        )
         return transform
 
     def compute_coordinates(self, center=None, normal=None, r_n=None, grid=None, dt=0):

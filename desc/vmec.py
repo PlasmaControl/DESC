@@ -161,10 +161,10 @@ class VMECIO:
         full_grid = LinearGrid(rho=r_full)
         half_grid = LinearGrid(rho=r_half)
 
-        p_transform_full = Transform(full_grid, eq.p_basis)
-        p_transform_half = Transform(half_grid, eq.p_basis)
-        i_transform_full = Transform(full_grid, eq.i_basis)
-        i_transform_half = Transform(half_grid, eq.i_basis)
+        p_transform_full = Transform(full_grid, eq.pressure.basis)
+        p_transform_half = Transform(half_grid, eq.pressure.basis)
+        i_transform_full = Transform(full_grid, eq.iota.basis)
+        i_transform_half = Transform(half_grid, eq.iota.basis)
 
         # dimensions
         file.createDimension("radius", surfs)  # number of flux surfaces

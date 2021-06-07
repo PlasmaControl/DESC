@@ -129,6 +129,18 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_logo
 
+Profiles
+********
+
+.. autosummary::
+    :toctree: _api/profiles
+    :recursive:
+    :template: class.rst
+	       
+    desc.profiles.PowerSeriesProfile
+    desc.profiles.SplineProfile
+    desc.profiles.MTanhProfile
+    
 Transform
 *********
 

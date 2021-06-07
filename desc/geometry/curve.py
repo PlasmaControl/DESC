@@ -144,11 +144,11 @@ class FourierRZCurve(Curve):
 
     @R_n.setter
     def R_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(new) == self.R_basis.num_modes:
             self._R_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                f"R_n should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
             )
 
     @property
@@ -158,11 +158,11 @@ class FourierRZCurve(Curve):
 
     @Z_n.setter
     def Z_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(new) == self.Z_basis.num_modes:
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                f"Z_n should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
             )
 
     def _get_transforms(self, grid=None):
@@ -210,11 +210,40 @@ class FourierRZCurve(Curve):
         if Z_n is None:
             Z_n = self.Z_n
         R_transform, Z_transform = self._get_transforms(grid)
-        R = R_transform.transform(R_n, dz=dt)
-        Z = Z_transform.transform(Z_n, dz=dt)
-        phi = R_transform.grid.nodes[:, 2] ** (dt == 0) * (dt <= 1)
-
-        return jnp.stack([R, phi, Z], axis=1)
+        if dt == 0:
+            R = R_transform.transform(R_n, dz=0)
+            Z = Z_transform.transform(Z_n, dz=0)
+            phi = R_transform.grid.nodes[:, 2]
+            return jnp.stack([R, phi, Z], axis=1)
+        if dt == 1:
+            R0 = R_transform.transform(R_n, dz=0)
+            dR = R_transform.transform(R_n, dz=dt)
+            dZ = Z_transform.transform(Z_n, dz=dt)
+            dphi = R0
+            return jnp.stack([dR, dphi, dZ], axis=1)
+        if dt == 2:
+            R0 = R_transform.transform(R_n, dz=0)
+            dR = R_transform.transform(R_n, dz=1)
+            d2R = R_transform.transform(R_n, dz=2)
+            d2Z = Z_transform.transform(Z_n, dz=2)
+            R = d2R - R0
+            Z = d2Z
+            # 2nd derivative wrt to phi = 0
+            phi = 2 * dR
+            return jnp.stack([R, phi, Z], axis=1)
+        if dt == 3:
+            R0 = R_transform.transform(R_n, dz=0)
+            dR = R_transform.transform(R_n, dz=1)
+            d2R = R_transform.transform(R_n, dz=2)
+            d3R = R_transform.transform(R_n, dz=3)
+            d3Z = Z_transform.transform(Z_n, dz=3)
+            R = d3R - 3 * dR
+            Z = d3Z
+            phi = 3 * d2R - R0
+            return jnp.stack([R, phi, Z], axis=1)
+        raise NotImplementedError(
+            "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+        )
 
     def compute_frenet_frame(self, R_n=None, Z_n=None, grid=None, coords="rpz"):
         """Compute frenet frame vectors using specified coefficients
@@ -239,19 +268,11 @@ class FourierRZCurve(Curve):
         if Z_n is None:
             Z_n = self.Z_n
         R_transform, Z_transform = self._get_transforms(grid)
-        dR = R_transform.transform(R_n, dz=1)
-        dZ = Z_transform.transform(Z_n, dz=1)
-        dphi = jnp.ones_like(R_transform.grid.nodes[:, 2])
+        T = self.compute_coordinates(R_n, Z_n, grid, dt=1)
+        N = self.compute_coordinates(R_n, Z_n, grid, dt=2)
 
-        d2R = R_transform.transform(R_n, dz=2)
-        d2Z = Z_transform.transform(Z_n, dz=2)
-        d2phi = jnp.zeros_like(R_transform.grid.nodes[:, 2])
-
-        T = jnp.stack([dR, dphi, dZ], axis=1)
-        N = jnp.stack([d2R, d2phi, d2Z], axis=1)
-
-        T = T / jnp.linalg.norm(T, axis=1)
-        N = N / jnp.linalg.norm(T, axis=1)
+        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
+        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "xyz":
@@ -278,12 +299,10 @@ class FourierRZCurve(Curve):
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
         """
-        R_transform, Z_transform = self._get_transforms(grid)
-        d2R = R_transform.transform(R_n, dz=2)
-        d2Z = Z_transform.transform(Z_n, dz=2)
-        d2phi = jnp.zeros_like(R_transform.grid.nodes[:, 2])
-
-        kappa = jnp.sqrt(d2R ** 2 + d2phi ** 2 + d2Z ** 2)
+        dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
+        d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
+        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
         return kappa
 
     def compute_torsion(self, R_n=None, Z_n=None, grid=None):
@@ -302,38 +321,14 @@ class FourierRZCurve(Curve):
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
         """
-        # tau = -N * B'
-        # B = TxN
-        # B' = T'xN + TxN'
-        # tau = -N*(T'xN) - N*(TxN')
-        #         ^ this is zero
-        if R_n is None:
-            R_n = self.R_n
-        if Z_n is None:
-            Z_n = self.Z_n
-        R_transform, Z_transform = self._get_transforms(grid)
-        dR = R_transform.transform(R_n, dz=1)
-        dZ = Z_transform.transform(Z_n, dz=1)
-        dphi = jnp.ones_like(R_transform.grid.nodes[:, 2])
-
-        d2R = R_transform.transform(R_n, dz=2)
-        d2Z = Z_transform.transform(Z_n, dz=2)
-        d2phi = jnp.zeros_like(R_transform.grid.nodes[:, 2])
-
-        d3R = R_transform.transform(R_n, dz=3)
-        d3Z = Z_transform.transform(Z_n, dz=3)
-        d3phi = jnp.zeros_like(R_transform.grid.nodes[:, 2])
-
-        T = jnp.stack([dR, dphi, dZ], axis=1)
-        T = T / jnp.linalg.norm(T, axis=1)
-
-        N = jnp.stack([d2R, d2phi, d2Z], axis=1)
-        kappa = jnp.sqrt(d2R ** 2 + d2phi ** 2 + d2Z ** 2)
-        N = N / kappa
-        dN = jnp.stack([d3R, d3phi, d3Z], axis=1) / kappa
-
-        tau = jnp.cross(T, dN, axis=1)
-        tau = jnp.sum(-N * tau, axis=1)
+        dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
+        d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
+        d3x = self.compute_coordinates(R_n, Z_n, grid, dt=3)
+        dxd2x = jnp.cross(dx, d2x, axis=1)
+        tau = (
+            jnp.sum(dxd2x * d3x, axis=1)
+            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
+        )
         return tau
 
     def compute_length(self, R_n=None, Z_n=None, grid=None):
@@ -353,12 +348,11 @@ class FourierRZCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coordinates(R_n, Z_n, grid)
-        R, phi, Z = coords.T
-        phi = phi * R
-        coords = jnp.array([R, phi, Z]).T
-        dl = jnp.linalg.norm(jnp.diff(coords, axis=0), axis=1)
-        return jnp.trapz(dl)
+        R_transform, Z_transform = self._get_transforms(grid)
+        T = self.compute_coordinates(R_n, Z_n, grid, dt=1)
+        T = jnp.linalg.norm(T, axis=1)
+        phi = R_transform.grid.nodes[:, 2]
+        return jnp.trapz(T, phi)
 
 
 class FourierXYZCurve(Curve):
@@ -597,8 +591,8 @@ class FourierXYZCurve(Curve):
         T = jnp.stack([dX, dY, dZ], axis=1)
         N = jnp.stack([d2X, d2Y, d2Z], axis=1)
 
-        T = T / jnp.linalg.norm(T, axis=1)
-        N = N / jnp.linalg.norm(T, axis=1)
+        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
+        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "rpz":
@@ -625,18 +619,10 @@ class FourierXYZCurve(Curve):
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
         """
-        if X_n is None:
-            X_n = self.X_n
-        if Y_n is None:
-            Y_n = self.Y_n
-        if Z_n is None:
-            Z_n = self.Z_n
-        transform = self._get_transforms(grid)
-        d2X = transform.transform(X_n, dz=2)
-        d2Y = transform.transform(Y_n, dz=2)
-        d2Z = transform.transform(Z_n, dz=2)
-
-        kappa = jnp.sqrt(d2X ** 2 + d2Y ** 2 + d2Z ** 2)
+        dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
+        d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
+        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
         return kappa
 
     def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
@@ -656,41 +642,14 @@ class FourierXYZCurve(Curve):
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
         """
-        # tau = -N * B'
-        # B = TxN
-        # B' = T'xN + TxN'
-        # tau = -N*(T'xN) - N*(TxN')
-        #         ^ this is zero
-        if X_n is None:
-            X_n = self.X_n
-        if Y_n is None:
-            Y_n = self.Y_n
-        if Z_n is None:
-            Z_n = self.Z_n
-        transform = self._get_transforms(grid)
-
-        dX = transform.transform(X_n, dz=1)
-        dY = transform.transform(Y_n, dz=1)
-        dZ = transform.transform(Z_n, dz=1)
-
-        d2X = transform.transform(X_n, dz=2)
-        d2Y = transform.transform(Y_n, dz=2)
-        d2Z = transform.transform(Z_n, dz=2)
-
-        d3X = transform.transform(X_n, dz=3)
-        d3Y = transform.transform(Y_n, dz=3)
-        d3Z = transform.transform(Z_n, dz=3)
-
-        T = jnp.stack([dX, dY, dZ], axis=1)
-        T = T / jnp.linalg.norm(T, axis=1)
-
-        N = jnp.stack([d2X, d2Y, d2Z], axis=1)
-        kappa = jnp.sqrt(d2X ** 2 + d2Y ** 2 + d2Z ** 2)
-        N = N / kappa
-        dN = jnp.stack([d3X, d3Y, d3Z], axis=1) / kappa
-
-        tau = jnp.cross(T, dN, axis=1)
-        tau = jnp.sum(-N * tau, axis=1)
+        dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
+        d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
+        d3x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=3)
+        dxd2x = jnp.cross(dx, d2x, axis=1)
+        tau = (
+            jnp.sum(dxd2x * d3x, axis=1)
+            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
+        )
         return tau
 
     def compute_length(self, X_n=None, Y_n=None, Z_n=None, grid=None):
@@ -710,9 +669,11 @@ class FourierXYZCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coordinates(X_n, Y_n, Z_n, grid)
-        dl = jnp.linalg.norm(jnp.diff(coords, axis=0), axis=1)
-        return jnp.trapz(dl)
+        transform = self._get_transforms(grid)
+        T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
+        T = jnp.linalg.norm(T, axis=1)
+        theta = transform.grid.nodes[:, 2]
+        return jnp.trapz(T, theta)
 
     # TODO: methods for converting between representations
 
@@ -921,14 +882,56 @@ class FourierPlanarCurve(Curve):
         if r_n is None:
             r_n = self.r_n
         transform = self._get_transforms(grid)
-        r = transform.transform(r_n, dz=dt)
-        t = transform.grid.nodes[:, -1]
-        X = r * jnp.cos(t)
-        Y = r * jnp.sin(t)
-        Z = np.zeros_like(r)
-        coords = jnp.array([X, Y, Z])
+        if dt == 0:
+            r = transform.transform(r_n, dz=dt)
+            t = transform.grid.nodes[:, -1]
+            X = r * jnp.cos(t)
+            Y = r * jnp.sin(t)
+            Z = np.zeros_like(r)
+            coords = jnp.array([X, Y, Z])
+        elif dt == 1:
+            t = transform.grid.nodes[:, -1]
+            r = transform.transform(r_n, dz=0)
+            dr = transform.transform(r_n, dz=1)
+
+            dX = dr * jnp.cos(t) - r * jnp.sin(t)
+            dY = dr * jnp.sin(t) + r * jnp.cos(t)
+            Z = np.zeros_like(r)
+            coords = jnp.array([dX, dY, Z])
+        elif dt == 2:
+            t = transform.grid.nodes[:, -1]
+            r = transform.transform(r_n, dz=0)
+            dr = transform.transform(r_n, dz=1)
+            d2r = transform.transform(r_n, dz=2)
+            d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
+            d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
+            Z = np.zeros_like(r)
+            coords = jnp.array([d2X, d2Y, Z])
+        elif dt == 3:
+            t = transform.grid.nodes[:, -1]
+            r = transform.transform(r_n, dz=0)
+            dr = transform.transform(r_n, dz=1)
+            d2r = transform.transform(r_n, dz=2)
+            d3r = transform.transform(r_n, dz=3)
+            d3X = (
+                d3r * jnp.cos(t)
+                - 3 * d2r * jnp.sin(t)
+                - 3 * dr * jnp.cos(t)
+                + r * jnp.sin(t)
+            )
+            d3Y = (
+                d3r * jnp.sin(t)
+                + 3 * d2r * jnp.cos(t)
+                - 3 * dr * jnp.sin(t)
+                - r * jnp.cos(t)
+            )
+            coords = jnp.array([d3X, d3Y, Z])
+        else:
+            raise NotImplementedError(
+                "derivatives higher than 3 have not been implemented for planar curves"
+            )
         R = self._rotmat(normal)
-        coords = jnp.matmul(R, coords) + center[:, np.newaxis]
+        coords = jnp.matmul(R, coords) + (center[:, jnp.newaxis] * (dt == 0))
 
         return coords.T
 
@@ -967,27 +970,17 @@ class FourierPlanarCurve(Curve):
             r_n = self.r_n
         transform = self._get_transforms(grid)
 
-        r = transform.transform(r_n, dz=0)
-        dr = transform.transform(r_n, dz=1)
-        d2r = transform.transform(r_n, dz=2)
-        t = transform.grid.nodes[:, -1]
-        R = self._rotmat(normal)
-
-        dX = dr * jnp.cos(t) - r * jnp.sin(t)
-        d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
-        dY = dr * jnp.sin(t) + r * jnp.cos(t)
-        d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-        Z = np.zeros_like(r)
-        dcoords = jnp.array([dX, dY, Z])
-        d2coords = jnp.array([d2X, d2Y, Z])
-        T = jnp.matmul(R, dcoords).T
-        N = jnp.matmul(R, d2coords).T
+        T = self.compute_coordinates(center, normal, r_n, grid, dt=1)
+        N = self.compute_coordinates(center, normal, r_n, grid, dt=2)
 
         T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         B = jnp.cross(T, N, axis=1)
 
         if coords.lower() == "rpz":
+            r = transform.transform(r_n)
+            t = transform.grid.nodes[:, 2]
+            R = self._rotmat(normal)
             xyz = jnp.array([r * jnp.cos(t), r * jnp.sin(t), jnp.zeros_like(r)])
             x, y, z = jnp.matmul(R, xyz) + center[:, jnp.newaxis]
             T = cart2polvec(T, x=x, y=y)
@@ -1016,26 +1009,12 @@ class FourierPlanarCurve(Curve):
         Returns
         -------
         kappa : ndarray, shape(k,)
-            curvature of the curve at specified grid locations in phi
+            curvature of the curve at specified grid locations in theta
         """
-        if center is None:
-            center = self.center
-        if normal is None:
-            normal = self.normal
-        if r_n is None:
-            r_n = self.r_n
-        transform = self._get_transforms(grid)
-
-        r = transform.transform(r_n, dz=0)
-        dr = transform.transform(r_n, dz=1)
-        d2r = transform.transform(r_n, dz=2)
-        t = transform.grid.nodes[:, -1]
-
-        d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
-        d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-        d2Z = np.zeros_like(r)
-
-        kappa = jnp.sqrt(d2X ** 2 + d2Y ** 2 + d2Z ** 2)
+        dx = self.compute_coordinates(center, normal, r_n, grid, dt=1)
+        d2x = self.compute_coordinates(center, normal, r_n, grid, dt=2)
+        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
         return kappa
 
     def compute_torsion(self, center=None, normal=None, r_n=None, grid=None):
@@ -1061,16 +1040,8 @@ class FourierPlanarCurve(Curve):
             torsion of the curve at specified grid locations in phi
         """
         # torsion is zero for planar curves
-        if center is None:
-            center = self.center
-        if normal is None:
-            normal = self.normal
-        if r_n is None:
-            r_n = self.r_n
         transform = self._get_transforms(grid)
-
         torsion = jnp.zeros_like(transform.grid.nodes[:, -1])
-
         return torsion
 
     def compute_length(self, center=None, normal=None, r_n=None, grid=None):
@@ -1095,6 +1066,8 @@ class FourierPlanarCurve(Curve):
         length : float
             length of the curve approximated by quadrature
         """
-        coords = self.compute_coordinates(center, normal, r_n, grid)
-        dl = jnp.linalg.norm(jnp.diff(coords, axis=0), axis=1)
-        return jnp.trapz(dl)
+        transform = self._get_transforms(grid)
+        T = self.compute_coordinates(center, normal, r_n, grid, dt=1)
+        T = jnp.linalg.norm(T, axis=1)
+        theta = transform.grid.nodes[:, 2]
+        return jnp.trapz(T, theta)

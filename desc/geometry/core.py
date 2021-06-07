@@ -10,11 +10,15 @@ def cart2polvec(vec, x=None, y=None, r=None, phi=None):
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
-        [[jnp.cos(phi), jnp.sin(phi), 0], [-jnp.sin(phi), jnp.cos(phi), 0], [0, 0, 1]]
+        [
+            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+        ]
     )
     rot = jnp.moveaxis(rot, -1, 0)
     polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return jnp.squeeze(polar)
+    return polar.reshape((-1, 3))
 
 
 def pol2cartvec(vec, x=None, y=None, r=None, phi=None):
@@ -22,11 +26,15 @@ def pol2cartvec(vec, x=None, y=None, r=None, phi=None):
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
-        [[jnp.cos(phi), -jnp.sin(phi), 0], [jnp.sin(phi), jnp.cos(phi), 0], [0, 0, 1]]
+        [
+            [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+            [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+        ]
     )
     rot = jnp.moveaxis(rot, -1, 0)
     cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return jnp.squeeze(cart)
+    return cart.reshape((-1, 3))
 
 
 def cart2pol(pts):

@@ -1244,12 +1244,13 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         )
 
         # normalization factor = <|B|>^4 * a / R^3
-        idx = jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
         m_R = jnp.abs(self.Rb_transform.basis.modes[:, 1])
         n_R = jnp.abs(self.Rb_transform.basis.modes[:, 2])
         m_Z = jnp.abs(self.Zb_transform.basis.modes[:, 1])
         n_Z = jnp.abs(self.Zb_transform.basis.modes[:, 2])
-        R_major = Rb_lmn[idx]
+        R_major = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
         R_minor = jnp.sum(Rb_lmn ** 2 / ((m_R + 1) * (n_R + 1))) - R_major ** 2
         Z_minor = jnp.sum(Zb_lmn ** 2 / ((m_Z + 1) * (n_Z + 1)))
         a_minor = jnp.sqrt((R_minor + Z_minor) / 2)

@@ -60,12 +60,7 @@ class FourierRZToroidalSurface(Surface):
             R_mn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
         if Z_mn is None:
-            Z_mn = np.array(
-                [
-                    0,
-                    1,
-                ]
-            )
+            Z_mn = np.array([0, 1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -254,11 +249,40 @@ class FourierRZToroidalSurface(Surface):
             Z_mn = self.Z_mn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        R = R_transform.transform(R_mn, dt=dt, dz=dz)
-        Z = Z_transform.transform(Z_mn, dt=dt, dz=dz)
-        phi = R_transform.grid.nodes[:, 2] ** (dz == 0) * (dz <= 1)
-
-        return jnp.stack([R, phi, Z], axis=1)
+        if dz == 0:
+            R = R_transform.transform(R_mn, dt=dt, dz=0)
+            Z = Z_transform.transform(Z_mn, dt=dt, dz=0)
+            phi = R_transform.grid.nodes[:, 2] * (dt == 0)
+            return jnp.stack([R, phi, Z], axis=1)
+        if dz == 1:
+            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
+            dR = R_transform.transform(R_mn, dt=dt, dz=1)
+            dZ = Z_transform.transform(Z_mn, dt=dt, dz=1)
+            dphi = R0 * (dt == 0)
+            return jnp.stack([dR, dphi, dZ], axis=1)
+        if dz == 2:
+            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
+            dR = R_transform.transform(R_mn, dt=dt, dz=1)
+            d2R = R_transform.transform(R_mn, dt=dt, dz=2)
+            d2Z = Z_transform.transform(Z_mn, dt=dt, dz=2)
+            R = d2R - R0
+            Z = d2Z
+            # 2nd derivative wrt to phi = 0
+            phi = 2 * dR * (dt == 0)
+            return jnp.stack([R, phi, Z], axis=1)
+        if dz == 3:
+            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
+            dR = R_transform.transform(R_mn, dt=dt, dz=1)
+            d2R = R_transform.transform(R_mn, dt=dt, dz=2)
+            d3R = R_transform.transform(R_mn, dt=dt, dz=3)
+            d3Z = Z_transform.transform(Z_mn, dt=dt, dz=3)
+            R = d3R - 3 * dR
+            Z = d3Z
+            phi = (3 * d2R - R0) * (dt == 0)
+            return jnp.stack([R, phi, Z], axis=1)
+        raise NotImplementedError(
+            "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+        )
 
     def compute_normal(self, R_mn=None, Z_mn=None, grid=None, coords="rpz"):
         """Compute normal vector to surface on default grid
@@ -286,22 +310,14 @@ class FourierRZToroidalSurface(Surface):
             Z_mn = self.Z_mn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        R_t = R_transform.transform(R_mn, dt=1)
-        R_z = R_transform.transform(R_mn, dz=1)
-        Z_t = Z_transform.transform(Z_mn, dt=1)
-        Z_z = Z_transform.transform(Z_mn, dz=1)
-        phi = R_transform.grid.nodes[:, -1]
-        phi_t = np.zeros_like(phi)
-        phi_z = np.ones_like(phi)
-
-        r_t = jnp.array([R_t, phi_t, Z_t]).T
-        r_z = jnp.array([R_z, phi_z, Z_z]).T
+        r_t = self.compute_coordinates(R_mn, Z_mn, grid, dt=1)
+        r_z = self.compute_coordinates(R_mn, Z_mn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         if coords.lower() == "xyz":
+            phi = R_transform.grid.nodes[:, 2]
             N = pol2cartvec(N, phi=phi)
-
         return N
 
     def compute_surface_area(self, R_mn=None, Z_mn=None, grid=None):
@@ -326,16 +342,8 @@ class FourierRZToroidalSurface(Surface):
             Z_mn = self.Z_mn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        R_t = R_transform.transform(R_mn, dt=1)
-        R_z = R_transform.transform(R_mn, dz=1)
-        Z_t = Z_transform.transform(Z_mn, dt=1)
-        Z_z = Z_transform.transform(Z_mn, dz=1)
-        phi = R_transform.grid.nodes[:, -1]
-        phi_t = np.zeros_like(phi)
-        phi_z = np.ones_like(phi)
-
-        r_t = jnp.array([R_t, phi_t, Z_t]).T
-        r_z = jnp.array([R_z, phi_z, Z_z]).T
+        r_t = self.compute_coordinates(R_mn, Z_mn, grid, dt=1)
+        r_z = self.compute_coordinates(R_mn, Z_mn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
@@ -404,12 +412,7 @@ class ZernikeToroidalSection(Surface):
             R_lm = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 1]])
         if Z_lm is None:
-            Z_lm = np.array(
-                [
-                    0,
-                    1,
-                ]
-            )
+            Z_lm = np.array([0, 1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -606,7 +609,7 @@ class ZernikeToroidalSection(Surface):
 
         R = R_transform.transform(R_lm, dr=dr, dt=dt)
         Z = Z_transform.transform(Z_lm, dr=dr, dt=dt)
-        phi = R_transform.grid.nodes[:, 2]
+        phi = R_transform.grid.nodes[:, 2] * (dr == 0) * (dt == 0)
 
         return jnp.stack([R, phi, Z], axis=1)
 
@@ -664,17 +667,10 @@ class ZernikeToroidalSection(Surface):
             Z_lm = self.Z_lm
         R_transform, Z_transform = self._get_transforms(grid)
 
-        R_t = R_transform.transform(R_lm, dt=1)
-        R_r = R_transform.transform(R_lm, dr=1)
-        Z_t = Z_transform.transform(Z_lm, dt=1)
-        Z_r = Z_transform.transform(Z_lm, dr=1)
-        phi = R_transform.grid.nodes[:, -1]
-        phi_t = np.zeros_like(phi)
-        phi_r = np.zeros_like(phi)
-
-        r_t = jnp.array([R_t, phi_t, Z_t]).T
-        r_r = jnp.array([R_r, phi_r, Z_r]).T
+        r_r = self.compute_coordinates(R_lm, Z_lm, grid, dr=1)
+        r_t = self.compute_coordinates(R_lm, Z_lm, grid, dt=1)
 
         N = jnp.cross(r_r, r_t, axis=1)
-
-        return jnp.sum(grid.weights * jnp.linalg.norm(N, axis=1))
+        return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
+            2 * np.pi
+        )

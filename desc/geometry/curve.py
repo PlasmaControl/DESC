@@ -117,8 +117,8 @@ class FourierRZCurve(Curve):
         R = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
 
-        idxR = np.where(n[:, np.newaxis] == self.R_basis.modes[:, 3])
-        idxZ = np.where(n[:, np.newaxis] == self.Z_basis.modes[:, 3])
+        idxR = np.where(n[:, np.newaxis] == self.R_basis.modes[:, 2])
+        idxZ = np.where(n[:, np.newaxis] == self.Z_basis.modes[:, 2])
 
         R[idxR[0]] = self.R_n[idxR[1]]
         Z[idxZ[0]] = self.Z_n[idxZ[1]]
@@ -428,7 +428,7 @@ class FourierXYZCurve(Curve):
         Y = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
 
-        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 3])
+        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 2])
 
         X[idx[0]] = self.X_n[idx[1]]
         Y[idx[0]] = self.Y_n[idx[1]]
@@ -803,7 +803,7 @@ class FourierPlanarCurve(Curve):
         n = np.atleast_1d(n).astype(int)
         r = np.zeros_like(n).astype(float)
 
-        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 3])
+        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 2])
 
         r[idx[0]] = self.r_n[idx[1]]
         return r

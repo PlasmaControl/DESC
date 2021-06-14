@@ -85,7 +85,8 @@ class Grid(IOAble):
 
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3))
-        weights = np.ones(nodes.shape[0])
+        # make weights sum to 4pi^2
+        weights = np.ones(nodes.shape[0]) / nodes.shape[0] * 4 * np.pi ** 2
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))

@@ -27,6 +27,8 @@ class FourierRZToroidalSurface(Surface):
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
+    rho : float (0,1)
+        flux surface label for the toroidal surface
     grid : Grid
         default grid for computation
     name : str
@@ -41,6 +43,7 @@ class FourierRZToroidalSurface(Surface):
         "_Z_basis",
         "_R_transform",
         "_Z_transform",
+        "rho",
         "_NFP",
     ]
 
@@ -52,6 +55,7 @@ class FourierRZToroidalSurface(Surface):
         modes_Z=None,
         NFP=1,
         sym="auto",
+        rho=1,
         grid=None,
         name=None,
     ):
@@ -90,9 +94,14 @@ class FourierRZToroidalSurface(Surface):
         self._Z_mn = copy_coeffs(Z_mn, modes_Z, self.Z_basis.modes[:, 1:])
         self._NFP = NFP
         self._sym = sym
-
+        self.rho = rho
         if grid is None:
-            grid = Grid(np.empty((0, 3)))
+            grid = LinearGrid(
+                rho=self.rho,
+                M=2 * max(MR, MZ) + 1,
+                N=2 * max(NR, NZ) + 1,
+                endpoint=True,
+            )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -129,6 +138,16 @@ class FourierRZToroidalSurface(Surface):
             )
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
+
+    def change_resolution(self, M, N):
+        """Change the maximum poloidal and toroidal resolution"""
+        R_modes_old = self.R_basis.modes
+        Z_modes_old = self.Z_basis.modes
+        self.R_basis.change_resolution(M=M, N=N)
+        self.Z_basis.change_resolution(M=M, N=N)
+        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+        self.R_mn = copy_coeffs(self.R_mn, R_modes_old, self.R_basis.modes)
+        self.Z_mn = copy_coeffs(self.Z_mn, Z_modes_old, self.Z_basis.modes)
 
     @property
     def R_mn(self):
@@ -224,6 +243,10 @@ class FourierRZToroidalSurface(Surface):
             ),
         )
         return R_transform, Z_transform
+
+    def compute_curvature(self, params=None, grid=None):
+        """Compute gaussian and mean curvature"""
+        raise NotImplementedError()
 
     def compute_coordinates(self, R_mn=None, Z_mn=None, grid=None, dt=0, dz=0):
         """Compute values using specified coefficients
@@ -380,6 +403,8 @@ class ZernikeToroidalSection(Surface):
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+    zeta : float (0,2pi)
+        toroidal angle for the section.
     grid : Grid
         default grid for computation
     name : str
@@ -394,6 +419,7 @@ class ZernikeToroidalSection(Surface):
         "_Z_basis",
         "_R_transform",
         "_Z_transform",
+        "zeta",
         "_spectral_indexing",
     ]
 
@@ -405,6 +431,7 @@ class ZernikeToroidalSection(Surface):
         modes_Z=None,
         spectral_indexing="fringe",
         sym="auto",
+        zeta=0,
         grid=None,
         name=None,
     ):
@@ -450,8 +477,11 @@ class ZernikeToroidalSection(Surface):
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
+        self.zeta = zeta
         if grid is None:
-            grid = Grid(np.empty((0, 3)))
+            grid = LinearGrid(
+                L=max(LR, LZ), M=2 * max(MR, MZ) + 1, zeta=self.zeta, endpoint=True
+            )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -487,6 +517,16 @@ class ZernikeToroidalSection(Surface):
             )
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
+
+    def change_resolution(self, L, M):
+        """Change the maximum radial and poloidal resolution"""
+        R_modes_old = self.R_basis.modes
+        Z_modes_old = self.Z_basis.modes
+        self.R_basis.change_resolution(L=L, M=M)
+        self.Z_basis.change_resolution(L=L, M=M)
+        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+        self.R_lm = copy_coeffs(self.R_lm, R_modes_old, self.R_basis.modes)
+        self.Z_lm = copy_coeffs(self.Z_lm, Z_modes_old, self.Z_basis.modes)
 
     @property
     def R_lm(self):
@@ -582,6 +622,10 @@ class ZernikeToroidalSection(Surface):
             ),
         )
         return R_transform, Z_transform
+
+    def compute_curvature(self, params=None, grid=None):
+        """Compute gaussian and mean curvature"""
+        raise NotImplementedError()
 
     def compute_coordinates(self, R_lm=None, Z_lm=None, grid=None, dr=0, dt=0):
         """Compute values using specified coefficients

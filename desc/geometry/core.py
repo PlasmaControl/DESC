@@ -73,23 +73,23 @@ class Curve(IOAble, ABC):
         """Default grid for computation"""
 
     @abstractmethod
-    def compute_coordinates(self, params, dt=0):
+    def compute_coordinates(self, params=None, grid=None, dt=0):
         """Compute real space coordinates on predefined grid"""
 
     @abstractmethod
-    def compute_frenet_frame(self, params):
+    def compute_frenet_frame(self, params=None, grid=None):
         """Compute frenet frame on predefined grid"""
 
     @abstractmethod
-    def compute_curvature(self, params):
+    def compute_curvature(self, params=None, grid=None):
         """Compute curvature on predefined grid"""
 
     @abstractmethod
-    def compute_torsion(self, params):
+    def compute_torsion(self, params=None, grid=None):
         """Compute torsion on predefined grid"""
 
     @abstractmethod
-    def compute_length(self, nodes=None):
+    def compute_length(self, params=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature"""
 
     def copy(self, deepcopy=True):
@@ -128,16 +128,20 @@ class Surface(IOAble, ABC):
         """Default grid for computation"""
 
     @abstractmethod
-    def compute_coordinates(self, nodes, params, dt=0, dz=0):
+    def compute_coordinates(self, params=None, grid=None, dt=0, dz=0):
         """Compute coordinate values at specified nodes"""
 
     @abstractmethod
-    def compute_normal(self, params):
+    def compute_normal(self, params=None, grid=None):
         """Compute normal vectors to the surface on predefined grid"""
 
     @abstractmethod
-    def compute_surface_area(self, nodes=None, params=None):
+    def compute_surface_area(self, params=None, grids=None):
         """Compute surface area via quadrature"""
+
+    @abstractmethod
+    def compute_curvature(self, params=None, grid=None):
+        """Compute gaussian and mean curvature"""
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this surface."""

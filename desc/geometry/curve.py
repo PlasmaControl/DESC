@@ -4,7 +4,7 @@ from desc.backend import jnp
 from desc.basis import FourierSeries
 from .core import Curve, cart2polvec, pol2cartvec
 from desc.transform import Transform
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.utils import copy_coeffs
 
 __all__ = [
@@ -78,7 +78,7 @@ class FourierRZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
         if grid is None:
-            grid = Grid(np.empty((0, 3)))
+            grid = LinearGrid(N=2 * max(NR, NZ) + 1, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -97,6 +97,16 @@ class FourierRZCurve(Curve):
     def grid(self):
         """Default grid for computation"""
         return self._grid
+
+    def change_resolution(self, N):
+        """Change the maximum toroidal resolution"""
+        R_modes_old = self.R_basis.modes
+        Z_modes_old = self.Z_basis.modes
+        self.R_basis.change_resolution(N=N)
+        self.L_basis.change_resolution(N=N)
+        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+        self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
+        self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
 
     @grid.setter
     def grid(self, new):
@@ -394,7 +404,7 @@ class FourierXYZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes, self.basis.modes[:, 2])
 
         if grid is None:
-            grid = Grid(np.empty((0, 3)))
+            grid = LinearGrid(N=2 * N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
         self.name = name
@@ -420,6 +430,15 @@ class FourierXYZCurve(Curve):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+
+    def change_resolution(self, N):
+        """Change the maximum angular resolution"""
+        modes_old = self.basis.modes
+        self.basis.change_resolution(N=N)
+        self._transform = self._get_transforms(self.grid)
+        self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
+        self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
+        self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
 
     def get_coeffs(self, n):
         """Get fourier coefficients for given mode number(s)"""
@@ -626,7 +645,7 @@ class FourierXYZCurve(Curve):
         return kappa
 
     def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute torsion using specified coefficients
+        """Compute torsion using specified coefficientsnp.empty((0, 3))
 
         Parameters
         ----------
@@ -729,7 +748,7 @@ class FourierPlanarCurve(Curve):
         self.normal = normal
         self.center = center
         if grid is None:
-            grid = Grid(np.empty((0, 3)))
+            grid = LinearGrid(N=2 * N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
         self.name = name
@@ -755,6 +774,13 @@ class FourierPlanarCurve(Curve):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+
+    def change_resolution(self, N):
+        """Change the maximum angular resolution"""
+        modes_old = self.basis.modes
+        self.basis.change_resolution(N=N)
+        self._transform = self._get_transforms(self.grid)
+        self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
 
     @property
     def center(self):

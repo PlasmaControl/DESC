@@ -410,7 +410,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 46, "N": 46, "NFP": nfp}
+        grid_kwargs = {"M": 32, "N": 32 * int(eq.NFP), "NFP": nfp}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:

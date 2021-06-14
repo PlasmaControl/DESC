@@ -4,7 +4,7 @@ import warnings
 from collections.abc import MutableSequence
 from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
-from desc.configuration import _Configuration, format_boundary, format_profiles
+from desc.configuration import _Configuration, format_boundary
 from desc.io import IOAble
 from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
 from desc.objective_funs import get_objective_function, ObjectiveFunction
@@ -210,12 +210,8 @@ class Equilibrium(_Configuration, IOAble):
             self._transforms["Zb"] = Transform(
                 self.grid, self.Zb_basis, derivs=0, build=False
             )
-            self._transforms["p"] = Transform(
-                self.grid, self.p_basis, derivs=1, build=False
-            )
-            self._transforms["i"] = Transform(
-                self.grid, self.i_basis, derivs=1, build=False
-            )
+            self.pressure.grid = self.grid
+            self.iota.grid = self.grid
 
         else:
             self.transforms["R"].change_resolution(self.grid, self.R_basis, build=False)
@@ -227,8 +223,9 @@ class Equilibrium(_Configuration, IOAble):
             self.transforms["Zb"].change_resolution(
                 self.grid, self.Zb_basis, build=False
             )
-            self.transforms["p"].change_resolution(self.grid, self.p_basis, build=False)
-            self.transforms["i"].change_resolution(self.grid, self.i_basis, build=False)
+        self.pressure.grid = self.grid
+        self.iota.grid = self.grid
+
         if self.objective is not None:
             derivs = self.objective.derivatives
             self.transforms["R"].change_derivatives(derivs, build=False)
@@ -413,17 +410,18 @@ class Equilibrium(_Configuration, IOAble):
             self._objective = objective
         elif isinstance(objective, str):
             self._set_transforms()
-            self._objective = get_objective_function(
+            objective = get_objective_function(
                 objective,
                 R_transform=self.transforms["R"],
                 Z_transform=self.transforms["Z"],
                 L_transform=self.transforms["L"],
                 Rb_transform=self.transforms["Rb"],
                 Zb_transform=self.transforms["Zb"],
-                p_transform=self.transforms["p"],
-                i_transform=self.transforms["i"],
+                p_profile=self.pressure,
+                i_profile=self.iota,
                 BC_constraint=self.constraint,
             )
+            self.objective = objective
         else:
             raise ValueError(
                 "objective should be of type 'ObjectiveFunction' or string, "
@@ -460,10 +458,10 @@ class Equilibrium(_Configuration, IOAble):
     def initial(self):
         """Return initial equilibrium state from which it was solved (Equilibrium)."""
         p_modes = np.array(
-            [self.p_basis.modes[:, 0], self.p_l, np.zeros_like(self.p_l)]
+            [self.pressure.basis.modes[:, 0], self.p_l, np.zeros_like(self.p_l)]
         ).T
         i_modes = np.array(
-            [self.i_basis.modes[:, 0], np.zeros_like(self.i_l), self.i_l]
+            [self.iota.basis.modes[:, 0], np.zeros_like(self.i_l), self.i_l]
         ).T
         Rb_lmn = self.Rb_lmn.reshape((-1, 1))
         Zb_lmn = self.Zb_lmn.reshape((-1, 1))
@@ -562,6 +560,7 @@ class Equilibrium(_Configuration, IOAble):
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving."
             )
+        self.objective = self.objective.name
 
         args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
 
@@ -731,7 +730,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
         Rb_lmn, Zb_lmn = format_boundary(
             inputs["boundary"], equil.Rb_basis, equil.Zb_basis, equil.bdry_mode
         )
-        p_l, i_l = format_profiles(inputs["profiles"], equil.p_basis, equil.i_basis)
+        p_l = np.zeros_like(equil.pressure.params)
+        i_l = np.zeros_like(equil.iota.params)
+        for l, p, i in inputs["profiles"]:
+            idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
+            idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
+            p_l[idx_p] = p
+            i_l[idx_i] = i
+
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
             deltas["dRb"] = Rb_lmn - equil.Rb_lmn
         if not np.allclose(Zb_lmn, equil.Zb_lmn):
@@ -874,8 +880,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 L_transform=equil.transforms["L"],
                 Rb_transform=equil.transforms["Rb"],
                 Zb_transform=equil.transforms["Zb"],
-                p_transform=equil.transforms["p"],
-                i_transform=equil.transforms["i"],
+                p_profile=equil.pressure,
+                i_profile=equil.iota,
                 BC_constraint=equil.constraint,
                 use_jit=True,
             )

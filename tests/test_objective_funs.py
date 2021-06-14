@@ -43,8 +43,8 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
             L_transform=L_transform,
             Rb_transform=RZb_transform,
             Zb_transform=RZb_transform,
-            p_transform=PI_transform,
-            i_transform=PI_transform,
+            p_profile=PI_transform,
+            i_profile=PI_transform,
         )
         self.assertIsInstance(obj_fun, ForceErrorNodes)
         with pytest.warns(UserWarning):
@@ -56,8 +56,8 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
                 L_transform=L_transform,
                 Rb_transform=RZb_transform,
                 Zb_transform=RZb_transform,
-                p_transform=PI_transform,
-                i_transform=PI_transform,
+                p_profile=PI_transform,
+                i_profile=PI_transform,
             )
             self.assertIsInstance(obj_fun, EnergyVolIntegral)
 
@@ -71,8 +71,8 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
                 L_transform=L_transform,
                 Rb_transform=RZb_transform,
                 Zb_transform=RZb_transform,
-                p_transform=PI_transform,
-                i_transform=PI_transform,
+                p_profile=PI_transform,
+                i_profile=PI_transform,
             )
 
 

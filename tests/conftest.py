@@ -87,9 +87,9 @@ def DummyStellarator(tmpdir_factory):
 
     inputs = {
         "sym": True,
-        "NFP": 3,
+        "NFP": 2,
         "Psi": 1.0,
-        "L": 2,
+        "L": 4,
         "M": 2,
         "N": 2,
         "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0]]),

@@ -15,7 +15,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    L = 101
+    L = 201
     grid = LinearGrid(L=L)
     drho = grid.nodes[1, 0]
 
@@ -80,7 +80,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt theta
-    M = 360
+    M = 540
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
 
@@ -234,7 +234,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(magnetic_field["|B|_tt"], B_tt, rtol=1e-2, atol=1e-4)
 
     # partial derivatives wrt zeta
-    N = 360
+    N = 540
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
 
@@ -388,8 +388,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(magnetic_field["|B|_zz"], B_zz, rtol=1e-2, atol=1e-4)
 
     # mixed derivatives wrt theta & zeta
-    M = 360
-    N = 360
+    M = 540
+    N = 540
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
     dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
@@ -489,7 +489,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt rho
-    L = 101
+    L = 201
     grid = LinearGrid(L=L, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -505,7 +505,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt theta
-    M = 360
+    M = 540
     grid = LinearGrid(M=M, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -523,7 +523,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt zeta
-    N = 360
+    N = 540
     grid = LinearGrid(N=N, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -550,7 +550,7 @@ def test_quasisymmetry(DummyStellarator):
     )
 
     # partial derivative wrt theta
-    M = 360
+    M = 540
     grid = LinearGrid(M=M, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]
@@ -567,7 +567,7 @@ def test_quasisymmetry(DummyStellarator):
     )
 
     # partial derivative wrt zeta
-    N = 360
+    N = 540
     grid = LinearGrid(N=N, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]

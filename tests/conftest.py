@@ -87,7 +87,7 @@ def DummyStellarator(tmpdir_factory):
 
     inputs = {
         "sym": True,
-        "NFP": 2,
+        "NFP": 3,
         "Psi": 1.0,
         "L": 4,
         "M": 2,

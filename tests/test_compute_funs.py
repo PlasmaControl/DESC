@@ -15,7 +15,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    L = 201
+    L = 101
     grid = LinearGrid(L=L)
     drho = grid.nodes[1, 0]
 
@@ -67,20 +67,20 @@ def test_magnetic_field_derivatives(DummyStellarator):
         ) / (2 * drho)
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_r"][2:-2], B_sup_theta_r[2:-2], rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_r"][2:-2], B_sup_theta_r[2:-2], rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_r"][2:-2], B_sup_zeta_r[2:-2], rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_r"][2:-2], B_sup_zeta_r[2:-2], rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_theta_r"][2:-2], B_sub_theta_r[2:-2], rtol=1e-2, atol=1e-4
+        magnetic_field["B_theta_r"][2:-2], B_sub_theta_r[2:-2], rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_zeta_r"][2:-2], B_sub_zeta_r[2:-2], rtol=1e-2, atol=1e-4
+        magnetic_field["B_zeta_r"][2:-2], B_sub_zeta_r[2:-2], rtol=1e-2, atol=1e-3
     )
 
     # partial derivatives wrt theta
-    M = 540
+    M = 360
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
 
@@ -213,28 +213,28 @@ def test_magnetic_field_derivatives(DummyStellarator):
     ) / (dtheta ** 2)
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_t"], B_sup_theta_t, rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_t"], B_sup_theta_t, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^theta_tt"], B_sup_theta_tt, rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_tt"], B_sup_theta_tt, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_t"], B_sup_zeta_t, rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_t"], B_sup_zeta_t, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_tt"], B_sup_zeta_tt, rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_tt"], B_sup_zeta_tt, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_rho_t"], B_sub_rho_t, rtol=1e-2, atol=1e-4
+        magnetic_field["B_rho_t"], B_sub_rho_t, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_zeta_t"], B_sub_zeta_t, rtol=1e-2, atol=1e-4
+        magnetic_field["B_zeta_t"], B_sub_zeta_t, rtol=1e-2, atol=1e-3
     )
-    np.testing.assert_allclose(magnetic_field["|B|_t"], B_t, rtol=1e-2, atol=1e-4)
-    np.testing.assert_allclose(magnetic_field["|B|_tt"], B_tt, rtol=1e-2, atol=1e-4)
+    np.testing.assert_allclose(magnetic_field["|B|_t"], B_t, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(magnetic_field["|B|_tt"], B_tt, rtol=1e-2, atol=1e-3)
 
     # partial derivatives wrt zeta
-    N = 540
+    N = 360
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
 
@@ -367,29 +367,29 @@ def test_magnetic_field_derivatives(DummyStellarator):
     ) / (dzeta ** 2)
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_z"], B_sup_theta_z, rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_z"], B_sup_theta_z, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^theta_zz"], B_sup_theta_zz, rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_zz"], B_sup_theta_zz, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_z"], B_sup_zeta_z, rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_z"], B_sup_zeta_z, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_zz"], B_sup_zeta_zz, rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_zz"], B_sup_zeta_zz, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_rho_z"], B_sub_rho_z, rtol=1e-2, atol=1e-4
+        magnetic_field["B_rho_z"], B_sub_rho_z, rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B_theta_z"], B_sub_theta_z, rtol=1e-2, atol=1e-4
+        magnetic_field["B_theta_z"], B_sub_theta_z, rtol=1e-2, atol=1e-3
     )
-    np.testing.assert_allclose(magnetic_field["|B|_z"], B_z, rtol=1e-2, atol=1e-4)
-    np.testing.assert_allclose(magnetic_field["|B|_zz"], B_zz, rtol=1e-2, atol=1e-4)
+    np.testing.assert_allclose(magnetic_field["|B|_z"], B_z, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(magnetic_field["|B|_zz"], B_zz, rtol=1e-2, atol=1e-3)
 
     # mixed derivatives wrt theta & zeta
-    M = 540
-    N = 540
+    M = 360
+    N = 360
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
     dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
@@ -470,13 +470,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_tz[-1, :] = (B_t[0, :] - B_t[-2, :]) / (2 * dzeta)
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_tz"], B_sup_theta_tz.flatten(), rtol=1e-2, atol=1e-4
+        magnetic_field["B^theta_tz"], B_sup_theta_tz.flatten(), rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_tz"], B_sup_zeta_tz.flatten(), rtol=1e-2, atol=1e-4
+        magnetic_field["B^zeta_tz"], B_sup_zeta_tz.flatten(), rtol=1e-2, atol=1e-3
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_tz"], B_tz.flatten(), rtol=1e-2, atol=1e-4
+        magnetic_field["|B|_tz"], B_tz.flatten(), rtol=1e-2, atol=1e-3
     )
 
 
@@ -489,7 +489,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt rho
-    L = 201
+    L = 101
     grid = LinearGrid(L=L, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -501,11 +501,11 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         B2_rho[i] = (B2[i + 1] - B2[i - 1]) / (2 * drho)
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_rho"][2:-2], B2_rho[2:-2], rtol=1e-2, atol=1e-4
+        magnetic_pressure["grad(|B|^2)_rho"][2:-2], B2_rho[2:-2], rtol=1e-2, atol=1e-3
     )
 
     # partial derivative wrt theta
-    M = 540
+    M = 360
     grid = LinearGrid(M=M, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -519,11 +519,11 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     B2_theta[-1] = (B2[0] - B2[-2]) / (2 * dtheta)
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_theta"], B2_theta, rtol=1e-2, atol=1e-4
+        magnetic_pressure["grad(|B|^2)_theta"], B2_theta, rtol=1e-2, atol=1e-3
     )
 
     # partial derivative wrt zeta
-    N = 540
+    N = 360
     grid = LinearGrid(N=N, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
@@ -537,7 +537,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     B2_zeta[-1] = (B2[0] - B2[-2]) / (2 * dzeta)
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_zeta"], B2_zeta, rtol=1e-2, atol=1e-4
+        magnetic_pressure["grad(|B|^2)_zeta"], B2_zeta, rtol=1e-2, atol=1e-3
     )
 
 
@@ -550,7 +550,7 @@ def test_quasisymmetry(DummyStellarator):
     )
 
     # partial derivative wrt theta
-    M = 540
+    M = 360
     grid = LinearGrid(M=M, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]
@@ -563,11 +563,11 @@ def test_quasisymmetry(DummyStellarator):
     Btilde_theta[-1] = (Btilde[0] - Btilde[-2]) / (2 * dtheta)
 
     np.testing.assert_allclose(
-        quasisymmetry["B*grad(|B|)_t"], Btilde_theta, rtol=1e-2, atol=1e-4
+        quasisymmetry["B*grad(|B|)_t"], Btilde_theta, rtol=1e-2, atol=1e-3
     )
 
     # partial derivative wrt zeta
-    N = 540
+    N = 360
     grid = LinearGrid(N=N, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]
@@ -580,7 +580,7 @@ def test_quasisymmetry(DummyStellarator):
     Btilde_zeta[-1] = (Btilde[0] - Btilde[-2]) / (2 * dzeta)
 
     np.testing.assert_allclose(
-        quasisymmetry["B*grad(|B|)_z"], Btilde_zeta, rtol=1e-2, atol=1e-4
+        quasisymmetry["B*grad(|B|)_z"], Btilde_zeta, rtol=1e-2, atol=1e-3
     )
 
 

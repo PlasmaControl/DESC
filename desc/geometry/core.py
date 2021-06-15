@@ -5,7 +5,7 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
 
 
-def cart2polvec(vec, x=None, y=None, r=None, phi=None):
+def cart2polvec(vec, x=None, y=None, phi=None):
     """transform vectors from cartesian to polar form"""
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
@@ -21,7 +21,7 @@ def cart2polvec(vec, x=None, y=None, r=None, phi=None):
     return polar.reshape((-1, 3))
 
 
-def pol2cartvec(vec, x=None, y=None, r=None, phi=None):
+def pol2cartvec(vec, x=None, y=None, phi=None):
     """transform vectors from polar to cartesian form"""
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
@@ -35,22 +35,6 @@ def pol2cartvec(vec, x=None, y=None, r=None, phi=None):
     rot = jnp.moveaxis(rot, -1, 0)
     cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
     return cart.reshape((-1, 3))
-
-
-def cart2pol(pts):
-    """transform points from cartesian [x,y,z] to polar [r,phi,z] coordinates"""
-    x, y, z = pts.T
-    r = jnp.sqrt(x ** 2 + y ** 2)
-    phi = jnp.arctan2(y, x)
-    return jnp.array([r, phi, z]).T
-
-
-def pol2cart(pts):
-    """transform points from polar [r,phi,z] to cartesian [x,y,z] coordinates"""
-    r, p, z = pts.T
-    x = r * jnp.cos(p)
-    y = r * jnp.sin(p)
-    return jnp.array([x, y, z]).T
 
 
 class Curve(IOAble, ABC):

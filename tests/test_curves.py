@@ -44,6 +44,15 @@ class TestRZCurve(unittest.TestCase):
         )
         np.testing.assert_allclose(c.Z_n, [])
 
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(5)
+        with pytest.raises(ValueError):
+            c.R_n = s.R_n
+        with pytest.raises(ValueError):
+            c.Z_n = s.Z_n
+
 
 class TestXYZCurve(unittest.TestCase):
     def test_length(self):
@@ -79,6 +88,17 @@ class TestXYZCurve(unittest.TestCase):
         np.testing.assert_allclose(c.X_n, [0, 5, 2])
         np.testing.assert_allclose(c.Y_n, [0, 2, 0])
         np.testing.assert_allclose(c.Z_n, [2, 3, 0])
+
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(5)
+        with pytest.raises(ValueError):
+            c.X_n = s.X_n
+        with pytest.raises(ValueError):
+            c.Y_n = s.Y_n
+        with pytest.raises(ValueError):
+            c.Z_n = s.Z_n
 
 
 class TestPlanarCurve(unittest.TestCase):
@@ -121,3 +141,10 @@ class TestPlanarCurve(unittest.TestCase):
         c.center = [3, 2, 1]
         np.testing.assert_allclose(np.linalg.norm(c.normal), 1)
         np.testing.assert_allclose(c.normal * np.linalg.norm(c.center), c.center[::-1])
+
+        s = c.copy()
+        assert s.eq(c)
+
+        c.change_resolution(5)
+        with pytest.raises(ValueError):
+            c.r_n = s.r_n

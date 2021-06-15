@@ -188,14 +188,14 @@ class FourierRZToroidalSurface(Surface):
 
         mn = np.array([m, n]).T
         idxR = np.where(
-            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 2:]).all(axis=-1)
+            (mn[:, np.newaxis, :] == self.R_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
         )
         idxZ = np.where(
-            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 2:]).all(axis=-1)
+            (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
         )
 
-        R[idxR[0]] = self.R_n[idxR[1]]
-        Z[idxZ[0]] = self.Z_n[idxZ[1]]
+        R[idxR[0]] = self.R_mn[idxR[1]]
+        Z[idxZ[0]] = self.Z_mn[idxZ[1]]
         return R, Z
 
     def set_coeffs(self, m, n=0, R=None, Z=None):
@@ -206,14 +206,14 @@ class FourierRZToroidalSurface(Surface):
             np.atleast_1d(R),
             np.atleast_1d(Z),
         )
-        m, n, R, Z = np.broadcast_arrays([m, n, R, Z])
+        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
         for mm, nn, RR, ZZ in zip(m, n, R, Z):
             idxR = self.R_basis.get_idx(0, mm, nn)
             idxZ = self.Z_basis.get_idx(0, mm, nn)
             if RR is not None:
-                self.R_n[idxR] = RR
+                self.R_mn[idxR] = RR
             if ZZ is not None:
-                self.Z_n[idxZ] = ZZ
+                self.Z_mn[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -224,7 +224,7 @@ class FourierRZToroidalSurface(Surface):
             elif len(grid) == 2:
                 grid = LinearGrid(rho=1, M=grid[0], N=grid[1], NFP=self.NFP)
             elif grid.shape[1] == 2:
-                grid = np.pad(grid, ((0, 0), (1, 0)))
+                grid = np.pad(grid, ((0, 0), (1, 0)), constant_values=self.rho)
                 grid = Grid(grid, sort=False)
             else:
                 grid = Grid(grid, sort=False)
@@ -573,8 +573,8 @@ class ZernikeToroidalSection(Surface):
             (lm[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, :2]).all(axis=-1)
         )
 
-        R[idxR[0]] = self.R_n[idxR[1]]
-        Z[idxZ[0]] = self.Z_n[idxZ[1]]
+        R[idxR[0]] = self.R_lm[idxR[1]]
+        Z[idxZ[0]] = self.Z_lm[idxZ[1]]
         return R, Z
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
@@ -585,25 +585,25 @@ class ZernikeToroidalSection(Surface):
             np.atleast_1d(R),
             np.atleast_1d(Z),
         )
-        l, m, R, Z = np.broadcast_arrays([l, m, R, Z])
+        l, m, R, Z = np.broadcast_arrays(l, m, R, Z)
         for ll, mm, RR, ZZ in zip(l, m, R, Z):
             idxR = self.R_basis.get_idx(ll, mm, 0)
             idxZ = self.Z_basis.get_idx(ll, mm, 0)
             if RR is not None:
-                self.R_n[idxR] = RR
+                self.R_lm[idxR] = RR
             if ZZ is not None:
-                self.Z_n[idxZ] = ZZ
+                self.Z_lm[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):
         if grid is None:
             return self._R_transform, self._Z_transform
         if not isinstance(grid, Grid):
             if np.isscalar(grid):
-                grid = LinearGrid(L=grid, M=grid, zeta=0, NFP=self.NFP)
+                grid = LinearGrid(L=grid, M=grid, zeta=0, NFP=1)
             elif len(grid) == 2:
-                grid = LinearGrid(L=grid[0], M=grid[1], zeta=0, NFP=self.NFP)
+                grid = LinearGrid(L=grid[0], M=grid[1], zeta=0, NFP=1)
             elif grid.shape[1] == 2:
-                grid = np.pad(grid, ((0, 0), (0, 1)))
+                grid = np.pad(grid, ((0, 0), (0, 1)), constant_values=self.zeta)
                 grid = Grid(grid, sort=False)
             else:
                 grid = Grid(grid, sort=False)

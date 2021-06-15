@@ -32,10 +32,6 @@ class ObjectiveFunction(IOAble, ABC):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -51,8 +47,6 @@ class ObjectiveFunction(IOAble, ABC):
         "R_transform",
         "Z_transform",
         "L_transform",
-        "Rb_transform",
-        "Zb_transform",
         "p_profile",
         "i_profile",
         "BC_constraint",
@@ -66,8 +60,6 @@ class ObjectiveFunction(IOAble, ABC):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -77,8 +69,6 @@ class ObjectiveFunction(IOAble, ABC):
         self.R_transform = R_transform
         self.Z_transform = Z_transform
         self.L_transform = L_transform
-        self.Rb_transform = Rb_transform
-        self.Zb_transform = Zb_transform
         self.p_profile = p_profile
         self.i_profile = i_profile
         self.BC_constraint = BC_constraint
@@ -113,14 +103,6 @@ class ObjectiveFunction(IOAble, ABC):
             (self.derivatives[:, None] == self.L_transform.derivatives).all(-1).any(-1)
         ):
             self.L_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.Rb_transform.derivatives).all(-1).any(-1)
-        ):
-            self.Rb_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
-        ):
-            self.Zb_transform.change_derivatives(self.derivatives, build=False)
 
     def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.
@@ -389,10 +371,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -409,8 +387,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -421,8 +397,6 @@ class ForceErrorGalerkin(ObjectiveFunction):
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             p_profile,
             i_profile,
             BC_constraint,
@@ -676,10 +650,6 @@ class ForceErrorNodes(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -901,10 +871,6 @@ class EnergyVolIntegral(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -921,8 +887,6 @@ class EnergyVolIntegral(ObjectiveFunction):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -933,8 +897,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             p_profile,
             i_profile,
             BC_constraint,
@@ -1119,10 +1081,6 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1292,10 +1250,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1312,8 +1266,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -1324,8 +1276,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             p_profile,
             i_profile,
             BC_constraint,
@@ -1496,8 +1446,6 @@ def get_objective_function(
     R_transform,
     Z_transform,
     L_transform,
-    Rb_transform,
-    Zb_transform,
     p_profile,
     i_profile,
     BC_constraint=None,
@@ -1515,10 +1463,6 @@ def get_objective_function(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1539,8 +1483,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,
@@ -1551,8 +1493,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,
@@ -1563,8 +1503,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,

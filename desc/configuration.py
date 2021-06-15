@@ -1243,16 +1243,12 @@ class _Configuration(IOAble, ABC):
         pressure.grid = grid
         iota = self.iota.copy()
         iota.grid = grid
-        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="auto")
-        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="auto")
 
         obj = get_objective_function(
             "energy",
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             pressure,
             iota,
             BC_constraint=None,

@@ -98,8 +98,6 @@ class TestPerturbations(unittest.TestCase):
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=pres,
             i_profile=iota,
             BC_constraint=LCFSConstraint(
@@ -112,6 +110,7 @@ class TestPerturbations(unittest.TestCase):
                 eq_old.Zb_lmn,
             ),
         )
+        obj_fun.Rb_transform = Rb_transform
         eq_old.objective = obj_fun
         y = eq_old.objective.BC_constraint.project(eq_old.x)
         args = (
@@ -145,6 +144,7 @@ class TestPerturbations(unittest.TestCase):
             eq_new.Psi,
         )
 
+        eq_new.objective.Rb_transform = Rb_transform
         res_new = eq_new.objective.compute(*args)
 
         # tolerance could be lower if only testing with JAX

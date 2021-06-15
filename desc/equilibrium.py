@@ -204,12 +204,6 @@ class Equilibrium(_Configuration, IOAble):
             self._transforms["L"] = Transform(
                 self.grid, self.L_basis, derivs=0, build=False
             )
-            self._transforms["Rb"] = Transform(
-                self.grid, self.Rb_basis, derivs=0, build=False
-            )
-            self._transforms["Zb"] = Transform(
-                self.grid, self.Zb_basis, derivs=0, build=False
-            )
             self.pressure.grid = self.grid
             self.iota.grid = self.grid
 
@@ -217,12 +211,6 @@ class Equilibrium(_Configuration, IOAble):
             self.transforms["R"].change_resolution(self.grid, self.R_basis, build=False)
             self.transforms["Z"].change_resolution(self.grid, self.Z_basis, build=False)
             self.transforms["L"].change_resolution(self.grid, self.L_basis, build=False)
-            self.transforms["Rb"].change_resolution(
-                self.grid, self.Rb_basis, build=False
-            )
-            self.transforms["Zb"].change_resolution(
-                self.grid, self.Zb_basis, build=False
-            )
         self.pressure.grid = self.grid
         self.iota.grid = self.grid
 
@@ -415,8 +403,6 @@ class Equilibrium(_Configuration, IOAble):
                 R_transform=self.transforms["R"],
                 Z_transform=self.transforms["Z"],
                 L_transform=self.transforms["L"],
-                Rb_transform=self.transforms["Rb"],
-                Zb_transform=self.transforms["Zb"],
                 p_profile=self.pressure,
                 i_profile=self.iota,
                 BC_constraint=self.constraint,
@@ -878,8 +864,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 R_transform=equil.transforms["R"],
                 Z_transform=equil.transforms["Z"],
                 L_transform=equil.transforms["L"],
-                Rb_transform=equil.transforms["Rb"],
-                Zb_transform=equil.transforms["Zb"],
                 p_profile=equil.pressure,
                 i_profile=equil.iota,
                 BC_constraint=equil.constraint,

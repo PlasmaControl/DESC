@@ -12,8 +12,8 @@ def test_magnetic_axis_guess(DummyStellarator):
     zeta = np.linspace(0, 2 * np.pi, num=33, endpoint=False)
 
     # axis guess for Dummy Stellarator:
-    R0 = 3.3 + 0.2 * np.cos(eq.NFP * zeta)
-    Z0 = 0.2 * np.sin(eq.NFP * zeta)
+    R0 = 3.4 + 0.2 * np.cos(eq.NFP * zeta)
+    Z0 = -0.2 * np.sin(eq.NFP * zeta)
 
     # axis location as input
     R0_eq, Z0_eq = eq.compute_axis_location(zeta)

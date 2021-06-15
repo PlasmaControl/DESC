@@ -104,7 +104,7 @@ def DummyStellarator(tmpdir_factory):
                 [0, -1, 1, 0, -0.3],
             ],
         ),
-        "axis": np.array([[-1, 0, 0.2], [0, 3.3, 0], [1, 0.2, 0]]),
+        "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
         "bdry_mode": "lcfs",
         "objective": "force",
         "optimizer": "lsq-exact",

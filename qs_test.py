@@ -1,172 +1,111 @@
-"""Testing QS perturbations."""
+"""Testing QS optimization."""
 
 import numpy as np
-import matplotlib.pyplot as plt
+
+from desc.utils import Timer
 from desc.equilibrium import EquilibriaFamily
 from desc.objective_funs import QuasisymmetryTripleProduct, QuasisymmetryFluxFunction
 from desc.transform import Transform
 from desc.grid import LinearGrid
-from desc.plotting import plot_surfaces, plot_2d, plot_section
 
+fname = "QHS_TP_r70_aR0_m2_i2"
 
-# validating functions
-
-fam = EquilibriaFamily.load("examples/DESC/outputs/HSXT_ansi.h5")
-eq = fam[-1]
-args = (eq.x, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
-
-res = 30
-rho = np.logspace(-1, 0, 11)
-TP_err = np.zeros_like(rho)
-FF_err = np.zeros_like(rho)
-
-for i in range(rho.size):
-    print("rho = {}".format(rho[i]))
-    grid = LinearGrid(M=res, N=res, NFP=eq.NFP, rho=rho[i])
-    R_transform = Transform(grid, eq.R_basis)
-    Z_transform = Transform(grid, eq.Z_basis)
-    L_transform = Transform(grid, eq.L_basis)
-    Rb_transform = Transform(grid, eq.Rb_basis)
-    Zb_transform = Transform(grid, eq.Zb_basis)
-    p_transform = Transform(grid, eq.p_basis)
-    i_transform = Transform(grid, eq.i_basis)
-    TP_fun = QuasisymmetryTripleProduct(
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_transform,
-        i_transform,
-        eq.constraint,
-    )
-    FF_fun = QuasisymmetryFluxFunction(
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_transform,
-        i_transform,
-        eq.constraint,
-    )
-    TP_err[i] = TP_fun.compute(*args)
-    FF_err[i] = FF_fun.compute(*args)
-
-plt.rcParams.update({"font.size": 20})
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-ax.loglog(rho, TP_err, "bo-", label="$f_T$")
-ax.loglog(rho, FF_err, "ro-", label="$f_P$")
-ax.legend()
-ax.set_xlabel("$\\rho = \\sqrt{\\psi_N}$")
-ax.set_title("HSX")
-fig.set_tight_layout(True)
-
-"""
-rho = 0.9  # surface to optimize
+rho = 0.7  # surface to optimize
 order = 2  # optimization order
-iters = 5  # optimization iterations
+iters = 2  # number of iterations
+mn_lim = np.array([1, 2])  # boundary mode optimization limit
 
-# optimization
-
-fam = EquilibriaFamily.load("examples/DESC/HELIOTRON_output.h5")
+fam = EquilibriaFamily.load("examples/DESC/qs/QHS_init.h5")
 eq = fam[-1]
-qs_grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=rho)
 
-R_transform = Transform(qs_grid, eq.R_basis)
-Z_transform = Transform(qs_grid, eq.Z_basis)
-L_transform = Transform(qs_grid, eq.L_basis)
-Rb_transform = Transform(qs_grid, eq.Rb_basis)
-Zb_transform = Transform(qs_grid, eq.Zb_basis)
-p_transform = Transform(qs_grid, eq.p_basis)
-i_transform = Transform(qs_grid, eq.i_basis)
-dRb = np.invert((eq.Rb_basis.modes == [0, 0, 0]).all(axis=1))
+err = 1e6
+err0 = 0
 
-for i in range(iters):
-    qs_fun = QuasisymmetryTripleProduct(
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_transform,
-        i_transform,
-        eq.constraint,
+timer = Timer()
+timer.start("total")
+
+# objective function transforms
+grid_obj = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=rho)
+R_tform_obj = Transform(grid_obj, eq.R_basis)
+Z_tform_obj = Transform(grid_obj, eq.Z_basis)
+L_tform_obj = Transform(grid_obj, eq.L_basis)
+Rb_tform_obj = Transform(grid_obj, eq.Rb_basis)
+Zb_tform_obj = Transform(grid_obj, eq.Zb_basis)
+p_tform_obj = Transform(grid_obj, eq.p_basis)
+i_tform_obj = Transform(grid_obj, eq.i_basis)
+
+# error evaluation transforms
+grid_err = LinearGrid(M=180, N=180, NFP=eq.NFP, rho=rho)
+R_tform_err = Transform(grid_err, eq.R_basis)
+Z_tform_err = Transform(grid_err, eq.Z_basis)
+L_tform_err = Transform(grid_err, eq.L_basis)
+Rb_tform_err = Transform(grid_err, eq.Rb_basis)
+Zb_tform_err = Transform(grid_err, eq.Zb_basis)
+p_tform_err = Transform(grid_err, eq.p_basis)
+i_tform_err = Transform(grid_err, eq.i_basis)
+
+for k, mn in enumerate(mn_lim):
+    print("Optimization step {}. Optimizing boundary modes m,n<={}".format(k, mn))
+    timer.start("opt step {}".format(k))
+
+    # optimization variables: boundary modes <= MN
+    dRb = np.logical_and(
+        np.abs(eq.Rb_basis.modes[:, 1]) <= mn, np.abs(eq.Rb_basis.modes[:, 2]) <= mn
     )
-    eq = eq.perturb(
-        objective=qs_fun, dRb=dRb, dZb=True, order=order, verbose=2, copy=True,
+    dZb = np.logical_and(
+        np.abs(eq.Zb_basis.modes[:, 1]) <= mn, np.abs(eq.Zb_basis.modes[:, 2]) <= mn
     )
-    fam.insert(len(fam), eq)
-    eq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=50, verbose=3)
+    # fix major radius
+    dRb[np.where((eq.Rb_basis.modes == [0, 0, 0]).all(axis=1))[0]] = False
 
-fam.save("examples/DESC/HELIOTRON_QS2_r90.h5")
+    for i in range(iters):
+        print("Iteration {}".format(i))
 
-# plotting
+        # QS objective functions
+        fun_obj = QuasisymmetryTripleProduct(
+            R_tform_obj,
+            Z_tform_obj,
+            L_tform_obj,
+            Rb_tform_obj,
+            Zb_tform_obj,
+            p_tform_obj,
+            i_tform_obj,
+            eq.constraint,
+        )
+        fun_err = QuasisymmetryTripleProduct(
+            R_tform_err,
+            Z_tform_err,
+            L_tform_err,
+            Rb_tform_err,
+            Zb_tform_err,
+            p_tform_err,
+            i_tform_err,
+            eq.constraint,
+        )
 
-fam1 = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS1_nosolve.h5")
-fam2 = EquilibriaFamily.load("examples/DESC/HELIOTRON_QS2_nosolve.h5")
-eq = fam1[-1]
+        tr_ratio = 0.1
+        while err > err0:
+            print("trust-region ratio = {}".format(tr_ratio))
+            eq_p = eq.perturb(
+                objective=fun_obj,
+                dRb=dRb,
+                dZb=dZb,
+                order=order,
+                tr_ratio=tr_ratio,
+                verbose=2,
+                copy=True,
+            )
+            args = (eq_p.x, eq_p.Rb_lmn, eq_p.Zb_lmn, eq_p.p_l, eq_p.i_l, eq_p.Psi)
+            err = fun_err.compute(*args)
+            tr_ratio /= 2
 
-ii = range(iters + 1)
-err1 = np.zeros_like(ii, dtype="float")
-err2 = np.zeros_like(ii, dtype="float")
-qs_grid = LinearGrid(M=180, N=180, NFP=eq.NFP, rho=rho)
+        err0 = err
+        eq = eq_p
+        fam.insert(len(fam), eq)
+        eq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=50, verbose=3)
+        timer.stop("opt step {}".format(k))
+        timer.disp("opt step {}".format(k))
 
-R_transform = Transform(qs_grid, eq.R_basis)
-Z_transform = Transform(qs_grid, eq.Z_basis)
-L_transform = Transform(qs_grid, eq.L_basis)
-Rb_transform = Transform(qs_grid, eq.Rb_basis)
-Zb_transform = Transform(qs_grid, eq.Zb_basis)
-p_transform = Transform(qs_grid, eq.p_basis)
-i_transform = Transform(qs_grid, eq.i_basis)
-dRb = np.invert((eq.Rb_basis.modes == [0, 0, 0]).all(axis=1))
-
-for i in ii:
-    print("\nIteration = {}".format(i))
-    print("-------------")
-    eq1 = fam1[2 + i]
-    eq2 = fam2[2 + i]
-    fun1 = QuasisymmetryTripleProduct(
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_transform,
-        i_transform,
-        eq1.constraint,
-    )
-    fun2 = QuasisymmetryTripleProduct(
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_transform,
-        i_transform,
-        eq2.constraint,
-    )
-    args1 = (eq1.x, eq1.Rb_lmn, eq1.Zb_lmn, eq1.p_l, eq1.i_l, eq1.Psi)
-    args2 = (eq2.x, eq2.Rb_lmn, eq2.Zb_lmn, eq2.p_l, eq2.i_l, eq2.Psi)
-    err1[i] = np.mean(np.abs(fun1.compute(*args1)))
-    err2[i] = np.mean(np.abs(fun2.compute(*args2)))
-    print("1st order error: {}".format(err1[i]))
-    print("2nd order error: {}".format(err2[i]))
-
-levels = np.logspace(-4, -1, num=7)
-plot_surfaces(fam2[2], nzeta=4)
-plot_surfaces(fam2[-1], nzeta=4)
-plot_2d(fam2[2], "QS_TP", grid=qs_grid, log=True, levels=levels)
-plot_2d(fam2[-1], "QS_TP", grid=qs_grid, log=True, levels=levels)
-
-plt.rcParams.update({"font.size": 20})
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-ax.semilogy(ii, err1, "bo-", label="1st order")
-ax.semilogy(ii, err2, "ro-", label="2nd order")
-ax.legend()
-ax.set_xticks(ii)
-ax.set_xlabel("Iteration")
-ax.set_ylabel("$\\langle g(x,c) \\rangle$")
-ax.set_title("Quasi-symmetry error at $\\rho={}$".format(rho))
-fig.set_tight_layout(True)
-"""
+fam.save("examples/DESC/qs/" + fname + ".h5")
+timer.stop("total")
+timer.disp("total")

@@ -1243,7 +1243,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             / jacobian["g"]
         )
 
-        # normalization factor = <|B|>^4 * a / R^3
+        # normalization factor = <|B|>^4 / R^2
         m_R = jnp.abs(self.Rb_transform.basis.modes[:, 1])
         n_R = jnp.abs(self.Rb_transform.basis.modes[:, 2])
         m_Z = jnp.abs(self.Zb_transform.basis.modes[:, 1])
@@ -1261,9 +1261,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         return QS * R_major ** 2 / norm ** 4  # * aspect_ratio
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume-averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1283,11 +1281,29 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (jacobian, cov_basis, toroidal_coords) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+        )
+
+        QS = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+        return jnp.mean(jnp.abs(QS) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1471,10 +1487,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         helicity = 1.0 / 4.0
 
         # covariant Boozer components
-        """
-        G = jnp.mean(magnetic_field["B_zeta"])  # poloidal current
-        I = jnp.mean(magnetic_field["B_theta"])  # toroidal current
-        """
         G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
             jacobian["g"]
         )  # poloidal current
@@ -1503,9 +1515,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         return QS / norm ** 3
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume-averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1525,11 +1535,29 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (jacobian, cov_basis, toroidal_coords) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_transform,
+            self.i_transform,
+        )
+
+        QS = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+        return jnp.mean(jnp.abs(QS) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.

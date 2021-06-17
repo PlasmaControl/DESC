@@ -1284,11 +1284,24 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             average quasi-symmetry error
 
         """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
         R_lmn, Z_lmn, L_lmn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (jacobian, cov_basis, toroidal_coords) = compute_quasisymmetry(
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
             Psi,
             R_lmn,
             Z_lmn,
@@ -1302,8 +1315,33 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.i_transform,
         )
 
-        QS = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        return jnp.mean(jnp.abs(QS) * jacobian["g"]) / jnp.mean(jacobian["g"])
+        # QS triple product (T^4/m^2)
+        QS = (
+            profiles["psi_r"]
+            * (
+                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+            )
+            / jacobian["g"]
+        )
+
+        # normalization factor = <|B|>^4 / R^2
+        m_R = jnp.abs(self.Rb_transform.basis.modes[:, 1])
+        n_R = jnp.abs(self.Rb_transform.basis.modes[:, 2])
+        m_Z = jnp.abs(self.Zb_transform.basis.modes[:, 1])
+        n_Z = jnp.abs(self.Zb_transform.basis.modes[:, 2])
+        R_major = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
+        R_minor = jnp.sum(Rb_lmn ** 2 / ((m_R + 1) * (n_R + 1))) - R_major ** 2
+        Z_minor = jnp.sum(Zb_lmn ** 2 / ((m_Z + 1) * (n_Z + 1)))
+        a_minor = jnp.sqrt((R_minor + Z_minor) / 2)
+        aspect_ratio = R_major / a_minor
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+
+        # normalized QS error
+        f = QS * R_major ** 2 / norm ** 4  # * aspect_ratio
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1538,11 +1576,24 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             average quasi-symmetry error
 
         """
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
         R_lmn, Z_lmn, L_lmn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (jacobian, cov_basis, toroidal_coords) = compute_quasisymmetry(
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
             Psi,
             R_lmn,
             Z_lmn,
@@ -1556,8 +1607,37 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.i_transform,
         )
 
-        QS = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        return jnp.mean(jnp.abs(QS) * jacobian["g"]) / jnp.mean(jacobian["g"])
+        # M/N (type of QS)
+        helicity = 1.0 / 4.0
+
+        # covariant Boozer components
+        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # poloidal current
+        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # toroidal current
+
+        # flux function C=C(rho)
+        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
+
+        # QS flux function (T^3)
+        QS = (
+            profiles["psi_r"]
+            / jacobian["g"]
+            * (
+                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+            )
+            - C * quasisymmetry["B*grad(|B|)"]
+        )
+
+        # normalization factor = <|B|>^3
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+
+        # normalized QS error
+        f = QS / norm ** 3
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.

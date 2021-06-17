@@ -1258,7 +1258,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
 
         # normalized QS error
-        return QS * R_major ** 2 / norm ** 4  # * aspect_ratio
+        return QS * R_major ** 2 / norm ** 4 * aspect_ratio
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Compute the volume-averaged quasi-symmetry error.
@@ -1340,7 +1340,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
 
         # normalized QS error
-        f = QS * R_major ** 2 / norm ** 4  # * aspect_ratio
+        f = QS * R_major ** 2 / norm ** 4 * aspect_ratio
         return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
@@ -1522,7 +1522,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         )
 
         # M/N (type of QS)
-        helicity = 1.0 / 4.0
+        helicity = 1.0 / 1.0
 
         # covariant Boozer components
         G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
@@ -1608,7 +1608,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         )
 
         # M/N (type of QS)
-        helicity = 1.0 / 4.0
+        helicity = 1.0 / 1.0
 
         # covariant Boozer components
         G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(

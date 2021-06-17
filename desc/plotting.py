@@ -186,13 +186,19 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def plot_coefficients(eq, ax=None):
-    """Plot 1D profiles.
+def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
+    """Plot spectral coefficient magnitudes vs spectral mode number.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
+    L : bool
+        wheter to include radial mode numbers in the x-axis or not (Default = True)
+    M : bool
+        wheter to include poloidal mode numbers in the x-axis or not (Default = True)
+    N : bool
+        wheter to include toroidal mode numbers in the x-axis or not (Default = True)
     ax : matplotlib AxesSubplot, optional
         axis to plot on
 
@@ -204,15 +210,37 @@ def plot_coefficients(eq, ax=None):
         axes being plotted to
 
     """
+    lmn = np.array([], dtype=int)
+    xlabel = ""
+    if L:
+        lmn = np.append(lmn, np.array([0]))
+        xlabel += "l"
+        if M or N:
+            xlabel += " + "
+    if M:
+        lmn = np.append(lmn, np.array([1]))
+        xlabel += "|m|"
+        if N:
+            xlabel += " + "
+    if N:
+        lmn = np.append(lmn, np.array([2]))
+        xlabel += "|n|"
+
     fig, ax = _format_ax(ax, rows=1, cols=3)
 
-    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
-    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
-    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+    ax[0, 0].semilogy(
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+    )
+    ax[0, 1].semilogy(
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+    )
+    ax[0, 2].semilogy(
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+    )
 
-    ax[0, 0].set_xlabel("l + |m| + |n|")
-    ax[0, 1].set_xlabel("l + |m| + |n|")
-    ax[0, 2].set_xlabel("l + |m| + |n|")
+    ax[0, 0].set_xlabel(xlabel)
+    ax[0, 1].set_xlabel(xlabel)
+    ax[0, 2].set_xlabel(xlabel)
 
     ax[0, 0].set_title("$|R_{lmn}|$")
     ax[0, 1].set_title("$|Z_{lmn}|$")

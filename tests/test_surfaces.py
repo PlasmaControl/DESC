@@ -2,7 +2,7 @@ import numpy as np
 import unittest
 import pytest
 
-from desc.geometry import FourierRZToroidalSurface, ZernikeToroidalSection
+from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import Grid, LinearGrid
 
 
@@ -63,9 +63,9 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
             c.Z_mn = s.Z_mn
 
 
-class TestZernikeToroidalSection(unittest.TestCase):
+class TestZernikeRZToroidalSection(unittest.TestCase):
     def test_area(self):
-        s = ZernikeToroidalSection()
+        s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=20, M=20, N=1)
         s.grid = grid
         np.testing.assert_allclose(s.compute_surface_area(), np.pi * 1 ** 2)
@@ -75,14 +75,14 @@ class TestZernikeToroidalSection(unittest.TestCase):
         )
 
     def test_normal(self):
-        s = ZernikeToroidalSection()
+        s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=20, M=20, N=1)
         s.grid = grid
         N = s.compute_normal(coords="xyz")
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape))
 
     def test_misc(self):
-        c = ZernikeToroidalSection()
+        c = ZernikeRZToroidalSection()
         grid = LinearGrid(L=4, M=4, N=1)
         c.grid = grid
         assert grid.eq(c.grid)

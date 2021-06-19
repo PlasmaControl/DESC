@@ -240,7 +240,7 @@ def equals(a, b):
 
     """
     if isinstance(a, (np.ndarray, jnp.ndarray)):
-        return np.allclose(a, b)
+        return a.shape == b.shape and np.allclose(a, b)
     if isinstance(a, dict):
         if a.keys() != b.keys():
             return False

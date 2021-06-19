@@ -1,5 +1,6 @@
 import os
 import pickle
+import copy
 import h5py
 import pydoc
 from abc import ABC
@@ -195,6 +196,14 @@ class IOAble(ABC):
             dict1 = self.__dict__
             dict2 = other.__dict__
         return equals(dict1, dict2)
+
+    def copy(self, deepcopy=True):
+        """Return a (deep)copy of this object."""
+        if deepcopy:
+            new = copy.deepcopy(self)
+        else:
+            new = copy.copy(self)
+        return new
 
 
 def reader_factory(load_from, file_format):

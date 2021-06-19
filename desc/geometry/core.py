@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import copy
 from desc.backend import jnp
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
@@ -76,14 +75,6 @@ class Curve(IOAble, ABC):
     def compute_length(self, params=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature"""
 
-    def copy(self, deepcopy=True):
-        """Return a (deep)copy of this curve."""
-        if deepcopy:
-            new = copy.deepcopy(self)
-        else:
-            new = copy.copy(self)
-        return new
-
 
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space,
@@ -126,11 +117,3 @@ class Surface(IOAble, ABC):
     @abstractmethod
     def compute_curvature(self, params=None, grid=None):
         """Compute gaussian and mean curvature"""
-
-    def copy(self, deepcopy=True):
-        """Return a (deep)copy of this surface."""
-        if deepcopy:
-            new = copy.deepcopy(self)
-        else:
-            new = copy.copy(self)
-        return new

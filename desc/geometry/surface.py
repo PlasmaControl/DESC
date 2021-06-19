@@ -1,13 +1,14 @@
 import numpy as np
 
 from desc.backend import jnp
+from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import sign, copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
 from .core import Surface, cart2polvec, pol2cartvec
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeToroidalSection"]
+__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
 
 class FourierRZToroidalSurface(Surface):
@@ -57,7 +58,7 @@ class FourierRZToroidalSurface(Surface):
         sym="auto",
         rho=1,
         grid=None,
-        name=None,
+        name="",
     ):
 
         if R_mn is None:
@@ -68,6 +69,10 @@ class FourierRZToroidalSurface(Surface):
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
+        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+
+        assert issubclass(modes_R.dtype.type, np.integer)
+        assert issubclass(modes_Z.dtype.type, np.integer)
 
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
@@ -371,8 +376,14 @@ class FourierRZToroidalSurface(Surface):
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
+    def get_constraint(self, R_basis, Z_basis, L_basis):
+        """Get the linear constraint to enforce this surface as a boundary condition"""
+        return LCFSConstraint(
+            R_basis, Z_basis, L_basis, self.R_basis, self.Z_basis, self.R_mn, self.Z_mn
+        )
 
-class ZernikeToroidalSection(Surface):
+
+class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a zernike polynomial in R,Z
 
     Parameters
@@ -433,7 +444,7 @@ class ZernikeToroidalSection(Surface):
         sym="auto",
         zeta=0,
         grid=None,
-        name=None,
+        name="",
     ):
         if R_lm is None:
             R_lm = np.array([10, 1])
@@ -443,6 +454,10 @@ class ZernikeToroidalSection(Surface):
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
+        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+
+        assert issubclass(modes_R.dtype.type, np.integer)
+        assert issubclass(modes_Z.dtype.type, np.integer)
 
         LR = np.max(abs(modes_R[:, 0]))
         MR = np.max(abs(modes_R[:, 1]))
@@ -717,4 +732,10 @@ class ZernikeToroidalSection(Surface):
         N = jnp.cross(r_r, r_t, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
             2 * np.pi
+        )
+
+    def get_constraint(self, R_basis, Z_basis, L_basis):
+        """Get the linear constraint to enforce this surface as a boundary condition"""
+        return PoincareConstraint(
+            R_basis, Z_basis, L_basis, self.R_basis, self.Z_basis, self.R_lm, self.Z_lm
         )

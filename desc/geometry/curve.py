@@ -54,7 +54,7 @@ class FourierRZCurve(Curve):
         NFP=1,
         sym="auto",
         grid=None,
-        name=None,
+        name="",
     ):
 
         R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
@@ -62,6 +62,11 @@ class FourierRZCurve(Curve):
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
             modes_Z = modes_R
+
+        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+
+        assert issubclass(modes_R.dtype.type, np.integer)
+        assert issubclass(modes_Z.dtype.type, np.integer)
 
         if sym == "auto":
             if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
@@ -391,12 +396,17 @@ class FourierXYZCurve(Curve):
         Z_n=[2, 0, 0],
         modes=None,
         grid=None,
-        name=None,
+        name="",
     ):
 
         X_n, Y_n, Z_n = np.atleast_1d(X_n), np.atleast_1d(Y_n), np.atleast_1d(Z_n)
         if modes is None:
             modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
+        else:
+            modes = np.asarray(modes)
+
+        assert issubclass(modes.dtype.type, np.integer)
+
         N = np.max(abs(modes))
         self._basis = FourierSeries(N, NFP=1, sym=False)
         self._X_n = copy_coeffs(X_n, modes, self.basis.modes[:, 2])
@@ -736,11 +746,15 @@ class FourierPlanarCurve(Curve):
         r_n=2,
         modes=None,
         grid=None,
-        name=None,
+        name="",
     ):
         r_n = np.atleast_1d(r_n)
         if modes is None:
             modes = np.arange(-(r_n.size // 2), r_n.size // 2 + 1)
+        else:
+            modes = np.asarray(modes)
+        assert issubclass(modes.dtype.type, np.integer)
+
         N = np.max(abs(modes))
         self._basis = FourierSeries(N, NFP=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.basis.modes[:, 2])

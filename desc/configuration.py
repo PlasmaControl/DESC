@@ -1811,14 +1811,20 @@ def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
 
     if mode == "lcfs":
         for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:
+            # index of basis mode with lowest radial power (l = |m|)
+            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+            if m == 0:  # magnetic axis only affects m=0 modes
+                # index of basis mode with second lowest radial power (l = |m| + 2)
                 idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                x0 = np.where(axis[:, 0] == n, axis[:, 1], b_lmn[k])[0]
-                x_lmn[idx] = x0
-                x_lmn[idx2] = b_lmn[k] - x0
+                ax = np.where(axis[:, 0] == n)[0]
+                if ax.size:
+                    a_n = axis[ax[0], 1]  # use provided axis guess
+                else:
+                    a_n = b_lmn[k]  # use boundary centroid as axis
+                x_lmn[idx0] = (b_lmn[k] + a_n) / 2
+                x_lmn[idx2] = (b_lmn[k] - a_n) / 2
             else:
-                x_lmn[idx] = b_lmn[k]
+                x_lmn[idx0] = b_lmn[k]
 
     elif mode == "poincare":
         for k, (l, m, n) in enumerate(b_basis.modes):

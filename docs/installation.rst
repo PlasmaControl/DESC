@@ -17,7 +17,7 @@ Or from github (for development builds)
 
 .. code-block:: bash
 
-    git clone https://github.com/ddudt/DESC.git
+    git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
     pip install -r requirements.txt
     pip install -r tests/requirements.txt
@@ -37,7 +37,7 @@ Or from github (for development builds)
 
 .. code-block:: bash
 
-    git clone https://github.com/ddudt/DESC.git
+    git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
     module load anaconda
     conda create --prefix ./env
@@ -58,7 +58,7 @@ For Traverse, first get the latest stable release and load the necessary modules
 
 .. code-block:: bash
 
-    git clone https://github.com/ddudt/DESC.git   
+    git clone https://github.com/PlasmaControl/DESC.git   
     wget https://github.com/google/jax/archive/jaxlib-v0.1.55.tar.gz
     tar zxf jaxlib-v0.1.55.tar.gz # this puts it in the current directory, you can put it anywhere that is convenient
     module load anaconda3 cudatoolkit cudnn/cuda-11.0/8.0.1

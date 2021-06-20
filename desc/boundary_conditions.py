@@ -375,6 +375,15 @@ def _get_lcfs_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn):
         if and only if Ax=b
 
     """
+    assert (
+        len(Rb_lmn) == Rb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Rb_basis.num_modes} and number of boundary coefficients {len(Rb_lmn)}"
+    assert (
+        len(Zb_lmn) == Zb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Zb_basis.num_modes} and number of boundary coefficients {len(Zb_lmn)}"
+    assert R_basis.M <= Rb_basis.M, "Boundary does not fully constraint R_basis"
+    assert Z_basis.N <= Zb_basis.N, "Boundary does not fully constraint Z_basis"
+
     R_modes = R_basis.modes
     Z_modes = Z_basis.modes
     Rb_modes = Rb_basis.modes
@@ -393,13 +402,13 @@ def _get_lcfs_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn):
     bR = Rb_lmn
     bZ = Zb_lmn
 
-    for i, (l, m, n) in enumerate(Rb_modes):
-        j = np.argwhere(np.logical_and(R_modes[:, 1] == m, R_modes[:, 2] == n))
-        AR[i, j] = 1
+    for i, (l, m, n) in enumerate(R_modes):
+        j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
+        AR[j, i] = 1
 
-    for i, (l, m, n) in enumerate(Zb_modes):
-        j = np.argwhere(np.logical_and(Z_modes[:, 1] == m, Z_modes[:, 2] == n))
-        AZ[i, dim_R + j] = 1
+    for i, (l, m, n) in enumerate(Z_modes):
+        j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
+        AZ[j, dim_R + i] = 1
 
     A = np.vstack([AR, AZ])
     b = np.concatenate([bR, bZ])
@@ -438,6 +447,15 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
         if and only if Ax=b
 
     """
+    assert (
+        len(Rb_lmn) == Rb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Rb_basis.num_modes} and number of boundary coefficients {len(Rb_lmn)}"
+    assert (
+        len(Zb_lmn) == Zb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Zb_basis.num_modes} and number of boundary coefficients {len(Zb_lmn)}"
+    assert R_basis.L <= Rb_basis.L, "Boundary does not fully constraint R_basis"
+    assert Z_basis.M <= Zb_basis.M, "Boundary does not fully constraint Z_basis"
+
     dim_R = R_basis.num_modes
     dim_Z = Z_basis.num_modes
     dim_Rb = Rb_basis.modes.shape[0]
@@ -446,21 +464,23 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
     AR = np.zeros((dim_Rb, dim_R))
     AZ = np.zeros((dim_Zb, dim_Z))
 
-    for i, (l, m, n) in enumerate(Rb_basis.modes):
+    for i, (l, m, n) in enumerate(R_basis.modes):
         j = np.where(
             np.logical_and(
-                (R_basis.modes[:, :2] == [l, m]).all(axis=1), R_basis.modes[:, -1] >= 0
+                (Rb_basis.modes[:, :2] == [l, m]).all(axis=1),
+                Rb_basis.modes[:, -1] >= 0,
             )
         )[0]
-        AR[i, j] = 1
+        AR[j, i] = 1
 
-    for i, (l, m, n) in enumerate(Zb_basis.modes):
+    for i, (l, m, n) in enumerate(Z_basis.modes):
         j = np.where(
             np.logical_and(
-                (Z_basis.modes[:, :2] == [l, m]).all(axis=1), Z_basis.modes[:, -1] >= 0
+                (Zb_basis.modes[:, :2] == [l, m]).all(axis=1),
+                Zb_basis.modes[:, -1] >= 0,
             )
         )[0]
-        AZ[i, j] = 1
+        AZ[j, i] = 1
 
     A = np.block([[AR, np.zeros((dim_Rb, dim_Z))], [np.zeros((dim_Zb, dim_R)), AZ]])
     b = np.concatenate([Rb_lmn, Zb_lmn])

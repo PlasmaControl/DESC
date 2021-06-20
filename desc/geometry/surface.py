@@ -378,12 +378,10 @@ class FourierRZToroidalSurface(Surface):
 
     def get_constraint(self, R_basis, Z_basis, L_basis):
         """Get the linear constraint to enforce this surface as a boundary condition"""
-        M = max(R_basis.M, Z_basis.M, L_basis.M)
-        N = max(R_basis.N, Z_basis.N, L_basis.N)
         Rb_basis = self.R_basis.copy()
         Zb_basis = self.Z_basis.copy()
-        Rb_basis.change_resolution(M, N)
-        Zb_basis.change_resolution(M, N)
+        Rb_basis.change_resolution(R_basis.M, R_basis.N)
+        Zb_basis.change_resolution(Z_basis.M, Z_basis.N)
 
         R_mn = copy_coeffs(self.R_mn, self.R_basis.modes, Rb_basis.modes)
         Z_mn = copy_coeffs(self.R_mn, self.R_basis.modes, Rb_basis.modes)
@@ -744,13 +742,10 @@ class ZernikeRZToroidalSection(Surface):
 
     def get_constraint(self, R_basis, Z_basis, L_basis):
         """Get the linear constraint to enforce this surface as a boundary condition"""
-        L = max(R_basis.L, Z_basis.L, L_basis.L)
-        M = max(R_basis.M, Z_basis.M, L_basis.M)
-
         Rb_basis = self.R_basis.copy()
         Zb_basis = self.Z_basis.copy()
-        Rb_basis.change_resolution(L, M)
-        Zb_basis.change_resolution(L, M)
+        Rb_basis.change_resolution(R_basis.L, R_basis.M)
+        Zb_basis.change_resolution(Z_basis.L, Z_basis.M)
 
         R_lm = copy_coeffs(self.R_lm, self.R_basis.modes, Rb_basis.modes)
         Z_lm = copy_coeffs(self.R_lm, self.R_basis.modes, Rb_basis.modes)

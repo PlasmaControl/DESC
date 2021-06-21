@@ -52,7 +52,7 @@ class VMECIO:
         inputs = {}
 
         # parameters
-        inputs["Psi"] = file.variables["phi"][-1]
+        inputs["Psi"] = float(file.variables["phi"][-1])
         inputs["NFP"] = int(file.variables["nfp"][0])
         inputs["M"] = M if M > 0 else int(file.variables["mpol"][0] - 1)
         inputs["N"] = N if N >= 0 else int(file.variables["ntor"][0])

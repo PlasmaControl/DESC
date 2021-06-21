@@ -388,25 +388,16 @@ class VMECIO:
         Rmajor_p = file.createVariable("Rmajor_p", np.float64)
         Rmajor_p.long_name = "major radius"
         Rmajor_p.units = "m"
-        Rmajor_p[:] = eq.Rb_lmn[
-            np.where((eq.Rb_basis.modes == [0, 0, 0]).all(axis=1))[0]
-        ]
-
-        m_R = np.abs(eq.Rb_basis.modes[:, 1])
-        n_R = np.abs(eq.Rb_basis.modes[:, 2])
-        m_Z = np.abs(eq.Zb_basis.modes[:, 1])
-        n_Z = np.abs(eq.Zb_basis.modes[:, 2])
-        R_minor = np.sum(eq.Rb_lmn ** 2 / ((m_R + 1) * (n_R + 1))) - Rmajor_p[:] ** 2
-        Z_minor = np.sum(eq.Zb_lmn ** 2 / ((m_Z + 1) * (n_Z + 1)))
+        Rmajor_p[:] = eq.major_radius
 
         Aminor_p = file.createVariable("Aminor_p", np.float64)
         Aminor_p.long_name = "minor radius"
         Aminor_p.units = "m"
-        Aminor_p[:] = np.sqrt((R_minor + Z_minor) / 2)
+        Aminor_p[:] = eq.minor_radius
 
         aspect = file.createVariable("aspect", np.float64)
         aspect.long_name = "aspect ratio = R_major / A_minor"
-        aspect[:] = Rmajor_p[:] / Aminor_p[:]
+        aspect[:] = eq.aspect_ratio
 
         volume_p = file.createVariable("volume_p", np.float64)
         volume_p.long_name = "plasma volume"

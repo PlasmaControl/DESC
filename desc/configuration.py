@@ -491,6 +491,26 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for rotational transform (PowerSeries)."""
         return self._i_basis
 
+    @property
+    def major_radius(self):
+        """Major radius (m)."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.pi * A)
+
+    @property
+    def minor_radius(self):
+        """Minor radius (m)."""
+        A = self.compute_cross_section_area()
+        return np.sqrt(A / np.pi)
+
+    @property
+    def aspect_ratio(self):
+        """Aspect ratio = major radius / minor radius."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.sqrt(np.pi * A ** 3))
+
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
@@ -1182,6 +1202,55 @@ class _Configuration(IOAble, ABC):
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
+
+    def compute_cross_section_area(self, grid=None):
+        """Compute toroidally averaged cross-section area.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Quadrature grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at
+
+        Returns
+        -------
+        area : float
+            cross section area in m^2
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
+        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+
+        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
+            self.Psi,
+            self.R_lmn,
+            self.Z_lmn,
+            self.L_lmn,
+            self.p_l,
+            self.i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            p_transform,
+            i_transform,
+        )
+
+        N = np.unique(grid.nodes[:, -1]).size  # number of toroidal angles
+        weights = grid.weights / (2 * np.pi / N)  # remove toroidal weights
+        return np.mean(
+            np.sum(
+                np.reshape(  # sqrt(g) / R * weight = dArea
+                    np.abs(jacobian["g"] / toroidal_coords["R"]) * weights, (N, -1)
+                ),
+                axis=1,
+            )
+        )
 
     def compute_dW(self, grid=None):
         """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.

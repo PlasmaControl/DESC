@@ -112,7 +112,7 @@ Before Submitting An Enhancement Suggestion
 
 -  `Check the documentation <https://desc-docs.readthedocs.io/en/latest/>`__
    for tips — you might discover that the enhancement is already available.
--  `Perform a cursory search <https://github.com/ddudt/DESC/issues?q=is%3Aopen+is%3Aissue+label%3Aenhancement>`__
+-  `Perform a cursory search <https://github.com/PlasmaControl/DESC/issues?q=is%3Aopen+is%3Aissue+label%3Aenhancement>`__
    to see if the enhancement has already been suggested. If it has, add
    a comment to the existing issue instead of opening a new one.
 
@@ -142,8 +142,8 @@ Your First Code Contribution
 Unsure where to begin contributing to DESC? You can start by looking
 through these ``good first issue`` and ``help wanted`` issues:
 
--  `Good first issues <https://github.com/ddudt/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22>`__ - issues which should only require a few lines of code, and a test or two.
--  `Help wanted issues <https://github.com/ddudt/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22>`__ - issues which should be a bit more involved than beginner issues.
+-  `Good first issues <https://github.com/PlasmaControl/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22>`__ - issues which should only require a few lines of code, and a test or two.
+-  `Help wanted issues <https://github.com/PlasmaControl/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22>`__ - issues which should be a bit more involved than beginner issues.
 
 Styleguides
 ^^^^^^^^^^^

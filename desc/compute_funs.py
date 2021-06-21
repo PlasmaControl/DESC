@@ -27,9 +27,9 @@ Z_transform : Transform
     transforms Z_lmn coefficients to real space
 L_transform : Transform
     transforms L_lmn coefficients to real space
-p_transform : Transform
+p_profile : Profile
     transforms p_l coefficients to real space
-i_transform : Transform
+i_profile : Profile
     transforms i_l coefficients to real space
 
 """
@@ -87,8 +87,8 @@ def compute_profiles(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic flux, pressure, and rotational transform profiles.
 
@@ -112,9 +112,9 @@ def compute_profiles(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -126,19 +126,19 @@ def compute_profiles(
     """
     profiles = {}
 
-    # toroidal flux (divided by 2 pi)
-    rho = p_transform.grid.nodes[:, 0]
+    # toroidal flux (Wb) divided by 2 pi
+    rho = p_profile.grid.nodes[:, 0]
     profiles["psi"] = Psi * rho ** 2 / (2 * jnp.pi)
     profiles["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
     profiles["psi_rr"] = 2 * Psi * np.ones_like(rho) / (2 * jnp.pi)
 
-    # pressure
-    profiles["p"] = p_transform.transform(p_l, 0)
-    profiles["p_r"] = p_transform.transform(p_l, 1)
+    # pressure (Pa)
+    profiles["p"] = p_profile.compute(p_l, dr=0)
+    profiles["p_r"] = p_profile.compute(p_l, dr=1)
 
     # rotational transform
-    profiles["iota"] = i_transform.transform(i_l, 0)
-    profiles["iota_r"] = i_transform.transform(i_l, 1)
+    profiles["iota"] = i_profile.compute(i_l, dr=0)
+    profiles["iota_r"] = i_profile.compute(i_l, dr=1)
 
     return profiles
 
@@ -153,8 +153,8 @@ def compute_toroidal_coords(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Transform toroidal coordinates to real space.
 
@@ -178,9 +178,9 @@ def compute_toroidal_coords(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -209,8 +209,8 @@ def compute_cartesian_coords(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute cartesian coordinates from toroidal coordinates.
 
@@ -234,9 +234,9 @@ def compute_cartesian_coords(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -261,8 +261,8 @@ def compute_cartesian_coords(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     cartesian_coords = {}
@@ -284,8 +284,8 @@ def compute_covariant_basis(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute covariant basis vectors.
 
@@ -309,9 +309,9 @@ def compute_covariant_basis(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -336,8 +336,8 @@ def compute_covariant_basis(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # toroidal coordinate 1st derivatives
@@ -372,8 +372,8 @@ def compute_jacobian(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute coordinate system jacobian.
 
@@ -397,9 +397,9 @@ def compute_jacobian(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -428,8 +428,8 @@ def compute_jacobian(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     jacobian = {}
@@ -450,8 +450,8 @@ def compute_contravariant_basis(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute contravariant basis vectors.
 
@@ -475,9 +475,9 @@ def compute_contravariant_basis(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -510,8 +510,8 @@ def compute_contravariant_basis(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     con_basis = {}
@@ -538,8 +538,8 @@ def compute_magnetic_field(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic field components.
 
@@ -563,9 +563,9 @@ def compute_magnetic_field(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -602,8 +602,8 @@ def compute_magnetic_field(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
     jacobian, cov_basis, toroidal_coords = compute_jacobian(
         Psi,
@@ -615,8 +615,8 @@ def compute_magnetic_field(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # lambda derivatives
@@ -655,8 +655,8 @@ def compute_magnetic_field_axis(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic field components; can handle nodes at the magnetic axis.
 
@@ -680,9 +680,9 @@ def compute_magnetic_field_axis(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -719,8 +719,8 @@ def compute_magnetic_field_axis(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
     jacobian, cov_basis, toroidal_coords = compute_jacobian(
         Psi,
@@ -732,11 +732,11 @@ def compute_magnetic_field_axis(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
-    axis = i_transform.grid.axis
+    axis = i_profile.grid.axis
 
     # lambda derivatives
     toroidal_coords["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
@@ -809,8 +809,8 @@ def compute_magnetic_field_magnitude(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic field magnitude.
 
@@ -834,9 +834,9 @@ def compute_magnetic_field_magnitude(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -879,8 +879,8 @@ def compute_magnetic_field_magnitude(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     magnetic_field["|B|"] = jnp.sqrt(
@@ -907,8 +907,8 @@ def compute_magnetic_field_magnitude_axis(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic field magnitude; can handle nodes at the magnetic axis.
 
@@ -932,9 +932,9 @@ def compute_magnetic_field_magnitude_axis(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Transform
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -977,8 +977,8 @@ def compute_magnetic_field_magnitude_axis(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     magnetic_field["|B|"] = jnp.sqrt(
@@ -1005,8 +1005,8 @@ def compute_current_density(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute current density field components.
 
@@ -1030,9 +1030,9 @@ def compute_current_density(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1079,8 +1079,8 @@ def compute_current_density(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # toroidal coordinate 2nd derivatives
@@ -1274,8 +1274,8 @@ def compute_magnetic_pressure_gradient(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic pressure gradient components and its magnitude.
 
@@ -1299,9 +1299,9 @@ def compute_magnetic_pressure_gradient(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1357,8 +1357,8 @@ def compute_magnetic_pressure_gradient(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # contravariant basis vectors
@@ -1445,8 +1445,8 @@ def compute_magnetic_tension(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute magnetic tension vector and its magnitude.
 
@@ -1470,9 +1470,9 @@ def compute_magnetic_tension(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1528,8 +1528,8 @@ def compute_magnetic_tension(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # contravariant basis vectors
@@ -1611,8 +1611,8 @@ def compute_force_error(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute force error components.
 
@@ -1636,9 +1636,9 @@ def compute_force_error(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1690,8 +1690,8 @@ def compute_force_error(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     force_error = {}
@@ -1726,8 +1726,8 @@ def compute_force_error_magnitude(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute force error magnitude.
 
@@ -1751,9 +1751,9 @@ def compute_force_error_magnitude(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1810,8 +1810,8 @@ def compute_force_error_magnitude(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     # contravariant basis vectors
@@ -1872,8 +1872,8 @@ def compute_energy(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute MHD energy by quadrature sum.
 
@@ -1899,9 +1899,9 @@ def compute_energy(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -1946,8 +1946,8 @@ def compute_energy(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
     NFP = R_transform.grid.NFP
@@ -1976,8 +1976,8 @@ def compute_quasisymmetry(
     R_transform,
     Z_transform,
     L_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
 ):
     """Compute quasisymmetry metrics.
 
@@ -2001,9 +2001,9 @@ def compute_quasisymmetry(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    p_transform : Transform
+    p_profile : Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile : Profile
         transforms i_l coefficients to real space
 
     Returns
@@ -2055,11 +2055,11 @@ def compute_quasisymmetry(
         R_transform,
         Z_transform,
         L_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
     )
 
-    axis = i_transform.grid.axis
+    axis = i_profile.grid.axis
 
     # toroidal coordinate 2nd derivatives
     toroidal_coords["R_rtt"] = R_transform.transform(R_lmn, 1, 2, 0)

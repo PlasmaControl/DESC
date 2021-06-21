@@ -331,12 +331,12 @@ def optimal_perturb(
         deltas["Zb_lmn"] = dZb
     if type(dp) is bool or dp is None:
         if dp is True:
-            deltas["p_l"] = np.ones((eq.p_basis.num_modes,), dtype=bool)
+            deltas["p_l"] = np.ones_like(eq.p_l, dtype=bool)
     elif np.any(dp):
         deltas["p_l"] = dp
     if type(di) is bool or di is None:
         if di is True:
-            deltas["i_l"] = np.ones((eq.i_basis.num_modes,), dtype=bool)
+            deltas["i_l"] = np.ones_like(eq.i_l, dtype=bool)
     elif np.any(di):
         deltas["i_l"] = di
     if type(dPsi) is bool or dPsi is None:

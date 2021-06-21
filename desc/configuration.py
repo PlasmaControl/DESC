@@ -12,6 +12,7 @@ from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
+from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
 from desc.basis import (
     PowerSeries,
     DoubleFourierSeries,
@@ -62,15 +63,13 @@ class _Configuration(IOAble, ABC):
         "_L_lmn",
         "_Rb_lmn",
         "_Zb_lmn",
-        "_p_l",
-        "_i_l",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
         "_Rb_basis",
         "_Zb_basis",
-        "_p_basis",
-        "_i_basis",
+        "_pressure",
+        "_iota",
         "_spectral_indexing",
         "_bdry_mode",
         "_boundary",
@@ -135,10 +134,12 @@ class _Configuration(IOAble, ABC):
         self._set_basis()
 
         # format profiles
-        self._p_l, self._i_l = format_profiles(
-            self._profiles, self.p_basis, self.i_basis
+        self._pressure = PowerSeriesProfile(
+            modes=self._profiles[:, 0], params=self._profiles[:, 1], name="pressure"
         )
-
+        self._iota = PowerSeriesProfile(
+            modes=self._profiles[:, 0], params=self._profiles[:, 2], name="iota"
+        )
         # format boundary
         self._Rb_lmn, self._Zb_lmn = format_boundary(
             self._boundary, self.Rb_basis, self.Zb_basis, self.bdry_mode
@@ -240,8 +241,6 @@ class _Configuration(IOAble, ABC):
                     "yellow",
                 )
             )
-        self._p_basis = PowerSeries(L=max(self.L, int(np.max(self._profiles[:, 0]))))
-        self._i_basis = PowerSeries(L=max(self.L, int(np.max(self._profiles[:, 0]))))
 
     @property
     def parent(self):
@@ -297,19 +296,10 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
-        old_modes_p = self.p_basis.modes
-        old_modes_i = self.i_basis.modes
         old_modes_Rb = self.Rb_basis.modes
         old_modes_Zb = self.Zb_basis.modes
 
         self._set_basis()
-
-        # previous resolution may have left off some coeffs, so we should add them back
-        # in but need to check if "profiles" is still accurate, might have been
-        # perturbed so we reuse the old coeffs up to the old resolution
-        full_p_l, full_i_l = format_profiles(self._profiles, self.p_basis, self.i_basis)
-        self._p_l = copy_coeffs(self.p_l, old_modes_p, self.p_basis.modes, full_p_l)
-        self._i_l = copy_coeffs(self.i_l, old_modes_i, self.p_basis.modes, full_i_l)
 
         # format boundary
         full_Rb_lmn, full_Zb_lmn = format_boundary(
@@ -439,22 +429,50 @@ class _Configuration(IOAble, ABC):
         self._Zb_lmn = Zb_lmn
 
     @property
+    def pressure(self):
+        """Pressure profile"""
+        return self._pressure
+
+    @pressure.setter
+    def pressure(self, new):
+        if isinstance(new, Profile):
+            self._pressure = new
+        else:
+            raise TypeError(
+                f"pressure profile should be of type Profile or a subclass, got {new} "
+            )
+
+    @property
     def p_l(self):
-        """Spectral coefficients of pressure profile (ndarray)."""
-        return self._p_l
+        """Coefficients of pressure profile (ndarray)."""
+        return self.pressure.params
 
     @p_l.setter
     def p_l(self, p_l):
-        self._p_l = p_l
+        self.pressure.params = p_l
+
+    @property
+    def iota(self):
+        """Rotational transform (iota) profile"""
+        return self._iota
+
+    @iota.setter
+    def iota(self, new):
+        if isinstance(new, Profile):
+            self._iota = new
+        else:
+            raise TypeError(
+                f"iota profile should be of type Profile or a subclass, got {new} "
+            )
 
     @property
     def i_l(self):
-        """Spectral coefficients of iota profile (ndarray)."""
-        return self._i_l
+        """Coefficients of iota profile (ndarray)."""
+        return self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
-        self._i_l = i_l
+        self.iota.params = i_l
 
     @property
     def R_basis(self):
@@ -480,16 +498,6 @@ class _Configuration(IOAble, ABC):
     def Zb_basis(self):
         """Spectral basis for Z at the boundary (Basis)."""
         return self._Zb_basis
-
-    @property
-    def p_basis(self):
-        """Spectral basis for pressure (PowerSeries)."""
-        return self._p_basis
-
-    @property
-    def i_basis(self):
-        """Spectral basis for rotational transform (PowerSeries)."""
-        return self._i_basis
 
     @property
     def major_radius(self):
@@ -582,8 +590,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         profiles = compute_profiles(
             self.Psi,
@@ -595,8 +605,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return profiles
@@ -624,8 +634,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         toroidal_coords = compute_toroidal_coords(
             self.Psi,
@@ -637,8 +649,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return toroidal_coords
@@ -665,8 +677,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self.Psi,
@@ -678,8 +692,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return cartesian_coords
@@ -707,8 +721,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self.Psi,
@@ -720,8 +736,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return cov_basis
@@ -749,8 +765,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -762,8 +780,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return jacobian
@@ -791,8 +809,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self.Psi,
@@ -804,8 +824,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return con_basis
@@ -834,8 +854,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_field,
@@ -853,8 +875,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return magnetic_field
@@ -882,8 +904,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             current_density,
@@ -902,8 +926,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return current_density
@@ -931,8 +955,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_pressure,
@@ -953,8 +979,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return magnetic_pressure
@@ -982,8 +1008,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             magnetic_tension,
@@ -1004,8 +1032,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return magnetic_tension
@@ -1033,8 +1061,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             force_error,
@@ -1055,8 +1085,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return force_error
@@ -1086,8 +1116,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             energy,
@@ -1106,8 +1138,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return energy
@@ -1135,8 +1167,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=3, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=3, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=3, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (
             quasisymmetry,
@@ -1157,8 +1191,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return quasisymmetry
@@ -1184,8 +1218,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1197,8 +1233,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
@@ -1273,8 +1309,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=1, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=1, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
         Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="auto")
         Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="auto")
 
@@ -1285,8 +1323,8 @@ class _Configuration(IOAble, ABC):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
             BC_constraint=None,
             use_jit=False,
         )
@@ -1781,38 +1819,6 @@ class _Configuration(IOAble, ABC):
         return b
 
 
-def format_profiles(profiles, p_basis, i_basis):
-    """Format profile input arrays.
-
-    Parameters
-    ----------
-    profiles : ndarray, shape(Nprof,3)
-        array of fourier coeffs [l, p, i]
-    p_basis : PowerSeries
-        spectral basis for p_l coefficients
-    i_basis : PowerSeries
-        spectral basis for i_l coefficients
-
-    Returns
-    -------
-    p_l : ndarray
-        spectral coefficients for pressure profile
-    i_l : ndarray
-        spectral coefficients for rotational transform profile
-
-    """
-    p_l = np.zeros((p_basis.num_modes,))
-    i_l = np.zeros((i_basis.num_modes,))
-
-    for l, p, i in profiles:
-        idx_p = np.where(p_basis.modes[:, 0] == int(l))[0]
-        idx_i = np.where(i_basis.modes[:, 0] == int(l))[0]
-        p_l[idx_p] = p
-        i_l[idx_i] = i
-
-    return p_l.astype(float), i_l.astype(float)
-
-
 def format_boundary(boundary, Rb_basis, Zb_basis, mode="lcfs"):
     """Format boundary arrays and converts between real and fourier representations.
 
@@ -1890,14 +1896,20 @@ def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
 
     if mode == "lcfs":
         for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:
+            # index of basis mode with lowest radial power (l = |m|)
+            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+            if m == 0:  # magnetic axis only affects m=0 modes
+                # index of basis mode with second lowest radial power (l = |m| + 2)
                 idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                x0 = np.where(axis[:, 0] == n, axis[:, 1], b_lmn[k])[0]
-                x_lmn[idx] = (b_lmn[k] + x0) / 2
-                x_lmn[idx2] = (b_lmn[k] - x0) / 2
+                ax = np.where(axis[:, 0] == n)[0]
+                if ax.size:
+                    a_n = axis[ax[0], 1]  # use provided axis guess
+                else:
+                    a_n = b_lmn[k]  # use boundary centroid as axis
+                x_lmn[idx0] = (b_lmn[k] + a_n) / 2
+                x_lmn[idx2] = (b_lmn[k] - a_n) / 2
             else:
-                x_lmn[idx] = b_lmn[k]
+                x_lmn[idx0] = b_lmn[k]
 
     elif mode == "poincare":
         for k, (l, m, n) in enumerate(b_basis.modes):

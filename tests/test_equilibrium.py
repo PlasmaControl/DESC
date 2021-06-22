@@ -60,7 +60,7 @@ def test_aspect_ratio(DSHAPE):
 
     # VMEC value
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    AR_vmec = float(file.variables["aspect_p"][-1])
+    AR_vmec = float(file.variables["aspect"][-1])
     file.close
 
     # DESC value

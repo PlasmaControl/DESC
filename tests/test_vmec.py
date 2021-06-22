@@ -156,9 +156,9 @@ def test_load_then_save(TmpDir):
     lmns1 = file1.variables["lmns"][:]
     lmns2 = file2.variables["lmns"][:]
 
-    np.testing.assert_allclose(rmnc2, rmnc1, atol=1e-1)
-    np.testing.assert_allclose(zmns2, zmns1, atol=1e-1)
-    np.testing.assert_allclose(lmns2, lmns1, atol=1e-1)
+    np.testing.assert_allclose(rmnc2, rmnc1, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(zmns2, zmns1, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(lmns2, lmns1, rtol=1e-3, atol=5e-2)
 
     file1.close
     file2.close

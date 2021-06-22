@@ -1260,8 +1260,10 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
         Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
         L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
-        p_transform = Transform(grid, self.p_basis, derivs=0, method="auto")
-        i_transform = Transform(grid, self.i_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1273,8 +1275,8 @@ class _Configuration(IOAble, ABC):
             R_transform,
             Z_transform,
             L_transform,
-            p_transform,
-            i_transform,
+            pressure,
+            iota,
         )
 
         N = np.unique(grid.nodes[:, -1]).size  # number of toroidal angles

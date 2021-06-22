@@ -175,7 +175,7 @@ class VMECIO:
         p_transform_half = Transform(half_grid, eq.pressure.basis)
         i_transform_full = Transform(full_grid, eq.iota.basis)
         i_transform_half = Transform(half_grid, eq.iota.basis)
-        i_transform_chi = Transform(full_grid, PowerSeries(eq.L + 2))
+        i_transform_chi = Transform(full_grid, PowerSeries(eq.iota.basis.L + 2))
 
         # dimensions
         file.createDimension("radius", surfs)  # number of flux surfaces
@@ -372,12 +372,12 @@ class VMECIO:
         chi = file.createVariable("chi", np.float64, ("radius",))
         chi.long_name = "poloidal flux"
         chi.units = "Wb"
-        chi[:] = (
+        chi[:] = (  # FIXME: this integration assumes iota Profile is a Power Series
             2
             * Psi
             * i_transform_chi.transform(
                 np.append([0, 0], eq.i_l)
-                / [c if c != 0 else 1 for c in np.arange(0, eq.L + 3)]
+                / [c if c != 0 else 1 for c in np.arange(0, eq.iota.basis.L + 3)]
             )
         )
 

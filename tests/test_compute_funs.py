@@ -31,6 +31,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,

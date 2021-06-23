@@ -1293,8 +1293,8 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         # QS triple product (T^4/m^2)
@@ -1573,8 +1573,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         # covariant Boozer components

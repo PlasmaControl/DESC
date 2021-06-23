@@ -1722,7 +1722,7 @@ class _Configuration(IOAble, ABC):
         if M_boz is None:
             M_boz = 2 * self.M
         if N_boz is None:
-            N_boz = 2 * self.N
+            N_boz = 2 * self.N if self.N > 0 else 0
         if rho is None:
             rho = np.linspace(0.01, 1, num=100)
 
@@ -1810,9 +1810,7 @@ class _Configuration(IOAble, ABC):
             b.bsubvmns = Bz_s.T
 
         # rotational transform
-        grid = LinearGrid(rho=rho)
-        transform = Transform(grid, self.i_basis)
-        b.iota = transform.transform(self.i_l)
+        b.iota = self.iota(rho)
 
         # run booz_xform
         b.run()

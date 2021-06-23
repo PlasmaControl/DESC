@@ -728,16 +728,25 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
+            Rv[:, :, i].T,
+            Zv[:, :, i].T,
+            color=colorblind_colors[2],
+            linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
+            Rr[:, :, i],
+            Zr[:, :, i],
+            color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
+            Rr[:, -1, i],
+            Zr[:, -1, i],
+            color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
+            Rr[0, 0, i],
+            Zr[0, 0, i],
+            color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])

@@ -112,14 +112,10 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = LCFSConstraint(
+        BC = eq.surface.get_constraint(
             eq.R_basis,
             eq.Z_basis,
             eq.L_basis,
-            eq.Rb_basis,
-            eq.Zb_basis,
-            eq.Rb_lmn,
-            eq.Zb_lmn,
         )
         eq.x = BC.make_feasible(eq.x)
 

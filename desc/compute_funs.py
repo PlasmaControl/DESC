@@ -1881,7 +1881,8 @@ def compute_energy(
     i_profile,
 ):
     """Compute MHD energy by quadrature sum.
-
+    :math:`\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
+    where DESC assumes :math:`\gamma=0`
     **REQUIRES 'quad' grid for correct results**
 
     Parameters
@@ -1965,7 +1966,7 @@ def compute_energy(
         / (2 * mu_0)
         * NFP
     )
-    energy["W"] = energy["W_B"] - energy["W_p"]
+    energy["W"] = energy["W_B"] + energy["W_p"]
     energy["beta"] = jnp.abs(energy["W_p"] / energy["W_B"])
 
     return (energy, magnetic_field, jacobian, cov_basis, toroidal_coords, profiles)

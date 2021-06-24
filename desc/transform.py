@@ -175,7 +175,7 @@ class Transform(IOAble):
 
         if (
             len(zeta_vals) > 1
-            and not abs((zeta_vals[-1] + zeta_vals[1]) * grid.NFP - 2 * np.pi) < 1e-14
+            and not abs((zeta_vals[-1] + zeta_vals[1]) * basis.NFP - 2 * np.pi) < 1e-14
         ):
             warnings.warn(
                 colored(

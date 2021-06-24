@@ -13,7 +13,11 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
 from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry import (
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+    FourierRZCurve,
+)
 from desc.basis import (
     PowerSeries,
     DoubleFourierSeries,
@@ -66,12 +70,11 @@ class _Configuration(IOAble, ABC):
         "_Z_basis",
         "_L_basis",
         "_surface",
+        "_axis",
         "_pressure",
         "_iota",
         "_spectral_indexing",
         "_bdry_mode",
-        "_boundary",
-        "_profiles",
     ]
 
     def __init__(self, inputs):
@@ -106,8 +109,8 @@ class _Configuration(IOAble, ABC):
             self._L = inputs["L"]
             self._M = inputs["M"]
             self._N = inputs["N"]
-            self._profiles = inputs["profiles"]
-            self._boundary = inputs["boundary"]
+            profiles = inputs["profiles"]
+            boundary = inputs["boundary"]
         except:
             raise ValueError(colored("input dict does not contain proper keys", "red"))
 
@@ -121,7 +124,7 @@ class _Configuration(IOAble, ABC):
         self._children = []
 
         # stellarator symmetry for bases
-        if self._sym:
+        if self.sym:
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
@@ -133,32 +136,42 @@ class _Configuration(IOAble, ABC):
 
         # format profiles
         self._pressure = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 1], name="pressure"
+            modes=profiles[:, 0], params=profiles[:, 1], name="pressure"
         )
         self._iota = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 2], name="iota"
+            modes=profiles[:, 0], params=profiles[:, 2], name="iota"
         )
         # format boundary
         if self.bdry_mode == "lcfs":
             self._surface = FourierRZToroidalSurface(
-                self._boundary[:, 3],
-                self._boundary[:, 4],
-                self._boundary[:, 1:3].astype(int),
-                self._boundary[:, 1:3].astype(int),
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, 1:3].astype(int),
+                boundary[:, 1:3].astype(int),
                 self.NFP,
                 self.sym,
             )
         elif self.bdry_mode == "poincare":
             self._surface = ZernikeRZToroidalSection(
-                self._boundary[:, 3],
-                self._boundary[:, 4],
-                self._boundary[:, :2].astype(int),
-                self._boundary[:, :2].astype(int),
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, :2].astype(int),
+                boundary[:, :2].astype(int),
                 self.spectral_indexing,
                 self.sym,
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
+
+        axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
+        self._axis = FourierRZCurve(
+            axis[:, 1],
+            axis[:, 2],
+            axis[:, 0].astype(int),
+            NFP=self.NFP,
+            sym=self.sym,
+            name="axis",
+        )
 
         # check if state vector is provided
         try:
@@ -168,9 +181,6 @@ class _Configuration(IOAble, ABC):
             )
         # default initial guess
         except:
-            axis = inputs.get(
-                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 2:]
-            )
             # check if R is provided
             try:
                 self._R_lmn = inputs["R_lmn"]
@@ -191,6 +201,10 @@ class _Configuration(IOAble, ABC):
             except:
                 self._L_lmn = np.zeros((self.L_basis.num_modes,))
             self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+
+        # this makes sure the axis has the correct coefficients
+        self.axis.change_resolution(self.N)
+        self._axis = self.axis
 
     def _set_basis(self):
 
@@ -276,6 +290,8 @@ class _Configuration(IOAble, ABC):
 
         self._set_basis()
 
+        if N_change:
+            self.axis.change_resolution(self.N)
         # this is kind of a kludge for now
         if self.bdry_mode == "lcfs":
             self.surface.change_resolution(self.M, self.N)
@@ -414,6 +430,79 @@ class _Configuration(IOAble, ABC):
             self.surface.Z_mn = Zb_lmn
         elif self.bdry_mode == "poincare":
             self.surface.Z_lm = Zb_lmn
+
+    @property
+    def Ra_n(self):
+        """R coefficients for axis fourier series"""
+        return self.axis.R_n
+
+    @property
+    def Za_n(self):
+        """Z coefficients for axis fourier series"""
+        return self.axis.Z_n
+
+    @property
+    def axis(self):
+        """Curve object representing the magnetic axis"""
+        AR = jnp.zeros((self._axis.R_basis.num_modes, self.R_basis.num_modes))
+        AR = jnp.where(
+            (self.R_basis.modes[:, 0] // 2 % 2 == 0)
+            & (self.R_basis.modes[:, 1] == 0)
+            & (
+                self.R_basis.modes[np.newaxis, :, 2]
+                == self._axis.R_basis.modes[:, 2, np.newaxis]
+            ),
+            1,
+            AR,
+        )
+        AR = jnp.where(
+            (self.R_basis.modes[:, 0] // 2 % 2 != 0)
+            & (self.R_basis.modes[:, 1] == 0)
+            & (
+                self.R_basis.modes[np.newaxis, :, 2]
+                == self._axis.R_basis.modes[:, 2, np.newaxis]
+            ),
+            -1,
+            AR,
+        )
+
+        AZ = jnp.zeros((self._axis.Z_basis.num_modes, self.Z_basis.num_modes))
+        AZ = jnp.where(
+            (self.Z_basis.modes[:, 0] // 2 % 2 == 0)
+            & (self.Z_basis.modes[:, 1] == 0)
+            & (
+                self.Z_basis.modes[np.newaxis, :, 2]
+                == self._axis.Z_basis.modes[:, 2, np.newaxis]
+            ),
+            1,
+            AZ,
+        )
+        AZ = jnp.where(
+            (self.Z_basis.modes[:, 0] // 2 % 2 != 0)
+            & (self.Z_basis.modes[:, 1] == 0)
+            & (
+                self.Z_basis.modes[np.newaxis, :, 2]
+                == self._axis.Z_basis.modes[:, 2, np.newaxis]
+            ),
+            -1,
+            AZ,
+        )
+        R_n = jnp.dot(AR, self.R_lmn)
+        Z_n = jnp.dot(AZ, self.Z_lmn)
+        self._axis.R_n = R_n
+        self._axis.Z_n = Z_n
+
+        return self._axis
+
+    @axis.setter
+    def axis(self, new):
+        if isinstance(new, FourierRZCurve):
+            new.change_resolution(self.N)
+            self._axis = new
+        else:
+            raise TypeError(
+                f"axis should be of type FourierRZCurve or a subclass, got {new}"
+            )
 
     @property
     def pressure(self):
@@ -1342,7 +1431,7 @@ class _Configuration(IOAble, ABC):
         if jnp.any(R) <= 0:
             raise ValueError("R values must be positive")
 
-        R0, Z0 = self.compute_axis_location(zeta=phi)
+        R0, phi0, Z0 = self.axis.compute_coordinates(grid=phi).T
         theta = jnp.arctan2(Z - Z0, R - R0)
         rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
         grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
@@ -1386,31 +1475,6 @@ class _Configuration(IOAble, ABC):
             phi = put(phi, i, np.nan)
 
         return jnp.vstack([rho, theta, phi]).T
-
-    def compute_axis_location(self, zeta=0):
-        """Find the axis location on specified zeta plane(s).
-
-        Parameters
-        ----------
-        zeta : float or array-like of float
-            zeta planes to find axis on
-
-        Returns
-        -------
-        R0 : ndarray
-            R coordinate of axis on specified zeta planes
-        Z0 : ndarray
-            Z coordinate of axis on specified zeta planes
-
-        """
-        z = np.atleast_1d(zeta).flatten()
-        r = np.zeros_like(z)
-        t = np.zeros_like(z)
-        nodes = np.array([r, t, z]).T
-        R0 = np.dot(self.R_basis.evaluate(nodes), self.R_lmn)
-        Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
-
-        return R0, Z0
 
     def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
         """Check that an equilibrium has properly nested flux surfaces in a plane.

@@ -67,7 +67,7 @@ def test_aspect_ratio(DSHAPE):
 def test_magnetic_axis_guess(DummyStellarator):
     """Tests that the magnetic axis initial guess is used correctly."""
 
-    eq = Equilibrium.load(load_from=str(DummyStellarator["desc_h5_path"]))
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
     zeta = np.linspace(0, 2 * np.pi, num=33, endpoint=False)
 
     # axis guess for Dummy Stellarator:

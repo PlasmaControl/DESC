@@ -139,17 +139,6 @@ class Transform(IOAble):
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
-        if grid.NFP != basis.NFP:
-            warnings.warn(
-                colored(
-                    "fft method requires the grid and basis to have the same number of "
-                    + "field periods, falling back to direct2 method",
-                    "yellow",
-                )
-            )
-            self.method = "direct2"
-            return
-
         if not isalmostequal(zeta_cts):
             warnings.warn(
                 colored(
@@ -217,8 +206,9 @@ class Transform(IOAble):
                 colored(
                     "fft method can not undersample in zeta, "
                     + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
-                        len(n_vals), len(zeta_vals) + "falling back to direct2 method"
-                    ),
+                        len(n_vals), len(zeta_vals)
+                    )
+                    + "falling back to direct2 method",
                     "yellow",
                 )
             )

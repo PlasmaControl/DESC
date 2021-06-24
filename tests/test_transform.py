@@ -12,10 +12,10 @@ from desc.transform import Transform
 
 
 class TestTransform(unittest.TestCase):
-    """Tests Transform classes"""
+    """Tests Transform classes."""
 
     def test_eq(self):
-        """Tests equals operator overload method"""
+        """Tests equals operator overload method."""
         grid_1 = LinearGrid(L=11, N=3)
         grid_2 = LinearGrid(M=5, N=5)
         grid_3 = ConcentricGrid(L=4, M=2, N=2)
@@ -34,7 +34,7 @@ class TestTransform(unittest.TestCase):
         self.assertTrue(transf_32.eq(transf_32b))
 
     def test_transform_order_error(self):
-        """Tests error handling with transform method"""
+        """Tests error handling with transform method."""
         grid = LinearGrid(L=11, endpoint=True)
         basis = PowerSeries(L=2)
         transf = Transform(grid, basis, derivs=0)
@@ -50,7 +50,7 @@ class TestTransform(unittest.TestCase):
             transf.transform(c, 0, 0, 0)
 
     def test_profile(self):
-        """Tests transform of power series on a radial profile"""
+        """Tests transform of power series on a radial profile."""
         grid = LinearGrid(L=11, endpoint=True)
         basis = PowerSeries(L=2)
         transf = Transform(grid, basis, derivs=1)
@@ -68,7 +68,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_surface(self):
-        """Tests transform of double Fourier series on a flux surface"""
+        """Tests transform of double Fourier series on a flux surface."""
         grid = LinearGrid(M=5, N=5, sym=True)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
@@ -103,7 +103,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
     def test_volume(self):
-        """Tests transform of Fourier-Zernike basis in a toroidal volume"""
+        """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
@@ -130,7 +130,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_set_grid(self):
-        """Tests the grid setter method"""
+        """Tests the grid setter method."""
         basis = FourierZernikeBasis(L=-1, M=1, N=1)
 
         grid_1 = LinearGrid(L=1, M=1, N=1)
@@ -149,7 +149,7 @@ class TestTransform(unittest.TestCase):
         self.assertTrue(transf_3.eq(transf_1))
 
     def test_set_basis(self):
-        """Tests the basis setter method"""
+        """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
 
         basis_20 = FourierZernikeBasis(L=-1, M=2, N=0)
@@ -166,8 +166,46 @@ class TestTransform(unittest.TestCase):
         transf_21.basis = basis_20
         self.assertTrue(transf_21.eq(transf_20))
 
+    def test_fft(self):
+        """Tests Fast Fourier Transform method."""
+        grid = LinearGrid(N=33)
+        zeta = grid.nodes[:, 2]
+
+        sin_coeffs = np.array([0.5, -1, 2])
+        cos_coeffs = np.array([3, -1, 1.5, -0.5])
+        for_coeffs = np.hstack((sin_coeffs, cos_coeffs))
+
+        sin_basis = FourierSeries(N=3, sym="sin")
+        cos_basis = FourierSeries(N=3, sym="cos")
+        for_basis = FourierSeries(N=3)
+
+        sin_tform = Transform(grid, sin_basis, derivs=1, method="fft")
+        cos_tform = Transform(grid, cos_basis, derivs=1, method="fft")
+        for_tform = Transform(grid, for_basis, derivs=1, method="fft")
+
+        correct_s0 = 0.5 * np.sin(3 * zeta) - np.sin(2 * zeta) + 2 * np.sin(zeta)
+        correct_s1 = 1.5 * np.cos(3 * zeta) - 2 * np.cos(2 * zeta) + 2 * np.cos(zeta)
+        correct_c0 = 3 - np.cos(zeta) + 1.5 * np.cos(2 * zeta) - 0.5 * np.cos(3 * zeta)
+        correct_c1 = np.sin(zeta) - 3 * np.sin(2 * zeta) + 1.5 * np.sin(3 * zeta)
+        correct_f0 = correct_s0 + correct_c0
+        correct_f1 = correct_s1 + correct_c1
+
+        s0 = sin_tform.transform(sin_coeffs, 0, 0, 0)
+        s1 = sin_tform.transform(sin_coeffs, 0, 0, 1)
+        c0 = cos_tform.transform(cos_coeffs, 0, 0, 0)
+        c1 = cos_tform.transform(cos_coeffs, 0, 0, 1)
+        f0 = for_tform.transform(for_coeffs, 0, 0, 0)
+        f1 = for_tform.transform(for_coeffs, 0, 0, 1)
+
+        np.testing.assert_allclose(s0, correct_s0, atol=1e-8)
+        np.testing.assert_allclose(s1, correct_s1, atol=1e-8)
+        np.testing.assert_allclose(c0, correct_c0, atol=1e-8)
+        np.testing.assert_allclose(c1, correct_c1, atol=1e-8)
+        np.testing.assert_allclose(f0, correct_f0, atol=1e-8)
+        np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
+
     def test_direct_fft_equal(self):
-        """tests that the direct and fft method produce the same results"""
+        """Tests that the direct and fft method produce the same results."""
 
         L = 4
         M = 3
@@ -303,7 +341,7 @@ class TestTransform(unittest.TestCase):
             )
 
     def test_project(self):
-        """tests projection method"""
+        """Tests projection method."""
 
         basis = FourierZernikeBasis(L=-1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)

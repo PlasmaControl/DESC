@@ -43,6 +43,7 @@ class FourierRZCurve(Curve):
         "_Z_basis",
         "_R_transform",
         "_Z_transform",
+        "_sym",
     ]
 
     def __init__(
@@ -73,7 +74,7 @@ class FourierRZCurve(Curve):
                 sym = True
             else:
                 sym = False
-
+        self._sym = sym
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
@@ -87,6 +88,11 @@ class FourierRZCurve(Curve):
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
+
+    @property
+    def sym(self):
+        """Whether this curve has stellarator symmetry"""
+        return self._sym
 
     @property
     def R_basis(self):

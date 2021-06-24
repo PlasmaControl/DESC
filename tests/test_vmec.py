@@ -236,7 +236,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         vmec.variables["am"][:], desc.variables["am"][:], atol=1e-1
     )
     np.testing.assert_allclose(
-        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-5
+        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-4
     )
     np.testing.assert_allclose(vmec.variables["ac"][:], desc.variables["ac"][:])
     np.testing.assert_allclose(

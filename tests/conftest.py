@@ -87,7 +87,7 @@ def DSHAPE(tmpdir_factory):
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("DummyStellarator")
+    output_path = output_dir.join("DummyStellarator.h5")
 
     inputs = {
         "sym": True,

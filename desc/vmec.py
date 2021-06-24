@@ -1,17 +1,16 @@
 import os
-import math
 import numpy as np
 
 from netCDF4 import Dataset, stringtochar
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
-import scipy.optimize
-import scipy.interpolate
+from scipy import optimize, interpolate, integrate
 
 from desc.utils import Timer, sign
 from desc.grid import Grid, LinearGrid
-from desc.basis import PowerSeries, DoubleFourierSeries
+from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
+from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
 from desc.boundary_conditions import LCFSConstraint
 from desc.vmec_utils import (
@@ -162,20 +161,13 @@ class VMECIO:
         M = eq.M
         N = eq.N
         M_nyq = M + 4
-        N_nyq = N + 2
+        N_nyq = N + 2 if N > 0 else 0
 
+        # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
         s_full = np.linspace(0, 1, surfs)
         s_half = s_full[0:-1] + 0.5 / (surfs - 1)
         r_full = np.sqrt(s_full)
         r_half = np.sqrt(s_half)
-        full_grid = LinearGrid(rho=r_full)
-        half_grid = LinearGrid(rho=r_half)
-
-        p_transform_full = Transform(full_grid, eq.pressure.basis)
-        p_transform_half = Transform(half_grid, eq.pressure.basis)
-        i_transform_full = Transform(full_grid, eq.iota.basis)
-        i_transform_half = Transform(half_grid, eq.iota.basis)
-        i_transform_chi = Transform(full_grid, PowerSeries(eq.iota.basis.L + 2))
 
         # dimensions
         file.createDimension("radius", surfs)  # number of flux surfaces
@@ -215,7 +207,7 @@ class VMECIO:
 
         mgrid_file = file.createVariable("mgrid_file", "S1", ("dim_00200",))
         mgrid_file[:] = stringtochar(
-            np.array(["NONE" + " " * 196], "S" + str(file.dimensions["dim_00200"].size))
+            np.array(["none" + " " * 196], "S" + str(file.dimensions["dim_00200"].size))
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
@@ -289,29 +281,12 @@ class VMECIO:
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
         signgs[:] = sign(eq.compute_jacobian(Grid(np.array([[1, 0, 0]])))["g"])
-        # TODO: do some other quantities need to be multiplied by signgs?
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
         gamma[:] = 0
 
-        am = file.createVariable("am", np.float64, ("preset",))
-        am.long_name = "pressure coefficients"
-        am.units = "Pa"
-        am[:] = np.zeros((file.dimensions["preset"].size,))
-        dim = min(preset, eq.p_l.size)
-        am[0:dim] = eq.p_l[0:dim]
-
-        ai = file.createVariable("ai", np.float64, ("preset",))
-        ai.long_name = "rotational transform coefficients"
-        ai[:] = np.zeros((file.dimensions["preset"].size,))
-        dim = min(preset, eq.p_l.size)
-        ai[0:dim] = eq.i_l[0:dim]
-
-        ac = file.createVariable("ac", np.float64, ("preset",))
-        ac.long_name = "normalized toroidal current density coefficients"
-        ac[:] = np.zeros((file.dimensions["preset"].size,))
-
+        # TODO: add option for saving spline profiles
         power_series = stringtochar(
             np.array(
                 ["power_series" + " " * 8], "S" + str(file.dimensions["dim_00020"].size)
@@ -330,16 +305,34 @@ class VMECIO:
         pcurr_type.long_name = "parameterization of current density function"
         pcurr_type[:] = power_series
 
+        am = file.createVariable("am", np.float64, ("preset",))
+        am.long_name = "pressure coefficients"
+        am.units = "Pa"
+        am[:] = PowerSeriesProfile.from_values(
+            s_full, eq.pressure(r_full), order=file.dimensions["preset"].size - 1,
+        ).params
+
+        ai = file.createVariable("ai", np.float64, ("preset",))
+        ai.long_name = "rotational transform coefficients"
+        ai[:] = np.zeros((file.dimensions["preset"].size,))
+        ai[:] = PowerSeriesProfile.from_values(
+            s_full, eq.iota(r_full), order=file.dimensions["preset"].size - 1,
+        ).params
+
+        ac = file.createVariable("ac", np.float64, ("preset",))
+        ac.long_name = "normalized toroidal current density coefficients"
+        ac[:] = np.zeros((file.dimensions["preset"].size,))
+
         presf = file.createVariable("presf", np.float64, ("radius",))
         presf.long_name = "pressure on full mesh"
         presf.units = "Pa"
-        presf[:] = p_transform_full.transform(eq.p_l)
+        presf[:] = eq.pressure(r_full)
 
         pres = file.createVariable("pres", np.float64, ("radius",))
         pres.long_name = "pressure on half mesh"
         pres.units = "Pa"
         pres[0] = 0
-        pres[1:] = p_transform_half.transform(eq.p_l)
+        pres[1:] = eq.pressure(r_half)
 
         mass = file.createVariable("mass", np.float64, ("radius",))
         mass.long_name = "mass on half mesh"
@@ -348,12 +341,12 @@ class VMECIO:
 
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
-        iotaf[:] = i_transform_full.transform(eq.i_l)
+        iotaf[:] = eq.iota(r_full)
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
         iotas[0] = 0
-        iotas[1:] = i_transform_half.transform(eq.i_l)
+        iotas[1:] = eq.iota(r_half)
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -372,14 +365,7 @@ class VMECIO:
         chi = file.createVariable("chi", np.float64, ("radius",))
         chi.long_name = "poloidal flux"
         chi.units = "Wb"
-        chi[:] = (  # FIXME: this integration assumes iota Profile is a Power Series
-            2
-            * Psi
-            * i_transform_chi.transform(
-                np.append([0, 0], eq.i_l)
-                / [c if c != 0 else 1 for c in np.arange(0, eq.iota.basis.L + 3)]
-            )
-        )
+        chi[:] = 2 * Psi * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
 
         chipf = file.createVariable("chipf", np.float64, ("radius",))
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
@@ -430,7 +416,7 @@ class VMECIO:
         for k in idx:
             (l, m, n) = eq.Z_basis.modes[k, :]
             Z0_n[n + N] += (-2 * (l % 2) + 1) * eq.Z_lmn[k]
-        zaxis_cs = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
+        zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
         zaxis_cs[1:] = Z0_n[0:N]
         if not eq.sym:
@@ -491,8 +477,10 @@ class VMECIO:
             lmnc.units = "rad"
         m, n, x_mn = zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        lmns[0, :] = 0
         lmns[1:, :] = s
         if not eq.sym:
+            lmnc[0, :] = 0
             lmnc[1:, :] = c
         timer.stop("lambda")
         if verbose > 1:
@@ -500,7 +488,7 @@ class VMECIO:
 
         # derived quantities (approximate conversion)
 
-        grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=1)
+        grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=1)
         coords = eq.compute_toroidal_coords(grid)
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
@@ -543,15 +531,17 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_jacobian(grid)["g"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        gmnc[0, :] = 0
         gmnc[1:, :] = c
         if not eq.sym:
+            gmns[0, :] = 0
             gmns[1:, :] = s
         timer.stop("Jacobian")
         if verbose > 1:
@@ -574,15 +564,17 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["|B|"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        bmnc[0, :] = 0
         bmnc[1:, :] = c
         if not eq.sym:
+            bmns[0, :] = 0
             bmns[1:, :] = s
         timer.stop("|B|")
         if verbose > 1:
@@ -609,15 +601,17 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["B^theta"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        bsupumnc[0, :] = 0
         bsupumnc[1:, :] = c
         if not eq.sym:
+            bsupumns[0, :] = 0
             bsupumns[1:, :] = s
         timer.stop("B^theta")
         if verbose > 1:
@@ -644,28 +638,30 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["B^zeta"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        bsupvmnc[0, :] = 0
         bsupvmnc[1:, :] = c
         if not eq.sym:
+            bsupvmns[0, :] = 0
             bsupvmns[1:, :] = s
         timer.stop("B^zeta")
         if verbose > 1:
             timer.disp("B^zeta")
 
-        # B_rho
-        timer.start("B_rho")
+        # B_psi
+        timer.start("B_psi")
         if verbose > 0:
-            print("Saving B_rho")
+            print("Saving B_psi")
         bsubsmns = file.createVariable(
             "bsubsmns", np.float64, ("radius", "mn_mode_nyq")
         )
-        bsubsmns.long_name = "sin(m*t-n*p) component of B_rho, on half mesh"
+        bsubsmns.long_name = "sin(m*t-n*p) component of B_psi, on full mesh"
         bsubsmns.units = "T*m"
         m = sin_basis.modes[:, 1]
         n = sin_basis.modes[:, 2]
@@ -673,25 +669,33 @@ class VMECIO:
             bsubsmnc = file.createVariable(
                 "bsubsmnc", np.float64, ("radius", "mn_mode_nyq")
             )
-            bsubsmnc.long_name = "cos(m*t-n*p) component of B_rho, on half mesh"
+            bsubsmnc.long_name = "cos(m*t-n*p) component of B_psi, on full mesh"
             bsubsmnc.units = "T*m"
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
-        x_mn = np.zeros((surfs - 1, m.size))
-        for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
-            data = eq.compute_magnetic_field(grid)["B_rho"]
+        x_mn = np.zeros((surfs, m.size))
+        for k in range(surfs):
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full[k])
+            data = eq.compute_magnetic_field(grid)["B_rho"] / (2 * r_full[k])
+            # B_rho -> B_psi conversion: d(rho)/d(s) = 1/(2*rho)
             if eq.sym:
                 x_mn[k, :] = sin_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[1:, :] = s
+        bsubsmns[:, :] = s
+        bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
+            s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+        )
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[1:, :] = c
-        timer.stop("B_rho")
+            bsubsmnc[:, :] = c
+            bsubsmnc[0, :] = (
+                c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+            )
+        timer.stop("B_psi")
         if verbose > 1:
-            timer.disp("B_rho")
+            timer.disp("B_psi")
 
         # B_theta
         timer.start("B_theta")
@@ -714,15 +718,17 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["B_theta"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        bsubumnc[0, :] = 0
         bsubumnc[1:, :] = c
         if not eq.sym:
+            bsubumns[0, :] = 0
             bsubumns[1:, :] = s
         timer.stop("B_theta")
         if verbose > 1:
@@ -749,15 +755,17 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         for k in range(surfs - 1):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half[k])
             data = eq.compute_magnetic_field(grid)["B_zeta"]
             if eq.sym:
                 x_mn[k, :] = cos_transform.fit(data)
             else:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
+        bsubvmnc[0, :] = 0
         bsubvmnc[1:, :] = c
         if not eq.sym:
+            bsubvmns[0, :] = 0
             bsubvmns[1:, :] = s
         timer.stop("B_zeta")
         if verbose > 1:
@@ -786,7 +794,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         for k in range(surfs):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full[k])
             data = (
                 eq.compute_current_density(grid)["J^theta"]
                 * eq.compute_jacobian(grid)["g"]
@@ -797,8 +805,15 @@ class VMECIO:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currumnc[:, :] = c
+        currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
+            s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+        )
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
+            currumns[0, :] = (
+                s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+            )
         timer.stop("J^theta")
         if verbose > 1:
             timer.disp("J^theta")
@@ -826,7 +841,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         for k in range(surfs):
-            grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full[k])
+            grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full[k])
             data = (
                 eq.compute_current_density(grid)["J^zeta"]
                 * eq.compute_jacobian(grid)["g"]
@@ -837,8 +852,15 @@ class VMECIO:
                 x_mn[k, :] = full_transform.fit(data)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currvmnc[:, :] = c
+        currvmnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
+            s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+        )
+        # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = s
+            currumns[0, :] = (
+                s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+            )
         timer.stop("J^zeta")
         if verbose > 1:
             timer.disp("J^zeta")
@@ -924,8 +946,8 @@ class VMECIO:
             si = np.linspace(0, 1, Cmn.shape[0])
         if s is None:
             s = si
-        Cf = scipy.interpolate.CubicSpline(si, Cmn)
-        Sf = scipy.interpolate.CubicSpline(si, Smn)
+        Cf = interpolate.CubicSpline(si, Cmn)
+        Sf = interpolate.CubicSpline(si, Smn)
 
         C = np.sum(
             Cf(s)
@@ -980,7 +1002,7 @@ class VMECIO:
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
-        lmbda_mn = scipy.interpolate.CubicSpline(si, lmns)
+        lmbda_mn = interpolate.CubicSpline(si, lmns)
 
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates
@@ -998,7 +1020,7 @@ class VMECIO:
             err = theta_star - theta_star_k
             return err
 
-        out = scipy.optimize.root(
+        out = optimize.root(
             root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
         )
         return out.x

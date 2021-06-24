@@ -262,6 +262,7 @@ class LinearGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._scale_weights()
 
     def _create_nodes(
         self,
@@ -427,6 +428,7 @@ class QuadratureGrid(Grid):
         self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
+        # quad grid should already be exact, so we don't scale weights
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """
@@ -566,6 +568,7 @@ class ConcentricGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._scale_weights()
 
     def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """

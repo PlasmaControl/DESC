@@ -324,28 +324,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     np.testing.assert_allclose(R_vmec, R_desc, rtol=1e-3)
     np.testing.assert_allclose(Z_vmec, Z_desc, rtol=1e-3)
 
-    # Jacobian
-    g_vmec = VMECIO.vmec_interpolate(
-        vmec.variables["gmnc"][:],
-        np.zeros_like(vmec.variables["gmnc"][:]),
-        vmec.variables["xm_nyq"][:],
-        vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    g_desc = VMECIO.vmec_interpolate(
-        desc.variables["gmnc"][:],
-        np.zeros_like(desc.variables["gmnc"][:]),
-        desc.variables["xm_nyq"][:],
-        desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    # can't test Jacobian because VMEC & DESC coordinate systems are different
+    # TODO: not testing Jacobian because VMEC & DESC coordinate systems are different
 
     # |B|
     b_vmec = VMECIO.vmec_interpolate(
@@ -391,6 +370,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
+    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
     np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=5e-3)
 
     # B^zeta
@@ -416,7 +396,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     )
     np.testing.assert_allclose(bsupv_vmec, bsupv_desc * sgn, rtol=1e-3, atol=1e-3)
 
-    # not testing B_psi because VMEC radial derivatives may be inaccurate
+    # TODO: not testing B_psi because VMEC radial derivatives are inaccurate
 
     # B_theta
     bsubu_vmec = VMECIO.vmec_interpolate(
@@ -439,6 +419,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
+    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
     np.testing.assert_allclose(bsubu_vmec, bsubu_desc, rtol=5e-2, atol=6e-3)
 
     # B_zeta
@@ -464,7 +445,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     )
     np.testing.assert_allclose(bsubv_vmec, bsubv_desc * sgn, rtol=1e-3)
 
-    # not testing J^theta & J^zeta because VMEC radial derivatives may be inaccurate
+    # TODO: not testing J^theta & J^zeta because VMEC radial derivatives are inaccurate
 
     vmec.close
     desc.close

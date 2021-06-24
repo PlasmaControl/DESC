@@ -10,7 +10,7 @@ from desc.io import IOAble
 
 
 class Transform(IOAble):
-    """Transforms from spectral coefficients to real space values
+    """Transforms from spectral coefficients to real space values.
 
     Parameters
     ----------
@@ -33,8 +33,7 @@ class Transform(IOAble):
           equally spaced toroidal nodes, and the same node pattern on each zeta plane
         * ``'direct1'`` uses full matrices and can handle arbitrary node patterns and
           spectral bases.
-        * ``'direct2'`` uses a DFT instead of FFT that while in theory slower in practice
-           can be somewhat faster
+        * ``'direct2'`` uses a DFT instead of FFT that can be faster in practice
         * ``'auto'`` selects the method based on the grid and basis resolution
 
     """
@@ -80,7 +79,7 @@ class Transform(IOAble):
         }
 
     def _get_derivatives(self, derivs):
-        """Get array of derivatives needed for calculating objective function
+        """Get array of derivatives needed for calculating objective function.
 
         Parameters
         ----------
@@ -126,16 +125,16 @@ class Transform(IOAble):
         return derivatives
 
     def _sort_derivatives(self):
-        """Sorts derivatives"""
+        """Sort derivatives."""
         sort_idx = np.lexsort(
             (self.derivatives[:, 0], self.derivatives[:, 1], self.derivatives[:, 2])
         )
         self._derivatives = self.derivatives[sort_idx]
 
     def _check_inputs_fft(self, grid, basis):
-        """helper function to check that inputs are formatted correctly for fft method"""
+        """Check that inputs are formatted correctly for fft method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
-            # this is the trivial case where we just return all zeros, so it doesn't matter
+            # trivial case where we just return all zeros, so it doesn't matter
             self._method = "fft"
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
@@ -143,7 +142,8 @@ class Transform(IOAble):
         if not isalmostequal(zeta_cts):
             warnings.warn(
                 colored(
-                    "fft method requires the same number of nodes on each zeta plane, falling back to direct1 method",
+                    "fft method requires the same number of nodes on each zeta plane, "
+                    + "falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -155,7 +155,8 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "fft method requires that node pattern is the same on each zeta plane, falling back to direct1 method",
+                    "fft method requires that node pattern is the same on each zeta "
+                    + "plane, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -166,7 +167,8 @@ class Transform(IOAble):
         if not issorted(id2):
             warnings.warn(
                 colored(
-                    "fft method requires zernike indices to be sorted by toroidal mode number, falling back to direct1 method",
+                    "fft method requires zernike indices to be sorted by toroidal mode "
+                    + "number, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -179,7 +181,8 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "fft method requires that nodes complete 1 full field period, falling back to direct2 method",
+                    "fft method requires that nodes complete 1 full field period, "
+                    + "falling back to direct2 method",
                     "yellow",
                 )
             )
@@ -190,7 +193,8 @@ class Transform(IOAble):
         if len(n_vals) > 1 and not islinspaced(n_vals):
             warnings.warn(
                 colored(
-                    "fft method requires the toroidal modes are equally spaced in n, falling back to direct1 method",
+                    "fft method requires the toroidal modes are equally spaced in n, "
+                    + "falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -200,9 +204,11 @@ class Transform(IOAble):
         if len(zeta_vals) < len(n_vals):
             warnings.warn(
                 colored(
-                    "fft method can not undersample in zeta, num_toroidal_modes={}, num_toroidal_angles={}, falling back to direct2 method".format(
+                    "fft method can not undersample in zeta, "
+                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
                         len(n_vals), len(zeta_vals)
-                    ),
+                    )
+                    + "falling back to direct2 method",
                     "yellow",
                 )
             )
@@ -212,7 +218,8 @@ class Transform(IOAble):
         if len(zeta_vals) % 2 == 0:
             warnings.warn(
                 colored(
-                    "fft method requires an odd number of toroidal nodes, falling back to direct2 method",
+                    "fft method requires an odd number of toroidal nodes, "
+                    + "falling back to direct2 method",
                     "yellow",
                 )
             )
@@ -222,7 +229,8 @@ class Transform(IOAble):
         if not issorted(grid.nodes[:, 2]):
             warnings.warn(
                 colored(
-                    "fft method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct2 method",
+                    "fft method requires nodes to be sorted by toroidal angle in "
+                    + "ascending order, falling back to direct2 method",
                     "yellow",
                 )
             )
@@ -232,7 +240,8 @@ class Transform(IOAble):
         if len(zeta_vals) > 1 and not islinspaced(zeta_vals):
             warnings.warn(
                 colored(
-                    "fft method requires nodes to be equally spaced in zeta, falling back to direct2 method",
+                    "fft method requires nodes to be equally spaced in zeta, "
+                    + "falling back to direct2 method",
                     "yellow",
                 )
             )
@@ -248,10 +257,11 @@ class Transform(IOAble):
         self.pad_dim = (self.num_z_nodes - 1) // 2 - self.N
         self.dk = basis.NFP * np.arange(-self.N, self.N + 1).reshape((1, -1))
         self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+        offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         for k in range(basis.num_modes):
             row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
             col = np.where(basis.modes[k, 2] == n_vals)[0]
-            self.fft_index[k] = self.num_n_modes * row + col
+            self.fft_index[k] = self.num_n_modes * row + col + offset
         self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
@@ -260,9 +270,9 @@ class Transform(IOAble):
         )
 
     def _check_inputs_direct2(self, grid, basis):
-        """helper function to check that inputs are formatted correctly for direct2 method"""
+        """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
-            # this is the trivial case where we just return all zeros, so it doesn't matter
+            # trivial case where we just return all zeros, so it doesn't matter
             self._method = "direct2"
             return
 
@@ -271,7 +281,8 @@ class Transform(IOAble):
         if not issorted(grid.nodes[:, 2]):
             warnings.warn(
                 colored(
-                    "direct2 method requires nodes to be sorted by toroidal angle in ascending order, falling back to direct1 method",
+                    "direct2 method requires nodes to be sorted by toroidal angle in "
+                    + "ascending order, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -281,7 +292,8 @@ class Transform(IOAble):
         if not isalmostequal(zeta_cts):
             warnings.warn(
                 colored(
-                    "direct2 method requires the same number of nodes on each zeta plane, falling back to direct1 method",
+                    "direct2 method requires the same number of nodes on each zeta "
+                    + "plane, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -293,7 +305,8 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "direct2 method requires that node pattern is the same on each zeta plane, falling back to direct1 method",
+                    "direct2 method requires that node pattern is the same on each "
+                    + "zeta plane, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -304,7 +317,8 @@ class Transform(IOAble):
         if not issorted(id2):
             warnings.warn(
                 colored(
-                    "direct2 method requires zernike indices to be sorted by toroidal mode number, falling back to direct1 method",
+                    "direct2 method requires zernike indices to be sorted by toroidal "
+                    + "mode number, falling back to direct1 method",
                     "yellow",
                 )
             )
@@ -338,7 +352,7 @@ class Transform(IOAble):
         )
 
     def build(self):
-        """Builds the transform matrices for each derivative order"""
+        """Build the transform matrices for each derivative order."""
         if self.built:
             return
 
@@ -376,7 +390,7 @@ class Transform(IOAble):
         self._built = True
 
     def build_pinv(self):
-        """build pseudoinverse for fitting"""
+        """Build the pseudoinverse for fitting."""
         if self.built_pinv:
             return
         A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
@@ -390,7 +404,7 @@ class Transform(IOAble):
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
-        """Transform from spectral domain to physical
+        """Transform from spectral domain to physical.
 
         Parameters
         ----------
@@ -414,9 +428,8 @@ class Transform(IOAble):
         if self.basis.num_modes != c.size:
             raise ValueError(
                 colored(
-                    "Coefficients dimension ({}) is incompatible with the number of basis modes({})".format(
-                        c.size, self.basis.num_modes
-                    ),
+                    "Coefficients dimension ({}) is incompatible with ".format(c.size)
+                    + "the number of basis modes({})".format(self.basis.num_modes),
                     "red",
                 )
             )
@@ -480,7 +493,7 @@ class Transform(IOAble):
             return jnp.matmul(A, c_fft).flatten(order="F")
 
     def fit(self, x):
-        """Transform from physical domain to spectral using weighted least squares fit
+        """Transform from physical domain to spectral using weighted least squares fit.
 
         Parameters
         ----------
@@ -498,7 +511,7 @@ class Transform(IOAble):
         return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
 
     def project(self, y):
-        """Project vector y onto basis
+        """Project vector y onto basis.
 
         Equivalent to dotting the transpose of the transform matrix into y, but
         somewhat more efficient in some cases by using FFT instead of full transform
@@ -519,9 +532,8 @@ class Transform(IOAble):
         if self.grid.num_nodes != y.size:
             raise ValueError(
                 colored(
-                    "y dimension ({}) is incompatible with the number of grid nodes({})".format(
-                        y.size, self.grid.num_nodes
-                    ),
+                    "y dimension ({}) is incompatible with ".format(y.size)
+                    + "the number of grid nodes({})".format(self.grid.num_nodes),
                     "red",
                 )
             )
@@ -551,7 +563,7 @@ class Transform(IOAble):
     def change_resolution(
         self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
     ):
-        """Re-builds the matrices with a new grid and basis
+        """Re-build the matrices with a new grid and basis.
 
         Parameters
         ----------
@@ -586,7 +598,7 @@ class Transform(IOAble):
 
     @property
     def grid(self):
-        """Grid : collocation grid for the transform"""
+        """Grid : collocation grid for the transform."""
         if not hasattr(self, "_grid"):
             self._grid = None
         return self._grid
@@ -608,7 +620,7 @@ class Transform(IOAble):
 
     @property
     def basis(self):
-        """Basis : spectral basis for the transform"""
+        """Basis : spectral basis for the transform."""
         if not hasattr(self, "_basis"):
             self._basis = None
         return self._basis
@@ -630,7 +642,7 @@ class Transform(IOAble):
 
     @property
     def derivatives(self):
-        """Set of derivatives the transform can compute
+        """Set of derivatives the transform can compute.
 
         Returns
         -------
@@ -642,7 +654,7 @@ class Transform(IOAble):
         return self._derivatives
 
     def change_derivatives(self, derivs, build=True):
-        """Changes the order and updates the matrices accordingly
+        """Change the order and updates the matrices accordingly.
 
         Doesn't delete any old orders, only adds new ones if not already there
 
@@ -668,13 +680,13 @@ class Transform(IOAble):
             # if we actually added derivatives and didn't build them, then its not built
             self._built = False
         if build:
-            # we don't update self._built here because if it was built before it still is
-            # but if it wasn't it still might have unbuilt matrices
+            # we don't update self._built here because it is still built from before
+            # but it still might have unbuilt matrices from new derivatives
             self.build()
 
     @property
     def matrices(self):
-        """dict of ndarray : transform matrices such that x=A*c"""
+        """dict of ndarray : transform matrices such that x=A*c."""
         if not hasattr(self, "_matrices"):
             self._matrices = {
                 "direct1": {
@@ -688,48 +700,48 @@ class Transform(IOAble):
 
     @property
     def num_nodes(self):
-        """int : number of nodes in the collocation grid"""
+        """int : number of nodes in the collocation grid."""
         return self.grid.num_nodes
 
     @property
     def num_modes(self):
-        """int : number of modes in the spectral basis"""
+        """int : number of modes in the spectral basis."""
         return self.basis.num_modes
 
     @property
     def modes(self):
-        """ndarray: collocation nodes"""
+        """ndarray: collocation nodes."""
         return self.grid.nodes
 
     @property
     def nodes(self):
-        """ndarray: spectral mode numbers"""
+        """ndarray: spectral mode numbers."""
         return self.basis.nodes
 
     @property
     def built(self):
-        """bool : whether the transform matrices have been built"""
+        """bool : whether the transform matrices have been built."""
         if not hasattr(self, "_built"):
             self._built = False
         return self._built
 
     @property
     def built_pinv(self):
-        """bool : whether the pseudoinverse matrix has been computed for inverse fitting"""
+        """bool : whether the pseudoinverse matrix has been built."""
         if not hasattr(self, "_built_pinv"):
             self._built_pinv = False
         return self._built_pinv
 
     @property
     def rcond(self):
-        """float: reciprocal condition number for inverse transform"""
+        """float: reciprocal condition number for inverse transform."""
         if not hasattr(self, "_rcond"):
             self._rcond = "auto"
         return self._rcond
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform"""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
         if not hasattr(self, "_method"):
             self._method = "direct1"
         return self._method
@@ -755,7 +767,7 @@ class Transform(IOAble):
             self._built = False
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "

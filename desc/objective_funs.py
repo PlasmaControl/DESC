@@ -1206,6 +1206,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1224,12 +1225,25 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.i_profile,
         )
 
-        return quasisymmetry["QS_TP"]
+        # QS triple product (T^4/m^2)
+        QS = (
+            profiles["psi_r"]
+            * (
+                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+            )
+            / jacobian["g"]
+        )
+
+        # normalization factor = <|B|>^4 / R^2
+        R0 = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        return QS * R0 ** 2 / norm ** 4  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1249,11 +1263,57 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_profile,
+            self.i_profile,
+        )
+
+        # QS triple product (T^4/m^2)
+        QS = (
+            profiles["psi_r"]
+            * (
+                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+            )
+            / jacobian["g"]
+        )
+
+        # normalization factor = <|B|>^4 / R^2
+        R0 = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        f = QS * R0 ** 2 / norm ** 4  # normalized QS error
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1414,6 +1474,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1432,14 +1493,37 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.i_profile,
         )
 
-        # normalize to flux surface average
-        QS_FF = quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
-        return QS_FF
+        # M/N (type of QS)
+        helicity = 1.0 / 1.0
+
+        # covariant Boozer components
+        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # poloidal current
+        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # toroidal current
+
+        # flux function C=C(rho)
+        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
+
+        # QS flux function (T^3)
+        QS = (
+            profiles["psi_r"]
+            / jacobian["g"]
+            * (
+                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+            )
+            - C * quasisymmetry["B*grad(|B|)"]
+        )
+
+        # normalization factor = <|B|>^3
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        return QS / norm ** 3  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1459,11 +1543,67 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_profile,
+            self.i_profile,
+        )
+
+        # covariant Boozer components
+        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # poloidal current
+        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # toroidal current
+
+        helicity = 1.0 / 1.0  # M/N (type of QS)
+        # flux function C=C(rho)
+        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
+
+        # QS flux function (T^3)
+        QS = (
+            profiles["psi_r"]
+            / jacobian["g"]
+            * (
+                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+            )
+            - C * quasisymmetry["B*grad(|B|)"]
+        )
+
+        # normalization factor = <|B|>^3
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        f = QS / norm ** 3  # normalized QS error
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1581,33 +1721,3 @@ def get_objective_function(
         )
 
     return obj_fun
-
-
-"""
-QS derivatives (just here so we don't loose them)
-            derivatives = np.array(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                    [2, 0, 0],
-                    [1, 1, 0],
-                    [1, 0, 1],
-                    [0, 2, 0],
-                    [0, 1, 1],
-                    [0, 0, 2],
-                    [3, 0, 0],
-                    [2, 1, 0],
-                    [2, 0, 1],
-                    [1, 2, 0],
-                    [1, 1, 1],
-                    [1, 0, 2],
-                    [0, 3, 0],
-                    [0, 2, 1],
-                    [0, 1, 2],
-                    [0, 0, 3],
-                    [2, 2, 0],
-                ]
-            )
-"""

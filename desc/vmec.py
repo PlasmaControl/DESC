@@ -317,7 +317,7 @@ class VMECIO:
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
-        ai[:] = PowerSeriesProfile.from_values(
+        ai[:11] = PowerSeriesProfile.from_values(
             s_full, eq.iota(r_full), order=10).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))

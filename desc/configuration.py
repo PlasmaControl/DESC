@@ -1092,8 +1092,10 @@ class _Configuration(IOAble, ABC):
         return force_error
 
     def compute_energy(self, grid=None):
-        """Compute total MHD energy.
-
+        """Compute total MHD energy,
+        :math:`W=\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
+        
+        where DESC assumes :math:`\gamma=0`.
         Also computes the individual components (magnetic and pressure)
 
         Parameters

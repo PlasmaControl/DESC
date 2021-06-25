@@ -308,16 +308,17 @@ class VMECIO:
         am = file.createVariable("am", np.float64, ("preset",))
         am.long_name = "pressure coefficients"
         am.units = "Pa"
-        am[:] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=file.dimensions["preset"].size - 1,
-        ).params
+        am[:] = np.zeros((file.dimensions["preset"].size,))
+        # only using up to 10th order to avoid poor conditioning
+        am[:11] = PowerSeriesProfile.from_values(
+            s_full, eq.pressure(r_full), order=10).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
+        # only using up to 10th order to avoid poor conditioning
         ai[:] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=file.dimensions["preset"].size - 1,
-        ).params
+            s_full, eq.iota(r_full), order=10).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"

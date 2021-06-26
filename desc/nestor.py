@@ -49,6 +49,115 @@ def copy_vector_periods(vec, zetas):
         zz = np.broadcast_to(z.reshape((*shp,1)),(*shp, zetas.size))
         return np.array((xx,yy,zz))
     return np.array((xx,yy))
+
+
+
+    #eval surface geometry
+def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc, zmns, rmns=None, zmnc=None, sym=False):
+
+
+    # integer mode number arrays
+    ixm=np.array(np.round(xm), dtype=int)
+    ixn=np.array(np.round(np.divide(xn, nfp)), dtype=int)        
+    # Fourier mode sorting array
+    # for a given mn in 0, 1, ..., (mnmax-1), it tells you at which position in the FFT input array this coefficient goes
+    mIdx = np.zeros([mnmax], dtype=int)
+    nIdx = np.zeros([mnmax], dtype=int)
+    for mn in range(mnmax):
+        m = ixm[mn]
+        n = ixn[mn]
+
+        # m from VMEC is always positive
+        mIdx[mn] = m
+
+        # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n
+        if n<=0:
+            idx_n = -n
+        else:
+            idx_n = nzeta - n
+        nIdx[mn] = idx_n
+    
+
+    # input arrays for FFTs
+    Rmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R
+    mRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dRdTheta
+    nRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dRdZeta
+    mmRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdTheta2
+    mnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdThetaZeta
+    nnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdZeta2
+    Zmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z
+    mZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dZdTheta
+    nZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dZdZeta
+    mmZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdTheta2
+    mnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdThetaZeta
+    nnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdZeta2
+
+    # multiply with mode numbers to get tangential derivatives
+    Rmn  [mIdx, nIdx] =         rmnc
+    mRmn [mIdx, nIdx] =  -   xm*rmnc
+    nRmn [mIdx, nIdx] =      xn*rmnc
+    mmRmn[mIdx, nIdx] =  -xm*xm*rmnc
+    mnRmn[mIdx, nIdx] =   xm*xn*rmnc
+    nnRmn[mIdx, nIdx] =  -xn*xn*rmnc
+    Zmn  [mIdx, nIdx] =  -      zmns*1j
+    mZmn [mIdx, nIdx] =      xm*zmns*1j
+    nZmn [mIdx, nIdx] =  -   xn*zmns*1j
+    mmZmn[mIdx, nIdx] =   xm*xm*zmns*1j
+    mnZmn[mIdx, nIdx] =  -xm*xn*zmns*1j
+    nnZmn[mIdx, nIdx] =   xn*xn*zmns*1j
+    # TODO: if lasym, must also include corresponding terms above!
+
+    R_2d             = (np.fft.ifft2(  Rmn)*ntheta*nzeta).real
+    dRdTheta_2d      = (np.fft.ifft2( mRmn)*ntheta*nzeta).imag
+    dRdZeta_2d       = (np.fft.ifft2( nRmn)*ntheta*nzeta).imag
+    d2RdTheta2_2d    = (np.fft.ifft2(mmRmn)*ntheta*nzeta).real
+    d2RdThetaZeta_2d = (np.fft.ifft2(mnRmn)*ntheta*nzeta).real
+    d2RdZeta2_2d     = (np.fft.ifft2(nnRmn)*ntheta*nzeta).real
+    Z_2d             = (np.fft.ifft2(  Zmn)*ntheta*nzeta).real
+    dZdTheta_2d      = (np.fft.ifft2( mZmn)*ntheta*nzeta).imag
+    dZdZeta_2d       = (np.fft.ifft2( nZmn)*ntheta*nzeta).imag
+    d2ZdTheta2_2d    = (np.fft.ifft2(mmZmn)*ntheta*nzeta).real
+    d2ZdThetaZeta_2d = (np.fft.ifft2(mnZmn)*ntheta*nzeta).real
+    d2ZdZeta2_2d     = (np.fft.ifft2(nnZmn)*ntheta*nzeta).real
+
+    coords = {}
+    # vectorize arrays, since most operations to follow act on all grid points anyway
+    coords["R"] = R_2d.flatten()
+    coords["Z"] = Z_2d.flatten()
+    if sym:
+        coords["R_sym"]         = R_2d            [:ntheta_sym,:].flatten()
+        coords["Z_sym"]         = Z_2d            [:ntheta_sym,:].flatten()
+        coords["dRdTheta"]      = dRdTheta_2d     [:ntheta_sym,:].flatten()
+        coords["dRdZeta"]       = dRdZeta_2d      [:ntheta_sym,:].flatten()
+        coords["d2RdTheta2"]    = d2RdTheta2_2d   [:ntheta_sym,:].flatten()
+        coords["d2RdThetaZeta"] = d2RdThetaZeta_2d[:ntheta_sym,:].flatten()
+        coords["d2RdZeta2"]     = d2RdZeta2_2d    [:ntheta_sym,:].flatten()
+        coords["dZdTheta"]      = dZdTheta_2d     [:ntheta_sym,:].flatten()
+        coords["dZdZeta"]       = dZdZeta_2d      [:ntheta_sym,:].flatten()
+        coords["d2ZdTheta2"]    = d2ZdTheta2_2d   [:ntheta_sym,:].flatten()
+        coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d[:ntheta_sym,:].flatten()
+        coords["d2ZdZeta2"]     = d2ZdZeta2_2d    [:ntheta_sym,:].flatten()
+    else:
+        coords["R_sym"]         = coords["R"]
+        coords["Z_sym"]         = coords["Z"]
+        coords["dRdTheta"]      = dRdTheta_2d.flatten()
+        coords["dRdZeta"]       = dRdZeta_2d.flatten()
+        coords["d2RdTheta2"]    = d2RdTheta2_2d.flatten()
+        coords["d2RdThetaZeta"] = d2RdThetaZeta_2d.flatten()
+        coords["d2RdZeta2"]     = d2RdZeta2_2d.flatten()
+        coords["dZdTheta"]      = dZdTheta_2d.flatten()
+        coords["dZdZeta"]       = dZdZeta_2d.flatten()
+        coords["d2ZdTheta2"]    = d2ZdTheta2_2d.flatten()
+        coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d.flatten()
+        coords["d2ZdZeta2"]     = d2ZdZeta2_2d.flatten()
+
+    phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/nfp            
+    coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
+
+
+    coords["X"] = (R_2d * np.cos(phi)).flatten()
+    coords["Y"] = (R_2d * np.sin(phi)).flatten()     
+    return coords
     
 # Neumann Solver for Toroidal Systems
 class Nestor:
@@ -174,8 +283,6 @@ class Nestor:
 
         # toroidal angles for starting points of toroidal modules
         self.zeta_fp = 2.0*np.pi/self.nfp_eff * np.arange(self.nfp_eff)
-
-        self.phiaxis = np.linspace(0,2*np.pi,self.nzeta, endpoint=False)/self.nfp
         
         # tanu, tanv
         epstan = 2.22e-16
@@ -231,112 +338,6 @@ class Nestor:
         self.ntheta_stellsym = self.ntheta//2 + 1
         self.nzeta_stellsym = self.nzeta//2 + 1
 
-
-    #eval surface geometry
-    def evalSurfaceGeometry_vmec(self, xm, xn, mnmax, rmnc, zmns, rmns=None, zmnc=None):
-
-
-        # integer mode number arrays
-        ixm=np.array(np.round(xm), dtype=int)
-        ixn=np.array(np.round(np.divide(xn, self.nfp)), dtype=int)        
-        # Fourier mode sorting array
-        # for a given mn in 0, 1, ..., (mnmax-1), it tells you at which position in the FFT input array this coefficient goes
-        mIdx = np.zeros([mnmax], dtype=int)
-        nIdx = np.zeros([mnmax], dtype=int)
-        for mn in range(mnmax):
-            m = ixm[mn]
-            n = ixn[mn]
-
-            # m from VMEC is always positive
-            mIdx[mn] = m
-
-            # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n
-            if n<=0:
-                idx_n = -n
-            else:
-                idx_n = self.nzeta - n
-            nIdx[mn] = idx_n
-        
-
-        # input arrays for FFTs
-        Rmn   = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for R
-        mRmn  = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for dRdTheta
-        nRmn  = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for dRdZeta
-        mmRmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2RdTheta2
-        mnRmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2RdThetaZeta
-        nnRmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2RdZeta2
-        Zmn   = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for Z
-        mZmn  = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for dZdTheta
-        nZmn  = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for dZdZeta
-        mmZmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2ZdTheta2
-        mnZmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2ZdThetaZeta
-        nnZmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2ZdZeta2
-
-        # multiply with mode numbers to get tangential derivatives
-        Rmn  [mIdx, nIdx] =         rmnc
-        mRmn [mIdx, nIdx] =  -   xm*rmnc
-        nRmn [mIdx, nIdx] =      xn*rmnc
-        mmRmn[mIdx, nIdx] =  -xm*xm*rmnc
-        mnRmn[mIdx, nIdx] =   xm*xn*rmnc
-        nnRmn[mIdx, nIdx] =  -xn*xn*rmnc
-        Zmn  [mIdx, nIdx] =  -      zmns*1j
-        mZmn [mIdx, nIdx] =      xm*zmns*1j
-        nZmn [mIdx, nIdx] =  -   xn*zmns*1j
-        mmZmn[mIdx, nIdx] =   xm*xm*zmns*1j
-        mnZmn[mIdx, nIdx] =  -xm*xn*zmns*1j
-        nnZmn[mIdx, nIdx] =   xn*xn*zmns*1j
-        # TODO: if lasym, must also include corresponding terms above!
-
-        R_2d             = (np.fft.ifft2(  Rmn)*self.ntheta*self.nzeta).real
-        dRdTheta_2d      = (np.fft.ifft2( mRmn)*self.ntheta*self.nzeta).imag
-        dRdZeta_2d       = (np.fft.ifft2( nRmn)*self.ntheta*self.nzeta).imag
-        d2RdTheta2_2d    = (np.fft.ifft2(mmRmn)*self.ntheta*self.nzeta).real
-        d2RdThetaZeta_2d = (np.fft.ifft2(mnRmn)*self.ntheta*self.nzeta).real
-        d2RdZeta2_2d     = (np.fft.ifft2(nnRmn)*self.ntheta*self.nzeta).real
-        Z_2d             = (np.fft.ifft2(  Zmn)*self.ntheta*self.nzeta).real
-        dZdTheta_2d      = (np.fft.ifft2( mZmn)*self.ntheta*self.nzeta).imag
-        dZdZeta_2d       = (np.fft.ifft2( nZmn)*self.ntheta*self.nzeta).imag
-        d2ZdTheta2_2d    = (np.fft.ifft2(mmZmn)*self.ntheta*self.nzeta).real
-        d2ZdThetaZeta_2d = (np.fft.ifft2(mnZmn)*self.ntheta*self.nzeta).real
-        d2ZdZeta2_2d     = (np.fft.ifft2(nnZmn)*self.ntheta*self.nzeta).real
-
-        coords = {}
-        # vectorize arrays, since most operations to follow act on all grid points anyway
-        coords["R"] = R_2d.flatten()
-        coords["Z"] = Z_2d.flatten()
-        if self.lasym:
-            coords["R_sym"]         = coords["R"]
-            coords["Z_sym"]         = coords["Z"]
-            coords["dRdTheta"]      = dRdTheta_2d.flatten()
-            coords["dRdZeta"]       = dRdZeta_2d.flatten()
-            coords["d2RdTheta2"]    = d2RdTheta2_2d.flatten()
-            coords["d2RdThetaZeta"] = d2RdThetaZeta_2d.flatten()
-            coords["d2RdZeta2"]     = d2RdZeta2_2d.flatten()
-            coords["dZdTheta"]      = dZdTheta_2d.flatten()
-            coords["dZdZeta"]       = dZdZeta_2d.flatten()
-            coords["d2ZdTheta2"]    = d2ZdTheta2_2d.flatten()
-            coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d.flatten()
-            coords["d2ZdZeta2"]     = d2ZdZeta2_2d.flatten()
-        else:
-            coords["R_sym"]         = R_2d            [:self.ntheta_stellsym,:].flatten()
-            coords["Z_sym"]         = Z_2d            [:self.ntheta_stellsym,:].flatten()
-            coords["dRdTheta"]      = dRdTheta_2d     [:self.ntheta_stellsym,:].flatten()
-            coords["dRdZeta"]       = dRdZeta_2d      [:self.ntheta_stellsym,:].flatten()
-            coords["d2RdTheta2"]    = d2RdTheta2_2d   [:self.ntheta_stellsym,:].flatten()
-            coords["d2RdThetaZeta"] = d2RdThetaZeta_2d[:self.ntheta_stellsym,:].flatten()
-            coords["d2RdZeta2"]     = d2RdZeta2_2d    [:self.ntheta_stellsym,:].flatten()
-            coords["dZdTheta"]      = dZdTheta_2d     [:self.ntheta_stellsym,:].flatten()
-            coords["dZdZeta"]       = dZdZeta_2d      [:self.ntheta_stellsym,:].flatten()
-            coords["d2ZdTheta2"]    = d2ZdTheta2_2d   [:self.ntheta_stellsym,:].flatten()
-            coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d[:self.ntheta_stellsym,:].flatten()
-            coords["d2ZdZeta2"]     = d2ZdZeta2_2d    [:self.ntheta_stellsym,:].flatten()
-
-        coords["phi_sym"] = np.broadcast_to(2.0*np.pi/(self.nfp*self.nzeta) * np.arange(self.nzeta), (self.ntheta_stellsym, self.nzeta)).flatten()
-        phi = np.linspace(0,2*np.pi,self.nzeta, endpoint=False)/self.nfp
-
-        coords["X"] = (R_2d * np.cos(phi)).flatten()
-        coords["Y"] = (R_2d * np.sin(phi)).flatten()     
-        return coords
     
     def compute_jacobian(self, coords):
 
@@ -889,13 +890,18 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     xn              = nestor.vacin['xn'][()]
     rmnc            = nestor.vacin['rmnc'][()]
     zmns            = nestor.vacin['zmns'][()]
-
+    nzeta           = int(nestor.vacin['nzeta'][()])
+    ntheta          = int(nestor.vacin['ntheta'][()])
+    ntheta_sym      = ntheta//2 + 1
+    nfp             = int(nestor.vacin['nfp'][()])
     # the following calls need to be done on every iteration
-    coords = nestor.evalSurfaceGeometry_vmec(xm, xn, mnmax, rmnc, zmns)
+    coords = evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc, zmns, sym=True)
     jacobian = nestor.compute_jacobian(coords)
     B_extern = nestor.interpolateMGridFile(coords["R_sym"], coords["Z_sym"], coords["phi_sym"])
+
+    phiaxis = np.linspace(0,2*np.pi,nestor.nzeta, endpoint=False)/nestor.nfp
     B_plasma = nestor.modelNetToroidalCurrent(nestor.raxis_nestor,
-                                   nestor.phiaxis,
+                                   phiaxis,
                                    nestor.zaxis_nestor,
                                    nestor.ctor/mu0,
                                    coords["R_sym"],

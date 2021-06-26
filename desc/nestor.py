@@ -53,10 +53,6 @@ def copy_vector_periods(vec, zetas):
 # Neumann Solver for Toroidal Systems
 class Nestor:
 
-    # number of calls to vacuum() subroutine from VMEC
-    # == NESTOR iteration counter
-    vacuum_calls = None
-
     # error flag from/to VMEC
     ier_flag = None
 
@@ -127,9 +123,6 @@ class Nestor:
     # amat from previous iteration to be used when skipping full NESTOR calculation
     amatsav = None
 
-    # size of bvec (1d) and amat (2d)
-    mnpd2 = None
-
     # poloidal current (?) from previous iteration; has to be carried over for use in VMEC
     bsubvvac = None
 
@@ -141,39 +134,33 @@ class Nestor:
 
     # read input file for NESTOR
     def load(self, vacinFilename):
-        vacin = Dataset(vacinFilename, "r")
-        self.vacuum_calls    = int(vacin['vacuum_calls'][()])
-        self.ier_flag        = int(vacin['ier_flag'][()])
-        mgrid_file           = vacin['mgrid_file'][()]
-        input_extension      = vacin['input_extension'][()]
-        self.ivacskip        = int(vacin['ivacskip'][()])
-        self.ivac            = int(vacin['ivac'][()])
-        self.nfp             = int(vacin['nfp'][()])
-        self.ntor            = int(vacin['ntor'][()])
-        self.mpol            = int(vacin['mpol'][()])
-        self.nzeta           = int(vacin['nzeta'][()])
-        self.ntheta          = int(vacin['ntheta'][()])
-        self.mnmax           = int(vacin['mnmax'][()])
-        self.xm              = vacin['xm'][()]
-        self.xn              = vacin['xn'][()]
-        self.rmnc            = vacin['rmnc'][()]
-        self.zmns            = vacin['zmns'][()]
-        self.rbtor           = vacin['rbtor'][()]
-        self.ctor            = vacin['ctor'][()]
-        self.lasym           = (vacin['lasym__logical__'][()] != 0)
-        self.signgs          = vacin['signgs'][()]
-        self.extcur          = vacin['extcur'][()]
-        self.raxis_nestor    = vacin['raxis_nestor'][()]
-        self.zaxis_nestor    = vacin['zaxis_nestor'][()]
-        self.wint            = np.array(vacin['wint'][()])
-        self.bvecsav         = vacin['bvecsav'][()]
-        self.amatsav         = vacin['amatsav'][()]
-        self.mnpd2           = int(vacin['mnpd2'][()])
-        self.bsubvvac        = vacin['bsubvvac'][()]
-        vacin.close()
+        self.vacin = Dataset(vacinFilename, "r")
+
+        self.ier_flag        = int(self.vacin['ier_flag'][()])
+        mgrid_file           = self.vacin['mgrid_file'][()]
+
+        self.ivacskip        = int(self.vacin['ivacskip'][()])
+        self.ivac            = int(self.vacin['ivac'][()])
+        self.nfp             = int(self.vacin['nfp'][()])
+        self.ntor            = int(self.vacin['ntor'][()])
+        self.mpol            = int(self.vacin['mpol'][()])
+        self.nzeta           = int(self.vacin['nzeta'][()])
+        self.ntheta          = int(self.vacin['ntheta'][()])
+        self.rbtor           = self.vacin['rbtor'][()]
+        self.ctor            = self.vacin['ctor'][()]
+        self.lasym           = (self.vacin['lasym__logical__'][()] != 0)
+        self.signgs          = self.vacin['signgs'][()]
+        self.extcur          = self.vacin['extcur'][()]
+        self.raxis_nestor    = self.vacin['raxis_nestor'][()]
+        self.zaxis_nestor    = self.vacin['zaxis_nestor'][()]
+        self.wint            = np.array(self.vacin['wint'][()])
+        self.bvecsav         = self.vacin['bvecsav'][()]
+        self.amatsav         = self.vacin['amatsav'][()]
+        self.bsubvvac        = self.vacin['bsubvvac'][()]
+        # self.vacin.close()
 
         self.mgrid_file = bytearray(mgrid_file).decode('utf-8')
-        self.input_extension = bytearray(input_extension).decode('utf-8')
+
 
     # pre-computable quantities and arrays
     def precompute(self):
@@ -181,23 +168,14 @@ class Nestor:
         self.nf = self.ntor
 
         if self.nzeta == 1:
-            self.nvper = 64
+            self.nfp_eff = 64
         else:
-            self.nvper = self.nfp
+            self.nfp_eff = self.nfp
 
-        self.nvp = self.nzeta * self.nvper
+        # toroidal angles for starting points of toroidal modules
+        self.zeta_fp = 2.0*np.pi/self.nfp_eff * np.arange(self.nfp_eff)
 
-        # toroidal extent of one module
-        dPhi_per = 2.0*np.pi/self.nfp
-
-        # cos, sin for starting points of toroidal modules
-        self.arg_per = 2.0*np.pi/self.nvper * np.arange(self.nvper)
-
-        # cos, sin args for going from cylindrical to cartesian coordinates
-        self.cosv = np.cos(2.0*np.pi/(self.nfp*self.nzeta) * np.arange(self.nzeta))
-        self.sinv = np.sin(2.0*np.pi/(self.nfp*self.nzeta) * np.arange(self.nzeta))
-        self.phiaxis = 2.0*np.pi/(self.nfp*self.nzeta) * np.arange(self.nzeta)
-
+        self.phiaxis = np.linspace(0,2*np.pi,self.nzeta, endpoint=False)/self.nfp
         
         # tanu, tanv
         epstan = 2.22e-16
@@ -206,19 +184,20 @@ class Nestor:
 
         self.tanu = 2.0*np.tan( np.pi*np.arange(2*self.ntheta)/self.ntheta )
         # mask explicit singularities at tan(pi/2), tan(3/2 pi)
-        self.tanu[np.where( (np.arange(2*self.ntheta)/self.ntheta-0.5)%1 < epstan )] = bigno
+        self.tanu = np.where( (np.arange(2*self.ntheta)/self.ntheta-0.5)%1 < epstan, bigno, self.tanu)
 
         if self.nzeta == 1:
-            # Tokamak: need nvper toroidal grid points
-            argv = np.arange(self.nvper)/self.nvper
+            # Tokamak: need nfp_eff toroidal grid points
+            argv = np.arange(self.nfp_eff)/self.nfp_eff
         else:
             # Stellarator: need nzeta toroidal grdi points
             argv = np.arange(self.nzeta)/self.nzeta
+            
         self.tanv = 2.0*np.tan( np.pi*argv )
         # mask explicit singularities at tan(pi/2)
-        self.tanv[np.where( (argv-0.5)%1 < epstan )] = bigno
+        self.tanv = np.where( (argv-0.5)%1 < epstan , bigno, self.tanv)
 
-        self.cmn = np.zeros([self.mf+self.nf+1, self.mf+1, self.nf+1])
+        cmn = np.zeros([self.mf+self.nf+1, self.mf+1, self.nf+1])
         for m in range(self.mf+1):
             for n in range(self.nf+1):
                 jmn = m+n
@@ -232,50 +211,52 @@ class Nestor:
                     f1 *= (smn-(i-1))
                     f2 *= i
                 for l in range(kmn, jmn+1, 2):
-                    self.cmn[l,m,n] = f1/(f2*f3)*((-1)**((l-imn)/2))
+                    cmn[l,m,n] = f1/(f2*f3)*((-1)**((l-imn)/2))
                     f1 *= (jmn+l+2)*(jmn-l)/4
                     f2 *= (l+2+kmn)/2
                     f3 *= (l+2-kmn)/2
 
+        # toroidal extent of one module
+        dPhi_per = 2.0*np.pi/self.nfp                    
         # cmns from cmn
         self.cmns = np.zeros([self.mf+self.nf+1, self.mf+1, self.nf+1])
         for m in range(1, self.mf+1):
             for n in range(1, self.nf+1):
-                self.cmns[:,m,n] = 0.5*dPhi_per*(self.cmn[:,m,n] + self.cmn[:, m-1, n] + self.cmn[:, m, n-1] + self.cmn[:, m-1, n-1])
-        self.cmns[:,1:self.mf+1,0] = 0.5*dPhi_per*(self.cmn[:,1:self.mf+1,0]+self.cmn[:,0:self.mf,0])
-        self.cmns[:,0,1:self.nf+1] = 0.5*dPhi_per*(self.cmn[:,0,1:self.nf+1]+self.cmn[:,0,0:self.nf])
-        self.cmns[:,0,0] = 0.5*dPhi_per*(self.cmn[:,0,0]+self.cmn[:,0,0])
+                self.cmns[:,m,n] = 0.5*dPhi_per*(cmn[:,m,n] + cmn[:, m-1, n] + cmn[:, m, n-1] + cmn[:, m-1, n-1])
+        self.cmns[:,1:self.mf+1,0] = 0.5 * dPhi_per * (cmn[:,1:self.mf+1,0] + cmn[:,0:self.mf,0])
+        self.cmns[:,0,1:self.nf+1] = 0.5 * dPhi_per * (cmn[:,0,1:self.nf+1] + cmn[:,0,0:self.nf])
+        self.cmns[:,0,0] = 0.5 * dPhi_per * (cmn[:,0,0] + cmn[:,0,0])
+
+
+        self.ntheta_stellsym = self.ntheta//2 + 1
+        self.nzeta_stellsym = self.nzeta//2 + 1
+
+
+    #eval surface geometry
+    def evalSurfaceGeometry_vmec(self, xm, xn, mnmax, rmnc, zmns, rmns=None, zmnc=None):
+
 
         # integer mode number arrays
-        ixm=np.array(np.round(self.xm), dtype=int)
-        ixn=np.array(np.round(np.divide(self.xn, self.nfp)), dtype=int)
-
+        ixm=np.array(np.round(xm), dtype=int)
+        ixn=np.array(np.round(np.divide(xn, self.nfp)), dtype=int)        
         # Fourier mode sorting array
         # for a given mn in 0, 1, ..., (mnmax-1), it tells you at which position in the FFT input array this coefficient goes
-        self.mIdx = np.zeros([self.mnmax], dtype=int)
-        self.nIdx = np.zeros([self.mnmax], dtype=int)
-        for mn in range(self.mnmax):
+        mIdx = np.zeros([mnmax], dtype=int)
+        nIdx = np.zeros([mnmax], dtype=int)
+        for mn in range(mnmax):
             m = ixm[mn]
             n = ixn[mn]
 
             # m from VMEC is always positive
-            self.mIdx[mn] = m
+            mIdx[mn] = m
 
             # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n
             if n<=0:
                 idx_n = -n
             else:
                 idx_n = self.nzeta - n
-            self.nIdx[mn] = idx_n
-
-    #eval surface geometry
-    def evalSurfaceGeometry(self):
-
-        self.ntheta_even = 2*int(self.ntheta/2)
-        self.ntheta_stellsym = int(self.ntheta_even/2)+1
-
-        self.nzeta_even = 2*int(self.nzeta/2)
-        self.nzeta_stellsym = int(self.nzeta_even/2)+1
+            nIdx[mn] = idx_n
+        
 
         # input arrays for FFTs
         Rmn   = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for R
@@ -292,19 +273,18 @@ class Nestor:
         nnZmn = np.zeros([self.ntheta, self.nzeta], dtype=np.complex128) # for d2ZdZeta2
 
         # multiply with mode numbers to get tangential derivatives
-        # for mn in range(self.mnmax):
-        Rmn  [self.mIdx, self.nIdx] =                   self.rmnc
-        mRmn [self.mIdx, self.nIdx] =  -        self.xm*self.rmnc
-        nRmn [self.mIdx, self.nIdx] =           self.xn*self.rmnc
-        mmRmn[self.mIdx, self.nIdx] =  -self.xm*self.xm*self.rmnc
-        mnRmn[self.mIdx, self.nIdx] =   self.xm*self.xn*self.rmnc
-        nnRmn[self.mIdx, self.nIdx] =  -self.xn*self.xn*self.rmnc
-        Zmn  [self.mIdx, self.nIdx] =  -                self.zmns*1j
-        mZmn [self.mIdx, self.nIdx] =           self.xm*self.zmns*1j
-        nZmn [self.mIdx, self.nIdx] =  -        self.xn*self.zmns*1j
-        mmZmn[self.mIdx, self.nIdx] =   self.xm*self.xm*self.zmns*1j
-        mnZmn[self.mIdx, self.nIdx] =  -self.xm*self.xn*self.zmns*1j
-        nnZmn[self.mIdx, self.nIdx] =   self.xn*self.xn*self.zmns*1j
+        Rmn  [mIdx, nIdx] =         rmnc
+        mRmn [mIdx, nIdx] =  -   xm*rmnc
+        nRmn [mIdx, nIdx] =      xn*rmnc
+        mmRmn[mIdx, nIdx] =  -xm*xm*rmnc
+        mnRmn[mIdx, nIdx] =   xm*xn*rmnc
+        nnRmn[mIdx, nIdx] =  -xn*xn*rmnc
+        Zmn  [mIdx, nIdx] =  -      zmns*1j
+        mZmn [mIdx, nIdx] =      xm*zmns*1j
+        nZmn [mIdx, nIdx] =  -   xn*zmns*1j
+        mmZmn[mIdx, nIdx] =   xm*xm*zmns*1j
+        mnZmn[mIdx, nIdx] =  -xm*xn*zmns*1j
+        nnZmn[mIdx, nIdx] =   xn*xn*zmns*1j
         # TODO: if lasym, must also include corresponding terms above!
 
         R_2d             = (np.fft.ifft2(  Rmn)*self.ntheta*self.nzeta).real
@@ -351,10 +331,11 @@ class Nestor:
             coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d[:self.ntheta_stellsym,:].flatten()
             coords["d2ZdZeta2"]     = d2ZdZeta2_2d    [:self.ntheta_stellsym,:].flatten()
 
-        coords["phi_sym"] = np.broadcast_to(self.phiaxis, (self.ntheta_stellsym, self.nzeta)).flatten()
+        coords["phi_sym"] = np.broadcast_to(2.0*np.pi/(self.nfp*self.nzeta) * np.arange(self.nzeta), (self.ntheta_stellsym, self.nzeta)).flatten()
+        phi = np.linspace(0,2*np.pi,self.nzeta, endpoint=False)/self.nfp
 
-        coords["X"] = (R_2d * self.cosv).flatten()
-        coords["Y"] = (R_2d * self.sinv).flatten()     
+        coords["X"] = (R_2d * np.cos(phi)).flatten()
+        coords["Y"] = (R_2d * np.sin(phi)).flatten()     
         return coords
     
     def compute_jacobian(self, coords):
@@ -362,18 +343,28 @@ class Nestor:
         jacobian = {}        
         # compute metric coefficients and surface normal components
         jacobian["surfNormR"]   =  self.signgs * (coords["R_sym"] * coords["dZdTheta"])
-        jacobian["surfNormPhi"] =  self.signgs * (coords["dRdTheta"] * coords["dZdZeta"] - coords["dRdZeta"] * coords["dZdTheta"])
+        jacobian["surfNormPhi"] =  self.signgs * (coords["dRdTheta"] * coords["dZdZeta"]
+                                                  - coords["dRdZeta"] * coords["dZdTheta"])
         jacobian["surfNormZ"]   = -self.signgs * (coords["R_sym"] * coords["dRdTheta"])
 
         # a, b, c in NESTOR article: dot-products of first-order derivatives of surface
-        jacobian["g_uu"] = (coords["dRdTheta"] * coords["dRdTheta"] + coords["dZdTheta"] * coords["dZdTheta"])
-        jacobian["g_uv"] = (coords["dRdTheta"] * coords["dRdZeta"]  + coords["dZdTheta"] * coords["dZdZeta"])/self.nfp
-        jacobian["g_vv"] = (coords["dRdZeta"]  * coords["dRdZeta"]  + coords["dZdZeta"]  * coords["dZdZeta"] + coords["R_sym"] * coords["R_sym"])/self.nfp**2
+        jacobian["g_uu"] = (coords["dRdTheta"] * coords["dRdTheta"]
+                            + coords["dZdTheta"] * coords["dZdTheta"])
+        jacobian["g_uv"] = (coords["dRdTheta"] * coords["dRdZeta"]
+                            + coords["dZdTheta"] * coords["dZdZeta"])/self.nfp
+        jacobian["g_vv"] = (coords["dRdZeta"]  * coords["dRdZeta"]
+                            + coords["dZdZeta"]  * coords["dZdZeta"]
+                            + coords["R_sym"] * coords["R_sym"])/self.nfp**2
         
         # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface (?)
-        jacobian["a_uu"]   = 0.5 * (jacobian["surfNormR"] * coords["d2RdTheta2"] + jacobian["surfNormZ"] * coords["d2ZdTheta2"])
-        jacobian["a_uv"] = (jacobian["surfNormR"] * coords["d2RdThetaZeta"] + jacobian["surfNormPhi"] * coords["dRdTheta"] + jacobian["surfNormZ"] * coords["d2ZdThetaZeta"])/self.nfp
-        jacobian["a_vv"]   = (jacobian["surfNormPhi"] * coords["dRdZeta"] + 0.5*(jacobian["surfNormR"] * (coords["d2RdZeta2"] - coords["R_sym"]) + jacobian["surfNormZ"] * coords["d2ZdZeta2"]) )/self.nfp**2
+        jacobian["a_uu"]   = 0.5 * (jacobian["surfNormR"] * coords["d2RdTheta2"]
+                                    + jacobian["surfNormZ"] * coords["d2ZdTheta2"])
+        jacobian["a_uv"] = (jacobian["surfNormR"] * coords["d2RdThetaZeta"]
+                            + jacobian["surfNormPhi"] * coords["dRdTheta"]
+                            + jacobian["surfNormZ"] * coords["d2ZdThetaZeta"])/self.nfp
+        jacobian["a_vv"]   = (jacobian["surfNormPhi"] * coords["dRdZeta"] +
+                              0.5*(jacobian["surfNormR"] * (coords["d2RdZeta2"] - coords["R_sym"])
+                                   + jacobian["surfNormZ"] * coords["d2ZdZeta2"]) )/self.nfp**2
 
         return jacobian
     
@@ -401,7 +392,7 @@ class Nestor:
         xyz = np.array([raxis*np.cos(phiaxis),
                         raxis*np.sin(phiaxis),
                         zaxis])
-        xpts = np.moveaxis(copy_vector_periods(xyz, self.arg_per), -1,1).reshape((3,-1))
+        xpts = np.moveaxis(copy_vector_periods(xyz, self.zeta_fp), -1,1).reshape((3,-1))
         # first point == last point        
         xpts = np.hstack([xpts[:,-1:], xpts])
 
@@ -510,7 +501,6 @@ class Nestor:
 
         return T_p_l, T_m_l, S_p_l, S_m_l
         
-    # scalpot; analyt
     def analyticalIntegrals(self, jacobian, T_p_l, T_m_l, S_p_l, S_m_l, B_field):
 
         # analysum, analysum2 using FFTs
@@ -519,10 +509,12 @@ class Nestor:
         T_p = (T_p_l*bexni).reshape(-1, self.ntheta_stellsym, self.nzeta)
         T_m = (T_m_l*bexni).reshape(-1, self.ntheta_stellsym, self.nzeta)
 
-        ft_T_p = np.fft.ifft(T_p, axis=1, n=self.ntheta)*self.ntheta
+        T_p = np.pad(T_p, ((0,0), (0,self.ntheta-self.ntheta_stellsym), (0,0)))
+        ft_T_p = np.fft.ifft(T_p, axis=1)*self.ntheta
         ft_T_p = np.fft.fft(ft_T_p, axis=2)
 
-        ft_T_m = np.fft.ifft(T_m, axis=1, n=self.ntheta)*self.ntheta
+        T_m = np.pad(T_m, ((0,0), (0,self.ntheta-self.ntheta_stellsym), (0,0)))        
+        ft_T_m = np.fft.ifft(T_m, axis=1)*self.ntheta
         ft_T_m = np.fft.fft(ft_T_m, axis=2)
 
         ku, kv = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta))
@@ -536,10 +528,12 @@ class Nestor:
         S_m_4d[:,ku, kv, i] = S_m_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,ku,kv]
         
         # TODO: figure out a faster way to do this, its very sparse
-        ft_S_p = np.fft.ifft(S_p_4d, axis=1, n=self.ntheta)*self.ntheta
+        S_p_4d = np.pad(S_p_4d, ((0,0),(0,self.ntheta-self.ntheta_stellsym),(0,0),(0,0)))
+        ft_S_p = np.fft.ifft(S_p_4d, axis=1)*self.ntheta
         ft_S_p = np.fft.fft(ft_S_p, axis=2)
-        
-        ft_S_m = np.fft.ifft(S_m_4d, axis=1, n=self.ntheta)*self.ntheta
+
+        S_m_4d = np.pad(S_m_4d, ((0,0),(0,self.ntheta-self.ntheta_stellsym),(0,0),(0,0)))
+        ft_S_m = np.fft.ifft(S_m_4d, axis=1)*self.ntheta
         ft_S_m = np.fft.fft(ft_S_m, axis=2)
 
         m,n = np.meshgrid(np.arange(self.mf+1), np.concatenate([np.arange(self.nf+1), np.arange(-self.nf,0)]), indexing="ij")
@@ -582,7 +576,8 @@ class Nestor:
             # compute Fourier transform of grpmn to arrive at amatrix
             # (to be compared against ref_amatrix)
             grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
-            grpmn_4d = np.fft.ifft(grpmn_4d, axis=2, n=self.ntheta)*self.ntheta
+            grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
+            grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
             grpmn_4d   = np.fft.fft(grpmn_4d, axis=3)
 
             amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
@@ -606,15 +601,16 @@ class Nestor:
 
         amatrix = self.amatsav
 
-        self.potvac_2d = self.solveForScalarMagneticPotential(amatrix, bvec)
+        potvac_2d = self.solveForScalarMagneticPotential(amatrix, bvec)
+        return potvac_2d
 
     def regularizedFourierTransforms(self, K_mn_grid, B_field, jacobian, coords):
 
         brad, bphi, bz = B_field        
         bexni = -self.wint * (jacobian["surfNormR"] * brad + jacobian["surfNormPhi"] * bphi + jacobian["surfNormZ"] * bz) * 4.0*np.pi*np.pi
 
-        green  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nvper])
-        greenp = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nvper])
+        green  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
+        greenp = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
 
         #max_ip = self.ntheta_stellsym*self.nzeta
         ku_ip, kv_ip, ku_i, kv_i = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), np.arange(self.ntheta), np.arange(self.nzeta), indexing="ij")
@@ -632,7 +628,7 @@ class Nestor:
         drv  = -(coords["R_sym"]*jacobian["surfNormR"] + coords["Z_sym"]*jacobian["surfNormZ"])      
         dsave = drv[ip] + coords["Z"].reshape((-1, self.nzeta))*jacobian["surfNormZ"].reshape((self.ntheta_stellsym, self.nzeta))[ku_ip, kv_ip]
         # x,y in period j
-        xper, yper = copy_vector_periods(np.array([xip, yip]), self.arg_per)
+        xper, yper = copy_vector_periods(np.array([xip, yip]), self.zeta_fp)
 
         # cartesian components of surface normal ... ???
         sxsave = (jacobian["surfNormR"][ip][:,:,:,:,np.newaxis]*xper - jacobian["surfNormPhi"][ip][:,:,:,:,np.newaxis]*yper)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
@@ -650,14 +646,14 @@ class Nestor:
                  + dsave[:,:,:,:,np.newaxis])
         greenp_update = ftemp*htemp*gtemp
         green_update = htemp
-        mask = ~((self.arg_per == 0) | (self.nzeta == 1)).reshape((1,1,1,1,-1,))                
+        mask = ~((self.zeta_fp == 0) | (self.nzeta == 1)).reshape((1,1,1,1,-1,))                
         greenp = np.where(mask, greenp + greenp_update, greenp)
         green  = np.where(mask, green + green_update, green)
                
 
         if self.nzeta == 1:
-            # Tokamak: nvper toroidal "modules"
-            delta_kv = (kv_i - kv_ip)%self.nvper
+            # Tokamak: nfp_eff toroidal "modules"
+            delta_kv = (kv_i - kv_ip)%self.nfp_eff
         else:
             # Stellarator: nv toroidal grid points
             delta_kv = (kv_i - kv_ip)%self.nzeta
@@ -669,15 +665,15 @@ class Nestor:
 
         greenp_sing = - (ga2/ga1*1/np.sqrt(ga1))[:,:,:,:,np.newaxis]
         green_sing = - 1/np.sqrt(ga1)[:,:,:,:,np.newaxis]
-        mask = ((ku_ip != ku_i) | (kv_ip != kv_i) | (self.nzeta == 1 and kp > 0))[:,:,:,:,np.newaxis] & ((self.arg_per == 0) |  (self.nzeta == 1))
+        mask = ((ku_ip != ku_i) | (kv_ip != kv_i) | (self.nzeta == 1 and kp > 0))[:,:,:,:,np.newaxis] & ((self.zeta_fp == 0) |  (self.nzeta == 1))
         greenp = np.where(mask, greenp + greenp_update + greenp_sing, greenp)
         green = np.where(mask, green + green_update + green_sing, green)                               
 
         if self.nzeta == 1:
             # Tokamak: need to do toroidal average / integral:
             # normalize by number of toroidal "modules"
-            greenp /= self.nvper
-            green  /= self.nvper
+            greenp /= self.nfp_eff
+            green  /= self.nfp_eff
 
         greenp = np.sum(greenp, -1)
         green = np.sum(green, -1)
@@ -699,7 +695,8 @@ class Nestor:
         kernel_4d[:,:,0,:] *= 0.5
         kernel_4d[:,:,-1,:] *= 0.5
 
-        ft_kernel = np.fft.ifft(kernel_4d, axis=2, n=self.ntheta)*self.ntheta
+        kernel_4d = np.pad(kernel_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))                    
+        ft_kernel = np.fft.ifft(kernel_4d, axis=2)*self.ntheta
         ft_kernel = np.fft.fft(ft_kernel, axis=3)
 
         ft_kernel = np.concatenate([ft_kernel[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
@@ -723,7 +720,8 @@ class Nestor:
         gsource_sym[0,:] *= 0.5
         gsource_sym[-1,:] *= 0.5
 
-        ft_gsource = np.fft.ifft(gsource_sym, axis=0, n=self.ntheta)*self.ntheta
+        gsource_sym = np.pad(gsource_sym, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
+        ft_gsource = np.fft.ifft(gsource_sym, axis=0)*self.ntheta
         ft_gsource = np.fft.fft(ft_gsource, axis=1)
         ft_gsource = np.concatenate([ft_gsource[:self.mf+1,:self.nf+1].imag, ft_gsource[:self.mf+1,-self.nf:].imag], axis=1)
 
@@ -747,16 +745,17 @@ class Nestor:
 
         potvac = np.linalg.solve(amatrix, bvec_1d)
 
-        return potvac.reshape([self.mf+1, 2*self.nf+1])
+        return potvac
 
 
 
     # compute co- and contravariant magnetic field components
-    def analyzeScalarMagneticPotential(self, B_field, potvac_2d, jacobian, coords):
+    def analyzeScalarMagneticPotential(self, B_field, potvac, jacobian, coords):
 
         brad, bphi, bz = B_field
-        m_potvac = np.zeros([self.ntheta_stellsym, self.nzeta]) # m*potvac --> for poloidal derivative
-        n_potvac = np.zeros([self.ntheta_stellsym, self.nzeta]) # n*potvac --> for toroidal derivative
+        potvac_2d = potvac.reshape([self.mf+1, 2*self.nf+1])
+        m_potvac = np.zeros([self.ntheta, self.nzeta]) # m*potvac --> for poloidal derivative
+        n_potvac = np.zeros([self.ntheta, self.nzeta]) # n*potvac --> for toroidal derivative
 
         m,n = np.meshgrid(np.arange(self.mf+1), np.arange(self.nf+1), indexing="ij")
 
@@ -765,11 +764,11 @@ class Nestor:
         m_potvac[m, -n] =  m * potvac_2d[m, -n]
         n_potvac[m, -n] = -n * potvac_2d[m, -n]
 
-        potu = np.fft.ifft(m_potvac, axis=0, n=self.ntheta) * self.ntheta
+        potu = np.fft.ifft(m_potvac, axis=0) * self.ntheta
         potu = np.fft.fft(potu, axis=1).real[:self.ntheta_stellsym, :]
         potu = potu.flatten()
 
-        potv = np.fft.ifft(n_potvac, axis=0, n=self.ntheta)*self.ntheta
+        potv = np.fft.ifft(n_potvac, axis=0)*self.ntheta
         potv = -np.fft.fft(potv, axis=1).real[:self.ntheta_stellsym, :] * self.nfp
         potv = potv.flatten()
 
@@ -777,11 +776,12 @@ class Nestor:
         bexu = coords["dRdTheta"] * brad  + coords["dZdTheta"] * bz
         bexv = coords["dRdZeta"] * brad + coords["R_sym"] * bphi + coords["dZdZeta"] * bz
 
+        vac_field = {}
         # B_u = potu + bexu
-        self.bsubu = potu + bexu
+        vac_field["bsubu"] = potu + bexu
 
         # B_v = potv + bexv
-        self.bsubv = potv + bexv
+        vac_field["bsubv"] = potv + bexv
 
         # compute B^u, B^v and (with B_u, B_v) then also |B|^2/2
 
@@ -793,31 +793,32 @@ class Nestor:
         # contravariant components of magnetic field: B^u, B^v
 
         # B^u
-        bsupu = (hvv*self.bsubu - huv*self.bsubv)*det
+        vac_field["bsupu"] = (hvv*vac_field["bsubu"] - huv*vac_field["bsubv"])*det
 
         # B^v
-        bsupv = (-huv*self.bsubu+jacobian["g_uu"]*self.bsubv)*det
+        vac_field["bsupv"] = (-huv * vac_field["bsubu"] + jacobian["g_uu"] * vac_field["bsubv"])*det
 
         # |B|^2/2 = (B^u*B_u + B^v*B_v)/2
-        self.bsqvac = (self.bsubu*bsupu + self.bsubv*bsupv)/2.0
+        vac_field["bsqvac"] = (vac_field["bsubu"] * vac_field["bsupu"] + vac_field["bsubv"] * vac_field["bsupv"])/2.0
 
         # compute cylindrical components B^R, B^\phi, B^Z
-        self.brv   = coords["dRdTheta"] * bsupu + coords["dRdZeta"] * bsupv
-        self.bphiv = coords["R_sym"] * bsupv
-        self.bzv   = coords["dZdTheta"] * bsupu + coords["dZdZeta"] * bsupv
-
-    def firstIterationPrintout(self):
+        vac_field["brv"]   = coords["dRdTheta"] * vac_field["bsupu"] + coords["dRdZeta"] * vac_field["bsupv"]
+        vac_field["bphiv"] = coords["R_sym"] * vac_field["bsupv"]
+        vac_field["bzv"]   = coords["dZdTheta"] * vac_field["bsupu"] + coords["dZdZeta"] * vac_field["bsupv"]
+        return vac_field
+        
+    def firstIterationPrintout(self, vac_field):
         print("  In VACUUM, np = %2d mf = %2d nf = %2d nu = %2d nv = %2d"%(self.nfp, self.mf, self.nf, self.ntheta, self.nzeta))
 
         # -plasma current/pi2
-        self.bsubuvac = np.sum(self.bsubu*self.wint)*self.signgs*2.0*np.pi
-        self.bsubvvac = np.sum(self.bsubv*self.wint)
+        self.bsubuvac = np.sum(vac_field["bsubu"] * self.wint)*self.signgs*2.0*np.pi
+        self.bsubvvac = np.sum(vac_field["bsubv"] * self.wint)
 
         # currents in MA
         fac = 1.0e-6/mu0
 
-        print(("  2*pi * a * -BPOL(vac) = %10.2E TOROIDAL CURRENT = %10.2E\n"
-              +"  R * BTOR(vac) = %10.2E R * BTOR(plasma) = %10.2E")%(self.bsubuvac*fac, self.ctor*fac, self.bsubvvac, self.rbtor))
+        print(("  2*pi * a * -BPOL(vac) = %10.8e \n TOROIDAL CURRENT = %10.8e\n"
+              +"  R * BTOR(vac) = %10.8e \n R * BTOR(plasma) = %10.8e")%(self.bsubuvac*fac, self.ctor*fac, self.bsubvvac, self.rbtor))
 
         if self.rbtor*self.bsubvvac < 0:
             # rbtor and bsubvvac must have the same sign --> phiedge_error_flag
@@ -827,7 +828,7 @@ class Nestor:
             # 'VAC-VMEC I_TOR MISMATCH : BOUNDARY MAY ENCLOSE EXT. COIL'
             self.ier_flag = 10
 
-    def produceOutputFile(self, vacoutFilename):
+    def produceOutputFile(self, vacoutFilename, potvac, vac_field):
         # mode numbers for potvac
         self.xmpot = np.zeros([(self.mf+1)*(2*self.nf+1)])
         self.xnpot = np.zeros([(self.mf+1)*(2*self.nf+1)])
@@ -861,15 +862,15 @@ class Nestor:
 
         var_ivac.assignValue(self.ivac)
         var_ier_flag.assignValue(self.ier_flag)
-        var_bsqvac[:] = self.bsqvac
+        var_bsqvac[:] = vac_field["bsqvac"]
         var_mnpd.assignValue((self.mf+1)*(2*self.nf+1))
-        var_mnpd2.assignValue(self.mnpd2)
+        var_mnpd2.assignValue((self.mf+1)*(2*self.nf+1))
         var_xmpot[:] = self.xmpot
         var_xnpot[:] = self.xnpot
-        var_potvac[:] = np.fft.fftshift(self.potvac_2d, axes=1).T.flatten()
-        var_brv[:] = self.brv
-        var_bphiv[:] = self.bphiv
-        var_bzv[:] = self.bzv
+        var_potvac[:] = np.fft.fftshift(potvac.reshape([self.mf+1, 2*self.nf+1]), axes=1).T.flatten()
+        var_brv[:] = vac_field["brv"]
+        var_bphiv[:] = vac_field["bphiv"]
+        var_bzv[:] = vac_field["bzv"]
         var_bsubvvac.assignValue(self.bsubvvac)
         var_amatsav[:] = self.amatsav
         var_bvecsav[:] = self.bvecsav
@@ -883,9 +884,14 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     # in principle, this needs to be done only once
     nestor.precompute()
     nestor.loadMGridFile(mgrid)
+    mnmax           = int(nestor.vacin['mnmax'][()])
+    xm              = nestor.vacin['xm'][()]
+    xn              = nestor.vacin['xn'][()]
+    rmnc            = nestor.vacin['rmnc'][()]
+    zmns            = nestor.vacin['zmns'][()]
 
     # the following calls need to be done on every iteration
-    coords = nestor.evalSurfaceGeometry()
+    coords = nestor.evalSurfaceGeometry_vmec(xm, xn, mnmax, rmnc, zmns)
     jacobian = nestor.compute_jacobian(coords)
     B_extern = nestor.interpolateMGridFile(coords["R_sym"], coords["Z_sym"], coords["phi_sym"])
     B_plasma = nestor.modelNetToroidalCurrent(nestor.raxis_nestor,
@@ -898,19 +904,19 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     B_field = B_extern + B_plasma
     T_p_l, T_m_l, S_p_l, S_m_l = nestor.compute_T_S(jacobian)
     I_mn, K_mn = nestor.analyticalIntegrals(jacobian, T_p_l, T_m_l, S_p_l, S_m_l, B_field)
-    nestor.computeScalarMagneticPotential(I_mn, K_mn, B_field, jacobian, coords)
-    nestor.analyzeScalarMagneticPotential(B_field,
-                                          nestor.potvac_2d,
+    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, B_field, jacobian, coords)
+    vac_field = nestor.analyzeScalarMagneticPotential(B_field,
+                                          potvac,
                                           jacobian,
                                           coords)
 
     if nestor.ivac == 0:
         nestor.ivac += 1
-        nestor.firstIterationPrintout()
+        nestor.firstIterationPrintout(vac_field)
 
     if vacout_filename is None:
         vacout_filename = vacin_filename.replace("vacin_", "vacout_")
-    nestor.produceOutputFile(vacout_filename)
+    nestor.produceOutputFile(vacout_filename, potvac, vac_field)
     
 if __name__ == '__main__':
     if len(sys.argv) > 1:

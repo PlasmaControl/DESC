@@ -13,13 +13,16 @@ import unittest
 from desc.nestor import main
 
 
+
 here = os.path.abspath(os.path.dirname(__file__))
+
+runId = "test.vmec"
+maxIter = 11
+
+
 
 ref_in_folder = here + "/inputs/nestor/ref_in/"
 ref_out_folder = here +"/inputs/nestor/ref_out/"
-
-runId = "test.vmec"
-maxIter = 10
 
 
 

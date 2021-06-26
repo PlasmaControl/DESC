@@ -59,4 +59,4 @@ def test_same_outputs(tmpdir_factory):
             r = ref_data[key]
             t = tst_data[key]
 
-            np.testing.assert_allclose(r,t, rtol=1e-10, atol=1e-10, err_msg="iter={}, key={}".format(iteration, key))
+            np.testing.assert_allclose(r,t, rtol=1e-10, atol=1e-4, err_msg="iter={}, key={}".format(iteration, key))

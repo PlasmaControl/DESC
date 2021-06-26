@@ -12,9 +12,7 @@ import os
 import sys
 
 import numpy as np
-from scipy.interpolate import RectBivariateSpline
-import matplotlib.pyplot as plt
-
+from desc.magnetic_fields import SplineMagneticField
 from netCDF4 import Dataset
 
 mu0 = 4.0e-7*np.pi
@@ -24,157 +22,6 @@ def def_ncdim(ncfile, size):
     ncfile.createDimension(dimname, size)
     return dimname
 
-# fast evaluation of external (coils-produced) magnetic field by bi-linear interpolation
-class MGridFile:
-
-    # filename of the mgrid file
-    mgridFilename = None
-
-    # number of radial grid knots
-    ir = None
-
-    # number of vertical grid knots
-    jz = None
-
-    # number of toroidal grid knots
-    kp = None
-
-    # number of field periods
-    nfp = None
-
-    # number of external currents/coil sets
-    nextcur = None
-
-    # coil currents defined in mgrid file (?)
-    cur = None
-
-    # normalization mode for magnetic field: "raw" or "scaled"
-    mode = None
-
-    # minimum grid position in radial direction
-    rMin = None
-
-    # maximum grid position in radial direction
-    rMax = None
-
-    # minimum grid position in vertical direction
-    zMin = None
-
-    # maximum grid position in vertical direction
-    zMax = None
-
-    # cylindrical magnetic field component B^R on grid
-    br = None
-
-    # cylindrical magnetic field component B^\phi on grid
-    bp = None
-
-    # cylindrical magnetic field component B^Z on grid
-    bz = None
-
-    # coil currents used to scale contributions from different coils
-    extcur = None
-
-    # grid knots in radial direction
-    rGrid = None
-
-    # grid knots in vertical direction
-    zGrid = None
-
-    # interpolator objects (one for each poloidal cut) for cylindrical magnetic field component B^R on grid
-    brInterp = None
-
-    # interpolator objects (one for each poloidal cut) for cylindrical magnetic field component B^\phi on grid
-    bpInterp = None
-
-    # interpolator objects (one for each poloidal cut) for cylindrical magnetic field component B^Z on grid
-    bzInterp = None
-
-    # Create a new MGridFile object and load the data from disk.
-    # Also scale the magnetic field contributions due to different coils
-    # according to the currents given in extcur.
-    def __init__(self, mgridFilename, extcur):
-        self.mgridFilename = mgridFilename
-        self.extcur = extcur
-        self.load()
-
-    # Load the mgrid data from disk.
-    # Also scale the magnetic field contributions due to different coils
-    # according to the currents given in extcur.
-    def load(self):
-        mgrid = Dataset(self.mgridFilename, "r")
-        self.ir = int(mgrid['ir'][()])
-        self.jz = int(mgrid['jz'][()])
-        self.kp = int(mgrid['kp'][()])
-        self.nfp = mgrid['nfp'][()].data
-        self.nextcur = int(mgrid['nextcur'][()])
-        self.cur = mgrid['raw_coil_cur'][()]
-        self.rMin = mgrid['rmin'][()]
-        self.rMax = mgrid['rmax'][()]
-        self.zMin = mgrid['zmin'][()]
-        self.zMax = mgrid['zmax'][()]
-
-        mgrid_mode = mgrid['mgrid_mode'][()]
-        self.mode = bytearray(mgrid_mode).decode('utf-8')
-
-        self.br = np.zeros([self.kp, self.jz, self.ir])
-        self.bp = np.zeros([self.kp, self.jz, self.ir])
-        self.bz = np.zeros([self.kp, self.jz, self.ir])
-        for i in range(self.nextcur):
-
-            # apply scaling by currents given in VMEC input file
-            scale = self.extcur[i]
-            if mgrid_mode == 'S':
-                scale *= 1.0/self.mgrid_cur[i]
-            # elif mgrid_mode == 'R':
-            else: # 'R' or nothing seems to be equal
-                pass
-            # else:
-            #     raise RuntimeError("mgrid mode '"+mgrid_mode+"' not recognized; expecting 'R' or 'S'")
-
-            # sum up contributions from different coils
-            coil_id = "%03d"%(i+1,)
-            self.br[:,:,:] += np.multiply(mgrid['br_'+coil_id][()], scale)
-            self.bp[:,:,:] += np.multiply(mgrid['bp_'+coil_id][()], scale)
-            self.bz[:,:,:] += np.multiply(mgrid['bz_'+coil_id][()], scale)
-        mgrid.close()
-
-        # re-compute grid knots in radial and vertical direction
-        self.rGrid = np.linspace(self.rMin, self.rMax, self.ir)
-        self.zGrid = np.linspace(self.zMin, self.zMax, self.jz)
-        self.pGrid = 2.0*np.pi/(self.nfp*self.kp) * np.arange(self.kp)
-        # setup interpolations for mgrid file
-        self.brInterp = []
-        self.bpInterp = []
-        self.bzInterp = []
-        for k in range(self.kp):
-            # I think kx=1, ky=1 makes this a bi-linear interpolation just as is used in NESTOR/VMEC
-            self.brInterp.append(RectBivariateSpline(self.rGrid, self.zGrid, self.br[k,:,:].T, kx=1, ky=1))
-            self.bpInterp.append(RectBivariateSpline(self.rGrid, self.zGrid, self.bp[k,:,:].T, kx=1, ky=1))
-            self.bzInterp.append(RectBivariateSpline(self.rGrid, self.zGrid, self.bz[k,:,:].T, kx=1, ky=1))
-
-    # debugging plot: show log10(|radial magnetic field component|)
-    def plotBr(self):
-        for k in range(self.kp):
-            plt.figure()
-            plt.pcolormesh(np.log10(np.abs(self.br[k,:,:])))
-            cb = plt.colorbar()
-            cb.set_label("B^R / T")
-            plt.title("toroidal index %d / %d"%(k+1, self.kp))
-
-    # evaluate MGRID on grid over flux surface
-    def interpB(self, R, Z, phi):
-        
-        brad = np.zeros_like(R)
-        bphi = np.zeros_like(phi)
-        bz   = np.zeros_like(Z)
-        for k, pp in enumerate(self.pGrid):
-            
-            brad = np.where(phi == pp, self.brInterp[k].ev(R, Z), brad)
-            bphi = np.where(phi == pp, self.bpInterp[k].ev(R, Z), bphi)
-            bz = np.where(phi == pp, self.bzInterp[k].ev(R, Z), bz)
-
-        return brad, bphi, bz
 
 def copy_vector_periods(vec, zetas):
     """Copies a vector into each field period by rotation
@@ -536,15 +383,14 @@ class Nestor:
         if mgrid_file is None:
             mgrid_file = self.mgrid_file
         mgridFilename = os.path.join(folder, mgrid_file)
-        self.mgrid = MGridFile(mgridFilename, self.extcur)
+        self.ext_field = SplineMagneticField.from_mgrid(mgridFilename, self.extcur)
 
     # evaluate MGRID on grid over flux surface
     def interpolateMGridFile(self, R, Z, phi):
-        brad, bphi, bz = self.mgrid.interpB(R, Z, phi)
+        grid = np.array([R,phi,Z]).T
+        B = self.ext_field.compute_magnetic_field(grid)
 
-        return np.array([brad,
-                         bphi,
-                         bz])
+        return B.T
 
     # model net toroidal plasma current as filament along the magnetic axis
     # and add its magnetic field on the LCFS to the MGRID magnetic field

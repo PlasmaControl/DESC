@@ -56,6 +56,7 @@ class SplineMagneticField(MagneticField):
         self._extrap = extrap
         self._period = period
 
+        # TODO: precompute derivative matrices
 
     def compute_magnetic_field(self, grid, params=None, dR=0, dp=0, dZ=0):
 
@@ -107,6 +108,11 @@ class SplineMagneticField(MagneticField):
             bz[:,:,:] += scale * mgrid['bz_'+coil_id][()]
         mgrid.close()
 
+        # shift axes to correct order
+        br = np.moveaxis(br, (0,1,2), (1,2,0))
+        bp = np.moveaxis(bp, (0,1,2), (1,2,0))
+        bz = np.moveaxis(bz, (0,1,2), (1,2,0))
+        
         # re-compute grid knots in radial and vertical direction
         Rgrid = np.linspace(rMin, rMax, ir)
         Zgrid = np.linspace(zMin, zMax, jz)

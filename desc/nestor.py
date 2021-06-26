@@ -531,10 +531,12 @@ class Nestor:
         return jacobian
     
     # read mgrid file; only need to do this once!
-    def loadMGridFile(self):
+    def loadMGridFile(self, mgrid_file=None):
         folder = os.getcwd()
-        self.mgridFilename = os.path.join(folder, self.mgrid_file)
-        self.mgrid = MGridFile(self.mgridFilename, self.extcur)
+        if mgrid_file is None:
+            mgrid_file = self.mgrid_file
+        mgridFilename = os.path.join(folder, mgrid_file)
+        self.mgrid = MGridFile(mgridFilename, self.extcur)
 
     # evaluate MGRID on grid over flux surface
     def interpolateMGridFile(self, R, Z, phi):
@@ -1029,12 +1031,12 @@ class Nestor:
         vacout.close()
 
 
-def main(vacin_filename, vacout_filename=None):
+def main(vacin_filename, vacout_filename=None, mgrid=None):
     nestor = Nestor(vacin_filename)
 
     # in principle, this needs to be done only once
     nestor.precompute()
-    nestor.loadMGridFile()
+    nestor.loadMGridFile(mgrid)
 
     # the following calls need to be done on every iteration
     coords = nestor.evalSurfaceGeometry()

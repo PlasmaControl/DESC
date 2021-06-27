@@ -12,6 +12,8 @@ import os
 import sys
 
 import numpy as np
+from desc.backend import put
+from desc.utils import Index
 from desc.magnetic_fields import SplineMagneticField
 from netCDF4 import Dataset
 
@@ -60,22 +62,9 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
     ixm=np.array(np.round(xm), dtype=int)
     ixn=np.array(np.round(np.divide(xn, nfp)), dtype=int)        
     # Fourier mode sorting array
-    # for a given mn in 0, 1, ..., (mnmax-1), it tells you at which position in the FFT input array this coefficient goes
-    mIdx = np.zeros([mnmax], dtype=int)
-    nIdx = np.zeros([mnmax], dtype=int)
-    for mn in range(mnmax):
-        m = ixm[mn]
-        n = ixn[mn]
-
-        # m from VMEC is always positive
-        mIdx[mn] = m
-
-        # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n
-        if n<=0:
-            idx_n = -n
-        else:
-            idx_n = nzeta - n
-        nIdx[mn] = idx_n
+    mIdx = ixm
+    # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n    
+    nIdx = np.where(ixn<=0, -ixn, nzeta-ixn)
     
 
     # input arrays for FFTs
@@ -93,18 +82,18 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
     nnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_zz
 
     # multiply with mode numbers to get tangential derivatives
-    Rmn  [mIdx, nIdx] =         rmnc
-    mRmn [mIdx, nIdx] =  -   xm*rmnc
-    nRmn [mIdx, nIdx] =      xn*rmnc
-    mmRmn[mIdx, nIdx] =  -xm*xm*rmnc
-    mnRmn[mIdx, nIdx] =   xm*xn*rmnc
-    nnRmn[mIdx, nIdx] =  -xn*xn*rmnc
-    Zmn  [mIdx, nIdx] =  -      zmns*1j
-    mZmn [mIdx, nIdx] =      xm*zmns*1j
-    nZmn [mIdx, nIdx] =  -   xn*zmns*1j
-    mmZmn[mIdx, nIdx] =   xm*xm*zmns*1j
-    mnZmn[mIdx, nIdx] =  -xm*xn*zmns*1j
-    nnZmn[mIdx, nIdx] =   xn*xn*zmns*1j
+    Rmn  = put(  Rmn,Index[mIdx, nIdx], rmnc)
+    mRmn = put( mRmn,Index[mIdx, nIdx], -   xm*rmnc)
+    nRmn = put( nRmn,Index[mIdx, nIdx],     xn*rmnc)
+    mmRmn= put(mmRmn,Index[mIdx, nIdx],  -xm*xm*rmnc)
+    mnRmn= put(mnRmn,Index[mIdx, nIdx],   xm*xn*rmnc)
+    nnRmn= put(nnRmn,Index[mIdx, nIdx],  -xn*xn*rmnc)
+    Zmn  = put(  Zmn,Index[mIdx, nIdx],  -      zmns*1j)
+    mZmn = put( mZmn,Index[mIdx, nIdx],      xm*zmns*1j)
+    nZmn = put( nZmn,Index[mIdx, nIdx],  -   xn*zmns*1j)
+    mmZmn= put(mmZmn,Index[mIdx, nIdx],   xm*xm*zmns*1j)
+    mnZmn= put(mnZmn,Index[mIdx, nIdx],  -xm*xn*zmns*1j)
+    nnZmn= put(nnZmn,Index[mIdx, nIdx],   xn*xn*zmns*1j)
     # TODO: if lasym, must also include corresponding terms above!
 
     R_2d             = (np.fft.ifft2(  Rmn)*ntheta*nzeta).real
@@ -527,8 +516,8 @@ class Nestor:
         S_p_4d = np.zeros([num_four, self.ntheta_stellsym, self.nzeta, self.ntheta_stellsym*self.nzeta])
         S_m_4d = np.zeros([num_four, self.ntheta_stellsym, self.nzeta, self.ntheta_stellsym*self.nzeta])
 
-        S_p_4d[:,kt, kz, i] = S_p_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz]
-        S_m_4d[:,kt, kz, i] = S_m_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz]
+        S_p_4d = put(S_p_4d, Index[:,kt, kz, i], S_p_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz])
+        S_m_4d = put(S_m_4d, Index[:,kt, kz, i], S_m_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz])
         
         # TODO: figure out a faster way to do this, its very sparse
         S_p_4d = np.pad(S_p_4d, ((0,0),(0,self.ntheta-self.ntheta_stellsym),(0,0),(0,0)))
@@ -566,7 +555,7 @@ class Nestor:
         full_bvec = ft_gsource + I_mn
 
         # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
-        full_bvec[0, self.nf+1:] = 0.0
+        full_bvec = put(full_bvec, Index[0, self.nf+1:], 0.0)
 
         # compute Fourier transform of grpmn to arrive at amatrix
         # (to be compared against ref_amatrix)
@@ -585,7 +574,7 @@ class Nestor:
         amatrix_4d = np.where(np.logical_and(m==0, n>self.nf)[:,:,np.newaxis, np.newaxis], 0, amatrix_4d)
 
         # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
-        amatrix_4d[m, n, m, n] += 4.0*np.pi**3
+        amatrix_4d = put(amatrix_4d, Index[m, n, m, n], amatrix_4d[m,n,m,n] + 4.0*np.pi**3)
 
         bvec = np.fft.fftshift(full_bvec, axes=1).T.flatten()
 
@@ -686,8 +675,8 @@ class Nestor:
 
         # accumulated magic from fourp and (sin/cos)mui
         kernel_4d = kernel_4d * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
-        kernel_4d[:,:,0,:] *= 0.5
-        kernel_4d[:,:,-1,:] *= 0.5
+        kernel_4d = put(kernel_4d, Index[:,:,0,:], 0.5*kernel_4d[:,:,0,:])
+        kernel_4d = put(kernel_4d, Index[:,:,-1,:], 0.5*kernel_4d[:,:,-1,:])
 
         kernel_4d = np.pad(kernel_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))                    
         ft_kernel = np.fft.ifft(kernel_4d, axis=2)*self.ntheta
@@ -711,8 +700,8 @@ class Nestor:
 
         # accumulated magic from fouri and (sin/cos)mui
         gsource_sym = gsource_sym * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
-        gsource_sym[0,:] *= 0.5
-        gsource_sym[-1,:] *= 0.5
+        gsource_sym = put(gsource_sym, Index[0,:], 0.5*gsource_sym[0,:])
+        gsource_sym = put(gsource_sym, Index[-1,:], 0.5*gsource_sym[-1,:])
 
         gsource_sym = np.pad(gsource_sym, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
         ft_gsource = np.fft.ifft(gsource_sym, axis=0)*self.ntheta
@@ -753,10 +742,10 @@ class Nestor:
 
         m,n = np.meshgrid(np.arange(self.mf+1), np.arange(self.nf+1), indexing="ij")
 
-        m_potvac[m, n] = m * potvac_2d[m, n]
-        n_potvac[m, n] = n * potvac_2d[m, n]
-        m_potvac[m, -n] =  m * potvac_2d[m, -n]
-        n_potvac[m, -n] = -n * potvac_2d[m, -n]
+        m_potvac = put(m_potvac, Index[m, n], m * potvac_2d[m, n])
+        n_potvac = put(n_potvac, Index[m, n], n * potvac_2d[m, n])
+        m_potvac = put(m_potvac, Index[m, -n], m * potvac_2d[m, -n])
+        n_potvac = put(n_potvac, Index[m, -n], -n * potvac_2d[m, -n])
 
         Bp_t = np.fft.ifft(m_potvac, axis=0) * self.ntheta
         Bp_t = (np.fft.fft(Bp_t, axis=1).real[:self.ntheta_stellsym, :]).flatten()

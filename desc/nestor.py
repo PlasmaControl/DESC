@@ -80,17 +80,17 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
 
     # input arrays for FFTs
     Rmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R
-    mRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dRdTheta
-    nRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dRdZeta
-    mmRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdTheta2
-    mnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdThetaZeta
-    nnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2RdZeta2
+    mRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_t
+    nRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_z
+    mmRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_tt
+    mnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_tz
+    nnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_zz
     Zmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z
-    mZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dZdTheta
-    nZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for dZdZeta
-    mmZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdTheta2
-    mnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdThetaZeta
-    nnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for d2ZdZeta2
+    mZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_t
+    nZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_z
+    mmZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_tt
+    mnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_tz
+    nnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_zz
 
     # multiply with mode numbers to get tangential derivatives
     Rmn  [mIdx, nIdx] =         rmnc
@@ -108,17 +108,17 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
     # TODO: if lasym, must also include corresponding terms above!
 
     R_2d             = (np.fft.ifft2(  Rmn)*ntheta*nzeta).real
-    dRdTheta_2d      = (np.fft.ifft2( mRmn)*ntheta*nzeta).imag
-    dRdZeta_2d       = (np.fft.ifft2( nRmn)*ntheta*nzeta).imag
-    d2RdTheta2_2d    = (np.fft.ifft2(mmRmn)*ntheta*nzeta).real
-    d2RdThetaZeta_2d = (np.fft.ifft2(mnRmn)*ntheta*nzeta).real
-    d2RdZeta2_2d     = (np.fft.ifft2(nnRmn)*ntheta*nzeta).real
+    R_t_2d      = (np.fft.ifft2( mRmn)*ntheta*nzeta).imag
+    R_z_2d       = (np.fft.ifft2( nRmn)*ntheta*nzeta).imag
+    R_tt_2d    = (np.fft.ifft2(mmRmn)*ntheta*nzeta).real
+    R_tz_2d = (np.fft.ifft2(mnRmn)*ntheta*nzeta).real
+    R_zz_2d     = (np.fft.ifft2(nnRmn)*ntheta*nzeta).real
     Z_2d             = (np.fft.ifft2(  Zmn)*ntheta*nzeta).real
-    dZdTheta_2d      = (np.fft.ifft2( mZmn)*ntheta*nzeta).imag
-    dZdZeta_2d       = (np.fft.ifft2( nZmn)*ntheta*nzeta).imag
-    d2ZdTheta2_2d    = (np.fft.ifft2(mmZmn)*ntheta*nzeta).real
-    d2ZdThetaZeta_2d = (np.fft.ifft2(mnZmn)*ntheta*nzeta).real
-    d2ZdZeta2_2d     = (np.fft.ifft2(nnZmn)*ntheta*nzeta).real
+    Z_t_2d      = (np.fft.ifft2( mZmn)*ntheta*nzeta).imag
+    Z_z_2d       = (np.fft.ifft2( nZmn)*ntheta*nzeta).imag
+    Z_tt_2d    = (np.fft.ifft2(mmZmn)*ntheta*nzeta).real
+    Z_tz_2d = (np.fft.ifft2(mnZmn)*ntheta*nzeta).real
+    Z_zz_2d     = (np.fft.ifft2(nnZmn)*ntheta*nzeta).real
 
     coords = {}
     # vectorize arrays, since most operations to follow act on all grid points anyway
@@ -127,29 +127,29 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
     if sym:
         coords["R_sym"]         = R_2d            [:ntheta_sym,:].flatten()
         coords["Z_sym"]         = Z_2d            [:ntheta_sym,:].flatten()
-        coords["dRdTheta"]      = dRdTheta_2d     [:ntheta_sym,:].flatten()
-        coords["dRdZeta"]       = dRdZeta_2d      [:ntheta_sym,:].flatten()
-        coords["d2RdTheta2"]    = d2RdTheta2_2d   [:ntheta_sym,:].flatten()
-        coords["d2RdThetaZeta"] = d2RdThetaZeta_2d[:ntheta_sym,:].flatten()
-        coords["d2RdZeta2"]     = d2RdZeta2_2d    [:ntheta_sym,:].flatten()
-        coords["dZdTheta"]      = dZdTheta_2d     [:ntheta_sym,:].flatten()
-        coords["dZdZeta"]       = dZdZeta_2d      [:ntheta_sym,:].flatten()
-        coords["d2ZdTheta2"]    = d2ZdTheta2_2d   [:ntheta_sym,:].flatten()
-        coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d[:ntheta_sym,:].flatten()
-        coords["d2ZdZeta2"]     = d2ZdZeta2_2d    [:ntheta_sym,:].flatten()
+        coords["R_t"]      = R_t_2d     [:ntheta_sym,:].flatten()
+        coords["R_z"]       = R_z_2d      [:ntheta_sym,:].flatten()
+        coords["R_tt"]    = R_tt_2d   [:ntheta_sym,:].flatten()
+        coords["R_tz"] = R_tz_2d[:ntheta_sym,:].flatten()
+        coords["R_zz"]     = R_zz_2d    [:ntheta_sym,:].flatten()
+        coords["Z_t"]      = Z_t_2d     [:ntheta_sym,:].flatten()
+        coords["Z_z"]       = Z_z_2d      [:ntheta_sym,:].flatten()
+        coords["Z_tt"]    = Z_tt_2d   [:ntheta_sym,:].flatten()
+        coords["Z_tz"] = Z_tz_2d[:ntheta_sym,:].flatten()
+        coords["Z_zz"]     = Z_zz_2d    [:ntheta_sym,:].flatten()
     else:
         coords["R_sym"]         = coords["R"]
         coords["Z_sym"]         = coords["Z"]
-        coords["dRdTheta"]      = dRdTheta_2d.flatten()
-        coords["dRdZeta"]       = dRdZeta_2d.flatten()
-        coords["d2RdTheta2"]    = d2RdTheta2_2d.flatten()
-        coords["d2RdThetaZeta"] = d2RdThetaZeta_2d.flatten()
-        coords["d2RdZeta2"]     = d2RdZeta2_2d.flatten()
-        coords["dZdTheta"]      = dZdTheta_2d.flatten()
-        coords["dZdZeta"]       = dZdZeta_2d.flatten()
-        coords["d2ZdTheta2"]    = d2ZdTheta2_2d.flatten()
-        coords["d2ZdThetaZeta"] = d2ZdThetaZeta_2d.flatten()
-        coords["d2ZdZeta2"]     = d2ZdZeta2_2d.flatten()
+        coords["R_t"]      = R_t_2d.flatten()
+        coords["R_z"]       = R_z_2d.flatten()
+        coords["R_tt"]    = R_tt_2d.flatten()
+        coords["R_tz"] = R_tz_2d.flatten()
+        coords["R_zz"]     = R_zz_2d.flatten()
+        coords["Z_t"]      = Z_t_2d.flatten()
+        coords["Z_z"]       = Z_z_2d.flatten()
+        coords["Z_tt"]    = Z_tt_2d.flatten()
+        coords["Z_tz"] = Z_tz_2d.flatten()
+        coords["Z_zz"]     = Z_zz_2d.flatten()
 
     phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/nfp            
     coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
@@ -338,34 +338,36 @@ class Nestor:
         self.ntheta_stellsym = self.ntheta//2 + 1
         self.nzeta_stellsym = self.nzeta//2 + 1
 
+    def compute_normal(self, coords):
+        normal = {}
+        normal["R_n"]   =  self.signgs * (coords["R_sym"] * coords["Z_t"])
+        normal["phi_n"] =  self.signgs * (coords["R_t"] * coords["Z_z"]
+                                                  - coords["R_z"] * coords["Z_t"])
+        normal["Z_n"]   = -self.signgs * (coords["R_sym"] * coords["R_t"])
+        return normal
     
-    def compute_jacobian(self, coords):
+    def compute_jacobian(self, coords, normal):
 
         jacobian = {}        
-        # compute metric coefficients and surface normal components
-        jacobian["surfNormR"]   =  self.signgs * (coords["R_sym"] * coords["dZdTheta"])
-        jacobian["surfNormPhi"] =  self.signgs * (coords["dRdTheta"] * coords["dZdZeta"]
-                                                  - coords["dRdZeta"] * coords["dZdTheta"])
-        jacobian["surfNormZ"]   = -self.signgs * (coords["R_sym"] * coords["dRdTheta"])
 
         # a, b, c in NESTOR article: dot-products of first-order derivatives of surface
-        jacobian["g_uu"] = (coords["dRdTheta"] * coords["dRdTheta"]
-                            + coords["dZdTheta"] * coords["dZdTheta"])
-        jacobian["g_uv"] = (coords["dRdTheta"] * coords["dRdZeta"]
-                            + coords["dZdTheta"] * coords["dZdZeta"])/self.nfp
-        jacobian["g_vv"] = (coords["dRdZeta"]  * coords["dRdZeta"]
-                            + coords["dZdZeta"]  * coords["dZdZeta"]
+        jacobian["g_tt"] = (coords["R_t"] * coords["R_t"]
+                            + coords["Z_t"] * coords["Z_t"])
+        jacobian["g_tz"] = (coords["R_t"] * coords["R_z"]
+                            + coords["Z_t"] * coords["Z_z"])/self.nfp
+        jacobian["g_zz"] = (coords["R_z"]  * coords["R_z"]
+                            + coords["Z_z"]  * coords["Z_z"]
                             + coords["R_sym"] * coords["R_sym"])/self.nfp**2
         
         # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface (?)
-        jacobian["a_uu"]   = 0.5 * (jacobian["surfNormR"] * coords["d2RdTheta2"]
-                                    + jacobian["surfNormZ"] * coords["d2ZdTheta2"])
-        jacobian["a_uv"] = (jacobian["surfNormR"] * coords["d2RdThetaZeta"]
-                            + jacobian["surfNormPhi"] * coords["dRdTheta"]
-                            + jacobian["surfNormZ"] * coords["d2ZdThetaZeta"])/self.nfp
-        jacobian["a_vv"]   = (jacobian["surfNormPhi"] * coords["dRdZeta"] +
-                              0.5*(jacobian["surfNormR"] * (coords["d2RdZeta2"] - coords["R_sym"])
-                                   + jacobian["surfNormZ"] * coords["d2ZdZeta2"]) )/self.nfp**2
+        jacobian["a_tt"]   = 0.5 * (normal["R_n"] * coords["R_tt"]
+                                    + normal["Z_n"] * coords["Z_tt"])
+        jacobian["a_tz"] = (normal["R_n"] * coords["R_tz"]
+                            + normal["phi_n"] * coords["R_t"]
+                            + normal["Z_n"] * coords["Z_tz"])/self.nfp
+        jacobian["a_zz"]   = (normal["phi_n"] * coords["R_z"] +
+                              0.5*(normal["R_n"] * (coords["R_zz"] - coords["R_sym"])
+                                   + normal["Z_n"] * coords["Z_zz"]) )/self.nfp**2
 
         return jacobian
     
@@ -444,9 +446,9 @@ class Nestor:
                          B[2]])
 
     def compute_T_S(self, jacobian):
-        a = jacobian["g_uu"]
-        b = jacobian["g_uv"]
-        c = jacobian["g_vv"]
+        a = jacobian["g_tt"]
+        b = jacobian["g_tz"]
+        c = jacobian["g_zz"]
         ap = a + 2*b + c
         am = a - 2*b + c
         cma = c - a
@@ -457,9 +459,9 @@ class Nestor:
         sqrt_am = np.sqrt(am)
 
         delt1u  = ap*am  - cma*cma
-        azp1u  = jacobian["a_uu"]  + jacobian["a_uv"]  + jacobian["a_vv"]
-        azm1u  = jacobian["a_uu"]  - jacobian["a_uv"]  + jacobian["a_vv"]
-        cma11u  = jacobian["a_vv"]  - jacobian["a_uu"]
+        azp1u  = jacobian["a_tt"]  + jacobian["a_tz"]  + jacobian["a_zz"]
+        azm1u  = jacobian["a_tt"]  - jacobian["a_tz"]  + jacobian["a_zz"]
+        cma11u  = jacobian["a_zz"]  - jacobian["a_tt"]
         r1p  = (azp1u*(delt1u - cma*cma)/ap - azm1u*ap + 2.0*cma11u*cma)/delt1u
         r1m  = (azm1u*(delt1u - cma*cma)/am - azp1u*am + 2.0*cma11u*cma)/delt1u
         r0p  = (-azp1u*am*cma/ap - azm1u*cma + 2.0*cma11u*am)/delt1u
@@ -502,11 +504,11 @@ class Nestor:
 
         return T_p_l, T_m_l, S_p_l, S_m_l
         
-    def analyticalIntegrals(self, jacobian, T_p_l, T_m_l, S_p_l, S_m_l, B_field):
+    def analyticalIntegrals(self, jacobian, normal, T_p_l, T_m_l, S_p_l, S_m_l, B_field):
 
         # analysum, analysum2 using FFTs
         brad, bphi, bz = B_field        
-        bexni = -self.wint * (jacobian["surfNormR"] * brad + jacobian["surfNormPhi"] * bphi + jacobian["surfNormZ"] * bz) * 4.0*np.pi*np.pi
+        bexni = -self.wint * (normal["R_n"] * brad + normal["phi_n"] * bphi + normal["Z_n"] * bz) * 4.0*np.pi*np.pi
         T_p = (T_p_l*bexni).reshape(-1, self.ntheta_stellsym, self.nzeta)
         T_m = (T_m_l*bexni).reshape(-1, self.ntheta_stellsym, self.nzeta)
 
@@ -518,15 +520,15 @@ class Nestor:
         ft_T_m = np.fft.ifft(T_m, axis=1)*self.ntheta
         ft_T_m = np.fft.fft(ft_T_m, axis=2)
 
-        ku, kv = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta))
-        i = self.nzeta*ku + kv
+        kt, kz = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta))
+        i = self.nzeta*kt + kz
         
         num_four = self.mf+self.nf+1
         S_p_4d = np.zeros([num_four, self.ntheta_stellsym, self.nzeta, self.ntheta_stellsym*self.nzeta])
         S_m_4d = np.zeros([num_four, self.ntheta_stellsym, self.nzeta, self.ntheta_stellsym*self.nzeta])
 
-        S_p_4d[:,ku, kv, i] = S_p_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,ku,kv]
-        S_m_4d[:,ku, kv, i] = S_m_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,ku,kv]
+        S_p_4d[:,kt, kz, i] = S_p_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz]
+        S_m_4d[:,kt, kz, i] = S_m_l.reshape(num_four, self.ntheta_stellsym, self.nzeta)[:,kt,kz]
         
         # TODO: figure out a faster way to do this, its very sparse
         S_p_4d = np.pad(S_p_4d, ((0,0),(0,self.ntheta-self.ntheta_stellsym),(0,0),(0,0)))
@@ -544,106 +546,97 @@ class Nestor:
         I_mn = np.where(np.logical_and(m != 0, n>0), np.sum(self.cmns[:,m,n] * ft_T_p[:, m, n].imag, axis=0), I_mn)
         I_mn = np.where(np.logical_and(m != 0, n<0), np.sum(self.cmns[:,m,-n] * ft_T_m[:, m, n].imag, axis=0), I_mn)                
 
-        K_mn_grid = np.zeros([self.mf+1, 2*self.nf+1, self.ntheta_stellsym*self.nzeta])
-        K_mn_grid = np.where(np.logical_or(m==0,n==0)[:,:,np.newaxis], np.sum(self.cmns[:,m,n, np.newaxis] * (ft_S_p[:, m, n, :].imag + ft_S_m[:, m, n, :].imag), axis=0), K_mn_grid)
-        K_mn_grid = np.where(np.logical_and(m!=0,n>0)[:,:,np.newaxis], np.sum(self.cmns[:,m,n, np.newaxis] * ft_S_p[:, m, n, :].imag,  axis=0), K_mn_grid)
-        K_mn_grid = np.where(np.logical_and(m!=0,n<0)[:,:,np.newaxis], np.sum(self.cmns[:,m,-n, np.newaxis] * ft_S_m[:, m, n, :].imag, axis=0), K_mn_grid)
+        K_mntz = np.zeros([self.mf+1, 2*self.nf+1, self.ntheta_stellsym*self.nzeta])
+        K_mntz = np.where(np.logical_or(m==0,n==0)[:,:,np.newaxis], np.sum(self.cmns[:,m,n, np.newaxis] * (ft_S_p[:, m, n, :].imag + ft_S_m[:, m, n, :].imag), axis=0), K_mntz)
+        K_mntz = np.where(np.logical_and(m!=0,n>0)[:,:,np.newaxis], np.sum(self.cmns[:,m,n, np.newaxis] * ft_S_p[:, m, n, :].imag,  axis=0), K_mntz)
+        K_mntz = np.where(np.logical_and(m!=0,n<0)[:,:,np.newaxis], np.sum(self.cmns[:,m,-n, np.newaxis] * ft_S_m[:, m, n, :].imag, axis=0), K_mntz)
+        K_mntz = K_mntz.reshape(self.mf+1, 2*self.nf+1, self.ntheta_stellsym, self.nzeta)
+        return I_mn, K_mntz
 
-        return I_mn, K_mn_grid
-
-    def computeScalarMagneticPotential(self, I_mn, K_mn_grid, B_field, jacobian, coords):
+    def computeScalarMagneticPotential(self, I_mn, K_mntz, B_field, jacobian, normal, coords):
         # this makes bvec to be in Fortran order (-nf, ..., nf)
         bvec = np.fft.fftshift(I_mn, axes=1).T.flatten()
-        if self.ivacskip != 0:
+        # Here, bvecsav stores the singular part of bvec from analyt
+        # to be subtracted from the "final" bvec computed below by fouri
+        self.bvecsav = bvec
 
-            # Here, bvecsav contains the previous non-singular contribution to the "final" bvec from fouri.
-            # For ivacskip != 0, this contribution is used from the cache in bvecsav.
-            bvec += self.bvecsav
+        ft_gsource, grpmn_4d = self.regularizedFourierTransforms(K_mntz, B_field, jacobian, normal, coords)
 
-        # greenf
-        else:
-            # Here, bvecsav stores the singular part of bvec from analyt
-            # to be subtracted from the "final" bvec computed below by fouri
-            self.bvecsav = bvec
+        # combine with contribution from analyt(); available here in I_mn
+        full_bvec = ft_gsource + I_mn
 
-            ft_gsource, grpmn_4d = self.regularizedFourierTransforms(K_mn_grid, B_field, jacobian, coords)
+        # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
+        full_bvec[0, self.nf+1:] = 0.0
 
-            # combine with contribution from analyt(); available here in I_mn
-            full_bvec = ft_gsource + I_mn
+        # compute Fourier transform of grpmn to arrive at amatrix
+        # (to be compared against ref_amatrix)
+        grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
+        grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
+        grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
+        grpmn_4d   = np.fft.fft(grpmn_4d, axis=3)
 
-            # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
-            full_bvec[0, self.nf+1:] = 0.0
+        amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
 
-            # compute Fourier transform of grpmn to arrive at amatrix
-            # (to be compared against ref_amatrix)
-            grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
-            grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
-            grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
-            grpmn_4d   = np.fft.fft(grpmn_4d, axis=3)
+        # scale amatrix by (2 pi)^2 (#TODO: why ?)
+        amatrix_4d *= (2.0*np.pi)**2
 
-            amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
+        m, n = np.meshgrid(np.arange(self.mf+1), np.arange(2*self.nf+1), indexing="ij")            
+        # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?)
+        amatrix_4d = np.where(np.logical_and(m==0, n>self.nf)[:,:,np.newaxis, np.newaxis], 0, amatrix_4d)
 
-            # scale amatrix by (2 pi)^2 (#TODO: why ?)
-            amatrix_4d *= (2.0*np.pi)**2
+        # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
+        amatrix_4d[m, n, m, n] += 4.0*np.pi**3
 
-            m, n = np.meshgrid(np.arange(self.mf+1), np.arange(2*self.nf+1), indexing="ij")            
-            # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?)
-            amatrix_4d = np.where(np.logical_and(m==0, n>self.nf)[:,:,np.newaxis, np.newaxis], 0, amatrix_4d)
+        bvec = np.fft.fftshift(full_bvec, axes=1).T.flatten()
 
-            # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
-            amatrix_4d[m, n, m, n] += 4.0*np.pi**3
+        self.amatsav = np.fft.fftshift(np.transpose(amatrix_4d, (1,0,3,2)), axes=(0,2)).reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)]).T.flatten()
 
-            bvec = np.fft.fftshift(full_bvec, axes=1).T.flatten()
-
-            self.amatsav = np.fft.fftshift(np.transpose(amatrix_4d, (1,0,3,2)), axes=(0,2)).reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)]).T.flatten()
-
-            # remove singular contribution from bvec to save the non-singular part
-            self.bvecsav = bvec - self.bvecsav
+        # remove singular contribution from bvec to save the non-singular part
+        self.bvecsav = bvec - self.bvecsav
 
         amatrix = self.amatsav
 
         potvac_2d = self.solveForScalarMagneticPotential(amatrix, bvec)
         return potvac_2d
 
-    def regularizedFourierTransforms(self, K_mn_grid, B_field, jacobian, coords):
+    def regularizedFourierTransforms(self, K_mntz, B_field, jacobian, normal, coords):
 
         brad, bphi, bz = B_field        
-        bexni = -self.wint * (jacobian["surfNormR"] * brad + jacobian["surfNormPhi"] * bphi + jacobian["surfNormZ"] * bz) * 4.0*np.pi*np.pi
+        bexni = -self.wint * (normal["R_n"] * brad + normal["phi_n"] * bphi + normal["Z_n"] * bz) * 4.0*np.pi*np.pi
 
         green  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
         greenp = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
 
-        #max_ip = self.ntheta_stellsym*self.nzeta
-        ku_ip, kv_ip, ku_i, kv_i = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), np.arange(self.ntheta), np.arange(self.nzeta), indexing="ij")
-
+        # indices over regular and primed arrays
+        kt_ip, kz_ip, kt_i, kz_i = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), np.arange(self.ntheta), np.arange(self.nzeta), indexing="ij")
         # linear index over primed grid
-        ip = (ku_ip*self.nzeta+kv_ip)
+        ip = (kt_ip*self.nzeta+kz_ip)
 
-        # cartesial coordinates in first field period
-        xip = coords["X"].reshape((-1,self.nzeta))[ku_ip, kv_ip]
-        yip = coords["Y"].reshape((-1,self.nzeta))[ku_ip, kv_ip]
 
         # field-period invariant vectors
         r_squared = (coords["R"]**2 + coords["Z"]**2).reshape((-1,self.nzeta))
-        gsave = r_squared[ku_ip, kv_ip] + r_squared - 2.0*coords["Z_sym"][ip].reshape(ku_ip.shape)*coords["Z"].reshape((-1, self.nzeta))
-        drv  = -(coords["R_sym"]*jacobian["surfNormR"] + coords["Z_sym"]*jacobian["surfNormZ"])      
-        dsave = drv[ip] + coords["Z"].reshape((-1, self.nzeta))*jacobian["surfNormZ"].reshape((self.ntheta_stellsym, self.nzeta))[ku_ip, kv_ip]
-        # x,y in period j
-        xper, yper = copy_vector_periods(np.array([xip, yip]), self.zeta_fp)
+        gsave = r_squared[kt_ip, kz_ip] + r_squared - 2.0*coords["Z_sym"][ip].reshape(kt_ip.shape)*coords["Z"].reshape((-1, self.nzeta))
+        drv  = -(coords["R_sym"]*normal["R_n"] + coords["Z_sym"]*normal["Z_n"])      
+        dsave = drv[ip] + coords["Z"].reshape((-1, self.nzeta))*normal["Z_n"].reshape((self.ntheta_stellsym, self.nzeta))[kt_ip, kz_ip]
 
-        # cartesian components of surface normal ... ???
-        sxsave = (jacobian["surfNormR"][ip][:,:,:,:,np.newaxis]*xper - jacobian["surfNormPhi"][ip][:,:,:,:,np.newaxis]*yper)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
-        sysave = (jacobian["surfNormR"][ip][:,:,:,:,np.newaxis]*yper + jacobian["surfNormPhi"][ip][:,:,:,:,np.newaxis]*xper)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
+        # copy cartesial coordinates in first field period to full domain
+        X_full, Y_full = copy_vector_periods(np.array([coords["X"].reshape((-1,self.nzeta))[kt_ip, kz_ip],
+                                                       coords["Y"].reshape((-1,self.nzeta))[kt_ip, kz_ip]]),
+                                             self.zeta_fp)
+
+        # cartesian components of surface normal
+        X_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*X_full - normal["phi_n"][ip][:,:,:,:,np.newaxis]*Y_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
+        Y_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*Y_full + normal["phi_n"][ip][:,:,:,:,np.newaxis]*X_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
 
 
 
         ftemp = (gsave[:,:,:,:,np.newaxis]
-                 - 2*xper*coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis]
-                 - 2*yper*coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis])
+                 - 2*X_full*coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis]
+                 - 2*Y_full*coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis])
         ftemp = 1/np.where(ftemp<=0, 1, ftemp)
         htemp = np.sqrt(ftemp)
-        gtemp = (  coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*sxsave
-                 + coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*sysave
+        gtemp = (  coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*X_n
+                 + coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*Y_n
                  + dsave[:,:,:,:,np.newaxis])
         greenp_update = ftemp*htemp*gtemp
         green_update = htemp
@@ -654,19 +647,19 @@ class Nestor:
 
         if self.nzeta == 1:
             # Tokamak: nfp_eff toroidal "modules"
-            delta_kv = (kv_i - kv_ip)%self.nfp_eff
+            delta_kz = (kz_i - kz_ip)%self.nfp_eff
         else:
             # Stellarator: nv toroidal grid points
-            delta_kv = (kv_i - kv_ip)%self.nzeta
+            delta_kz = (kz_i - kz_ip)%self.nzeta
 
         # TODO: why is there an additional offset of ntheta?
-        delta_ku = ku_i - ku_ip + self.ntheta
-        ga1 = self.tanu[delta_ku]*(jacobian["g_uu"][ip]*self.tanu[delta_ku] + 2*jacobian["g_uv"][ip]*self.tanv[delta_kv]) + jacobian["g_vv"][ip]*self.tanv[delta_kv]*self.tanv[delta_kv]
-        ga2 = self.tanu[delta_ku]*(jacobian["a_uu"][ip]*self.tanu[delta_ku] +   jacobian["a_uv"][ip]*self.tanv[delta_kv]) + jacobian["a_vv"][ip]*self.tanv[delta_kv]*self.tanv[delta_kv]
+        delta_kt = kt_i - kt_ip + self.ntheta
+        ga1 = self.tanu[delta_kt]*(jacobian["g_tt"][ip]*self.tanu[delta_kt] + 2*jacobian["g_tz"][ip]*self.tanv[delta_kz]) + jacobian["g_zz"][ip]*self.tanv[delta_kz]*self.tanv[delta_kz]
+        ga2 = self.tanu[delta_kt]*(jacobian["a_tt"][ip]*self.tanu[delta_kt] +   jacobian["a_tz"][ip]*self.tanv[delta_kz]) + jacobian["a_zz"][ip]*self.tanv[delta_kz]*self.tanv[delta_kz]
 
         greenp_sing = - (ga2/ga1*1/np.sqrt(ga1))[:,:,:,:,np.newaxis]
         green_sing = - 1/np.sqrt(ga1)[:,:,:,:,np.newaxis]
-        mask = ((ku_ip != ku_i) | (kv_ip != kv_i) | (self.nzeta == 1 and kp > 0))[:,:,:,:,np.newaxis] & ((self.zeta_fp == 0) |  (self.nzeta == 1))
+        mask = ((kt_ip != kt_i) | (kz_ip != kz_i) | (self.nzeta == 1 and kp > 0))[:,:,:,:,np.newaxis] & ((self.zeta_fp == 0) |  (self.nzeta == 1))
         greenp = np.where(mask, greenp + greenp_update + greenp_sing, greenp)
         green = np.where(mask, green + green_update + green_sing, green)                               
 
@@ -687,9 +680,9 @@ class Nestor:
 
         # stellarator-symmetric first half-module is copied directly
         # the other half of the first module is "folded over" according to odd symmetry under the stellarator-symmetry operation
-        ku, kv = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), indexing="ij")
+        kt, kz = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), indexing="ij")
         # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
-        kernel_4d = greenp[:,:,ku, kv] - greenp[:,:,-ku, -kv]
+        kernel_4d = greenp[:,:,kt, kz] - greenp[:,:,-kt, -kz]
 
         # accumulated magic from fourp and (sin/cos)mui
         kernel_4d = kernel_4d * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
@@ -703,15 +696,15 @@ class Nestor:
         ft_kernel = np.concatenate([ft_kernel[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
                                     ft_kernel[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, -self.nf:].imag],
                                    axis=-1).transpose((2,3,0,1))
-        # now assemble final grpmn by adding K_mn_grid and ft_kernel_4d
-        K_mn_grid_4d = K_mn_grid.reshape(self.mf+1, 2*self.nf+1, self.ntheta_stellsym, self.nzeta)
+        
+        # now assemble final grpmn by adding K_mntz and ft_kernel_4d
         # whoooo... :-)
-        grpmn_4d = K_mn_grid_4d + ft_kernel
+        grpmn_4d = K_mntz+ ft_kernel
 
 
         # first step: "fold over" upper half of gsource to make use of stellarator symmetry
         # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
-        gsource_sym = gstore[ku, kv] - gstore[-ku, -kv]
+        gsource_sym = gstore[kt, kz] - gstore[-kt, -kz]
 
         # compute Fourier-transform of gsource
         # when only computing the contribution to bvec from gstore, the reference value can be found in potvac,
@@ -765,55 +758,53 @@ class Nestor:
         m_potvac[m, -n] =  m * potvac_2d[m, -n]
         n_potvac[m, -n] = -n * potvac_2d[m, -n]
 
-        potu = np.fft.ifft(m_potvac, axis=0) * self.ntheta
-        potu = np.fft.fft(potu, axis=1).real[:self.ntheta_stellsym, :]
-        potu = potu.flatten()
+        Bp_t = np.fft.ifft(m_potvac, axis=0) * self.ntheta
+        Bp_t = (np.fft.fft(Bp_t, axis=1).real[:self.ntheta_stellsym, :]).flatten()
 
-        potv = np.fft.ifft(n_potvac, axis=0)*self.ntheta
-        potv = -np.fft.fft(potv, axis=1).real[:self.ntheta_stellsym, :] * self.nfp
-        potv = potv.flatten()
+        Bp_z = np.fft.ifft(n_potvac, axis=0)*self.ntheta
+        Bp_z = -(np.fft.fft(Bp_z, axis=1).real[:self.ntheta_stellsym, :] * self.nfp).flatten()
 
         # compute covariant magnetic field components: B_u, B_v
-        bexu = coords["dRdTheta"] * brad  + coords["dZdTheta"] * bz
-        bexv = coords["dRdZeta"] * brad + coords["R_sym"] * bphi + coords["dZdZeta"] * bz
+        Bex_t = coords["R_t"] * brad  + coords["Z_t"] * bz
+        Bex_z = coords["R_z"] * brad + coords["R_sym"] * bphi + coords["Z_z"] * bz
 
         vac_field = {}
         # B_u = potu + bexu
-        vac_field["bsubu"] = potu + bexu
+        vac_field["B_t"] = Bp_t + Bex_t
 
         # B_v = potv + bexv
-        vac_field["bsubv"] = potv + bexv
+        vac_field["B_z"] = Bp_z + Bex_z
 
-        # compute B^u, B^v and (with B_u, B_v) then also |B|^2/2
+        # compute B^t, B^z and (with B_t, B_z) then also |B|^2/2
 
         # TODO: for now, simply copied over from NESTOR code; have to understand what is actually done here!
-        huv = self.nfp*jacobian["g_uv"]
-        hvv = jacobian["g_vv"]*self.nfp*self.nfp
-        det = 1.0/(jacobian["g_uu"]*hvv-huv*huv)
+        h_tz = self.nfp*jacobian["g_tz"]
+        h_zz = jacobian["g_zz"]*self.nfp*self.nfp
+        det = 1.0/(jacobian["g_tt"]*h_zz-h_tz**2)
 
         # contravariant components of magnetic field: B^u, B^v
 
         # B^u
-        vac_field["bsupu"] = (hvv*vac_field["bsubu"] - huv*vac_field["bsubv"])*det
+        vac_field["B^t"] = (h_zz*vac_field["B_t"] - h_tz*vac_field["B_z"])*det
 
         # B^v
-        vac_field["bsupv"] = (-huv * vac_field["bsubu"] + jacobian["g_uu"] * vac_field["bsubv"])*det
+        vac_field["B^z"] = (-h_tz * vac_field["B_t"] + jacobian["g_tt"] * vac_field["B_z"])*det
 
         # |B|^2/2 = (B^u*B_u + B^v*B_v)/2
-        vac_field["bsqvac"] = (vac_field["bsubu"] * vac_field["bsupu"] + vac_field["bsubv"] * vac_field["bsupv"])/2.0
+        vac_field["|B|^2"] = (vac_field["B_t"] * vac_field["B^t"] + vac_field["B_z"] * vac_field["B^z"])/2.0
 
         # compute cylindrical components B^R, B^\phi, B^Z
-        vac_field["brv"]   = coords["dRdTheta"] * vac_field["bsupu"] + coords["dRdZeta"] * vac_field["bsupv"]
-        vac_field["bphiv"] = coords["R_sym"] * vac_field["bsupv"]
-        vac_field["bzv"]   = coords["dZdTheta"] * vac_field["bsupu"] + coords["dZdZeta"] * vac_field["bsupv"]
+        vac_field["BR"]   = coords["R_t"] * vac_field["B^t"] + coords["R_z"] * vac_field["B^z"]
+        vac_field["Bphi"] = coords["R_sym"] * vac_field["B^z"]
+        vac_field["BZ"]   = coords["Z_t"] * vac_field["B^t"] + coords["Z_z"] * vac_field["B^z"]
         return vac_field
         
     def firstIterationPrintout(self, vac_field):
         print("  In VACUUM, np = %2d mf = %2d nf = %2d nu = %2d nv = %2d"%(self.nfp, self.mf, self.nf, self.ntheta, self.nzeta))
 
         # -plasma current/pi2
-        self.bsubuvac = np.sum(vac_field["bsubu"] * self.wint)*self.signgs*2.0*np.pi
-        self.bsubvvac = np.sum(vac_field["bsubv"] * self.wint)
+        self.bsubuvac = np.sum(vac_field["B_t"] * self.wint)*self.signgs*2.0*np.pi
+        self.bsubvvac = np.sum(vac_field["B_z"] * self.wint)
 
         # currents in MA
         fac = 1.0e-6/mu0
@@ -863,15 +854,15 @@ class Nestor:
 
         var_ivac.assignValue(self.ivac)
         var_ier_flag.assignValue(self.ier_flag)
-        var_bsqvac[:] = vac_field["bsqvac"]
+        var_bsqvac[:] = vac_field["|B|^2"]
         var_mnpd.assignValue((self.mf+1)*(2*self.nf+1))
         var_mnpd2.assignValue((self.mf+1)*(2*self.nf+1))
         var_xmpot[:] = self.xmpot
         var_xnpot[:] = self.xnpot
         var_potvac[:] = np.fft.fftshift(potvac.reshape([self.mf+1, 2*self.nf+1]), axes=1).T.flatten()
-        var_brv[:] = vac_field["brv"]
-        var_bphiv[:] = vac_field["bphiv"]
-        var_bzv[:] = vac_field["bzv"]
+        var_brv[:] = vac_field["BR"]
+        var_bphiv[:] = vac_field["Bphi"]
+        var_bzv[:] = vac_field["BZ"]
         var_bsubvvac.assignValue(self.bsubvvac)
         var_amatsav[:] = self.amatsav
         var_bvecsav[:] = self.bvecsav
@@ -896,7 +887,8 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     nfp             = int(nestor.vacin['nfp'][()])
     # the following calls need to be done on every iteration
     coords = evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc, zmns, sym=True)
-    jacobian = nestor.compute_jacobian(coords)
+    normal = nestor.compute_normal(coords)
+    jacobian = nestor.compute_jacobian(coords, normal)
     B_extern = nestor.interpolateMGridFile(coords["R_sym"], coords["Z_sym"], coords["phi_sym"])
 
     phiaxis = np.linspace(0,2*np.pi,nestor.nzeta, endpoint=False)/nestor.nfp
@@ -909,8 +901,8 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
                                    coords["Z_sym"])
     B_field = B_extern + B_plasma
     T_p_l, T_m_l, S_p_l, S_m_l = nestor.compute_T_S(jacobian)
-    I_mn, K_mn = nestor.analyticalIntegrals(jacobian, T_p_l, T_m_l, S_p_l, S_m_l, B_field)
-    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, B_field, jacobian, coords)
+    I_mn, K_mn = nestor.analyticalIntegrals(jacobian, normal, T_p_l, T_m_l, S_p_l, S_m_l, B_field)
+    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, B_field, jacobian, normal, coords)
     vac_field = nestor.analyzeScalarMagneticPotential(B_field,
                                           potvac,
                                           jacobian,

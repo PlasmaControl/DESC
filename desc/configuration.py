@@ -568,12 +568,28 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
+    def _get_transforms(self, grid=None, derivs=0):
+        """get transforms with a specific grid"""
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
+        if not isinstance(grid, Grid):
+            if np.isscalar(grid):
+                grid = LinearGrid(L=grid, M=grid, N=grid, NFP=self.NFP)
+            grid = np.atleast_1d(grid)
+            if grid.ndim == 1:
+                grid = np.tile(grid, (3, 1))
+            grid = Grid(grid, sort=False)
+        R_transform = Transform(grid, self.R_basis, derivs=derivs)
+        Z_transform = Transform(grid, self.Z_basis, derivs=derivs)
+        L_transform = Transform(grid, self.L_basis, derivs=derivs)
+        return R_transform, Z_transform, L_transform
+
     def compute_profiles(self, grid=None):
         """Compute magnetic flux, pressure, and rotational transform profiles.
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -584,16 +600,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         profiles = compute_profiles(
             self.Psi,
@@ -616,7 +627,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -627,17 +638,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        # TODO: option to return intermediate variables for all these
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         toroidal_coords = compute_toroidal_coords(
             self.Psi,
@@ -660,7 +665,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -671,16 +676,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self.Psi,
@@ -703,7 +703,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -715,16 +715,11 @@ class _Configuration(IOAble, ABC):
             the x direction, differentiated wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self.Psi,
@@ -747,7 +742,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -759,16 +754,11 @@ class _Configuration(IOAble, ABC):
             system jacobian g.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -791,7 +781,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -803,16 +793,11 @@ class _Configuration(IOAble, ABC):
             in the x direction, differentiated wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self.Psi,
@@ -835,7 +820,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -848,16 +833,11 @@ class _Configuration(IOAble, ABC):
             derivative wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_field,
@@ -886,7 +866,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -898,16 +878,11 @@ class _Configuration(IOAble, ABC):
             component of the current, with the derivative wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             current_density,
@@ -937,7 +912,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -949,16 +924,11 @@ class _Configuration(IOAble, ABC):
             magnetic pressure gradient.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_pressure,
@@ -990,7 +960,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -1002,16 +972,11 @@ class _Configuration(IOAble, ABC):
             magnitude.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_tension,
@@ -1043,7 +1008,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -1055,16 +1020,11 @@ class _Configuration(IOAble, ABC):
             force error.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             force_error,
@@ -1094,13 +1054,13 @@ class _Configuration(IOAble, ABC):
     def compute_energy(self, grid=None):
         """Compute total MHD energy,
         :math:`W=\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
-        
+
         where DESC assumes :math:`\gamma=0`.
         Also computes the individual components (magnetic and pressure)
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1112,16 +1072,11 @@ class _Configuration(IOAble, ABC):
             MHD energy (W_B + W_p)
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             energy,
@@ -1151,7 +1106,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1163,16 +1118,11 @@ class _Configuration(IOAble, ABC):
         and the flux function metric has the key 'QS_FF'.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=3, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=3, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=3, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=3)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             quasisymmetry,
@@ -1204,7 +1154,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1214,16 +1164,11 @@ class _Configuration(IOAble, ABC):
             plasma volume in m^3
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1239,14 +1184,14 @@ class _Configuration(IOAble, ABC):
             iota,
         )
 
-        return np.sum(np.abs(jacobian["g"]) * grid.weights)
+        return np.sum(np.abs(jacobian["g"]) * R_transform.grid.weights)
 
     def compute_cross_section_area(self, grid=None):
         """Compute toroidally averaged cross-section area.
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1256,16 +1201,11 @@ class _Configuration(IOAble, ABC):
             cross section area in m^2
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1281,8 +1221,8 @@ class _Configuration(IOAble, ABC):
             iota,
         )
 
-        N = np.unique(grid.nodes[:, -1]).size  # number of toroidal angles
-        weights = grid.weights / (2 * np.pi / N)  # remove toroidal weights
+        N = np.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
+        weights = R_transform.grid.weights / (2 * np.pi / N)  # remove toroidal weights
         return np.mean(
             np.sum(
                 np.reshape(  # sqrt(g) / R * weight = dArea
@@ -1297,7 +1237,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             grid to use for computation. If None, a QuadratureGrid is created
 
         Returns
@@ -1307,18 +1247,17 @@ class _Configuration(IOAble, ABC):
             describe the shape of unstable perturbations
 
         """
-        if grid is None:
-            grid = QuadratureGrid(L=self.L, M=self.M, N=self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
-        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="auto")
-        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="auto")
+        iota.grid = R_transform.grid
+        Rb_transform = Transform(
+            R_transform.grid, self.Rb_basis, derivs=1, method="auto"
+        )
+        Zb_transform = Transform(
+            R_transform.grid, self.Zb_basis, derivs=1, method="auto"
+        )
 
         obj = get_objective_function(
             "energy",

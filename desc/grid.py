@@ -74,7 +74,7 @@ class Grid(IOAble):
     def _scale_weights(self):
         """Scales weights to sum to full volume and reduces weights for duplicated nodes"""
 
-        nodes = self.nodes.copy()
+        nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
         nodes[:, 2] %= 2 * np.pi / self.NFP
         _, inverse, counts = np.unique(

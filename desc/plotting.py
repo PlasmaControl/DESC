@@ -186,13 +186,19 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def plot_coefficients(eq, ax=None):
-    """Plot 1D profiles.
+def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
+    """Plot spectral coefficient magnitudes vs spectral mode number.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
+    L : bool
+        wheter to include radial mode numbers in the x-axis or not (Default = True)
+    M : bool
+        wheter to include poloidal mode numbers in the x-axis or not (Default = True)
+    N : bool
+        wheter to include toroidal mode numbers in the x-axis or not (Default = True)
     ax : matplotlib AxesSubplot, optional
         axis to plot on
 
@@ -204,15 +210,37 @@ def plot_coefficients(eq, ax=None):
         axes being plotted to
 
     """
+    lmn = np.array([], dtype=int)
+    xlabel = ""
+    if L:
+        lmn = np.append(lmn, np.array([0]))
+        xlabel += "l"
+        if M or N:
+            xlabel += " + "
+    if M:
+        lmn = np.append(lmn, np.array([1]))
+        xlabel += "|m|"
+        if N:
+            xlabel += " + "
+    if N:
+        lmn = np.append(lmn, np.array([2]))
+        xlabel += "|n|"
+
     fig, ax = _format_ax(ax, rows=1, cols=3)
 
-    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
-    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
-    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+    ax[0, 0].semilogy(
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+    )
+    ax[0, 1].semilogy(
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+    )
+    ax[0, 2].semilogy(
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+    )
 
-    ax[0, 0].set_xlabel("l + |m| + |n|")
-    ax[0, 1].set_xlabel("l + |m| + |n|")
-    ax[0, 2].set_xlabel("l + |m| + |n|")
+    ax[0, 0].set_xlabel(xlabel)
+    ax[0, 1].set_xlabel(xlabel)
+    ax[0, 2].set_xlabel(xlabel)
 
     ax[0, 0].set_title("$|R_{lmn}|$")
     ax[0, 1].set_title("$|Z_{lmn}|$")
@@ -342,7 +370,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
         else:
-            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
             contourf_kwargs["levels"] = kwargs.get(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
@@ -410,7 +438,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 46, "N": 46, "NFP": nfp}
+        grid_kwargs = {"M": 32, "N": 32 * int(eq.NFP), "NFP": nfp}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -808,7 +836,7 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["QS", "B*grad(|B|)"]:
+        elif name_dict["base"] in ["|grad(psi)|", "B*grad(|B|)"]:
             out = eq.compute_quasisymmetry(grid)[_name_key(name_dict)]
         else:
             raise NotImplementedError(
@@ -903,7 +931,7 @@ def _format_name(name):
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(rho)|": r"(\mathrm{m}^{-1})",
         "|beta|": r"(\mathrm{m}^{-1})",
-        "QS": "",
+        "|grad(psi)|": r"(\mathrm{T} \cdot \mathrm{m})",
         "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
     }
     name_dict["units"] = units[name_dict["base"]]

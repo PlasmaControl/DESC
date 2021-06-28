@@ -31,6 +31,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -110,6 +111,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -294,6 +296,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -480,6 +483,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         quasisymmetry,
         current_density,
         magnetic_field,
+        con_basis,
         jacobian,
         cov_basis,
         toroidal_coords,
@@ -686,9 +690,7 @@ def test_quasisymmetry(DummyStellarator):
 
 def test_compute_flux_coords(SOLOVEV):
 
-    eq = EquilibriaFamily.load(
-        load_from=str(SOLOVEV["output_path"]), file_format="hdf5"
-    )[-1]
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)

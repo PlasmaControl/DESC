@@ -690,9 +690,9 @@ class InputReader:
             match = re.search("LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
                 if re.search(r"T", match.group(0), re.IGNORECASE):
-                    desc_file.write("sym \t=   0\n")
+                    desc_file.write("sym = 0\n")
                 else:
-                    desc_file.write("sym \t=   1\n")
+                    desc_file.write("sym = 1\n")
             match = re.search(r"NFP\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -700,7 +700,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("NFP\t\t\t= {:3d}\n".format(numbers[0]))
+                desc_file.write("NFP = {:3d}\n".format(numbers[0]))
             match = re.search(r"PHIEDGE\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -708,7 +708,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("Psi\t= {:16.8E}\n".format(numbers[0]))
+                desc_file.write("Psi = {:16.8E}\n".format(numbers[0]))
             match = re.search(r"MPOL\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -716,7 +716,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("M_pol\t\t= {:3d}\n".format(numbers[0]))
+                desc_file.write("M_pol = {:3d}\n".format(numbers[0]))
             match = re.search(r"NTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -724,7 +724,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("N_tor\t\t= {:3d}\n".format(numbers[0]))
+                desc_file.write("N_tor = {:3d}\n".format(numbers[0]))
                 Ntor = numbers[0]
 
             # pressure profile
@@ -1047,22 +1047,22 @@ class InputReader:
         for k in range(max(p_l.size, i_l.size)):
             if k >= p_l.size:
                 desc_file.write(
-                    "l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(k, 0.0, i_l[k])
+                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, 0.0, i_l[k])
                 )
             elif k >= i_l.size:
                 desc_file.write(
-                    "l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(k, p_l[k], 0.0)
+                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, p_l[k], 0.0)
                 )
             else:
                 desc_file.write(
-                    "l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(k, p_l[k], i_l[k])
+                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, p_l[k], i_l[k])
                 )
 
         desc_file.write("\n")
         desc_file.write("# magnetic axis initial guess\n")
         for k in range(np.shape(axis)[0]):
             desc_file.write(
-                "n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(
+                "n: {:3d}  R0 = {:16.8E}  Z0 = {:16.8E}\n".format(
                     int(axis[k, 0]), axis[k, 1], axis[k, 2]
                 )
             )
@@ -1071,7 +1071,7 @@ class InputReader:
         desc_file.write("# fixed-boundary surface shape\n")
         for k in range(np.shape(bdry)[0]):
             desc_file.write(
-                "m: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+                "m: {:3d}  n: {:3d}  R1 = {:16.8E}  Z1 = {:16.8E}\n".format(
                     int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]
                 )
             )

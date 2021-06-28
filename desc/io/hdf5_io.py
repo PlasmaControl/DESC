@@ -17,7 +17,7 @@ class hdf5IO(IO):
     """Class to wrap ABC IO for hdf5 file format."""
 
     def __init__(self):
-        """Initialize hdf5IO instance"""
+        """Initialize hdf5IO instance."""
         self._file_types_ = (h5py._hl.group.Group, h5py._hl.files.File)
         self._file_format_ = "hdf5"
         super().__init__()
@@ -60,7 +60,7 @@ class hdf5IO(IO):
             raise RuntimeError("Cannot create sub in reader.")
 
     def groups(self, where=None):
-        """Finds groups in location given by 'where'.
+        """Find groups in location given by 'where'.
 
         Parameters
         ----------
@@ -102,7 +102,6 @@ class hdf5Reader(hdf5IO, Reader):
             specifies where to read obj from
 
         """
-
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
@@ -138,8 +137,7 @@ class hdf5Reader(hdf5IO, Reader):
                             obj,
                             attr,
                             cls.load(
-                                load_from=loc[attr],
-                                file_format=self._file_format_,
+                                load_from=loc[attr], file_format=self._file_format_,
                             ),
                         )
                     else:
@@ -186,8 +184,7 @@ class hdf5Reader(hdf5IO, Reader):
                     cls = pydoc.locate(cls_name)
                     if cls is not None:
                         thedict[key] = cls.load(
-                            load_from=loc[key],
-                            file_format=self._file_format_,
+                            load_from=loc[key], file_format=self._file_format_,
                         )
                     else:
                         warnings.warn(
@@ -239,8 +236,7 @@ class hdf5Reader(hdf5IO, Reader):
                     if cls is not None:
                         thelist.append(
                             cls.load(
-                                load_from=loc[str(i)],
-                                file_format=self._file_format_,
+                                load_from=loc[str(i)], file_format=self._file_format_,
                             ),
                         )
                     else:
@@ -258,7 +254,7 @@ class hdf5Writer(hdf5IO, Writer):
     """Class specifying a writer with hdf5IO."""
 
     def __init__(self, target, file_mode="w"):
-        """Initializes hdf5Writer class.
+        """Initialize hdf5Writer class.
 
         Parameters
         ----------

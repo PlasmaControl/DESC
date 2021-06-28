@@ -565,6 +565,26 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
 
+    @property
+    def major_radius(self):
+        """Major radius (m)."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.pi * A)
+
+    @property
+    def minor_radius(self):
+        """Minor radius (m)."""
+        A = self.compute_cross_section_area()
+        return np.sqrt(A / np.pi)
+
+    @property
+    def aspect_ratio(self):
+        """Aspect ratio = major radius / minor radius."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.sqrt(np.pi * A ** 3))
+
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
@@ -1138,8 +1158,10 @@ class _Configuration(IOAble, ABC):
         return force_error
 
     def compute_energy(self, grid=None):
-        """Compute total MHD energy.
-
+        """Compute total MHD energy,
+        :math:`W=\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
+        
+        where DESC assumes :math:`\gamma=0`.
         Also computes the individual components (magnetic and pressure)
 
         Parameters
@@ -1222,6 +1244,7 @@ class _Configuration(IOAble, ABC):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1283,6 +1306,57 @@ class _Configuration(IOAble, ABC):
         )
 
         return np.sum(np.abs(jacobian["g"]) * grid.weights)
+
+    def compute_cross_section_area(self, grid=None):
+        """Compute toroidally averaged cross-section area.
+
+        Parameters
+        ----------
+        grid : Grid, optional
+            Quadrature grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at
+
+        Returns
+        -------
+        area : float
+            cross section area in m^2
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N)
+
+        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
+        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
+        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        pressure = self.pressure.copy()
+        pressure.grid = grid
+        iota = self.iota.copy()
+        iota.grid = grid
+
+        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
+            self.Psi,
+            self.R_lmn,
+            self.Z_lmn,
+            self.L_lmn,
+            self.p_l,
+            self.i_l,
+            R_transform,
+            Z_transform,
+            L_transform,
+            pressure,
+            iota,
+        )
+
+        N = np.unique(grid.nodes[:, -1]).size  # number of toroidal angles
+        weights = grid.weights / (2 * np.pi / N)  # remove toroidal weights
+        return np.mean(
+            np.sum(
+                np.reshape(  # sqrt(g) / R * weight = dArea
+                    np.abs(jacobian["g"] / toroidal_coords["R"]) * weights, (N, -1)
+                ),
+                axis=1,
+            )
+        )
 
     def compute_dW(self, grid=None):
         """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.
@@ -1635,22 +1709,31 @@ class _Configuration(IOAble, ABC):
             return eq_sfl
 
     def run_booz_xform(
-        self, M_nyq=None, N_nyq=None, M_boz=None, N_boz=None, rho=None, verbose=True
+        self,
+        M_nyq=None,
+        N_nyq=None,
+        M_boz=None,
+        N_boz=None,
+        rho=None,
+        filename=None,
+        verbose=True,
     ):
         """Convert to Boozer coordinates by running booz_xform.
 
         Parameters
         ----------
         M_nyq : int
-            DESCRIPTION. The default is None.
+            Poloidal resolution for derived quantities. Default is M.
         N_nyq : int
-            DESCRIPTION. The default is None.
-        M_b : int
-            DESCRIPTION. The default is None.
-        N_b : int
-            DESCRIPTION. The default is None.
+            Toroidal resolution for derived quantities. Default is N.
+        M_boz : int
+            Poloidal resolution of Boozer spectrum. Default is 2*M.
+        N_boz : int
+            Toroidal resolution of Boozer spectrum. Default is 2*N.
         rho : ndarray
             Radial coordinates of the flux surfaces to evaluate at.
+        filename : str, Optional
+            If given, saves the results to a NetCDF file.
         verbose : bool
             Set False to suppress output of Booz_xform calculations.
 
@@ -1672,13 +1755,13 @@ class _Configuration(IOAble, ABC):
             ) from exc
 
         if M_nyq is None:
-            M_nyq = math.ceil(1.5 * self.M)
+            M_nyq = self.M
         if N_nyq is None:
-            N_nyq = math.ceil(1.5 * self.N)
+            N_nyq = self.N
         if M_boz is None:
             M_boz = 2 * self.M
         if N_boz is None:
-            N_boz = 2 * self.N
+            N_boz = 2 * self.N if self.N > 0 else 0
         if rho is None:
             rho = np.linspace(0.01, 1, num=100)
 
@@ -1703,8 +1786,8 @@ class _Configuration(IOAble, ABC):
         )[-b.mnmax :]
 
         # Nyquist resolution
-        b.mpol_nyq = M_nyq
-        b.ntor_nyq = N_nyq
+        b.mpol_nyq = int(M_nyq)
+        b.ntor_nyq = int(N_nyq)
         b.mnmax_nyq = (2 * N_nyq + 1) * M_nyq + N_nyq + 1
         b.xm_nyq = np.tile(
             np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
@@ -1714,8 +1797,8 @@ class _Configuration(IOAble, ABC):
         )[-b.mnmax :]
 
         # Boozer resolution
-        b.mboz = M_boz
-        b.nboz = N_boz
+        b.mboz = int(M_boz)
+        b.nboz = int(N_boz)
 
         # R, Z, lambda
         m, n, R_mn = zernike_to_fourier(self.R_lmn, basis=self.R_basis, rho=rho)
@@ -1766,12 +1849,12 @@ class _Configuration(IOAble, ABC):
             b.bsubvmns = Bz_s.T
 
         # rotational transform
-        grid = LinearGrid(rho=rho)
-        transform = Transform(grid, self.i_basis)
-        b.iota = transform.transform(self.i_l)
+        b.iota = self.iota(rho)
 
         # run booz_xform
         b.run()
+        if filename is not None:
+            b.write_boozmn(filename)
         return b
 
 

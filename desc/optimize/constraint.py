@@ -98,9 +98,7 @@ class LinearEqualityConstraint(IOAble):
 
     @property
     def built(self):
-        if not hasattr(self, "_built"):
-            self._built = False
-        return self._built
+        return self.__dict__.setdefault("_built", False)
 
     @property
     def dimy(self):

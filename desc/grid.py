@@ -107,44 +107,32 @@ class Grid(IOAble):
     @property
     def L(self):
         """int: radial grid resolution"""
-        if not hasattr(self, "_L"):
-            self._L = 0
-        return self._L
+        return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
         """ int: poloidal grid resolution"""
-        if not hasattr(self, "_M"):
-            self._M = 0
-        return self._M
+        return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
         """ int: toroidal grid resolution"""
-        if not hasattr(self, "_N"):
-            self._N = 0
-        return self._N
+        return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
         """ int: number of field periods"""
-        if not hasattr(self, "_NFP"):
-            self._NFP = 1
-        return self._NFP
+        return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
         """ bool: True for stellarator symmetry, False otherwise"""
-        if not hasattr(self, "_sym"):
-            self._sym = False
-        return self._sym
+        return self.__dict__.setdefault("_sym", False)
 
     @property
     def nodes(self):
         """ndarray: node coordinates, in (rho,theta,zeta)"""
-        if not hasattr(self, "_nodes"):
-            self._nodes = np.array([]).reshape((0, 3))
-        return self._nodes
+        return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
     @nodes.setter
     def nodes(self, nodes):
@@ -153,9 +141,7 @@ class Grid(IOAble):
     @property
     def weights(self):
         """ndarray: weight for each node, either exact quadrature or volume based"""
-        if not hasattr(self, "_weights"):
-            self._weights = np.array([]).reshape((0, 3))
-        return self._weights
+        return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
 
     @weights.setter
     def weights(self, weights):
@@ -169,16 +155,12 @@ class Grid(IOAble):
     @property
     def axis(self):
         """ndarray: indices of nodes at magnetic axis"""
-        if not hasattr(self, "_axis"):
-            self._axis = np.array([])
-        return self._axis
+        return self.__dict__.setdefault("_axis", np.array([]))
 
     @property
     def node_pattern(self):
         """str: pattern for placement of nodes in rho,theta,zeta"""
-        if not hasattr(self, "_node_pattern"):
-            self._node_pattern = None
-        return self._node_pattern
+        return self.__dict__.setdefault("_node_pattern", "custom")
 
     def __repr__(self):
         """string form of the object"""
@@ -393,9 +375,7 @@ class LinearGrid(Grid):
     @property
     def endpoint(self):
         """bool: whether the grid is made of open or closed intervals"""
-        if not hasattr(self, "_endpoint"):
-            self._endpoint = False
-        return self._endpoint
+        return self.__dict__.setdefault("_endpoint", False)
 
 
 class QuadratureGrid(Grid):

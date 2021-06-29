@@ -379,7 +379,12 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self.NFP, axis=self.axis, endpoint=self.endpoint
+                L=L,
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                axis=len(self.axis) > 0,
+                endpoint=self.endpoint,
             )
             self._enforce_symmetry()
             self._sort_nodes()
@@ -692,7 +697,12 @@ class ConcentricGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self.NFP, node_pattern=self.node_pattern
+                L=L,
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                axis=len(self.axis) > 0,
+                node_pattern=self.node_pattern,
             )
             self._enforce_symmetry()
             self._sort_nodes()

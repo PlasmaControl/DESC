@@ -28,7 +28,7 @@ def lsqtr(
     gtol=1e-6,
     verbose=1,
     maxiter=None,
-    tr_method="cho",
+    tr_method="svd",
     callback=None,
     options={},
 ):

@@ -230,11 +230,11 @@ class Transform(IOAble):
             warnings.warn(
                 colored(
                     "fft method requires nodes to be sorted by toroidal angle in "
-                    + "ascending order, falling back to direct2 method",
+                    + "ascending order, falling back to direct1 method",
                     "yellow",
                 )
             )
-            self.method = "direct2"
+            self.method = "direct1"
             return
 
         if len(zeta_vals) > 1 and not islinspaced(zeta_vals):

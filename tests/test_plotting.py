@@ -10,6 +10,7 @@ from desc.plotting import (
     plot_logo,
     plot_grid,
     plot_basis,
+    plot_coefficients,
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -269,6 +270,54 @@ def test_section_logF(plot_eq):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces(plot_eq):
     fig, ax = plot_surfaces(plot_eq)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_con_basis(plot_eq):
+    fig, ax = plot_2d(plot_eq, "e^rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_cov_basis(plot_eq):
+    fig, ax = plot_2d(plot_eq, "e_rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_magnetic_tension(plot_eq):
+    fig, ax = plot_2d(plot_eq, "Btension")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_magnetic_pressure(plot_eq):
+    fig, ax = plot_2d(plot_eq, "Bpressure")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_gradpsi(plot_eq):
+    fig, ax = plot_2d(plot_eq, "|grad(psi)|")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_normF_2d(plot_eq):
+    fig, ax = plot_2d(plot_eq, "|F|", norm_F=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_normF_section(plot_eq):
+    fig, ax = plot_section(plot_eq, "|F|", norm_F=True, log=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_coefficients(plot_eq):
+    fig, ax = plot_coefficients(plot_eq)
     return fig
 
 

@@ -229,13 +229,13 @@ class TestGrid(unittest.TestCase):
 
     def test_repr(self):
 
-        qg = ConcentricGrid(1, 2, 3)
+        qg = ConcentricGrid(2, 3, 4)
         s = str(qg)
         assert "ConcentricGrid" in s
         assert "jacobi" in s
-        assert "L=1" in s
-        assert "M=2" in s
-        assert "N=3" in s
+        assert "L=2" in s
+        assert "M=3" in s
+        assert "N=4" in s
 
     def test_change_resolution(self):
 

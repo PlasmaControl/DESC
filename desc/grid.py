@@ -1,6 +1,6 @@
 import numpy as np
 from termcolor import colored
-from desc.utils import equals
+
 from desc.io import IOAble
 from scipy import special
 
@@ -18,6 +18,8 @@ class Grid(IOAble):
     ----------
     nodes : ndarray of float, size(num_nodes,3)
         node coordinates, in (rho,theta,zeta)
+    sort : bool
+        whether to sort the nodes for use with FFT method.
 
     """
 
@@ -34,7 +36,7 @@ class Grid(IOAble):
         "_node_pattern",
     ]
 
-    def __init__(self, nodes):
+    def __init__(self, nodes, sort=True):
 
         self._L = np.unique(nodes[:, 0]).size
         self._M = np.unique(nodes[:, 1]).size
@@ -46,27 +48,10 @@ class Grid(IOAble):
         self._nodes, self._weights = self._create_nodes(nodes)
 
         self._enforce_symmetry()
-        self._sort_nodes()
+        if sort:
+            self._sort_nodes()
         self._find_axis()
-
-    def __eq__(self, other):
-        """Overloads the == operator
-
-        Parameters
-        ----------
-        other : Grid
-            another Grid object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is a Grid with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        return equals(self.__dict__, other.__dict__)
+        self._scale_weights()
 
     def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""
@@ -85,6 +70,18 @@ class Grid(IOAble):
     def _find_axis(self):
         """Finds indices of axis nodes"""
         self._axis = np.where(self.nodes[:, 0] == 0)[0]
+
+    def _scale_weights(self):
+        """Scales weights to sum to full volume and reduces weights for duplicated nodes"""
+
+        nodes = self.nodes.copy().astype(float)
+        nodes[:, 1] %= 2 * np.pi
+        nodes[:, 2] %= 2 * np.pi / self.NFP
+        _, inverse, counts = np.unique(
+            nodes, axis=0, return_inverse=True, return_counts=True
+        )
+        self._weights /= counts[inverse]
+        self._weights *= 4 * np.pi ** 2 / self._weights.sum()
 
     def _create_nodes(self, nodes):
         """Allows for custom node creation
@@ -265,6 +262,7 @@ class LinearGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._scale_weights()
 
     def _create_nodes(
         self,
@@ -430,6 +428,7 @@ class QuadratureGrid(Grid):
         self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
+        # quad grid should already be exact, so we don't scale weights
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """
@@ -569,6 +568,7 @@ class ConcentricGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._scale_weights()
 
     def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """
@@ -646,7 +646,8 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            theta = (theta + dtheta / 3) % (2 * np.pi)
+            if self.sym:
+                theta = (theta + dtheta / 3) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)

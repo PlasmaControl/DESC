@@ -1,14 +1,23 @@
 import warnings
+import pydoc
 import numpy as np
 import h5py
 from .core_io import IO, Reader, Writer
+
+
+def fullname(o):
+    klass = o.__class__
+    module = klass.__module__
+    if module == "builtins":
+        return klass.__qualname__  # avoid outputs like 'builtins.str'
+    return module + "." + klass.__qualname__
 
 
 class hdf5IO(IO):
     """Class to wrap ABC IO for hdf5 file format."""
 
     def __init__(self):
-        """Initialize hdf5IO instance"""
+        """Initialize hdf5IO instance."""
         self._file_types_ = (h5py._hl.group.Group, h5py._hl.files.File)
         self._file_format_ = "hdf5"
         super().__init__()
@@ -51,7 +60,7 @@ class hdf5IO(IO):
             raise RuntimeError("Cannot create sub in reader.")
 
     def groups(self, where=None):
-        """Finds groups in location given by 'where'.
+        """Find groups in location given by 'where'.
 
         Parameters
         ----------
@@ -80,10 +89,9 @@ class hdf5Reader(hdf5IO, Reader):
         """
         self.target = target
         self.file_mode = "r"
-        self.obj_lib = {}
         super().__init__()
 
-    def read_obj(self, obj, where=None, obj_lib=None):
+    def read_obj(self, obj, where=None):
         """Read object from file in group specified by where argument.
 
         Parameters
@@ -94,11 +102,6 @@ class hdf5Reader(hdf5IO, Reader):
             specifies where to read obj from
 
         """
-        if obj_lib is not None:
-            self.obj_lib.update(obj_lib)
-        if hasattr(obj, "_object_lib_"):
-            self.obj_lib.update(obj._object_lib_)
-
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
@@ -112,34 +115,37 @@ class hdf5Reader(hdf5IO, Reader):
                 else:
                     setattr(obj, attr, loc[attr][()])
             elif isinstance(loc[attr], h5py.Group):
-                if "name" not in loc[attr].keys():
+                if "__class__" not in loc[attr].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no name found.".format(attr),
+                        "Could not load attribute '{}', no class name found.".format(
+                            attr
+                        ),
                         RuntimeWarning,
                     )
                     continue
-                name = loc[attr]["name"][()].decode("utf-8")
-                if name == "list":
+
+                cls_name = loc[attr]["__class__"][()].decode("utf-8")
+                if cls_name == "list":
                     setattr(obj, attr, self.read_list(where=loc[attr]))
-                elif name == "dict":
+                elif cls_name == "dict":
                     setattr(obj, attr, self.read_dict(where=loc[attr]))
                 else:
-                    if name not in self.obj_lib:
+                    # use importlib to import the correct class
+                    cls = pydoc.locate(cls_name)
+                    if cls is not None:
+                        setattr(
+                            obj,
+                            attr,
+                            cls.load(
+                                load_from=loc[attr], file_format=self._file_format_,
+                            ),
+                        )
+                    else:
                         warnings.warn(
-                            "No object_lib '{}'.".format(name), RuntimeWarning
+                            "Class '{}' could not be imported.".format(cls_name),
+                            RuntimeWarning,
                         )
                         continue
-
-                    # initialized an object from object_lib
-                    setattr(
-                        obj,
-                        attr,
-                        self.obj_lib[name].load(
-                            load_from=loc[attr],
-                            file_format=self._file_format_,
-                            obj_lib=self.obj_lib,
-                        ),
-                    )
 
     def read_dict(self, where=None):
         """Read dictionary from file in group specified by where argument.
@@ -154,39 +160,39 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for key in loc.keys():
             if isinstance(loc[key], h5py.Dataset):
-                if (
-                    isinstance(loc[key][()], bytes)
-                    and loc[key][()].decode("utf-8") != "name"
-                ):
+                if isinstance(loc[key][()], bytes) and key != "__class__":
                     thedict[key] = loc[key][()].decode("utf-8")
                 elif not isinstance(loc[key][()], bytes):
                     thedict[key] = loc[key][()]
 
             elif isinstance(loc[key], h5py.Group):
-                if "name" not in loc[key].keys():
+                if "__class__" not in loc[key].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no name found.".format(key),
+                        "Could not load attribute '{}', no class name found.".format(
+                            key
+                        ),
                         RuntimeWarning,
                     )
                     continue
-                name = loc[key]["name"][()].decode("utf-8")
-                if name == "list":
-                    thedict[name] = self.read_list(where=loc[key])
-                elif name == "dict":
+                cls_name = loc[key]["__class__"][()].decode("utf-8")
+                if cls_name == "list":
+                    thedict[key] = self.read_list(where=loc[key])
+                elif cls_name == "dict":
                     thedict[key] = self.read_dict(where=loc[key])
                 else:
-                    if name not in self.obj_lib:
+                    # use importlib to import the correct class
+                    cls = pydoc.locate(cls_name)
+                    if cls is not None:
+                        thedict[key] = cls.load(
+                            load_from=loc[key], file_format=self._file_format_,
+                        )
+                    else:
                         warnings.warn(
-                            "No object_lib '{}'.".format(name), RuntimeWarning
+                            "Class '{}' could not be imported.".format(cls_name),
+                            RuntimeWarning,
                         )
                         continue
 
-                    # initialized an object from object_lib
-                    thedict[key] = self.obj_lib[name].load(
-                        load_from=loc[key],
-                        file_format=self._file_format_,
-                        obj_lib=self.obj_lib,
-                    )
         return thedict
 
     def read_list(self, where=None):
@@ -205,38 +211,40 @@ class hdf5Reader(hdf5IO, Reader):
             if isinstance(loc[str(i)], h5py.Dataset):
                 if (
                     isinstance(loc[str(i)][()], bytes)
-                    and loc[str(i)][()].decode("utf-8") != "name"
+                    and loc[str(i)][()].decode("utf-8") != "__class__"
                 ):
                     thelist.append(loc[str(i)][()].decode("utf-8"))
-                elif not isinstance(loc[attr][()], bytes):
+                elif not isinstance(loc[str(i)][()], bytes):
                     thelist.append(loc[str(i)][()])
             elif isinstance(loc[str(i)], h5py.Group):
-                if "name" not in loc[str(i)].keys():
+                if "__class__" not in loc[str(i)].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no name found.".format(str(i)),
+                        "Could not load attribute '{}', no class name found.".format(
+                            str(i)
+                        ),
                         RuntimeWarning,
                     )
                     continue
-                name = loc[str(i)]["name"][()].decode("utf-8")
-                if name == "list":
-                    thelist.append(self.read_list(where=loc[key]))
-                elif name == "dict":
-                    thelist.append(self.read_dict(where=loc[key]))
+                cls_name = loc[str(i)]["__class__"][()].decode("utf-8")
+                if cls_name == "list":
+                    thelist.append(self.read_list(where=loc[str(i)]))
+                elif cls_name == "dict":
+                    thelist.append(self.read_dict(where=loc[str(i)]))
                 else:
-                    if name not in self.obj_lib:
+                    # use importlib to import the correct class
+                    cls = pydoc.locate(cls_name)
+                    if cls is not None:
+                        thelist.append(
+                            cls.load(
+                                load_from=loc[str(i)], file_format=self._file_format_,
+                            ),
+                        )
+                    else:
                         warnings.warn(
-                            "No object_lib '{}'.".format(name), RuntimeWarning
+                            "Class '{}' could not be imported.".format(cls_name),
+                            RuntimeWarning,
                         )
                         continue
-
-                    # initialized an object from object_lib
-                    thelist.append(
-                        self.obj_lib[name].load(
-                            load_from=loc[str(i)],
-                            file_format=self._file_format_,
-                            obj_lib=self.obj_lib,
-                        )
-                    )
                 i += 1
 
         return thelist
@@ -246,7 +254,7 @@ class hdf5Writer(hdf5IO, Writer):
     """Class specifying a writer with hdf5IO."""
 
     def __init__(self, target, file_mode="w"):
-        """Initializes hdf5Writer class.
+        """Initialize hdf5Writer class.
 
         Parameters
         ----------
@@ -274,7 +282,7 @@ class hdf5Writer(hdf5IO, Writer):
         loc = self.resolve_where(where)
 
         # save name of object class
-        loc.create_dataset("name", data=type(obj).__name__)
+        loc.create_dataset("__class__", data=fullname(obj))
         for attr in obj._io_attrs_:
             try:
                 data = getattr(obj, attr)
@@ -321,7 +329,7 @@ class hdf5Writer(hdf5IO, Writer):
 
         """
         loc = self.resolve_where(where)
-        loc.create_dataset("name", data="dict")
+        loc.create_dataset("__class__", data="dict")
         for key in thedict.keys():
             try:
                 data = thedict[key]
@@ -347,7 +355,7 @@ class hdf5Writer(hdf5IO, Writer):
 
         """
         loc = self.resolve_where(where)
-        loc.create_dataset("name", data="list")
+        loc.create_dataset("__class__", data="list")
         for i in range(len(thelist)):
             try:
                 data = thelist[i]

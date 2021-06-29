@@ -26,9 +26,10 @@ def SOLOVEV(tmpdir_factory):
     """Run SOLOVEV example."""
     input_path = "examples//DESC//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("SOLOVEV_out")
+    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
     desc_nc_path = output_dir.join("SOLOVEV_out.nc")
     vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
+    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")
@@ -38,14 +39,15 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(output_path), input_filename, "--numpy"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy"]
     main(args)
 
     SOLOVEV_out = {
         "input_path": input_path,
-        "output_path": output_path,
+        "desc_h5_path": desc_h5_path,
         "desc_nc_path": desc_nc_path,
         "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
     }
     return SOLOVEV_out
 
@@ -55,9 +57,10 @@ def DSHAPE(tmpdir_factory):
     """Run DSHAPE example."""
     input_path = "examples//DESC//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("DSHAPE_out")
+    desc_h5_path = output_dir.join("DSHAPE_out.h5")
     desc_nc_path = output_dir.join("DSHAPE_out.nc")
     vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")
@@ -67,14 +70,15 @@ def DSHAPE(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(output_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename]
     main(args)
 
     DSHAPE_out = {
         "input_path": input_path,
-        "output_path": output_path,
+        "desc_h5_path": desc_h5_path,
         "desc_nc_path": desc_nc_path,
         "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
     }
     return DSHAPE_out
 
@@ -83,15 +87,15 @@ def DSHAPE(tmpdir_factory):
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")
-    output_path = output_dir.join("DummyStellarator")
+    output_path = output_dir.join("DummyStellarator.h5")
 
     inputs = {
         "sym": True,
-        "NFP": 1,
+        "NFP": 3,
         "Psi": 1.0,
-        "L": 2,
+        "L": 4,
         "M": 2,
-        "N": 1,
+        "N": 2,
         "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0]]),
         "boundary": np.array(
             [
@@ -100,13 +104,14 @@ def DummyStellarator(tmpdir_factory):
                 [0, -1, 0, 0, 1],
                 [0, 1, 1, 0.3, 0],
                 [0, -1, -1, -0.3, 0],
-                [0, 1, -1, -0.3, 0],
-                [0, -1, 1, -0.3, 0],
+                [0, 1, -1, 0, -0.3],
+                [0, -1, 1, 0, -0.3],
             ],
         ),
+        "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
         "bdry_mode": "lcfs",
         "objective": "force",
-        "optimizer": "scipy-trf",
+        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(inputs=inputs)
     eq.build()

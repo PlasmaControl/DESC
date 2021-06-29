@@ -1,8 +1,65 @@
 import os
+import pickle
+import h5py
+import pydoc
 from abc import ABC
 from termcolor import colored
+from desc.utils import equals
 from .pickle_io import PickleReader, PickleWriter
-from .hdf5_io import hdf5Reader, hdf5Writer
+from .hdf5_io import hdf5Reader, hdf5Writer, fullname
+
+
+def load(load_from, file_format=None):
+    """Load any DESC object from previously saved file
+
+    Parameters
+    ----------
+    load_from : str or path-like or file instance
+        file to initialize from
+    file_format : {``'hdf5'``, ``'pickle'``} (Default: infer from file name)
+        file format of file initializing from
+
+    Returns
+    -------
+    obj :
+        The object saved in the file
+    """
+
+    if file_format is None and isinstance(load_from, (str, os.PathLike)):
+        name = str(load_from)
+        if name.endswith(".h5") or name.endswith(".hdf5"):
+            file_format = "hdf5"
+        elif name.endswith(".pkl") or name.endswith(".pickle"):
+            file_format = "pickle"
+        else:
+            raise RuntimeError(
+                colored(
+                    "could not infer file format from file name, it should be provided as file_format",
+                    "red",
+                )
+            )
+
+    if file_format == "pickle":
+        with open(load_from, "rb") as f:
+            obj = pickle.load(f)
+    elif file_format == "hdf5":
+        f = h5py.File(load_from, "r")
+        if "__class__" in f.keys():
+            cls_name = f["__class__"][()].decode("utf-8")
+            cls = pydoc.locate(cls_name)
+            obj = cls.__new__(cls)
+            f.close()
+            reader = reader_factory(load_from, file_format)
+            reader.read_obj(obj)
+        else:
+            raise ValueError(
+                "Could not load from {}, no __class__ attribute found".format(load_from)
+            )
+
+    # to set other secondary stuff that wasnt saved possibly:
+    if hasattr(obj, "_set_up"):
+        obj._set_up()
+    return obj
 
 
 class IOAble(ABC):
@@ -11,11 +68,7 @@ class IOAble(ABC):
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
     To save properly, each object should have an attribute `_io_attrs_` which
     is a list of strings of the object attributes or properties that should be
-    saved and loaded. If any of these attributes are custom types (ie, not
-    standard python containers or numpy arrays), an attribute called
-    `_object_lib_` should also be defined. `_object_lib_` is a dictionary,
-    where the keys are the class names of any custom types, and the values are
-    instances of the class.
+    saved and loaded.
 
     For saved objects to be loaded correctly, the __init__ method of any custom
     types being saved should only assign attributes that are listed in `_io_attrs_`.
@@ -27,7 +80,7 @@ class IOAble(ABC):
     """
 
     @classmethod
-    def load(cls, load_from, file_format=None, obj_lib=None):
+    def load(cls, load_from, file_format=None):
         """Initialize from file.
 
         Parameters
@@ -52,13 +105,16 @@ class IOAble(ABC):
                         "red",
                     )
                 )
-        self = cls.__new__(cls)  # create a blank object bypassing init
-        reader = reader_factory(load_from, file_format)
-        reader.read_obj(self, obj_lib=obj_lib)
+        if isinstance(load_from, (str, os.PathLike)):  # load from top level of file
+            self = load(load_from, file_format)
+        else:  # being called from within a nested object
+            self = cls.__new__(cls)  # create a blank object bypassing init
+            reader = reader_factory(load_from, file_format)
+            reader.read_obj(self)
 
-        # to set other secondary stuff that wasnt saved possibly:
-        if hasattr(self, "_set_up"):
-            self._set_up()
+            # to set other secondary stuff that wasnt saved possibly:
+            if hasattr(self, "_set_up"):
+                self._set_up()
 
         return self
 
@@ -90,6 +146,55 @@ class IOAble(ABC):
         writer = writer_factory(file_name, file_format=file_format, file_mode=file_mode)
         writer.write_obj(self)
         writer.close()
+
+    def __getstate__(self):
+        """helper method for working with pickle io"""
+        if hasattr(self, "_io_attrs_"):
+            return {
+                attr: val
+                for attr, val in self.__dict__.items()
+                if attr in self._io_attrs_
+            }
+        return self.__dict__
+
+    def __setstate__(self, state):
+        """helper method for working with pickle io"""
+        self.__dict__.update(state)
+        if hasattr(self, "_set_up"):
+            self._set_up()
+
+    def eq(self, other):
+        """Compare equivalence between DESC objects
+
+        Two objects are considered equivalent if they will be saved and loaded
+        with the same data, (ie, they have the same data "where it counts", specifically,
+        they have the same _io_attrs_)
+
+        Parameters
+        ----------
+        other
+            object to compare to
+
+        Returns
+        -------
+        eq : bool
+            whether this and other are equivalent
+        """
+        if self.__class__ != other.__class__:
+            return False
+        if hasattr(self, "_io_attrs_"):
+            dict1 = {
+                key: val for key, val in self.__dict__.items() if key in self._io_attrs_
+            }
+            dict2 = {
+                key: val
+                for key, val in other.__dict__.items()
+                if key in self._io_attrs_
+            }
+        else:
+            dict1 = self.__dict__
+            dict2 = other.__dict__
+        return equals(dict1, dict2)
 
 
 def reader_factory(load_from, file_format):

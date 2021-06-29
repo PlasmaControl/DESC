@@ -1,4 +1,3 @@
-import os
 from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
@@ -7,7 +6,7 @@ from termcolor import colored
 import warnings
 
 from desc.grid import Grid, LinearGrid
-from desc.basis import FourierZernikeBasis, jacobi, fourier
+from desc.basis import jacobi, fourier
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -187,13 +186,19 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def plot_coefficients(eq, ax=None):
-    """Plot 1D profiles.
+def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
+    """Plot spectral coefficient magnitudes vs spectral mode number.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
+    L : bool
+        wheter to include radial mode numbers in the x-axis or not (Default = True)
+    M : bool
+        wheter to include poloidal mode numbers in the x-axis or not (Default = True)
+    N : bool
+        wheter to include toroidal mode numbers in the x-axis or not (Default = True)
     ax : matplotlib AxesSubplot, optional
         axis to plot on
 
@@ -205,15 +210,37 @@ def plot_coefficients(eq, ax=None):
         axes being plotted to
 
     """
+    lmn = np.array([], dtype=int)
+    xlabel = ""
+    if L:
+        lmn = np.append(lmn, np.array([0]))
+        xlabel += "l"
+        if M or N:
+            xlabel += " + "
+    if M:
+        lmn = np.append(lmn, np.array([1]))
+        xlabel += "|m|"
+        if N:
+            xlabel += " + "
+    if N:
+        lmn = np.append(lmn, np.array([2]))
+        xlabel += "|n|"
+
     fig, ax = _format_ax(ax, rows=1, cols=3)
 
-    ax[0, 0].semilogy(np.sum(np.abs(eq.R_basis.modes), axis=1), np.abs(eq.R_lmn), "bo")
-    ax[0, 1].semilogy(np.sum(np.abs(eq.Z_basis.modes), axis=1), np.abs(eq.Z_lmn), "bo")
-    ax[0, 2].semilogy(np.sum(np.abs(eq.L_basis.modes), axis=1), np.abs(eq.L_lmn), "bo")
+    ax[0, 0].semilogy(
+        np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
+    )
+    ax[0, 1].semilogy(
+        np.sum(np.abs(eq.Z_basis.modes[:, lmn]), axis=1), np.abs(eq.Z_lmn), "bo"
+    )
+    ax[0, 2].semilogy(
+        np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
+    )
 
-    ax[0, 0].set_xlabel("l + |m| + |n|")
-    ax[0, 1].set_xlabel("l + |m| + |n|")
-    ax[0, 2].set_xlabel("l + |m| + |n|")
+    ax[0, 0].set_xlabel(xlabel)
+    ax[0, 1].set_xlabel(xlabel)
+    ax[0, 2].set_xlabel(xlabel)
 
     ax[0, 0].set_title("$|R_{lmn}|$")
     ax[0, 1].set_title("$|Z_{lmn}|$")
@@ -343,7 +370,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
         else:
-            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
             contourf_kwargs["levels"] = kwargs.get(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
@@ -411,7 +438,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 46, "N": 46, "NFP": nfp}
+        grid_kwargs = {"M": 32, "N": 32 * int(eq.NFP), "NFP": nfp}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -692,31 +719,27 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
             raise ValueError(
                 colored(
-                    "r_grid and t_grid should have the same zeta planes, got r_grid={}, t_grid{}".format(
-                        zeta, t_zeta
-                    ),
+                    "r_grid and t_grid should have the same zeta planes, "
+                    + "got r_grid={}, t_grid{}".format(zeta, t_zeta),
                     "red",
                 )
             )
+
+    # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
+    # PEST-like flux coordinates
+
+    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
     r_coords = eq.compute_toroidal_coords(r_grid)
-    t_coords = eq.compute_toroidal_coords(t_grid)
-
-    # theta coordinates cooresponding to linearly spaced vartheta angles
-    v_nodes = t_grid.nodes
-    v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-    v_grid = Grid(v_nodes)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        v_coords = eq.compute_toroidal_coords(v_grid)
+    v_coords = eq.compute_toroidal_coords(v_grid)
 
     # rho contours
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
     Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
 
-    # theta contours
+    # vartheta contours
     Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
     Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
@@ -733,25 +756,16 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=colorblind_colors[2],
-            linestyle=":",
+            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=colorblind_colors[0],
+            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i],
-            Zr[:, -1, i],
-            color=colorblind_colors[1],
+            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i],
-            Zr[0, 0, i],
-            color=colorblind_colors[3],
+            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])
@@ -813,7 +827,7 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["QS", "B*grad(|B|)"]:
+        elif name_dict["base"] in ["|grad(psi)|", "B*grad(|B|)"]:
             out = eq.compute_quasisymmetry(grid)[_name_key(name_dict)]
         else:
             raise NotImplementedError(
@@ -908,7 +922,7 @@ def _format_name(name):
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(rho)|": r"(\mathrm{m}^{-1})",
         "|beta|": r"(\mathrm{m}^{-1})",
-        "QS": "",
+        "|grad(psi)|": r"(\mathrm{T} \cdot \mathrm{m})",
         "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
     }
     name_dict["units"] = units[name_dict["base"]]

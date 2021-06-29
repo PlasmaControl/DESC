@@ -4,18 +4,11 @@ from termcolor import colored
 import warnings
 
 from desc.backend import jnp, jit, use_jax
-from desc.utils import unpack_state, equals, Timer
+from desc.utils import unpack_state, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.transform import Transform
-from desc.boundary_conditions import (
-    LCFSConstraint,
-    PoincareConstraint,
-    UmbilicConstraint,
-)
 from desc.compute_funs import (
     compute_force_error_magnitude,
-    dot,
     compute_energy,
     compute_quasisymmetry,
 )
@@ -43,9 +36,9 @@ class ObjectiveFunction(IOAble, ABC):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
             linear constraint to enforce boundary conditions
@@ -60,19 +53,11 @@ class ObjectiveFunction(IOAble, ABC):
         "L_transform",
         "Rb_transform",
         "Zb_transform",
-        "p_transform",
-        "i_transform",
+        "p_profile",
+        "i_profile",
         "BC_constraint",
         "use_jit",
     ]
-
-    _object_lib_ = {
-        "Transform": Transform,
-        "LCFSConstraint": LCFSConstraint,
-        "PoincareConstraint": PoincareConstraint,
-        "UmbilicConstraint": UmbilicConstraint,
-    }
-    _object_lib_.update(Transform._object_lib_)
 
     arg_names = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
 
@@ -83,8 +68,8 @@ class ObjectiveFunction(IOAble, ABC):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -94,8 +79,8 @@ class ObjectiveFunction(IOAble, ABC):
         self.L_transform = L_transform
         self.Rb_transform = Rb_transform
         self.Zb_transform = Zb_transform
-        self.p_transform = p_transform
-        self.i_transform = i_transform
+        self.p_profile = p_profile
+        self.i_profile = i_profile
         self.BC_constraint = BC_constraint
         self.use_jit = use_jit
         self._set_up()
@@ -136,14 +121,6 @@ class ObjectiveFunction(IOAble, ABC):
             (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
         ):
             self.Zb_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.p_transform.derivatives).all(-1).any(-1)
-        ):
-            self.p_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.i_transform.derivatives).all(-1).any(-1)
-        ):
-            self.i_transform.change_derivatives(self.derivatives, build=False)
 
     def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.
@@ -240,42 +217,6 @@ class ObjectiveFunction(IOAble, ABC):
         if verbose > 1:
             timer.disp("Total compilation time")
         self.compiled = True
-
-    # note: we can't override __eq__ here because that breaks the hashing that jax uses
-    # when jitting functions
-    def eq(self, other):
-        """Test for equivalence between objectives.
-
-        Parameters
-        ----------
-        other : ObjectiveFunction
-            another ObjectiveFunction object to compare to
-
-        Returns
-        -------
-        bool
-            True if other is an ObjectiveFunction with the same attributes as self
-            False otherwise
-
-        """
-        if self.__class__ != other.__class__:
-            return False
-        ignore_keys = [
-            "_grad",
-            "_jac",
-            "_hess",
-            "compute",
-            "compute_scalar",
-            "compiled",
-            "use_jit",
-        ]
-        dict1 = {
-            key: val for key, val in self.__dict__.items() if key not in ignore_keys
-        }
-        dict2 = {
-            key: val for key, val in other.__dict__.items() if key not in ignore_keys
-        }
-        return equals(dict1, dict2)
 
     @property
     @abstractmethod
@@ -422,14 +363,14 @@ class ObjectiveFunction(IOAble, ABC):
         f = self.compute
         dims = [f(*args).size]
         for a in argnums:
-            if isinstance(a, int) and a < 7:
+            if isinstance(a, int) and a < 6:
                 f = Derivative(f, argnum=a)
             elif isinstance(a, str) and a in ObjectiveFunction.arg_names:
                 a = ObjectiveFunction.arg_names.get(a)
                 f = Derivative(f, argnum=a)
             else:
                 raise ValueError(
-                    "argnums should be integers between 0 and 6 "
+                    "argnums should be integers between 0 and 5 "
                     + "or one of {}, got {}".format(ObjectiveFunction.arg_names, a)
                 )
             dims.append(args[a].size)
@@ -452,9 +393,9 @@ class ForceErrorGalerkin(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -470,8 +411,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -482,8 +423,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -580,8 +521,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -649,8 +590,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -703,8 +644,8 @@ class ForceErrorGalerkin(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -739,9 +680,9 @@ class ForceErrorNodes(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -833,8 +774,8 @@ class ForceErrorNodes(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -922,8 +863,8 @@ class ForceErrorNodes(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         weights = self.R_transform.grid.weights
@@ -964,9 +905,9 @@ class EnergyVolIntegral(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -982,8 +923,8 @@ class EnergyVolIntegral(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -994,8 +935,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -1075,8 +1016,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         residual = energy["W"]
@@ -1154,8 +1095,8 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
         print(
@@ -1182,9 +1123,9 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1265,6 +1206,7 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1279,16 +1221,29 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
-        return quasisymmetry["QS_TP"]
+        # QS triple product (T^4/m^2)
+        QS = (
+            profiles["psi_r"]
+            * (
+                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+            )
+            / jacobian["g"]
+        )
+
+        # normalization factor = <|B|>^4 / R^2
+        R0 = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        return QS * R0 ** 2 / norm ** 4  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1308,11 +1263,57 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_profile,
+            self.i_profile,
+        )
+
+        # QS triple product (T^4/m^2)
+        QS = (
+            profiles["psi_r"]
+            * (
+                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
+                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
+            )
+            / jacobian["g"]
+        )
+
+        # normalization factor = <|B|>^4 / R^2
+        R0 = Rb_lmn[
+            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+        ]
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        f = QS * R0 ** 2 / norm ** 4  # normalized QS error
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1355,9 +1356,9 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1373,8 +1374,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         L_transform,
         Rb_transform,
         Zb_transform,
-        p_transform,
-        i_transform,
+        p_profile,
+        i_profile,
         BC_constraint,
         use_jit=True,
     ):
@@ -1385,8 +1386,8 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             L_transform,
             Rb_transform,
             Zb_transform,
-            p_transform,
-            i_transform,
+            p_profile,
+            i_profile,
             BC_constraint,
             use_jit,
         )
@@ -1473,6 +1474,7 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             quasisymmetry,
             current_density,
             magnetic_field,
+            con_basis,
             jacobian,
             cov_basis,
             toroidal_coords,
@@ -1487,18 +1489,41 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_transform,
-            self.i_transform,
+            self.p_profile,
+            self.i_profile,
         )
 
-        # normalize to flux surface average
-        QS_FF = quasisymmetry["QS_FF"] / jnp.mean(quasisymmetry["QS_FF"]) - 1
-        return QS_FF
+        # M/N (type of QS)
+        helicity = 1.0 / 1.0
+
+        # covariant Boozer components
+        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # poloidal current
+        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # toroidal current
+
+        # flux function C=C(rho)
+        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
+
+        # QS flux function (T^3)
+        QS = (
+            profiles["psi_r"]
+            / jacobian["g"]
+            * (
+                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+            )
+            - C * quasisymmetry["B*grad(|B|)"]
+        )
+
+        # normalization factor = <|B|>^3
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        return QS / norm ** 3  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total quasisymetry error.
-
-        eg 1/2 sum(f**2)
+        """Compute the volume averaged quasi-symmetry error.
 
         Parameters
         ----------
@@ -1518,11 +1543,67 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         Returns
         -------
         f : float
-            total quasisymmetry error
+            average quasi-symmetry error
+
         """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
+        if self.BC_constraint is not None and x.size == self.dimy:
+            # x is really 'y', need to recover full state vector
+            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+
+        R_lmn, Z_lmn, L_lmn = unpack_state(
+            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
+        )
+
+        (
+            quasisymmetry,
+            current_density,
+            magnetic_field,
+            con_basis,
+            jacobian,
+            cov_basis,
+            toroidal_coords,
+            profiles,
+        ) = compute_quasisymmetry(
+            Psi,
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.p_profile,
+            self.i_profile,
+        )
+
+        # covariant Boozer components
+        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # poloidal current
+        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
+            jacobian["g"]
+        )  # toroidal current
+
+        helicity = 1.0 / 1.0  # M/N (type of QS)
+        # flux function C=C(rho)
+        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
+
+        # QS flux function (T^3)
+        QS = (
+            profiles["psi_r"]
+            / jacobian["g"]
+            * (
+                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
+                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
+            )
+            - C * quasisymmetry["B*grad(|B|)"]
+        )
+
+        # normalization factor = <|B|>^3
+        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        f = QS / norm ** 3  # normalized QS error
+        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1557,8 +1638,8 @@ def get_objective_function(
     L_transform,
     Rb_transform,
     Zb_transform,
-    p_transform,
-    i_transform,
+    p_profile,
+    i_profile,
     BC_constraint=None,
     use_jit=True,
 ):
@@ -1578,9 +1659,9 @@ def get_objective_function(
         transforms Rb_lmn coefficients to real space
     Zb_transform : Transform
         transforms Zb_lmn coefficients to real space
-    p_transform : Transform
+    p_profile: Profile
         transforms p_l coefficients to real space
-    i_transform : Transform
+    i_profile: Profile
         transforms i_l coefficients to real space
     BC_constraint : BoundaryCondition
         linear constraint to enforce boundary conditions
@@ -1600,8 +1681,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
@@ -1612,8 +1693,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
@@ -1624,8 +1705,8 @@ def get_objective_function(
             L_transform=L_transform,
             Rb_transform=Rb_transform,
             Zb_transform=Zb_transform,
-            p_transform=p_transform,
-            i_transform=i_transform,
+            p_profile=p_profile,
+            i_profile=i_profile,
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
@@ -1640,33 +1721,3 @@ def get_objective_function(
         )
 
     return obj_fun
-
-
-"""
-QS derivatives (just here so we don't loose them)
-            derivatives = np.array(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                    [2, 0, 0],
-                    [1, 1, 0],
-                    [1, 0, 1],
-                    [0, 2, 0],
-                    [0, 1, 1],
-                    [0, 0, 2],
-                    [3, 0, 0],
-                    [2, 1, 0],
-                    [2, 0, 1],
-                    [1, 2, 0],
-                    [1, 1, 1],
-                    [1, 0, 2],
-                    [0, 3, 0],
-                    [0, 2, 1],
-                    [0, 1, 2],
-                    [0, 0, 3],
-                    [2, 2, 0],
-                ]
-            )
-"""

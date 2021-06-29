@@ -1,11 +1,9 @@
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
-from .derivative import SVDJacobian
 from .utils import (
     check_termination,
     OptimizeResult,
-    evaluate_quadratic_form,
     print_header_nonlinear,
     print_iteration_nonlinear,
     status_messages,

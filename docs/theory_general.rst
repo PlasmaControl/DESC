@@ -7,7 +7,7 @@ The code is constantly evolving and may differ from the implementation presented
 This documentation aims to reflect the latest version of the code, and major discrepancies from the publication will be noted when relevant. 
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. 
-.. _publication: https://github.com/ddudt/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
+.. _publication: https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
 
 Flux coordinates
 ****************

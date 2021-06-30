@@ -176,7 +176,7 @@ def lsqtr(
     if return_tr:
         alltr = [trust_radius]
 
-    alpha = np.nan  # "Levenberg-Marquardt" parameter
+    alpha = 0  # "Levenberg-Marquardt" parameter
 
     while True:
 
@@ -213,6 +213,7 @@ def lsqtr(
                 )
 
             step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+
             # geodesic acceleration
             if ga_tr_ratio > 0:
                 f0 = f

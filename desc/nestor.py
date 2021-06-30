@@ -147,7 +147,104 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc
     coords["X"] = (R_2d * np.cos(phi)).flatten()
     coords["Y"] = (R_2d * np.sin(phi)).flatten()     
     return coords
+
+
+def compute_normal(coords, signgs):
+    normal = {}
+    normal["R_n"]   =  signgs * (coords["R_sym"] * coords["Z_t"])
+    normal["phi_n"] =  signgs * (coords["R_t"] * coords["Z_z"]
+                                              - coords["R_z"] * coords["Z_t"])
+    normal["Z_n"]   = -signgs * (coords["R_sym"] * coords["R_t"])
+    return normal
+
+def compute_jacobian(coords, normal, nfp):
+
+    jacobian = {}        
+
+    # a, b, c in NESTOR article: dot-products of first-order derivatives of surface
+    jacobian["g_tt"] = (coords["R_t"] * coords["R_t"]
+                        + coords["Z_t"] * coords["Z_t"])
+    jacobian["g_tz"] = (coords["R_t"] * coords["R_z"]
+                        + coords["Z_t"] * coords["Z_z"])/nfp
+    jacobian["g_zz"] = (coords["R_z"]  * coords["R_z"]
+                        + coords["Z_z"]  * coords["Z_z"]
+                        + coords["R_sym"] * coords["R_sym"])/nfp**2
     
+    # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface (?)
+    jacobian["a_tt"]   = 0.5 * (normal["R_n"] * coords["R_tt"]
+                                + normal["Z_n"] * coords["Z_tt"])
+    jacobian["a_tz"] = (normal["R_n"] * coords["R_tz"]
+                        + normal["phi_n"] * coords["R_t"]
+                        + normal["Z_n"] * coords["Z_tz"])/nfp
+    jacobian["a_zz"]   = (normal["phi_n"] * coords["R_z"] +
+                          0.5*(normal["R_n"] * (coords["R_zz"] - coords["R_sym"])
+                               + normal["Z_n"] * coords["Z_zz"]) )/nfp**2
+
+    return jacobian
+
+
+# TODO: vectorize this over multiple coils
+def biot_savart(eval_pts, coil_pts, current):
+    """Biot-Savart law following [1]
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(3,n)
+        evaluation points in cartesian coordinates
+    coil_pts : array-like shape(3,m)
+        points in cartesian space defining coil
+    current : float
+        current through the coil
+
+    Returns
+    -------
+    B : ndarray, shape(3,k)
+        magnetic field in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart fields of a filamentary segment" (2002)
+    """
+    dvec = np.diff(coil_pts, axis=1)
+    L = np.linalg.norm(dvec, axis=0)
+
+    Ri_vec = eval_pts[:, :,np.newaxis] - coil_pts[:,np.newaxis,:-1]
+    Ri = np.linalg.norm(Ri_vec, axis=0)
+    Rf = np.linalg.norm(eval_pts[:, :, np.newaxis] - coil_pts[:,np.newaxis,1:], axis=0)
+    Ri_p_Rf = Ri + Rf
+
+    # 1.0e-7 == mu0/(4 pi)
+    Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / ( Ri * Rf * (Ri_p_Rf*Ri_p_Rf - L*L) )
+
+    # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
+    vec = np.cross(dvec, Ri_vec, axis=0)
+    return np.sum(Bmag * vec, axis=-1)
+
+
+# model net toroidal plasma current as filament along the magnetic axis
+# and add its magnetic field on the LCFS to the MGRID magnetic field
+def modelNetToroidalCurrent(raxis, phiaxis, zaxis, current, R_sym, phi_sym, Z_sym, zeta_fp):
+
+    # TODO: we can simplify this by evaluating the field directly in cylindrical coordinates
+    # copy 1 field period around to make full torus
+    xyz = np.array([raxis*np.cos(phiaxis),
+                    raxis*np.sin(phiaxis),
+                    zaxis])
+    xpts = np.moveaxis(copy_vector_periods(xyz, zeta_fp), -1,1).reshape((3,-1))
+    # first point == last point        
+    xpts = np.hstack([xpts[:,-1:], xpts])
+
+    eval_pts = np.array([R_sym*np.cos(phi_sym),
+                         R_sym*np.sin(phi_sym),
+                         Z_sym])
+
+
+    B = biot_savart(eval_pts, xpts, current)
+
+    # add B^X and B^Y to MGRID magnetic field; need to convert to cylindrical components first
+    return np.array([B[0]*np.cos(phi_sym) + B[1]*np.sin(phi_sym),
+                     B[1]*np.cos(phi_sym) - B[0]*np.sin(phi_sym),
+                     B[2]])
+
+
 # Neumann Solver for Toroidal Systems
 class Nestor:
 
@@ -227,15 +324,11 @@ class Nestor:
     # MGridFile object holding the external magnetic field to interpolate
     mgrid = None
 
-    def __init__(self, vacinFilename):
-        self.load(vacinFilename)
-
-    # read input file for NESTOR
-    def load(self, vacinFilename):
+    def __init__(self, vacinFilename, mgrid):
         self.vacin = Dataset(vacinFilename, "r")
 
         self.ier_flag        = int(self.vacin['ier_flag'][()])
-        mgrid_file           = self.vacin['mgrid_file'][()]
+
 
         self.ivacskip        = int(self.vacin['ivacskip'][()])
         self.ivac            = int(self.vacin['ivac'][()])
@@ -248,7 +341,7 @@ class Nestor:
         self.ctor            = self.vacin['ctor'][()]
         self.lasym           = (self.vacin['lasym__logical__'][()] != 0)
         self.signgs          = self.vacin['signgs'][()]
-        self.extcur          = self.vacin['extcur'][()]
+
         self.raxis_nestor    = self.vacin['raxis_nestor'][()]
         self.zaxis_nestor    = self.vacin['zaxis_nestor'][()]
         self.wint            = np.array(self.vacin['wint'][()])
@@ -257,8 +350,10 @@ class Nestor:
         self.bsubvvac        = self.vacin['bsubvvac'][()]
         # self.vacin.close()
 
-        self.mgrid_file = bytearray(mgrid_file).decode('utf-8')
-
+        extcur          = self.vacin['extcur'][()]        
+        folder = os.getcwd()
+        mgridFilename = os.path.join(folder, mgrid)
+        self.ext_field = SplineMagneticField.from_mgrid(mgridFilename, extcur)
 
     # pre-computable quantities and arrays
     def precompute(self):
@@ -327,47 +422,6 @@ class Nestor:
         self.ntheta_stellsym = self.ntheta//2 + 1
         self.nzeta_stellsym = self.nzeta//2 + 1
 
-    def compute_normal(self, coords):
-        normal = {}
-        normal["R_n"]   =  self.signgs * (coords["R_sym"] * coords["Z_t"])
-        normal["phi_n"] =  self.signgs * (coords["R_t"] * coords["Z_z"]
-                                                  - coords["R_z"] * coords["Z_t"])
-        normal["Z_n"]   = -self.signgs * (coords["R_sym"] * coords["R_t"])
-        return normal
-    
-    def compute_jacobian(self, coords, normal):
-
-        jacobian = {}        
-
-        # a, b, c in NESTOR article: dot-products of first-order derivatives of surface
-        jacobian["g_tt"] = (coords["R_t"] * coords["R_t"]
-                            + coords["Z_t"] * coords["Z_t"])
-        jacobian["g_tz"] = (coords["R_t"] * coords["R_z"]
-                            + coords["Z_t"] * coords["Z_z"])/self.nfp
-        jacobian["g_zz"] = (coords["R_z"]  * coords["R_z"]
-                            + coords["Z_z"]  * coords["Z_z"]
-                            + coords["R_sym"] * coords["R_sym"])/self.nfp**2
-        
-        # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface (?)
-        jacobian["a_tt"]   = 0.5 * (normal["R_n"] * coords["R_tt"]
-                                    + normal["Z_n"] * coords["Z_tt"])
-        jacobian["a_tz"] = (normal["R_n"] * coords["R_tz"]
-                            + normal["phi_n"] * coords["R_t"]
-                            + normal["Z_n"] * coords["Z_tz"])/self.nfp
-        jacobian["a_zz"]   = (normal["phi_n"] * coords["R_z"] +
-                              0.5*(normal["R_n"] * (coords["R_zz"] - coords["R_sym"])
-                                   + normal["Z_n"] * coords["Z_zz"]) )/self.nfp**2
-
-        return jacobian
-    
-    # read mgrid file; only need to do this once!
-    def loadMGridFile(self, mgrid_file=None):
-        folder = os.getcwd()
-        if mgrid_file is None:
-            mgrid_file = self.mgrid_file
-        mgridFilename = os.path.join(folder, mgrid_file)
-        self.ext_field = SplineMagneticField.from_mgrid(mgridFilename, self.extcur)
-
     # evaluate MGRID on grid over flux surface
     def interpolateMGridFile(self, R, Z, phi):
         grid = np.array([R,phi,Z]).T
@@ -375,64 +429,6 @@ class Nestor:
 
         return B.T
 
-    # model net toroidal plasma current as filament along the magnetic axis
-    # and add its magnetic field on the LCFS to the MGRID magnetic field
-    def modelNetToroidalCurrent(self, raxis, phiaxis, zaxis, current, R_sym, phi_sym, Z_sym):
-
-        # TODO: we can simplify this by evaluating the field directly in cylindrical coordinates
-        # copy 1 field period around to make full torus
-        xyz = np.array([raxis*np.cos(phiaxis),
-                        raxis*np.sin(phiaxis),
-                        zaxis])
-        xpts = np.moveaxis(copy_vector_periods(xyz, self.zeta_fp), -1,1).reshape((3,-1))
-        # first point == last point        
-        xpts = np.hstack([xpts[:,-1:], xpts])
-
-        eval_pts = np.array([R_sym*np.cos(phi_sym),
-                             R_sym*np.sin(phi_sym),
-                             Z_sym])
-
-        # TODO: vectorize this over multiple coils
-        def biot_savart(eval_pts, coil_pts, current):
-            """Biot-Savart law following [1]
-
-            Parameters
-            ----------
-            eval_pts : array-like shape(3,n)
-                evaluation points in cartesian coordinates
-            coil_pts : array-like shape(3,m)
-                points in cartesian space defining coil
-            current : float
-                current through the coil
-
-            Returns
-            -------
-            B : ndarray, shape(3,k)
-                magnetic field in cartesian components at specified points
-
-            [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart fields of a filamentary segment" (2002)
-            """
-            dvec = np.diff(coil_pts, axis=1)
-            L = np.linalg.norm(dvec, axis=0)
-
-            Ri_vec = eval_pts[:, :,np.newaxis] - coil_pts[:,np.newaxis,:-1]
-            Ri = np.linalg.norm(Ri_vec, axis=0)
-            Rf = np.linalg.norm(eval_pts[:, :, np.newaxis] - coil_pts[:,np.newaxis,1:], axis=0)
-            Ri_p_Rf = Ri + Rf
-
-            # 1.0e-7 == mu0/(4 pi)
-            Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / ( Ri * Rf * (Ri_p_Rf*Ri_p_Rf - L*L) )
-
-            # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
-            vec = np.cross(dvec, Ri_vec, axis=0)
-            return np.sum(Bmag * vec, axis=-1)
-
-        B = biot_savart(eval_pts, xpts, current)
-
-        # add B^X and B^Y to MGRID magnetic field; need to convert to cylindrical components first
-        return np.array([B[0]*np.cos(phi_sym) + B[1]*np.sin(phi_sym),
-                         B[1]*np.cos(phi_sym) - B[0]*np.sin(phi_sym),
-                         B[2]])
 
     def compute_T_S(self, jacobian):
         a = jacobian["g_tt"]
@@ -730,8 +726,6 @@ class Nestor:
 
         return potvac
 
-
-
     # compute co- and contravariant magnetic field components
     def analyzeScalarMagneticPotential(self, B_field, potvac, jacobian, coords):
 
@@ -860,11 +854,10 @@ class Nestor:
 
 
 def main(vacin_filename, vacout_filename=None, mgrid=None):
-    nestor = Nestor(vacin_filename)
+    nestor = Nestor(vacin_filename, mgrid)
 
     # in principle, this needs to be done only once
     nestor.precompute()
-    nestor.loadMGridFile(mgrid)
     mnmax           = int(nestor.vacin['mnmax'][()])
     xm              = nestor.vacin['xm'][()]
     xn              = nestor.vacin['xn'][()]
@@ -876,18 +869,19 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     nfp             = int(nestor.vacin['nfp'][()])
     # the following calls need to be done on every iteration
     coords = evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, ntheta_sym, nfp, rmnc, zmns, sym=True)
-    normal = nestor.compute_normal(coords)
-    jacobian = nestor.compute_jacobian(coords, normal)
+    normal = compute_normal(coords, nestor.signgs)
+    jacobian = compute_jacobian(coords, normal, nestor.nfp)
     B_extern = nestor.interpolateMGridFile(coords["R_sym"], coords["Z_sym"], coords["phi_sym"])
 
     phiaxis = np.linspace(0,2*np.pi,nestor.nzeta, endpoint=False)/nestor.nfp
-    B_plasma = nestor.modelNetToroidalCurrent(nestor.raxis_nestor,
+    B_plasma = modelNetToroidalCurrent(nestor.raxis_nestor,
                                    phiaxis,
                                    nestor.zaxis_nestor,
                                    nestor.ctor/mu0,
                                    coords["R_sym"],
                                    coords["phi_sym"],
-                                   coords["Z_sym"])
+                                       coords["Z_sym"],
+                                       nestor.zeta_fp)
     B_field = B_extern + B_plasma
     T_p_l, T_m_l, S_p_l, S_m_l = nestor.compute_T_S(jacobian)
     I_mn, K_mn = nestor.analyticalIntegrals(jacobian, normal, T_p_l, T_m_l, S_p_l, S_m_l, B_field)

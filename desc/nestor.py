@@ -536,12 +536,6 @@ class Nestor:
 
     def regularizedFourierTransforms(self, B_field, jacobian, normal, coords):
 
-        brad, bphi, bz = B_field        
-        bexni = -self.wint * (normal["R_n"] * brad + normal["phi_n"] * bphi + normal["Z_n"] * bz) * 4.0*np.pi*np.pi
-
-        source  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.NFP_eff])
-        kernel = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.NFP_eff])
-
         # indices over regular and primed arrays
         kt_ip, kz_ip, kt_i, kz_i = np.meshgrid(np.arange(self.ntheta_stellsym),
                                                np.arange(self.nzeta),
@@ -563,7 +557,11 @@ class Nestor:
         X_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*X_full - normal["phi_n"][ip][:,:,:,:,np.newaxis]*Y_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
         Y_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*Y_full + normal["phi_n"][ip][:,:,:,:,np.newaxis]*X_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
 
-        # greens functions for kernel and source
+        # greens functions for kernel and source        
+        # theta', zeta', theta, zeta, period
+        source = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.NFP_eff])
+        kernel = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.NFP_eff])
+        # full part, including singularity
         ftemp = (gsave[:,:,:,:,np.newaxis]
                  - 2*X_full*coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis]
                  - 2*Y_full*coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis])
@@ -608,8 +606,9 @@ class Nestor:
         kernel = np.sum(kernel, -1)
         source = np.sum(source, -1)
 
-        # greens function kernel, indexed by m,n,mprime,nprime ie g_mnmn from Merkel 1986        
-        # step 1: "fold over" contribution from (pi ... 2pi) in greenp
+        # greens function kernel, indexed by theta,zeta,thetaprime,zetaprime
+        # becomes g_mnm'n' from Merkel 1986        
+        # step 1: "fold over" contribution from (pi ... 2pi) 
         # stellarator-symmetric first half-module is copied directly
         # the other half of the first module is "folded over" according to odd symmetry under the stellarator-symmetry operation
         kt, kz = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), indexing="ij")
@@ -620,40 +619,42 @@ class Nestor:
         kernel = put(kernel, Index[:,:,-1,:], 0.5*kernel[:,:,-1,:])
         kernel = np.pad(kernel, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))
 
-        g_mnmpnp = np.fft.ifft(kernel, axis=2)*self.ntheta
-        g_mnmpnp = np.fft.fft(g_mnmpnp, axis=3)
-        g_mnmpnp = np.concatenate([g_mnmpnp[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
-                                    g_mnmpnp[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, -self.nf:].imag],
-                                   axis=-1).transpose((2,3,0,1))
+        g_tzmn = np.fft.ifft(kernel, axis=2)*self.ntheta
+        g_tzmn = np.fft.fft(g_tzmn, axis=3)
+        g_mntz = np.concatenate([g_tzmn[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
+                                 g_tzmn[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, -self.nf:].imag],
+                                axis=-1).transpose((2,3,0,1))
         
 
         # source term for integral equation, ie h_mn from Merkel 1986
-        source = np.sum(bexni.reshape((self.ntheta_stellsym, self.nzeta,1,1)) * source[:self.ntheta_stellsym, :, :, :], axis=(0,1))
+        brad, bphi, bz = B_field        
+        bexni = -self.wint * (normal["R_n"] * brad + normal["phi_n"] * bphi + normal["Z_n"] * bz) * 4.0*np.pi*np.pi        
+        h_tz = np.sum(bexni.reshape((self.ntheta_stellsym, self.nzeta,1,1)) * source[:self.ntheta_stellsym, :, :, :], axis=(0,1))
         # first step: "fold over" upper half of gsource to make use of stellarator symmetry
         # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
-        source = source[kt, kz] - source[-kt, -kz]
-        source = source * 1/self.NFP * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
-        source = put(source, Index[0,:], 0.5*source[0,:])
-        source = put(source, Index[-1,:], 0.5*source[-1,:])
-        source = np.pad(source, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
-        h_mn = np.fft.ifft(source, axis=0)*self.ntheta
+        h_tz = h_tz[kt, kz] - h_tz[-kt, -kz]
+        h_tz = h_tz * 1/self.NFP * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
+        h_tz = put(h_tz, Index[0,:], 0.5*h_tz[0,:])
+        h_tz = put(h_tz, Index[-1,:], 0.5*h_tz[-1,:])
+        h_tz = np.pad(h_tz, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
+        h_mn = np.fft.ifft(h_tz, axis=0)*self.ntheta
         h_mn = np.fft.fft(h_mn, axis=1)
         h_mn = np.concatenate([h_mn[:self.mf+1,:self.nf+1].imag, h_mn[:self.mf+1,-self.nf:].imag], axis=1)
 
-        return g_mnmpnp, h_mn
+        return g_mntz, h_mn
 
     
-    def computeScalarMagneticPotential(self, I_mn, K_mntz, g_mnmpnp, h_mn):
+    def computeScalarMagneticPotential(self, I_mn, K_mntz, g_mntz, h_mn):
 
         # add in analytic part to get full kernel
-        grpmn_4d = g_mnmpnp + K_mntz
+        g_mntz = g_mntz + K_mntz
         # compute Fourier transform of grpmn to arrive at amatrix
-        grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
-        grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
-        grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
-        grpmn_4d = np.fft.fft(grpmn_4d, axis=3)
+        g_mntz = g_mntz * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
+        g_mntz = np.pad(g_mntz, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
+        g_mnmn = np.fft.ifft(g_mntz, axis=2)*self.ntheta
+        g_mnmn = np.fft.fft(g_mnmn, axis=3)
 
-        amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
+        amatrix_4d = np.concatenate([g_mnmn[:, :, :self.mf+1, :self.nf+1].imag, g_mnmn[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
         # scale amatrix by (2 pi)^2 (#TODO: why ?)
         amatrix_4d *= (2.0*np.pi)**2
         m, n = np.meshgrid(np.arange(self.mf+1), np.arange(2*self.nf+1), indexing="ij")            
@@ -669,23 +670,23 @@ class Nestor:
         # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
         bvec = put(bvec, Index[0, self.nf+1:], 0.0).flatten()
 
-        potvac = np.linalg.solve(amatrix, bvec)     
-        return potvac
+        phi_mn = np.linalg.solve(amatrix, bvec).reshape([self.mf+1, 2*self.nf+1])    
+        return phi_mn
 
 
     # compute co- and contravariant magnetic field components
-    def analyzeScalarMagneticPotential(self, B_field, potvac, jacobian, coords):
+    def analyzeScalarMagneticPotential(self, B_field, phi_mn, jacobian, coords):
 
         brad, bphi, bz = B_field
-        potvac_2d = potvac.reshape([self.mf+1, 2*self.nf+1])
+        potvac = phi_mn
         m_potvac = np.zeros([self.ntheta, self.nzeta]) # m*potvac --> for poloidal derivative
         n_potvac = np.zeros([self.ntheta, self.nzeta]) # n*potvac --> for toroidal derivative
         m,n = np.meshgrid(np.arange(self.mf+1), np.arange(self.nf+1), indexing="ij")
 
-        m_potvac = put(m_potvac, Index[m, n], m * potvac_2d[m, n])
-        n_potvac = put(n_potvac, Index[m, n], n * potvac_2d[m, n])
-        m_potvac = put(m_potvac, Index[m, -n], m * potvac_2d[m, -n])
-        n_potvac = put(n_potvac, Index[m, -n], -n * potvac_2d[m, -n])
+        m_potvac = put(m_potvac, Index[m, n], m * potvac[m, n])
+        n_potvac = put(n_potvac, Index[m, n], n * potvac[m, n])
+        m_potvac = put(m_potvac, Index[m, -n], m * potvac[m, -n])
+        n_potvac = put(n_potvac, Index[m, -n], -n * potvac[m, -n])
 
         Bp_theta = np.fft.ifft(m_potvac, axis=0) * self.ntheta
         Bp_theta = (np.fft.fft(Bp_theta, axis=1).real[:self.ntheta_stellsym, :]).flatten()
@@ -808,18 +809,18 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
                                        nestor.zeta_fp)
     B_field = B_extern + B_plasma
     TS = compute_T_S(jacobian, nestor.mf+nestor.nf+1)
-    I_mn, K_mn = nestor.analyticalIntegrals(jacobian, normal, TS, B_field)
-    g_mnmpnp, h_mn = nestor.regularizedFourierTransforms(B_field, jacobian, normal, coords)    
-    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, g_mnmpnp, h_mn)
+    I_mn, K_mntz = nestor.analyticalIntegrals(jacobian, normal, TS, B_field)
+    g_mntz, h_mn = nestor.regularizedFourierTransforms(B_field, jacobian, normal, coords)    
+    phi_mn = nestor.computeScalarMagneticPotential(I_mn, K_mntz, g_mntz, h_mn)
     vac_field = nestor.analyzeScalarMagneticPotential(B_field,
-                                          potvac,
+                                          phi_mn,
                                           jacobian,
                                           coords)
     nestor.firstIterationPrintout(vac_field)
 
     if vacout_filename is None:
         vacout_filename = vacin_filename.replace("vacin_", "vacout_")
-    nestor.produceOutputFile(vacout_filename, potvac, vac_field)
+    nestor.produceOutputFile(vacout_filename, phi_mn, vac_field)
     
 if __name__ == '__main__':
     if len(sys.argv) > 1:

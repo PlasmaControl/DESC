@@ -3,7 +3,6 @@ import warnings
 from termcolor import colored
 from desc.utils import Timer
 from desc.backend import use_jax, jnp
-from desc.boundary_conditions import get_boundary_condition
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -418,12 +417,9 @@ def optimal_perturb(
 
         LHS = LHS[:, c_idx]  # restrict optimization space
         uA, sA, vtA = np.linalg.svd(LHS, full_matrices=False)
-        mA, nA = LHS.shape
 
         # find optimal perturbation
-        dc1_opt, hit, alpha = trust_region_step_exact(
-            nA,
-            mA,
+        dc1_opt, hit, alpha_c = trust_region_step_exact_svd(
             RHS_1g,
             uA,
             sA,
@@ -446,12 +442,9 @@ def optimal_perturb(
         RHS_1f = f + np.matmul(Fc, dc1)
 
         uJ, sJ, vtJ = np.linalg.svd(Fx, full_matrices=False)
-        mJ, nJ = Fx.shape
 
         # apply optimal perturbation
-        dx1, hit, alpha = trust_region_step_exact(
-            nJ,
-            mJ,
+        dx1, hit, alpha_x = trust_region_step_exact_svd(
             RHS_1f,
             uJ,
             sJ,
@@ -491,15 +484,13 @@ def optimal_perturb(
             timer.disp("d^2g computation")
 
         # find optimal perturbation
-        dc2_opt, hit, alpha = trust_region_step_exact(
-            nA,
-            mA,
+        dc2_opt, hit, alpha_c = trust_region_step_exact_svd(
             RHS_2g,
             uA,
             sA,
             vtA.T,
             tr_ratio[0] * np.linalg.norm(dc1_opt),
-            initial_alpha=None,
+            initial_alpha=alpha_c / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -515,15 +506,13 @@ def optimal_perturb(
         RHS_2f += np.matmul(Fc, dc2)
 
         # apply optimal perturbation
-        dx2, hit, alpha = trust_region_step_exact(
-            nJ,
-            mJ,
+        dx2, hit, alpha_x = trust_region_step_exact_svd(
             RHS_2f,
             uJ,
             sJ,
             vtJ.T,
             tr_ratio[0] * np.linalg.norm(y),
-            initial_alpha=None,
+            initial_alpha=alpha_x / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,

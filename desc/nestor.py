@@ -544,14 +544,15 @@ class Nestor:
         brad, bphi, bz = B_field        
         bexni = -self.wint * (normal["R_n"] * brad + normal["phi_n"] * bphi + normal["Z_n"] * bz) * 4.0*np.pi*np.pi
 
-        green  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
-        greenp = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
+        source  = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
+        kernel = np.zeros([self.ntheta_stellsym, self.nzeta, self.ntheta, self.nzeta, self.nfp_eff])
 
         # indices over regular and primed arrays
-        kt_ip, kz_ip, kt_i, kz_i = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), np.arange(self.ntheta), np.arange(self.nzeta), indexing="ij")
-        # linear index over primed grid
-        ip = (kt_ip*self.nzeta+kz_ip)
-
+        kt_ip, kz_ip, kt_i, kz_i = np.meshgrid(np.arange(self.ntheta_stellsym),
+                                               np.arange(self.nzeta),
+                                               np.arange(self.ntheta),
+                                               np.arange(self.nzeta), indexing="ij")
+        ip = (kt_ip*self.nzeta+kz_ip) # linear index over primed grid
 
         # field-period invariant vectors
         r_squared = (coords["R"]**2 + coords["Z"]**2).reshape((-1,self.nzeta))
@@ -563,13 +564,11 @@ class Nestor:
         X_full, Y_full = copy_vector_periods(np.array([coords["X"].reshape((-1,self.nzeta))[kt_ip, kz_ip],
                                                        coords["Y"].reshape((-1,self.nzeta))[kt_ip, kz_ip]]),
                                              self.zeta_fp)
-
-        # cartesian components of surface normal
+        # cartesian components of surface normal on full domain
         X_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*X_full - normal["phi_n"][ip][:,:,:,:,np.newaxis]*Y_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
         Y_n = (normal["R_n"][ip][:,:,:,:,np.newaxis]*Y_full + normal["phi_n"][ip][:,:,:,:,np.newaxis]*X_full)/coords["R_sym"][ip][:,:,:,:,np.newaxis]
 
-
-
+        # greens functions for kernel and source
         ftemp = (gsave[:,:,:,:,np.newaxis]
                  - 2*X_full*coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis]
                  - 2*Y_full*coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis,:,:,np.newaxis])
@@ -578,11 +577,11 @@ class Nestor:
         gtemp = (  coords["X"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*X_n
                  + coords["Y"].reshape((-1, self.nzeta))[np.newaxis,np.newaxis:,:,np.newaxis]*Y_n
                  + dsave[:,:,:,:,np.newaxis])
-        greenp_update = ftemp*htemp*gtemp
-        green_update = htemp
+        kernel_update = ftemp*htemp*gtemp
+        source_update = htemp
         mask = ~((self.zeta_fp == 0) | (self.nzeta == 1)).reshape((1,1,1,1,-1,))                
-        greenp = np.where(mask, greenp + greenp_update, greenp)
-        green  = np.where(mask, green + green_update, green)
+        kernel = np.where(mask, kernel + kernel_update, kernel)
+        source  = np.where(mask, source + source_update, source)
                
 
         if self.nzeta == 1:
@@ -592,78 +591,67 @@ class Nestor:
             # Stellarator: nv toroidal grid points
             delta_kz = (kz_i - kz_ip)%self.nzeta
 
+        # subtract out singular part of the kernels
         # TODO: why is there an additional offset of ntheta?
         delta_kt = kt_i - kt_ip + self.ntheta
         ga1 = self.tanu[delta_kt]*(jacobian["g_tt"][ip]*self.tanu[delta_kt] + 2*jacobian["g_tz"][ip]*self.tanv[delta_kz]) + jacobian["g_zz"][ip]*self.tanv[delta_kz]*self.tanv[delta_kz]
         ga2 = self.tanu[delta_kt]*(jacobian["a_tt"][ip]*self.tanu[delta_kt] +   jacobian["a_tz"][ip]*self.tanv[delta_kz]) + jacobian["a_zz"][ip]*self.tanv[delta_kz]*self.tanv[delta_kz]
 
-        greenp_sing = - (ga2/ga1*1/np.sqrt(ga1))[:,:,:,:,np.newaxis]
-        green_sing = - 1/np.sqrt(ga1)[:,:,:,:,np.newaxis]
+        kernel_sing = - (ga2/ga1*1/np.sqrt(ga1))[:,:,:,:,np.newaxis]
+        source_sing = - 1/np.sqrt(ga1)[:,:,:,:,np.newaxis]
         mask = ((kt_ip != kt_i) | (kz_ip != kz_i) | (self.nzeta == 1 and kp > 0))[:,:,:,:,np.newaxis] & ((self.zeta_fp == 0) |  (self.nzeta == 1))
-        greenp = np.where(mask, greenp + greenp_update + greenp_sing, greenp)
-        green = np.where(mask, green + green_update + green_sing, green)                               
+        kernel = np.where(mask, kernel + kernel_update + kernel_sing, kernel)
+        source = np.where(mask, source + source_update + source_sing, source)                               
 
         if self.nzeta == 1:
             # Tokamak: need to do toroidal average / integral:
             # normalize by number of toroidal "modules"
-            greenp /= self.nfp_eff
-            green  /= self.nfp_eff
+            kernel /= self.nfp_eff
+            source  /= self.nfp_eff
 
-        greenp = np.sum(greenp, -1)
-        green = np.sum(green, -1)
-        gstore = np.sum(bexni.reshape((self.ntheta_stellsym, self.nzeta,1,1)) * green[:self.ntheta_stellsym, :, :, :], axis=(0,1))
+        # summing over field periods
+        kernel = np.sum(kernel, -1)
+        source = np.sum(source, -1)
 
-        # Here, grpmn should contain already the contributions from S^{\pm}_l as computed in analyt/analysum(2).
-        # Thus Fourier-transform greenp and add to grpmn.
-
+        # greens function kernel, indexed by m,n,mprime,nprime ie g_mnmn from Merkel 1986        
         # step 1: "fold over" contribution from (pi ... 2pi) in greenp
-
         # stellarator-symmetric first half-module is copied directly
         # the other half of the first module is "folded over" according to odd symmetry under the stellarator-symmetry operation
         kt, kz = np.meshgrid(np.arange(self.ntheta_stellsym), np.arange(self.nzeta), indexing="ij")
         # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
-        kernel_4d = greenp[:,:,kt, kz] - greenp[:,:,-kt, -kz]
+        kernel = kernel[:,:,kt, kz] - kernel[:,:,-kt, -kz]
+        kernel = kernel * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
+        kernel = put(kernel, Index[:,:,0,:],  0.5*kernel[:,:,0,:]) # scale endpoints by half (same pt in physical space)
+        kernel = put(kernel, Index[:,:,-1,:], 0.5*kernel[:,:,-1,:])
+        kernel = np.pad(kernel, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))
 
-        # accumulated magic from fourp and (sin/cos)mui
-        kernel_4d = kernel_4d * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
-        kernel_4d = put(kernel_4d, Index[:,:,0,:], 0.5*kernel_4d[:,:,0,:])
-        kernel_4d = put(kernel_4d, Index[:,:,-1,:], 0.5*kernel_4d[:,:,-1,:])
-
-        kernel_4d = np.pad(kernel_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))                    
-        ft_kernel = np.fft.ifft(kernel_4d, axis=2)*self.ntheta
-        ft_kernel = np.fft.fft(ft_kernel, axis=3)
-
-        ft_kernel = np.concatenate([ft_kernel[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
-                                    ft_kernel[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, -self.nf:].imag],
+        g_mnmpnp = np.fft.ifft(kernel, axis=2)*self.ntheta
+        g_mnmpnp = np.fft.fft(g_mnmpnp, axis=3)
+        g_mnmpnp = np.concatenate([g_mnmpnp[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, :self.nf+1].imag,
+                                    g_mnmpnp[:self.ntheta_stellsym, :self.nzeta, :self.mf+1, -self.nf:].imag],
                                    axis=-1).transpose((2,3,0,1))
         
-        # now assemble final grpmn by adding K_mntz and ft_kernel_4d
-        # whoooo... :-)
-        grpmn_4d = K_mntz+ ft_kernel
 
-
+        # source term for integral equation, ie h_mn from Merkel 1986
+        source = np.sum(bexni.reshape((self.ntheta_stellsym, self.nzeta,1,1)) * source[:self.ntheta_stellsym, :, :, :], axis=(0,1))
         # first step: "fold over" upper half of gsource to make use of stellarator symmetry
         # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
-        gsource_sym = gstore[kt, kz] - gstore[-kt, -kz]
+        source = source[kt, kz] - source[-kt, -kz]
+        source = source * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
+        source = put(source, Index[0,:], 0.5*source[0,:])
+        source = put(source, Index[-1,:], 0.5*source[-1,:])
+        source = np.pad(source, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
+        h_mn = np.fft.ifft(source, axis=0)*self.ntheta
+        h_mn = np.fft.fft(h_mn, axis=1)
+        h_mn = np.concatenate([h_mn[:self.mf+1,:self.nf+1].imag, h_mn[:self.mf+1,-self.nf:].imag], axis=1)
 
-        # compute Fourier-transform of gsource
-        # when only computing the contribution to bvec from gstore, the reference value can be found in potvac,
-
-        # accumulated magic from fouri and (sin/cos)mui
-        gsource_sym = gsource_sym * 1/self.nfp * (2*np.pi)/self.ntheta * (2.0*np.pi)/self.nzeta
-        gsource_sym = put(gsource_sym, Index[0,:], 0.5*gsource_sym[0,:])
-        gsource_sym = put(gsource_sym, Index[-1,:], 0.5*gsource_sym[-1,:])
-
-        gsource_sym = np.pad(gsource_sym, ( (0,self.ntheta-self.ntheta_stellsym),(0,0)))                            
-        ft_gsource = np.fft.ifft(gsource_sym, axis=0)*self.ntheta
-        ft_gsource = np.fft.fft(ft_gsource, axis=1)
-        ft_gsource = np.concatenate([ft_gsource[:self.mf+1,:self.nf+1].imag, ft_gsource[:self.mf+1,-self.nf:].imag], axis=1)
-
-        return ft_gsource, grpmn_4d
+        return g_mnmpnp, h_mn
 
     
-    def computeScalarMagneticPotential(self, I_mn, ft_gsource, grpmn_4d):
+    def computeScalarMagneticPotential(self, I_mn, K_mntz, g_mnmpnp, h_mn):
 
+        # add in analytic part to get full kernel
+        grpmn_4d = g_mnmpnp + K_mntz
         # compute Fourier transform of grpmn to arrive at amatrix
         grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
         grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
@@ -682,7 +670,7 @@ class Nestor:
         amatrix = amatrix_4d.reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)])
 
         # combine with contribution from analytic integral; available here in I_mn
-        bvec = ft_gsource + I_mn
+        bvec = h_mn + I_mn
         # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
         bvec = put(bvec, Index[0, self.nf+1:], 0.0).flatten()
 
@@ -834,8 +822,8 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     B_field = B_extern + B_plasma
     T_p_l, T_m_l, S_p_l, S_m_l = nestor.compute_T_S(jacobian)
     I_mn, K_mn = nestor.analyticalIntegrals(jacobian, normal, T_p_l, T_m_l, S_p_l, S_m_l, B_field)
-    ft_gsource, grpmn_4d = nestor.regularizedFourierTransforms(K_mn, B_field, jacobian, normal, coords)    
-    potvac = nestor.computeScalarMagneticPotential(I_mn, ft_gsource, grpmn_4d)
+    g_mnmpnp, h_mn = nestor.regularizedFourierTransforms(K_mn, B_field, jacobian, normal, coords)    
+    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, g_mnmpnp, h_mn)
     vac_field = nestor.analyzeScalarMagneticPotential(B_field,
                                           potvac,
                                           jacobian,

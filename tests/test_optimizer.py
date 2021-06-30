@@ -145,7 +145,7 @@ class TestLSQTR(unittest.TestCase):
             return fun(x, p) - y
 
         rando = default_rng(seed=0)
-        p0 = p + 1 * (rando.random(p.size) - 0.5)
+        p0 = p + 0.25 * (rando.random(p.size) - 0.5)
 
         jac = Derivative(res, 0, "fwd")
 
@@ -156,6 +156,7 @@ class TestLSQTR(unittest.TestCase):
             verbose=0,
             x_scale=1,
             tr_method="cho",
+            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
         )
         np.testing.assert_allclose(out["x"], p)
 
@@ -166,5 +167,6 @@ class TestLSQTR(unittest.TestCase):
             verbose=0,
             x_scale=1,
             tr_method="svd",
+            options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
         )
         np.testing.assert_allclose(out["x"], p)

@@ -741,22 +741,19 @@ class Nestor:
         m_potvac = put(m_potvac, Index[m, -n], m * potvac_2d[m, -n])
         n_potvac = put(n_potvac, Index[m, -n], -n * potvac_2d[m, -n])
 
-        Bp_t = np.fft.ifft(m_potvac, axis=0) * self.ntheta
-        Bp_t = (np.fft.fft(Bp_t, axis=1).real[:self.ntheta_stellsym, :]).flatten()
+        Bp_theta = np.fft.ifft(m_potvac, axis=0) * self.ntheta
+        Bp_theta = (np.fft.fft(Bp_theta, axis=1).real[:self.ntheta_stellsym, :]).flatten()
 
-        Bp_z = np.fft.ifft(n_potvac, axis=0)*self.ntheta
-        Bp_z = -(np.fft.fft(Bp_z, axis=1).real[:self.ntheta_stellsym, :] * self.nfp).flatten()
+        Bp_zeta = np.fft.ifft(n_potvac, axis=0)*self.ntheta
+        Bp_zeta = -(np.fft.fft(Bp_zeta, axis=1).real[:self.ntheta_stellsym, :] * self.nfp).flatten()
 
         # compute covariant magnetic field components: B_u, B_v
-        Bex_t = coords["R_t"] * brad  + coords["Z_t"] * bz
-        Bex_z = coords["R_z"] * brad + coords["R_sym"] * bphi + coords["Z_z"] * bz
+        Bex_theta = coords["R_t"] * brad  + coords["Z_t"] * bz
+        Bex_zeta = coords["R_z"] * brad + coords["R_sym"] * bphi + coords["Z_z"] * bz
 
         vac_field = {}
-        # B_u = potu + bexu
-        vac_field["B_t"] = Bp_t + Bex_t
-
-        # B_v = potv + bexv
-        vac_field["B_z"] = Bp_z + Bex_z
+        vac_field["B_theta"] = Bp_theta + Bex_theta
+        vac_field["B_zeta"] = Bp_zeta + Bex_zeta
 
         # compute B^t, B^z and (with B_t, B_z) then also |B|^2/2
 
@@ -768,40 +765,38 @@ class Nestor:
         # contravariant components of magnetic field: B^u, B^v
 
         # B^u
-        vac_field["B^t"] = (h_zz*vac_field["B_t"] - h_tz*vac_field["B_z"])*det
+        vac_field["B^theta"] = (h_zz*vac_field["B_theta"] - h_tz*vac_field["B_zeta"])*det
 
         # B^v
-        vac_field["B^z"] = (-h_tz * vac_field["B_t"] + jacobian["g_tt"] * vac_field["B_z"])*det
+        vac_field["B^zeta"] = (-h_tz * vac_field["B_theta"] + jacobian["g_tt"] * vac_field["B_zeta"])*det
 
         # |B|^2/2 = (B^u*B_u + B^v*B_v)/2
-        vac_field["|B|^2"] = (vac_field["B_t"] * vac_field["B^t"] + vac_field["B_z"] * vac_field["B^z"])/2.0
+        vac_field["|B|^2"] = (vac_field["B_theta"] * vac_field["B^theta"] + vac_field["B_zeta"] * vac_field["B^zeta"])/2.0
 
         # compute cylindrical components B^R, B^\phi, B^Z
-        vac_field["BR"]   = coords["R_t"] * vac_field["B^t"] + coords["R_z"] * vac_field["B^z"]
-        vac_field["Bphi"] = coords["R_sym"] * vac_field["B^z"]
-        vac_field["BZ"]   = coords["Z_t"] * vac_field["B^t"] + coords["Z_z"] * vac_field["B^z"]
+        vac_field["BR"]   = coords["R_t"] * vac_field["B^theta"] + coords["R_z"] * vac_field["B^zeta"]
+        vac_field["Bphi"] = coords["R_sym"] * vac_field["B^zeta"]
+        vac_field["BZ"]   = coords["Z_t"] * vac_field["B^theta"] + coords["Z_z"] * vac_field["B^zeta"]
         return vac_field
         
     def firstIterationPrintout(self, vac_field):
         print("  In VACUUM, np = %2d mf = %2d nf = %2d nu = %2d nv = %2d"%(self.nfp, self.mf, self.nf, self.ntheta, self.nzeta))
 
         # -plasma current/pi2
-        self.bsubuvac = np.sum(vac_field["B_t"] * self.wint)*self.signgs*2.0*np.pi
-        self.bsubvvac = np.sum(vac_field["B_z"] * self.wint)
+        bsubuvac = np.sum(vac_field["B_theta"] * self.wint)*self.signgs*2.0*np.pi
+        bsubvvac = np.sum(vac_field["B_zeta"] * self.wint)
 
         # currents in MA
         fac = 1.0e-6/mu0
 
         print(("  2*pi * a * -BPOL(vac) = %10.8e \n TOROIDAL CURRENT = %10.8e\n"
-              +"  R * BTOR(vac) = %10.8e \n R * BTOR(plasma) = %10.8e")%(self.bsubuvac*fac, self.ctor*fac, self.bsubvvac, self.rbtor))
+              +"  R * BTOR(vac) = %10.8e \n R * BTOR(plasma) = %10.8e")%(bsubuvac*fac, self.ctor*fac, bsubvvac, self.rbtor))
 
-        if self.rbtor*self.bsubvvac < 0:
-            # rbtor and bsubvvac must have the same sign --> phiedge_error_flag
-            self.ier_flag = 7
+        if self.rbtor*bsubvvac < 0:
+            raise ValueError("poloidal current and toroidal field must have same sign, Psi may be incorrect")
 
-        if np.abs((self.ctor - self.bsubuvac)/self.rbtor) > 1.0e-2:
-            # 'VAC-VMEC I_TOR MISMATCH : BOUNDARY MAY ENCLOSE EXT. COIL'
-            self.ier_flag = 10
+        if np.abs((self.ctor - bsubuvac)/self.rbtor) > 1.0e-2:
+            raise ValueError("Toroidal current and poloidal field mismatch, boundary may enclose external coil")
 
     def produceOutputFile(self, vacoutFilename, potvac, vac_field):
         # mode numbers for potvac
@@ -820,8 +815,6 @@ class Nestor:
         dim_mnpd2 = def_ncdim(vacout, (self.mf+1)*(2*self.nf+1))
         dim_mnpd2_sq = def_ncdim(vacout, (self.mf+1)*(2*self.nf+1)*(self.mf+1)*(2*self.nf+1))
 
-        var_ivac     = vacout.createVariable("ivac", "i4")
-        var_ier_flag = vacout.createVariable("ier_flag", "i4")
         var_bsqvac   = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
         var_mnpd     = vacout.createVariable("mnpd", "i4")
         var_mnpd2    = vacout.createVariable("mnpd2", "i4")
@@ -831,12 +824,9 @@ class Nestor:
         var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
         var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
         var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
-        var_bsubvvac = vacout.createVariable("bsubvvac", "f8")
         var_amatsav  = vacout.createVariable("amatsav", "f8", (dim_mnpd2_sq,))
         var_bvecsav  = vacout.createVariable("bvecsav", "f8", (dim_mnpd2,))
 
-        var_ivac.assignValue(self.ivac)
-        var_ier_flag.assignValue(self.ier_flag)
         var_bsqvac[:] = vac_field["|B|^2"]
         var_mnpd.assignValue((self.mf+1)*(2*self.nf+1))
         var_mnpd2.assignValue((self.mf+1)*(2*self.nf+1))
@@ -846,7 +836,6 @@ class Nestor:
         var_brv[:] = vac_field["BR"]
         var_bphiv[:] = vac_field["Bphi"]
         var_bzv[:] = vac_field["BZ"]
-        var_bsubvvac.assignValue(self.bsubvvac)
         var_amatsav[:] = self.amatsav
         var_bvecsav[:] = self.bvecsav
 
@@ -890,10 +879,7 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
                                           potvac,
                                           jacobian,
                                           coords)
-
-    if nestor.ivac == 0:
-        nestor.ivac += 1
-        nestor.firstIterationPrintout(vac_field)
+    nestor.firstIterationPrintout(vac_field)
 
     if vacout_filename is None:
         vacout_filename = vacin_filename.replace("vacin_", "vacout_")

@@ -679,26 +679,14 @@ class Nestor:
         # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
         amatrix_4d = put(amatrix_4d, Index[m, n, m, n], amatrix_4d[m,n,m,n] + 4.0*np.pi**3)
 
-        amatrix = np.fft.fftshift(np.transpose(amatrix_4d, (1,0,3,2)), axes=(0,2)).reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)]).T.flatten()        
-        self.amatsav = amatrix
+        amatrix = amatrix_4d.reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)])
 
-        # combine with contribution from analyt(); available here in I_mn
+        # combine with contribution from analytic integral; available here in I_mn
         bvec = ft_gsource + I_mn
         # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
-        bvec = put(bvec, Index[0, self.nf+1:], 0.0)
-        bvec = np.fft.fftshift(bvec, axes=1).T.flatten()
+        bvec = put(bvec, Index[0, self.nf+1:], 0.0).flatten()
 
-        # remove singular contribution from bvec to save the non-singular part
-        self.bvecsav = bvec - np.fft.fftshift(I_mn, axes=1).T.flatten()
-
-        bvec_2d = bvec.reshape([2*self.nf+1, self.mf+1]).T
-        bvec_1d = np.fft.ifftshift(bvec_2d, axes=1).flatten()
-
-        amatrix = np.fft.ifftshift(amatrix.reshape([2*self.nf+1, self.mf+1, 2*self.nf+1, self.mf+1]).T, axes=(1,3))
-
-        amatrix = amatrix.reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)])
-
-        potvac = np.linalg.solve(amatrix, bvec_1d)     
+        potvac = np.linalg.solve(amatrix, bvec)     
         return potvac
 
 
@@ -800,8 +788,6 @@ class Nestor:
         var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
         var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
         var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
-        var_amatsav  = vacout.createVariable("amatsav", "f8", (dim_mnpd2_sq,))
-        var_bvecsav  = vacout.createVariable("bvecsav", "f8", (dim_mnpd2,))
 
         var_bsqvac[:] = vac_field["|B|^2"]
         var_mnpd.assignValue((self.mf+1)*(2*self.nf+1))
@@ -812,8 +798,6 @@ class Nestor:
         var_brv[:] = vac_field["BR"]
         var_bphiv[:] = vac_field["Bphi"]
         var_bzv[:] = vac_field["BZ"]
-        var_amatsav[:] = self.amatsav
-        var_bvecsav[:] = self.bvecsav
 
         vacout.close()
 

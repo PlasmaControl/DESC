@@ -538,51 +538,6 @@ class Nestor:
         K_mntz = K_mntz.reshape(self.mf+1, 2*self.nf+1, self.ntheta_stellsym, self.nzeta)
         return I_mn, K_mntz
 
-    def computeScalarMagneticPotential(self, I_mn, K_mntz, B_field, jacobian, normal, coords):
-        # this makes bvec to be in Fortran order (-nf, ..., nf)
-        bvec = np.fft.fftshift(I_mn, axes=1).T.flatten()
-        # Here, bvecsav stores the singular part of bvec from analyt
-        # to be subtracted from the "final" bvec computed below by fouri
-        self.bvecsav = bvec
-
-        ft_gsource, grpmn_4d = self.regularizedFourierTransforms(K_mntz, B_field, jacobian, normal, coords)
-
-        # combine with contribution from analyt(); available here in I_mn
-        full_bvec = ft_gsource + I_mn
-
-        # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
-        full_bvec = put(full_bvec, Index[0, self.nf+1:], 0.0)
-
-        # compute Fourier transform of grpmn to arrive at amatrix
-        # (to be compared against ref_amatrix)
-        grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
-        grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
-        grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
-        grpmn_4d   = np.fft.fft(grpmn_4d, axis=3)
-
-        amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
-
-        # scale amatrix by (2 pi)^2 (#TODO: why ?)
-        amatrix_4d *= (2.0*np.pi)**2
-
-        m, n = np.meshgrid(np.arange(self.mf+1), np.arange(2*self.nf+1), indexing="ij")            
-        # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?)
-        amatrix_4d = np.where(np.logical_and(m==0, n>self.nf)[:,:,np.newaxis, np.newaxis], 0, amatrix_4d)
-
-        # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
-        amatrix_4d = put(amatrix_4d, Index[m, n, m, n], amatrix_4d[m,n,m,n] + 4.0*np.pi**3)
-
-        bvec = np.fft.fftshift(full_bvec, axes=1).T.flatten()
-
-        self.amatsav = np.fft.fftshift(np.transpose(amatrix_4d, (1,0,3,2)), axes=(0,2)).reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)]).T.flatten()
-
-        # remove singular contribution from bvec to save the non-singular part
-        self.bvecsav = bvec - self.bvecsav
-
-        amatrix = self.amatsav
-
-        potvac_2d = self.solveForScalarMagneticPotential(amatrix, bvec)
-        return potvac_2d
 
     def regularizedFourierTransforms(self, K_mntz, B_field, jacobian, normal, coords):
 
@@ -705,26 +660,47 @@ class Nestor:
         ft_gsource = np.concatenate([ft_gsource[:self.mf+1,:self.nf+1].imag, ft_gsource[:self.mf+1,-self.nf:].imag], axis=1)
 
         return ft_gsource, grpmn_4d
-    # call the solver for the linear system of equations that defines the scalar magnetic potential
-    def solveForScalarMagneticPotential(self, Amat, bvec):
-        # matrix          is ref_amatrix_4d_fft
-        # right-hand-side is full_bvec
 
-        # solution is potvac
+    
+    def computeScalarMagneticPotential(self, I_mn, ft_gsource, grpmn_4d):
 
-        # Note: have to re-create proper shapes here from amatrix, bvec
-        # since these are the only ones available for ivacskip != 0 .
+        # compute Fourier transform of grpmn to arrive at amatrix
+        grpmn_4d = grpmn_4d * self.wint.reshape([1,1,self.ntheta_stellsym, self.nzeta])
+        grpmn_4d = np.pad(grpmn_4d, ((0,0),(0,0), (0,self.ntheta-self.ntheta_stellsym),(0,0)))            
+        grpmn_4d = np.fft.ifft(grpmn_4d, axis=2)*self.ntheta
+        grpmn_4d = np.fft.fft(grpmn_4d, axis=3)
+
+        amatrix_4d = np.concatenate([grpmn_4d[:, :, :self.mf+1, :self.nf+1].imag, grpmn_4d[:, :, :self.mf+1, -self.nf:].imag], axis=-1)
+        # scale amatrix by (2 pi)^2 (#TODO: why ?)
+        amatrix_4d *= (2.0*np.pi)**2
+        m, n = np.meshgrid(np.arange(self.mf+1), np.arange(2*self.nf+1), indexing="ij")            
+        # zero out (m=0, n<0, m', n') modes for all m', n' (#TODO: why ?)
+        amatrix_4d = np.where(np.logical_and(m==0, n>self.nf)[:,:,np.newaxis, np.newaxis], 0, amatrix_4d)
+        # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)         
+        amatrix_4d = put(amatrix_4d, Index[m, n, m, n], amatrix_4d[m,n,m,n] + 4.0*np.pi**3)
+
+        amatrix = np.fft.fftshift(np.transpose(amatrix_4d, (1,0,3,2)), axes=(0,2)).reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)]).T.flatten()        
+        self.amatsav = amatrix
+
+        # combine with contribution from analyt(); available here in I_mn
+        bvec = ft_gsource + I_mn
+        # final fixup from fouri: zero out (m=0, n<0) components (#TODO: why ?)
+        bvec = put(bvec, Index[0, self.nf+1:], 0.0)
+        bvec = np.fft.fftshift(bvec, axes=1).T.flatten()
+
+        # remove singular contribution from bvec to save the non-singular part
+        self.bvecsav = bvec - np.fft.fftshift(I_mn, axes=1).T.flatten()
 
         bvec_2d = bvec.reshape([2*self.nf+1, self.mf+1]).T
         bvec_1d = np.fft.ifftshift(bvec_2d, axes=1).flatten()
 
-        amatrix = np.fft.ifftshift(Amat.reshape([2*self.nf+1, self.mf+1, 2*self.nf+1, self.mf+1]).T, axes=(1,3))
+        amatrix = np.fft.ifftshift(amatrix.reshape([2*self.nf+1, self.mf+1, 2*self.nf+1, self.mf+1]).T, axes=(1,3))
 
         amatrix = amatrix.reshape([(self.mf+1)*(2*self.nf+1), (self.mf+1)*(2*self.nf+1)])
 
-        potvac = np.linalg.solve(amatrix, bvec_1d)
-
+        potvac = np.linalg.solve(amatrix, bvec_1d)     
         return potvac
+
 
     # compute co- and contravariant magnetic field components
     def analyzeScalarMagneticPotential(self, B_field, potvac, jacobian, coords):
@@ -874,7 +850,8 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     B_field = B_extern + B_plasma
     T_p_l, T_m_l, S_p_l, S_m_l = nestor.compute_T_S(jacobian)
     I_mn, K_mn = nestor.analyticalIntegrals(jacobian, normal, T_p_l, T_m_l, S_p_l, S_m_l, B_field)
-    potvac = nestor.computeScalarMagneticPotential(I_mn, K_mn, B_field, jacobian, normal, coords)
+    ft_gsource, grpmn_4d = nestor.regularizedFourierTransforms(K_mn, B_field, jacobian, normal, coords)    
+    potvac = nestor.computeScalarMagneticPotential(I_mn, ft_gsource, grpmn_4d)
     vac_field = nestor.analyzeScalarMagneticPotential(B_field,
                                           potvac,
                                           jacobian,

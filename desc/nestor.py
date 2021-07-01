@@ -53,8 +53,39 @@ def copy_vector_periods(vec, zetas):
     return np.array((xx,yy))
 
 
-def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
+def evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
+    """Evaluates surface geometry terms for vmec type inputs
 
+    Parameters
+    ----------
+    xm : ndarray of integer
+        poloidal mode numbers
+    xn : ndarray of integer
+        toroidal mode numbers
+    ntheta : integer
+        number of poloidal grid points
+    nzeta : integer
+        number of toroidal grid points
+    NFP : integer
+        number of field periods
+    rmnc : ndarray
+        cosine fourier coefficients for R
+    zmns : ndarray
+        sine fourier coefficients for Z
+    rmns : ndarray
+        sine fourier coefficients for R
+    zmnc : ndarray
+        cosine fourier coefficients for Z
+    sym :bool
+        whether to assume stellarator symmetry
+
+    Returns
+    -------
+    coords :dict of ndarray
+        dictionary of arrays of coordinates R,Z and derivatives on a regular grid
+        in theta, zeta
+
+    """
     ntheta_sym = ntheta//2 + 1
     # integer mode number arrays
     ixm=np.array(np.round(xm), dtype=int)
@@ -148,6 +179,20 @@ def evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, NFP, rmnc, zmns, rmns
 
 
 def compute_normal(coords, signgs):
+    """Compute the outward normal vector to the plasma surface
+
+    Parameters
+    ----------
+    coords : dict of ndarray
+        coordinates and derivatives on plasma surface
+    signgs : integer
+        sign of the coordinate jacobian (+1 for right handed coordinates, -1 for left)
+
+    Returns
+    -------
+    normal : dict of ndarray
+        R, phi, Z components of normal vector on regular grid in theta, zeta
+    """
     normal = {}
     normal["R_n"]   =  signgs * (coords["R_sym"] * coords["Z_t"])
     normal["phi_n"] =  signgs * (coords["R_t"] * coords["Z_z"]
@@ -155,8 +200,24 @@ def compute_normal(coords, signgs):
     normal["Z_n"]   = -signgs * (coords["R_sym"] * coords["R_t"])
     return normal
 
-def compute_jacobian(coords, normal, NFP):
 
+def compute_jacobian(coords, normal, NFP):
+    """Compute the surface jacobian elements
+
+    Parameters
+    ----------
+    coords : dict of ndarray
+        cylindrical coordinates and derivatives on the surface
+    normal : dict of ndarray
+        cylindrical components of normal vector to surface
+    NFP : int
+        number of field periods
+
+    Returns
+    -------
+    jacobian : dict of ndarray
+        jacobian elements on the surface on regular grid in theta, zeta
+    """
     jacobian = {}        
     # a, b, c in NESTOR article: dot-products of first-order derivatives of surface
     jacobian["g_tt"] = (coords["R_t"] * coords["R_t"]
@@ -216,21 +277,46 @@ def biot_savart(eval_pts, coil_pts, current):
 
 # model net toroidal plasma current as filament along the magnetic axis
 def modelNetToroidalCurrent(raxis, phiaxis, zaxis, current, coords, normal, zeta_fp):
+    """Compute field due to net toroidal current
+    
+    Models the current as a filament along the magnetic axis and computes field on the boundary
 
+    Parameters
+    ----------
+    raxis : ndarray
+        R coordinates of magnetic axis
+    phiaxis : ndarray
+        phi coordinates of magnetic axis
+    zaxis : ndarray
+        Z coordinates of magnetic axis
+    current : float
+        net toroidal plasma current in Amps
+    coords : dict of ndarray
+        coordinates and derivatives on plasma surface
+    normal : dict of ndarray
+        cylindrical components of outward normal vector on surface
+    zeta_fp : ndarrray
+        toroidal angles at the start of each field period
+
+    Returns
+    -------
+    B_j : dict of ndarray
+        field on the boundary due to net current at magnetic axis, in cartesian and cylindrical components
+    """
     # TODO: we can simplify this by evaluating the field directly in cylindrical coordinates
     # copy 1 field period around to make full torus
-    xyz = np.array([raxis*np.cos(phiaxis),
+    axis = np.array([raxis*np.cos(phiaxis),
                     raxis*np.sin(phiaxis),
                     zaxis])
-    xpts = np.moveaxis(copy_vector_periods(xyz, zeta_fp), -1,1).reshape((3,-1))
+    axis = np.moveaxis(copy_vector_periods(axis, zeta_fp), -1,1).reshape((3,-1))
     # first point == last point for periodicity
-    xpts = np.hstack([xpts[:,-1:], xpts])
+    axis = np.hstack([axis[:,-1:], axis])
 
     eval_pts = np.array([coords["R_sym"]*np.cos(coords["phi_sym"]),
                          coords["R_sym"]*np.sin(coords["phi_sym"]),
                          coords["Z_sym"]])
 
-    B = biot_savart(eval_pts, xpts, current)
+    B = biot_savart(eval_pts, axis, current)
 
     # convert to cylindrical components
     B_j = {}
@@ -244,71 +330,111 @@ def modelNetToroidalCurrent(raxis, phiaxis, zaxis, current, coords, normal, zeta
     return B_j
 
 def compute_T_S(jacobian, num_four):
-     a = jacobian["g_tt"]
-     b = jacobian["g_tz"]
-     c = jacobian["g_zz"]
-     ap = a + 2*b + c
-     am = a - 2*b + c
-     cma = c - a
+    """Compute T and S functions needed for analytic integrals by recurrence relation
 
-     sqrt_a = np.sqrt(a)
-     sqrt_c = np.sqrt(c)
-     sqrt_ap = np.sqrt(ap)
-     sqrt_am = np.sqrt(am)
+    Parameters
+    ----------
+    jacobian : dict of ndarray
+        jacobian elemnents on plasma surface
+    num_four : integer
+        largest absolute fourier mode number, eg M+N+1
 
-     delt1u  = ap*am  - cma*cma
-     azp1u  = jacobian["a_tt"]  + jacobian["a_tz"]  + jacobian["a_zz"]
-     azm1u  = jacobian["a_tt"]  - jacobian["a_tz"]  + jacobian["a_zz"]
-     cma11u  = jacobian["a_zz"]  - jacobian["a_tt"]
-     r1p  = (azp1u*(delt1u - cma*cma)/ap - azm1u*ap + 2.0*cma11u*cma)/delt1u
-     r1m  = (azm1u*(delt1u - cma*cma)/am - azp1u*am + 2.0*cma11u*cma)/delt1u
-     r0p  = (-azp1u*am*cma/ap - azm1u*cma + 2.0*cma11u*am)/delt1u
-     r0m  = (-azm1u*ap*cma/am - azp1u*cma + 2.0*cma11u*ap)/delt1u
-     ra1p = azp1u/ap
-     ra1m = azm1u/am
+    returns
+    TS : dict of ndarray
+        T^plus, T^minus, S^plus, S^minus
+    """
+    a = jacobian["g_tt"]
+    b = jacobian["g_tz"]
+    c = jacobian["g_zz"]
+    ap = a + 2*b + c
+    am = a - 2*b + c
+    cma = c - a
 
-     # compute T^{\pm}_l, S^{\pm}_l
-     # jacobian["g_tt"].size = ntheta_sym * nzeta
-     # num_four = mf + nf + 1
-     T_p_l = np.zeros([num_four, jacobian["g_tt"].size]) # T^{+}_l
-     T_m_l = np.zeros([num_four, jacobian["g_tt"].size]) # T^{-}_l
-     S_p_l = np.zeros([num_four, jacobian["g_tt"].size]) # S^{+}_l
-     S_m_l = np.zeros([num_four, jacobian["g_tt"].size]) # S^{-}_l
+    sqrt_a = np.sqrt(a)
+    sqrt_c = np.sqrt(c)
+    sqrt_ap = np.sqrt(ap)
+    sqrt_am = np.sqrt(am)
 
-     T_p_l = put(T_p_l, Index[0, :], 1.0/sqrt_ap*np.log((sqrt_ap*2*sqrt_c + ap + cma)/(sqrt_ap*2*sqrt_a - ap + cma)))
-     T_m_l = put(T_m_l, Index[0, :], 1.0/sqrt_am*np.log((sqrt_am*2*sqrt_c + am + cma)/(sqrt_am*2*sqrt_a - am + cma)))
-     S_p_l = put(S_p_l, Index[0, :], ra1p * T_p_l[0, :] - (r1p + r0p)/(2*sqrt_c) + (r0p - r1p)/(2*sqrt_a))
-     S_m_l = put(S_m_l, Index[0, :], ra1m * T_m_l[0, :] - (r1m + r0m)/(2*sqrt_c) + (r0m - r1m)/(2*sqrt_a))
-                       
-     T_p_l = put(T_p_l, Index[1, :], ((2*sqrt_c + (-1) * 2*sqrt_a) - (1.0)*cma*T_p_l[0, :])/(ap))
-     T_m_l = put(T_m_l, Index[1, :], ((2*sqrt_c + (-1) * 2*sqrt_a) - (1.0)*cma*T_m_l[0, :])/(am))
-     S_p_l = put(S_p_l, Index[1, :], (r1p + ra1p)*T_p_l[1, :] + r0p*T_p_l[0, :] - (r1p + r0p)/(2*sqrt_c) + (-1) * (r0p - r1p)/(2*sqrt_a))
-     S_m_l = put(S_m_l, Index[1, :], (r1m + ra1m)*T_m_l[1, :] + r0m*T_m_l[0, :] - (r1m + r0m)/(2*sqrt_c) + (-1) * (r0m - r1m)/(2*sqrt_a))
+    delt1u  = ap*am  - cma*cma
+    azp1u  = jacobian["a_tt"]  + jacobian["a_tz"]  + jacobian["a_zz"]
+    azm1u  = jacobian["a_tt"]  - jacobian["a_tz"]  + jacobian["a_zz"]
+    cma11u  = jacobian["a_zz"]  - jacobian["a_tt"]
+    r1p  = (azp1u*(delt1u - cma*cma)/ap - azm1u*ap + 2.0*cma11u*cma)/delt1u
+    r1m  = (azm1u*(delt1u - cma*cma)/am - azp1u*am + 2.0*cma11u*cma)/delt1u
+    r0p  = (-azp1u*am*cma/ap - azm1u*cma + 2.0*cma11u*am)/delt1u
+    r0m  = (-azm1u*ap*cma/am - azp1u*cma + 2.0*cma11u*ap)/delt1u
+    ra1p = azp1u/ap
+    ra1m = azm1u/am
 
-     arrs = {"T_p_l": T_p_l,
-             "T_m_l": T_m_l,
-             "S_p_l": S_p_l,
-             "S_m_l": S_m_l,
-     }
-     # now use recurrence relation for l > 0
-     def body_fun(l, arrs):
-         # compute T^{\pm}_l
-         arrs["T_p_l"] = put(arrs["T_p_l"], Index[l, :], ((2*sqrt_c + (-1)**l * 2*sqrt_a) - (2.0*l - 1.0)*cma*arrs["T_p_l"][l-1, :] - (l-1)*am*arrs["T_p_l"][l-2, :])/(ap*l))
-         arrs["T_m_l"] = put(arrs["T_m_l"], Index[l, :], ((2*sqrt_c + (-1)**l * 2*sqrt_a) - (2.0*l - 1.0)*cma*arrs["T_m_l"][l-1, :] - (l-1)*ap*arrs["T_m_l"][l-2, :])/(am*l))
+    # compute T^{\pm}_l, S^{\pm}_l
+    # jacobian["g_tt"].size = ntheta_sym * nzeta
+    # num_four = mf + nf + 1
+    T_p_l = np.zeros([num_four, jacobian["g_tt"].size]) # T^{+}_l
+    T_m_l = np.zeros([num_four, jacobian["g_tt"].size]) # T^{-}_l
+    S_p_l = np.zeros([num_four, jacobian["g_tt"].size]) # S^{+}_l
+    S_m_l = np.zeros([num_four, jacobian["g_tt"].size]) # S^{-}_l
 
-         # compute S^{\pm}_l based on T^{\pm}_l and T^{\pm}_{l-1}
-         arrs["S_p_l"] = put(arrs["S_p_l"], Index[l, :], (r1p*l + ra1p)*arrs["T_p_l"][l, :] + r0p*l*arrs["T_p_l"][l-1, :] - (r1p + r0p)/(2*sqrt_c) + (-1)**l * (r0p - r1p)/(2*sqrt_a))
-         arrs["S_m_l"] = put(arrs["S_m_l"], Index[l, :], (r1m*l + ra1m)*arrs["T_m_l"][l, :] + r0m*l*arrs["T_m_l"][l-1, :] - (r1m + r0m)/(2*sqrt_c) + (-1)**l * (r0m - r1m)/(2*sqrt_a))
+    T_p_l = put(T_p_l, Index[0, :], 1.0/sqrt_ap*np.log((sqrt_ap*2*sqrt_c + ap + cma)/(sqrt_ap*2*sqrt_a - ap + cma)))
+    T_m_l = put(T_m_l, Index[0, :], 1.0/sqrt_am*np.log((sqrt_am*2*sqrt_c + am + cma)/(sqrt_am*2*sqrt_a - am + cma)))
+    S_p_l = put(S_p_l, Index[0, :], ra1p * T_p_l[0, :] - (r1p + r0p)/(2*sqrt_c) + (r0p - r1p)/(2*sqrt_a))
+    S_m_l = put(S_m_l, Index[0, :], ra1m * T_m_l[0, :] - (r1m + r0m)/(2*sqrt_c) + (r0m - r1m)/(2*sqrt_a))
+                      
+    T_p_l = put(T_p_l, Index[1, :], ((2*sqrt_c + (-1) * 2*sqrt_a) - (1.0)*cma*T_p_l[0, :])/(ap))
+    T_m_l = put(T_m_l, Index[1, :], ((2*sqrt_c + (-1) * 2*sqrt_a) - (1.0)*cma*T_m_l[0, :])/(am))
+    S_p_l = put(S_p_l, Index[1, :], (r1p + ra1p)*T_p_l[1, :] + r0p*T_p_l[0, :] - (r1p + r0p)/(2*sqrt_c) + (-1) * (r0p - r1p)/(2*sqrt_a))
+    S_m_l = put(S_m_l, Index[1, :], (r1m + ra1m)*T_m_l[1, :] + r0m*T_m_l[0, :] - (r1m + r0m)/(2*sqrt_c) + (-1) * (r0m - r1m)/(2*sqrt_a))
 
-         return arrs
+    arrs = {"T_p_l": T_p_l,
+            "T_m_l": T_m_l,
+            "S_p_l": S_p_l,
+            "S_m_l": S_m_l,
+    }
+    # now use recurrence relation for l > 0
+    def body_fun(l, arrs):
+        # compute T^{\pm}_l
+        arrs["T_p_l"] = put(arrs["T_p_l"], Index[l, :], ((2*sqrt_c + (-1)**l * 2*sqrt_a) - (2.0*l - 1.0)*cma*arrs["T_p_l"][l-1, :] - (l-1)*am*arrs["T_p_l"][l-2, :])/(ap*l))
+        arrs["T_m_l"] = put(arrs["T_m_l"], Index[l, :], ((2*sqrt_c + (-1)**l * 2*sqrt_a) - (2.0*l - 1.0)*cma*arrs["T_m_l"][l-1, :] - (l-1)*ap*arrs["T_m_l"][l-2, :])/(am*l))
 
-     arrs = fori_loop(2,num_four, body_fun, arrs)
+        # compute S^{\pm}_l based on T^{\pm}_l and T^{\pm}_{l-1}
+        arrs["S_p_l"] = put(arrs["S_p_l"], Index[l, :], (r1p*l + ra1p)*arrs["T_p_l"][l, :] + r0p*l*arrs["T_p_l"][l-1, :] - (r1p + r0p)/(2*sqrt_c) + (-1)**l * (r0p - r1p)/(2*sqrt_a))
+        arrs["S_m_l"] = put(arrs["S_m_l"], Index[l, :], (r1m*l + ra1m)*arrs["T_m_l"][l, :] + r0m*l*arrs["T_m_l"][l-1, :] - (r1m + r0m)/(2*sqrt_c) + (-1)**l * (r0m - r1m)/(2*sqrt_a))
 
-     return arrs
+        return arrs
+
+    arrs = fori_loop(2,num_four, body_fun, arrs)
+
+    return arrs
 
 
-def analyticalIntegrals(jacobian, normal, TS, B_field, mf, nf, ntheta, nzeta, cmns, weights):
+def compute_analytic_integrals(jacobian, normal, TS, B_field, mf, nf, ntheta, nzeta, cmns, weights):
+    """Compute analytic integral of singular part of greens function kernels
 
+    Parameters
+    ----------
+    jacobian : dict of ndarray
+        jacobian elemnents on plasma surface
+    normal : dict of ndarray
+        cylindrical components of normal vector to surface
+    TS : dict of ndarray
+        T^plus, T^minus, S^plus, S^minus
+    B_field : dict of ndarray
+        external magnetic field
+    mf, nf : integer
+        maximum poloidal and toroidal mode numbers
+    ntheta, nzeta : integer
+        number of grid points in poloidal, toroidal directions
+    cmns : ndarray
+        precomputed coefficients for power series expansion
+    weights : ndarray
+        quadrature weights for integration
+
+    Returns
+    -------
+    I_mn : ndarray
+        singular part of source term, indexed by m, n
+    K_mntz : ndarray
+        singular part of greens function kernel, indexed by m, n, theta, zeta
+    """
     ntheta_sym = ntheta//2 + 1
     # analysum, analysum2 using FFTs
     bexni = -weights * B_field["Bn"] * 4.0*np.pi*np.pi
@@ -357,8 +483,31 @@ def analyticalIntegrals(jacobian, normal, TS, B_field, mf, nf, ntheta, nzeta, cm
     return I_mn, K_mntz
 
 
-def computeScalarMagneticPotential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, nzeta, weights):
+def compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, nzeta, weights):
+    """Computes the magnetic scalar potential to cancel the normal field on the surface
 
+    Parameters
+    ----------
+    I_mn : ndarray
+        singular part of source term, indexed by m, n
+    K_mntz : ndarray
+        singular part of greens function kernel, indexed by m, n, theta, zeta
+    g_mntz : ndarray
+        regularized part of greens function kernel, indexed by m, n, theta, zeta
+    h_mn : ndarray
+        regularized part of source term, indexed by m, n
+    mf, nf : integer
+        maximum poloidal and toroidal mode numbers
+    ntheta, nzeta : integer
+        number of grid points in poloidal, toroidal directions
+    weights : ndarray
+        quadrature weights for integration
+    
+    Returns
+    -------
+    phi_mn : ndarray
+        scalar magnetic potential, indexed by m, n
+    """
     ntheta_sym = ntheta//2+1
     # add in analytic part to get full kernel
     g_mntz = g_mntz + K_mntz
@@ -389,9 +538,33 @@ def computeScalarMagneticPotential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, n
 
 
 
-# compute co- and contravariant magnetic field components
-def analyzeScalarMagneticPotential(B_field, phi_mn, jacobian, coords, normal, mf, nf, ntheta, nzeta, NFP):
+def compute_vacuum_magnetic_field(B_field, phi_mn, jacobian, coords, normal, mf, nf, ntheta, nzeta, NFP):
+    """Computes vacum magnetic field on plasma boundary
 
+    Parameters
+    ----------
+    B_field : dict of ndarray
+        external magnetic field
+    phi_mn : ndarray
+        scalar magnetic potential, indexed by m, n
+    jacobian : dict of ndarray
+        jacobian elemnents on plasma surface
+    coords : dict of ndarray
+        coordinates and derivatives on plasma surface
+    normal : dict of ndarray
+        cylindrical components of normal vector to surface
+    mf, nf : integer
+        maximum poloidal and toroidal mode numbers
+    ntheta, nzeta : integer
+        number of grid points in poloidal, toroidal directions
+    NFP : integer
+        number of field periods
+
+    Returns
+    -------
+    Btot : dict of ndarray
+        total field on plasma boundary from coils, plasma current, and scalar potential
+    """
     ntheta_sym = ntheta//2+1
     potvac = phi_mn
     m_potvac = np.zeros([ntheta, nzeta]) # m*potvac --> for poloidal derivative
@@ -443,15 +616,6 @@ def analyzeScalarMagneticPotential(B_field, phi_mn, jacobian, coords, normal, mf
 # Neumann Solver for Toroidal Systems
 class Nestor:
 
-    # error flag from/to VMEC
-    ier_flag = None
-
-    # skip counter --> only do full NESTOR calculation every nvacskip iterations
-    ivacskip = None
-
-    # 0,1,2; depending on initialization status of NESTOR in VMEC
-    ivac = None
-
     # number of field periods
     NFP = None
 
@@ -466,9 +630,6 @@ class Nestor:
 
     # number of poloidal grid points
     ntheta = None
-
-    # total number of Fourier coefficients in geometry input
-    mnmax = None
 
     # poloidal mode numbers m of geometry input
     xm = None
@@ -506,12 +667,6 @@ class Nestor:
     # normalization factor for surface integrals;
     # essentially 1/(ntheta*nzeta) with 1/2 at the ends in the poloidal direction
     wint = None
-
-    # bvec from previous iteration to be used when skipping full NESTOR calculation
-    bvecsav = None
-
-    # amat from previous iteration to be used when skipping full NESTOR calculation
-    amatsav = None
 
     # poloidal current (?) from previous iteration; has to be carried over for use in VMEC
     bsubvvac = None
@@ -682,7 +837,7 @@ class Nestor:
             delta_kz = (kz_i - kz_ip)%self.NFP_eff
         else:
             # Stellarator: nv toroidal grid points
-            delta_kz = (kz_i - kz_ip)%self.nzeta
+            delta_kz = (kz_i - kz_ip)%nzeta
 
         # subtract out singular part of the kernels
         # TODO: why is there an additional offset of ntheta?
@@ -814,7 +969,6 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
 
     # in principle, this needs to be done only once
     nestor.precompute()
-    mnmax           = int(nestor.vacin['mnmax'][()])
     xm              = nestor.vacin['xm'][()]
     xn              = nestor.vacin['xn'][()]
     rmnc            = nestor.vacin['rmnc'][()]
@@ -825,7 +979,7 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     phiaxis = np.linspace(0,2*np.pi,nestor.nzeta, endpoint=False)/nestor.NFP
 
     # the following calls need to be done on every iteration
-    coords = evalSurfaceGeometry_vmec(xm, xn, mnmax, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
+    coords = evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
     normal = compute_normal(coords, nestor.signgs)
     jacobian = compute_jacobian(coords, normal, nestor.NFP)
     B_extern = nestor.interpolateMGridFile(coords, normal)
@@ -838,10 +992,10 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
                                        nestor.zeta_fp)
     B_field = {key: B_extern[key] + B_plasma[key] for key in B_extern}
     TS = compute_T_S(jacobian, nestor.mf+nestor.nf+1)
-    I_mn, K_mntz = analyticalIntegrals(jacobian, normal, TS, B_field, nestor.mf, nestor.nf, ntheta, nzeta, nestor.cmns, nestor.wint)
+    I_mn, K_mntz = compute_analytic_integrals(jacobian, normal, TS, B_field, nestor.mf, nestor.nf, ntheta, nzeta, nestor.cmns, nestor.wint)
     g_mntz, h_mn = nestor.regularizedFourierTransforms(B_field, jacobian, normal, coords, nestor.mf, nestor.nf, ntheta, nzeta)    
-    phi_mn = computeScalarMagneticPotential(I_mn, K_mntz, g_mntz, h_mn, nestor.mf, nestor.nf, ntheta, nzeta, nestor.wint)
-    Btot = analyzeScalarMagneticPotential(B_field,
+    phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, nestor.mf, nestor.nf, ntheta, nzeta, nestor.wint)
+    Btot = compute_vacuum_magnetic_field(B_field,
                                           phi_mn,
                                           jacobian,
                                                coords,

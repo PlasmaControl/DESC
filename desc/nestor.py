@@ -53,7 +53,72 @@ def copy_vector_periods(vec, zetas):
     return np.array((xx,yy))
 
 
-def evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
+def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzeta, sym):
+    """Evaluate coordinates and derivatives on the surface
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        spectral coefficients for R
+    Z_lmn : ndarray
+        spectral coefficients for Z
+    Rb_transform : Transform
+        object to transform R from spectral to real space
+    Zb_transform : Transform
+        object to transform Z from spectral to real space
+    ntheta, nzeta : int
+        number of grid points in poloidal, toroidal directions
+    sym : bool
+        whether to assume stellarator symmetry
+
+    Returns
+    -------
+    coords :dict of ndarray
+        dictionary of arrays of coordinates R,Z and derivatives on a regular grid
+        in theta, zeta    
+    """
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
+    phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP
+    
+    R_2d    = Rb_transform.transform(R_lmn, dt=0, dz=0).reshape((ntheta, nzeta))
+    R_t_2d  = Rb_transform.transform(R_lmn, dt=1, dz=0).reshape((ntheta, nzeta))
+    R_z_2d  = Rb_transform.transform(R_lmn, dt=0, dz=1).reshape((ntheta, nzeta))
+    R_tt_2d = Rb_transform.transform(R_lmn, dt=2, dz=0).reshape((ntheta, nzeta))
+    R_tz_2d = Rb_transform.transform(R_lmn, dt=1, dz=1).reshape((ntheta, nzeta))
+    R_zz_2d = Rb_transform.transform(R_lmn, dt=0, dz=2).reshape((ntheta, nzeta))
+    Z_2d    = Zb_transform.transform(Z_lmn, dt=0, dz=0).reshape((ntheta, nzeta))
+    Z_t_2d  = Zb_transform.transform(Z_lmn, dt=1, dz=0).reshape((ntheta, nzeta))
+    Z_z_2d  = Zb_transform.transform(Z_lmn, dt=0, dz=1).reshape((ntheta, nzeta))
+    Z_tt_2d = Zb_transform.transform(Z_lmn, dt=2, dz=0).reshape((ntheta, nzeta))
+    Z_tz_2d = Zb_transform.transform(Z_lmn, dt=1, dz=1).reshape((ntheta, nzeta))
+    Z_zz_2d = Zb_transform.transform(Z_lmn, dt=0, dz=2).reshape((ntheta, nzeta))
+    
+    coords = {}
+    coords["R"]     = R_2d.flatten()
+    coords["Z"]     = Z_2d.flatten()
+    coords["R_sym"] = R_2d[:ntheta_sym,:].flatten()
+    coords["Z_sym"] = Z_2d[:ntheta_sym,:].flatten()
+    coords["R_t"]   = R_t_2d[:ntheta_sym,:].flatten()
+    coords["R_z"]   = R_z_2d[:ntheta_sym,:].flatten()
+    coords["R_tt"]  = R_tt_2d[:ntheta_sym,:].flatten()
+    coords["R_tz"]  = R_tz_2d[:ntheta_sym,:].flatten()
+    coords["R_zz"]  = R_zz_2d[:ntheta_sym,:].flatten()
+    coords["Z_t"]   = Z_t_2d[:ntheta_sym,:].flatten()
+    coords["Z_z"]   = Z_z_2d[:ntheta_sym,:].flatten()
+    coords["Z_tt"]  = Z_tt_2d[:ntheta_sym,:].flatten()
+    coords["Z_tz"]  = Z_tz_2d[:ntheta_sym,:].flatten()
+    coords["Z_zz"]  = Z_zz_2d[:ntheta_sym,:].flatten()
+
+    coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
+    coords["X"] = (R_2d * np.cos(phi)).flatten()
+    coords["Y"] = (R_2d * np.sin(phi)).flatten()
+
+    
+
+def eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
     """Evaluates surface geometry terms for vmec type inputs
 
     Parameters
@@ -86,7 +151,10 @@ def evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, 
         in theta, zeta
 
     """
-    ntheta_sym = ntheta//2 + 1
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
     # integer mode number arrays
     ixm=np.array(np.round(xm), dtype=int)
     ixn=np.array(np.round(np.divide(xn, NFP)), dtype=int)        
@@ -142,32 +210,18 @@ def evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, 
     # vectorize arrays, since most operations to follow act on all grid points anyway
     coords["R"] = R_2d.flatten()
     coords["Z"] = Z_2d.flatten()
-    if sym:
-        coords["R_sym"]         = R_2d            [:ntheta_sym,:].flatten()
-        coords["Z_sym"]         = Z_2d            [:ntheta_sym,:].flatten()
-        coords["R_t"]      = R_t_2d     [:ntheta_sym,:].flatten()
-        coords["R_z"]       = R_z_2d      [:ntheta_sym,:].flatten()
-        coords["R_tt"]    = R_tt_2d   [:ntheta_sym,:].flatten()
-        coords["R_tz"] = R_tz_2d[:ntheta_sym,:].flatten()
-        coords["R_zz"]     = R_zz_2d    [:ntheta_sym,:].flatten()
-        coords["Z_t"]      = Z_t_2d     [:ntheta_sym,:].flatten()
-        coords["Z_z"]       = Z_z_2d      [:ntheta_sym,:].flatten()
-        coords["Z_tt"]    = Z_tt_2d   [:ntheta_sym,:].flatten()
-        coords["Z_tz"] = Z_tz_2d[:ntheta_sym,:].flatten()
-        coords["Z_zz"]     = Z_zz_2d    [:ntheta_sym,:].flatten()
-    else:
-        coords["R_sym"]         = coords["R"]
-        coords["Z_sym"]         = coords["Z"]
-        coords["R_t"]      = R_t_2d.flatten()
-        coords["R_z"]       = R_z_2d.flatten()
-        coords["R_tt"]    = R_tt_2d.flatten()
-        coords["R_tz"] = R_tz_2d.flatten()
-        coords["R_zz"]     = R_zz_2d.flatten()
-        coords["Z_t"]      = Z_t_2d.flatten()
-        coords["Z_z"]       = Z_z_2d.flatten()
-        coords["Z_tt"]    = Z_tt_2d.flatten()
-        coords["Z_tz"] = Z_tz_2d.flatten()
-        coords["Z_zz"]     = Z_zz_2d.flatten()
+    coords["R_sym"]         = R_2d            [:ntheta_sym,:].flatten()
+    coords["Z_sym"]         = Z_2d            [:ntheta_sym,:].flatten()
+    coords["R_t"]      = R_t_2d     [:ntheta_sym,:].flatten()
+    coords["R_z"]       = R_z_2d      [:ntheta_sym,:].flatten()
+    coords["R_tt"]    = R_tt_2d   [:ntheta_sym,:].flatten()
+    coords["R_tz"] = R_tz_2d[:ntheta_sym,:].flatten()
+    coords["R_zz"]     = R_zz_2d    [:ntheta_sym,:].flatten()
+    coords["Z_t"]      = Z_t_2d     [:ntheta_sym,:].flatten()
+    coords["Z_z"]       = Z_z_2d      [:ntheta_sym,:].flatten()
+    coords["Z_tt"]    = Z_tt_2d   [:ntheta_sym,:].flatten()
+    coords["Z_tz"] = Z_tz_2d[:ntheta_sym,:].flatten()
+    coords["Z_zz"]     = Z_zz_2d    [:ntheta_sym,:].flatten()
 
     phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP            
     coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
@@ -931,20 +985,20 @@ class Nestor:
         return B_ex
         
 
-    def compute(self, coords, current):
+    def compute(self, surface_coords, axis_coords, current):
 
-        normal = compute_normal(coords, self.signgs)
-        jacobian = compute_jacobian(coords, normal, self.NFP)
-        B_extern = self.eval_external_field(coords, normal)
-        B_plasma = modelNetToroidalCurrent(coords["axis"],
+        normal = compute_normal(surface_coords, self.signgs)
+        jacobian = compute_jacobian(surface_coords, normal, self.NFP)
+        B_extern = self.eval_external_field(surface_coords, normal)
+        B_plasma = modelNetToroidalCurrent(axis_coords,
                                        current,
-                                       coords,
+                                       surface_coords,
                                        normal,
                                        )
         B_field = {key: B_extern[key] + B_plasma[key] for key in B_extern}
         TS = compute_T_S(jacobian, self.mf, self.nf, self.ntheta, self.nzeta)
         I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.mf, self.nf, self.ntheta, self.nzeta, self.cmns, self.weights)
-        g_mntz, h_mn = regularizedFourierTransforms(coords,
+        g_mntz, h_mn = regularizedFourierTransforms(surface_coords,
                                                        normal,
                                                        jacobian,
                                                        B_field,
@@ -952,7 +1006,7 @@ class Nestor:
                                                        self.tanv,
                                                        self.mf, self.nf, self.ntheta, self.nzeta, self.NFP, self.weights)    
         phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.mf, self.nf, self.ntheta, self.nzeta, self.weights)
-        Btot = compute_vacuum_magnetic_field(coords,
+        Btot = compute_vacuum_magnetic_field(surface_coords,
                                          normal,
                                          jacobian,
                                          B_field,
@@ -993,17 +1047,11 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
     mf = mpol+1
     nf = ntor
 
-
-
-
     nestor = Nestor(ext_field, signgs, mf, nf, ntheta, nzeta, NFP)                    
 
-    
-    # the following calls need to be done on every iteration
-    coords = evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
-    axis = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)
-    coords["axis"] = axis
-    phi_mn, Btot = nestor.compute(coords, ctor/mu0)
+    surface_coords = eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
+    axis_coords = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)
+    phi_mn, Btot = nestor.compute(surface_coords, axis_coords, ctor/mu0)
     firstIterationPrintout(Btot, ctor, rbtor, nestor.signgs, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP, nestor.weights)
     print(np.linalg.norm(Btot["Bn"]))
 

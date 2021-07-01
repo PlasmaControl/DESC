@@ -91,6 +91,17 @@ class Equilibrium(_Configuration, IOAble):
         self.optimizer = inputs.get("optimizer", None)
         self.optimizer_results = {}
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
+                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
+            )
+        )
+
     @property
     def x0(self):
         """Return initial optimization vector before solution (ndarray)."""
@@ -182,7 +193,10 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
             )
         else:
             raise ValueError(

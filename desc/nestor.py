@@ -383,12 +383,10 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta):
     ra1m = azm1u/am
 
     # compute T^{\pm}_l, S^{\pm}_l
-    # jacobian["g_tt"].size = ntheta_sym * nzeta
-    # num_four = mf + nf + 1
-    T_p_l = np.zeros([mf + nf + 1, jacobian["g_tt"].size]) # T^{+}_l
-    T_m_l = np.zeros([mf + nf + 1, jacobian["g_tt"].size]) # T^{-}_l
-    S_p_l = np.zeros([mf + nf + 1, jacobian["g_tt"].size]) # S^{+}_l
-    S_m_l = np.zeros([mf + nf + 1, jacobian["g_tt"].size]) # S^{-}_l
+    T_p_l = np.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # T^{+}_l
+    T_m_l = np.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # T^{-}_l
+    S_p_l = np.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # S^{+}_l
+    S_m_l = np.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # S^{-}_l
 
     T_p_l = put(T_p_l, Index[0, :], 1.0/sqrt_ap*np.log((sqrt_ap*2*sqrt_c + ap + cma)/(sqrt_ap*2*sqrt_a - ap + cma)))
     T_m_l = put(T_m_l, Index[0, :], 1.0/sqrt_am*np.log((sqrt_am*2*sqrt_c + am + cma)/(sqrt_am*2*sqrt_a - am + cma)))
@@ -771,96 +769,102 @@ def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf,
     return Btot
 
 
+def firstIterationPrintout(Btot, ctor, rbtor, signgs, mf, nf, ntheta, nzeta, NFP, weights):
+    print("In VACUUM, NFP = %2d mf = %2d nf = %2d ntheta = %2d nzeta = %2d"%(NFP, mf, nf, ntheta, nzeta))
+
+    # -plasma current/pi2
+    bsubuvac = np.sum(Btot["B_theta"] * weights)*signgs*2.0*np.pi
+    bsubvvac = np.sum(Btot["B_zeta"] * weights)
+
+    # currents in MA
+    fac = 1.0e-6/mu0
+
+    print("2*pi * a * -BPOL(vac) = {: 10.8e} \n".format(bsubuvac*fac) +
+          "TOROIDAL CURRENT      = {: 10.8e} \n".format(ctor*fac) +
+          "R * BTOR(vac)         = {: 10.8e} \n".format(bsubvvac) +
+          "R * BTOR(plasma)      = {: 10.8e} \n".format(rbtor))
+
+    if rbtor*bsubvvac < 0:
+        raise ValueError("poloidal current and toroidal field must have same sign, Psi may be incorrect")
+
+    if np.abs((ctor - bsubuvac)/rbtor) > 1.0e-2:
+        raise ValueError("Toroidal current and poloidal field mismatch, boundary may enclose external coil")
 
 
-# Neumann Solver for Toroidal Systems
+
+def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
+    # mode numbers for potvac
+    xmpot = np.zeros([(mf+1)*(2*nf+1)])
+    xnpot = np.zeros([(mf+1)*(2*nf+1)])
+    mn = 0
+    for n in range(-nf, nf+1):
+        for m in range(mf+1):
+            xmpot[mn] = m
+            xnpot[mn] = n*NFP
+            mn += 1
+
+    vacout = Dataset(vacoutFilename, "w")
+
+    dim_nuv2 = def_ncdim(vacout, (ntheta//2+1)*nzeta)
+    dim_mnpd2 = def_ncdim(vacout, (mf+1)*(2*nf+1))
+
+
+    var_bsqvac   = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
+    var_mnpd     = vacout.createVariable("mnpd", "i4")
+    var_mnpd2    = vacout.createVariable("mnpd2", "i4")
+    var_xmpot    = vacout.createVariable("xmpot", "f8", (dim_mnpd2,))
+    var_xnpot    = vacout.createVariable("xnpot", "f8", (dim_mnpd2,))
+    var_potvac   = vacout.createVariable("potvac", "f8", (dim_mnpd2,))
+    var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
+    var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
+    var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
+
+    var_bsqvac[:] = Btot["|B|^2"]
+    var_mnpd.assignValue((mf+1)*(2*nf+1))
+    var_mnpd2.assignValue((mf+1)*(2*nf+1))
+    var_xmpot[:] = xmpot
+    var_xnpot[:] = xnpot
+    var_potvac[:] = np.fft.fftshift(potvac.reshape([mf+1, 2*nf+1]), axes=1).T.flatten()
+    var_brv[:] = Btot["BR"]
+    var_bphiv[:] = Btot["Bphi"]
+    var_bzv[:] = Btot["BZ"]
+
+    vacout.close()
+
+    
 class Nestor:
+    """Neumann Solver for Toroidal Systems
 
-    # number of field periods
-    NFP = None
+    Parameters
+    ----------
+    ext_field : MagneticField
+        external field object, either splined or coils
+    signgs : int
+        sign of Jacobian; needed for surface normal vector sign
+    mf, nf : integer
+        maximum poloidal and toroidal mode numbers to use
+    ntheta, nzeta : int
+        number of grid points in poloidal, toroidal directions to use
+    NFP : integer
+        number of field periods
+    """
 
-    # number of toroidal Fourier harmonics in geometry input
-    ntor = None
+    def __init__(self, ext_field, signgs, mf, nf, ntheta, nzeta, NFP):
 
-    # number of poloidal Fourier harmonics in geometry input
-    mpol = None
+        self.ext_field = ext_field
+        self.signgs = signgs
+        self.mf = mf
+        self.nf = nf
+        self.ntheta = ntheta
+        self.nzeta = nzeta
+        self.NFP = NFP
 
-    # number of toroidal grid points; has to match mgrid file!
-    nzeta = None
+        weights = 2*np.ones((self.ntheta//2+1, self.nzeta))/(self.ntheta*self.nzeta)
+        weights[0] /= 2.0
+        weights[-1] /= 2.0
+        self.weights = weights.flatten()
 
-    # number of poloidal grid points
-    ntheta = None
-
-    # poloidal mode numbers m of geometry input
-    xm = None
-
-    # toroidal mode numbers n*NFP of geometry input
-    xn = None
-
-    # Fourier coefficients for R*cos(m theta - n zeta) of geometry input
-    rmnc = None
-
-    # Fourier coefficients for Z*sin(m theta - n zeta) of geometry input
-    zmns = None
-
-    # net poloidal current; only used for comparison
-    rbtor = None
-
-    # net toroial current in A*mu0; used for filament model along magnetic axis
-    ctor = None
-
-    # sign of Jacobian; needed for surface normal vector sign
-    signgs = None
-
-    # coil currents for scaling mgrid file
-    extcur = None
-
-    # toroidal Fourier coefficients for magnetic axis: R*cos(n zeta)
-    raxis_nestor = None
-
-    # toroidal Fourier coefficients for magnetic axis: Z*sin(n zeta)
-    zaxis_nestor = None
-
-    # normalization factor for surface integrals;
-    # essentially 1/(ntheta*nzeta) with 1/2 at the ends in the poloidal direction
-    wint = None
-
-    # poloidal current (?) from previous iteration; has to be carried over for use in VMEC
-    bsubvvac = None
-
-    # MGridFile object holding the external magnetic field to interpolate
-    mgrid = None
-
-    def __init__(self, vacinFilename, mgrid):
-        self.vacin = Dataset(vacinFilename, "r")
-
-        self.NFP             = int(self.vacin['nfp'][()])
-        self.ntor            = int(self.vacin['ntor'][()])
-        self.mpol            = int(self.vacin['mpol'][()])
-        self.nzeta           = int(self.vacin['nzeta'][()])
-        self.ntheta          = int(self.vacin['ntheta'][()])
-        self.rbtor           = self.vacin['rbtor'][()]
-        self.ctor            = self.vacin['ctor'][()]
-        self.signgs          = self.vacin['signgs'][()]
-
-        self.raxis    = self.vacin['raxis_nestor'][()]
-        self.zaxis    = self.vacin['zaxis_nestor'][()]
-        self.wint            = np.array(self.vacin['wint'][()])
-        self.bvecsav         = self.vacin['bvecsav'][()]
-        self.amatsav         = self.vacin['amatsav'][()]
-        self.bsubvvac        = self.vacin['bsubvvac'][()]
-        # self.vacin.close()
-
-        extcur          = self.vacin['extcur'][()]        
-        folder = os.getcwd()
-        mgridFilename = os.path.join(folder, mgrid)
-        self.ext_field = SplineMagneticField.from_mgrid(mgridFilename, extcur)
-
-    # pre-computable quantities and arrays
-    def precompute(self):
-        self.mf = self.mpol+1
-        self.nf = self.ntor
-        
+        # pre-computable quantities and arrays
         # tanu, tanv
         epstan = 2.22e-16
         bigno = 1.0e50 # allows proper comparison against implementation used in VMEC
@@ -912,11 +916,8 @@ class Nestor:
         self.cmns[:,0,1:self.nf+1] = 0.5 * dPhi_per * (cmn[:,0,1:self.nf+1] + cmn[:,0,0:self.nf])
         self.cmns[:,0,0] = 0.5 * dPhi_per * (cmn[:,0,0] + cmn[:,0,0])
 
-        self.ntheta_stellsym = self.ntheta//2 + 1
-        self.nzeta_stellsym = self.nzeta//2 + 1
 
-    # evaluate MGRID on grid over flux surface
-    def interpolateMGridFile(self, coords, normal):
+    def eval_external_field(self, coords, normal):
         grid = np.array([coords["R_sym"],coords["phi_sym"],coords["Z_sym"]]).T
         B = self.ext_field.compute_magnetic_field(grid).T
         B_ex = {}
@@ -930,130 +931,85 @@ class Nestor:
         return B_ex
         
 
+    def compute(self, coords, current):
 
-
-
-
-    
-
-
-
-
-        
-    def firstIterationPrintout(self, Btot):
-        print("In VACUUM, NFP = %2d mf = %2d nf = %2d ntheta = %2d nzeta = %2d"%(self.NFP, self.mf, self.nf, self.ntheta, self.nzeta))
-
-        # -plasma current/pi2
-        bsubuvac = np.sum(Btot["B_theta"] * self.wint)*self.signgs*2.0*np.pi
-        bsubvvac = np.sum(Btot["B_zeta"] * self.wint)
-
-        # currents in MA
-        fac = 1.0e-6/mu0
-
-        print("2*pi * a * -BPOL(vac) = {: 10.8e} \n".format(bsubuvac*fac) +
-              "TOROIDAL CURRENT      = {: 10.8e} \n".format(self.ctor*fac) +
-              "R * BTOR(vac)         = {: 10.8e} \n".format(bsubvvac) +
-              "R * BTOR(plasma)      = {: 10.8e} \n".format(self.rbtor))
-
-        if self.rbtor*bsubvvac < 0:
-            raise ValueError("poloidal current and toroidal field must have same sign, Psi may be incorrect")
-
-        if np.abs((self.ctor - bsubuvac)/self.rbtor) > 1.0e-2:
-            raise ValueError("Toroidal current and poloidal field mismatch, boundary may enclose external coil")
-
-    def produceOutputFile(self, vacoutFilename, potvac, Btot):
-        # mode numbers for potvac
-        self.xmpot = np.zeros([(self.mf+1)*(2*self.nf+1)])
-        self.xnpot = np.zeros([(self.mf+1)*(2*self.nf+1)])
-        mn = 0
-        for n in range(-self.nf, self.nf+1):
-            for m in range(self.mf+1):
-                self.xmpot[mn] = m
-                self.xnpot[mn] = n*self.NFP
-                mn += 1
-
-        vacout = Dataset(vacoutFilename, "w")
-
-        dim_nuv2 = def_ncdim(vacout, self.ntheta_stellsym*self.nzeta)
-        dim_mnpd2 = def_ncdim(vacout, (self.mf+1)*(2*self.nf+1))
-        dim_mnpd2_sq = def_ncdim(vacout, (self.mf+1)*(2*self.nf+1)*(self.mf+1)*(2*self.nf+1))
-
-        var_bsqvac   = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
-        var_mnpd     = vacout.createVariable("mnpd", "i4")
-        var_mnpd2    = vacout.createVariable("mnpd2", "i4")
-        var_xmpot    = vacout.createVariable("xmpot", "f8", (dim_mnpd2,))
-        var_xnpot    = vacout.createVariable("xnpot", "f8", (dim_mnpd2,))
-        var_potvac   = vacout.createVariable("potvac", "f8", (dim_mnpd2,))
-        var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
-        var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
-        var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
-
-        var_bsqvac[:] = Btot["|B|^2"]
-        var_mnpd.assignValue((self.mf+1)*(2*self.nf+1))
-        var_mnpd2.assignValue((self.mf+1)*(2*self.nf+1))
-        var_xmpot[:] = self.xmpot
-        var_xnpot[:] = self.xnpot
-        var_potvac[:] = np.fft.fftshift(potvac.reshape([self.mf+1, 2*self.nf+1]), axes=1).T.flatten()
-        var_brv[:] = Btot["BR"]
-        var_bphiv[:] = Btot["Bphi"]
-        var_bzv[:] = Btot["BZ"]
-
-        vacout.close()
-
-
-def main(vacin_filename, vacout_filename=None, mgrid=None):
-    nestor = Nestor(vacin_filename, mgrid)
-
-    # in principle, this needs to be done only once
-    nestor.precompute()
-    xm              = nestor.vacin['xm'][()]
-    xn              = nestor.vacin['xn'][()]
-    rmnc            = nestor.vacin['rmnc'][()]
-    zmns            = nestor.vacin['zmns'][()]
-    nzeta           = int(nestor.vacin['nzeta'][()])
-    ntheta          = int(nestor.vacin['ntheta'][()])
-    NFP             = int(nestor.vacin['nfp'][()])
-
-
-
-
-                     
-
-    
-    # the following calls need to be done on every iteration
-    coords = evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
-    axis = evaluate_axis_vmec(nestor.raxis,nestor.zaxis, nzeta, NFP)
-    normal = compute_normal(coords, nestor.signgs)
-    jacobian = compute_jacobian(coords, normal, nestor.NFP)
-    B_extern = nestor.interpolateMGridFile(coords, normal)
-    B_plasma = modelNetToroidalCurrent(axis,
-                                       nestor.ctor/mu0,
+        normal = compute_normal(coords, self.signgs)
+        jacobian = compute_jacobian(coords, normal, self.NFP)
+        B_extern = self.eval_external_field(coords, normal)
+        B_plasma = modelNetToroidalCurrent(coords["axis"],
+                                       current,
                                        coords,
                                        normal,
                                        )
-    B_field = {key: B_extern[key] + B_plasma[key] for key in B_extern}
-    TS = compute_T_S(jacobian, nestor.mf, nestor.nf, ntheta, nzeta)
-    I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, nestor.mf, nestor.nf, ntheta, nzeta, nestor.cmns, nestor.wint)
-    g_mntz, h_mn = regularizedFourierTransforms(coords,
+        B_field = {key: B_extern[key] + B_plasma[key] for key in B_extern}
+        TS = compute_T_S(jacobian, self.mf, self.nf, self.ntheta, self.nzeta)
+        I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.mf, self.nf, self.ntheta, self.nzeta, self.cmns, self.weights)
+        g_mntz, h_mn = regularizedFourierTransforms(coords,
                                                        normal,
                                                        jacobian,
                                                        B_field,
-                                                       nestor.tanu,
-                                                       nestor.tanv,
-                                                       nestor.mf, nestor.nf, ntheta, nzeta, NFP, nestor.wint)    
-    phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, nestor.mf, nestor.nf, ntheta, nzeta, nestor.wint)
-    Btot = compute_vacuum_magnetic_field(coords,
+                                                       self.tanu,
+                                                       self.tanv,
+                                                       self.mf, self.nf, self.ntheta, self.nzeta, self.NFP, self.weights)    
+        phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.mf, self.nf, self.ntheta, self.nzeta, self.weights)
+        Btot = compute_vacuum_magnetic_field(coords,
                                          normal,
                                          jacobian,
                                          B_field,
                                           phi_mn,
-                                          nestor.mf, nestor.nf, ntheta, nzeta, NFP)
-    nestor.firstIterationPrintout(Btot)
+                                          self.mf, self.nf, self.ntheta, self.nzeta, self.NFP)
+        return phi_mn, Btot
+
+
+
+
+def main(vacin_filename, vacout_filename=None, mgrid=None):
+    vacin = Dataset(vacin_filename, "r")
+
+    ntor    = int(vacin['ntor'][()])
+    mpol    = int(vacin['mpol'][()])
+    nzeta   = int(vacin['nzeta'][()])
+    ntheta  = int(vacin['ntheta'][()])
+    NFP     = int(vacin['nfp'][()])
+
+    rbtor   = vacin['rbtor'][()]
+    ctor    = vacin['ctor'][()]
+    signgs  = vacin['signgs'][()]
+
+    raxis   = vacin['raxis_nestor'][()]
+    zaxis   = vacin['zaxis_nestor'][()]
+    wint    = np.array(vacin['wint'][()])
+
+    xm      = vacin['xm'][()]
+    xn      = vacin['xn'][()]
+    rmnc    = vacin['rmnc'][()]
+    zmns    = vacin['zmns'][()]
+    
+    extcur = vacin['extcur'][()]        
+    folder = os.getcwd()
+    mgridFilename = os.path.join(folder, mgrid)
+    ext_field = SplineMagneticField.from_mgrid(mgridFilename, extcur)
+
+    mf = mpol+1
+    nf = ntor
+
+
+
+
+    nestor = Nestor(ext_field, signgs, mf, nf, ntheta, nzeta, NFP)                    
+
+    
+    # the following calls need to be done on every iteration
+    coords = evalSurfaceGeometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
+    axis = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)
+    coords["axis"] = axis
+    phi_mn, Btot = nestor.compute(coords, ctor/mu0)
+    firstIterationPrintout(Btot, ctor, rbtor, nestor.signgs, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP, nestor.weights)
     print(np.linalg.norm(Btot["Bn"]))
 
     if vacout_filename is None:
         vacout_filename = vacin_filename.replace("vacin_", "vacout_")
-    nestor.produceOutputFile(vacout_filename, phi_mn, Btot)
+    produceOutputFile(vacout_filename, phi_mn, Btot, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP)
     
 if __name__ == '__main__':
     if len(sys.argv) > 1:

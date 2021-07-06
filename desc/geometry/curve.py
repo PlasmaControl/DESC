@@ -15,8 +15,7 @@ __all__ = [
 
 
 class FourierRZCurve(Curve):
-    """Curve parameterized by fourier series for R,Z in terms of
-    toroidal angle phi
+    """Curve parameterized by fourier series for R,Z in terms of toroidal angle phi.
 
     Parameters
     ----------
@@ -91,26 +90,26 @@ class FourierRZCurve(Curve):
 
     @property
     def sym(self):
-        """Whether this curve has stellarator symmetry"""
+        """Whether this curve has stellarator symmetry."""
         return self._sym
 
     @property
     def R_basis(self):
-        """Spectral basis for R_fourier series"""
+        """Spectral basis for R_fourier series."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z_fourier series"""
+        """Spectral basis for Z_fourier series."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
         return self._grid
 
     def change_resolution(self, N):
-        """Change the maximum toroidal resolution"""
+        """Change the maximum toroidal resolution."""
         R_modes_old = self.R_basis.modes
         Z_modes_old = self.Z_basis.modes
         self.R_basis.change_resolution(N=N)
@@ -133,7 +132,7 @@ class FourierRZCurve(Curve):
         self._Z_transform.grid = self.grid
 
     def get_coeffs(self, n):
-        """Get fourier coefficients for given mode number(s)"""
+        """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         R = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
@@ -146,7 +145,7 @@ class FourierRZCurve(Curve):
         return R, Z
 
     def set_coeffs(self, n, R=None, Z=None):
-        """set specific fourier coefficients"""
+        """Set specific Fourier coefficients."""
         n, R, Z = np.atleast_1d(n), np.atleast_1d(R), np.atleast_1d(Z)
         R = np.broadcast_to(R, n.shape)
         Z = np.broadcast_to(Z, n.shape)
@@ -160,7 +159,7 @@ class FourierRZCurve(Curve):
 
     @property
     def R_n(self):
-        """Spectral coefficients for R"""
+        """Spectral coefficients for R."""
         return self._R_n
 
     @R_n.setter
@@ -174,7 +173,7 @@ class FourierRZCurve(Curve):
 
     @property
     def Z_n(self):
-        """Spectral coefficients for Z"""
+        """Spectral coefficients for Z."""
         return self._Z_n
 
     @Z_n.setter
@@ -209,7 +208,7 @@ class FourierRZCurve(Curve):
         return R_transform, Z_transform
 
     def compute_coordinates(self, R_n=None, Z_n=None, grid=None, dt=0):
-        """Compute values using specified coefficients
+        """Compute values using specified coefficients.
 
         Parameters
         ----------
@@ -267,7 +266,7 @@ class FourierRZCurve(Curve):
         )
 
     def compute_frenet_frame(self, R_n=None, Z_n=None, grid=None, coords="rpz"):
-        """Compute frenet frame vectors using specified coefficients
+        """Compute Frenet frame vectors using specified coefficients.
 
         Parameters
         ----------
@@ -276,7 +275,7 @@ class FourierRZCurve(Curve):
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
         coords : {"rpz", "xyz"}
-            basis vectors to use for frenet vector representation
+            basis vectors to use for Frenet vector representation
 
         Returns
         -------
@@ -305,7 +304,7 @@ class FourierRZCurve(Curve):
         return T, N, B
 
     def compute_curvature(self, R_n=None, Z_n=None, grid=None):
-        """Compute curvature using specified coefficients
+        """Compute curvature using specified coefficients.
 
         Parameters
         ----------
@@ -327,7 +326,7 @@ class FourierRZCurve(Curve):
         return kappa
 
     def compute_torsion(self, R_n=None, Z_n=None, grid=None):
-        """Compute torsion using specified coefficients
+        """Compute torsion using specified coefficients.
 
         Parameters
         ----------
@@ -353,7 +352,7 @@ class FourierRZCurve(Curve):
         return tau
 
     def compute_length(self, R_n=None, Z_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature
+        """Compute the length of the curve using specified nodes for quadrature.
 
         Parameters
         ----------
@@ -377,8 +376,7 @@ class FourierRZCurve(Curve):
 
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by fourier series for X,Y,Z in terms of
-    arbitrary angle phi
+    """Curve parameterized by fourier series for X,Y,Z in terms of arbitrary angle phi.
 
     Parameters
     ----------
@@ -427,12 +425,12 @@ class FourierXYZCurve(Curve):
 
     @property
     def basis(self):
-        """Spectral basis for fourier series"""
+        """Spectral basis for Fourier series."""
         return self._basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
         return self._grid
 
     @grid.setter
@@ -448,7 +446,7 @@ class FourierXYZCurve(Curve):
         self._transform.grid = self.grid
 
     def change_resolution(self, N):
-        """Change the maximum angular resolution"""
+        """Change the maximum angular resolution."""
         modes_old = self.basis.modes
         self.basis.change_resolution(N=N)
         self._transform = self._get_transforms(self.grid)
@@ -457,7 +455,7 @@ class FourierXYZCurve(Curve):
         self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
 
     def get_coeffs(self, n):
-        """Get fourier coefficients for given mode number(s)"""
+        """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         X = np.zeros_like(n).astype(float)
         Y = np.zeros_like(n).astype(float)
@@ -471,7 +469,7 @@ class FourierXYZCurve(Curve):
         return X, Y, Z
 
     def set_coeffs(self, n, X=None, Y=None, Z=None):
-        """set specific fourier coefficients"""
+        """Set specific Fourier coefficients."""
         n, X, Y, Z = (
             np.atleast_1d(n),
             np.atleast_1d(X),
@@ -492,7 +490,7 @@ class FourierXYZCurve(Curve):
 
     @property
     def X_n(self):
-        """Spectral coefficients for X"""
+        """Spectral coefficients for X."""
         return self._X_n
 
     @X_n.setter
@@ -506,7 +504,7 @@ class FourierXYZCurve(Curve):
 
     @property
     def Y_n(self):
-        """Spectral coefficients for Y"""
+        """Spectral coefficients for Y."""
         return self._Y_n
 
     @Y_n.setter
@@ -520,7 +518,7 @@ class FourierXYZCurve(Curve):
 
     @property
     def Z_n(self):
-        """Spectral coefficients for Z"""
+        """Spectral coefficients for Z."""
         return self._Z_n
 
     @Z_n.setter
@@ -550,7 +548,7 @@ class FourierXYZCurve(Curve):
         return transform
 
     def compute_coordinates(self, X_n=None, Y_n=None, Z_n=None, grid=None, dt=0):
-        """Compute values using specified coefficients
+        """Compute values using specified coefficients.
 
         Parameters
         ----------
@@ -585,7 +583,7 @@ class FourierXYZCurve(Curve):
     def compute_frenet_frame(
         self, X_n=None, Y_n=None, Z_n=None, grid=None, coords="rpz"
     ):
-        """Compute frenet frame vectors using specified coefficients
+        """Compute Frenet frame vectors using specified coefficients.
 
         Parameters
         ----------
@@ -596,7 +594,7 @@ class FourierXYZCurve(Curve):
             dependent coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
         coords : {"rpz", "xyz"}
-            basis vectors to use for frenet vector representation
+            basis vectors to use for Frenet vector representation
 
         Returns
         -------
@@ -638,7 +636,7 @@ class FourierXYZCurve(Curve):
         return T, N, B
 
     def compute_curvature(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute curvature using specified coefficients
+        """Compute curvature using specified coefficients.
 
         Parameters
         ----------
@@ -661,7 +659,7 @@ class FourierXYZCurve(Curve):
         return kappa
 
     def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute torsion using specified coefficientsnp.empty((0, 3))
+        """Compute torsion using specified coefficientsnp.empty((0, 3)).
 
         Parameters
         ----------
@@ -688,7 +686,7 @@ class FourierXYZCurve(Curve):
         return tau
 
     def compute_length(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature
+        """Compute the length of the curve using specified nodes for quadrature.
 
         Parameters
         ----------
@@ -716,7 +714,7 @@ class FourierXYZCurve(Curve):
 class FourierPlanarCurve(Curve):
     """Curve that lines in a plane, parameterized by a point (the center of the curve),
     a vector (normal to the plane), and a fourier series defining the radius from the
-    center as a function of a polar angle theta
+    center as a function of a polar angle theta.
 
     Parameters
     ----------
@@ -775,12 +773,12 @@ class FourierPlanarCurve(Curve):
 
     @property
     def basis(self):
-        """Spectral basis for fourier series"""
+        """Spectral basis for Fourier series."""
         return self._basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
         return self._grid
 
     @grid.setter
@@ -796,7 +794,7 @@ class FourierPlanarCurve(Curve):
         self._transform.grid = self.grid
 
     def change_resolution(self, N):
-        """Change the maximum angular resolution"""
+        """Change the maximum angular resolution."""
         modes_old = self.basis.modes
         self.basis.change_resolution(N=N)
         self._transform = self._get_transforms(self.grid)
@@ -804,7 +802,7 @@ class FourierPlanarCurve(Curve):
 
     @property
     def center(self):
-        """center of planar curve polar coordinates"""
+        """Center of planar curve polar coordinates."""
         return self._center
 
     @center.setter
@@ -818,7 +816,7 @@ class FourierPlanarCurve(Curve):
 
     @property
     def normal(self):
-        """normal vector to plane"""
+        """Normal vector to plane."""
         return self._normal
 
     @normal.setter
@@ -832,7 +830,7 @@ class FourierPlanarCurve(Curve):
 
     @property
     def r_n(self):
-        """Spectral coefficients for r"""
+        """Spectral coefficients for r."""
         return self._r_n
 
     @r_n.setter
@@ -845,7 +843,7 @@ class FourierPlanarCurve(Curve):
             )
 
     def get_coeffs(self, n):
-        """Get fourier coefficients for given mode number(s)"""
+        """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         r = np.zeros_like(n).astype(float)
 
@@ -855,7 +853,7 @@ class FourierPlanarCurve(Curve):
         return r
 
     def set_coeffs(self, n, r=None):
-        """set specific fourier coefficients"""
+        """Set specific fourier coefficients."""
         n, r = np.atleast_1d(n), np.atleast_1d(r)
         r = np.broadcast_to(r, n.shape)
         for nn, rr in zip(n, r):
@@ -864,7 +862,7 @@ class FourierPlanarCurve(Curve):
                 self.r_n[idx] = rr
 
     def _rotmat(self, normal=None):
-        """rotation matrix to rotate z axis into plane normal"""
+        """Rotation matrix to rotate z axis into plane normal."""
         if normal is None:
             normal = self.normal
 
@@ -898,7 +896,7 @@ class FourierPlanarCurve(Curve):
         return transform
 
     def compute_coordinates(self, center=None, normal=None, r_n=None, grid=None, dt=0):
-        """Compute values using specified coefficients
+        """Compute values using specified coefficients.
 
         Parameters
         ----------
@@ -984,7 +982,7 @@ class FourierPlanarCurve(Curve):
     def compute_frenet_frame(
         self, center=None, normal=None, r_n=None, grid=None, coords="rpz"
     ):
-        """Compute frenet frame vectors using specified coefficients
+        """Compute Frenet frame vectors using specified coefficients.
 
         Parameters
         ----------
@@ -1000,7 +998,7 @@ class FourierPlanarCurve(Curve):
             dependent coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
         coords : {"rpz", "xyz"}
-            basis vectors to use for frenet vector representation
+            basis vectors to use for Frenet vector representation
 
         Returns
         -------
@@ -1036,7 +1034,7 @@ class FourierPlanarCurve(Curve):
         return T, N, B
 
     def compute_curvature(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute curvature using specified coefficients
+        """Compute curvature using specified coefficients.
 
         Parameters
         ----------
@@ -1064,7 +1062,7 @@ class FourierPlanarCurve(Curve):
         return kappa
 
     def compute_torsion(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute torsion using specified coefficients
+        """Compute torsion using specified coefficients.
 
         Parameters
         ----------
@@ -1091,7 +1089,7 @@ class FourierPlanarCurve(Curve):
         return torsion
 
     def compute_length(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature
+        """Compute the length of the curve using specified nodes for quadrature.
 
         Parameters
         ----------

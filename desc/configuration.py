@@ -433,65 +433,17 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Ra_n(self):
-        """R coefficients for axis fourier series"""
+        """R coefficients for axis Fourier series."""
         return self.axis.R_n
 
     @property
     def Za_n(self):
-        """Z coefficients for axis fourier series"""
+        """Z coefficients for axis Fourier series."""
         return self.axis.Z_n
 
     @property
     def axis(self):
-        """Curve object representing the magnetic axis"""
-        AR = jnp.zeros((self._axis.R_basis.num_modes, self.R_basis.num_modes))
-        AR = jnp.where(
-            (self.R_basis.modes[:, 0] // 2 % 2 == 0)
-            & (self.R_basis.modes[:, 1] == 0)
-            & (
-                self.R_basis.modes[np.newaxis, :, 2]
-                == self._axis.R_basis.modes[:, 2, np.newaxis]
-            ),
-            1,
-            AR,
-        )
-        AR = jnp.where(
-            (self.R_basis.modes[:, 0] // 2 % 2 != 0)
-            & (self.R_basis.modes[:, 1] == 0)
-            & (
-                self.R_basis.modes[np.newaxis, :, 2]
-                == self._axis.R_basis.modes[:, 2, np.newaxis]
-            ),
-            -1,
-            AR,
-        )
-
-        AZ = jnp.zeros((self._axis.Z_basis.num_modes, self.Z_basis.num_modes))
-        AZ = jnp.where(
-            (self.Z_basis.modes[:, 0] // 2 % 2 == 0)
-            & (self.Z_basis.modes[:, 1] == 0)
-            & (
-                self.Z_basis.modes[np.newaxis, :, 2]
-                == self._axis.Z_basis.modes[:, 2, np.newaxis]
-            ),
-            1,
-            AZ,
-        )
-        AZ = jnp.where(
-            (self.Z_basis.modes[:, 0] // 2 % 2 != 0)
-            & (self.Z_basis.modes[:, 1] == 0)
-            & (
-                self.Z_basis.modes[np.newaxis, :, 2]
-                == self._axis.Z_basis.modes[:, 2, np.newaxis]
-            ),
-            -1,
-            AZ,
-        )
-        R_n = jnp.dot(AR, self.R_lmn)
-        Z_n = jnp.dot(AZ, self.Z_lmn)
-        self._axis.R_n = R_n
-        self._axis.Z_n = Z_n
-
+        """Curve object representing the magnetic axis."""
         return self._axis
 
     @axis.setter

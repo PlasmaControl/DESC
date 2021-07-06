@@ -1510,12 +1510,16 @@ def plot_logo(savepath=None, **kwargs):
 
 def plot_field_lines(eq, rho, seed_thetas=0, phi_end=2*np.pi, grid=None, ax=None, B_interp=None, return_B_interp = False, **kwargs):
     """Traces field lines on specified flux surface at specified initial theta seed locations, then plots them. 
-    Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then the field line
-    from phi=0 up to the specified phi angle, by solving these equations:
-        :math:'\\frac{dR}{d\phi} = \\frac{RB_R}{B_{\phi}} , \\frac{dZ}{d\phi} = \\frac{RB_Z}{B_{\phi}}'
-        where :math:'B_R = \mathbf{B} \cdot \hat{\mathbf{R}} = (B^{\theta} \mathbf{e}_{\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{R}} = B^{\theta} \\frac{\partial R}{\partial \theta} + B^{\zeta} \\frac{\partial R}{\partial \zeta}'
-        :math:'B_Z = \mathbf{B} \cdot \hat{\mathbf{Z}} = (B^{\theta} \mathbf{e}_{\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{Z}} = B^{\theta} \\frac{\partial Z}{\partial \theta} + B^{\zeta} \\frac{\partial Z}{\partial \zeta}'
-        :math:'B_{\phi} = \mathbf{B} \cdot \hat{\mathbf{\phi}} = R B^{\zeta}'
+    Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then integrating the field line
+    from phi=0 up to the specified phi angle, by solving:
+        
+    :math:`\\frac{dR}{d\phi} = \\frac{RB_R}{B_{\phi}} , \\frac{dZ}{d\phi} = \\frac{RB_Z}{B_{\phi}}`
+    
+    :math:`B_R = \mathbf{B} \cdot \hat{\mathbf{R}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{R}} = B^{\\theta} \\frac{\partial R}{\partial \\theta} + B^{\zeta} \\frac{\partial R}{\partial \zeta}`
+
+    :math:`B_Z = \mathbf{B} \cdot \hat{\mathbf{Z}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{Z}} = B^{\\theta} \\frac{\partial Z}{\partial \\theta} + B^{\zeta} \\frac{\partial Z}{\partial \zeta}`
+
+    :math:`B_{\phi} = \mathbf{B} \cdot \hat{\mathbf{\phi}} = R B^{\zeta}`
 
     Parameters
     ----------

@@ -69,6 +69,15 @@ class Profile(IOAble, ABC):
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         return self.compute(params, grid, dr, dt, dz)
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )
+
 
 class PowerSeriesProfile(Profile):
     """Profile represented by a monic power series
@@ -123,6 +132,12 @@ class PowerSeriesProfile(Profile):
             derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
         )
         return transform
+
+    def __repr__(self):
+        s = super().__repr__
+        s = s[:-1]
+        s += ", basis={})".format(self.basis)
+        return s
 
     @property
     def basis(self):
@@ -395,6 +410,12 @@ class SplineProfile(Profile):
             grid = Grid(np.empty((0, 3)))
         self.grid = grid
 
+    def __repr__(self):
+        s = super().__repr__
+        s = s[:-1]
+        s += ", method={}, num_knots={})".format(self._method, len(self._knots))
+        return s
+
     @property
     def grid(self):
         """Default grid for computation"""
@@ -617,6 +638,12 @@ class MTanhProfile(Profile):
         if grid is None:
             grid = Grid(np.empty((0, 3)))
         self.grid = grid
+
+    def __repr__(self):
+        s = super().__repr__
+        s = s[:-1]
+        s += ", num_params={})".format(len(self._params))
+        return s
 
     @property
     def grid(self):

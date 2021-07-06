@@ -52,7 +52,7 @@ def write_ascii(fname, eq):
     # profile coefficients
     nprof = len(np.nonzero(np.abs(eq.p_l) + np.abs(eq.i_l))[0])
     file.write("Nprof = {:3d}\n".format(nprof))
-    for k, (l, m, n) in enumerate(eq.p_basis.modes):
+    for k, (l, m, n) in enumerate(eq.pressure.basis.modes):
         if (eq.p_l[k] != 0) or (eq.i_l[k] != 0):
             file.write(
                 "l: {:3d} cP = {:16.8E} cI = {:16.8E}\n".format(k, eq.p_l[k], eq.i_l[k])

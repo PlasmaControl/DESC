@@ -59,6 +59,15 @@ class Optimizer(IOAble):
 
         self.method = method
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (method={})".format(self.method)
+        )
+
     @property
     def method(self):
         """str : name of the optimization method"""

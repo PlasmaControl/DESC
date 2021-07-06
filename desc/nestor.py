@@ -15,6 +15,8 @@ import numpy as np
 from desc.backend import put, fori_loop
 from desc.utils import Index
 from desc.magnetic_fields import SplineMagneticField
+from desc.grid import LinearGrid
+from desc.transform import Transform
 
 from scipy.constants import mu_0
 
@@ -159,141 +161,6 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
     coords["Z"] = axis[2]
     return coords
     
-    
-def eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
-    """Evaluates surface geometry terms for vmec type inputs
-
-    Parameters
-    ----------
-    xm : ndarray of integer
-        poloidal mode numbers
-    xn : ndarray of integer
-        toroidal mode numbers
-    ntheta : integer
-        number of poloidal grid points
-    nzeta : integer
-        number of toroidal grid points
-    NFP : integer
-        number of field periods
-    rmnc : ndarray
-        cosine fourier coefficients for R
-    zmns : ndarray
-        sine fourier coefficients for Z
-    rmns : ndarray
-        sine fourier coefficients for R
-    zmnc : ndarray
-        cosine fourier coefficients for Z
-    sym :bool
-        whether to assume stellarator symmetry
-
-    Returns
-    -------
-    coords :dict of ndarray
-        dictionary of arrays of coordinates R,Z and derivatives on a regular grid
-        in theta, zeta
-
-    """
-    if sym:
-        ntheta_sym = ntheta//2 + 1
-    else:
-        ntheta_sym = ntheta
-    # integer mode number arrays
-    ixm=np.array(np.round(xm), dtype=int)
-    ixn=np.array(np.round(np.divide(xn, NFP)), dtype=int)        
-    # Fourier mode sorting array
-    mIdx = ixm
-    # reverse toroidal mode numbers, since VMEC kernel (mu-nv) is reversed in n    
-    nIdx = np.where(ixn<=0, -ixn, nzeta-ixn)
-    
-
-    # input arrays for FFTs
-    Rmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R
-    mRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_t
-    nRmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_z
-    mmRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_tt
-    mnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_tz
-    nnRmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for R_zz
-    Zmn   = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z
-    mZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_t
-    nZmn  = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_z
-    mmZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_tt
-    mnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_tz
-    nnZmn = np.zeros([ntheta, nzeta], dtype=np.complex128) # for Z_zz
-
-    # multiply with mode numbers to get tangential derivatives
-    Rmn  = put(  Rmn,Index[mIdx, nIdx], rmnc)
-    mRmn = put( mRmn,Index[mIdx, nIdx], -   xm*rmnc)
-    nRmn = put( nRmn,Index[mIdx, nIdx],     xn*rmnc)
-    mmRmn= put(mmRmn,Index[mIdx, nIdx],  -xm*xm*rmnc)
-    mnRmn= put(mnRmn,Index[mIdx, nIdx],   xm*xn*rmnc)
-    nnRmn= put(nnRmn,Index[mIdx, nIdx],  -xn*xn*rmnc)
-    Zmn  = put(  Zmn,Index[mIdx, nIdx],  -      zmns*1j)
-    mZmn = put( mZmn,Index[mIdx, nIdx],      xm*zmns*1j)
-    nZmn = put( nZmn,Index[mIdx, nIdx],  -   xn*zmns*1j)
-    mmZmn= put(mmZmn,Index[mIdx, nIdx],   xm*xm*zmns*1j)
-    mnZmn= put(mnZmn,Index[mIdx, nIdx],  -xm*xn*zmns*1j)
-    nnZmn= put(nnZmn,Index[mIdx, nIdx],   xn*xn*zmns*1j)
-    # TODO: if lasym, must also include corresponding terms above!
-
-    R_2d             = (np.fft.ifft2(  Rmn)*ntheta*nzeta).real
-    R_t_2d      = (np.fft.ifft2( mRmn)*ntheta*nzeta).imag
-    R_z_2d       = (np.fft.ifft2( nRmn)*ntheta*nzeta).imag
-    R_tt_2d    = (np.fft.ifft2(mmRmn)*ntheta*nzeta).real
-    R_tz_2d = (np.fft.ifft2(mnRmn)*ntheta*nzeta).real
-    R_zz_2d     = (np.fft.ifft2(nnRmn)*ntheta*nzeta).real
-    Z_2d             = (np.fft.ifft2(  Zmn)*ntheta*nzeta).real
-    Z_t_2d      = (np.fft.ifft2( mZmn)*ntheta*nzeta).imag
-    Z_z_2d       = (np.fft.ifft2( nZmn)*ntheta*nzeta).imag
-    Z_tt_2d    = (np.fft.ifft2(mmZmn)*ntheta*nzeta).real
-    Z_tz_2d = (np.fft.ifft2(mnZmn)*ntheta*nzeta).real
-    Z_zz_2d     = (np.fft.ifft2(nnZmn)*ntheta*nzeta).real
-
-    coords = {}
-    # vectorize arrays, since most operations to follow act on all grid points anyway
-    coords["R"] = R_2d.flatten()
-    coords["Z"] = Z_2d.flatten()
-    coords["R_sym"]         = R_2d            [:ntheta_sym,:].flatten()
-    coords["Z_sym"]         = Z_2d            [:ntheta_sym,:].flatten()
-    coords["R_t"]      = R_t_2d     [:ntheta_sym,:].flatten()
-    coords["R_z"]       = R_z_2d      [:ntheta_sym,:].flatten()
-    coords["R_tt"]    = R_tt_2d   [:ntheta_sym,:].flatten()
-    coords["R_tz"] = R_tz_2d[:ntheta_sym,:].flatten()
-    coords["R_zz"]     = R_zz_2d    [:ntheta_sym,:].flatten()
-    coords["Z_t"]      = Z_t_2d     [:ntheta_sym,:].flatten()
-    coords["Z_z"]       = Z_z_2d      [:ntheta_sym,:].flatten()
-    coords["Z_tt"]    = Z_tt_2d   [:ntheta_sym,:].flatten()
-    coords["Z_tz"] = Z_tz_2d[:ntheta_sym,:].flatten()
-    coords["Z_zz"]     = Z_zz_2d    [:ntheta_sym,:].flatten()
-
-    phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP            
-    coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
-
-
-    coords["X"] = (R_2d * np.cos(phi)).flatten()
-    coords["Y"] = (R_2d * np.sin(phi)).flatten()     
-    return coords
-
-
-def evaluate_axis_vmec(raxis,zaxis, nzeta, NFP):
-
-    if nzeta == 1:
-        NFP_eff = 64
-    else:
-        NFP_eff = NFP
-    zeta_fp = 2.0*np.pi/NFP_eff * np.arange(NFP_eff)
-    
-    phiaxis = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP
-    axis = np.array([raxis*np.cos(phiaxis),
-                     raxis*np.sin(phiaxis),
-                     zaxis])
-    
-    axis = np.moveaxis(copy_vector_periods(axis, zeta_fp), -1,1).reshape((3,-1))
-    coords = {}
-    coords["R"] = np.sqrt(axis[0]**2 + axis[1]**2)
-    coords["phi"] = np.arctan2(axis[1], axis[0])
-    coords["Z"] = axis[2]
-    return coords
-
 
 def compute_normal(coords, signgs):
     """Compute the outward normal vector to the plasma surface
@@ -896,27 +763,44 @@ class Nestor:
 
     Parameters
     ----------
+    equil : Equilibrium
+        equilibrium being optimized
     ext_field : MagneticField
         external field object, either splined or coils
-    signgs : int
-        sign of Jacobian; needed for surface normal vector sign
-    mf, nf : integer
+    M, N : integer
         maximum poloidal and toroidal mode numbers to use
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions to use
-    NFP : integer
-        number of field periods
     """
 
-    def __init__(self, ext_field, signgs, mf, nf, ntheta, nzeta, NFP):
+    def __init__(self, equil, ext_field, M=None, N=None, ntheta=None, nzeta=None):
 
+        if M is None:
+            M = equil.M + 1
+        if N is None:
+            N = equil.N
+        if ntheta is None:
+            ntheta = 2*M + 6
+        if nzeta is None:
+            nzeta = 2*N + 6
+            
         self.ext_field = ext_field
-        self.signgs = signgs
-        self.mf = mf
-        self.nf = nf
+        self.signgs = np.sign(np.mean(equil.compute_jacobian()["g"]))
+        self.M = M
+        self.N = N
         self.ntheta = ntheta
         self.nzeta = nzeta
-        self.NFP = NFP
+        self.NFP = equil.NFP
+        self.sym = equil.sym
+
+        bdry_grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=self.NFP)
+        axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=self.NFP)    
+        self._Ra_transform = Transform(axis_grid, equil.R_basis)
+        self._Za_transform = Transform(axis_grid, equil.Z_basis)        
+        self._Rb_transform = Transform(bdry_grid, equil.R_basis, derivs=2)
+        self._Zb_transform = Transform(bdry_grid, equil.Z_basis, derivs=2)        
+
+        
 
         weights = 2*np.ones((self.ntheta//2+1, self.nzeta))/(self.ntheta*self.nzeta)
         weights[0] /= 2.0
@@ -945,9 +829,9 @@ class Nestor:
         # mask explicit singularities at tan(pi/2)
         self.tanv = np.where( (argv-0.5)%1 < epstan , bigno, self.tanv)
 
-        cmn = np.zeros([self.mf+self.nf+1, self.mf+1, self.nf+1])
-        for m in range(self.mf+1):
-            for n in range(self.nf+1):
+        cmn = np.zeros([self.M+self.N+1, self.M+1, self.N+1])
+        for m in range(self.M+1):
+            for n in range(self.N+1):
                 jmn = m+n
                 imn = m-n
                 kmn = abs(imn)
@@ -967,12 +851,12 @@ class Nestor:
         # toroidal extent of one module
         dPhi_per = 2.0*np.pi/self.NFP                    
         # cmns from cmn
-        self.cmns = np.zeros([self.mf+self.nf+1, self.mf+1, self.nf+1])
-        for m in range(1, self.mf+1):
-            for n in range(1, self.nf+1):
+        self.cmns = np.zeros([self.M+self.N+1, self.M+1, self.N+1])
+        for m in range(1, self.M+1):
+            for n in range(1, self.N+1):
                 self.cmns[:,m,n] = 0.5*dPhi_per*(cmn[:,m,n] + cmn[:, m-1, n] + cmn[:, m, n-1] + cmn[:, m-1, n-1])
-        self.cmns[:,1:self.mf+1,0] = 0.5 * dPhi_per * (cmn[:,1:self.mf+1,0] + cmn[:,0:self.mf,0])
-        self.cmns[:,0,1:self.nf+1] = 0.5 * dPhi_per * (cmn[:,0,1:self.nf+1] + cmn[:,0,0:self.nf])
+        self.cmns[:,1:self.M+1,0] = 0.5 * dPhi_per * (cmn[:,1:self.M+1,0] + cmn[:,0:self.M,0])
+        self.cmns[:,0,1:self.N+1] = 0.5 * dPhi_per * (cmn[:,0,1:self.N+1] + cmn[:,0,0:self.N])
         self.cmns[:,0,0] = 0.5 * dPhi_per * (cmn[:,0,0] + cmn[:,0,0])
 
 
@@ -990,8 +874,11 @@ class Nestor:
         return B_ex
         
 
-    def compute(self, surface_coords, axis_coords, current):
+    def compute(self, R_lmn, Z_lmn, current):
 
+
+        surface_coords = eval_surface_geometry(R_lmn, Z_lmn, self._Rb_transform, self._Zb_transform, self.ntheta, self.nzeta, self.NFP, self.sym)        
+        axis_coords = eval_axis_geometry(R_lmn, Z_lmn, self._Ra_transform, self._Za_transform, self.nzeta, self.NFP)
         normal = compute_normal(surface_coords, self.signgs)
         jacobian = compute_jacobian(surface_coords, normal, self.NFP)
         B_extern = self.eval_external_field(surface_coords, normal)
@@ -1001,22 +888,22 @@ class Nestor:
                                        normal,
                                        )
         B_field = {key: B_extern[key] + B_plasma[key] for key in B_extern}
-        TS = compute_T_S(jacobian, self.mf, self.nf, self.ntheta, self.nzeta)
-        I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.mf, self.nf, self.ntheta, self.nzeta, self.cmns, self.weights)
+        TS = compute_T_S(jacobian, self.M, self.N, self.ntheta, self.nzeta)
+        I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.M, self.N, self.ntheta, self.nzeta, self.cmns, self.weights)
         g_mntz, h_mn = regularizedFourierTransforms(surface_coords,
                                                        normal,
                                                        jacobian,
                                                        B_field,
                                                        self.tanu,
                                                        self.tanv,
-                                                       self.mf, self.nf, self.ntheta, self.nzeta, self.NFP, self.weights)    
-        phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.mf, self.nf, self.ntheta, self.nzeta, self.weights)
+                                                       self.M, self.N, self.ntheta, self.nzeta, self.NFP, self.weights)    
+        phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.M, self.N, self.ntheta, self.nzeta, self.weights)
         Btot = compute_vacuum_magnetic_field(surface_coords,
                                          normal,
                                          jacobian,
                                          B_field,
                                           phi_mn,
-                                          self.mf, self.nf, self.ntheta, self.nzeta, self.NFP)
+                                          self.M, self.N, self.ntheta, self.nzeta, self.NFP)
         return phi_mn, Btot
 
 

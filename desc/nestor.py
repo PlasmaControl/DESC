@@ -15,14 +15,9 @@ import numpy as np
 from desc.backend import put, fori_loop
 from desc.utils import Index
 from desc.magnetic_fields import SplineMagneticField
-from netCDF4 import Dataset
 
-mu0 = 4.0e-7*np.pi
+from scipy.constants import mu_0
 
-def def_ncdim(ncfile, size):
-    dimname = "dim_%05d"%(size,)
-    ncfile.createDimension(dimname, size)
-    return dimname
 
 
 def copy_vector_periods(vec, zetas):
@@ -85,18 +80,18 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
         ntheta_sym = ntheta
     phi = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP
     
-    R_2d    = Rb_transform.transform(R_lmn, dt=0, dz=0).reshape((ntheta, nzeta))
-    R_t_2d  = Rb_transform.transform(R_lmn, dt=1, dz=0).reshape((ntheta, nzeta))
-    R_z_2d  = Rb_transform.transform(R_lmn, dt=0, dz=1).reshape((ntheta, nzeta))
-    R_tt_2d = Rb_transform.transform(R_lmn, dt=2, dz=0).reshape((ntheta, nzeta))
-    R_tz_2d = Rb_transform.transform(R_lmn, dt=1, dz=1).reshape((ntheta, nzeta))
-    R_zz_2d = Rb_transform.transform(R_lmn, dt=0, dz=2).reshape((ntheta, nzeta))
-    Z_2d    = Zb_transform.transform(Z_lmn, dt=0, dz=0).reshape((ntheta, nzeta))
-    Z_t_2d  = Zb_transform.transform(Z_lmn, dt=1, dz=0).reshape((ntheta, nzeta))
-    Z_z_2d  = Zb_transform.transform(Z_lmn, dt=0, dz=1).reshape((ntheta, nzeta))
-    Z_tt_2d = Zb_transform.transform(Z_lmn, dt=2, dz=0).reshape((ntheta, nzeta))
-    Z_tz_2d = Zb_transform.transform(Z_lmn, dt=1, dz=1).reshape((ntheta, nzeta))
-    Z_zz_2d = Zb_transform.transform(Z_lmn, dt=0, dz=2).reshape((ntheta, nzeta))
+    R_2d    = Rb_transform.transform(R_lmn, dt=0, dz=0).reshape((nzeta, ntheta)).T
+    R_t_2d  = Rb_transform.transform(R_lmn, dt=1, dz=0).reshape((nzeta, ntheta)).T
+    R_z_2d  = Rb_transform.transform(R_lmn, dt=0, dz=1).reshape((nzeta, ntheta)).T
+    R_tt_2d = Rb_transform.transform(R_lmn, dt=2, dz=0).reshape((nzeta, ntheta)).T
+    R_tz_2d = Rb_transform.transform(R_lmn, dt=1, dz=1).reshape((nzeta, ntheta)).T
+    R_zz_2d = Rb_transform.transform(R_lmn, dt=0, dz=2).reshape((nzeta, ntheta)).T
+    Z_2d    = Zb_transform.transform(Z_lmn, dt=0, dz=0).reshape((nzeta, ntheta)).T
+    Z_t_2d  = Zb_transform.transform(Z_lmn, dt=1, dz=0).reshape((nzeta, ntheta)).T
+    Z_z_2d  = Zb_transform.transform(Z_lmn, dt=0, dz=1).reshape((nzeta, ntheta)).T
+    Z_tt_2d = Zb_transform.transform(Z_lmn, dt=2, dz=0).reshape((nzeta, ntheta)).T
+    Z_tz_2d = Zb_transform.transform(Z_lmn, dt=1, dz=1).reshape((nzeta, ntheta)).T
+    Z_zz_2d = Zb_transform.transform(Z_lmn, dt=0, dz=2).reshape((nzeta, ntheta)).T
     
     coords = {}
     coords["R"]     = R_2d.flatten()
@@ -122,9 +117,27 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
 
     
 def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
-    """
+    """Evaluate coordinates and derivatives on the axis
 
+    Parameters
+    ----------
+    R_lmn : ndarray
+        spectral coefficients for R
+    Z_lmn : ndarray
+        spectral coefficients for Z
+    Ra_transform : Transform
+        object to transform R from spectral to real space
+    Za_transform : Transform
+        object to transform Z from spectral to real space
+    nzeta : int
+        number of grid points in toroidal directions
+    NFP : integer
+        number of field periods
 
+    Returns
+    -------
+    axis : dict of ndarray
+        dictionary of arrays of cylindrical coordinates of axis
     """
     if nzeta == 1:
         NFP_eff = 64
@@ -140,10 +153,11 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
                      zaxis])
     
     axis = np.moveaxis(copy_vector_periods(axis, zeta_fp), -1,1).reshape((3,-1))
-    axis = np.array([np.sqrt(axis[0]**2 + axis[1]**2),
-                    np.arctan2(axis[1], axis[0]),
-                    axis[2]])
-    return axis
+    coords = {}
+    coords["R"] = np.sqrt(axis[0]**2 + axis[1]**2)
+    coords["phi"] = np.arctan2(axis[1], axis[0])
+    coords["Z"] = axis[2]
+    return coords
     
     
 def eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
@@ -274,10 +288,11 @@ def evaluate_axis_vmec(raxis,zaxis, nzeta, NFP):
                      zaxis])
     
     axis = np.moveaxis(copy_vector_periods(axis, zeta_fp), -1,1).reshape((3,-1))
-    axis = np.array([np.sqrt(axis[0]**2 + axis[1]**2),
-                    np.arctan2(axis[1], axis[0]),
-                    axis[2]])
-    return axis
+    coords = {}
+    coords["R"] = np.sqrt(axis[0]**2 + axis[1]**2)
+    coords["phi"] = np.arctan2(axis[1], axis[0])
+    coords["Z"] = axis[2]
+    return coords
 
 
 def compute_normal(coords, signgs):
@@ -369,7 +384,7 @@ def biot_savart(eval_pts, coil_pts, current):
     Rf = np.linalg.norm(eval_pts[:, :, np.newaxis] - coil_pts[:,np.newaxis,1:], axis=0)
     Ri_p_Rf = Ri + Rf
 
-    # 1.0e-7 == mu0/(4 pi)
+    # 1.0e-7 == mu_0/(4 pi)
     Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / ( Ri * Rf * (Ri_p_Rf*Ri_p_Rf - L*L) )
 
     # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
@@ -401,9 +416,9 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
     """
     # TODO: we can simplify this by evaluating the field directly in cylindrical coordinates
     # convert to cartesian form
-    axis = np.array([axis[0]*np.cos(axis[1]),
-                     axis[0]*np.sin(axis[1]),
-                     axis[2]])
+    axis = np.array([axis["R"]*np.cos(axis["phi"]),
+                     axis["R"]*np.sin(axis["phi"]),
+                     axis["Z"]])
     # first point == last point for periodicity
     axis = np.hstack([axis[:,-1:], axis])
 
@@ -859,7 +874,7 @@ def firstIterationPrintout(Btot, ctor, rbtor, signgs, mf, nf, ntheta, nzeta, NFP
     bsubvvac = np.sum(Btot["B_zeta"] * weights)
 
     # currents in MA
-    fac = 1.0e-6/mu0
+    fac = 1.0e-6/mu_0
 
     print("2*pi * a * -BPOL(vac) = {: 10.8e} \n".format(bsubuvac*fac) +
           "TOROIDAL CURRENT      = {: 10.8e} \n".format(ctor*fac) +
@@ -874,44 +889,6 @@ def firstIterationPrintout(Btot, ctor, rbtor, signgs, mf, nf, ntheta, nzeta, NFP
 
 
 
-def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
-    # mode numbers for potvac
-    xmpot = np.zeros([(mf+1)*(2*nf+1)])
-    xnpot = np.zeros([(mf+1)*(2*nf+1)])
-    mn = 0
-    for n in range(-nf, nf+1):
-        for m in range(mf+1):
-            xmpot[mn] = m
-            xnpot[mn] = n*NFP
-            mn += 1
-
-    vacout = Dataset(vacoutFilename, "w")
-
-    dim_nuv2 = def_ncdim(vacout, (ntheta//2+1)*nzeta)
-    dim_mnpd2 = def_ncdim(vacout, (mf+1)*(2*nf+1))
-
-
-    var_bsqvac   = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
-    var_mnpd     = vacout.createVariable("mnpd", "i4")
-    var_mnpd2    = vacout.createVariable("mnpd2", "i4")
-    var_xmpot    = vacout.createVariable("xmpot", "f8", (dim_mnpd2,))
-    var_xnpot    = vacout.createVariable("xnpot", "f8", (dim_mnpd2,))
-    var_potvac   = vacout.createVariable("potvac", "f8", (dim_mnpd2,))
-    var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
-    var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
-    var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
-
-    var_bsqvac[:] = Btot["|B|^2"]
-    var_mnpd.assignValue((mf+1)*(2*nf+1))
-    var_mnpd2.assignValue((mf+1)*(2*nf+1))
-    var_xmpot[:] = xmpot
-    var_xnpot[:] = xnpot
-    var_potvac[:] = np.fft.fftshift(potvac.reshape([mf+1, 2*nf+1]), axes=1).T.flatten()
-    var_brv[:] = Btot["BR"]
-    var_bphiv[:] = Btot["Bphi"]
-    var_bzv[:] = Btot["BZ"]
-
-    vacout.close()
 
     
 class Nestor:

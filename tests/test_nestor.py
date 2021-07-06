@@ -10,24 +10,69 @@ import os
 import numpy as np
 from netCDF4 import Dataset
 import unittest
-from desc.nestor import Nestor, firstIterationPrintout, produceOutputFile, eval_surface_geometry, eval_surface_geometry_vmec, eval_axis_geometry, evaluate_axis_vmec
+from desc.nestor import Nestor, firstIterationPrintout, eval_surface_geometry, eval_surface_geometry_vmec, eval_axis_geometry, evaluate_axis_vmec
 from desc.magnetic_fields import SplineMagneticField
 from desc.grid import LinearGrid
-from desc.basis import DoubleFourierSeries
+from desc.basis import DoubleFourierSeries, FourierSeries
 from desc.vmec_utils import ptolemy_identity_fwd
 from desc.utils import copy_coeffs
 from desc.transform import Transform
-
+from desc.equilibrium import Equilibrium
+from scipy.constants import mu_0
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 runId = "test.vmec"
 maxIter = 11
-mu0 = 4.0e-7*np.pi
+
 
 
 ref_in_folder = here + "/inputs/nestor/ref_in/"
 ref_out_folder = here +"/inputs/nestor/ref_out/"
+
+def def_ncdim(ncfile, size):
+    dimname = "dim_%05d"%(size,)
+    ncfile.createDimension(dimname, size)
+    return dimname
+
+def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
+    # mode numbers for potvac
+    xmpot = np.zeros([(mf+1)*(2*nf+1)])
+    xnpot = np.zeros([(mf+1)*(2*nf+1)])
+    mn = 0
+    for n in range(-nf, nf+1):
+        for m in range(mf+1):
+            xmpot[mn] = m
+            xnpot[mn] = n*NFP
+            mn += 1
+
+    vacout = Dataset(vacoutFilename, "w")
+
+    dim_nuv2 = def_ncdim(vacout, (ntheta//2+1)*nzeta)
+    dim_mnpd2 = def_ncdim(vacout, (mf+1)*(2*nf+1))
+
+
+    var_bsqvac   = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
+    var_mnpd     = vacout.createVariable("mnpd", "i4")
+    var_mnpd2    = vacout.createVariable("mnpd2", "i4")
+    var_xmpot    = vacout.createVariable("xmpot", "f8", (dim_mnpd2,))
+    var_xnpot    = vacout.createVariable("xnpot", "f8", (dim_mnpd2,))
+    var_potvac   = vacout.createVariable("potvac", "f8", (dim_mnpd2,))
+    var_brv      = vacout.createVariable("brv", "f8", (dim_nuv2,))
+    var_bphiv    = vacout.createVariable("bphiv", "f8", (dim_nuv2,))
+    var_bzv      = vacout.createVariable("bzv", "f8", (dim_nuv2,))
+
+    var_bsqvac[:] = Btot["|B|^2"]
+    var_mnpd.assignValue((mf+1)*(2*nf+1))
+    var_mnpd2.assignValue((mf+1)*(2*nf+1))
+    var_xmpot[:] = xmpot
+    var_xnpot[:] = xnpot
+    var_potvac[:] = np.fft.fftshift(potvac.reshape([mf+1, 2*nf+1]), axes=1).T.flatten()
+    var_brv[:] = Btot["BR"]
+    var_bphiv[:] = Btot["Bphi"]
+    var_bzv[:] = Btot["BZ"]
+
+    vacout.close()
 
 
 def main(vacin_filename, vacout_filename=None, mgrid=None, method="vmec"):
@@ -65,23 +110,51 @@ def main(vacin_filename, vacout_filename=None, mgrid=None, method="vmec"):
 
     if method == "vmec":
         surface_coords = eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=sym)
+        axis_coords = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)        
     elif method == "desc":
-        grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=NFP)
-        mr, nr, R_mn = ptolemy_identity_fwd(xm, xn//NFP, np.zeros_like(rmnc), rmnc)
-        mz, nz, Z_mn = ptolemy_identity_fwd(xm, xn//NFP, zmns, np.zeros_like(zmns))
-        R_mn = R_mn[0]
-        Z_mn = Z_mn[0]
-        modes_R = np.array([np.zeros_like(mr), mr, nr]).T
-        modes_Z = np.array([np.zeros_like(mz), mz, nz]).T
-        R_basis = DoubleFourierSeries(M=np.max(abs(mr)), N=np.max(abs(nr)), NFP=NFP, sym="cos" if sym else False)
-        Z_basis = DoubleFourierSeries(M=np.max(abs(mz)), N=np.max(abs(nz)), NFP=NFP, sym="sin" if sym else False)
-        R_mn = copy_coeffs(R_mn, modes_R, R_basis.modes)
-        Z_mn = copy_coeffs(Z_mn, modes_Z, Z_basis.modes)
-        R_transform = Transform(grid, R_basis, derivs=2)
-        Z_transform = Transform(grid, Z_basis, derivs=2)
-        surface_coords = eval_surface_geometry(R_mn, Z_mn, R_transform, Z_transform, ntheta, nzeta, NFP, sym)
-    axis_coords = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)
-    phi_mn, Btot = nestor.compute(surface_coords, axis_coords, ctor/mu0)
+        bdry_grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=NFP)
+        mr, nr, Rb_mn = ptolemy_identity_fwd(xm, xn//NFP, np.zeros_like(rmnc), rmnc)
+        mz, nz, Zb_mn = ptolemy_identity_fwd(xm, xn//NFP, zmns, np.zeros_like(zmns))
+        M = max(np.max(abs(mr)),np.max(abs(mz)))
+        N = max(np.max(abs(nr)),np.max(abs(nz)))        
+        Rb_mn = Rb_mn[0]
+        Zb_mn = Zb_mn[0]
+        modes_Rb = np.array([np.zeros_like(mr), mr, nr]).T
+        modes_Zb = np.array([np.zeros_like(mz), mz, nz]).T
+        
+        a_basis = FourierSeries(N=N, NFP=NFP, sym=False)
+        axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=NFP)
+        a_transform = Transform(axis_grid, a_basis)
+        Ra_n = a_transform.fit(raxis)
+        Za_n = a_transform.fit(zaxis)
+
+
+        temp_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=False)
+        Rb_lmn = copy_coeffs(Rb_mn, modes_Rb, temp_basis.modes).reshape((-1,1))
+        Zb_lmn = copy_coeffs(Zb_mn, modes_Zb, temp_basis.modes).reshape((-1,1))
+        boundary = np.hstack([temp_basis.modes, Rb_lmn, Zb_lmn])
+        axis = np.hstack([a_basis.modes[:,2:], Ra_n[:,np.newaxis], Za_n[:,np.newaxis]])
+        profiles = np.array([0,0,0]).reshape((1,3))
+        eq = {"L": 2*M,
+              "M": M,
+              "N": N,
+              "profiles": profiles,
+              "boundary": boundary,
+              "NFP": NFP,
+              "Psi": 1.0,
+              "axis": axis,
+              "sym": sym,
+              }
+        eq = Equilibrium(eq)
+        Ra_transform = Transform(axis_grid, eq.R_basis)
+        Za_transform = Transform(axis_grid, eq.Z_basis)        
+        Rb_transform = Transform(bdry_grid, eq.R_basis, derivs=2)
+        Zb_transform = Transform(bdry_grid, eq.Z_basis, derivs=2)        
+
+        surface_coords = eval_surface_geometry(eq.R_lmn, eq.Z_lmn, Rb_transform, Zb_transform, ntheta, nzeta, NFP, sym)        
+        axis_coords = eval_axis_geometry(eq.R_lmn, eq.Z_lmn, Ra_transform, Za_transform, nzeta, NFP)
+        
+    phi_mn, Btot = nestor.compute(surface_coords, axis_coords, ctor/mu_0)
     firstIterationPrintout(Btot, ctor, rbtor, nestor.signgs, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP, nestor.weights)
     print(np.linalg.norm(Btot["Bn"]))
 
@@ -128,7 +201,7 @@ def test_same_outputs(tmpdir_factory):
         d.close()
 
         desc_tst_data = {}
-        d = Dataset(vmec_tst_fname, "r")
+        d = Dataset(desc_tst_fname, "r")
         for key in d.variables:
             desc_tst_data[key] = d[key][()]
         d.close()

@@ -860,7 +860,10 @@ class Nestor:
         self.cmns[:,1:self.M+1,0] = 0.5 * dPhi_per * (cmn[:,1:self.M+1,0] + cmn[:,0:self.M,0])
         self.cmns[:,0,1:self.N+1] = 0.5 * dPhi_per * (cmn[:,0,1:self.N+1] + cmn[:,0,0:self.N])
         self.cmns[:,0,0] = 0.5 * dPhi_per * (cmn[:,0,0] + cmn[:,0,0])
-
+        self.cmns = jnp.asarray(self.cmns)
+        self.tanu = jnp.asarray(self.tanu)
+        self.tanv = jnp.asarray(self.tanv)
+        
 
     def eval_external_field(self, coords, normal):
         grid = jnp.array([coords["R_sym"],coords["phi_sym"],coords["Z_sym"]]).T

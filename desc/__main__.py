@@ -53,7 +53,6 @@ def main(cl_args=sys.argv[1:]):
 
     if ir.args.plot > 1:
         print("Plotting initial guess")
-        print("Axis location: {}".format(equil_fam[0].initial.compute_axis_location()))
         ax = plot_surfaces(equil_fam[0].initial)
         plt.show()
         ax = plot_section(equil_fam[0].initial, "|F|", log=True, norm_F=True)
@@ -61,14 +60,12 @@ def main(cl_args=sys.argv[1:]):
     if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
-            print("Axis location: {}".format(eq.compute_axis_location()))
             ax = plot_surfaces(eq)
             plt.show()
             ax = plot_section(eq, "|F|", log=True, norm_F=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
-        print("Axis location: {}".format(equil_fam[-1].compute_axis_location()))
         ax = plot_surfaces(equil_fam[-1])
         plt.show()
         ax = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)

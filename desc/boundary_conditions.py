@@ -2,12 +2,12 @@ import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.basis import jacobi_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.utils import unpack_state
+from desc.utils import unpack_state, copy_coeffs
 
 
 __all__ = [
@@ -87,21 +87,63 @@ class LCFSConstraint(BoundaryCondition):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
-    _io_attrs_ = BoundaryCondition._io_attrs_ + ["_dim_lcfs", "_dim_axis", "_dim_gauge"]
+    _io_attrs_ = BoundaryCondition._io_attrs_ + [
+        "_brmask",
+        "_bzmask",
+        "_rmask",
+        "_zmask",
+    ]
 
     def __init__(
         self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
 
+        Rb_basis_full = Rb_basis.copy()
+        Zb_basis_full = Zb_basis.copy()
+        # make sure the boundary bases have same resolution as flux surface bases so that
+        # all modes are properly constrainted
+        Rb_basis_full.change_resolution(M=R_basis.M, N=R_basis.N)
+        Zb_basis_full.change_resolution(M=Z_basis.M, N=Z_basis.N)
+        Rb_lmn_full = copy_coeffs(Rb_lmn, Rb_basis.modes, Rb_basis_full.modes)
+        Zb_lmn_full = copy_coeffs(Zb_lmn, Zb_basis.modes, Zb_basis_full.modes)
+
+        # find indices where to insert boundary coeffs into constraint array
+        self._brmask = np.where(
+            (Rb_basis_full.modes[:, np.newaxis] == Rb_basis.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
+        self._bzmask = (
+            np.where(
+                (Zb_basis_full.modes[:, np.newaxis] == Zb_basis.modes[np.newaxis, :, :])
+                .all(axis=-1)
+                .any(-1)
+            )[0]
+            + Rb_basis_full.num_modes
+        )
+        # find which coeffs can acually be constrainted
+        self._rmask = np.where(
+            (Rb_basis.modes[:, np.newaxis] == Rb_basis_full.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
+        self._zmask = np.where(
+            (Zb_basis.modes[:, np.newaxis] == Zb_basis_full.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
+
         A_lcfs, b_lcfs = _get_lcfs_bc(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+            R_basis,
+            Z_basis,
+            L_basis,
+            Rb_basis_full,
+            Zb_basis_full,
+            Rb_lmn_full,
+            Zb_lmn_full,
         )
         A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
         A_gauge, b_gauge = _get_gauge_bc(R_basis, Z_basis, L_basis)
-
-        self._dim_lcfs = b_lcfs.size
-        self._dim_axis = b_axis.size
-        self._dim_gauge = b_gauge.size
 
         A = np.vstack([A_lcfs, A_axis, A_gauge])
         b = np.concatenate([b_lcfs, b_axis, b_gauge])
@@ -111,9 +153,9 @@ class LCFSConstraint(BoundaryCondition):
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
         if Rb_lmn is not None and Zb_lmn is not None:
-            z1 = jnp.zeros(self._dim_axis)
-            z2 = jnp.zeros(self._dim_gauge)
-            b = jnp.concatenate([Rb_lmn.flatten(), Zb_lmn.flatten(), z1, z2])
+            b = jnp.zeros(self.b.shape)
+            b = put(b, self._brmask, Rb_lmn[self._rmask])
+            b = put(b, self._bzmask, Zb_lmn[self._zmask])
         else:
             b = self.b
 
@@ -156,21 +198,59 @@ class PoincareConstraint(BoundaryCondition):
         whether to compute null space and pseudoinverse now or wait until needed.
     """
 
-    _io_attrs_ = BoundaryCondition._io_attrs_ + ["_dim_poincare", "_dim_sfl"]
+    _io_attrs_ = BoundaryCondition._io_attrs_ + [
+        "_brmask",
+        "_bzmask",
+        "_rmask",
+        "_zmask",
+    ]
 
     def __init__(
         self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
+        Rb_basis_full = Rb_basis.copy()
+        Zb_basis_full = Zb_basis.copy()
+        Rb_basis_full.change_resolution(L=R_basis.L, M=R_basis.M)
+        Zb_basis_full.change_resolution(L=Z_basis.L, M=Z_basis.M)
+        Rb_lmn_full = copy_coeffs(Rb_lmn, Rb_basis.modes, Rb_basis_full.modes)
+        Zb_lmn_full = copy_coeffs(Zb_lmn, Zb_basis.modes, Zb_basis_full.modes)
+
+        # find indices where to insert boundary coeffs into constraint array
+        self._brmask = np.where(
+            (Rb_basis_full.modes[:, np.newaxis] == Rb_basis.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
+        self._bzmask = (
+            np.where(
+                (Zb_basis_full.modes[:, np.newaxis] == Zb_basis.modes[np.newaxis, :, :])
+                .all(axis=-1)
+                .any(-1)
+            )[0]
+            + Rb_basis_full.num_modes
+        )
+        # find which coeffs can acually be constrainted
+        self._rmask = np.where(
+            (Rb_basis.modes[:, np.newaxis] == Rb_basis_full.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
+        self._zmask = np.where(
+            (Zb_basis.modes[:, np.newaxis] == Zb_basis_full.modes[np.newaxis, :, :])
+            .all(axis=-1)
+            .any(-1)
+        )[0]
 
         A_poincare, b_poincare = _get_poincare_bc(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
+            R_basis,
+            Z_basis,
+            L_basis,
+            Rb_basis_full,
+            Zb_basis_full,
+            Rb_lmn_full,
+            Zb_lmn_full,
         )
-        A_sfl, b_sfl = _get_sfl_bc(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-        )
-
-        self._dim_poincare = b_poincare.size
-        self._dim_sfl = b_sfl.size
+        A_sfl, b_sfl = _get_sfl_bc(R_basis, Z_basis, L_basis)
 
         A = np.vstack([A_poincare, A_sfl])
         b = np.concatenate([b_poincare, b_sfl])
@@ -180,8 +260,9 @@ class PoincareConstraint(BoundaryCondition):
     def recover_from_constraints(self, y, Rb_lmn=None, Zb_lmn=None):
         """Recover full state vector that satifies linear constraints."""
         if Rb_lmn is not None and Zb_lmn is not None:
-            z1 = jnp.zeros(self._dim_sfl)
-            b = jnp.concatenate([Rb_lmn.flatten(), Zb_lmn.flatten(), z1])
+            b = jnp.zeros(self.b.shape)
+            b = put(b, self._brmask, Rb_lmn[self._rmask])
+            b = put(b, self._bzmask, Zb_lmn[self._zmask])
         else:
             b = self.b
 
@@ -232,12 +313,8 @@ class UmbilicConstraint(BoundaryCondition):
         self, R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn, build=True
     ):
 
-        A_umbilic, b_umbilic = _get_umbilic_bc(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-        )
-        A_sfl, b_sfl = _get_sfl_bc(
-            R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn
-        )
+        A_umbilic, b_umbilic = _get_umbilic_bc(R_basis, Z_basis)
+        A_sfl, b_sfl = _get_sfl_bc(R_basis, Z_basis, L_basis)
 
         self._dim_umbilic = b_umbilic.size
         self._dim_sfl = b_sfl.size
@@ -375,6 +452,15 @@ def _get_lcfs_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn):
         if and only if Ax=b
 
     """
+    assert (
+        len(Rb_lmn) == Rb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Rb_basis.num_modes} and number of boundary coefficients {len(Rb_lmn)}"
+    assert (
+        len(Zb_lmn) == Zb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Zb_basis.num_modes} and number of boundary coefficients {len(Zb_lmn)}"
+    assert R_basis.M <= Rb_basis.M, "Boundary does not fully constraint R_basis"
+    assert Z_basis.N <= Zb_basis.N, "Boundary does not fully constraint Z_basis"
+
     R_modes = R_basis.modes
     Z_modes = Z_basis.modes
     Rb_modes = Rb_basis.modes
@@ -393,13 +479,13 @@ def _get_lcfs_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_lmn):
     bR = Rb_lmn
     bZ = Zb_lmn
 
-    for i, (l, m, n) in enumerate(Rb_modes):
-        j = np.argwhere(np.logical_and(R_modes[:, 1] == m, R_modes[:, 2] == n))
-        AR[i, j] = 1
+    for i, (l, m, n) in enumerate(R_modes):
+        j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
+        AR[j, i] = 1
 
-    for i, (l, m, n) in enumerate(Zb_modes):
-        j = np.argwhere(np.logical_and(Z_modes[:, 1] == m, Z_modes[:, 2] == n))
-        AZ[i, dim_R + j] = 1
+    for i, (l, m, n) in enumerate(Z_modes):
+        j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
+        AZ[j, dim_R + i] = 1
 
     A = np.vstack([AR, AZ])
     b = np.concatenate([bR, bZ])
@@ -438,6 +524,15 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
         if and only if Ax=b
 
     """
+    assert (
+        len(Rb_lmn) == Rb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Rb_basis.num_modes} and number of boundary coefficients {len(Rb_lmn)}"
+    assert (
+        len(Zb_lmn) == Zb_basis.num_modes
+    ), f"Mismatch between number of boundary modes {Zb_basis.num_modes} and number of boundary coefficients {len(Zb_lmn)}"
+    assert R_basis.L <= Rb_basis.L, "Boundary does not fully constraint R_basis"
+    assert Z_basis.M <= Zb_basis.M, "Boundary does not fully constraint Z_basis"
+
     dim_R = R_basis.num_modes
     dim_Z = Z_basis.num_modes
     dim_Rb = Rb_basis.modes.shape[0]
@@ -446,21 +541,23 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
     AR = np.zeros((dim_Rb, dim_R))
     AZ = np.zeros((dim_Zb, dim_Z))
 
-    for i, (l, m, n) in enumerate(Rb_basis.modes):
+    for i, (l, m, n) in enumerate(R_basis.modes):
         j = np.where(
             np.logical_and(
-                (R_basis.modes[:, :2] == [l, m]).all(axis=1), R_basis.modes[:, -1] >= 0
+                (Rb_basis.modes[:, :2] == [l, m]).all(axis=1),
+                Rb_basis.modes[:, -1] >= 0,
             )
         )[0]
-        AR[i, j] = 1
+        AR[j, i] = 1
 
-    for i, (l, m, n) in enumerate(Zb_basis.modes):
+    for i, (l, m, n) in enumerate(Z_basis.modes):
         j = np.where(
             np.logical_and(
-                (Z_basis.modes[:, :2] == [l, m]).all(axis=1), Z_basis.modes[:, -1] >= 0
+                (Zb_basis.modes[:, :2] == [l, m]).all(axis=1),
+                Zb_basis.modes[:, -1] >= 0,
             )
         )[0]
-        AZ[i, j] = 1
+        AZ[j, i] = 1
 
     A = np.block([[AR, np.zeros((dim_Rb, dim_Z))], [np.zeros((dim_Zb, dim_R)), AZ]])
     b = np.concatenate([Rb_lmn, Zb_lmn])

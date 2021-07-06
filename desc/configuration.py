@@ -13,6 +13,11 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
 from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
+from desc.geometry import (
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+    FourierRZCurve,
+)
 from desc.basis import (
     PowerSeries,
     DoubleFourierSeries,
@@ -61,19 +66,15 @@ class _Configuration(IOAble, ABC):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
-        "_Rb_lmn",
-        "_Zb_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "_Rb_basis",
-        "_Zb_basis",
+        "_surface",
+        "_axis",
         "_pressure",
         "_iota",
         "_spectral_indexing",
         "_bdry_mode",
-        "_boundary",
-        "_profiles",
     ]
 
     def __init__(self, inputs):
@@ -108,8 +109,8 @@ class _Configuration(IOAble, ABC):
             self._L = inputs["L"]
             self._M = inputs["M"]
             self._N = inputs["N"]
-            self._profiles = inputs["profiles"]
-            self._boundary = inputs["boundary"]
+            profiles = inputs["profiles"]
+            boundary = inputs["boundary"]
         except:
             raise ValueError(colored("input dict does not contain proper keys", "red"))
 
@@ -123,7 +124,7 @@ class _Configuration(IOAble, ABC):
         self._children = []
 
         # stellarator symmetry for bases
-        if self._sym:
+        if self.sym:
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
@@ -135,14 +136,41 @@ class _Configuration(IOAble, ABC):
 
         # format profiles
         self._pressure = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 1], name="pressure"
+            modes=profiles[:, 0], params=profiles[:, 1], name="pressure"
         )
         self._iota = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 2], name="iota"
+            modes=profiles[:, 0], params=profiles[:, 2], name="iota"
         )
         # format boundary
-        self._Rb_lmn, self._Zb_lmn = format_boundary(
-            self._boundary, self.Rb_basis, self.Zb_basis, self.bdry_mode
+        if self.bdry_mode == "lcfs":
+            self._surface = FourierRZToroidalSurface(
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, 1:3].astype(int),
+                boundary[:, 1:3].astype(int),
+                self.NFP,
+                self.sym,
+            )
+        elif self.bdry_mode == "poincare":
+            self._surface = ZernikeRZToroidalSection(
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, :2].astype(int),
+                boundary[:, :2].astype(int),
+                self.spectral_indexing,
+                self.sym,
+            )
+        else:
+            raise ValueError("boundary should either have l=0 or n=0")
+
+        axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
+        self._axis = FourierRZCurve(
+            axis[:, 1],
+            axis[:, 2],
+            axis[:, 0].astype(int),
+            NFP=self.NFP,
+            sym=self.sym,
+            name="axis",
         )
 
         # check if state vector is provided
@@ -153,22 +181,19 @@ class _Configuration(IOAble, ABC):
             )
         # default initial guess
         except:
-            axis = inputs.get(
-                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 2:]
-            )
             # check if R is provided
             try:
                 self._R_lmn = inputs["R_lmn"]
             except:
                 self._R_lmn = initial_guess(
-                    self.R_basis, self.Rb_lmn, self.Rb_basis, axis[:, 0:-1]
+                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis[:, 0:-1]
                 )
             # check if Z is provided
             try:
                 self._Z_lmn = inputs["Z_lmn"]
             except:
                 self._Z_lmn = initial_guess(
-                    self.Z_basis, self.Zb_lmn, self.Zb_basis, axis[:, (0, -1)]
+                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis[:, (0, -1)]
                 )
             # check if lambda is provided
             try:
@@ -176,6 +201,10 @@ class _Configuration(IOAble, ABC):
             except:
                 self._L_lmn = np.zeros((self.L_basis.num_modes,))
             self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+
+        # this makes sure the axis has the correct coefficients
+        self.axis.change_resolution(self.N)
+        self._axis = self.axis
 
     def _set_basis(self):
 
@@ -203,44 +232,6 @@ class _Configuration(IOAble, ABC):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-
-        if np.all(self._boundary[:, 0] == 0):
-            self._Rb_basis = DoubleFourierSeries(
-                M=self.M, N=self.N, NFP=self.NFP, sym=self._R_sym
-            )
-            self._Zb_basis = DoubleFourierSeries(
-                M=self.M, N=self.N, NFP=self.NFP, sym=self._Z_sym
-            )
-        elif np.all(self._boundary[:, 2] == 0):
-            self._Rb_basis = ZernikePolynomial(
-                L=self.L, M=self.M, sym=self._R_sym, index=self.spectral_indexing
-            )
-            self._Zb_basis = ZernikePolynomial(
-                L=self.L, M=self.M, sym=self._Z_sym, index=self.spectral_indexing
-            )
-        else:
-            raise ValueError("boundary should either have l=0 or n=0")
-
-        nonzero_modes = self._boundary[
-            np.argwhere(self._boundary[:, 3:] != np.array([0, 0]))[:, 0]
-        ]
-        if nonzero_modes.size and (
-            self.L < np.max(abs(nonzero_modes[:, 0]))
-            or self.M < np.max(abs(nonzero_modes[:, 1]))
-            or self.N < np.max(abs(nonzero_modes[:, 2]))
-        ):
-            warnings.warn(
-                colored(
-                    "Configuration resolution does not fully resolve boundary inputs, "
-                    + "Configuration L,M,N={},{},{}, ".format(self.L, self.M, self.N)
-                    + "boundary resolution L,M,N={},{},{}".format(
-                        int(np.max(abs(nonzero_modes[:, 0]))),
-                        int(np.max(abs(nonzero_modes[:, 1]))),
-                        int(np.max(abs(nonzero_modes[:, 2]))),
-                    ),
-                    "yellow",
-                )
-            )
 
     @property
     def parent(self):
@@ -292,21 +283,16 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
-        old_modes_Rb = self.Rb_basis.modes
-        old_modes_Zb = self.Zb_basis.modes
 
         self._set_basis()
 
-        # format boundary
-        full_Rb_lmn, full_Zb_lmn = format_boundary(
-            self._boundary, self.Rb_basis, self.Zb_basis, self.bdry_mode
-        )
-        self._Rb_lmn = copy_coeffs(
-            self.Rb_lmn, old_modes_Rb, self.Rb_basis.modes, full_Rb_lmn
-        )
-        self._Zb_lmn = copy_coeffs(
-            self.Zb_lmn, old_modes_Zb, self.Zb_basis.modes, full_Zb_lmn
-        )
+        if N_change:
+            self.axis.change_resolution(self.N)
+        # this is kind of a kludge for now
+        if self.bdry_mode == "lcfs":
+            self.surface.change_resolution(self.M, self.N)
+        elif self.bdry_mode == "poincare":
+            self.surface.change_resolution(self.L, self.M)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -315,6 +301,11 @@ class _Configuration(IOAble, ABC):
         # state vector
         self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
         self._make_labels()
+
+    @property
+    def surface(self):
+        """geometric surface defining boundary conditions"""
+        return self._surface
 
     @property
     def spectral_indexing(self):
@@ -409,20 +400,57 @@ class _Configuration(IOAble, ABC):
     @property
     def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        return self._Rb_lmn
+        if self.bdry_mode == "lcfs":
+            return self.surface.R_mn
+        elif self.bdry_mode == "poincare":
+            return self.surface.R_lm
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
-        self._Rb_lmn = Rb_lmn
+        if self.bdry_mode == "lcfs":
+            self.surface.R_mn = Rb_lmn
+        elif self.bdry_mode == "poincare":
+            self.surface.R_lm = Rb_lmn
 
     @property
     def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        return self._Zb_lmn
+        if self.bdry_mode == "lcfs":
+            return self.surface.Z_mn
+        elif self.bdry_mode == "poincare":
+            return self.surface.Z_lm
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
-        self._Zb_lmn = Zb_lmn
+        if self.bdry_mode == "lcfs":
+            self.surface.Z_mn = Zb_lmn
+        elif self.bdry_mode == "poincare":
+            self.surface.Z_lm = Zb_lmn
+
+    @property
+    def Ra_n(self):
+        """R coefficients for axis Fourier series."""
+        return self.axis.R_n
+
+    @property
+    def Za_n(self):
+        """Z coefficients for axis Fourier series."""
+        return self.axis.Z_n
+
+    @property
+    def axis(self):
+        """Curve object representing the magnetic axis."""
+        return self._axis
+
+    @axis.setter
+    def axis(self, new):
+        if isinstance(new, FourierRZCurve):
+            new.change_resolution(self.N)
+            self._axis = new
+        else:
+            raise TypeError(
+                f"axis should be of type FourierRZCurve or a subclass, got {new}"
+            )
 
     @property
     def pressure(self):
@@ -484,16 +512,6 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
-
-    @property
-    def Rb_basis(self):
-        """Spectral basis for R at the boundary (Basis)."""
-        return self._Rb_basis
-
-    @property
-    def Zb_basis(self):
-        """Spectral basis for Z at the boundary (Basis)."""
-        return self._Zb_basis
 
     @property
     def major_radius(self):
@@ -1247,21 +1265,13 @@ class _Configuration(IOAble, ABC):
         pressure = self.pressure.copy()
         pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = R_transform.grid
-        Rb_transform = Transform(
-            R_transform.grid, self.Rb_basis, derivs=1, method="auto"
-        )
-        Zb_transform = Transform(
-            R_transform.grid, self.Zb_basis, derivs=1, method="auto"
-        )
+        iota.grid = grid
 
         obj = get_objective_function(
             "energy",
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             pressure,
             iota,
             BC_constraint=None,
@@ -1378,7 +1388,7 @@ class _Configuration(IOAble, ABC):
         if jnp.any(R) <= 0:
             raise ValueError("R values must be positive")
 
-        R0, Z0 = self.compute_axis_location(zeta=phi)
+        R0, phi0, Z0 = self.axis.compute_coordinates(grid=phi).T
         theta = jnp.arctan2(Z - Z0, R - R0)
         rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
         grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
@@ -1422,31 +1432,6 @@ class _Configuration(IOAble, ABC):
             phi = put(phi, i, np.nan)
 
         return jnp.vstack([rho, theta, phi]).T
-
-    def compute_axis_location(self, zeta=0):
-        """Find the axis location on specified zeta plane(s).
-
-        Parameters
-        ----------
-        zeta : float or array-like of float
-            zeta planes to find axis on
-
-        Returns
-        -------
-        R0 : ndarray
-            R coordinate of axis on specified zeta planes
-        Z0 : ndarray
-            Z coordinate of axis on specified zeta planes
-
-        """
-        z = np.atleast_1d(zeta).flatten()
-        r = np.zeros_like(z)
-        t = np.zeros_like(z)
-        nodes = np.array([r, t, z]).T
-        R0 = np.dot(self.R_basis.evaluate(nodes), self.R_lmn)
-        Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
-
-        return R0, Z0
 
     def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
@@ -1586,13 +1571,13 @@ class _Configuration(IOAble, ABC):
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
         R_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.Rb_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid, eq_sfl.surface.R_basis, build_pinv=True, rcond=rcond
         )
         Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.Zb_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid, eq_sfl.surface.Z_basis, build_pinv=True, rcond=rcond
         )
         Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
         del Z_sfl_bdry_transform
@@ -1754,54 +1739,6 @@ class _Configuration(IOAble, ABC):
         if filename is not None:
             b.write_boozmn(filename)
         return b
-
-
-def format_boundary(boundary, Rb_basis, Zb_basis, mode="lcfs"):
-    """Format boundary arrays and converts between real and fourier representations.
-
-    Parameters
-    ----------
-    boundary : ndarray, shape(Nbdry,5)
-        array of fourier coeffs [l, m, n, Rb_lmn, Zb_lmn]
-        or array of real space coordinates, [rho, theta, phi, R, Z]
-    Rb_basis : DoubleFourierSeries
-        spectral basis for Rb_lmn coefficients
-    Zb_basis : DoubleFourierSeries
-        spectral basis for Zb_lmn coefficients
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
-
-    Returns
-    -------
-    Rb_lmn : ndarray
-        spectral coefficients for R boundary
-    Zb_lmn : ndarray
-        spectral coefficients for Z boundary
-
-    """
-    Rb_lmn = np.zeros((Rb_basis.num_modes,))
-    Zb_lmn = np.zeros((Zb_basis.num_modes,))
-
-    if mode == "lcfs":
-        # boundary is on m,n LCFS
-        for m, n, R1, Z1 in boundary[:, 1:]:
-            idx_R = np.where((Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            idx_Z = np.where((Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            Rb_lmn[idx_R] = R1
-            Zb_lmn[idx_Z] = Z1
-    elif mode == "poincare":
-        # boundary is on l,m poincare section
-        for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
-            idx_R = np.where((Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
-            idx_Z = np.where((Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
-            Rb_lmn[idx_R] = R1
-            Zb_lmn[idx_Z] = Z1
-    else:
-        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-    return Rb_lmn.astype(float), Zb_lmn.astype(float)
 
 
 def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):

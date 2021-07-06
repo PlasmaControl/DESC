@@ -29,14 +29,14 @@ def write_ascii(fname, eq):
     if eq.sym:
         nbdry = len(np.nonzero(eq.Rb_lmn)[0]) + len(np.nonzero(eq.Zb_lmn)[0])
         file.write("Nbdry = {:3d}\n".format(nbdry))
-        for k, (l, m, n) in enumerate(eq.Rb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
             if eq.Rb_lmn[k] != 0:
                 file.write(
                     "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
                         m, n, eq.Rb_lmn[k], 0
                     )
                 )
-        for k, (l, m, n) in enumerate(eq.Zb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
             if eq.Zb_lmn[k] != 0:
                 file.write(
                     "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
@@ -44,9 +44,9 @@ def write_ascii(fname, eq):
                     )
                 )
     else:
-        nbdry = eq.Rb_basis.num_modes
+        nbdry = eq.surface.R_basis.num_modes
         file.write("Nbdry = {:3d}\n".format(nbdry))
-        for k, (l, m, n) in enumerate(eq.Rb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
             file.write(
                 "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
                     m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]

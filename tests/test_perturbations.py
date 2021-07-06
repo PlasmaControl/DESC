@@ -87,8 +87,6 @@ class TestPerturbations(unittest.TestCase):
         R_transform = Transform(grid, eq_old.R_basis)
         Z_transform = Transform(grid, eq_old.Z_basis)
         L_transform = Transform(grid, eq_old.L_basis)
-        Rb_transform = Transform(grid, eq_old.Rb_basis)
-        Zb_transform = Transform(grid, eq_old.Zb_basis)
         pres = eq_old.pressure.copy()
         pres.grid = grid
         iota = eq_old.iota.copy()
@@ -98,18 +96,10 @@ class TestPerturbations(unittest.TestCase):
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=pres,
             i_profile=iota,
-            BC_constraint=LCFSConstraint(
-                eq_old.R_basis,
-                eq_old.Z_basis,
-                eq_old.L_basis,
-                eq_old.Rb_basis,
-                eq_old.Zb_basis,
-                eq_old.Rb_lmn,
-                eq_old.Zb_lmn,
+            BC_constraint=eq_old.surface.get_constraint(
+                eq_old.R_basis, eq_old.Z_basis, eq_old.L_basis
             ),
         )
         eq_old.objective = obj_fun
@@ -122,15 +112,16 @@ class TestPerturbations(unittest.TestCase):
             eq_old.i_l,
             eq_old.Psi,
         )
+        eq_old.objective.Rb_transform = eq_old.surface._R_transform
         res_old = eq_old.objective.compute(*args)
 
         deltas = {
-            "dRb": np.zeros((eq_old.Rb_basis.num_modes,)),
-            "dZb": np.zeros((eq_old.Zb_basis.num_modes,)),
+            "dRb": np.zeros((eq_old.surface.R_basis.num_modes,)),
+            "dZb": np.zeros((eq_old.surface.Z_basis.num_modes,)),
             "dPsi": 0.2,
         }
-        idx_R = np.where((eq_old.Rb_basis.modes == [0, 2, 1]).all(axis=1))[0]
-        idx_Z = np.where((eq_old.Zb_basis.modes == [0, -2, 1]).all(axis=1))[0]
+        idx_R = np.where((eq_old.surface.R_basis.modes == [0, 2, 1]).all(axis=1))[0]
+        idx_Z = np.where((eq_old.surface.Z_basis.modes == [0, -2, 1]).all(axis=1))[0]
         deltas["dRb"][idx_R] = 0.5
         deltas["dZb"][idx_Z] = -0.3
 
@@ -144,7 +135,7 @@ class TestPerturbations(unittest.TestCase):
             eq_new.i_l,
             eq_new.Psi,
         )
-
+        eq_new.objective.Rb_transform = eq_new.surface._R_transform
         res_new = eq_new.objective.compute(*args)
 
         # tolerance could be lower if only testing with JAX

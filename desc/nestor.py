@@ -117,7 +117,31 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
     coords["Y"] = (R_2d * np.sin(phi)).flatten()
 
     
+def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
+    """
 
+
+    """
+    if nzeta == 1:
+        NFP_eff = 64
+    else:
+        NFP_eff = NFP
+    zeta_fp = 2.0*np.pi/NFP_eff * np.arange(NFP_eff)
+
+    raxis = Ra_transform.transform(R_lmn)
+    zaxis = Za_transform.transform(Z_lmn)    
+    phiaxis = np.linspace(0,2*np.pi,nzeta, endpoint=False)/NFP
+    axis = np.array([raxis*np.cos(phiaxis),
+                     raxis*np.sin(phiaxis),
+                     zaxis])
+    
+    axis = np.moveaxis(copy_vector_periods(axis, zeta_fp), -1,1).reshape((3,-1))
+    axis = np.array([np.sqrt(axis[0]**2 + axis[1]**2),
+                    np.arctan2(axis[1], axis[0]),
+                    axis[2]])
+    return axis
+    
+    
 def eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, rmns=None, zmnc=None, sym=False):
     """Evaluates surface geometry terms for vmec type inputs
 

@@ -53,7 +53,7 @@ def copy_vector_periods(vec, zetas):
     return np.array((xx,yy))
 
 
-def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzeta, sym):
+def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzeta, NFP, sym):
     """Evaluate coordinates and derivatives on the surface
 
     Parameters
@@ -68,6 +68,8 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
         object to transform Z from spectral to real space
     ntheta, nzeta : int
         number of grid points in poloidal, toroidal directions
+    NFP : integer
+        number of field periods
     sym : bool
         whether to assume stellarator symmetry
 
@@ -115,6 +117,8 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
     coords["phi_sym"] = np.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
     coords["X"] = (R_2d * np.cos(phi)).flatten()
     coords["Y"] = (R_2d * np.sin(phi)).flatten()
+
+    return coords
 
     
 def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
@@ -1040,54 +1044,4 @@ class Nestor:
 
 
 
-
-def main(vacin_filename, vacout_filename=None, mgrid=None):
-    vacin = Dataset(vacin_filename, "r")
-
-    ntor    = int(vacin['ntor'][()])
-    mpol    = int(vacin['mpol'][()])
-    nzeta   = int(vacin['nzeta'][()])
-    ntheta  = int(vacin['ntheta'][()])
-    NFP     = int(vacin['nfp'][()])
-
-    rbtor   = vacin['rbtor'][()]
-    ctor    = vacin['ctor'][()]
-    signgs  = vacin['signgs'][()]
-
-    raxis   = vacin['raxis_nestor'][()]
-    zaxis   = vacin['zaxis_nestor'][()]
-    wint    = np.array(vacin['wint'][()])
-
-    xm      = vacin['xm'][()]
-    xn      = vacin['xn'][()]
-    rmnc    = vacin['rmnc'][()]
-    zmns    = vacin['zmns'][()]
-    
-    extcur = vacin['extcur'][()]        
-    folder = os.getcwd()
-    mgridFilename = os.path.join(folder, mgrid)
-    ext_field = SplineMagneticField.from_mgrid(mgridFilename, extcur)
-
-    mf = mpol+1
-    nf = ntor
-
-    nestor = Nestor(ext_field, signgs, mf, nf, ntheta, nzeta, NFP)                    
-
-    surface_coords = eval_surface_geometry_vmec(xm, xn, ntheta, nzeta, NFP, rmnc, zmns, sym=True)
-    axis_coords = evaluate_axis_vmec(raxis, zaxis, nzeta, NFP)
-    phi_mn, Btot = nestor.compute(surface_coords, axis_coords, ctor/mu0)
-    firstIterationPrintout(Btot, ctor, rbtor, nestor.signgs, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP, nestor.weights)
-    print(np.linalg.norm(Btot["Bn"]))
-
-    if vacout_filename is None:
-        vacout_filename = vacin_filename.replace("vacin_", "vacout_")
-    produceOutputFile(vacout_filename, phi_mn, Btot, nestor.mf, nestor.nf, nestor.ntheta, nestor.nzeta, nestor.NFP)
-    
-if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        vacin_filename = sys.argv[1]
-        folder = os.getcwd()
-        main(vacin_filename)
-    else:
-        print("usage: NESTOR.py vacin.nc")
 

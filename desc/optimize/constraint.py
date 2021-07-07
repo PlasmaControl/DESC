@@ -42,21 +42,6 @@ class LinearEqualityConstraint(IOAble):
         if build:
             self.build()
 
-    def __add__(self, other):
-        if not isinstance(other, LinearEqualityConstraint):
-            raise ValueError(
-                colored(
-                    "cannot combine LinearConstraint with object of type {}".format(
-                        type(other)
-                    ),
-                    "red",
-                )
-            )
-
-        newA = np.vstack([self.A, other.A])
-        newb = np.concatenate([self.b, other.b])
-        return LinearEqualityConstraint(newA, newb)
-
     def build(self):
         """Builds linear constraint by factorizing A to get pseudoinverse and nullspace"""
 
@@ -88,13 +73,6 @@ class LinearEqualityConstraint(IOAble):
         self._x0 = Ainv.dot(self.b)
 
         self._built = True
-
-    def remove_duplicates(self):
-        """Delete duplicate constraints (ie duplicate rows in A,b)"""
-        temp = np.hstack([self.A, self.b.reshape((-1, 1))])
-        temp = np.unique(temp, axis=0)
-        self._A = np.atleast_2d(temp[:, :-1])
-        self._b = temp[:, -1].flatten()
 
     @property
     def built(self):

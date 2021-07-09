@@ -642,6 +642,11 @@ def compute_magnetic_field(
     magnetic_field["B_theta"] = dot(magnetic_field["B"], cov_basis["e_theta"], 0)
     magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
 
+    # cylindrical components (R,Z,phi)
+    magnetic_field["B_R"] = magnetic_field['B^theta']*cov_basis['e_theta'][0,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][0,:]
+    magnetic_field["B_Z"] = magnetic_field['B^theta']*cov_basis['e_theta'][2,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][2,:]
+    magnetic_field["B_phi"] = toroidal_coords["R"]*magnetic_field['B^zeta']
+
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 
 
@@ -795,6 +800,11 @@ def compute_magnetic_field_axis(
     magnetic_field["B_rho"] = dot(magnetic_field["B"], cov_basis["e_rho"], 0)
     magnetic_field["B_theta"] = dot(magnetic_field["B"], cov_basis["e_theta"], 0)
     magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
+
+    # cylindrical components (R,Z,phi)
+    magnetic_field["B_R"] = magnetic_field['B^theta']*cov_basis['e_theta'][0,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][0,:]
+    magnetic_field["B_Z"] = magnetic_field['B^theta']*cov_basis['e_theta'][2,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][2,:]
+    magnetic_field["B_phi"] = toroidal_coords["R"]*magnetic_field['B^zeta']
 
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 

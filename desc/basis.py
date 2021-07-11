@@ -607,7 +607,7 @@ class ZernikePolynomial(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
+        radial = zernike_radial(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
         return radial * poloidal
 
@@ -792,7 +792,7 @@ class FourierZernikeBasis(Basis):
             return np.array([]).reshape((len(nodes), 0))
         # TODO: avoid duplicate calculations when mixing derivatives
 
-        radial = jacobi(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
+        radial = zernike_radial(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
         poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
         toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
         return radial * poloidal * toroidal
@@ -916,8 +916,8 @@ def polyval_vec(p, x, prec=None):
     return y[outidx][:, xidx].astype(float)
 
 
-def jacobi_coeffs(l, m, exact=True):
-    """Jacobi polynomial coefficients.
+def zernike_radial_coeffs(l, m, exact=True):
+    """Polynomial coefficients for radial part of zernike basis.
 
     Parameters
     ----------
@@ -974,8 +974,8 @@ def jacobi_coeffs(l, m, exact=True):
     return c
 
 
-def jacobi(rho, l, m, dr=0):
-    """Jacobi polynomials.
+def zernike_radial(rho, l, m, dr=0):
+    """Radial part of zernike polynomials.
 
     Parameters
     ----------
@@ -994,7 +994,7 @@ def jacobi(rho, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    coeffs = jacobi_coeffs(l, m)
+    coeffs = zernike_radial_coeffs(l, m)
     lmax = np.max(l)
     coeffs = polyder_vec(coeffs, dr)
     # this should give accuracy of ~1e-6 in the eval'd polynomials

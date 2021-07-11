@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import mpmath
 from desc.grid import LinearGrid
-from desc.basis import polyder_vec, polyval_vec, powers, jacobi, fourier, jacobi_coeffs
+from desc.basis import polyder_vec, polyval_vec, powers, zernike_radial, fourier, zernike_radial_coeffs
 from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 
 
@@ -34,7 +34,7 @@ class TestBasis(unittest.TestCase):
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=2, N=0)
         l, m = basis.modes[:, 0], basis.modes[:, 1]
-        coeffs = jacobi_coeffs(l, m, exact=True)
+        coeffs = zernike_radial_coeffs(l, m, exact=True)
         grid = LinearGrid(L=20)
         r = grid.nodes[:, 0]
         mpmath.mp.dps = 100
@@ -47,8 +47,8 @@ class TestBasis(unittest.TestCase):
         mpmath.mp.dps = 15
         exactf = exact[:, 0, :].T
         exactdf = exact[:, 1, :].T
-        approxf = jacobi(r, l, m)
-        approxdf = jacobi(r, l, m, dr=1)
+        approxf = zernike_radial(r, l, m)
+        approxdf = zernike_radial(r, l, m, dr=1)
 
         np.testing.assert_allclose(approxf, exactf, atol=1e-12)
         np.testing.assert_allclose(approxdf, exactdf, atol=1e-12)
@@ -67,8 +67,8 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
-    def test_jacobi(self):
-        """Tests jacobi function"""
+    def test_zernike_radial(self):
+        """Tests zernike_radial function"""
         l = np.array([3, 4, 6])
         m = np.array([1, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
@@ -96,8 +96,8 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
         correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
 
-        values = jacobi(r, l, m, 0)
-        derivs = jacobi(r, l, m, 1)
+        values = zernike_radial(r, l, m, 0)
+        derivs = zernike_radial(r, l, m, 1)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)

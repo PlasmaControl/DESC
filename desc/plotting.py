@@ -8,7 +8,7 @@ from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
-from desc.basis import jacobi, fourier
+from desc.basis import zernike_radial, fourier
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -1426,9 +1426,9 @@ def plot_logo(savepath=None, **kwargs):
     cZ = eq[:, 4]
     zern_idx = eq[:, :3]
     ls, ms, ns = zern_idx.T
-    axis_jacobi = jacobi(0, ls, ms)
-    R0 = axis_jacobi.dot(cR)
-    Z0 = axis_jacobi.dot(cZ)
+    axis_zernike_radial = zernike_radial(0, ls, ms)
+    R0 = axis_zernike_radial.dot(cR)
+    Z0 = axis_zernike_radial.dot(cZ)
 
     nr = kwargs.get("nr", 5)
     nt = kwargs.get("nt", 8)
@@ -1442,7 +1442,7 @@ def plot_logo(savepath=None, **kwargs):
     r = r.flatten()
     t = t.flatten()
 
-    radial = jacobi(r, ls, ms)
+    radial = zernike_radial(r, ls, ms)
     poloidal = fourier(t, ms)
     zern = radial * poloidal
     bdry = poloidal

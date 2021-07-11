@@ -1343,11 +1343,10 @@ class _Configuration(IOAble, ABC):
             err = theta_star - theta_star_k
             k += 1
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(abs(err) > tol)
-            rho = put(rho, i, np.nan)
-            theta_k = put(theta_k, i, np.nan)
-            zeta = put(zeta, i, np.nan)
+        noconverge = abs(err) > tol
+        rho = jnp.where(noconverge, jnp.nan, rho)
+        theta_k = jnp.where(noconverge, jnp.nan, theta_k)
+        phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta_k, zeta]).T
 
@@ -1396,7 +1395,7 @@ class _Configuration(IOAble, ABC):
         eZ = Z - Zk
 
         k = 0
-        while jnp.any(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol) and k < maxiter:
+        while jnp.any(((eR) ** 2 + (eZ) ** 2) > tol ** 2) and k < maxiter:
             Rr = R_transform.transform(self.R_lmn, 1, 0, 0)
             Rt = R_transform.transform(self.R_lmn, 0, 1, 0)
             Zr = Z_transform.transform(self.Z_lmn, 1, 0, 0)
@@ -1419,11 +1418,10 @@ class _Configuration(IOAble, ABC):
             eZ = Z - Zk
             k += 1
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol)
-            rho = put(rho, i, np.nan)
-            theta = put(theta, i, np.nan)
-            phi = put(phi, i, np.nan)
+        noconverge = (eR) ** 2 + (eZ) ** 2 > tol ** 2
+        rho = jnp.where(noconverge, jnp.nan, rho)
+        theta = jnp.where(noconverge, jnp.nan, theta)
+        phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta, phi]).T
 

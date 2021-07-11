@@ -1346,7 +1346,7 @@ class _Configuration(IOAble, ABC):
         noconverge = abs(err) > tol
         rho = jnp.where(noconverge, jnp.nan, rho)
         theta_k = jnp.where(noconverge, jnp.nan, theta_k)
-        phi = jnp.where(noconverge, jnp.nan, phi)
+        zeta = jnp.where(noconverge, jnp.nan, zeta)
 
         return jnp.vstack([rho, theta_k, zeta]).T
 

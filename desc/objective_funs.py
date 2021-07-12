@@ -86,6 +86,7 @@ class ObjectiveFunction(IOAble, ABC):
         self._check_transforms()
         self.set_derivatives(self.use_jit)
         self.compiled = False
+        self.built = False
         if not self.use_jit:
             self.compiled = True
 
@@ -134,6 +135,41 @@ class ObjectiveFunction(IOAble, ABC):
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
 
+    def build(self, rebuild=False, verbose=1):
+        """Precompute the transform matrices to be used in optimization
+
+        Parameters
+        ----------
+        rebuild : bool
+            whether to force recalculation of transforms that have already been built
+        verbose : int, optional
+            level of output
+        """
+        if self.built and not rebuild:
+            return
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+        if not self.R_transform.built:
+            self.R_transform.build()
+        if not self.Z_transform.built:
+            self.Z_transform.build()
+        if not self.L_transform.built:
+            self.L_transform.build()
+        if hasattr(self.p_profile, "_transform") and not (
+            self.p_profile._transform.built
+        ):
+            self.p_profile._transform.build()
+        if hasattr(self.i_profile, "_transform") and not (
+            self.i_profile._transform.built
+        ):
+            self.i_profile._transform.build()
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        self.built = True
+
     def compile(self, x, args, verbose=1, mode="auto"):
         """Call the necessary functions to ensure the function is compiled.
 
@@ -163,18 +199,7 @@ class ObjectiveFunction(IOAble, ABC):
         elif mode == "auto":
             mode = "lsq"
 
-        if not np.all(
-            [self.R_transform.built, self.Z_transform.built, self.L_transform.built,]
-        ):
-            if verbose > 0:
-                print("Precomputing transforms")
-            timer.start("Precomputing transforms")
-            self.R_transform.build()
-            self.Z_transform.build()
-            self.L_transform.build()
-            timer.stop("Precomputing transforms")
-            if verbose > 1:
-                timer.disp("Precomputing transforms")
+        self.build(verbose=verbose)
 
         if verbose > 0:
             print("Compiling objective function and derivatives")

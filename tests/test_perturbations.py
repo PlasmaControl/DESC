@@ -122,6 +122,7 @@ class TestPerturbations(unittest.TestCase):
             eq_old.i_l,
             eq_old.Psi,
         )
+        eq_old.objective.compile(y, args[1:])
         res_old = eq_old.objective.compute(*args)
 
         deltas = {
@@ -144,7 +145,7 @@ class TestPerturbations(unittest.TestCase):
             eq_new.i_l,
             eq_new.Psi,
         )
-
+        eq_new.objective.compile(y, args[1:])
         res_new = eq_new.objective.compute(*args)
 
         # tolerance could be lower if only testing with JAX

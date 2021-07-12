@@ -423,7 +423,9 @@ class Transform(IOAble):
             array of values of function at node locations
         """
         if not self.built:
-            self.build()
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build() before being used"
+            )
 
         if self.basis.num_modes != c.size:
             raise ValueError(
@@ -507,7 +509,9 @@ class Transform(IOAble):
 
         """
         if not self.built_pinv:
-            self.build_pinv()
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build_pinv() before being used"
+            )
         return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
 
     def project(self, y):
@@ -527,7 +531,9 @@ class Transform(IOAble):
             vector y projected onto basis, shape (self.basis.num_modes)
         """
         if not self.built:
-            self.build()
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build() before being used"
+            )
 
         if self.grid.num_nodes != y.size:
             raise ValueError(

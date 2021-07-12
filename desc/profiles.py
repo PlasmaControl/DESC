@@ -139,6 +139,7 @@ class PowerSeriesProfile(Profile):
             grid,
             self.basis,
             derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            build=True,
         )
         return transform
 

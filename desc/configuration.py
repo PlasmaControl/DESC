@@ -579,9 +579,9 @@ class _Configuration(IOAble, ABC):
             if grid.ndim == 1:
                 grid = np.tile(grid, (3, 1))
             grid = Grid(grid, sort=False)
-        R_transform = Transform(grid, self.R_basis, derivs=derivs)
-        Z_transform = Transform(grid, self.Z_basis, derivs=derivs)
-        L_transform = Transform(grid, self.L_basis, derivs=derivs)
+        R_transform = Transform(grid, self.R_basis, derivs=derivs, build=True)
+        Z_transform = Transform(grid, self.Z_basis, derivs=derivs, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=derivs, build=True)
         return R_transform, Z_transform, L_transform
 
     def compute_profiles(self, grid=None):

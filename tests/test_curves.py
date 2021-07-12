@@ -22,9 +22,9 @@ class TestRZCurve(unittest.TestCase):
     def test_frenet(self):
         c = FourierRZCurve()
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]))
-        np.testing.assert_allclose(T, np.array([[0, 1, 0]]))
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]))
-        np.testing.assert_allclose(B, np.array([[0, 0, 1]]))
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
 
     def test_misc(self):
         c = FourierRZCurve()
@@ -37,10 +37,7 @@ class TestRZCurve(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 5, 0)
         np.testing.assert_allclose(
-            c.R_n,
-            [
-                5,
-            ],
+            c.R_n, [5,],
         )
         np.testing.assert_allclose(c.Z_n, [])
 
@@ -70,9 +67,9 @@ class TestXYZCurve(unittest.TestCase):
     def test_frenet(self):
         c = FourierXYZCurve()
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]))
-        np.testing.assert_allclose(T, np.array([[0, 0, 1]]))
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]))
-        np.testing.assert_allclose(B, np.array([[0, -1, 0]]))
+        np.testing.assert_allclose(T, np.array([[0, 0, 1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
 
     def test_misc(self):
         c = FourierXYZCurve()
@@ -117,9 +114,9 @@ class TestPlanarCurve(unittest.TestCase):
     def test_frenet(self):
         c = FourierPlanarCurve()
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]))
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]))
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]))
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]))
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
 
     def test_misc(self):
         c = FourierPlanarCurve()
@@ -131,10 +128,7 @@ class TestPlanarCurve(unittest.TestCase):
         np.testing.assert_allclose(r, 2)
         c.set_coeffs(0, 3)
         np.testing.assert_allclose(
-            c.r_n,
-            [
-                3,
-            ],
+            c.r_n, [3,],
         )
 
         c.normal = [1, 2, 3]

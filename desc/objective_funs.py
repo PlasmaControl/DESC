@@ -164,13 +164,7 @@ class ObjectiveFunction(IOAble, ABC):
             mode = "lsq"
 
         if not np.all(
-            [
-                self.R_transform.built,
-                self.Z_transform.built,
-                self.L_transform.built,
-                self.Rb_transform.built,
-                self.Zb_transform.built,
-            ]
+            [self.R_transform.built, self.Z_transform.built, self.L_transform.built,]
         ):
             if verbose > 0:
                 print("Precomputing transforms")
@@ -178,8 +172,6 @@ class ObjectiveFunction(IOAble, ABC):
             self.R_transform.build()
             self.Z_transform.build()
             self.L_transform.build()
-            self.Rb_transform.build()
-            self.Zb_transform.build()
             timer.stop("Precomputing transforms")
             if verbose > 1:
                 timer.disp("Precomputing transforms")

@@ -27,7 +27,7 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         grid = LinearGrid(L=1, theta=0, zeta=0)
         s.grid = grid
         N = s.compute_normal(coords="xyz")
-        np.testing.assert_allclose(N[0], [-1, 0, 0])
+        np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
     def test_misc(self):
         c = FourierRZToroidalSurface()
@@ -40,17 +40,10 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_mn,
-            [
-                5,
-                1,
-            ],
+            c.R_mn, [5, 1,],
         )
         np.testing.assert_allclose(
-            c.Z_mn,
-            [
-                1,
-            ],
+            c.Z_mn, [1,],
         )
 
         s = c.copy()
@@ -79,7 +72,7 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         grid = LinearGrid(L=20, M=20, N=1)
         s.grid = grid
         N = s.compute_normal(coords="xyz")
-        np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape))
+        np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
     def test_misc(self):
         c = ZernikeRZToroidalSection()
@@ -92,17 +85,10 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_lm,
-            [
-                5,
-                1,
-            ],
+            c.R_lm, [5, 1,],
         )
         np.testing.assert_allclose(
-            c.Z_lm,
-            [
-                1,
-            ],
+            c.Z_lm, [1,],
         )
 
         s = c.copy()

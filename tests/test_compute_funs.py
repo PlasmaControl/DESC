@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import convolve2d
 
+from desc.backend import put
 from desc.grid import LinearGrid, Grid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.transform import Transform
@@ -479,4 +480,8 @@ def test_compute_flux_coords(SOLOVEV):
 
     flux_coords = eq.compute_flux_coords(real_coords)
 
-    np.testing.assert_allclose(nodes, flux_coords)
+    # catch difference between 0 and 2*pi
+    if flux_coords[0, 1] > np.pi:  # theta[0] = 0
+        flux_coords = put(flux_coords, (0, 1), flux_coords[0, 1] - 2 * np.pi)
+
+    np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)

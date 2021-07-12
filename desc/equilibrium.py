@@ -4,7 +4,7 @@ import warnings
 from collections.abc import MutableSequence
 from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
-from desc.configuration import _Configuration, format_boundary
+from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
 from desc.objective_funs import get_objective_function, ObjectiveFunction
@@ -12,6 +12,7 @@ from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.perturbations import perturb, optimal_perturb
+from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -64,7 +65,6 @@ class Equilibrium(_Configuration, IOAble):
         "_grid",
         "_node_pattern",
         "_transforms",
-        "_constraint",
         "_objective",
         "optimizer_results",
         "_optimizer",
@@ -80,13 +80,11 @@ class Equilibrium(_Configuration, IOAble):
         self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
         self._node_pattern = inputs.get("node_pattern", "quad")
         self._solved = False
-        self._constraint = None
         self._objective = None
         self._optimizer = None
         self._set_grid()
         self._transforms = {}
         self._set_transforms()
-        self.constraint = inputs.get("bdry_mode", None)
         self.objective = inputs.get("objective", None)
         self.optimizer = inputs.get("optimizer", None)
         self.optimizer_results = {}
@@ -212,12 +210,6 @@ class Equilibrium(_Configuration, IOAble):
             self._transforms["L"] = Transform(
                 self.grid, self.L_basis, derivs=0, build=False
             )
-            self._transforms["Rb"] = Transform(
-                self.grid, self.Rb_basis, derivs=0, build=False
-            )
-            self._transforms["Zb"] = Transform(
-                self.grid, self.Zb_basis, derivs=0, build=False
-            )
             self.pressure.grid = self.grid
             self.iota.grid = self.grid
 
@@ -225,12 +217,6 @@ class Equilibrium(_Configuration, IOAble):
             self.transforms["R"].change_resolution(self.grid, self.R_basis, build=False)
             self.transforms["Z"].change_resolution(self.grid, self.Z_basis, build=False)
             self.transforms["L"].change_resolution(self.grid, self.L_basis, build=False)
-            self.transforms["Rb"].change_resolution(
-                self.grid, self.Rb_basis, build=False
-            )
-            self.transforms["Zb"].change_resolution(
-                self.grid, self.Zb_basis, build=False
-            )
         self.pressure.grid = self.grid
         self.iota.grid = self.grid
 
@@ -328,7 +314,6 @@ class Equilibrium(_Configuration, IOAble):
             )
             and self.objective is not None
         ):
-            self.constraint = self.constraint.name
             self.objective = self.objective.name
 
     @property
@@ -363,43 +348,6 @@ class Equilibrium(_Configuration, IOAble):
         self._solved = solved
 
     @property
-    def constraint(self):
-        """Boundary condition currently assigned (BoundaryCondition)."""
-        if not hasattr(self, "_constraint"):
-            self._constraint = None
-        return self._constraint
-
-    @constraint.setter
-    def constraint(self, constraint):
-        if constraint is None:
-            self._constraint = constraint
-        elif isinstance(constraint, BoundaryCondition) and constraint.eq(
-            self.constraint
-        ):
-            return
-        elif isinstance(constraint, BoundaryCondition) and not constraint.eq(
-            self.constraint
-        ):
-            self._constraint = constraint
-        elif isinstance(constraint, str):
-            self._constraint = get_boundary_condition(
-                constraint,
-                R_basis=self.R_basis,
-                Z_basis=self.Z_basis,
-                L_basis=self.L_basis,
-                Rb_basis=self.Rb_basis,
-                Zb_basis=self.Zb_basis,
-                Rb_lmn=self.Rb_lmn,
-                Zb_lmn=self.Zb_lmn,
-                build=False,
-            )
-        else:
-            raise ValueError(
-                "objective should be of type 'BoundaryCondition' or string, "
-                + "got {}".format(constraint)
-            )
-
-    @property
     def objective(self):
         """Objective function currently assigned (ObjectiveFunction)."""
         if not hasattr(self, "_objective"):
@@ -423,11 +371,11 @@ class Equilibrium(_Configuration, IOAble):
                 R_transform=self.transforms["R"],
                 Z_transform=self.transforms["Z"],
                 L_transform=self.transforms["L"],
-                Rb_transform=self.transforms["Rb"],
-                Zb_transform=self.transforms["Zb"],
                 p_profile=self.pressure,
                 i_profile=self.iota,
-                BC_constraint=self.constraint,
+                BC_constraint=self.surface.get_constraint(
+                    self.R_basis, self.Z_basis, self.L_basis
+                ),
             )
             self.objective = objective
         else:
@@ -473,8 +421,12 @@ class Equilibrium(_Configuration, IOAble):
         ).T
         Rb_lmn = self.Rb_lmn.reshape((-1, 1))
         Zb_lmn = self.Zb_lmn.reshape((-1, 1))
-        Rb_modes = np.hstack([self.Rb_basis.modes, Rb_lmn, np.zeros_like(Rb_lmn)])
-        Zb_modes = np.hstack([self.Zb_basis.modes, np.zeros_like(Zb_lmn), Zb_lmn])
+        Rb_modes = np.hstack(
+            [self.surface.R_basis.modes, Rb_lmn, np.zeros_like(Rb_lmn)]
+        )
+        Zb_modes = np.hstack(
+            [self.surface.Z_basis.modes, np.zeros_like(Zb_lmn), Zb_lmn]
+        )
         inputs = {
             "sym": self.sym,
             "NFP": self.NFP,
@@ -736,9 +688,29 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         """
         deltas = {}
-        Rb_lmn, Zb_lmn = format_boundary(
-            inputs["boundary"], equil.Rb_basis, equil.Zb_basis, equil.bdry_mode
-        )
+        if equil.bdry_mode == "lcfs":
+            s = FourierRZToroidalSurface(
+                inputs["boundary"][:, 3],
+                inputs["boundary"][:, 4],
+                inputs["boundary"][:, 1:3].astype(int),
+                inputs["boundary"][:, 1:3].astype(int),
+                equil.NFP,
+                equil.sym,
+            )
+            s.change_resolution(equil.M, equil.N)
+            Rb_lmn, Zb_lmn = s.R_mn, s.Z_mn
+        elif equil.bdry_mode == "poincare":
+            s = ZernikeRZToroidalSection(
+                inputs["boundary"][:, 3],
+                inputs["boundary"][:, 4],
+                inputs["boundary"][:, :2].astype(int),
+                inputs["boundary"][:, :2].astype(int),
+                equil.spectral_indexing,
+                equil.sym,
+            )
+            s.change_resolution(equil.L, equil.M)
+            Rb_lmn, Zb_lmn = s.R_lm, s.Z_lm
+
         p_l = np.zeros_like(equil.pressure.params)
         i_l = np.zeros_like(equil.iota.params)
         for l, p, i in inputs["profiles"]:
@@ -767,7 +739,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        print("Constraint: {}".format(equil.constraint.name))
+        print("Constraint: {}".format(equil.objective.BC_constraint.name))
         print("Objective: {}".format(equil.objective.name))
         print("Optimizer: {}".format(equil.optimizer.method))
         print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
@@ -873,30 +845,19 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self.save(checkpoint_path)
                 break
 
-            # boundary condition
-            constraint = get_boundary_condition(
-                self.inputs[ii]["bdry_mode"],
-                R_basis=equil.R_basis,
-                Z_basis=equil.Z_basis,
-                L_basis=equil.L_basis,
-                Rb_basis=equil.Rb_basis,
-                Zb_basis=equil.Zb_basis,
-                Rb_lmn=equil.Rb_lmn,
-                Zb_lmn=equil.Zb_lmn,
-            )
-            equil.constraint = constraint
-
             # objective function
             objective = get_objective_function(
                 self.inputs[ii]["objective"],
                 R_transform=equil.transforms["R"],
                 Z_transform=equil.transforms["Z"],
                 L_transform=equil.transforms["L"],
-                Rb_transform=equil.transforms["Rb"],
-                Zb_transform=equil.transforms["Zb"],
                 p_profile=equil.pressure,
                 i_profile=equil.iota,
-                BC_constraint=equil.constraint,
+                BC_constraint=equil.surface.get_constraint(
+                    R_basis=equil.R_basis,
+                    Z_basis=equil.Z_basis,
+                    L_basis=equil.L_basis,
+                ),
                 use_jit=True,
             )
             # reuse old objective if possible to avoid recompiling

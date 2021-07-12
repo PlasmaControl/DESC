@@ -29,6 +29,8 @@ class Basis(IOAble, ABC):
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym is not False:
+            raise ValueError(f"Unknown symmetry type {self.sym}")
 
     def _sort_modes(self):
         """Sorts modes for use with FFT"""
@@ -317,7 +319,7 @@ class FourierSeries(Basis):
         self._sort_modes()
 
     def _get_modes(self, N=0):
-        """Gets mode numbers for double fourier series
+        """Gets mode numbers for fourier series
 
         Parameters
         ----------
@@ -393,6 +395,7 @@ class FourierSeries(Basis):
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
+            self._enforce_symmetry()
             self._sort_modes()
 
 
@@ -532,6 +535,7 @@ class DoubleFourierSeries(Basis):
             self._M = M
             self._N = N
             self._modes = self._get_modes(self.M, self.N)
+            self._enforce_symmetry()
             self._sort_modes()
 
 
@@ -736,6 +740,7 @@ class ZernikePolynomial(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
+            self._enforce_symmetry()
             self._sort_modes()
 
 
@@ -963,6 +968,7 @@ class FourierZernikeBasis(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
+            self._enforce_symmetry()
             self._sort_modes()
 
 

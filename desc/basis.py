@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from math import factorial
 from desc.utils import sign, flatten_list
 from desc.io import IOAble
+from desc.backend import jnp, jit, fori_loop, gammaln
 
 __all__ = [
     "PowerSeries",
@@ -79,7 +80,9 @@ class Basis(IOAble, ABC):
         """ndarray: the modes numbers for the basis"""
 
     @abstractmethod
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -90,6 +93,9 @@ class Basis(IOAble, ABC):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -218,7 +224,9 @@ class PowerSeries(Basis):
         z = np.zeros((L + 1, 2))
         return np.hstack([l, z])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -229,6 +237,9 @@ class PowerSeries(Basis):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -240,7 +251,24 @@ class PowerSeries(Basis):
             modes = self.modes
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
-        return powers(nodes[:, 0], modes[:, 0], dr=derivatives[0])
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+        if unique:
+            _, ridx, routidx = np.unique(
+                r, return_index=True, return_inverse=True, axis=0
+            )
+            _, lidx, loutidx = np.unique(
+                l, return_index=True, return_inverse=True, axis=0
+            )
+            r = r[ridx]
+            l = l[lidx]
+
+        radial = powers(r, l, dr=derivatives[0])
+        if unique:
+            radial = radial[routidx][:, loutidx]
+
+        return radial
 
     def change_resolution(self, L):
         """Change resolution of the basis to the given resolution.
@@ -308,7 +336,9 @@ class FourierSeries(Basis):
         z = np.zeros((dim_tor, 2))
         return np.hstack([z, n])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -319,6 +349,9 @@ class FourierSeries(Basis):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -331,7 +364,22 @@ class FourierSeries(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        return fourier(nodes[:, 2], modes[:, 2], NFP=self._NFP, dt=derivatives[2])
+        r, t, z = nodes.T
+        n = modes[:, 2]
+        if unique:
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                n, return_index=True, return_inverse=True, axis=0
+            )
+            z = z[zidx]
+            n = n[nidx]
+
+        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        if unique:
+            toroidal = toroidal[zoutidx][:, noutidx]
+        return toroidal
 
     def change_resolution(self, N):
         """Change resolution of the basis to the given resolutions.
@@ -409,7 +457,9 @@ class DoubleFourierSeries(Basis):
         y = np.hstack([z, mm, nn])
         return y
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -420,6 +470,9 @@ class DoubleFourierSeries(Basis):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -432,8 +485,32 @@ class DoubleFourierSeries(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
+        r, t, z = nodes.T
+        m = modes[:, 1]
+        n = modes[:, 2]
+        if unique:
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                m, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                n, return_index=True, return_inverse=True, axis=0
+            )
+            t = t[tidx]
+            z = z[zidx]
+            m = m[midx]
+            n = n[nidx]
+
+        poloidal = fourier(t, m, dt=derivatives[1])
+        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        if unique:
+            poloidal = poloidal[toutidx][:, moutidx]
+            toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
     def change_resolution(self, M, N):
@@ -584,7 +661,9 @@ class ZernikePolynomial(Basis):
 
         return np.hstack([pol, tor])
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -595,6 +674,9 @@ class ZernikePolynomial(Basis):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of int, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -607,8 +689,34 @@ class ZernikePolynomial(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        radial = zernike_radial(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
-        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
+        r, t, z = nodes.T
+        lm = modes[:, :2]
+        m = modes[:, 1]
+        if unique:
+            _, ridx, routidx = np.unique(
+                r, return_index=True, return_inverse=True, axis=0
+            )
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, lmidx, lmoutidx = np.unique(
+                lm, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                m, return_index=True, return_inverse=True, axis=0
+            )
+            r = r[ridx]
+            t = t[tidx]
+
+            lm = lm[lmidx]
+            m = m[midx]
+
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        poloidal = fourier(t, m, dt=derivatives[1])
+
+        if unique:
+            radial = radial[routidx][:, lmoutidx]
+            poloidal = poloidal[toutidx][:, moutidx]
         return radial * poloidal
 
     def change_resolution(self, L, M):
@@ -768,7 +876,9 @@ class FourierZernikeBasis(Basis):
         ).T
         return np.unique(np.hstack([pol, tor]), axis=0)
 
-    def evaluate(self, nodes, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
         """Evaluates basis functions at specified nodes
 
         Parameters
@@ -779,6 +889,9 @@ class FourierZernikeBasis(Basis):
             order of derivatives to compute in (rho,theta,zeta)
         modes : ndarray of int, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -791,10 +904,43 @@ class FourierZernikeBasis(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
         # TODO: avoid duplicate calculations when mixing derivatives
+        r, t, z = nodes.T
+        lm = modes[:, :2]
+        m = modes[:, 1]
+        n = modes[:, 2]
+        if unique:
+            _, ridx, routidx = np.unique(
+                r, return_index=True, return_inverse=True, axis=0
+            )
+            _, tidx, toutidx = np.unique(
+                t, return_index=True, return_inverse=True, axis=0
+            )
+            _, zidx, zoutidx = np.unique(
+                z, return_index=True, return_inverse=True, axis=0
+            )
+            _, lmidx, lmoutidx = np.unique(
+                lm, return_index=True, return_inverse=True, axis=0
+            )
+            _, midx, moutidx = np.unique(
+                m, return_index=True, return_inverse=True, axis=0
+            )
+            _, nidx, noutidx = np.unique(
+                n, return_index=True, return_inverse=True, axis=0
+            )
+            r = r[ridx]
+            t = t[tidx]
+            z = z[zidx]
+            lm = lm[lmidx]
+            m = m[midx]
+            n = n[nidx]
 
-        radial = zernike_radial(nodes[:, 0], modes[:, 0], modes[:, 1], dr=derivatives[0])
-        poloidal = fourier(nodes[:, 1], modes[:, 1], dt=derivatives[1])
-        toroidal = fourier(nodes[:, 2], modes[:, 2], NFP=self.NFP, dt=derivatives[2])
+        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        poloidal = fourier(t, m, dt=derivatives[1])
+        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        if unique:
+            radial = radial[routidx][:, lmoutidx]
+            poloidal = poloidal[toutidx][:, moutidx]
+            toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
     def change_resolution(self, L, M, N):
@@ -842,13 +988,6 @@ def polyder_vec(p, m):
     factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
-    # for modest to large arrays, faster to find unique values and
-    # only evaluate those. Have to cast to float because np.unique
-    # can't handle object types like python native int
-    _, pidx, outidx = np.unique(
-        p.astype(float), return_index=True, return_inverse=True, axis=0
-    )
-    p = p[pidx]
     order = p.shape[1] - 1
 
     D = np.arange(order, -1, -1)
@@ -859,7 +998,6 @@ def polyder_vec(p, m):
     p = np.roll(D * p, m, axis=1)
     idx = np.arange(p.shape[1])
     p = np.where(idx < m, 0, p)
-    p = p[outidx]
 
     return p
 
@@ -974,12 +1112,12 @@ def zernike_radial_coeffs(l, m, exact=True):
     return c
 
 
-def zernike_radial(rho, l, m, dr=0):
+def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
     Parameters
     ----------
-    rho : ndarray, shape(N,)
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
@@ -994,12 +1132,44 @@ def zernike_radial(rho, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    coeffs = zernike_radial_coeffs(l, m)
-    lmax = np.max(l)
-    coeffs = polyder_vec(coeffs, dr)
-    # this should give accuracy of ~1e-6 in the eval'd polynomials
-    prec = int(0.4 * lmax + 5.4)
-    return polyval_vec(coeffs, rho, prec=prec).T
+    m = jnp.abs(m)
+    alpha = m
+    beta = 0
+    n = (l - m) // 2
+    s = (-1) ** n
+    if dr == 0:
+        out = r ** m * jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+    elif dr == 1:
+        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
+    elif dr == 2:
+        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        out = (
+            m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
+            - 2 * 4 * m * r ** m * df
+            + r ** m * (16 * r ** 2 * d2f - 4 * df)
+        )
+    elif dr == 3:
+        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        d3f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
+        out = (
+            (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
+            - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
+            + 48 * r ** (m + 1) * d2f
+            - 64 * r ** (m + 3) * d3f
+            + 48 * m * r ** (m + 1) * d2f
+            - 12 * m * r ** jnp.maximum(m - 1, 0) * df
+        )
+    else:
+        raise NotImplementedError(
+            "Analytic radial derivatives of zernike polynomials for order>3 have not been implemented"
+        )
+    return s * jnp.where((l - m) % 2 == 0, out, 0)
 
 
 def power_coeffs(l):
@@ -1066,23 +1236,109 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    # for modest to large arrays, faster to find unique values and
-    # only evaluate those
-    unq_theta, tidx = np.unique(theta, return_inverse=True)
-    unq_m, midx = np.unique(m, return_inverse=True)
-
-    theta_2d = np.atleast_2d(unq_theta).T
-    m_2d = np.atleast_2d(unq_m)
+    theta_2d = np.atleast_2d(theta).T
+    m_2d = np.atleast_2d(m)
     m_pos = (m_2d >= 0).astype(int)
     m_neg = (m_2d < 0).astype(int)
     m_abs = np.abs(m_2d) * NFP
     if dt == 0:
         out = np.where(m_pos, np.cos(m_abs * theta_2d), np.sin(m_abs * theta_2d))
     else:
-        out = m_abs * (m_neg - m_pos) * fourier(unq_theta, -unq_m, NFP=NFP, dt=dt - 1)
-    # put duplicate values back in
-    out = out[tidx][:, midx]
+        out = m_abs * (m_neg - m_pos) * fourier(theta, -m, NFP=NFP, dt=dt - 1)
+
     return out
+
+
+@jit
+@jnp.vectorize
+def binom(n, k):
+    """Binomial coefficient.
+    
+    Implementation is only correct for positive integer n,k and n>=k
+    
+    Parameters
+    ----------
+    n : int, array-like
+        number of things to choose from
+    k : int, array-like
+        number of things chosen
+        
+    Returns
+    -------
+    val : int, float, array-like
+        number of possible combinations
+    """
+    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L68
+    kx = k.astype(int)
+
+    def body_fun(i, b_n):
+        b, n = b_n
+        num = n + 1 - i
+        den = i
+        return (b * num / den, n)
+
+    b, n = fori_loop(1, 1 + kx, body_fun, (1.0, n))
+    return b
+
+
+@jit
+@jnp.vectorize
+def jacobi(n, alpha, beta, x, dx=0):
+    """Jacobi polynomial evaluation
+    
+    Implementation is only correct for non-negative integer coefficients, returns 0 otherwise
+    
+    Parameters
+    ----------
+    n : int, array_like
+        Degree of the polynomial. 
+    alpha : int, array_like
+        Parameter
+    beta : int, array_like
+        Parameter
+    x : float, array_like
+        Points at which to evaluate the polynomial
+
+    Returns
+    -------
+    P : ndarray
+        Values of the Jacobi polynomial
+    """
+    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L144
+    # coefficient for derivative
+    c = (
+        gammaln(alpha + beta + n + 1 + dx)
+        - dx * jnp.log(2)
+        - gammaln(alpha + beta + n + 1)
+    )
+    c = jnp.exp(c)
+    # taking derivative is same as coeff*jacobi but for shifted n,a,b
+    n -= dx
+    alpha += dx
+    beta += dx
+
+    def body_fun(kk, d_p_a_b_x):
+        d, p, alpha, beta, x = d_p_a_b_x
+        k = kk + 1.0
+        t = 2 * k + alpha + beta
+        d = (
+            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
+        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+        p = d + p
+        return (d, p, alpha, beta, x)
+
+    d = (alpha + beta + 2) * (x - 1) / (2 * (alpha + 1))
+    p = d + 1
+    d, p, alpha, beta, x = fori_loop(
+        0, jnp.maximum(n - 1, 0).astype(int), body_fun, (d, p, alpha, beta, x)
+    )
+    out = binom(n + alpha, n) * p
+    # should be complex for n<0, but it gets replaced elsewhere so just return 0 here
+    out = jnp.where(n < 0, 0, out)
+    # other edge cases
+    out = jnp.where(n == 0, 1.0, out)
+    out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
+    return c * out
 
 
 def zernike_norm(l, m):

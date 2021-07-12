@@ -117,8 +117,8 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([np.sin(t), np.ones_like(t), np.cos(t)]).T
         correct_ders = np.array([np.cos(t), np.zeros_like(t), -np.sin(t)]).T
 
-        values = fourier(t, m, dt=0)
-        derivs = fourier(t, m, dt=1)
+        values = fourier(t[:, np.newaxis], m, dt=0)
+        derivs = fourier(t[:, np.newaxis], m, dt=1)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)

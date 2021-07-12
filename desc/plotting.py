@@ -1443,7 +1443,7 @@ def plot_logo(savepath=None, **kwargs):
     t = t.flatten()
 
     radial = zernike_radial(r[:, np.newaxis], ls, ms)
-    poloidal = fourier(t, ms)
+    poloidal = fourier(t[:, np.newaxis], ms)
     zern = radial * poloidal
     bdry = poloidal
 

@@ -376,7 +376,7 @@ class FourierSeries(Basis):
             z = z[zidx]
             n = n[nidx]
 
-        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
         if unique:
             toroidal = toroidal[zoutidx][:, noutidx]
         return toroidal
@@ -506,8 +506,8 @@ class DoubleFourierSeries(Basis):
             m = m[midx]
             n = n[nidx]
 
-        poloidal = fourier(t, m, dt=derivatives[1])
-        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
@@ -712,7 +712,7 @@ class ZernikePolynomial(Basis):
             m = m[midx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t, m, dt=derivatives[1])
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
             radial = radial[routidx][:, lmoutidx]
@@ -935,8 +935,8 @@ class FourierZernikeBasis(Basis):
             n = n[nidx]
 
         radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
-        poloidal = fourier(t, m, dt=derivatives[1])
-        toroidal = fourier(z, n, NFP=self.NFP, dt=derivatives[2])
+        poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
@@ -1236,17 +1236,16 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    theta_2d = np.atleast_2d(theta).T
-    m_2d = np.atleast_2d(m)
-    m_pos = (m_2d >= 0).astype(int)
-    m_neg = (m_2d < 0).astype(int)
-    m_abs = np.abs(m_2d) * NFP
-    if dt == 0:
-        out = np.where(m_pos, np.cos(m_abs * theta_2d), np.sin(m_abs * theta_2d))
-    else:
-        out = m_abs * (m_neg - m_pos) * fourier(theta, -m, NFP=NFP, dt=dt - 1)
+    return _fourier(theta, m, NFP, dt)
 
-    return out
+
+@jit
+@jnp.vectorize
+def _fourier(theta, m, NFP, dt):
+    m_pos = (m >= 0).astype(int)
+    m_abs = jnp.abs(m) * NFP
+    shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
+    return m_abs ** dt * jnp.sin(m_abs * theta + shift)
 
 
 @jit

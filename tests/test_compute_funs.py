@@ -1,9 +1,8 @@
 import numpy as np
 from scipy.signal import convolve2d
 
-from desc.backend import put
-from desc.grid import LinearGrid, Grid
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.grid import LinearGrid
+from desc.equilibrium import Equilibrium
 from desc.transform import Transform
 from desc.compute_funs import compute_quasisymmetry
 
@@ -464,24 +463,3 @@ def test_quasisymmetry(DummyStellarator):
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(quasisymmetry["B*grad(|B|)_z"])),
     )
-
-
-def test_compute_flux_coords(SOLOVEV):
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-
-    rho = np.linspace(0.01, 0.99, 20)
-    theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
-    zeta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
-
-    nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
-    real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
-
-    flux_coords = eq.compute_flux_coords(real_coords)
-
-    # catch difference between 0 and 2*pi
-    if flux_coords[0, 1] > np.pi:  # theta[0] = 0
-        flux_coords = put(flux_coords, (0, 1), flux_coords[0, 1] - 2 * np.pi)
-
-    np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)

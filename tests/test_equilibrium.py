@@ -2,6 +2,7 @@ import numpy as np
 from netCDF4 import Dataset
 
 from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.grid import Grid
 
 
 def test_compute_volume(DSHAPE):
@@ -81,6 +82,28 @@ def test_magnetic_axis_guess(DummyStellarator):
 
     np.testing.assert_allclose(R0_eq, R0, rtol=0, atol=1e-6)
     np.testing.assert_allclose(Z0_eq, Z0, rtol=0, atol=1e-6)
+
+
+def test_compute_theta_coords(SOLOVEV):
+
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+
+    rho = np.linspace(0.01, 0.99, 20)
+    theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
+    zeta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
+
+    nodes = np.vstack([rho, theta, zeta]).T
+    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
+    flux_coords = nodes.copy()
+    flux_coords[:, 1] += coords["lambda"]
+
+    geom_coords = np.asarray(eq.compute_theta_coords(flux_coords))
+
+    # catch difference between 0 and 2*pi
+    if geom_coords[0, 1] > np.pi:  # theta[0] = 0
+        geom_coords[0, 1] = geom_coords[0, 1] - 2 * np.pi
+
+    np.testing.assert_allclose(nodes, geom_coords, rtol=1e-5, atol=1e-5)
 
 
 # can't test booz_xform because it can't be installed by Travis

@@ -529,9 +529,9 @@ def compute_jacobian(
             + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_z"], 0), 0,)
         )
     if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
-        pass
+        raise NotImplementedError
     if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
-        pass
+        raise NotImplementedError
     if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
         data["sqrt(g)_tz"] = (
             dot(data["e_rho_tz"], cross(data["e_theta"], data["e_zeta"], 0), 0,)
@@ -784,7 +784,7 @@ def compute_contravariant_magnetic_field(
 
     # 2nd order derivatives
     if dr > 1:
-        pass
+        raise NotImplementedError
     if dt > 1:
         data["B0_tt"] = -(
             data["psi_r"]
@@ -806,9 +806,9 @@ def compute_contravariant_magnetic_field(
         data["B^zeta_zz"] = data["B0_zz"] * (1 + data["lambda_t"])
         +2 * data["B0_z"] * data["lambda_tz"] + data["B0"] * data["lambda_tzz"]
     if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
-        pass
+        raise NotImplementedError
     if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
-        pass
+        raise NotImplementedError
     if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
         data["B0_tz"] = -(
             data["psi_r"]
@@ -1006,7 +1006,7 @@ def compute_magnetic_field_magnitude(
 
     # 1st order derivatives
     if dr > 0:
-        pass
+        raise NotImplementedError
     if dt > 0:
         data["|B|_t"] = (
             data["B^theta"]
@@ -1052,7 +1052,7 @@ def compute_magnetic_field_magnitude(
 
     # 2nd order derivatives
     if dr > 1:
-        pass
+        raise NotImplementedError
     if dt > 1:
         data["|B|_tt"] = (
             data["B^theta_t"]
@@ -1188,9 +1188,9 @@ def compute_magnetic_field_magnitude(
             )
         ) / data["|B|"] - data["|B|_z"] ** 2 / data["|B|"]
     if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
-        pass
+        raise NotImplementedError
     if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
-        pass
+        raise NotImplementedError
     if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
         data["|B|_tz"] = (
             data["B^theta_z"]
@@ -1541,7 +1541,7 @@ def compute_B_dot_gradB(
 
     # 1st order derivatives
     if dr > 0:
-        pass
+        raise NotImplementedError
     if dt > 0:
         data["B*grad(|B|)_t"] = (
             data["B^theta_t"] * data["|B|_t"]

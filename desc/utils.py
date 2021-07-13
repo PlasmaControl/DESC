@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from termcolor import colored
-from desc.backend import jnp
 
 # Helper Classes -------------------------------------------------------------
 
@@ -239,7 +238,7 @@ def equals(a, b):
         a == b
 
     """
-    if isinstance(a, (np.ndarray, jnp.ndarray)):
+    if hasattr(a, "shape") and hasattr(b, "shape"):
         return a.shape == b.shape and np.allclose(a, b)
     if isinstance(a, dict):
         if a.keys() != b.keys():

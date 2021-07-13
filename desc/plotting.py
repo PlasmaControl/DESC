@@ -8,7 +8,7 @@ from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
-from desc.basis import zernike_radial, fourier
+from desc.basis import zernike_radial_poly, fourier
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -760,25 +760,16 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=colorblind_colors[2],
-            linestyle=":",
+            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=colorblind_colors[0],
+            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i],
-            Zr[:, -1, i],
-            color=colorblind_colors[1],
+            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i],
-            Zr[0, 0, i],
-            color=colorblind_colors[3],
+            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])
@@ -1435,7 +1426,7 @@ def plot_logo(savepath=None, **kwargs):
     cZ = eq[:, 4]
     zern_idx = eq[:, :3]
     ls, ms, ns = zern_idx.T
-    axis_zernike_radial = zernike_radial(np.zeros((1, 1)), ls, ms)
+    axis_zernike_radial = zernike_radial_poly(np.zeros((1, 1)), ls, ms)
     R0 = axis_zernike_radial.dot(cR)
     Z0 = axis_zernike_radial.dot(cZ)
 
@@ -1451,7 +1442,7 @@ def plot_logo(savepath=None, **kwargs):
     r = r.flatten()
     t = t.flatten()
 
-    radial = zernike_radial(r[:, np.newaxis], ls, ms)
+    radial = zernike_radial_poly(r[:, np.newaxis], ls, ms)
     poloidal = fourier(t[:, np.newaxis], ms)
     zern = radial * poloidal
     bdry = poloidal

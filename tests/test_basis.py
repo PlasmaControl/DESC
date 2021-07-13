@@ -7,8 +7,9 @@ from desc.basis import (
     polyval_vec,
     powers,
     zernike_radial,
-    fourier,
+    zernike_radial_poly,
     zernike_radial_coeffs,
+    fourier,
 )
 from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
 
@@ -40,7 +41,7 @@ class TestBasis(unittest.TestCase):
 
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=40, N=0)
-        l, m = basis.modes[::20, 0], basis.modes[::20, 1]
+        l, m = basis.modes[::40, 0], basis.modes[::40, 1]
         coeffs = zernike_radial_coeffs(l, m, exact=True)
         grid = LinearGrid(L=20)
         r = grid.nodes[:, 0]
@@ -54,11 +55,15 @@ class TestBasis(unittest.TestCase):
         mpmath.mp.dps = 15
         exactf = exact[:, 0, :].T
         exactdf = exact[:, 1, :].T
-        approxf = zernike_radial(r[:, np.newaxis], l, m)
-        approxdf = zernike_radial(r[:, np.newaxis], l, m, dr=1)
+        approx1f = zernike_radial(r[:, np.newaxis], l, m)
+        approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
+        approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
+        approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
 
-        np.testing.assert_allclose(approxf, exactf, atol=1e-12)
-        np.testing.assert_allclose(approxdf, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx1f, exactf, atol=1e-12)
+        np.testing.assert_allclose(approx1df, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx2f, exactf, atol=1e-12)
+        np.testing.assert_allclose(approx2df, exactdf, atol=1e-12)
 
     def test_powers(self):
         """Tests powers function"""
@@ -103,11 +108,15 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
         correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
 
-        values = zernike_radial(r[:, np.newaxis], l, m, 0)
-        derivs = zernike_radial(r[:, np.newaxis], l, m, 1)
+        values1 = zernike_radial(r[:, np.newaxis], l, m, 0)
+        derivs1 = zernike_radial(r[:, np.newaxis], l, m, 1)
+        values2 = zernike_radial_poly(r[:, np.newaxis], l, m, 0)
+        derivs2 = zernike_radial_poly(r[:, np.newaxis], l, m, 1)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(values1, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs1, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
     def test_fourier(self):
         """Tests fourier function"""

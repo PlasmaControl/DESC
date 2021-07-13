@@ -711,11 +711,17 @@ class ZernikePolynomial(Basis):
             )
             r = r[ridx]
             t = t[tidx]
-
             lm = lm[lmidx]
             m = m[midx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        # some logic here to use the fastest method, assuming that you're not using
+        # "unique" within jit/AD since that doesn't work
+        if unique and (np.max(modes[:, 0]) <= 26) and (len(modes) < 400):
+            radial_fun = zernike_radial_poly
+        else:
+            radial_fun = zernike_radial
+
+        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
 
         if unique:
@@ -939,7 +945,14 @@ class FourierZernikeBasis(Basis):
             m = m[midx]
             n = n[nidx]
 
-        radial = zernike_radial(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
+        # some logic here to use the fastest method, assuming that you're not using
+        # "unique" within jit/AD since that doesn't work
+        if unique and (np.max(modes[:, 0]) <= 26) and (len(modes) < 400):
+            radial_fun = zernike_radial_poly
+        else:
+            radial_fun = zernike_radial
+
+        radial = radial_fun(r[:, np.newaxis], lm[:, 0], lm[:, 1], dr=derivatives[0])
         poloidal = fourier(t[:, np.newaxis], m, dt=derivatives[1])
         toroidal = fourier(z[:, np.newaxis], n, NFP=self.NFP, dt=derivatives[2])
         if unique:
@@ -1118,8 +1131,47 @@ def zernike_radial_coeffs(l, m, exact=True):
     return c
 
 
+def zernike_radial_poly(rho, l, m, dr=0):
+    """Radial part of zernike polynomials.
+
+    Evaluates basis functions using numpy to
+    exactly compute the polynomial coefficients
+    and Horner's method for low resolution,
+    or extended precision arithmetic for high resolution.
+    Faster for low resolution, but not differentiable.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    m : ndarray of int, shape(K,)
+        azimuthal mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    coeffs = zernike_radial_coeffs(l, m)
+    lmax = np.max(l)
+    coeffs = polyder_vec(coeffs, dr)
+    # this should give accuracy of ~1e-10 in the eval'd polynomials
+    prec = int(0.4 * lmax + 6.6)
+    return polyval_vec(coeffs, rho, prec=prec).T
+
+
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
+
+    Evaluates basis functions using JAX and a stable
+    evaluation scheme based on jacobi polynomials and
+    binomial coefficients. Generally faster for L>24
+    and differentiable, but slower for low resolution.
 
     Parameters
     ----------

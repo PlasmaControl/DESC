@@ -161,6 +161,7 @@ class PowerSeriesProfile(Profile):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+        self._transform.build()
 
     @property
     def params(self):

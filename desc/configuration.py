@@ -1560,26 +1560,34 @@ class _Configuration(IOAble, ABC):
         eq_sfl.change_resolution(L, M, N)
 
         R_sfl_transform = Transform(
-            sfl_grid, eq_sfl.R_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
         )
         R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
         del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
         Z_sfl_transform = Transform(
-            sfl_grid, eq_sfl.Z_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
         )
         Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
         del Z_sfl_transform
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
         R_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.surface.R_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.R_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.surface.Z_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.Z_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
         del Z_sfl_bdry_transform
@@ -1706,7 +1714,7 @@ class _Configuration(IOAble, ABC):
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym="cos")
         else:
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym=None)
-        transform = Transform(grid, basis, build_pinv=True)
+        transform = Transform(grid, basis, build=False, build_pinv=True)
         m = basis.modes[:, 1]
         n = basis.modes[:, 2]
 

@@ -46,7 +46,7 @@ class Transform(IOAble):
         basis,
         derivs=0,
         rcond="auto",
-        build=False,
+        build=True,
         build_pinv=False,
         method="auto",
     ):

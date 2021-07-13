@@ -226,3 +226,33 @@ class TestGrid(unittest.TestCase):
         vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
 
         self.assertAlmostEqual(vol, vol_quad)
+
+    def test_repr(self):
+
+        qg = ConcentricGrid(2, 3, 4)
+        s = str(qg)
+        assert "ConcentricGrid" in s
+        assert "jacobi" in s
+        assert "L=2" in s
+        assert "M=3" in s
+        assert "N=4" in s
+
+    def test_change_resolution(self):
+
+        lg = LinearGrid(1, 2, 3)
+        lg.change_resolution(2, 3, 4)
+        assert lg.L == 2
+        assert lg.M == 3
+        assert lg.N == 4
+
+        qg = QuadratureGrid(1, 2, 3)
+        qg.change_resolution(2, 3, 4)
+        assert qg.L == 2
+        assert qg.M == 3
+        assert qg.N == 4
+
+        cg = ConcentricGrid(2, 3, 4)
+        cg.change_resolution(3, 4, 5)
+        assert cg.L == 3
+        assert cg.M == 4
+        assert cg.N == 5

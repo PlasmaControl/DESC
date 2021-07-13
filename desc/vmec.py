@@ -1247,9 +1247,11 @@ class VMECIO:
             ax[k].plot(coords["Rv_vmec"][:, :, k].T, coords["Zv_vmec"][:, :, k].T, "b-")
 
             ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
-            ax[k].plot(coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r:")
+            ax[k].plot(
+                coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r--"
+            )
             s_desc = ax[k].plot(
-                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r:"
+                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r--"
             )
 
             ax[k].axis("equal")

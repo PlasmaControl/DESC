@@ -103,9 +103,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def x0(self):
         """Return initial optimization vector before solution (ndarray)."""
-        if not hasattr(self, "_x0"):
-            self._x0 = None
-        return self._x0
+        return self.__dict__.setdefault("_x0", None)
 
     @x0.setter
     def x0(self, x0):
@@ -114,11 +112,10 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def L_grid(self):
         """Radial resolution of grid in real space (int)."""
-        if not hasattr(self, "_L_grid"):
-            self._L_grid = (
-                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
-            )
-        return self._L_grid
+        return self.__dict__.setdefault(
+            "_L_grid",
+            self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid,
+        )
 
     @L_grid.setter
     def L_grid(self, new):
@@ -130,9 +127,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def M_grid(self):
         """Poloidal resolution of grid in real space (int)."""
-        if not hasattr(self, "_M_grid"):
-            self._M_grid = 1
-        return self._M_grid
+        return self.__dict__.setdefault("_M_grid", 1)
 
     @M_grid.setter
     def M_grid(self, new):
@@ -144,9 +139,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def N_grid(self):
         """Toroidal resolution of grid in real space (int)."""
-        if not hasattr(self, "_N_grid"):
-            self._N_grid = 0
-        return self._N_grid
+        return self.__dict__.setdefault("_N_grid", 0)
 
     @N_grid.setter
     def N_grid(self, new):
@@ -158,9 +151,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def node_pattern(self):
         """Pattern for placement of nodes in curvilinear coordinates (str)."""
-        if not hasattr(self, "_node_pattern"):
-            self._node_pattern = None
-        return self._node_pattern
+        return self.__dict__.setdefault("_node_pattern", None)
 
     @property
     def transforms(self):
@@ -350,9 +341,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def objective(self):
         """Objective function currently assigned (ObjectiveFunction)."""
-        if not hasattr(self, "_objective"):
-            self._objective = None
-        return self._objective
+        return self.__dict__.setdefault("_objective", None)
 
     @objective.setter
     def objective(self, objective):
@@ -389,9 +378,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def optimizer(self):
         """Optimizer currently assigned (Optimizer)."""
-        if not hasattr(self, "_optimizer"):
-            self._optimizer = None
-        return self._optimizer
+        return self.__dict__.setdefault("_optimizer", None)
 
     @optimizer.setter
     def optimizer(self, optimizer):

@@ -89,9 +89,9 @@ def test_compute_theta_coords(SOLOVEV):
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
-    rho = np.linspace(0.01, 0.99, 20)
-    theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
-    zeta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
+    rho = np.linspace(0.01, 0.99, 200)
+    theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
+    zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
     coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))

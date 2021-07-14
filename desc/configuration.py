@@ -6,9 +6,9 @@ from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
-from desc.backend import jnp, put
+from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import unpack_state, copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
@@ -1281,7 +1281,7 @@ class _Configuration(IOAble, ABC):
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
-    def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
+    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of
         straight field-line coordinates (rho, theta*, zeta).
 
@@ -1290,6 +1290,8 @@ class _Configuration(IOAble, ABC):
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             coordinate.
+        L_lmn : ndarray
+            spectral coefficients for lambda. Defaults to self.L_lmn
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1302,9 +1304,9 @@ class _Configuration(IOAble, ABC):
             a given coordinate nan will be returned for those values
 
         """
-        rho = flux_coords[:, 0]
-        theta_star = flux_coords[:, 1]
-        zeta = flux_coords[:, 2]
+        if L_lmn is None:
+            L_lmn = self.L_lmn
+        rho, theta_star, zeta = flux_coords.T
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
         if jnp.any(rho) <= 0:
@@ -1313,48 +1315,40 @@ class _Configuration(IOAble, ABC):
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates
 
-        theta_k = theta_star
-        grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-
-        transform = Transform(
-            grid,
-            self.L_basis,
-            derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-            method="direct1",
-        )
-
+        nodes = flux_coords.copy()
+        A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
         # theta* = theta + lambda
-        theta_star_k = theta_k + transform.transform(self.L_lmn)
-        err = theta_star - theta_star_k
+        lmbda = jnp.dot(A0, L_lmn)
+        k = 0
+
+        def cond_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            theta_star_k = nodes[:, 1] + lmbda
+            err = theta_star - theta_star_k
+            return jnp.any(jnp.abs(err) > tol) & (k < maxiter)
 
         # Newton method for root finding
-        k = 0
-        while jnp.any(abs(err) > tol) and k < maxiter:
-            lmbda = transform.transform(self.L_lmn, 0, 0, 0)
-            lmbda_t = transform.transform(self.L_lmn, 0, 1, 0)
-            f = theta_star - theta_k - lmbda
+        def body_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            A1 = self.L_basis.evaluate(nodes, (0, 1, 0))
+            lmbda_t = jnp.dot(A1, L_lmn)
+            f = theta_star - nodes[:, 1] - lmbda
             df = -1 - lmbda_t
-
-            theta_k = theta_k - f / df
-
-            grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-            transform = Transform(
-                grid,
-                self.L_basis,
-                derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-                method="direct1",
-            )
-
-            theta_star_k = theta_k + transform.transform(self.L_lmn)
-            err = theta_star - theta_star_k
+            nodes = put(nodes, opsindex[:, 1], nodes[:, 1] - f / df)
+            A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
+            lmbda = jnp.dot(A0, L_lmn)
             k += 1
+            return (nodes, k, lmbda)
 
-        noconverge = abs(err) > tol
-        rho = jnp.where(noconverge, jnp.nan, rho)
-        theta_k = jnp.where(noconverge, jnp.nan, theta_k)
-        zeta = jnp.where(noconverge, jnp.nan, zeta)
+        nodes, k, lmbda = jit(while_loop, static_argnums=(0, 1))(
+            cond_fun, body_fun, (nodes, k, lmbda)
+        )
+        theta_star_k = nodes[:, 1] + lmbda
+        err = theta_star - theta_star_k
+        noconverge = jnp.abs(err) > tol
+        nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
 
-        return jnp.vstack([rho, theta_k, zeta]).T
+        return nodes
 
     def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
         """Find the flux coordinates (rho, theta, zeta) that correspond to a set of

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import warnings
 import scipy.optimize
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, jit
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
@@ -840,7 +840,7 @@ class MTanhProfile(Profile):
             )
             / w
         )
-
+        fun = jit(fun)
         ped0 = np.clip(interp1d([0.93], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         off0 = np.clip(interp1d([0.98], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         default_pmax = np.array([np.inf, np.inf, 1.02, 0.2, np.inf])

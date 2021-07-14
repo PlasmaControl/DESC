@@ -1350,7 +1350,9 @@ class _Configuration(IOAble, ABC):
 
         return nodes
 
-    def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
+    def compute_flux_coords(
+        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
+    ):
         """Find the flux coordinates (rho, theta, zeta) that correspond to a set of
         real space coordinates (R, phi, Z).
 
@@ -1358,6 +1360,8 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2d array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+        R_lmn, Z_lmn : ndarray
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
         tol : float
             Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
         maxiter : int > 0
@@ -1373,54 +1377,74 @@ class _Configuration(IOAble, ABC):
             nan will be returned for those values
 
         """
-        R = real_coords[:, 0]
-        phi = real_coords[:, 1]
-        Z = real_coords[:, 2]
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if jnp.any(R) <= 0:
-            raise ValueError("R values must be positive")
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
 
-        R0, phi0, Z0 = self.axis.compute_coordinates(grid=phi).T
-        theta = jnp.arctan2(Z - Z0, R - R0)
-        rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
-        grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
+        R, phi, Z = real_coords.T
+        R = jnp.abs(R)
 
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
+        # nearest neighbor search on coarse grid for initial guess
+        nodes = ConcentricGrid(L=20, M=10, N=0).nodes
+        AR = self.R_basis.evaluate(nodes)
+        AZ = self.Z_basis.evaluate(nodes)
+        Rg = jnp.dot(AR, R_lmn)
+        Zg = jnp.dot(AZ, Z_lmn)
+        distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
+        idx = jnp.argmin(distance, axis=1)
 
-        Rk = R_transform.transform(self.R_lmn)
-        Zk = Z_transform.transform(self.Z_lmn)
-        eR = R - Rk
-        eZ = Z - Zk
-
+        rhok = nodes[idx, 0]
+        thetak = nodes[idx, 1]
+        Rk = Rg[idx]
+        Zk = Zg[idx]
         k = 0
-        while jnp.any(((eR) ** 2 + (eZ) ** 2) > tol ** 2) and k < maxiter:
-            Rr = R_transform.transform(self.R_lmn, 1, 0, 0)
-            Rt = R_transform.transform(self.R_lmn, 0, 1, 0)
-            Zr = Z_transform.transform(self.Z_lmn, 1, 0, 0)
-            Zt = Z_transform.transform(self.Z_lmn, 0, 1, 0)
+
+        def cond_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+
+        def body_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            nodes = jnp.array([rhok, thetak, phi]).T
+            ARr = self.R_basis.evaluate(nodes, (1, 0, 0))
+            Rr = jnp.dot(ARr, R_lmn)
+            AZr = self.Z_basis.evaluate(nodes, (1, 0, 0))
+            Zr = jnp.dot(AZr, Z_lmn)
+            ARt = self.R_basis.evaluate(nodes, (0, 1, 0))
+            Rt = jnp.dot(ARt, R_lmn)
+            AZt = self.Z_basis.evaluate(nodes, (0, 1, 0))
+            Zt = jnp.dot(AZt, Z_lmn)
 
             tau = Rt * Zr - Rr * Zt
-            theta += (Zr * eR - Rr * eZ) / tau
-            rho += (Rt * eZ - Zt * eR) / tau
-            # negative rho -> rotate theta instead
-            theta = jnp.where(rho < 0, -theta % (2 * np.pi), theta % (2 * np.pi))
-            rho = jnp.clip(rho, rhomin, 1)
-
-            grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
-            R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-            Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
-
-            Rk = R_transform.transform(self.R_lmn)
-            Zk = Z_transform.transform(self.Z_lmn)
             eR = R - Rk
             eZ = Z - Zk
-            k += 1
+            thetak += (Zr * eR - Rr * eZ) / tau
+            rhok += (Rt * eZ - Zt * eR) / tau
+            # negative rho -> rotate theta instead
+            thetak = jnp.where(
+                rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
+            )
+            rhok = jnp.abs(rhok)
+            rhok = jnp.clip(rhok, rhomin, 1)
+            nodes = jnp.array([rhok, thetak, phi]).T
 
-        noconverge = (eR) ** 2 + (eZ) ** 2 > tol ** 2
-        rho = jnp.where(noconverge, jnp.nan, rho)
-        theta = jnp.where(noconverge, jnp.nan, theta)
+            AR = self.R_basis.evaluate(nodes, (0, 0, 0))
+            Rk = jnp.dot(AR, R_lmn)
+            AZ = self.Z_basis.evaluate(nodes, (0, 0, 0))
+            Zk = jnp.dot(AZ, Z_lmn)
+            k += 1
+            return (k, rhok, thetak, Rk, Zk)
+
+        k, rhok, thetak, Rk, Zk = while_loop(
+            cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
+        )
+
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        rho = jnp.where(noconverge, jnp.nan, rhok)
+        theta = jnp.where(noconverge, jnp.nan, thetak)
         phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta, phi]).T

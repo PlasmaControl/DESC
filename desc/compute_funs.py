@@ -181,7 +181,7 @@ def compute_lambda(
     if dt > 0:
         data["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
     if dz > 0:
-        data["lambda_r"] = L_transform.transform(L_lmn, 0, 0, 1)
+        data["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1)
 
     # 2nd order derivatives
     if dr > 1:

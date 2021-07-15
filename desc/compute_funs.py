@@ -48,7 +48,7 @@ def cross(a, b, axis):
 
 
 def compute_toroidal_flux(
-    Psi, i_profile, dr=0, data=None,
+    Psi, iota, dr=0, data=None,
 ):
     """Compute toroidal magnetic flux profile.
 
@@ -56,7 +56,7 @@ def compute_toroidal_flux(
     ----------
     Psi : float
         Total toroidal flux within the last closed flux surface, in Webers.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -72,7 +72,7 @@ def compute_toroidal_flux(
         data = {}
 
     # toroidal flux (Wb) divided by 2 pi
-    rho = i_profile.grid.nodes[:, 0]
+    rho = iota.grid.nodes[:, 0]
     data["psi"] = Psi * rho ** 2 / (2 * jnp.pi)
     if dr > 0:
         data["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
@@ -82,7 +82,7 @@ def compute_toroidal_flux(
 
 
 def compute_iota(
-    i_l, i_profile, dr=0, data=None,
+    i_l, iota, dr=0, data=None,
 ):
     """Compute rotational transform profile.
 
@@ -90,7 +90,7 @@ def compute_iota(
     ----------
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -105,17 +105,17 @@ def compute_iota(
     if data is None:
         data = {}
 
-    data["iota"] = i_profile.compute(i_l, dr=0)
+    data["iota"] = iota.compute(i_l, dr=0)
     if dr > 0:
-        data["iota_r"] = i_profile.compute(i_l, dr=1)
+        data["iota_r"] = iota.compute(i_l, dr=1)
     if dr > 1:
-        data["iota_rr"] = i_profile.compute(i_l, dr=2)
+        data["iota_rr"] = iota.compute(i_l, dr=2)
 
     return data
 
 
 def compute_pressure(
-    p_l, p_profile, dr=0, data=None,
+    p_l, pressure, dr=0, data=None,
 ):
     """Compute pressure profile.
 
@@ -123,7 +123,7 @@ def compute_pressure(
     ----------
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
-    p_profile : Profile
+    pressure : Profile
         Transforms p_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -138,9 +138,9 @@ def compute_pressure(
     if data is None:
         data = {}
 
-    data["p"] = p_profile.compute(p_l, dr=0)
+    data["p"] = pressure.compute(p_l, dr=0)
     if dr > 0:
-        data["p_r"] = p_profile.compute(p_l, dr=1)
+        data["p_r"] = pressure.compute(p_l, dr=1)
 
     return data
 
@@ -677,7 +677,7 @@ def compute_contravariant_magnetic_field(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     dr=0,
     dt=0,
     dz=0,
@@ -703,7 +703,7 @@ def compute_contravariant_magnetic_field(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -720,8 +720,8 @@ def compute_contravariant_magnetic_field(
         component of the magnetic field, differentiated wrt y.
 
     """
-    data = compute_toroidal_flux(Psi, i_profile, dr=dr + 1, data=data)
-    data = compute_iota(i_l, i_profile, dr=dr, data=data)
+    data = compute_toroidal_flux(Psi, iota, dr=dr + 1, data=data)
+    data = compute_iota(i_l, iota, dr=dr, data=data)
     data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dr + 1, dz=dz + 1, data=data)
     data = compute_jacobian(
         R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data,
@@ -838,7 +838,7 @@ def compute_covariant_magnetic_field(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     dr=0,
     dt=0,
     dz=0,
@@ -864,7 +864,7 @@ def compute_covariant_magnetic_field(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -890,7 +890,7 @@ def compute_covariant_magnetic_field(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=dr,
         dt=dt,
         dz=dz,
@@ -936,7 +936,7 @@ def compute_magnetic_field_magnitude(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     dr=0,
     dt=0,
     dz=0,
@@ -962,7 +962,7 @@ def compute_magnetic_field_magnitude(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -988,7 +988,7 @@ def compute_magnetic_field_magnitude(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=dr,
         dt=dt,
         dz=dz,
@@ -1272,7 +1272,7 @@ def compute_magnetic_pressure_gradient(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     data=None,
 ):
     """Compute magnetic pressure gradient.
@@ -1295,7 +1295,7 @@ def compute_magnetic_pressure_gradient(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
 
     Returns
@@ -1315,7 +1315,7 @@ def compute_magnetic_pressure_gradient(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=1,
         dt=1,
         dz=1,
@@ -1374,7 +1374,7 @@ def compute_magnetic_tension(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     data=None,
 ):
     """Compute magnetic tension.
@@ -1397,7 +1397,7 @@ def compute_magnetic_tension(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
 
     Returns
@@ -1417,7 +1417,7 @@ def compute_magnetic_tension(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=0,
         dt=1,
         dz=1,
@@ -1477,7 +1477,7 @@ def compute_B_dot_gradB(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     dr=0,
     dt=0,
     dz=0,
@@ -1503,7 +1503,7 @@ def compute_B_dot_gradB(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -1528,7 +1528,7 @@ def compute_B_dot_gradB(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=0,
         dt=2,
         dz=2,
@@ -1569,7 +1569,7 @@ def compute_contravariant_current_density(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
+    iota,
     dr=0,
     dt=0,
     dz=0,
@@ -1595,7 +1595,7 @@ def compute_contravariant_current_density(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
         Order of derivative wrt the radial coordinate, rho.
@@ -1621,7 +1621,7 @@ def compute_contravariant_current_density(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=dr + 1,
         dt=dt + 1,
         dz=dz + 1,
@@ -1650,8 +1650,8 @@ def compute_force_error(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
-    p_profile,
+    iota,
+    pressure,
     data=None,
 ):
     """Compute force error components.
@@ -1676,9 +1676,9 @@ def compute_force_error(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
-    p_profile : Profile
+    pressure : Profile
         Transforms p_l coefficients to real space.
 
     Returns
@@ -1689,7 +1689,7 @@ def compute_force_error(
         force error.
 
     """
-    data = compute_pressure(p_l, p_profile, dr=1, data=data)
+    data = compute_pressure(p_l, pressure, dr=1, data=data)
     data = compute_contravariant_current_density(
         R_lmn,
         Z_lmn,
@@ -1699,7 +1699,7 @@ def compute_force_error(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
+        iota,
         dr=0,
         dt=0,
         dz=0,
@@ -1725,8 +1725,8 @@ def compute_force_error_magnitude(
     R_transform,
     Z_transform,
     L_transform,
-    i_profile,
-    p_profile,
+    iota,
+    pressure,
     data=None,
 ):
     """Compute force error magnitude.
@@ -1751,9 +1751,9 @@ def compute_force_error_magnitude(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    i_profile : Profile
+    iota : Profile
         Transforms i_l coefficients to real space.
-    p_profile : Profile
+    pressure : Profile
         Transforms p_l coefficients to real space.
 
     Returns
@@ -1772,8 +1772,8 @@ def compute_force_error_magnitude(
         R_transform,
         Z_transform,
         L_transform,
-        i_profile,
-        p_profile,
+        iota,
+        pressure,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(

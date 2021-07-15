@@ -7,7 +7,7 @@ from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
 from desc.backend import jnp, put
-from desc.io import IOAble
+from desc.io import IOAble, load
 from desc.utils import unpack_state, copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
@@ -17,6 +17,8 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
+    Surface,
+    Curve,
 )
 from desc.basis import (
     PowerSeries,
@@ -102,7 +104,6 @@ class _Configuration(IOAble, ABC):
                 L_lmn : ndarray, spectral coefficients of lambda
 
         """
-        self.inputs = inputs
         try:
             self._Psi = float(inputs["Psi"])
             self._NFP = inputs["NFP"]
@@ -185,14 +186,14 @@ class _Configuration(IOAble, ABC):
             try:
                 self._R_lmn = inputs["R_lmn"]
             except:
-                self._R_lmn = initial_guess(
+                self._R_lmn = self._initial_guess_surface(
                     self.R_basis, self.Rb_lmn, self.surface.R_basis, axis[:, 0:-1]
                 )
             # check if Z is provided
             try:
                 self._Z_lmn = inputs["Z_lmn"]
             except:
-                self._Z_lmn = initial_guess(
+                self._Z_lmn = self._initial_guess_surface(
                     self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis[:, (0, -1)]
                 )
             # check if lambda is provided
@@ -205,6 +206,190 @@ class _Configuration(IOAble, ABC):
         # this makes sure the axis has the correct coefficients
         self.axis.change_resolution(self.N)
         self._axis = self.axis
+
+    def set_initial_guess(self, *args):
+        """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
+
+        Parameters
+        ----------
+        args : 
+            either:
+              - No arguments, in which case eq.surface will be used
+              - Another Surface object which will be scaled to generate the initial guess
+                (optionally a Curve object may be supplied as an iniital guess for the axis)
+              - Another Equilibrium, where its flux surfaces will be used as an initial guess
+              - File path to VMEC or DESC equilibrium, which will be loaded and used
+                as the initial guess
+        """
+        nargs = len(args)
+        if nargs > 2:
+            raise ValueError(
+                "set_initial_guess should be called with 0,1 or 2 arguments"
+            )
+        if nargs == 0:
+            if hasattr(self, "_surface"):
+                # use whatever surface is already assigned
+                if hasattr(self, "_axis"):
+                    axis = None  # TODO: proper guess from axis object
+                else:
+                    axis = None
+                self._R_lmn = self._initial_guess_surface(
+                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis
+                )
+                self._Z_lmn = self._initial_guess_surface(
+                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis
+                )
+                self._L_lmn = np.zeros(self.L_basis.num_modes)
+            else:
+                raise ValueError(
+                    "set_initial_guess called with no arguments but no surface is assigned"
+                )
+        else:  # nargs > 0
+            if isinstance(args[0], Surface):
+                surface = args[0]
+                if nargs > 1:
+                    if isinstance(args[1], Curve):
+                        axis = None  # TODO: proper guess from axis object
+                    else:
+                        raise TypeError(
+                            "Don't know how to initialize from object type {}".format(
+                                type(args[1])
+                            )
+                        )
+                else:
+                    axis = None
+                # TODO: check type of surface / type of BC
+                self._R_lmn = self._initial_guess_surface(
+                    self.R_basis, surface.Rb_lmn, surface.R_basis, axis
+                )
+                self._Z_lmn = self._initial_guess_surface(
+                    self.Z_basis, surface.Zb_lmn, surface.Z_basis, axis
+                )
+                self._L_lmn = np.zeros(self.L_basis.num_modes)
+            elif isinstance(args[0], _Configuration):
+                eq = args[0]
+                if nargs > 1:
+                    raise ValueError(
+                        "set_initial_guess got unknown additional argument {}".format(
+                            args[1]
+                        )
+                    )
+                self._R_lmn = copy_coeffs(
+                    eq.R_lmn, eq.R_basis.modes, self.R_basis.modes
+                )
+                self._Z_lmn = copy_coeffs(
+                    eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes
+                )
+                self._L_lmn = copy_coeffs(
+                    eq.L_lmn, eq.L_basis.modes, self.L_basis.modes
+                )
+            elif isinstance(args[0], str):
+                # from file
+                path = args[0]
+                file_format = None
+                if nargs > 1:
+                    if isinstance(args[1], str):
+                        file_format = args[1]
+                    else:
+                        raise ValueError(
+                            "set_initial_guess got unknown additional argument {}".format(
+                                args[1]
+                            )
+                        )
+                try:  # is it desc?
+                    eq = load(path, file_format)
+                except:
+                    try:  # maybe its vmec
+                        from desc.vmec import VMECIO
+
+                        eq = VMECIO.load(path)
+                    except:  # its neither
+                        raise ValueError(
+                            "Could not load equilibrium from path {}, please make sure it is a valid DESC or VMEC equilibrium".format(
+                                path
+                            )
+                        )
+                if not isinstance(eq, _Configuration):
+                    if hasattr(eq, "equilibria"):  # its a family!
+                        eq = eq[-1]
+                    else:
+                        raise TypeError(
+                            "Cannot initialize equilibrium from loaded object of type {}".format(
+                                type(eq)
+                            )
+                        )
+                self._R_lmn = copy_coeffs(
+                    eq.R_lmn, eq.R_basis.modes, self.R_basis.modes
+                )
+                self._Z_lmn = copy_coeffs(
+                    eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes
+                )
+                self._L_lmn = copy_coeffs(
+                    eq.L_lmn, eq.L_basis.modes, self.L_basis.modes
+                )
+            else:
+                raise ValueError(
+                    "Can't initialize equilibrium from args {}".format(args)
+                )
+
+    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode="lcfs"):
+        """Create an initial guess from the boundary coefficients and magnetic axis guess.
+     
+        Parameters
+        ----------
+        x_basis : FourierZernikeBais
+            basis of the flux surfaces (for R, Z, or Lambda).
+        b_lmn : ndarray, shape(b_basis.num_modes,)
+            vector of boundary coefficients associated with b_basis.
+        b_basis : Basis
+            basis of the boundary surface (for Rb or Zb)
+        axis : ndarray, shape(num_modes,2)
+            coefficients of the magnetic axis. axis[i, :] = [n, x0].
+            Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
+        mode : str
+            One of 'lcfs', 'poincare'.
+            Whether the boundary condition is specified by the last closed flux surface
+            (rho=1) or the Poincare section (zeta=0).
+     
+        Returns
+        -------
+        x_lmn : ndarray
+            vector of flux surface coefficients associated with x_basis.
+     
+        """
+        x_lmn = np.zeros((x_basis.num_modes,))
+
+        if mode == "lcfs":
+            if axis is None:
+                axidx = np.where(b_basis.modes[:, 1] == 0)[0]
+                axis = np.hstack([b_basis.modes[axidx, 2], b_lmn[axidx]])
+            for k, (l, m, n) in enumerate(b_basis.modes):
+                # index of basis mode with lowest radial power (l = |m|)
+                idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+                if m == 0:  # magnetic axis only affects m=0 modes
+                    # index of basis mode with second lowest radial power (l = |m| + 2)
+                    idx2 = np.where(
+                        (x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1)
+                    )[0]
+                    ax = np.where(axis[:, 0] == n)[0]
+                    if ax.size:
+                        a_n = axis[ax[0], 1]  # use provided axis guess
+                    else:
+                        a_n = b_lmn[k]  # use boundary centroid as axis
+                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2
+                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2
+                else:
+                    x_lmn[idx0] = b_lmn[k]
+
+        elif mode == "poincare":
+            for k, (l, m, n) in enumerate(b_basis.modes):
+                idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
+                x_lmn[idx] = b_lmn[k]
+
+        else:
+            raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
+
+        return x_lmn
 
     def _set_basis(self):
 
@@ -367,7 +552,7 @@ class _Configuration(IOAble, ABC):
     @x.setter
     def x(self, x):
         self._x = x
-        self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
+        self.R_lmn, self.Z_lmn, self.L_lmn = unpack_state(
             self.x, self.R_basis.num_modes, self.Z_basis.num_modes
         )
 
@@ -378,7 +563,7 @@ class _Configuration(IOAble, ABC):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        self._R_lmn = R_lmn
+        self._R_lmn[:] = R_lmn
         self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
@@ -388,7 +573,7 @@ class _Configuration(IOAble, ABC):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        self._Z_lmn = Z_lmn
+        self._Z_lmn[:] = Z_lmn
         self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
@@ -398,7 +583,7 @@ class _Configuration(IOAble, ABC):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        self._L_lmn = L_lmn
+        self._L_lmn[:] = L_lmn
         self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
@@ -1743,58 +1928,3 @@ class _Configuration(IOAble, ABC):
         if filename is not None:
             b.write_boozmn(filename)
         return b
-
-
-def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
-    """Create an initial guess from the boundary coefficients and magnetic axis guess.
-
-    Parameters
-    ----------
-    x_basis : FourierZernikeBais
-        basis of the flux surfaces (for R, Z, or Lambda).
-    b_lmn : ndarray, shape(b_basis.num_modes,)
-        vector of boundary coefficients associated with b_basis.
-    b_basis : Basis
-        basis of the boundary surface (for Rb or Zb)
-    axis : ndarray, shape(num_modes,2)
-        coefficients of the magnetic axis. axis[i, :] = [n, x0].
-        Only used for 'lcfs' boundary mode.
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
-
-    Returns
-    -------
-    x_lmn : ndarray
-        vector of flux surface coefficients associated with x_basis.
-
-    """
-    x_lmn = np.zeros((x_basis.num_modes,))
-
-    if mode == "lcfs":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            # index of basis mode with lowest radial power (l = |m|)
-            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:  # magnetic axis only affects m=0 modes
-                # index of basis mode with second lowest radial power (l = |m| + 2)
-                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                ax = np.where(axis[:, 0] == n)[0]
-                if ax.size:
-                    a_n = axis[ax[0], 1]  # use provided axis guess
-                else:
-                    a_n = b_lmn[k]  # use boundary centroid as axis
-                x_lmn[idx0] = (b_lmn[k] + a_n) / 2
-                x_lmn[idx2] = (b_lmn[k] - a_n) / 2
-            else:
-                x_lmn[idx0] = b_lmn[k]
-
-    elif mode == "poincare":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
-            x_lmn[idx] = b_lmn[k]
-
-    else:
-        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-    return x_lmn

@@ -2,108 +2,65 @@ import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 import warnings
+from scipy.constants import mu_0
 
 from desc.backend import jnp, jit, use_jax
 from desc.utils import unpack_state, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
+from desc.grid import QuadratureGrid
+from desc.transform import Transform
 from desc.compute_funs import (
-    compute_force_error_magnitude,
-    compute_energy,
-    compute_quasisymmetry,
+    compute_pressure,
+    compute_jacobian,
+    compute_magnetic_field_magnitude,
 )
 
 __all__ = [
-    "ForceErrorNodes",
-    "ForceErrorGalerkin",
-    "EnergyVolIntegral",
+    "Energy",
     "get_objective_function",
 ]
 
 
-class ObjectiveFunction(IOAble, ABC):
-    """Objective function used in the optimization of an Equilibrium.
+class ObjectiveFunction(IOAble):
+    """Objective function comprised of one or more Objectives."""
 
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-            linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
+    _io_attrs_ = ["objectives", "constraints"]
 
-    """
+    def __init__(self, objectives, constraints, eq=None, use_jit=True):
+        """Initialize an Objective Function.
 
-    _io_attrs_ = [
-        "R_transform",
-        "Z_transform",
-        "L_transform",
-        "p_profile",
-        "i_profile",
-        "BC_constraint",
-        "use_jit",
-    ]
+        Parameters
+        ----------
+        objectives : Objective, tuple
+            List of objectives to be targeted during optimization.
+        constraints : BoundaryCondition
+            Boundary condition.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
 
-    arg_names = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
+        """
+        if not isinstance(objectives, tuple):
+            objectives = (objectives,)
+        # TODO: generalize constraints to be Objectives like "objectives"
 
-    def __init__(
-        self,
-        R_transform,
-        Z_transform,
-        L_transform,
-        p_profile,
-        i_profile,
-        BC_constraint,
-        use_jit=True,
-    ):
+        self._objectives = objectives
+        self._constraints = constraints
+        self._use_jit = use_jit
+        self._built = False
+        self._compiled = False
 
-        self.R_transform = R_transform
-        self.Z_transform = Z_transform
-        self.L_transform = L_transform
-        self.p_profile = p_profile
-        self.i_profile = i_profile
-        self.BC_constraint = BC_constraint
-        self.use_jit = use_jit
-        self._set_up()
+        self._dim_x = self._constraints.dimy
+        self._dim_f = 0
+        for obj in self._objectives:
+            self._dim_f += obj.dim_f
 
-    def _set_up(self):
-        self.dimx = (
-            self.R_transform.num_modes
-            + self.Z_transform.num_modes
-            + self.L_transform.num_modes
-        )
-        self.dimy = self.dimx if self.BC_constraint is None else self.BC_constraint.dimy
-        self.dimf = self.R_transform.num_nodes + self.Z_transform.num_nodes
-        self._check_transforms()
-        self.set_derivatives(self.use_jit)
-        self.compiled = False
-        self.built = False
-        if not self.use_jit:
-            self.compiled = True
+        self.set_derivatives(self._use_jit)
 
-    def _check_transforms(self):
-        """Make sure transforms can compute the correct derivatives."""
-        if not all(
-            (self.derivatives[:, None] == self.R_transform.derivatives).all(-1).any(-1)
-        ):
-            self.R_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.Z_transform.derivatives).all(-1).any(-1)
-        ):
-            self.Z_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.L_transform.derivatives).all(-1).any(-1)
-        ):
-            self.L_transform.change_derivatives(self.derivatives, build=False)
+        if eq is not None:
+            self.build(eq)
 
     def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.
@@ -111,64 +68,173 @@ class ObjectiveFunction(IOAble, ABC):
         Parameters
         ----------
         use_jit : bool, optional
-            whether to just-in-time compile the objective and derivatives
+            Whether to just-in-time compile the objective and derivatives.
 
         """
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-
         self._hess = Derivative(
             self.compute_scalar,
             mode="hess",
             use_jit=use_jit,
             block_size=block_size,
-            shape=(self.dimy, self.dimy),
+            shape=(self._dim_x, self._dim_x),
         )
         self._jac = Derivative(
             self.compute,
             mode="fwd",
             use_jit=use_jit,
             block_size=block_size,
-            shape=(self.dimf, self.dimy),
+            shape=(self._dim_f, self._dim_x),
         )
 
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
 
-    def build(self, rebuild=False, verbose=1):
-        """Precompute the transform matrices to be used in optimization
+    def build(self, eq, verbose=1):
+        """Precompute the transforms.
 
         Parameters
         ----------
-        rebuild : bool
-            whether to force recalculation of transforms that have already been built
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
         verbose : int, optional
-            level of output
+            Level of output.
+
         """
-        if self.built and not rebuild:
-            return
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-        if not self.R_transform.built:
-            self.R_transform.build()
-        if not self.Z_transform.built:
-            self.Z_transform.build()
-        if not self.L_transform.built:
-            self.L_transform.build()
-        if hasattr(self.p_profile, "_transform") and not (
-            self.p_profile._transform.built
-        ):
-            self.p_profile._transform.build()
-        if hasattr(self.i_profile, "_transform") and not (
-            self.i_profile._transform.built
-        ):
-            self.i_profile._transform.build()
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-        self.built = True
+        self._nR = eq.R_basis.num_modes
+        self._nZ = eq.Z_basis.num_modes
+
+        for obj in self._objectives:
+            if not obj.built:
+                if verbose > 0:
+                    print("Building objective: " + obj.name)
+                obj.build(eq, verbose=verbose)
+
+        self._built = True
+
+    # XXX: maybe have a method to set which variables are free/fixed for optimization?
+
+    # TODO: use 'target' & 'weight'
+    # TODO: generalize params to (x, **kwargs)
+    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
+        """Compute the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector of optimization variables.
+        Rb_lmn : ndarray
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : float, ndarray
+            Objective function value(s).
+
+        """
+        # x is really 'y', need to recover full state vector
+        x = self._constraints.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        R_lmn, Z_lmn, L_lmn = unpack_state(x, self._nR, self._nZ)
+
+        kwargs = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "Rb_lmn": Rb_lmn,
+            "Zb_lmn": Zb_lmn,
+            "i_l": i_l,
+            "p_l": p_l,
+            "Psi": Psi,
+        }
+        f = jnp.array([obj.compute(**kwargs) for obj in self._objectives])
+        return jnp.concatenate(f)
+
+    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
+        """Compute the scalar form of the objective.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector of optimization variables.
+        Rb_lmn : ndarray
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : float, ndarray
+            Objective function value(s).
+
+        """
+        # x is really 'y', need to recover full state vector
+        x = self._constraints.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        R_lmn, Z_lmn, L_lmn = unpack_state(x, self._nR, self._nZ)
+
+        kwargs = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "Rb_lmn": Rb_lmn,
+            "Zb_lmn": Zb_lmn,
+            "i_l": i_l,
+            "p_l": p_l,
+            "Psi": Psi,
+        }
+        f = jnp.array([obj.compute_scalar(**kwargs) for obj in self._objectives])
+        return jnp.sum(f)
+
+    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
+        """Print the value(s) of the objective.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector of optimization variables.
+        Rb_lmn : ndarray
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        """
+        # x is really 'y', need to recover full state vector
+        x = self._constraints.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        R_lmn, Z_lmn, L_lmn = unpack_state(x, self._nR, self._nZ)
+
+        kwargs = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "Rb_lmn": Rb_lmn,
+            "Zb_lmn": Zb_lmn,
+            "i_l": i_l,
+            "p_l": p_l,
+            "Psi": Psi,
+        }
+        for obj in self._objectives:
+            obj.callback(**kwargs)
+        return None
 
     def compile(self, x, args, verbose=1, mode="auto"):
         """Call the necessary functions to ensure the function is compiled.
@@ -190,7 +256,7 @@ class ObjectiveFunction(IOAble, ABC):
         if not hasattr(self, "_grad"):
             self.set_derivatives()
         if not use_jax:
-            self.compiled = True
+            self._compiled = True
             return
 
         timer = Timer()
@@ -236,41 +302,7 @@ class ObjectiveFunction(IOAble, ABC):
         timer.stop("Total compilation time")
         if verbose > 1:
             timer.disp("Total compilation time")
-        self.compiled = True
-
-    @property
-    @abstractmethod
-    def scalar(self):
-        """Whether default "compute" method is a scalar or vector (bool)."""
-
-    @property
-    @abstractmethod
-    def name(self):
-        """Name of objective function (str)."""
-
-    @property
-    @abstractmethod
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-
-    @abstractmethod
-    def compute(self, *args):
-        """Compute the objective function.
-
-        Parameters
-        ----------
-        args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-
-        """
-
-    @abstractmethod
-    def compute_scalar(self, *args):
-        """Compute the scalar form of the objective."""
-
-    @abstractmethod
-    def callback(self, *args):
-        """Print the value of the objective."""
+        self._compiled = True
 
     def grad_x(self, *args):
         """Compute gradient vector of scalar form of the objective wrt to x."""
@@ -285,50 +317,48 @@ class ObjectiveFunction(IOAble, ABC):
         return self._jac.compute(*args)
 
     def jvp(self, argnum, v, *args):
-        """Compute jacobian-vector product of the objective function.
+        """Compute Jacobian-vector product of the objective function.
 
         Eg, df/dx*v
 
         Parameters
         ----------
         argnum : int or tuple of int
-            integer describing which argument of the objective should be differentiated.
+            Integer describing which argument of the objective should be differentiated.
         v : ndarray or tuple of ndarray
-            vector to multiply the jacobian matrix by, one per argnum
+            Vector to multiply the Jacobian matrix by, one per argnum.
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+            List of arguments to the objective function.
 
         Returns
         -------
         df : ndarray
-            Jacobian vector product, summed over different argnums
+            Jacobian-vector product.
 
         """
-        f = Derivative.compute_jvp(self.compute, argnum, v, *args)
-        return f
+        return Derivative.compute_jvp(self.compute, argnum, v, *args)
 
     def jvp2(self, argnum1, argnum2, v1, v2, *args):
-        """Compute 2nd derivative jacobian-vector product of the objective function.
+        """Compute 2nd derivative Jacobian-vector product of the objective function.
 
         Eg, d^2f/dx^2*v1*v2
 
         Parameters
         ----------
         argnum1, argnum2 : int or tuple of int
-            integer describing which argument of the objective should be differentiated.
+            Integer describing which argument of the objective should be differentiated.
         v1, v2 : ndarray or tuple of ndarray
-            vector to multiply the jacobian matrix by, one per argnum
+            Vector to multiply the Jacobian matrix by, one per argnum.
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+            List of arguments to the objective function.
 
         Returns
         -------
         d2f : ndarray
-            Jacobian vector product
+            Jacobian-vector product.
 
         """
-        f = Derivative.compute_jvp2(self.compute, argnum1, argnum2, v1, v2, *args)
-        return f
+        return Derivative.compute_jvp2(self.compute, argnum1, argnum2, v1, v2, *args)
 
     def jvp3(self, argnum1, argnum2, argnum3, v1, v2, v3, *args):
         """Compute 3rd derivative jacobian-vector product of the objective function.
@@ -338,22 +368,21 @@ class ObjectiveFunction(IOAble, ABC):
         Parameters
         ----------
         argnum1, argnum2, argnum2 : int or tuple of int
-            integer describing which argument of the objective should be differentiated.
+            Integer describing which argument of the objective should be differentiated.
         v1, v2, v3 : ndarray or tuple of ndarray
-            vector to multiply the jacobian matrix by, one per argnum
+            Vector to multiply the Jacobian matrix by, one per argnum.
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+            List of arguments to the objective function.
 
         Returns
         -------
         d3f : ndarray
-            Jacobian vector product
+            Jacobian-vector product.
 
         """
-        f = Derivative.compute_jvp3(
+        return Derivative.compute_jvp3(
             self.compute, argnum1, argnum2, argnum3, v1, v2, v3, *args
         )
-        return f
 
     def derivative(self, argnums, *args):
         """Compute arbitrary derivatives of the objective function.
@@ -361,7 +390,7 @@ class ObjectiveFunction(IOAble, ABC):
         Parameters
         ----------
         argnums : int, str, tuple
-            integer or str or tuple of integers/strings describing which arguments
+            Integer or str or tuple of integers/strings describing which arguments
             of the objective should be differentiated.
             Passing a tuple with multiple values will compute a higher order derivative.
             Eg, argnums=(0,0) would compute the 2nd derivative with respect to the
@@ -369,12 +398,12 @@ class ObjectiveFunction(IOAble, ABC):
             derivative, first with respect to the third argument and then with
             respect to the fifth.
         args : list
-            (x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+            List of arguments to the objective function.
 
         Returns
         -------
         df : ndarray
-            specified derivative of the objective
+            Specified derivative of the objective.
 
         """
         if not isinstance(argnums, tuple):
@@ -397,558 +426,485 @@ class ObjectiveFunction(IOAble, ABC):
 
         return f(*args).reshape(tuple(dims))
 
+    @property
+    def use_jit(self):
+        """bool: Whether to just-in-time compile the objective and derivatives."""
+        return self._use_jit
 
-class ForceErrorGalerkin(ObjectiveFunction):
-    """Minimizes spectral coefficients of force balance residual.
+    @property
+    def compiled(self):
+        """bool: Whether the functions have been compiled."""
+        return self._compiled
 
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
+    @property
+    def dim_x(self):
+        """int: Number of optimization variables."""
+        return self._dim_x
 
-    """
+    @property
+    def dim_f(self):
+        """int: Number of objective equations."""
+        return self._dim_f
 
-    def __init__(
-        self,
-        R_transform,
-        Z_transform,
-        L_transform,
-        p_profile,
-        i_profile,
-        BC_constraint,
-        use_jit=True,
-    ):
 
-        super().__init__(
-            R_transform,
-            Z_transform,
-            L_transform,
-            p_profile,
-            i_profile,
-            BC_constraint,
-            use_jit,
-        )
+class _Objective(IOAble, ABC):
+    """Objective (or constraint) used in the optimization of an Equilibrium."""
 
-        if self.R_transform.grid.node_pattern != "quad":
+    _io_attrs_ = [
+        "grid",
+        "target",
+        "weight",
+    ]
+
+    def __init__(self, eq=None, grid=None, target=0, weight=1):
+        """Initialize an Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray
+            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes
+            to evaluate at.
+        target : float, ndarray
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+
+        """
+        self._grid = grid
+        self._target = target
+        self._weight = weight
+        self._built = False
+
+        if self.scalar:
+            self._dim_f = 1
+        else:
+            self._dim_f = None
+
+        if eq is not None:
+            self.build(eq, self._grid)
+
+    @property
+    def grid(self):
+        """Grid: Collocation grid containing the nodes to evaluate at."""
+        return self._grid
+
+    @property
+    def target(self):
+        """float: Target value(s) of the objective."""
+        return self._target
+
+    @target.setter
+    def target(self, target):
+        self._target = target
+
+    @property
+    def weight(self):
+        """float: Weighting to apply to the Objective, relative to other Objectives."""
+        return self._weight
+
+    @weight.setter
+    def weight(self, weight):
+        self._weight = weight
+
+    @property
+    def built(self):
+        """bool: Whether the transforms have been precomputed."""
+        return self._built
+
+    @property
+    def dim_f(self):
+        """int: Number of objective equations."""
+        return self._dim_f
+
+    @abstractmethod
+    def build(self, eq, grid=None, verbose=1):
+        """Precompute the transforms."""
+
+    @abstractmethod
+    def compute(self, **kwargs):
+        """Compute the objective function."""
+
+    @abstractmethod
+    def compute_scalar(self, **kwargs):
+        """Compute the scalar form of the objective."""
+
+    @abstractmethod
+    def callback(self, **kwargs):
+        """Print the value(s) of the objective."""
+
+    @property
+    @abstractmethod
+    def scalar(self):
+        """Whether default "compute" method is a scalar or vector (bool)."""
+
+    @property
+    @abstractmethod
+    def name(self):
+        """Name of objective function (str)."""
+
+
+class Volume(_Objective):
+    """Plasma volume."""
+
+    def __init__(self, eq=None, grid=None, target=0, weight=1, gamma=0):
+        """Initialize a Volume Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray
+            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes
+            to evaluate at.
+        target : float, ndarray
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+
+        """
+        super().__init__(eq=eq, grid=grid, target=target, weight=weight)
+
+        if self._grid is not None and self._grid.node_pattern != "quad":
             warnings.warn(
                 colored(
-                    "Galerkin method requires 'quad' pattern nodes, "
-                    + "force error calculated will be incorrect",
+                    "Volume objective requires 'quad' node pattern, "
+                    + "integration will be incorrect.",
                     "yellow",
                 )
             )
 
-    @property
-    def scalar(self):
-        """Wether default "compute" method is a scalar or vector (bool)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "galerkin"
-
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        # TODO: different derivatives for R,Z,L,p,i ?
-        # old axis derivatives
-        # axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [2, 0, 0],
-                [0, 2, 0],
-                [0, 0, 2],
-                [1, 1, 0],
-                [1, 0, 1],
-                [0, 1, 1],
-            ]
-        )
-        return derivatives
-
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute spectral coefficients of force balance residual by quadrature.
+    def build(self, eq, grid=None, verbose=1):
+        """Precompute the transforms.
 
         Parameters
         ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray
+            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes
+            to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=1, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=1, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn):
+        """Compute plasma volume.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
 
         Returns
         -------
-        f : ndarray
-            force error in radial and helical directions at each node
+        V : float
+            Plasma volume, in cubic meters.
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        data = compute_jacobian(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        V = jnp.sum(jnp.abs(data["sqrt(g)"]) * self._grid.weights)
+        return V
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-
-        f_rho = self.R_transform.project(
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = self.Z_transform.project(
-            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-        )
-
-        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
-        return residual
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the integral of the force balance residual by quadrature.
-
-        eg int(`|F_R|` + `|F_Z|`)
+    def compute(self, R_lmn, Z_lmn, **kwargs):
+        """Compute plasma volume.
 
         Parameters
         ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
 
         Returns
         -------
-        f : float
-            total force balance error
+        V : float
+            Plasma volume, in cubic meters.
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        V = self._compute(R_lmn, Z_lmn)
+        return jnp.atleast_1d((V - self._target) * self._weight)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-        f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
-        return f
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the integral errors for toroidal components of the force balance.
+    def compute_scalar(self, R_lmn, Z_lmn, **kwargs):
+        """Compute plasma volume.
 
         Parameters
         ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+
+        Returns
+        -------
+        V : float
+            Plasma volume, in cubic meters.
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        return self.compute(R_lmn, Z_lmn)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Print plamsa volume.
 
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
 
-        weights = self.R_transform.grid.weights
-
-        f_rho = jnp.sum(
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = jnp.sum(
-            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-        )
-        f_tot = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
-
-        print(
-            "int(|F|): {:10.3e}  ".format(f_tot)
-            + "int(|F_rho|): {:10.3e}  int(|F_beta|): {:10.3e}".format(f_rho, f_beta)
-        )
+        """
+        V = self._compute(R_lmn, Z_lmn)
+        print("Plasma volume: {:10.3e} (m^3)".format(V))
         return None
-
-
-class ForceErrorNodes(ObjectiveFunction):
-    """Minimizes equilibrium force balance error in physical space.
-
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
-
-    """
 
     @property
     def scalar(self):
         """Whether default "compute" method is a scalar or vector (bool)."""
-        return False
+        return True
 
     @property
     def name(self):
         """Name of objective function (str)."""
-        return "force"
+        return "volume"
 
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        # TODO: different derivatives for R,Z,L,p,i ?
-        # old axis derivatives
-        # axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [2, 0, 0],
-                [0, 2, 0],
-                [0, 0, 2],
-                [1, 1, 0],
-                [1, 0, 1],
-                [0, 1, 1],
-            ]
-        )
-        return derivatives
 
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute force balance error.
+class Energy(_Objective):
+    """MHD energy: W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV."""
+
+    _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
+
+    def __init__(self, eq=None, grid=None, target=0, weight=1, gamma=0):
+        """Initialize an Energy Objective.
 
         Parameters
         ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : ndarray
-            force error in radial and helical directions at each node
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray
+            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes
+            to evaluate at.
+        target : float, ndarray
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        gamma : float, optional
+            Adiabatic (compressional) index. Default = 0.
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
+        self._gamma = gamma
+        super().__init__(eq=eq, grid=grid, target=target, weight=weight)
 
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-
-        f_rho = (
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
-
-        return residual
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the total force balance error.
-
-        eg 1/2 sum(f**2)
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : float
-            total force balance error
-        """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        residual = 1 / 2 * jnp.sum(residual ** 2)
-        return residual
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the rms errors for radial and helical force balance.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-
-        f_rho = (
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-
-        f_rho_rms = jnp.sqrt(jnp.sum(f_rho ** 2))
-        f_beta_rms = jnp.sqrt(jnp.sum(f_beta ** 2))
-
-        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
-        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
-
-        print(
-            "Total residual: {:10.3e}  f_rho: {:10.3e}  f_beta: {:10.3e}".format(
-                resid_rms, f_rho_rms, f_beta_rms
-            )
-        )
-        return None
-
-
-class EnergyVolIntegral(ObjectiveFunction):
-    """Minimizes the volume integral of MHD energy in physical space.
-
-    W = integral of (B^2 / (2*mu0) - p) dV
-
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
-
-    """
-
-    def __init__(
-        self,
-        R_transform,
-        Z_transform,
-        L_transform,
-        p_profile,
-        i_profile,
-        BC_constraint,
-        use_jit=True,
-    ):
-
-        super().__init__(
-            R_transform,
-            Z_transform,
-            L_transform,
-            p_profile,
-            i_profile,
-            BC_constraint,
-            use_jit,
-        )
-
-        if self.R_transform.grid.node_pattern != "quad":
+        if self._grid is not None and self._grid.node_pattern != "quad":
             warnings.warn(
                 colored(
-                    "Energy method requires 'quad' pattern nodes, "
-                    + "force error calculated will be incorrect.",
+                    "Energy objective requires 'quad' node pattern, "
+                    + "integration will be incorrect.",
                     "yellow",
                 )
             )
+
+    def build(self, eq, grid=None, verbose=1):
+        """Precompute the transforms.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray
+            Collocation grid containing the (rho, theta, zeta) coordinates of the nodes
+            to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._pressure = eq.pressure.copy()
+        self._iota.grid = self._grid
+        self._pressure.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=1, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=1, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=1, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
+        """Compute MHD energy components.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        W : float
+            Total MHD energy in the plasma volume, in Joules.
+
+        """
+        data = compute_pressure(p_l, self._pressure)
+        data = compute_magnetic_field_magnitude(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            data=data,
+        )
+        W_B = jnp.sum(
+            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * self._grid.weights
+        ) / (2 * mu_0)
+        W_p = jnp.sum(data["p"] * jnp.abs(data["sqrt(g)"]) * self._grid.weights) / (
+            self._gamma - 1
+        )
+        W = W_B + W_p
+        return W, W_B, W_p
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute MHD energy.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        W : float
+            Total MHD energy in the plasma volume, in Joules.
+
+        """
+        W, W_B, B_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return jnp.atleast_1d((W - self._target) * self._weight)
+
+    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute MHD energy.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        W : float
+            Total MHD energy in the plasma volume, in Joules.
+
+        """
+        return self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Print MHD energy.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal flux within the last closed flux surface, in Webers.
+
+        """
+        W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        print(
+            "Total MHD energy: {:10.3e}, ".format(W)
+            + "Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e} ".format(W_B, W_p)
+            + "(J)"
+        )
+        return None
+
+    @property
+    def gamma(self):
+        """float: Adiabatic (compressional) index."""
+        return self._gamma
+
+    @gamma.setter
+    def gamma(self, gamma):
+        self._gamma = gamma
 
     @property
     def scalar(self):
@@ -959,664 +915,6 @@ class EnergyVolIntegral(ObjectiveFunction):
     def name(self):
         """Name of objective function (str)."""
         return "energy"
-
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        # TODO: different derivatives for R,Z,L,p,i ?
-        derivatives = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
-        return derivatives
-
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute MHD energy.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        W : float
-            total MHD energy in the plasma volume
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            energy,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_energy(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        residual = energy["W"]
-
-        return residual
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute MHD energy.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        W : float
-            total MHD energy in the plasma volume
-
-        """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        return residual
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the MHD energy.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            energy,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_energy(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        print(
-            "Total MHD energy: {:10.3e}, ".format(energy["W"])
-            + "Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e}".format(
-                energy["W_B"], energy["W_p"]
-            )
-        )
-        return None
-
-
-class QuasisymmetryTripleProduct(ObjectiveFunction):
-    """Maximizes quasisymmetry with the triple product definition.
-
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
-
-    """
-
-    @property
-    def scalar(self):
-        """Whether default "compute" method is a scalar or vector (bool)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "qs_tp"
-
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [2, 0, 0],
-                [0, 2, 0],
-                [0, 0, 2],
-                [1, 1, 0],
-                [1, 0, 1],
-                [0, 1, 1],
-                [0, 3, 0],
-                [0, 0, 3],
-                [1, 1, 1],
-                [1, 2, 0],
-                [1, 0, 2],
-                [0, 2, 1],
-                [0, 1, 2],
-            ]
-        )
-        return derivatives
-
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute quasisymmetry error.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : ndarray
-            force error in radial and helical directions at each node
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # QS triple product (T^4/m^2)
-        QS = (
-            profiles["psi_r"]
-            * (
-                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-            )
-            / jacobian["g"]
-        )
-
-        # normalization factor = <|B|>^4 / R^2
-        R0 = Rb_lmn[
-            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
-        ]
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        return QS * R0 ** 2 / norm ** 4  # normalized QS error
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the volume averaged quasi-symmetry error.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : float
-            average quasi-symmetry error
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # QS triple product (T^4/m^2)
-        QS = (
-            profiles["psi_r"]
-            * (
-                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-            )
-            / jacobian["g"]
-        )
-
-        # normalization factor = <|B|>^4 / R^2
-        R0 = Rb_lmn[
-            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
-        ]
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        f = QS * R0 ** 2 / norm ** 4  # normalized QS error
-        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the rms errors for quasisymmetry.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
-
-        print("Residual: {:10.3e}".format(resid_rms))
-        return None
-
-
-class QuasisymmetryFluxFunction(ObjectiveFunction):
-    """Maximizes quasisymmetry with the flux function definition.
-
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
-
-    """
-
-    def __init__(
-        self,
-        R_transform,
-        Z_transform,
-        L_transform,
-        p_profile,
-        i_profile,
-        BC_constraint,
-        use_jit=True,
-    ):
-
-        super().__init__(
-            R_transform,
-            Z_transform,
-            L_transform,
-            p_profile,
-            i_profile,
-            BC_constraint,
-            use_jit,
-        )
-
-        rho_vals = np.unique(self.R_transform.grid.nodes[:, 0])
-        if rho_vals.size != 1:
-            warnings.warn(
-                colored(
-                    "QS Flux Function requires nodes on a single flux surface, "
-                    + "quasisymmetry error calculated will be incorrect.",
-                    "yellow",
-                )
-            )
-
-    @property
-    def scalar(self):
-        """Whether default "compute" method is a scalar or vector (bool)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "qs_ff"
-
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [2, 0, 0],
-                [0, 2, 0],
-                [0, 0, 2],
-                [1, 1, 0],
-                [1, 0, 1],
-                [0, 1, 1],
-                [0, 3, 0],
-                [0, 0, 3],
-                [1, 1, 1],
-                [1, 2, 0],
-                [1, 0, 2],
-                [0, 2, 1],
-                [0, 1, 2],
-            ]
-        )
-        return derivatives
-
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute quasisymmetry error.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : ndarray
-            force error in radial and helical directions at each node
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # M/N (type of QS)
-        helicity = 1.0 / 1.0
-
-        # covariant Boozer components
-        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # poloidal current
-        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # toroidal current
-
-        # flux function C=C(rho)
-        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
-
-        # QS flux function (T^3)
-        QS = (
-            profiles["psi_r"]
-            / jacobian["g"]
-            * (
-                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-            )
-            - C * quasisymmetry["B*grad(|B|)"]
-        )
-
-        # normalization factor = <|B|>^3
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        return QS / norm ** 3  # normalized QS error
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the volume averaged quasi-symmetry error.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : float
-            average quasi-symmetry error
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # covariant Boozer components
-        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # poloidal current
-        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # toroidal current
-
-        helicity = 1.0 / 1.0  # M/N (type of QS)
-        # flux function C=C(rho)
-        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
-
-        # QS flux function (T^3)
-        QS = (
-            profiles["psi_r"]
-            / jacobian["g"]
-            * (
-                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-            )
-            - C * quasisymmetry["B*grad(|B|)"]
-        )
-
-        # normalization factor = <|B|>^3
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        f = QS / norm ** 3  # normalized QS error
-        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the rms errors for quasisymmetry.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        """
-        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
-        resid_rms = 1 / 2 * jnp.sum(residual ** 2)
-
-        print("Residual: {:10.3e}".format(resid_rms))
-        return None
 
 
 def get_objective_function(

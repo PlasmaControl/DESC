@@ -6,7 +6,6 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
 from desc.objective_funs import get_objective_function, ObjectiveFunction
 from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
@@ -54,7 +53,7 @@ class Equilibrium(_Configuration, IOAble):
         * ``'optimizer'`` : str, optimizer to use
     """
 
-    # TODO: make this ^ format correctly with sphinx, dont show it as init method
+    # TODO: make this ^ format correctly with sphinx, don't show it as init method
 
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
@@ -191,10 +190,7 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
             )
         else:
             raise ValueError(
@@ -855,9 +851,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 p_profile=equil.pressure,
                 i_profile=equil.iota,
                 BC_constraint=equil.surface.get_constraint(
-                    R_basis=equil.R_basis,
-                    Z_basis=equil.Z_basis,
-                    L_basis=equil.L_basis,
+                    R_basis=equil.R_basis, Z_basis=equil.Z_basis, L_basis=equil.L_basis,
                 ),
                 use_jit=True,
             )

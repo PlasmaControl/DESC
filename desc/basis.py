@@ -15,13 +15,12 @@ __all__ = [
 
 
 class Basis(IOAble, ABC):
-    """Basis is an abstract base class for spectral basis sets"""
+    """Basis is an abstract base class for spectral basis sets."""
 
     _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes", "_sym", "_spectral_indexing"]
 
     def _enforce_symmetry(self):
-        """Enforces stellarator symmetry"""
-
+        """Enforces stellarator symmetry."""
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
@@ -32,13 +31,12 @@ class Basis(IOAble, ABC):
             raise ValueError(f"Unknown symmetry type {self.sym}")
 
     def _sort_modes(self):
-        """Sorts modes for use with FFT"""
-
+        """Sorts modes for use with FFT."""
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 
     def get_idx(self, L=0, M=0, N=0):
-        """Get the index into the ``'modes'`` array corresponding to a given mode number
+        """Get the index into the ``'modes'`` array corresponding to a given mode number.
 
         Parameters
         ----------
@@ -53,6 +51,7 @@ class Basis(IOAble, ABC):
         -------
         idx : ndarray of int
             indices of given mode numbers
+
         """
         L = np.atleast_1d(L)
         M = np.atleast_1d(M)

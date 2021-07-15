@@ -24,21 +24,7 @@ from desc.basis import (
     ZernikePolynomial,
     FourierZernikeBasis,
 )
-from desc.compute_funs import (
-    compute_profiles,
-    compute_toroidal_coords,
-    compute_cartesian_coords,
-    compute_covariant_basis,
-    compute_jacobian,
-    compute_contravariant_basis,
-    compute_magnetic_field_magnitude_axis,
-    compute_current_density,
-    compute_magnetic_pressure_gradient,
-    compute_magnetic_tension,
-    compute_force_error_magnitude,
-    compute_energy,
-    compute_quasisymmetry,
-)
+# TODO: from desc.compute_funs import
 from desc.vmec_utils import (
     ptolemy_identity_rev,
     zernike_to_fourier,

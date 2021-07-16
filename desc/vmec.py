@@ -84,17 +84,19 @@ class VMECIO:
         # profiles
         preset = file.dimensions["preset"].size
         p0 = file.variables["presf"][0] / file.variables["am"][0]
-        inputs["profiles"] = np.zeros((preset, 3))
-        inputs["profiles"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["profiles"][:, 1] = file.variables["am"][:] * p0
-        inputs["profiles"][:, 2] = file.variables["ai"][:]
+        inputs["pressure"] = np.zeros((preset, 2))
+        inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["pressure"][:, 1] = file.variables["am"][:] * p0
+        inputs["iota"] = np.zeros((preset, 2))
+        inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["iota"][:, 1] = file.variables["ai"][:]
 
         file.close
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        inputs["surface"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
 
         # initialize Equilibrium
         eq = Equilibrium(inputs=inputs)
@@ -112,11 +114,7 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = eq.surface.get_constraint(
-            eq.R_basis,
-            eq.Z_basis,
-            eq.L_basis,
-        )
+        BC = eq.surface.get_constraint(eq.R_basis, eq.Z_basis, eq.L_basis,)
         eq.x = BC.make_feasible(eq.x)
 
         return eq
@@ -307,14 +305,16 @@ class VMECIO:
         am[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         am[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=10).params
+            s_full, eq.pressure(r_full), order=10
+        ).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         ai[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=10).params
+            s_full, eq.iota(r_full), order=10
+        ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"

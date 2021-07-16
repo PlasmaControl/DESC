@@ -136,30 +136,14 @@ class TestGrid(unittest.TestCase):
             [
                 np.array([0, 1, 1, 1, 1, 1]),
                 np.array(
-                    [
-                        0,
-                        0,
-                        2 * np.pi / 5,
-                        4 * np.pi / 5,
-                        6 * np.pi / 5,
-                        8 * np.pi / 5,
-                    ]
+                    [0, 0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5,]
                 ),
                 np.zeros((int((M + 1) * (M + 2) / 2),)),
             ]
         ).T
         fringe_nodes = np.stack(
             [
-                np.array(
-                    [
-                        0,
-                        0.5,
-                        0.5,
-                        1,
-                        1,
-                        1,
-                    ]
-                ),
+                np.array([0, 0.5, 0.5, 1, 1, 1,]),
                 np.array(
                     [
                         2 / 3 * np.pi,
@@ -214,8 +198,9 @@ class TestGrid(unittest.TestCase):
             "N": 0,
             "NFP": 1,
             "Psi": 1.0,
-            "profiles": np.array([[0, 0, 0]]),
-            "boundary": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
+            "pressure": np.array([[0, 0]]),
+            "iota": np.array([[0, 0]]),
+            "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
             "spectral_indexing": "ansi",
             "bdry_mode": "lcfs",
             "node_pattern": "quad",

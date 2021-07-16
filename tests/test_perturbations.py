@@ -79,8 +79,9 @@ class TestPerturbations(unittest.TestCase):
             "L": 2,
             "M": 2,
             "N": 1,
-            "profiles": np.zeros((1, 3)),
-            "boundary": np.array([[0, -1, 0, 0, 2], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0]]),
+            "pressure": np.array([[0, 0]]),
+            "iota": np.array([[0, 0]]),
+            "surface": np.array([[0, -1, 0, 0, 2], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0]]),
         }
         eq_old = Equilibrium(inputs=inputs)
         grid = LinearGrid(NFP=eq_old.NFP, rho=0)

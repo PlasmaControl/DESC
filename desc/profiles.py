@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import warnings
 import scipy.optimize
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, jit
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
@@ -134,7 +134,7 @@ class PowerSeriesProfile(Profile):
         return transform
 
     def __repr__(self):
-        s = super().__repr__
+        s = super().__repr__()
         s = s[:-1]
         s += ", basis={})".format(self.basis)
         return s
@@ -411,7 +411,7 @@ class SplineProfile(Profile):
         self.grid = grid
 
     def __repr__(self):
-        s = super().__repr__
+        s = super().__repr__()
         s = s[:-1]
         s += ", method={}, num_knots={})".format(self._method, len(self._knots))
         return s
@@ -640,7 +640,7 @@ class MTanhProfile(Profile):
         self.grid = grid
 
     def __repr__(self):
-        s = super().__repr__
+        s = super().__repr__()
         s = s[:-1]
         s += ", num_params={})".format(len(self._params))
         return s
@@ -727,7 +727,7 @@ class MTanhProfile(Profile):
                 / (width ** 3 * (e2z + 1) ** 3)
             )
             f = (
-                jnp.polyval(jnp.polyder(core_poly[::-1], 2)) * dz ** 2
+                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz ** 2
                 + jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * ddz
             )
 
@@ -838,7 +838,7 @@ class MTanhProfile(Profile):
             )
             / w
         )
-
+        fun = jit(fun)
         ped0 = np.clip(interp1d([0.93], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         off0 = np.clip(interp1d([0.98], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         default_pmax = np.array([np.inf, np.inf, 1.02, 0.2, np.inf])

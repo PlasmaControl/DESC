@@ -4,9 +4,11 @@ import os
 import pathlib
 import h5py
 import shutil
+import numpy as np
 
 from desc.io import InputReader, load
 from desc.io import hdf5Writer, hdf5Reader
+from desc.io.ascii_io import write_ascii, read_ascii
 from desc.utils import equals
 
 
@@ -232,3 +234,12 @@ def test_pickle_io(SOLOVEV, tmpdir_factory):
     eqf.save(tmp_path, file_format="pickle")
     peqf = load(tmp_path, file_format="pickle")
     assert equals(eqf, peqf)
+
+
+def test_ascii_io(plot_eq, tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("solovev_test.txt")
+    eq1 = plot_eq
+    write_ascii(tmp_path, eq1)
+    eq2 = read_ascii(tmp_path)
+    assert np.allclose(eq1.x, eq2.x)

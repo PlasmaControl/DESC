@@ -540,16 +540,12 @@ class _Configuration(IOAble, ABC):
     @property
     def parent(self):
         """Pointer to the equilibrium this was derived from."""
-        if not hasattr(self, "_parent"):
-            self._parent = None
-        return self._parent
+        return self.__dict__.setdefault("_parent", None)
 
     @property
     def children(self):
         """List of configurations that were derived from this one."""
-        if not hasattr(self, "_children"):
-            self._children = []
-        return self._children
+        return self.__dict__.setdefault("_children", [])
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""

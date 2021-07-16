@@ -82,10 +82,10 @@ class _Configuration(IOAble, ABC):
     def __init__(
         self,
         Psi=1.0,
+        NFP=None,
         L=None,
         M=None,
         N=None,
-        NFP=None,
         pressure=None,
         iota=None,
         surface=None,
@@ -98,25 +98,35 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        inputs : dict
-            Dictionary of inputs with the following required keys:
-                Psi : float, total toroidal flux (in Webers) within LCFS
-                NFP : int, number of field periods
-                L : int, radial resolution
-                M : int, poloidal resolution
-                N : int, toroidal resolution
-                profiles : ndarray, array of profile coeffs [l, p_l, i_l]
-                boundary : ndarray, array of boundary coeffs [m, n, Rb_lmn, Zb_lmn]
-            And the following optional keys:
-                sym : bool, is the problem stellarator symmetric or not, default is False
-                spectral_indexing : str, type of Zernike indexing scheme to use, default is ``'ansi'``
-                bdry_mode : {``'lcfs'``, ``'poincare'``}, where the BC are enforced
-                axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-                x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
-                R_lmn : ndarray, spectral coefficients of R
-                Z_lmn : ndarray, spectral coefficients of Z
-                L_lmn : ndarray, spectral coefficients of lambda
-
+        Psi : float (optional)
+            total toroidal flux (in Webers) within LCFS. Default 1.0
+        NFP : int (optional)
+            number of field periods Default surface.NFP or 1
+        L : int (optional)
+            Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+        M : int (optional)
+            Poloidal resolution. Default surface.M or 1
+        N : int (optional)
+            Toroidal resolution. Default surface.N or 0
+        pressure : Profile or ndarray shape(k,2) (optional)
+            Pressure profile or array of mode numbers and spectral coefficients.
+            Default is a PowerSeriesProfile with zero pressure
+        iota : Profile or ndarray shape(k,2) (optional)
+            Rotational transform profile or array of mode numbers and spectral coefficients
+            Default is a PowerSeriesProfile with zero rotational transform
+        surface: Surface or ndarray shape(k,5) (optional)
+            Fixed boundary surface shape, as a Surface object or array of
+            spectral mode numbers and coefficients of the form [l, m, n, R, Z].
+            Default is a FourierRZToroidalSurface with major radius 10 and
+            minor radius 1
+        axis : Curve or ndarray shape(k,3) (optional)
+            Initial guess for the magnetic axis as a Curve object or ndarray
+            of mode numbers and spectral coefficints of the form [n, R, Z].
+            Default is the centroid of the surface.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry. Default surface.sym or False.
+        spectral_indexing : str (optional)
+            Type of Zernike indexing scheme to use. Default ``'fringe'``
         """
         assert spectral_indexing in [None, "ansi", "fringe"]
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
@@ -128,6 +138,16 @@ class _Configuration(IOAble, ABC):
 
         assert isinstance(Psi, numbers.Number)
         self._Psi = float(Psi)
+
+        assert (NFP is None) or isinstance(NFP, numbers.Real)
+        if NFP is not None:
+            self._NFP = NFP
+        elif hasattr(surface, "NFP"):
+            self._NFP = surface.NFP
+        elif hasattr(axis, "NFP"):
+            self._NFP = axis.NFP
+        else:
+            self._NFP = 1
 
         assert sym in [None, True, False]
         if sym is None and hasattr(surface, "sym"):
@@ -169,14 +189,6 @@ class _Configuration(IOAble, ABC):
         else:
             self._L = self.M if (self.spectral_indexing == "ansi") else 2 * self.M
 
-        assert (NFP is None) or isinstance(NFP, numbers.Number)
-        if NFP is None and hasattr(surface, "NFP"):
-            self._NFP = surface.NFP
-        elif NFP is None and hasattr(axis, "NFP"):
-            self._NFP = axis.NFP
-        else:
-            self._NFP = 1
-
         # bases
         self._R_basis = FourierZernikeBasis(
             L=self.L,
@@ -205,7 +217,7 @@ class _Configuration(IOAble, ABC):
 
         # surface and axis
         if surface is None:
-            self._surface = FourierRZToroidalSurface()
+            self._surface = FourierRZToroidalSurface(NFP=self.NFP)
             self._bdry_mode = "lcfs"
         elif isinstance(surface, Surface):
             self._surface = surface
@@ -267,6 +279,13 @@ class _Configuration(IOAble, ABC):
             )
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
+
+        # make sure field periods agree
+        if not (self.NFP == self.surface.NFP == self.axis.NFP):
+            raise ValueError(
+                "Unequal number of field periods for equilirium "
+                + f"{self.NFP}, surface {self.surface.NFP}, and axis {self.axis.NFP}"
+            )
 
         # profiles
         if isinstance(pressure, Profile):

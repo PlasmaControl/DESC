@@ -256,8 +256,35 @@ class _Configuration(IOAble, ABC):
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
         elif axis is None and isinstance(surface, Surface):
-            pass
-            # TODO: axis from surface object
+            # TODO: make this method of surface, surface.get_axis()?
+            if isinstance(surface, FourierRZToroidalSurface):
+                axis = FourierRZCurve(
+                    R_n=surface.R_mn[np.where(surface.R_basis.modes[:, 1] == 0)],
+                    Z_n=surface.Z_mn[np.where(surface.Z_basis.modes[:, 1] == 0)],
+                    modes_R=surface.R_basis.modes[
+                        np.where(surface.R_basis.modes[:, 1] == 0)
+                    ],
+                    modes_Z=surface.Z_basis.modes[
+                        np.where(surface.Z_basis.modes[:, 1] == 0)
+                    ],
+                )
+            elif isinstance(surface, ZernikeRZToroidalSection):
+                axis = FourierRZCurve(
+                    R_n=surface.R_lm[
+                        np.where(
+                            (surface.R_basis.modes[:, 0] == 0)
+                            & (surface.R_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    Z_n=surface.Z_lm[
+                        np.where(
+                            (surface.Z_basis.modes[:, 0] == 0)
+                            & (surface.Z_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    modes_R=[0],
+                    modes_Z=[0],
+                )
         elif axis is None and isinstance(surface, jnp.ndarray):
             axis = surface[np.where(surface[:, 1] == 0)[0], 2:]
             self._axis = FourierRZCurve(
@@ -345,14 +372,16 @@ class _Configuration(IOAble, ABC):
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):
-                    axis = None  # TODO: proper guess from axis object
+                    axisR = np.array([self.axis.R_basis.modes[:, -1], self.axis.R_n]).T
+                    axisZ = np.array([self.axis.Z_basis.modes[:, -1], self.axis.Z_n]).T
                 else:
-                    axis = None
+                    axisR = None
+                    axisZ = None
                 self._R_lmn = self._initial_guess_surface(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis
+                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
                 )
                 self._Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis
+                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
                 )
                 self._L_lmn = np.zeros(self.L_basis.num_modes)
             else:
@@ -364,7 +393,9 @@ class _Configuration(IOAble, ABC):
                 surface = args[0]
                 if nargs > 1:
                     if isinstance(args[1], Curve):
-                        axis = None  # TODO: proper guess from axis object
+                        axis = args[1]
+                        axisR = np.array([axis.R_basis.modes[:, -1], axis.R_n]).T
+                        axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
                     else:
                         raise TypeError(
                             "Don't know how to initialize from object type {}".format(
@@ -372,13 +403,13 @@ class _Configuration(IOAble, ABC):
                             )
                         )
                 else:
-                    axis = None
-                # TODO: check type of surface / type of BC
+                    axisR = None
+                    axisZ = None
                 self._R_lmn = self._initial_guess_surface(
-                    self.R_basis, surface.Rb_lmn, surface.R_basis, axis
+                    self.R_basis, surface.Rb_lmn, surface.R_basis, axisR
                 )
                 self._Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, surface.Zb_lmn, surface.Z_basis, axis
+                    self.Z_basis, surface.Zb_lmn, surface.Z_basis, axisZ
                 )
                 self._L_lmn = np.zeros(self.L_basis.num_modes)
             elif isinstance(args[0], _Configuration):
@@ -447,7 +478,7 @@ class _Configuration(IOAble, ABC):
                     "Can't initialize equilibrium from args {}".format(args)
                 )
 
-    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode="lcfs"):
+    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode=None):
         """Create an initial guess from the boundary coefficients and magnetic axis guess.
 
         Parameters
@@ -473,7 +504,14 @@ class _Configuration(IOAble, ABC):
 
         """
         x_lmn = np.zeros((x_basis.num_modes,))
-
+        if mode is None:
+            # auto detect based on mode numbers
+            if np.all(b_basis.modes[:, 0] == 0):
+                mode = "lcfs"
+            elif np.all(b_basis.modes[:, 2] == 0):
+                mode = "poincare"
+            else:
+                raise ValueError("Surface should have either l=0 or n=0")
         if mode == "lcfs":
             if axis is None:
                 axidx = np.where(b_basis.modes[:, 1] == 0)[0]

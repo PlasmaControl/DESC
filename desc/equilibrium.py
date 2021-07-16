@@ -34,7 +34,7 @@ class Equilibrium(_Configuration, IOAble):
         * ``'M'`` : int, poloidal resolution
         * ``'N'`` : int, toroidal resolution
         * ``'profiles'`` : ndarray, array of profile coeffs [l, p_l, i_l]
-        * ``'boundary'`` : ndarray, array of boundary coeffs [l, m, n, Rb_lmn, Zb_lmn]
+        * ``'surface'`` : ndarray, array of surface coeffs [l, m, n, Rb_lmn, Zb_lmn]
 
         And the following optional keys:
 
@@ -72,12 +72,11 @@ class Equilibrium(_Configuration, IOAble):
 
     def __init__(self, inputs):
 
-        super().__init__(inputs=inputs)
-        self._x0 = self._x
-        self._L_grid = inputs.get("L_grid", self._L)
-        self._M_grid = inputs.get("M_grid", self._M)
-        self._N_grid = inputs.get("N_grid", self._N)
-        self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
+        super().__init__(**inputs)
+        self._x0 = self.x
+        self._L_grid = inputs.get("L_grid", self.L)
+        self._M_grid = inputs.get("M_grid", self.M)
+        self._N_grid = inputs.get("N_grid", self.N)
         self._node_pattern = inputs.get("node_pattern", "quad")
         self._solved = False
         self._objective = None
@@ -191,10 +190,7 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
             )
         else:
             raise ValueError(
@@ -416,12 +412,8 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def initial(self):
         """Return initial equilibrium state from which it was solved (Equilibrium)."""
-        p_modes = np.array(
-            [self.pressure.basis.modes[:, 0], self.p_l, np.zeros_like(self.p_l)]
-        ).T
-        i_modes = np.array(
-            [self.iota.basis.modes[:, 0], np.zeros_like(self.i_l), self.i_l]
-        ).T
+        p_modes = np.array([self.pressure.basis.modes[:, 0], self.p_l]).T
+        i_modes = np.array([self.iota.basis.modes[:, 0], self.i_l]).T
         Rb_lmn = self.Rb_lmn.reshape((-1, 1))
         Zb_lmn = self.Zb_lmn.reshape((-1, 1))
         Rb_modes = np.hstack(
@@ -439,8 +431,9 @@ class Equilibrium(_Configuration, IOAble):
             "N": self.N,
             "spectral_indexing": self.spectral_indexing,
             "bdry_mode": self.bdry_mode,
-            "profiles": np.vstack((p_modes, i_modes)),
-            "boundary": np.vstack((Rb_modes, Zb_modes)),
+            "pressure": p_modes,
+            "iota": i_modes,
+            "surface": np.vstack((Rb_modes, Zb_modes)),
             "x": self.x0,
             "objective": self.objective.name,
             "optimizer": self.optimizer.method,
@@ -692,10 +685,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
         deltas = {}
         if equil.bdry_mode == "lcfs":
             s = FourierRZToroidalSurface(
-                inputs["boundary"][:, 3],
-                inputs["boundary"][:, 4],
-                inputs["boundary"][:, 1:3].astype(int),
-                inputs["boundary"][:, 1:3].astype(int),
+                inputs["surface"][:, 3],
+                inputs["surface"][:, 4],
+                inputs["surface"][:, 1:3].astype(int),
+                inputs["surface"][:, 1:3].astype(int),
                 equil.NFP,
                 equil.sym,
             )
@@ -703,10 +696,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Rb_lmn, Zb_lmn = s.R_mn, s.Z_mn
         elif equil.bdry_mode == "poincare":
             s = ZernikeRZToroidalSection(
-                inputs["boundary"][:, 3],
-                inputs["boundary"][:, 4],
-                inputs["boundary"][:, :2].astype(int),
-                inputs["boundary"][:, :2].astype(int),
+                inputs["surface"][:, 3],
+                inputs["surface"][:, 4],
+                inputs["surface"][:, :2].astype(int),
+                inputs["surface"][:, :2].astype(int),
                 equil.spectral_indexing,
                 equil.sym,
             )
@@ -715,10 +708,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         p_l = np.zeros_like(equil.pressure.params)
         i_l = np.zeros_like(equil.iota.params)
-        for l, p, i in inputs["profiles"]:
+        for l, p in inputs["pressure"]:
             idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
             p_l[idx_p] = p
+        for l, i in inputs["iota"]:
+            idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
             i_l[idx_i] = i
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
@@ -855,9 +849,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 p_profile=equil.pressure,
                 i_profile=equil.iota,
                 BC_constraint=equil.surface.get_constraint(
-                    R_basis=equil.R_basis,
-                    Z_basis=equil.Z_basis,
-                    L_basis=equil.L_basis,
+                    R_basis=equil.R_basis, Z_basis=equil.Z_basis, L_basis=equil.L_basis,
                 ),
                 use_jit=True,
             )

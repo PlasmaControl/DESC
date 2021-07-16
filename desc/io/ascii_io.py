@@ -130,7 +130,7 @@ def read_ascii(filename):
         bdry_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
         bdryR[i] = float(lines[i + 1].strip("\n").split()[6])
         bdryZ[i] = float(lines[i + 1].strip("\n").split()[9])
-    eq["boundary"] = np.hstack(
+    eq["surface"] = np.hstack(
         [
             np.zeros((Nbdry, 1)),
             bdry_idx,
@@ -148,9 +148,8 @@ def read_ascii(filename):
         pl[i] = int(lines[i + 1].strip("\n").split()[1])
         cP[i] = float(lines[i + 1].strip("\n").split()[4])
         cI[i] = float(lines[i + 1].strip("\n").split()[7])
-    eq["profiles"] = np.hstack(
-        [pl.reshape((-1, 1)), cP.reshape((-1, 1)), cI.reshape((-1, 1))]
-    )
+    eq["pressure"] = np.hstack([pl.reshape((-1, 1)), cP.reshape((-1, 1))])
+    eq["iota"] = np.hstack([pl.reshape((-1, 1)), cI.reshape((-1, 1))])
     lines = lines[Nprof + 1 :]
 
     NRZ = int(lines[0].strip("\n").split()[-1])

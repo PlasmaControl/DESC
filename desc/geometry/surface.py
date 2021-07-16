@@ -78,6 +78,9 @@ class FourierRZToroidalSurface(Surface):
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
         NZ = np.max(abs(modes_Z[:, 1]))
+        self._L = 0
+        self._M = max(MR, MZ)
+        self._N = max(NR, NZ)
         if sym == "auto":
             if np.all(
                 R_mn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
@@ -102,10 +105,7 @@ class FourierRZToroidalSurface(Surface):
         self.rho = rho
         if grid is None:
             grid = LinearGrid(
-                rho=self.rho,
-                M=2 * max(MR, MZ) + 1,
-                N=2 * max(NR, NZ) + 1,
-                endpoint=True,
+                rho=self.rho, M=2 * self.M + 1, N=2 * self.N + 1, endpoint=True,
             )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
@@ -153,6 +153,8 @@ class FourierRZToroidalSurface(Surface):
         self._R_transform, self._Z_transform = self._get_transforms(self.grid)
         self.R_mn = copy_coeffs(self.R_mn, R_modes_old, self.R_basis.modes)
         self.Z_mn = copy_coeffs(self.Z_mn, Z_modes_old, self.Z_basis.modes)
+        self._M = M
+        self._N = N
 
     @property
     def R_mn(self):
@@ -463,6 +465,9 @@ class ZernikeRZToroidalSection(Surface):
         MR = np.max(abs(modes_R[:, 1]))
         LZ = np.max(abs(modes_Z[:, 0]))
         MZ = np.max(abs(modes_Z[:, 1]))
+        self._L = max(LR, LZ)
+        self._M = max(MR, MZ)
+        self._N = 0
 
         if sym == "auto":
             if np.all(
@@ -494,9 +499,7 @@ class ZernikeRZToroidalSection(Surface):
 
         self.zeta = zeta
         if grid is None:
-            grid = LinearGrid(
-                L=max(LR, LZ), M=2 * max(MR, MZ) + 1, zeta=self.zeta, endpoint=True
-            )
+            grid = LinearGrid(L=self.L, M=2 * self.M + 1, zeta=self.zeta, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -542,6 +545,8 @@ class ZernikeRZToroidalSection(Surface):
         self._R_transform, self._Z_transform = self._get_transforms(self.grid)
         self.R_lm = copy_coeffs(self.R_lm, R_modes_old, self.R_basis.modes)
         self.Z_lm = copy_coeffs(self.Z_lm, Z_modes_old, self.Z_basis.modes)
+        self._L = L
+        self._M = M
 
     @property
     def R_lm(self):

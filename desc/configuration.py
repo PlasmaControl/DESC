@@ -345,9 +345,16 @@ class _Configuration(IOAble, ABC):
         self._parent = None
         self._children = []
 
+        self._R_lmn = np.zeros(self.R_basis.num_modes)
+        self._Z_lmn = np.zeros(self.Z_basis.num_modes)
+        self._L_lmn = np.zeros(self.L_basis.num_modes)
         self.set_initial_guess()
-        # TODO: check if state vector is provided
-        # TODO: make sure axis has correct coeffs
+        if "R_lmn" in kwargs:
+            self.R_lmn = kwargs["R_lmn"]
+        if "Z_lmn" in kwargs:
+            self.Z_lmn = kwargs["Z_lmn"]
+        if "L_lmn" in kwargs:
+            self.L_lmn = kwargs["L_lmn"]
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
@@ -377,13 +384,12 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
-                self._R_lmn = self._initial_guess_surface(
+                self.R_lmn = self._initial_guess_surface(
                     self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
                 )
-                self._Z_lmn = self._initial_guess_surface(
+                self.Z_lmn = self._initial_guess_surface(
                     self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
                 )
-                self._L_lmn = np.zeros(self.L_basis.num_modes)
             else:
                 raise ValueError(
                     "set_initial_guess called with no arguments but no surface is assigned"
@@ -405,13 +411,12 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
-                self._R_lmn = self._initial_guess_surface(
+                self.R_lmn = self._initial_guess_surface(
                     self.R_basis, surface.Rb_lmn, surface.R_basis, axisR
                 )
-                self._Z_lmn = self._initial_guess_surface(
+                self.Z_lmn = self._initial_guess_surface(
                     self.Z_basis, surface.Zb_lmn, surface.Z_basis, axisZ
                 )
-                self._L_lmn = np.zeros(self.L_basis.num_modes)
             elif isinstance(args[0], _Configuration):
                 eq = args[0]
                 if nargs > 1:
@@ -420,15 +425,9 @@ class _Configuration(IOAble, ABC):
                             args[1]
                         )
                     )
-                self._R_lmn = copy_coeffs(
-                    eq.R_lmn, eq.R_basis.modes, self.R_basis.modes
-                )
-                self._Z_lmn = copy_coeffs(
-                    eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes
-                )
-                self._L_lmn = copy_coeffs(
-                    eq.L_lmn, eq.L_basis.modes, self.L_basis.modes
-                )
+                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
+                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
             elif isinstance(args[0], str):
                 # from file
                 path = args[0]
@@ -464,15 +463,9 @@ class _Configuration(IOAble, ABC):
                                 type(eq)
                             )
                         )
-                self._R_lmn = copy_coeffs(
-                    eq.R_lmn, eq.R_basis.modes, self.R_basis.modes
-                )
-                self._Z_lmn = copy_coeffs(
-                    eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes
-                )
-                self._L_lmn = copy_coeffs(
-                    eq.L_lmn, eq.L_basis.modes, self.L_basis.modes
-                )
+                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
+                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
             else:
                 raise ValueError(
                     "Can't initialize equilibrium from args {}".format(args)

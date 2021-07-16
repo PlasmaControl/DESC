@@ -43,7 +43,7 @@ class FourierRZCurve(Curve):
         "_R_transform",
         "_Z_transform",
         "_sym",
-        "_N",
+        "_NFP",
     ]
 
     def __init__(
@@ -78,6 +78,7 @@ class FourierRZCurve(Curve):
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
+        self._NFP = NFP
         self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
         self._Z_basis = FourierSeries(NZ, NFP, sym="sin" if sym else False)
 
@@ -104,6 +105,11 @@ class FourierRZCurve(Curve):
     def Z_basis(self):
         """Spectral basis for Z_fourier series."""
         return self._Z_basis
+
+    @property
+    def NFP(self):
+        """Number of field periods."""
+        return self._NFP
 
     @property
     def grid(self):

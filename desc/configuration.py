@@ -2,6 +2,7 @@ import numpy as np
 import copy
 import warnings
 import math
+import numbers
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
@@ -64,7 +65,6 @@ class _Configuration(IOAble, ABC):
         "_L",
         "_M",
         "_N",
-        "_x",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -79,7 +79,21 @@ class _Configuration(IOAble, ABC):
         "_bdry_mode",
     ]
 
-    def __init__(self, inputs):
+    def __init__(
+        self,
+        Psi=1.0,
+        L=None,
+        M=None,
+        N=None,
+        NFP=None,
+        pressure=None,
+        iota=None,
+        surface=None,
+        axis=None,
+        sym=None,
+        spectral_indexing=None,
+        **kwargs,
+    ):
         """Initialize a Configuration.
 
         Parameters
@@ -104,26 +118,24 @@ class _Configuration(IOAble, ABC):
                 L_lmn : ndarray, spectral coefficients of lambda
 
         """
-        try:
-            self._Psi = float(inputs["Psi"])
-            self._NFP = inputs["NFP"]
-            self._L = inputs["L"]
-            self._M = inputs["M"]
-            self._N = inputs["N"]
-            profiles = inputs["profiles"]
-            boundary = inputs["boundary"]
-        except:
-            raise ValueError(colored("input dict does not contain proper keys", "red"))
+        assert spectral_indexing in [None, "ansi", "fringe"]
+        if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
+            self._spectral_indexing = surface.spectral_indexing
+        elif spectral_indexing is None:
+            self._spectral_indexing = "fringe"
+        else:
+            self._spectral_indexing = spectral_indexing
 
-        # optional inputs
-        self._sym = inputs.get("sym", False)
-        self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
-        self._bdry_mode = inputs.get("bdry_mode", "lcfs")
+        assert isinstance(Psi, numbers.Number)
+        self._Psi = float(Psi)
 
-        # keep track of where it came from
-        self._parent = None
-        self._children = []
-
+        assert sym in [None, True, False]
+        if sym is None and hasattr(surface, "sym"):
+            self._sym = surface.sym
+        elif sym is None:
+            self._sym = False
+        else:
+            self._sym = sym
         # stellarator symmetry for bases
         if self.sym:
             self._R_sym = "cos"
@@ -132,87 +144,171 @@ class _Configuration(IOAble, ABC):
             self._R_sym = False
             self._Z_sym = False
 
-        # create bases
-        self._set_basis()
+        # resolution
+        assert (L is None) or (L == int(L))
+        assert (M is None) or (M == int(M))
+        assert (N is None) or (N == int(N))
+        if N == int(N):
+            self._N = int(N)
+        elif hasattr(surface, "N"):
+            self._N = surface.N
+        else:
+            self._N = 0
 
-        # format profiles
-        self._pressure = PowerSeriesProfile(
-            modes=profiles[:, 0], params=profiles[:, 1], name="pressure"
+        if M == int(M):
+            self._M = int(M)
+        elif hasattr(surface, "M"):
+            self._M = surface.M
+        else:
+            self._M = 1
+
+        if L == int(L):
+            self._L = int(L)
+        elif hasattr(surface, "L") and (surface.L > 0):
+            self._L = surface.L
+        else:
+            self._L = self.M if (self.spectral_indexing == "ansi") else 2 * self.M
+
+        assert (NFP is None) or isinstance(NFP, numbers.Number)
+        if NFP is None and hasattr(surface, "NFP"):
+            self._NFP = surface.NFP
+        elif NFP is None and hasattr(axis, "NFP"):
+            self._NFP = axis.NFP
+        else:
+            self._NFP = 1
+
+        # bases
+        self._R_basis = FourierZernikeBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self._R_sym,
+            spectral_indexing=self.spectral_indexing,
         )
-        self._iota = PowerSeriesProfile(
-            modes=profiles[:, 0], params=profiles[:, 2], name="iota"
+        self._Z_basis = FourierZernikeBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
         )
-        # format boundary
-        if self.bdry_mode == "lcfs":
-            self._surface = FourierRZToroidalSurface(
-                boundary[:, 3],
-                boundary[:, 4],
-                boundary[:, 1:3].astype(int),
-                boundary[:, 1:3].astype(int),
-                self.NFP,
-                self.sym,
+        self._L_basis = FourierZernikeBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
+
+        # surface and axis
+        if surface is None:
+            self._surface = FourierRZToroidalSurface()
+            self._bdry_mode = "lcfs"
+        elif isinstance(surface, Surface):
+            self._surface = surface
+            if isinstance(surface, FourierRZToroidalSurface):
+                self._bdry_mode = "lcfs"
+            if isinstance(surface, ZernikeRZToroidalSection):
+                self._bdry_mode = "poincare"
+        elif isinstance(surface, jnp.ndarray):
+            if np.all(surface[:, 0] == 0):
+                self._bdry_mode = "lcfs"
+            elif np.all(surface[:, 2] == 0):
+                self._bdry_mode = "poincare"
+            else:
+                raise ValueError("boundary should either have l=0 or n=0")
+            if self.bdry_mode == "lcfs":
+                self._surface = FourierRZToroidalSurface(
+                    surface[:, 3],
+                    surface[:, 4],
+                    surface[:, 1:3].astype(int),
+                    surface[:, 1:3].astype(int),
+                    self.NFP,
+                    self.sym,
+                )
+            elif self.bdry_mode == "poincare":
+                self._surface = ZernikeRZToroidalSection(
+                    surface[:, 3],
+                    surface[:, 4],
+                    surface[:, :2].astype(int),
+                    surface[:, :2].astype(int),
+                    self.spectral_indexing,
+                    self.sym,
+                )
+        else:
+            raise TypeError("Got unknown surface type {}".format(surface))
+
+        if isinstance(axis, FourierRZCurve):
+            self._axis = axis
+        elif axis is None and isinstance(surface, Surface):
+            pass
+            # TODO: axis from surface object
+        elif axis is None and isinstance(surface, jnp.ndarray):
+            axis = surface[np.where(surface[:, 1] == 0)[0], 2:]
+            self._axis = FourierRZCurve(
+                axis[:, 1],
+                axis[:, 2],
+                axis[:, 0].astype(int),
+                NFP=self.NFP,
+                sym=self.sym,
+                name="axis",
             )
-        elif self.bdry_mode == "poincare":
-            self._surface = ZernikeRZToroidalSection(
-                boundary[:, 3],
-                boundary[:, 4],
-                boundary[:, :2].astype(int),
-                boundary[:, :2].astype(int),
-                self.spectral_indexing,
-                self.sym,
+        elif isinstance(axis, jnp.ndarray):
+            self._axis = FourierRZCurve(
+                axis[:, 1],
+                axis[:, 2],
+                axis[:, 0].astype(int),
+                NFP=self.NFP,
+                sym=self.sym,
+                name="axis",
             )
         else:
-            raise ValueError("boundary should either have l=0 or n=0")
+            raise TypeError("Got unknown axis type {}".format(axis))
 
-        axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
-        self._axis = FourierRZCurve(
-            axis[:, 1],
-            axis[:, 2],
-            axis[:, 0].astype(int),
-            NFP=self.NFP,
-            sym=self.sym,
-            name="axis",
-        )
-
-        # check if state vector is provided
-        try:
-            self._x = inputs["x"]
-            self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self.x, self.R_basis.num_modes, self.Z_basis.num_modes
+        # profiles
+        if isinstance(pressure, Profile):
+            self._pressure = pressure
+        elif isinstance(pressure, jnp.ndarray):
+            self._pressure = PowerSeriesProfile(
+                modes=pressure[:, 0], params=pressure[:, 1], name="pressure"
             )
-        # default initial guess
-        except:
-            # check if R is provided
-            try:
-                self._R_lmn = inputs["R_lmn"]
-            except:
-                self._R_lmn = self._initial_guess_surface(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis[:, 0:-1]
-                )
-            # check if Z is provided
-            try:
-                self._Z_lmn = inputs["Z_lmn"]
-            except:
-                self._Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis[:, (0, -1)]
-                )
-            # check if lambda is provided
-            try:
-                self._L_lmn = inputs["L_lmn"]
-            except:
-                self._L_lmn = np.zeros((self.L_basis.num_modes,))
-            self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+        elif pressure is None:
+            self._pressure = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="pressure"
+            )
+        else:
+            raise TypeError("Got unknown pressure profile {}".format(pressure))
 
-        # this makes sure the axis has the correct coefficients
-        self.axis.change_resolution(self.N)
-        self._axis = self.axis
+        if isinstance(iota, Profile):
+            self.iota = iota
+        elif isinstance(iota, jnp.ndarray):
+            self._iota = PowerSeriesProfile(
+                modes=iota[:, 0], params=iota[:, 1], name="iota"
+            )
+        elif iota is None:
+            self._iota = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="iota"
+            )
+        else:
+            raise TypeError("Got unknown iota profile {}".format(iota))
+
+        # keep track of where it came from
+        self._parent = None
+        self._children = []
+
+        self.set_initial_guess()
+        # TODO: check if state vector is provided
+        # TODO: make sure axis has correct coeffs
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
 
         Parameters
         ----------
-        args : 
+        args :
             either:
               - No arguments, in which case eq.surface will be used
               - Another Surface object which will be scaled to generate the initial guess
@@ -334,7 +430,7 @@ class _Configuration(IOAble, ABC):
 
     def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode="lcfs"):
         """Create an initial guess from the boundary coefficients and magnetic axis guess.
-     
+
         Parameters
         ----------
         x_basis : FourierZernikeBais
@@ -350,19 +446,19 @@ class _Configuration(IOAble, ABC):
             One of 'lcfs', 'poincare'.
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
-     
+
         Returns
         -------
         x_lmn : ndarray
             vector of flux surface coefficients associated with x_basis.
-     
+
         """
         x_lmn = np.zeros((x_basis.num_modes,))
 
         if mode == "lcfs":
             if axis is None:
                 axidx = np.where(b_basis.modes[:, 1] == 0)[0]
-                axis = np.hstack([b_basis.modes[axidx, 2], b_lmn[axidx]])
+                axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
             for k, (l, m, n) in enumerate(b_basis.modes):
                 # index of basis mode with lowest radial power (l = |m|)
                 idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
@@ -390,33 +486,6 @@ class _Configuration(IOAble, ABC):
             raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
         return x_lmn
-
-    def _set_basis(self):
-
-        self._R_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._R_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._Z_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._L_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
 
     @property
     def parent(self):
@@ -473,7 +542,9 @@ class _Configuration(IOAble, ABC):
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self._set_basis()
+        self.R_basis.change_resolution(self.L, self.M, self.N)
+        self.Z_basis.change_resolution(self.L, self.M, self.N)
+        self.L_basis.change_resolution(self.L, self.M, self.N)
 
         if N_change:
             self.axis.change_resolution(self.N)
@@ -488,7 +559,6 @@ class _Configuration(IOAble, ABC):
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
         # state vector
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
         self._make_labels()
 
     @property
@@ -547,13 +617,12 @@ class _Configuration(IOAble, ABC):
     @property
     def x(self):
         """Optimization state vector (ndarray)."""
-        return self._x
+        return jnp.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @x.setter
     def x(self, x):
-        self._x = x
         self.R_lmn, self.Z_lmn, self.L_lmn = unpack_state(
-            self.x, self.R_basis.num_modes, self.Z_basis.num_modes
+            x, self.R_basis.num_modes, self.Z_basis.num_modes
         )
 
     @property
@@ -564,7 +633,6 @@ class _Configuration(IOAble, ABC):
     @R_lmn.setter
     def R_lmn(self, R_lmn):
         self._R_lmn[:] = R_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def Z_lmn(self):
@@ -574,7 +642,6 @@ class _Configuration(IOAble, ABC):
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
         self._Z_lmn[:] = Z_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def L_lmn(self):
@@ -584,7 +651,6 @@ class _Configuration(IOAble, ABC):
     @L_lmn.setter
     def L_lmn(self, L_lmn):
         self._L_lmn[:] = L_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def Rb_lmn(self):

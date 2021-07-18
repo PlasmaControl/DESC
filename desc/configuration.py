@@ -8,7 +8,7 @@ from shapely.geometry import LineString, MultiLineString
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
@@ -24,6 +24,7 @@ from desc.basis import (
     ZernikePolynomial,
     FourierZernikeBasis,
 )
+
 # TODO: from desc.compute_funs import
 from desc.vmec_utils import (
     ptolemy_identity_rev,
@@ -347,14 +348,18 @@ class _Configuration(IOAble, ABC):
 
     @property
     def x(self):
-        """Optimization state vector (ndarray)."""
-        return self._x
-
-    @x.setter
-    def x(self, x):
-        self._x = x
-        self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self.x, self.R_basis.num_modes, self.Z_basis.num_modes
+        """State vector x = [R_lmn, Z_lmn, L_lmn, Rb_lmn, Zb_lmn, p_l, i_l, Psi]."""
+        return np.concatenate(
+            (
+                np.atleast_1d(self._R_lmn),
+                np.atleast_1d(self._Z_lmn),
+                np.atleast_1d(self._L_lmn),
+                np.atleast_1d(self._surface.R_lmn),
+                np.atleast_1d(self._surface.Z_lmn),
+                np.atleast_1d(self._pressure.params),
+                np.atleast_1d(self._iota.params),
+                np.atleast_1d(self._Psi),
+            )
         )
 
     @property
@@ -365,7 +370,6 @@ class _Configuration(IOAble, ABC):
     @R_lmn.setter
     def R_lmn(self, R_lmn):
         self._R_lmn = R_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def Z_lmn(self):
@@ -375,7 +379,6 @@ class _Configuration(IOAble, ABC):
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
         self._Z_lmn = Z_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def L_lmn(self):
@@ -385,37 +388,24 @@ class _Configuration(IOAble, ABC):
     @L_lmn.setter
     def L_lmn(self, L_lmn):
         self._L_lmn = L_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @property
     def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.R_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.R_lm
+        return self.surface.R_lmn
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.R_mn = Rb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.R_lm = Rb_lmn
+        self.surface.R_lmn = Rb_lmn
 
     @property
     def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.Z_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.Z_lm
+        return self.surface.Z_lmn
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.Z_mn = Zb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.Z_lm = Zb_lmn
+        self.surface.Z_lmn = Zb_lmn
 
     @property
     def Ra_n(self):

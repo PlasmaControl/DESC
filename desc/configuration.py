@@ -701,32 +701,20 @@ class _Configuration(IOAble, ABC):
     @property
     def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.R_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.R_lm
+        return self.surface.R_lmn
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.R_mn = Rb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.R_lm = Rb_lmn
+        self.surface.R_lmn = Rb_lmn
 
     @property
     def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.Z_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.Z_lm
+        return self.surface.Z_lmn
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.Z_mn = Zb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.Z_lm = Zb_lmn
+        self.surface.Z_lmn = Zb_lmn
 
     @property
     def Ra_n(self):

@@ -17,7 +17,7 @@ class FourierRZToroidalSurface(Surface):
 
     Parameters
     ----------
-    R_mn, Z_mn : array-like, shape(k,)
+    R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
         poloidal and toroidal mode numbers [m,n] for R_n.
@@ -38,8 +38,8 @@ class FourierRZToroidalSurface(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_R_mn",
-        "_Z_mn",
+        "_R_lmn",
+        "_Z_lmn",
         "_R_basis",
         "_Z_basis",
         "_R_transform",
@@ -50,8 +50,8 @@ class FourierRZToroidalSurface(Surface):
 
     def __init__(
         self,
-        R_mn=None,
-        Z_mn=None,
+        R_lmn=None,
+        Z_lmn=None,
         modes_R=None,
         modes_Z=None,
         NFP=1,
@@ -61,11 +61,11 @@ class FourierRZToroidalSurface(Surface):
         name="",
     ):
 
-        if R_mn is None:
-            R_mn = np.array([10, 1])
+        if R_lmn is None:
+            R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
-        if Z_mn is None:
-            Z_mn = np.array([0, 1])
+        if Z_lmn is None:
+            Z_lmn = np.array([0, 1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -83,9 +83,9 @@ class FourierRZToroidalSurface(Surface):
         self._N = max(NR, NZ)
         if sym == "auto":
             if np.all(
-                R_mn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
             ) and np.all(
-                Z_mn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
             ):
                 sym = True
             else:
@@ -98,8 +98,8 @@ class FourierRZToroidalSurface(Surface):
             M=MZ, N=NZ, NFP=NFP, sym="sin" if sym else False
         )
 
-        self._R_mn = copy_coeffs(R_mn, modes_R, self.R_basis.modes[:, 1:])
-        self._Z_mn = copy_coeffs(Z_mn, modes_Z, self.Z_basis.modes[:, 1:])
+        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
+        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
         self._NFP = NFP
         self._sym = sym
         self.rho = rho
@@ -151,37 +151,37 @@ class FourierRZToroidalSurface(Surface):
         self.R_basis.change_resolution(M=M, N=N)
         self.Z_basis.change_resolution(M=M, N=N)
         self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_mn = copy_coeffs(self.R_mn, R_modes_old, self.R_basis.modes)
-        self.Z_mn = copy_coeffs(self.Z_mn, Z_modes_old, self.Z_basis.modes)
+        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
         self._M = M
         self._N = N
 
     @property
-    def R_mn(self):
+    def R_lmn(self):
         """Spectral coefficients for R"""
-        return self._R_mn
+        return self._R_lmn
 
-    @R_mn.setter
-    def R_mn(self, new):
+    @R_lmn.setter
+    def R_lmn(self, new):
         if len(new) == self.R_basis.num_modes:
-            self._R_mn = jnp.asarray(new)
+            self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_mn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
             )
 
     @property
-    def Z_mn(self):
+    def Z_lmn(self):
         """Spectral coefficients for Z"""
-        return self._Z_mn
+        return self._Z_lmn
 
-    @Z_mn.setter
-    def Z_mn(self, new):
+    @Z_lmn.setter
+    def Z_lmn(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_mn = jnp.asarray(new)
+            self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_mn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
             )
 
     def get_coeffs(self, m, n=0):
@@ -201,8 +201,8 @@ class FourierRZToroidalSurface(Surface):
             (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
         )
 
-        R[idxR[0]] = self.R_mn[idxR[1]]
-        Z[idxZ[0]] = self.Z_mn[idxZ[1]]
+        R[idxR[0]] = self.R_lmn[idxR[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
         return R, Z
 
     def set_coeffs(self, m, n=0, R=None, Z=None):
@@ -218,9 +218,9 @@ class FourierRZToroidalSurface(Surface):
             idxR = self.R_basis.get_idx(0, mm, nn)
             idxZ = self.Z_basis.get_idx(0, mm, nn)
             if RR is not None:
-                self.R_mn[idxR] = RR
+                self.R_lmn[idxR] = RR
             if ZZ is not None:
-                self.Z_mn[idxZ] = ZZ
+                self.Z_lmn[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -255,13 +255,13 @@ class FourierRZToroidalSurface(Surface):
         """Compute gaussian and mean curvature"""
         raise NotImplementedError()
 
-    def compute_coordinates(self, R_mn=None, Z_mn=None, grid=None, dt=0, dz=0):
+    def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0):
         """Compute values using specified coefficients
 
         Parameters
         ----------
-        R_mn, Z_mn: array-like
-            fourier coefficients for R, Z. Defaults to self.R_mn, self.Z_mn
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -273,39 +273,39 @@ class FourierRZToroidalSurface(Surface):
         values : ndarray, shape(k,3)
             R, phi, Z coordinates of the surface at points specified in grid
         """
-        if R_mn is None:
-            R_mn = self.R_mn
-        if Z_mn is None:
-            Z_mn = self.Z_mn
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
         R_transform, Z_transform = self._get_transforms(grid)
 
         if dz == 0:
-            R = R_transform.transform(R_mn, dt=dt, dz=0)
-            Z = Z_transform.transform(Z_mn, dt=dt, dz=0)
+            R = R_transform.transform(R_lmn, dt=dt, dz=0)
+            Z = Z_transform.transform(Z_lmn, dt=dt, dz=0)
             phi = R_transform.grid.nodes[:, 2] * (dt == 0)
             return jnp.stack([R, phi, Z], axis=1)
         if dz == 1:
-            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
-            dR = R_transform.transform(R_mn, dt=dt, dz=1)
-            dZ = Z_transform.transform(Z_mn, dt=dt, dz=1)
+            R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
+            dR = R_transform.transform(R_lmn, dt=dt, dz=1)
+            dZ = Z_transform.transform(Z_lmn, dt=dt, dz=1)
             dphi = R0 * (dt == 0)
             return jnp.stack([dR, dphi, dZ], axis=1)
         if dz == 2:
-            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
-            dR = R_transform.transform(R_mn, dt=dt, dz=1)
-            d2R = R_transform.transform(R_mn, dt=dt, dz=2)
-            d2Z = Z_transform.transform(Z_mn, dt=dt, dz=2)
+            R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
+            dR = R_transform.transform(R_lmn, dt=dt, dz=1)
+            d2R = R_transform.transform(R_lmn, dt=dt, dz=2)
+            d2Z = Z_transform.transform(Z_lmn, dt=dt, dz=2)
             R = d2R - R0
             Z = d2Z
             # 2nd derivative wrt to phi = 0
             phi = 2 * dR * (dt == 0)
             return jnp.stack([R, phi, Z], axis=1)
         if dz == 3:
-            R0 = R_transform.transform(R_mn, dt=dt, dz=0)
-            dR = R_transform.transform(R_mn, dt=dt, dz=1)
-            d2R = R_transform.transform(R_mn, dt=dt, dz=2)
-            d3R = R_transform.transform(R_mn, dt=dt, dz=3)
-            d3Z = Z_transform.transform(Z_mn, dt=dt, dz=3)
+            R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
+            dR = R_transform.transform(R_lmn, dt=dt, dz=1)
+            d2R = R_transform.transform(R_lmn, dt=dt, dz=2)
+            d3R = R_transform.transform(R_lmn, dt=dt, dz=3)
+            d3Z = Z_transform.transform(Z_lmn, dt=dt, dz=3)
             R = d3R - 3 * dR
             Z = d3Z
             phi = (3 * d2R - R0) * (dt == 0)
@@ -314,13 +314,13 @@ class FourierRZToroidalSurface(Surface):
             "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
         )
 
-    def compute_normal(self, R_mn=None, Z_mn=None, grid=None, coords="rpz"):
+    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
         """Compute normal vector to surface on default grid
 
         Parameters
         ----------
-        R_mn, Z_mn: array-like
-            fourier coefficients for R, Z. Defaults to self.R_mn, self.Z_mn
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -334,14 +334,14 @@ class FourierRZToroidalSurface(Surface):
         """
         assert coords.lower() in ["rpz", "xyz"]
 
-        if R_mn is None:
-            R_mn = self.R_mn
-        if Z_mn is None:
-            Z_mn = self.Z_mn
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        r_t = self.compute_coordinates(R_mn, Z_mn, grid, dt=1)
-        r_z = self.compute_coordinates(R_mn, Z_mn, grid, dz=1)
+        r_t = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        r_z = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
@@ -350,13 +350,13 @@ class FourierRZToroidalSurface(Surface):
             N = pol2cartvec(N, phi=phi)
         return N
 
-    def compute_surface_area(self, R_mn=None, Z_mn=None, grid=None):
+    def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
         """Compute surface area via quadrature
 
         Parameters
         ----------
-        R_mn, Z_mn: array-like
-            fourier coefficients for R, Z. Defaults to self.R_mn, self.Z_mn
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -366,14 +366,14 @@ class FourierRZToroidalSurface(Surface):
         area : float
             surface area
         """
-        if R_mn is None:
-            R_mn = self.R_mn
-        if Z_mn is None:
-            Z_mn = self.Z_mn
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        r_t = self.compute_coordinates(R_mn, Z_mn, grid, dt=1)
-        r_z = self.compute_coordinates(R_mn, Z_mn, grid, dz=1)
+        r_t = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        r_z = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
@@ -381,7 +381,13 @@ class FourierRZToroidalSurface(Surface):
     def get_constraint(self, R_basis, Z_basis, L_basis):
         """Get the linear constraint to enforce this surface as a boundary condition"""
         return LCFSConstraint(
-            R_basis, Z_basis, L_basis, self.R_basis, self.Z_basis, self.R_mn, self.Z_mn
+            R_basis,
+            Z_basis,
+            L_basis,
+            self.R_basis,
+            self.Z_basis,
+            self.R_lmn,
+            self.Z_lmn,
         )
 
 
@@ -390,12 +396,12 @@ class ZernikeRZToroidalSection(Surface):
 
     Parameters
     ----------
-    R_lm, Z_lm : array-like, shape(k,)
+    R_lmn, Z_lmn : array-like, shape(k,)
         zernike coefficients
     modes_R : array-like, shape(k,2)
-        radial and poloidal mode numbers [l,m] for R_lm
+        radial and poloidal mode numbers [l,m] for R_lmn
     modes_Z : array-like, shape(k,2)
-        radial and poloidal mode numbers [l,m] for Z_lm. If None defaults to modes_R.
+        radial and poloidal mode numbers [l,m] for Z_lmn. If None defaults to modes_R.
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
@@ -426,8 +432,8 @@ class ZernikeRZToroidalSection(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_R_lm",
-        "_Z_lm",
+        "_R_lmn",
+        "_Z_lmn",
         "_R_basis",
         "_Z_basis",
         "_R_transform",
@@ -438,8 +444,8 @@ class ZernikeRZToroidalSection(Surface):
 
     def __init__(
         self,
-        R_lm=None,
-        Z_lm=None,
+        R_lmn=None,
+        Z_lmn=None,
         modes_R=None,
         modes_Z=None,
         spectral_indexing="fringe",
@@ -448,11 +454,11 @@ class ZernikeRZToroidalSection(Surface):
         grid=None,
         name="",
     ):
-        if R_lm is None:
-            R_lm = np.array([10, 1])
+        if R_lmn is None:
+            R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 1]])
-        if Z_lm is None:
-            Z_lm = np.array([0, 1])
+        if Z_lmn is None:
+            Z_lmn = np.array([0, 1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -471,9 +477,9 @@ class ZernikeRZToroidalSection(Surface):
 
         if sym == "auto":
             if np.all(
-                R_lm[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
             ) and np.all(
-                Z_lm[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
             ):
                 sym = True
             else:
@@ -492,8 +498,8 @@ class ZernikeRZToroidalSection(Surface):
             sym="sin" if sym else False,
         )
 
-        self._R_lm = copy_coeffs(R_lm, modes_R, self.R_basis.modes[:, :2])
-        self._Z_lm = copy_coeffs(Z_lm, modes_Z, self.Z_basis.modes[:, :2])
+        self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
+        self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
         self._sym = sym
         self._spectral_indexing = spectral_indexing
 
@@ -543,37 +549,37 @@ class ZernikeRZToroidalSection(Surface):
         self.R_basis.change_resolution(L=L, M=M)
         self.Z_basis.change_resolution(L=L, M=M)
         self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_lm = copy_coeffs(self.R_lm, R_modes_old, self.R_basis.modes)
-        self.Z_lm = copy_coeffs(self.Z_lm, Z_modes_old, self.Z_basis.modes)
+        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
         self._L = L
         self._M = M
-
+        
     @property
-    def R_lm(self):
+    def R_lmn(self):
         """Spectral coefficients for R"""
-        return self._R_lm
+        return self._R_lmn
 
-    @R_lm.setter
-    def R_lm(self, new):
+    @R_lmn.setter
+    def R_lmn(self, new):
         if len(new) == self.R_basis.num_modes:
-            self._R_lm = jnp.asarray(new)
+            self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_lm should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
             )
 
     @property
-    def Z_lm(self):
+    def Z_lmn(self):
         """Spectral coefficients for Z"""
-        return self._Z_lm
+        return self._Z_lmn
 
-    @Z_lm.setter
-    def Z_lm(self, new):
+    @Z_lmn.setter
+    def Z_lmn(self, new):
         if len(new) == self.Z_basis.num_modes:
-            self._Z_lm = jnp.asarray(new)
+            self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_lm should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
             )
 
     def get_coeffs(self, l, m=0):
@@ -593,8 +599,8 @@ class ZernikeRZToroidalSection(Surface):
             (lm[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, :2]).all(axis=-1)
         )
 
-        R[idxR[0]] = self.R_lm[idxR[1]]
-        Z[idxZ[0]] = self.Z_lm[idxZ[1]]
+        R[idxR[0]] = self.R_lmn[idxR[1]]
+        Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
         return R, Z
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
@@ -610,9 +616,9 @@ class ZernikeRZToroidalSection(Surface):
             idxR = self.R_basis.get_idx(ll, mm, 0)
             idxZ = self.Z_basis.get_idx(ll, mm, 0)
             if RR is not None:
-                self.R_lm[idxR] = RR
+                self.R_lmn[idxR] = RR
             if ZZ is not None:
-                self.Z_lm[idxZ] = ZZ
+                self.Z_lmn[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -647,13 +653,13 @@ class ZernikeRZToroidalSection(Surface):
         """Compute gaussian and mean curvature"""
         raise NotImplementedError()
 
-    def compute_coordinates(self, R_lm=None, Z_lm=None, grid=None, dr=0, dt=0):
+    def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0):
         """Compute values using specified coefficients
 
         Parameters
         ----------
-        R_lm, Z_lm: array-like
-            zernike coefficients for R, Z. Defaults to self.R_lm, self.Z_lm
+        R_lmn, Z_lmn: array-like
+            zernike coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,1)x(0,2pi)
@@ -665,25 +671,25 @@ class ZernikeRZToroidalSection(Surface):
         values : ndarray, shape(k,3)
             R, phi, Z coordinates of the surface at points specified in grid
         """
-        if R_lm is None:
-            R_lm = self.R_lm
-        if Z_lm is None:
-            Z_lm = self.Z_lm
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        R = R_transform.transform(R_lm, dr=dr, dt=dt)
-        Z = Z_transform.transform(Z_lm, dr=dr, dt=dt)
+        R = R_transform.transform(R_lmn, dr=dr, dt=dt)
+        Z = Z_transform.transform(Z_lmn, dr=dr, dt=dt)
         phi = R_transform.grid.nodes[:, 2] * (dr == 0) * (dt == 0)
 
         return jnp.stack([R, phi, Z], axis=1)
 
-    def compute_normal(self, R_lm=None, Z_lm=None, grid=None, coords="rpz"):
+    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
         """Compute normal vector to surface on default grid
 
         Parameters
         ----------
-        R_lm, Z_lm: array-like
-            zernike coefficients for R, Z. Defaults to self.R_lm, self.Z_lm
+        R_lmn, Z_lmn: array-like
+            zernike coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,1)x(0,2pi)
@@ -709,13 +715,13 @@ class ZernikeRZToroidalSection(Surface):
 
         return N
 
-    def compute_surface_area(self, R_lm=None, Z_lm=None, grid=None):
+    def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
         """Compute surface area via quadrature
 
         Parameters
         ----------
-        R_lm, Z_lm: array-like
-            zernike coefficients for R, Z. Defaults to self.R_lm, self.Z_lm
+        R_lmn, Z_lmn: array-like
+            zernike coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,1)x(0,2pi)
@@ -725,14 +731,14 @@ class ZernikeRZToroidalSection(Surface):
         area : float
             surface area
         """
-        if R_lm is None:
-            R_lm = self.R_lm
-        if Z_lm is None:
-            Z_lm = self.Z_lm
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
         R_transform, Z_transform = self._get_transforms(grid)
 
-        r_r = self.compute_coordinates(R_lm, Z_lm, grid, dr=1)
-        r_t = self.compute_coordinates(R_lm, Z_lm, grid, dt=1)
+        r_r = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1)
+        r_t = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
 
         N = jnp.cross(r_r, r_t, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
@@ -742,5 +748,11 @@ class ZernikeRZToroidalSection(Surface):
     def get_constraint(self, R_basis, Z_basis, L_basis):
         """Get the linear constraint to enforce this surface as a boundary condition"""
         return PoincareConstraint(
-            R_basis, Z_basis, L_basis, self.R_basis, self.Z_basis, self.R_lm, self.Z_lm
+            R_basis,
+            Z_basis,
+            L_basis,
+            self.R_basis,
+            self.Z_basis,
+            self.R_lmn,
+            self.Z_lmn,
         )

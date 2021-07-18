@@ -25,36 +25,48 @@ class Equilibrium(_Configuration, IOAble):
 
     Parameters
     ----------
-    inputs : dict
-        Dictionary of inputs with the following required keys:
-
-        * ``'Psi'`` : float, total toroidal flux (in Webers) within LCFS
-        * ``'NFP'`` : int, number of field periods
-        * ``'L'`` : int, radial resolution
-        * ``'M'`` : int, poloidal resolution
-        * ``'N'`` : int, toroidal resolution
-        * ``'profiles'`` : ndarray, array of profile coeffs [l, p_l, i_l]
-        * ``'surface'`` : ndarray, array of surface coeffs [l, m, n, Rb_lmn, Zb_lmn]
-
-        And the following optional keys:
-
-        * ``'sym'`` : bool, is the problem stellarator symmetric or not, default is False
-        * ``'spectral_indexing'`` : str, type of Zernike indexing scheme to use, default is ``'ansi'``
-        * ``'bdry_mode'`` : str, how to calculate error at bdry, default is ``'spectral'``
-        * ``'axis'`` : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-        * ``'x'`` : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
-        * ``'R_lmn'`` : ndarray, spectral coefficients of R
-        * ``'Z_lmn'`` : ndarray, spectral coefficients of Z
-        * ``'L_lmn'`` : ndarray, spectral coefficients of lambda
-        * ``'L_grid'`` : int, resolution of real space nodes in radial direction
-        * ``'M_grid'`` : int, resolution of real space nodes in poloidal direction
-        * ``'N_grid'`` : int, resolution of real space nodes in toroidal direction
-        * ``'node_pattern'`` : str, node pattern, default is "cheb1"
-        * ``'objective'`` : str, mode for equilibrium solution
-        * ``'optimizer'`` : str, optimizer to use
+    Psi : float (optional)
+        total toroidal flux (in Webers) within LCFS. Default 1.0
+    NFP : int (optional)
+        number of field periods Default surface.NFP or 1
+    L : int (optional)
+        Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+    M : int (optional)
+        Poloidal resolution. Default surface.M or 1
+    N : int (optional)
+        Toroidal resolution. Default surface.N or 0
+    L_grid : int (optional)
+        resolution of real space nodes in radial direction
+    M_grid : int (optional)
+        resolution of real space nodes in poloidal direction
+    N_grid : int (optional)
+        resolution of real space nodes in toroidal direction
+    node_pattern : str (optional)
+        pattern of nodes in real space. Default is "jacobi"
+    pressure : Profile or ndarray shape(k,2) (optional)
+        Pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero pressure
+    iota : Profile or ndarray shape(k,2) (optional)
+        Rotational transform profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero rotational transform
+    surface: Surface or ndarray shape(k,5) (optional)
+        Fixed boundary surface shape, as a Surface object or array of
+        spectral mode numbers and coefficients of the form [l, m, n, R, Z].
+        Default is a FourierRZToroidalSurface with major radius 10 and
+        minor radius 1
+    axis : Curve or ndarray shape(k,3) (optional)
+        Initial guess for the magnetic axis as a Curve object or ndarray
+        of mode numbers and spectral coefficints of the form [n, R, Z].
+        Default is the centroid of the surface.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. Default surface.sym or False.
+    spectral_indexing : str (optional)
+        Type of Zernike indexing scheme to use. Default ``'fringe'``
+    objective : str or ObjectiveFunction (optional)
+        function to solve for equilibrium solution
+    optimizer : str or Optimzer (optional)
+        optimizer to use
     """
-
-    # TODO: make this ^ format correctly with sphinx, dont show it as init method
 
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
@@ -70,22 +82,58 @@ class Equilibrium(_Configuration, IOAble):
         "_optimizer",
     ]
 
-    def __init__(self, inputs):
+    def __init__(
+        self,
+        Psi=1.0,
+        NFP=None,
+        L=None,
+        M=None,
+        N=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        node_pattern=None,
+        pressure=None,
+        iota=None,
+        surface=None,
+        axis=None,
+        sym=None,
+        spectral_indexing=None,
+        objective=None,
+        optimizer=None,
+        **kwargs,
+    ):
 
-        super().__init__(**inputs)
+        super().__init__(
+            Psi,
+            NFP,
+            L,
+            M,
+            N,
+            pressure,
+            iota,
+            surface,
+            axis,
+            sym,
+            spectral_indexing,
+            **kwargs,
+        )
         self._x0 = self.x
-        self._L_grid = inputs.get("L_grid", self.L)
-        self._M_grid = inputs.get("M_grid", self.M)
-        self._N_grid = inputs.get("N_grid", self.N)
-        self._node_pattern = inputs.get("node_pattern", "quad")
+        assert (L_grid is None) or (int(L_grid) == L_grid)
+        assert (M_grid is None) or (int(M_grid) == M_grid)
+        assert (N_grid is None) or (int(N_grid) == N_grid)
+        self._L_grid = L_grid if L_grid is not None else self.L
+        self._M_grid = M_grid if M_grid is not None else self.M
+        self._N_grid = N_grid if N_grid is not None else self.N
+        self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
         self._solved = False
         self._objective = None
         self._optimizer = None
         self._set_grid()
         self._transforms = {}
         self._set_transforms()
-        self.objective = inputs.get("objective", None)
-        self.optimizer = inputs.get("optimizer", None)
+        self.objective = objective
+        self.optimizer = optimizer
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -102,7 +150,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def x0(self):
         """Return initial optimization vector before solution (ndarray)."""
-        return self.__dict__.setdefault("_x0", None)
+        if not hasattr(self, "_x0"):
+            self._x0 = None
+        return self._x0
 
     @x0.setter
     def x0(self, x0):
@@ -111,10 +161,11 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def L_grid(self):
         """Radial resolution of grid in real space (int)."""
-        return self.__dict__.setdefault(
-            "_L_grid",
-            self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid,
-        )
+        if not hasattr(self, "_L_grid"):
+            self._L_grid = (
+                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
+            )
+        return self._L_grid
 
     @L_grid.setter
     def L_grid(self, new):
@@ -126,7 +177,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def M_grid(self):
         """Poloidal resolution of grid in real space (int)."""
-        return self.__dict__.setdefault("_M_grid", 1)
+        if not hasattr(self, "_M_grid"):
+            self._M_grid = 1
+        return self._M_grid
 
     @M_grid.setter
     def M_grid(self, new):
@@ -138,7 +191,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def N_grid(self):
         """Toroidal resolution of grid in real space (int)."""
-        return self.__dict__.setdefault("_N_grid", 0)
+        if not hasattr(self, "_N_grid"):
+            self._N_grid = 0
+        return self._N_grid
 
     @N_grid.setter
     def N_grid(self, new):
@@ -150,7 +205,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def node_pattern(self):
         """Pattern for placement of nodes in curvilinear coordinates (str)."""
-        return self.__dict__.setdefault("_node_pattern", None)
+        if not hasattr(self, "_node_pattern"):
+            self._node_pattern = None
+        return self._node_pattern
 
     @property
     def transforms(self):
@@ -340,7 +397,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def objective(self):
         """Objective function currently assigned (ObjectiveFunction)."""
-        return self.__dict__.setdefault("_objective", None)
+        if not hasattr(self, "_objective"):
+            self._objective = None
+        return self._objective
 
     @objective.setter
     def objective(self, objective):
@@ -377,7 +436,9 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def optimizer(self):
         """Optimizer currently assigned (Optimizer)."""
-        return self.__dict__.setdefault("_optimizer", None)
+        if not hasattr(self, "_optimizer"):
+            self._optimizer = None
+        return self._optimizer
 
     @optimizer.setter
     def optimizer(self, optimizer):
@@ -399,6 +460,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def initial(self):
         """Return initial equilibrium state from which it was solved (Equilibrium)."""
+        # TODO: fix this with new x etc
         p_modes = np.array([self.pressure.basis.modes[:, 0], self.p_l]).T
         i_modes = np.array([self.iota.basis.modes[:, 0], self.i_l]).T
         Rb_lmn = self.Rb_lmn.reshape((-1, 1))
@@ -425,7 +487,7 @@ class Equilibrium(_Configuration, IOAble):
             "objective": self.objective.name,
             "optimizer": self.optimizer.method,
         }
-        return Equilibrium(inputs=inputs)
+        return Equilibrium(**inputs)
 
     def evaluate(self, jac=False):
         """Evaluate the objective function.
@@ -647,9 +709,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def __init__(self, inputs):
         # did we get 1 set of inputs or several?
         if isinstance(inputs, (list, tuple)):
-            self.equilibria = [Equilibrium(inputs[0])]
+            self.equilibria = [Equilibrium(**inputs[0])]
         else:
-            self.equilibria = [Equilibrium(inputs=inputs)]
+            self.equilibria = [Equilibrium(**inputs)]
         self.inputs = inputs
 
     @staticmethod

@@ -206,7 +206,7 @@ class TestGrid(unittest.TestCase):
             "node_pattern": "quad",
         }
 
-        eq = Equilibrium(inputs)
+        eq = Equilibrium(**inputs)
         g = eq.compute_jacobian(eq.grid)
         vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
 

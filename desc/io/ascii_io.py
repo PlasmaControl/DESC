@@ -96,7 +96,6 @@ def write_ascii(fname, eq):
     file.close()
 
 
-# FIXME: this is all wrong now with the class structure
 def read_ascii(filename):
     """reads a previously generated DESC ascii output file
 
@@ -177,7 +176,7 @@ def read_ascii(filename):
     else:
         eq["sym"] = False
 
-    equil = Equilibrium(eq)
+    equil = Equilibrium(**eq)
     equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
     equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)
     equil.L_lmn = copy_coeffs(cL, zern_idx, equil.L_basis.modes)

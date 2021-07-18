@@ -85,10 +85,10 @@ class TestIsNested(unittest.TestCase):
             "index": "fringe",
         }
 
-        eq1 = Equilibrium(inputs)
+        eq1 = Equilibrium(**inputs)
         eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
         eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
-        eq2 = Equilibrium(inputs)
+        eq2 = Equilibrium(**inputs)
         eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
         eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
         self.assertTrue(eq1.is_nested())

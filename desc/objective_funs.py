@@ -128,7 +128,7 @@ class ObjectiveFunction(IOAble):
         )
         self._derivatives["Psi"] = Derivative(
             self.compute_constraints,
-            argnum=0,
+            argnum=7,
             mode="fwd",
             use_jit=use_jit,
             block_size=block_size,
@@ -947,9 +947,7 @@ class FixedBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(Rb_lmn, Zb_lmn)
-        return jnp.concatenate(
-            np.array((Rb * self._R_weight, Zb * self._Z_weight), dtype=object)
-        )
+        return jnp.concatenate((Rb * self._R_weight, Zb * self._Z_weight))
 
     def compute_scalar(self, Rb_lmn, Zb_lmn, **kwargs):
         """Compute total fixed-boundary error.
@@ -1119,7 +1117,7 @@ class LCFSBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        return jnp.concatenate(np.array((Rb, Zb), dtype=object)) * self._weight
+        return jnp.concatenate((Rb, Zb)) * self._weight
 
     def compute_scalar(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
         """Compute total last closed flux surface boundary error.

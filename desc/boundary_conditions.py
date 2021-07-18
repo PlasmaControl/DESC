@@ -7,7 +7,7 @@ from desc.basis import jacobi_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import copy_coeffs
 
 
 __all__ = [

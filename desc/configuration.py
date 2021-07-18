@@ -54,6 +54,39 @@ class _Configuration(IOAble, ABC):
     It contains information about a plasma state, including the
     shapes of flux surfaces and profile inputs. It can compute additional
     information, such as the magnetic field and plasma currents.
+
+    Parameters
+    ----------
+    Psi : float (optional)
+        total toroidal flux (in Webers) within LCFS. Default 1.0
+    NFP : int (optional)
+        number of field periods Default surface.NFP or 1
+    L : int (optional)
+        Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+    M : int (optional)
+        Poloidal resolution. Default surface.M or 1
+    N : int (optional)
+        Toroidal resolution. Default surface.N or 0
+    pressure : Profile or ndarray shape(k,2) (optional)
+        Pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero pressure
+    iota : Profile or ndarray shape(k,2) (optional)
+        Rotational transform profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero rotational transform
+    surface: Surface or ndarray shape(k,5) (optional)
+        Fixed boundary surface shape, as a Surface object or array of
+        spectral mode numbers and coefficients of the form [l, m, n, R, Z].
+        Default is a FourierRZToroidalSurface with major radius 10 and
+        minor radius 1
+    axis : Curve or ndarray shape(k,3) (optional)
+        Initial guess for the magnetic axis as a Curve object or ndarray
+        of mode numbers and spectral coefficints of the form [n, R, Z].
+        Default is the centroid of the surface.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. Default surface.sym or False.
+    spectral_indexing : str (optional)
+        Type of Zernike indexing scheme to use. Default ``'fringe'``
+
     """
 
     _io_attrs_ = [
@@ -94,40 +127,7 @@ class _Configuration(IOAble, ABC):
         spectral_indexing=None,
         **kwargs,
     ):
-        """Initialize a Configuration.
 
-        Parameters
-        ----------
-        Psi : float (optional)
-            total toroidal flux (in Webers) within LCFS. Default 1.0
-        NFP : int (optional)
-            number of field periods Default surface.NFP or 1
-        L : int (optional)
-            Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
-        M : int (optional)
-            Poloidal resolution. Default surface.M or 1
-        N : int (optional)
-            Toroidal resolution. Default surface.N or 0
-        pressure : Profile or ndarray shape(k,2) (optional)
-            Pressure profile or array of mode numbers and spectral coefficients.
-            Default is a PowerSeriesProfile with zero pressure
-        iota : Profile or ndarray shape(k,2) (optional)
-            Rotational transform profile or array of mode numbers and spectral coefficients
-            Default is a PowerSeriesProfile with zero rotational transform
-        surface: Surface or ndarray shape(k,5) (optional)
-            Fixed boundary surface shape, as a Surface object or array of
-            spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-            Default is a FourierRZToroidalSurface with major radius 10 and
-            minor radius 1
-        axis : Curve or ndarray shape(k,3) (optional)
-            Initial guess for the magnetic axis as a Curve object or ndarray
-            of mode numbers and spectral coefficints of the form [n, R, Z].
-            Default is the centroid of the surface.
-        sym : bool (optional)
-            Whether to enforce stellarator symmetry. Default surface.sym or False.
-        spectral_indexing : str (optional)
-            Type of Zernike indexing scheme to use. Default ``'fringe'``
-        """
         assert spectral_indexing in [None, "ansi", "fringe"]
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing

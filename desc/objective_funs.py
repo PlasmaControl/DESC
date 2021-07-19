@@ -332,8 +332,7 @@ class ObjectiveFunction(IOAble):
             "i_l": i_l,
             "Psi": Psi,
         }
-        f = jnp.array([obj.compute(**kwargs) for obj in self._constraints])
-        return jnp.concatenate(f)
+        return jnp.concatenate([obj.compute(**kwargs) for obj in self._constraints])
 
     def compute(self, x):
         """Compute the objective function.
@@ -351,12 +350,9 @@ class ObjectiveFunction(IOAble):
         """
         if x.size == self._dim_y:
             x = self.recover(x)  # x is really y
-        if x.size != self._dim_x:
-            raise ValueError("State vector is not the proper size.")
         kwargs = self.unpack_state(x)
 
-        f = jnp.array([obj.compute(**kwargs) for obj in self._objectives])
-        return jnp.concatenate(f)
+        return jnp.concatenate([obj.compute(**kwargs) for obj in self._objectives])
 
     def compute_scalar(self, x):
         """Compute the scalar form of the objective.
@@ -378,8 +374,7 @@ class ObjectiveFunction(IOAble):
             raise ValueError("State vector is not the proper size.")
         kwargs = self.unpack_state(x)
 
-        f = jnp.array([obj.compute_scalar(**kwargs) for obj in self._objectives])
-        return jnp.sum(f)
+        return jnp.sum([obj.compute_scalar(**kwargs) for obj in self._objectives])
 
     def callback(self, x):
         """Print the value(s) of the objective.
@@ -418,6 +413,9 @@ class ObjectiveFunction(IOAble):
         """
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
+        if x.size != self._dim_x:
+            raise ValueError("State vector is not the proper size.")
+
         kwargs = {}
         kwargs["R_lmn"] = x[: self._dim_R]
         kwargs["Z_lmn"] = x[self._dim_R : self._dim_R + self._dim_Z]
@@ -979,7 +977,7 @@ class FixedBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(Rb_lmn, Zb_lmn)
-        f = jnp.concatenate(np.array((Rb, Zb)))
+        f = jnp.concatenate((Rb, Zb))
         print(
             "Total fixed-boundary error: {:10.3e}, ".format(jnp.linalg.norm(f))
             + "R fixed-boundary error: {:10.3e}, ".format(jnp.linalg.norm(Rb))
@@ -1406,7 +1404,7 @@ class FixedPsi(_Objective):
             Total toroidal magnetic flux error, in Webers.
 
         """
-        return jnp.atleast_1d(Psi) - self._target
+        return Psi - self._target
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.
@@ -1438,7 +1436,7 @@ class FixedPsi(_Objective):
             Total toroidal magnetic flux error, in Webers.
 
         """
-        return jnp.absolute(self.compute(Psi))
+        return jnp.linalg.norm(self.compute(Psi))
 
     def callback(self, Psi, **kwargs):
         """Print fixed-Psi error.
@@ -1622,7 +1620,7 @@ class LCFSBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        f = jnp.concatenate(np.array((Rb, Zb)))
+        f = jnp.concatenate((Rb, Zb))
         print(
             "Total boundary error: {:10.3e}, ".format(jnp.linalg.norm(f))
             + "R boundary error: {:10.3e}, ".format(jnp.linalg.norm(Rb))
@@ -1729,8 +1727,7 @@ class Volume(_Objective):
 
         """
         data = compute_jacobian(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        V = jnp.sum(jnp.abs(data["sqrt(g)"]) * self._grid.weights)
-        return V
+        return jnp.atleast_1d(jnp.sum(jnp.abs(data["sqrt(g)"]) * self._grid.weights))
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -1749,7 +1746,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        return jnp.absolute((V - self._target) * self._weight)
+        return (V - self._target) * self._weight
 
     def compute_scalar(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -1767,7 +1764,7 @@ class Volume(_Objective):
             Plasma volume, in cubic meters.
 
         """
-        return self.compute(R_lmn, Z_lmn)
+        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn))
 
     def callback(self, R_lmn, Z_lmn, **kwargs):
         """Print plamsa volume.
@@ -1917,11 +1914,13 @@ class Energy(_Objective):
             self._iota,
             data=data,
         )
-        W_B = jnp.sum(
-            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * self._grid.weights
-        ) / (2 * mu_0)
-        W_p = jnp.sum(data["p"] * jnp.abs(data["sqrt(g)"]) * self._grid.weights) / (
-            self._gamma - 1
+        W_B = jnp.atleast_1d(
+            jnp.sum(data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * self._grid.weights)
+            / (2 * mu_0)
+        )
+        W_p = jnp.atleast_1d(
+            jnp.sum(data["p"] * jnp.abs(data["sqrt(g)"]) * self._grid.weights)
+            / (self._gamma - 1)
         )
         W = W_B + W_p
         return W, W_B, W_p
@@ -1951,7 +1950,7 @@ class Energy(_Objective):
 
         """
         W, W_B, B_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return jnp.absolute((W - self._target) * self._weight)
+        return (W - self._target) * self._weight
 
     def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute MHD energy.
@@ -1977,7 +1976,7 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume, in Joules.
 
         """
-        return self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print MHD energy.

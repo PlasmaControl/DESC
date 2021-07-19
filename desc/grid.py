@@ -614,14 +614,16 @@ class ConcentricGrid(Grid):
             rho[0] = rho[1] / 10
 
         drho = np.zeros_like(rho)
-        for i in range(rho.size):
-            if i == 0:
-                drho[i] = (rho[0] + rho[1]) / 2
-            elif i == rho.size - 1:
-                drho[i] = 1 - (rho[-2] + rho[-1]) / 2
-            else:
-                drho[i] = (rho[i + 1] - rho[i - 1]) / 2
-
+        if rho.size > 1:
+            for i in range(rho.size):
+                if i == 0:
+                    drho[i] = (rho[0] + rho[1]) / 2
+                elif i == rho.size - 1:
+                    drho[i] = 1 - (rho[-2] + rho[-1]) / 2
+                else:
+                    drho[i] = (rho[i + 1] - rho[i - 1]) / 2
+        else:
+            drho = np.array([1.0])
         r = []
         t = []
         dr = []

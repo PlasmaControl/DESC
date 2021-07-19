@@ -106,6 +106,8 @@ class PowerSeriesProfile(Profile):
         params = np.atleast_1d(params)
         if modes is None:
             modes = np.arange(params.size)
+        else:
+            modes = np.atleast_1d(modes)
         self._basis = PowerSeries(L=int(np.max(abs(modes))))
         self._params = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, params):
@@ -399,8 +401,11 @@ class SplineProfile(Profile):
 
     def __init__(self, values, knots=None, grid=None, method="cubic2", name=None):
 
+        values = np.atleast_1d(values)
         if knots is None:
             knots = np.linspace(0, 1, values.size)
+        else:
+            knots = np.atleast_1d(knots)
         self._name = name
         self._knots = knots
         self._params = values

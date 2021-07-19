@@ -64,6 +64,12 @@ class FourierRZCurve(Curve):
         if modes_Z is None:
             modes_Z = modes_R
 
+        if R_n.size == 0:
+            raise ValueError("At least 1 coefficient for R must be supplied")
+        if Z_n.size == 0:
+            Z_n = np.array([0.0])
+            modes_Z = np.array([0])
+
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
         assert issubclass(modes_R.dtype.type, np.integer)

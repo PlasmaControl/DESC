@@ -742,7 +742,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.sym,
             )
             s.change_resolution(equil.M, equil.N)
-            Rb_lmn, Zb_lmn = s.R_mn, s.Z_mn
+            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
             s = ZernikeRZToroidalSection(
                 inputs["surface"][:, 3],
@@ -753,7 +753,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.sym,
             )
             s.change_resolution(equil.L, equil.M)
-            Rb_lmn, Zb_lmn = s.R_lm, s.Z_lm
+            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
 
         p_l = np.zeros_like(equil.pressure.params)
         i_l = np.zeros_like(equil.iota.params)

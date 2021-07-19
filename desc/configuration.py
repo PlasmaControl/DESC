@@ -165,24 +165,24 @@ class _Configuration(IOAble, ABC):
             self._Z_sym = False
 
         # resolution
-        assert (L is None) or (L == int(L))
-        assert (M is None) or (M == int(M))
-        assert (N is None) or (N == int(N))
-        if N == int(N):
+        assert (L is None) or (isinstance(L, numbers.Real) and (L == int(L)))
+        assert (M is None) or (isinstance(M, numbers.Real) and (M == int(M)))
+        assert (N is None) or (isinstance(N, numbers.Real) and (N == int(N)))
+        if N is not None:
             self._N = int(N)
         elif hasattr(surface, "N"):
             self._N = surface.N
         else:
             self._N = 0
 
-        if M == int(M):
+        if M is not None:
             self._M = int(M)
         elif hasattr(surface, "M"):
             self._M = surface.M
         else:
             self._M = 1
 
-        if L == int(L):
+        if L is not None:
             self._L = int(L)
         elif hasattr(surface, "L") and (surface.L > 0):
             self._L = surface.L
@@ -255,46 +255,6 @@ class _Configuration(IOAble, ABC):
 
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
-        elif axis is None and isinstance(surface, Surface):
-            # TODO: make this method of surface, surface.get_axis()?
-            if isinstance(surface, FourierRZToroidalSurface):
-                axis = FourierRZCurve(
-                    R_n=surface.R_mn[np.where(surface.R_basis.modes[:, 1] == 0)],
-                    Z_n=surface.Z_mn[np.where(surface.Z_basis.modes[:, 1] == 0)],
-                    modes_R=surface.R_basis.modes[
-                        np.where(surface.R_basis.modes[:, 1] == 0)
-                    ],
-                    modes_Z=surface.Z_basis.modes[
-                        np.where(surface.Z_basis.modes[:, 1] == 0)
-                    ],
-                )
-            elif isinstance(surface, ZernikeRZToroidalSection):
-                axis = FourierRZCurve(
-                    R_n=surface.R_lm[
-                        np.where(
-                            (surface.R_basis.modes[:, 0] == 0)
-                            & (surface.R_basis.modes[:, 1] == 0)
-                        )
-                    ].sum(),
-                    Z_n=surface.Z_lm[
-                        np.where(
-                            (surface.Z_basis.modes[:, 0] == 0)
-                            & (surface.Z_basis.modes[:, 1] == 0)
-                        )
-                    ].sum(),
-                    modes_R=[0],
-                    modes_Z=[0],
-                )
-        elif axis is None and isinstance(surface, jnp.ndarray):
-            axis = surface[np.where(surface[:, 1] == 0)[0], 2:]
-            self._axis = FourierRZCurve(
-                axis[:, 1],
-                axis[:, 2],
-                axis[:, 0].astype(int),
-                NFP=self.NFP,
-                sym=self.sym,
-                name="axis",
-            )
         elif isinstance(axis, jnp.ndarray):
             self._axis = FourierRZCurve(
                 axis[:, 1],
@@ -304,14 +264,53 @@ class _Configuration(IOAble, ABC):
                 sym=self.sym,
                 name="axis",
             )
+        elif axis is None:  # use the center of surface
+            # TODO: make this method of surface, surface.get_axis()?
+            if isinstance(self.surface, FourierRZToroidalSurface):
+                self._axis = FourierRZCurve(
+                    R_n=self.surface.R_lmn[
+                        np.where(self.surface.R_basis.modes[:, 1] == 0)
+                    ],
+                    Z_n=self.surface.Z_lmn[
+                        np.where(self.surface.Z_basis.modes[:, 1] == 0)
+                    ],
+                    modes_R=self.surface.R_basis.modes[
+                        np.where(self.surface.R_basis.modes[:, 1] == 0)[0], -1
+                    ],
+                    modes_Z=self.surface.Z_basis.modes[
+                        np.where(self.surface.Z_basis.modes[:, 1] == 0)[0], -1
+                    ],
+                    NFP=self.NFP,
+                )
+            elif isinstance(self.surface, ZernikeRZToroidalSection):
+                self._axis = FourierRZCurve(
+                    R_n=self.surface.R_lmn[
+                        np.where(
+                            (self.surface.R_basis.modes[:, 0] == 0)
+                            & (self.surface.R_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    Z_n=self.surface.Z_lmn[
+                        np.where(
+                            (self.surface.Z_basis.modes[:, 0] == 0)
+                            & (self.surface.Z_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    modes_R=[0],
+                    modes_Z=[0],
+                    NFP=self.NFP,
+                )
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
 
         # make sure field periods agree
-        if not (self.NFP == self.surface.NFP == self.axis.NFP):
+        eqNFP = self.NFP
+        surfNFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+        axNFP = self.axis.NFP
+        if not (eqNFP == surfNFP == axNFP):
             raise ValueError(
                 "Unequal number of field periods for equilirium "
-                + f"{self.NFP}, surface {self.surface.NFP}, and axis {self.axis.NFP}"
+                + f"{eqNFP}, surface {surfNFP}, and axis {axNFP}"
             )
 
         # profiles
@@ -350,12 +349,16 @@ class _Configuration(IOAble, ABC):
         self._L_lmn = np.zeros(self.L_basis.num_modes)
         self.set_initial_guess()
         if "R_lmn" in kwargs:
-            self.R_lmn = kwargs["R_lmn"]
+            self.R_lmn = kwargs.pop("R_lmn")
         if "Z_lmn" in kwargs:
-            self.Z_lmn = kwargs["Z_lmn"]
+            self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
-            self.L_lmn = kwargs["L_lmn"]
+            self.L_lmn = kwargs.pop("L_lmn")
+        # if len(kwargs):
+        #     raise ValueError("Got unknown keyword arguments: {}".format(kwargs.keys()))
 
+    # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
+    # TODO: make this kwargs instead?
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
 
@@ -398,7 +401,7 @@ class _Configuration(IOAble, ABC):
             if isinstance(args[0], Surface):
                 surface = args[0]
                 if nargs > 1:
-                    if isinstance(args[1], Curve):
+                    if isinstance(args[1], FourierRZCurve):
                         axis = args[1]
                         axisR = np.array([axis.R_basis.modes[:, -1], axis.R_n]).T
                         axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
@@ -412,10 +415,10 @@ class _Configuration(IOAble, ABC):
                     axisR = None
                     axisZ = None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, surface.Rb_lmn, surface.R_basis, axisR
+                    self.R_basis, surface.R_lmn, surface.R_basis, axisR
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, surface.Zb_lmn, surface.Z_basis, axisZ
+                    self.Z_basis, surface.Z_lmn, surface.Z_basis, axisZ
                 )
             elif isinstance(args[0], _Configuration):
                 eq = args[0]

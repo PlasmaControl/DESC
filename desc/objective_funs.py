@@ -8,20 +8,26 @@ from desc.backend import jnp, jit, use_jax
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.grid import QuadratureGrid
+from desc.grid import QuadratureGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
     compute_pressure,
     compute_jacobian,
     compute_magnetic_field_magnitude,
+    compute_force_error_magnitude,
 )
 
 __all__ = [
     "FixedBoundary",
+    "FixedPressure",
+    "FixedIota",
+    "FixedPsi",
     "LCFSBoundary",
     "Volume",
     "Energy",
+    "RadialForceBalance",
+    "HelicalForceBalance",
 ]
 
 
@@ -1778,7 +1784,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        print("Plasma volume: {:10.3e} (m^3)".format(V))
+        print("Plasma volume: {:10.3e} (m^3)".format(float(V)))
         return None
 
     @property
@@ -1798,7 +1804,11 @@ class Volume(_Objective):
 
 
 class Energy(_Objective):
-    """MHD energy: W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV."""
+    """MHD energy.
+
+    W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
+
+    """
 
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
@@ -1999,8 +2009,9 @@ class Energy(_Objective):
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         print(
-            "Total MHD energy: {:10.3e}, ".format(W)
-            + "Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e} ".format(W_B, W_p)
+            "Total MHD energy: {:10.3e}, ".format(float(W))
+            + "Magnetic Energy: {:10.3e}, ".format(float(W_B))
+            + "Pressure Energy: {:10.3e} ".format(float(W_p))
             + "(J)"
         )
         return None
@@ -2028,6 +2039,441 @@ class Energy(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "energy"
+
+
+class RadialForceBalance(_Objective):
+    """Radial MHD force balance.
+
+    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
+    f_rho = F_rho |grad(rho)| dV  (N)
+
+    """
+
+    def __init__(self, grid=None, eq=None, target=0, weight=1):
+        """Initialize a RadialForceBalance Objective.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+
+        """
+        self._grid = grid
+        super().__init__(grid, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, grid=None, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                offset=0,
+                node_pattern=eq.node_pattern,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._pressure = eq.pressure.copy()
+        self._iota.grid = self._grid
+        self._pressure.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._built = True
+        self._check_dimensions()
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
+        """Compute radial MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_rho : ndarray
+            Radial MHD force balance error at each node, in Newtons.
+        f : ndarray
+            Total MHD force balance error at each node, in Newtons.
+
+        """
+        data = compute_force_error_magnitude(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            p_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._pressure,
+        )
+        f_rho = (
+            data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"] * self._grid.weights
+        )
+        f = data["|F|"] * data["sqrt(g)"] * self._grid.weights
+        return f_rho, f
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute radial MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_rho : ndarray
+            Radial MHD force balance error at each node, in Newtons.
+
+        """
+        f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return (f_rho - self._target) * self._weight
+
+    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute total radial MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_rho : ndarray
+            Total radial MHD force balance error, in Newtons.
+
+        """
+        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Print radial MHD force balance error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        print(
+            "Radial force error: {:10.3e}, ".format(jnp.sum(jnp.absolute(f_rho)))
+            + "Total force error: {:10.3e} (N)".format(jnp.sum(jnp.absolute(f)))
+        )
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "radial force"
+
+
+class HelicalForceBalance(_Objective):
+    """Helical MHD force balance.
+
+    F_beta = sqrt(g) J^rho
+    beta = B^zeta grad(theta) - B^theta grad(zeta)
+    f_beta = F_beta |beta| dV  (N)
+
+    """
+
+    def __init__(self, grid=None, eq=None, target=0, weight=1):
+        """Initialize a HelicalForceBalance Objective.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+
+        """
+        self._grid = grid
+        super().__init__(grid, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, grid=None, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                offset=1 / 4,
+                node_pattern=eq.node_pattern,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._pressure = eq.pressure.copy()
+        self._iota.grid = self._grid
+        self._pressure.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._built = True
+        self._check_dimensions()
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
+        """Compute helical MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_beta : ndarray
+            Helical MHD force balance error at each node, in Newtons.
+        f : ndarray
+            Total MHD force balance error at each node, in Newtons.
+
+        """
+        data = compute_force_error_magnitude(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            p_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._pressure,
+        )
+        f_beta = data["F_beta"] * data["|beta|"] * data["sqrt(g)"] * self._grid.weights
+        f = data["|F|"] * data["sqrt(g)"] * self._grid.weights
+        return f_beta, f
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute helical MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_beta : ndarray
+            Helical MHD force balance error at each node, in Newtons.
+
+        """
+        f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return (f_beta - self._target) * self._weight
+
+    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute total helical MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f_beta : ndarray
+            Helical MHD force balance error at each node, in Newtons.
+
+        """
+        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Print helical MHD force balance error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        print(
+            "Helical force error: {:10.3e}, ".format(jnp.sum(jnp.absolute(f_beta)))
+            + "Total force error: {:10.3e} (N)".format(jnp.sum(jnp.absolute(f)))
+        )
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "helical force"
 
 
 def get_objective_function(

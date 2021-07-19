@@ -1711,6 +1711,7 @@ def compute_force_error(
     )
     data["F_theta"] = data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
     data["F_zeta"] = -data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
 
     return data
 
@@ -1780,6 +1781,13 @@ def compute_force_error_magnitude(
         R_lmn, Z_lmn, R_transform, Z_transform, data=data
     )
 
+    data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    data["|beta|"] = jnp.sqrt(
+        data["B^zeta"] ** 2 * data["g^tt"]
+        + data["B^theta"] ** 2 * data["g^zz"]
+        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+    )
+
     data["F"] = (
         data["F_rho"] * data["e^rho"]
         + data["F_theta"] * data["e^theta"]
@@ -1793,6 +1801,7 @@ def compute_force_error_magnitude(
         + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
         + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
     )
-    data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2 * data["g^rr"])
+
+    data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
 
     return data

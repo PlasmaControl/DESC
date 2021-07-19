@@ -10,7 +10,7 @@ from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.grid import QuadratureGrid
 from desc.transform import Transform
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
     compute_pressure,
     compute_jacobian,
@@ -660,7 +660,7 @@ class _Objective(IOAble, ABC):
         Parameters
         ----------
         geometry : TBD, optional
-            Geometry defining where the objective is evaluated. Often a Grid or Surface.
+            Geometry defining where the objective is evaluated.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray
@@ -698,8 +698,8 @@ class _Objective(IOAble, ABC):
         return None
 
     @abstractmethod
-    def build(self, eq, grid=None, verbose=1):
-        """Precompute the transforms."""
+    def build(self, eq, geometry=None, verbose=1):
+        """Build constant arrays."""
 
     @abstractmethod
     def compute(self, **kwargs):
@@ -800,7 +800,7 @@ class FixedBoundary(_Objective):
         super().__init__(surface, eq=eq, target=target, weight=weight)
 
     def build(self, eq, surface=None, verbose=1):
-        """Precompute the transforms.
+        """Build constant arrays.
 
         Parameters
         ----------
@@ -962,7 +962,7 @@ class FixedBoundary(_Objective):
         Returns
         -------
         f : ndarray
-            Boundary surface errors, in meters.
+            Boundary surface error, in meters.
 
         """
         return jnp.linalg.norm(self.compute(Rb_lmn, Zb_lmn))
@@ -1004,6 +1004,471 @@ class FixedBoundary(_Objective):
         return "fixed-boundary"
 
 
+class FixedPressure(_Objective):
+    """Fixes pressure coefficients."""
+
+    def __init__(
+        self, profile=None, eq=None, target=None, weight=1, modes=True,
+    ):
+        """Initialize a FixedPressure Objective.
+
+        Parameters
+        ----------
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : tuple, float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(target) = len(weight) = len(modes)
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the profile modes.
+
+        """
+        self._profile = profile
+        self._modes = modes
+        super().__init__(profile, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, profile=None, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if profile is not None:
+            self._profile = profile
+        if self._profile is None:
+            self._profile = eq.pressure
+        if not isinstance(self._profile, PowerSeriesProfile):
+            raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
+            # TODO: add implementation for SplineProfile & MTanhProfile
+
+        # find inidies of profile modes to fix
+        if self._modes is False or self._modes is None:  # no modes
+            self._idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes in profile
+            self._idx = np.arange(self._profile.basis.num_modes)
+            idx = self._idx
+        else:  # specified modes
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [self._modes.dtype],
+            }
+            _, self._idx, idx = np.intersect1d(
+                self._profile.basis.modes.view(dtype), self._modes.view(dtype)
+            )
+            if self._idx.size < self._modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the pressure profile, ",
+                        +"these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = self._idx.size
+
+        # set target values for pressure coefficients
+        if self._target[0] is None:  # use profile coefficients
+            self._target = self._profile.params[self._idx]
+        elif self._target.size == 1:  # use scalar target for all modes
+            self._target = self._target * np.ones((self._dim_f,))
+        elif self._target.size == self._modes.shape[0]:  # use given array target
+            self._target = self._target[idx]
+        else:
+            raise ValueError("target must be the same size as modes")
+
+        # check weights
+        if self._weight.size == 1:  # use scalar weight for all modes
+            self._weight = self._weight * np.ones((self._dim_f,))
+        elif self._weight.size == self._modes.shape[0]:  # use given array weight
+            self._weight = self._weight[idx]
+        else:
+            raise ValueError("weight must be the same size as modes")
+
+        self._built = True
+        self._check_dimensions()
+
+    def _compute(self, p_l):
+        """Compute fixed-pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile errors, in Pascals.
+
+        """
+        return p_l[self._idx] - self._target
+
+    def compute(self, p_l, **kwargs):
+        """Compute fixed-pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile errors, in Pascals.
+
+        """
+        return self._compute(p_l) * self._weight
+
+    def compute_scalar(self, p_l, **kwargs):
+        """Compute total fixed-pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile error, in Pascals.
+
+        """
+        return jnp.linalg.norm(self.compute(p_l))
+
+    def callback(self, p_l, **kwargs):
+        """Print fixed-pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+
+        """
+        f = self._compute(p_l)
+        print("Fixed-pressure profile error: {:10.3e} (Pa)".format(jnp.linalg.norm(f)))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "fixed-pressure"
+
+
+class FixedIota(_Objective):
+    """Fixes rotational transform coefficients."""
+
+    def __init__(
+        self, profile=None, eq=None, target=None, weight=1, modes=True,
+    ):
+        """Initialize a FixedIota Objective.
+
+        Parameters
+        ----------
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : tuple, float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(target) = len(weight) = len(modes)
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the profile modes.
+
+        """
+        self._profile = profile
+        self._modes = modes
+        super().__init__(profile, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, profile=None, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if profile is not None:
+            self._profile = profile
+        if self._profile is None:
+            self._profile = eq.pressure
+        if not isinstance(self._profile, PowerSeriesProfile):
+            raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
+            # TODO: add implementation for SplineProfile & MTanhProfile
+
+        # find inidies of profile modes to fix
+        if self._modes is False or self._modes is None:  # no modes
+            self._idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes in profile
+            self._idx = np.arange(self._profile.basis.num_modes)
+            idx = self._idx
+        else:  # specified modes
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [self._modes.dtype],
+            }
+            _, self._idx, idx = np.intersect1d(
+                self._profile.basis.modes.view(dtype), self._modes.view(dtype)
+            )
+            if self._idx.size < self._modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the iota profile, ",
+                        +"these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = self._idx.size
+
+        # set target values for iota coefficients
+        if self._target[0] is None:  # use profile coefficients
+            self._target = self._profile.params[self._idx]
+        elif self._target.size == 1:  # use scalar target for all modes
+            self._target = self._target * np.ones((self._dim_f,))
+        elif self._target.size == self._modes.shape[0]:  # use given array target
+            self._target = self._target[idx]
+        else:
+            raise ValueError("target must be the same size as modes")
+
+        # check weights
+        if self._weight.size == 1:  # use scalar weight for all modes
+            self._weight = self._weight * np.ones((self._dim_f,))
+        elif self._weight.size == self._modes.shape[0]:  # use given array weight
+            self._weight = self._weight[idx]
+        else:
+            raise ValueError("weight must be the same size as modes")
+
+        self._built = True
+        self._check_dimensions()
+
+    def _compute(self, i_l):
+        """Compute fixed-iota profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile errors, in Pascals.
+
+        """
+        return i_l[self._idx] - self._target
+
+    def compute(self, i_l, **kwargs):
+        """Compute fixed-iota profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile errors, in Pascals.
+
+        """
+        return self._compute(i_l) * self._weight
+
+    def compute_scalar(self, i_l, **kwargs):
+        """Compute total fixed-iota profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile error, in Pascals.
+
+        """
+        return jnp.linalg.norm(self.compute(i_l))
+
+    def callback(self, i_l, **kwargs):
+        """Print fixed-iota profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        """
+        f = self._compute(i_l)
+        print("Fixed-iota profile error: {:10.3e} (Pa)".format(jnp.linalg.norm(f)))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "fixed-iota"
+
+
+class FixedPsi(_Objective):
+    """Fixes total toroidal magnetic flux within the last closed flux surface."""
+
+    def __init__(self, geometry=None, eq=None, target=None, weight=1):
+        """Initialize a FixedIota Objective.
+
+        Parameters
+        ----------
+        geometry : unused
+            This parameter is unused but included for the Objective API.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, optional
+            Target value(s) of the objective. If None, uses Equilibrium value.
+        weight : float, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+
+        """
+        super().__init__(geometry, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, geometry=None, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        geometry : unused
+            This parameter is unused but included for the Objective API.
+        verbose : int, optional
+            Level of output.
+
+        """
+        # set target value for Psi
+        if self._target[0] is None:  # use Equilibrium value
+            self._target = np.atleast_1d(eq.Psi)
+
+        self._built = True
+        self._check_dimensions()
+
+    def _compute(self, Psi):
+        """Compute fixed-Psi error.
+
+        Parameters
+        ----------
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Total toroidal magnetic flux error, in Webers.
+
+        """
+        return jnp.atleast_1d(Psi) - self._target
+
+    def compute(self, Psi, **kwargs):
+        """Compute fixed-Psi error.
+
+        Parameters
+        ----------
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Total toroidal magnetic flux error, in Webers.
+
+        """
+        return self._compute(Psi) * self._weight
+
+    def compute_scalar(self, Psi, **kwargs):
+        """Compute fixed-Psi error.
+
+        Parameters
+        ----------
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Total toroidal magnetic flux error, in Webers.
+
+        """
+        return jnp.absolute(self.compute(Psi))
+
+    def callback(self, Psi, **kwargs):
+        """Print fixed-Psi error.
+
+        Parameters
+        ----------
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(Psi)
+        print("Fixed-Psi error: {:10.3e} (Wb)".format(f))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return True
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "fixed-Psi"
+
+
 class LCFSBoundary(_Objective):
     """Boundary condition on the last closed flux surface."""
 
@@ -1028,7 +1493,7 @@ class LCFSBoundary(_Objective):
         super().__init__(surface, eq=eq, target=target, weight=weight)
 
     def build(self, eq, surface=None, verbose=1):
-        """Precompute the transforms.
+        """Build constant arrays.
 
         Parameters
         ----------
@@ -1215,7 +1680,7 @@ class Volume(_Objective):
             )
 
     def build(self, eq, grid=None, verbose=1):
-        """Precompute the transforms.
+        """Build constant arrays.
 
         Parameters
         ----------
@@ -1284,7 +1749,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        return jnp.atleast_1d((V - self._target) * self._weight)
+        return jnp.absolute((V - self._target) * self._weight)
 
     def compute_scalar(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -1373,7 +1838,7 @@ class Energy(_Objective):
             )
 
     def build(self, eq, grid=None, verbose=1):
-        """Precompute the transforms.
+        """Build constant arrays.
 
         Parameters
         ----------
@@ -1427,7 +1892,7 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         Returns
         -------
@@ -1477,7 +1942,7 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         Returns
         -------
@@ -1486,7 +1951,7 @@ class Energy(_Objective):
 
         """
         W, W_B, B_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return jnp.atleast_1d((W - self._target) * self._weight)
+        return jnp.absolute((W - self._target) * self._weight)
 
     def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute MHD energy.
@@ -1504,7 +1969,7 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         Returns
         -------
@@ -1530,7 +1995,7 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)

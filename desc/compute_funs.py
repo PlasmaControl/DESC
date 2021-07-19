@@ -55,7 +55,7 @@ def compute_toroidal_flux(
     Parameters
     ----------
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     iota : Profile
         Transforms i_l coefficients to real space.
     dr : int, optional
@@ -696,7 +696,7 @@ def compute_contravariant_magnetic_field(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -857,7 +857,7 @@ def compute_covariant_magnetic_field(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -955,7 +955,7 @@ def compute_magnetic_field_magnitude(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1288,7 +1288,7 @@ def compute_magnetic_pressure_gradient(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1390,7 +1390,7 @@ def compute_magnetic_tension(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1496,7 +1496,7 @@ def compute_B_dot_gradB(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1588,7 +1588,7 @@ def compute_contravariant_current_density(
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1669,7 +1669,7 @@ def compute_force_error(
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -1744,7 +1744,7 @@ def compute_force_error_magnitude(
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
     Psi : float
-        Total toroidal flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform

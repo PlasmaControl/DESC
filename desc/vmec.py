@@ -25,7 +25,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
         """Load a VMEC netCDF file as a Equilibrium.
 
         Parameters
@@ -39,7 +39,7 @@ class VMECIO:
         N : int, optional
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
-            Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
+            Type of Zernike indexing scheme to use. (Default = ``'fringe'``)
 
         Returns
         -------
@@ -59,8 +59,6 @@ class VMECIO:
         default_L = {
             "ansi": inputs["M"],
             "fringe": 2 * inputs["M"],
-            "chevron": inputs["M"],
-            "house": 2 * inputs["M"],
         }
         inputs["L"] = L if L >= 0 else default_L[inputs["spectral_indexing"]]
 

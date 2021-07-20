@@ -1,11 +1,12 @@
 import unittest
 import numpy as np
 import pytest
-from desc.grid import LinearGrid, ConcentricGrid
+from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.basis import (
     PowerSeries,
     FourierSeries,
     DoubleFourierSeries,
+    ZernikePolynomial,
     FourierZernikeBasis,
 )
 from desc.transform import Transform
@@ -384,3 +385,96 @@ class TestTransform(unittest.TestCase):
 
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
+
+    def test_fft_warnings(self):
+        g = LinearGrid(L=2, M=2, N=2)
+        b = ZernikePolynomial(L=0, M=0)
+        with pytest.warns(UserWarning):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct2"
+
+        g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
+        b = ZernikePolynomial(L=2, M=2)
+        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct1"
+
+        g = LinearGrid(L=2, M=2, N=2)
+        b = DoubleFourierSeries(M=2, N=2)
+        b._modes = b.modes[np.random.permutation(25)]
+        with pytest.warns(
+            UserWarning, match="zernike indices to be sorted by toroidal mode"
+        ):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct1"
+
+        g = LinearGrid(L=2, M=2, N=2, NFP=2)
+        b = DoubleFourierSeries(M=2, N=2)
+        with pytest.warns(UserWarning, match="nodes complete 1 full field period"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct2"
+
+        g = LinearGrid(L=2, M=2, N=2)
+        b = DoubleFourierSeries(M=1, N=1)
+        b._modes[:, 2] = np.where(b._modes[:, 2] == 1, 2, b._modes[:, 2])
+        with pytest.warns(UserWarning, match="toroidal modes are equally spaced in n"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct1"
+
+        g = LinearGrid(L=2, M=2, N=2)
+        b = DoubleFourierSeries(M=1, N=3)
+        with pytest.warns(UserWarning, match="can not undersample in zeta"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct2"
+
+        g = LinearGrid(L=2, M=2, N=4)
+        b = DoubleFourierSeries(M=1, N=1)
+        with pytest.warns(
+            UserWarning, match="requires an odd number of toroidal nodes"
+        ):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct2"
+
+        g = LinearGrid(L=2, M=2, N=5)
+        b = DoubleFourierSeries(M=1, N=1)
+        g._nodes = g._nodes[::-1]
+        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct1"
+
+        g = LinearGrid(L=2, M=2, N=5)
+        b = DoubleFourierSeries(M=1, N=1)
+        g._nodes[:, 2] = np.where(g._nodes[:, 2] == 0, 0.01, g.nodes[:, 2])
+        with pytest.warns(UserWarning, match="nodes to be equally spaced in zeta"):
+            t = Transform(g, b, method="fft")
+        assert t.method == "direct2"
+
+    def test_direct2_warnings(self):
+
+        g = LinearGrid(L=2, M=2, N=5)
+        b = DoubleFourierSeries(M=1, N=1)
+        g._nodes = g._nodes[::-1]
+        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
+            t = Transform(g, b, method="direct2")
+        assert t.method == "direct1"
+
+        g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
+        b = ZernikePolynomial(L=2, M=2)
+        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
+            t = Transform(g, b, method="direct2")
+        assert t.method == "direct1"
+
+        g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
+        b = ZernikePolynomial(L=2, M=2)
+        with pytest.warns(UserWarning, match="node pattern is the same"):
+            t = Transform(g, b, method="direct2")
+        assert t.method == "direct1"
+
+        g = LinearGrid(L=2, M=2, N=2)
+        b = DoubleFourierSeries(M=2, N=2)
+        b._modes = b.modes[np.random.permutation(25)]
+        with pytest.warns(
+            UserWarning, match="zernike indices to be sorted by toroidal mode"
+        ):
+            t = Transform(g, b, method="direct2")
+        assert t.method == "direct1"

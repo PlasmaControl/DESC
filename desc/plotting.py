@@ -818,7 +818,12 @@ def _compute(eq, name, grid):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         # primary calculations
-        if name_dict["base"] in ["rho", "theta", "zeta"]:
+        if name_dict["base"] == "e":
+            if name_dict["subs"] in ["rho", "theta", "zeta"]:
+                out = eq.compute_covariant_basis(grid)[_name_key(name_dict)]
+            if name_dict["sups"] in ["rho", "theta", "zeta"]:
+                out = eq.compute_contravariant_basis(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["rho", "theta", "zeta"]:
             idx = ["rho", "theta", "zeta"].index(name_dict["base"])
             out = grid.nodes[:, idx]
         elif name_dict["base"] == "vartheta":
@@ -837,7 +842,7 @@ def _compute(eq, name, grid):
         elif name_dict["base"] in ["Bpressure"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["Btension"]:
-            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
+            out = eq.compute_magnetic_tension(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["|grad(psi)|", "B*grad(|B|)"]:
@@ -847,6 +852,10 @@ def _compute(eq, name, grid):
                 "No output for base named '{}'.".format(name_dict["base"])
             )
 
+    if (out.ndim == 2) and (out.shape[0] == 3):
+        # for now only do norms of vectors
+        # TODO: allow plotting individual vector components
+        out = np.linalg.norm(out, axis=0)
     # secondary calculations
     power = name_dict["power"]
     if power != "":
@@ -912,6 +921,7 @@ def _format_name(name):
         name_dict["base"] = parsename
 
     units = {
+        "e": "",
         "rho": "",
         "theta": r"(\mathrm{rad})",
         "zeta": r"(\mathrm{rad})",

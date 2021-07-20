@@ -1,10 +1,16 @@
 import numpy as np
+from scipy.signal import convolve2d
 
-from desc.backend import put
-from desc.grid import LinearGrid, Grid
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.grid import LinearGrid
+from desc.equilibrium import Equilibrium
 from desc.transform import Transform
 from desc.compute_funs import compute_quasisymmetry
+
+# convolve kernel is reverse of FD coeffs
+FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
+FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]
+FD_COEF_2_2 = np.array([1, -2, 1])[::-1]
+FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
 
 
 def test_magnetic_field_derivatives(DummyStellarator):
@@ -16,7 +22,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    L = 201
+    L = 50
     grid = LinearGrid(L=L)
     drho = grid.nodes[1, 0]
 
@@ -51,52 +57,38 @@ def test_magnetic_field_derivatives(DummyStellarator):
         iota,
     )
 
-    B_sup_theta_r = np.zeros_like(magnetic_field["B^theta"])
-    B_sup_zeta_r = np.zeros_like(magnetic_field["B^zeta"])
-    B_sub_theta_r = np.zeros_like(magnetic_field["B_theta"])
-    B_sub_zeta_r = np.zeros_like(magnetic_field["B_zeta"])
-
-    for i in range(1, L - 1):
-        B_sup_theta_r[i] = (
-            magnetic_field["B^theta"][i + 1] - magnetic_field["B^theta"][i - 1]
-        ) / (2 * drho)
-        B_sup_zeta_r[i] = (
-            magnetic_field["B^zeta"][i + 1] - magnetic_field["B^zeta"][i - 1]
-        ) / (2 * drho)
-        B_sub_theta_r[i] = (
-            magnetic_field["B_theta"][i + 1] - magnetic_field["B_theta"][i - 1]
-        ) / (2 * drho)
-        B_sub_zeta_r[i] = (
-            magnetic_field["B_zeta"][i + 1] - magnetic_field["B_zeta"][i - 1]
-        ) / (2 * drho)
+    B_sup_theta_r = np.convolve(magnetic_field["B^theta"], FD_COEF_1_4, "same") / drho
+    B_sub_theta_r = np.convolve(magnetic_field["B_theta"], FD_COEF_1_4, "same") / drho
+    B_sup_zeta_r = np.convolve(magnetic_field["B^zeta"], FD_COEF_1_4, "same") / drho
+    B_sub_zeta_r = np.convolve(magnetic_field["B_zeta"], FD_COEF_1_4, "same") / drho
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_r"][2:-1],
-        B_sup_theta_r[2:-1],
+        magnetic_field["B^theta_r"][3:-2],
+        B_sup_theta_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(magnetic_field["B^theta_r"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_r"][2:-1],
-        B_sup_zeta_r[2:-1],
+        magnetic_field["B^zeta_r"][3:-2],
+        B_sup_zeta_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(magnetic_field["B^zeta_r"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_theta_r"][2:-1],
-        B_sub_theta_r[2:-1],
+        magnetic_field["B_theta_r"][3:-2],
+        B_sub_theta_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(magnetic_field["B_theta_r"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_zeta_r"][2:-1],
-        B_sub_zeta_r[2:-1],
+        magnetic_field["B_zeta_r"][3:-2],
+        B_sub_zeta_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(magnetic_field["B_zeta_r"])),
     )
 
     # partial derivatives wrt theta
-    M = 360
+    M = 90
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
 
@@ -131,157 +123,70 @@ def test_magnetic_field_derivatives(DummyStellarator):
         iota,
     )
 
-    B_sup_theta_t = np.zeros_like(magnetic_field["B^theta"])
-    B_sup_theta_tt = np.zeros_like(magnetic_field["B^theta"])
-    B_sup_zeta_t = np.zeros_like(magnetic_field["B^zeta"])
-    B_sup_zeta_tt = np.zeros_like(magnetic_field["B^zeta"])
-    B_sub_rho_t = np.zeros_like(magnetic_field["B_rho"])
-    B_sub_zeta_t = np.zeros_like(magnetic_field["B_zeta"])
-    B_t = np.zeros_like(magnetic_field["|B|"])
-    B_tt = np.zeros_like(magnetic_field["|B|"])
-
-    # theta=0
-    B_sup_theta_t[0] = (
-        magnetic_field["B^theta"][1] - magnetic_field["B^theta"][-1]
-    ) / (2 * dtheta)
-    B_sup_theta_tt[0] = (
-        magnetic_field["B^theta"][1]
-        - 2 * magnetic_field["B^theta"][0]
-        + magnetic_field["B^theta"][-1]
-    ) / (dtheta ** 2)
-    B_sup_zeta_t[0] = (magnetic_field["B^zeta"][1] - magnetic_field["B^zeta"][-1]) / (
-        2 * dtheta
+    B_sup_theta_t = np.convolve(magnetic_field["B^theta"], FD_COEF_1_4, "same") / dtheta
+    B_sup_theta_tt = (
+        np.convolve(magnetic_field["B^theta"], FD_COEF_2_4, "same") / dtheta ** 2
     )
-    B_sup_zeta_tt[0] = (
-        magnetic_field["B^zeta"][1]
-        - 2 * magnetic_field["B^zeta"][0]
-        + magnetic_field["B^zeta"][-1]
-    ) / (dtheta ** 2)
-    B_sub_rho_t[0] = (magnetic_field["B_rho"][1] - magnetic_field["B_rho"][-1]) / (
-        2 * dtheta
+    B_sup_zeta_t = np.convolve(magnetic_field["B^zeta"], FD_COEF_1_4, "same") / dtheta
+    B_sup_zeta_tt = (
+        np.convolve(magnetic_field["B^zeta"], FD_COEF_2_4, "same") / dtheta ** 2
     )
-    B_sub_zeta_t[0] = (magnetic_field["B_zeta"][1] - magnetic_field["B_zeta"][-1]) / (
-        2 * dtheta
-    )
-    B_t[0] = (magnetic_field["|B|"][1] - magnetic_field["|B|"][-1]) / (2 * dtheta)
-    B_tt[0] = (
-        magnetic_field["|B|"][1]
-        - 2 * magnetic_field["|B|"][0]
-        + magnetic_field["|B|"][-1]
-    ) / (dtheta ** 2)
-    # theta = (0,2pi)
-    for i in range(1, M - 1):
-        B_sup_theta_t[i] = (
-            magnetic_field["B^theta"][i + 1] - magnetic_field["B^theta"][i - 1]
-        ) / (2 * dtheta)
-        B_sup_theta_tt[i] = (
-            magnetic_field["B^theta"][i + 1]
-            - 2 * magnetic_field["B^theta"][i]
-            + magnetic_field["B^theta"][i - 1]
-        ) / (dtheta ** 2)
-        B_sup_zeta_t[i] = (
-            magnetic_field["B^zeta"][i + 1] - magnetic_field["B^zeta"][i - 1]
-        ) / (2 * dtheta)
-        B_sup_zeta_tt[i] = (
-            magnetic_field["B^zeta"][i + 1]
-            - 2 * magnetic_field["B^zeta"][i]
-            + magnetic_field["B^zeta"][i - 1]
-        ) / (dtheta ** 2)
-        B_sub_rho_t[i] = (
-            magnetic_field["B_rho"][i + 1] - magnetic_field["B_rho"][i - 1]
-        ) / (2 * dtheta)
-        B_sub_zeta_t[i] = (
-            magnetic_field["B_zeta"][i + 1] - magnetic_field["B_zeta"][i - 1]
-        ) / (2 * dtheta)
-        B_t[i] = (magnetic_field["|B|"][i + 1] - magnetic_field["|B|"][i - 1]) / (
-            2 * dtheta
-        )
-        B_tt[i] = (
-            magnetic_field["|B|"][i + 1]
-            - 2 * magnetic_field["|B|"][i]
-            + magnetic_field["|B|"][i - 1]
-        ) / (dtheta ** 2)
-    # theta = 2pi
-    B_sup_theta_t[-1] = (
-        magnetic_field["B^theta"][0] - magnetic_field["B^theta"][-2]
-    ) / (2 * dtheta)
-    B_sup_theta_tt[-1] = (
-        magnetic_field["B^theta"][0]
-        - 2 * magnetic_field["B^theta"][-1]
-        + magnetic_field["B^theta"][-2]
-    ) / (dtheta ** 2)
-    B_sup_zeta_t[-1] = (magnetic_field["B^zeta"][0] - magnetic_field["B^zeta"][-2]) / (
-        2 * dtheta
-    )
-    B_sup_zeta_tt[-1] = (
-        magnetic_field["B^zeta"][0]
-        - 2 * magnetic_field["B^zeta"][-1]
-        + magnetic_field["B^zeta"][-2]
-    ) / (dtheta ** 2)
-    B_sub_rho_t[-1] = (magnetic_field["B_rho"][0] - magnetic_field["B_rho"][-2]) / (
-        2 * dtheta
-    )
-    B_sub_zeta_t[-1] = (magnetic_field["B_zeta"][0] - magnetic_field["B_zeta"][-2]) / (
-        2 * dtheta
-    )
-    B_t[-1] = (magnetic_field["|B|"][0] - magnetic_field["|B|"][-2]) / (2 * dtheta)
-    B_tt[-1] = B_tt[-1] = (
-        magnetic_field["|B|"][0]
-        - 2 * magnetic_field["|B|"][-1]
-        + magnetic_field["|B|"][-2]
-    ) / (dtheta ** 2)
+    B_sub_rho_t = np.convolve(magnetic_field["B_rho"], FD_COEF_1_4, "same") / dtheta
+    B_sub_zeta_t = np.convolve(magnetic_field["B_zeta"], FD_COEF_1_4, "same") / dtheta
+    B_t = np.convolve(magnetic_field["|B|"], FD_COEF_1_4, "same") / dtheta
+    B_tt = np.convolve(magnetic_field["|B|"], FD_COEF_2_4, "same") / dtheta ** 2
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_t"],
-        B_sup_theta_t,
+        magnetic_field["B^theta_t"][3:-2],
+        B_sup_theta_t[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^theta_t"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^theta_tt"],
-        B_sup_theta_tt,
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(magnetic_field["B^theta_tt"])),
+        magnetic_field["B^theta_tt"][3:-2],
+        B_sup_theta_tt[3:-2],
+        rtol=2e-2,
+        atol=2e-2 * np.mean(np.abs(magnetic_field["B^theta_tt"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_t"],
-        B_sup_zeta_t,
+        magnetic_field["B^zeta_t"][3:-2],
+        B_sup_zeta_t[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^zeta_t"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_tt"],
-        B_sup_zeta_tt,
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(magnetic_field["B^zeta_tt"])),
+        magnetic_field["B^zeta_tt"][3:-2],
+        B_sup_zeta_tt[3:-2],
+        rtol=2e-2,
+        atol=2e-2 * np.mean(np.abs(magnetic_field["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_rho_t"],
-        B_sub_rho_t,
+        magnetic_field["B_rho_t"][3:-2],
+        B_sub_rho_t[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B_rho_t"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_zeta_t"],
-        B_sub_zeta_t,
+        magnetic_field["B_zeta_t"][3:-2],
+        B_sub_zeta_t[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B_zeta_t"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_t"],
-        B_t,
+        magnetic_field["|B|_t"][3:-2],
+        B_t[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["|B|_t"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_tt"],
-        B_tt,
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(magnetic_field["|B|_tt"])),
+        magnetic_field["|B|_tt"][3:-2],
+        B_tt[3:-2],
+        rtol=2e-2,
+        atol=2e-2 * np.mean(np.abs(magnetic_field["|B|_tt"])),
     )
 
     # partial derivatives wrt zeta
-    N = 360
+    N = 90
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
 
@@ -316,158 +221,71 @@ def test_magnetic_field_derivatives(DummyStellarator):
         iota,
     )
 
-    B_sup_theta_z = np.zeros_like(magnetic_field["B^theta"])
-    B_sup_theta_zz = np.zeros_like(magnetic_field["B^theta"])
-    B_sup_zeta_z = np.zeros_like(magnetic_field["B^zeta"])
-    B_sup_zeta_zz = np.zeros_like(magnetic_field["B^zeta"])
-    B_sub_rho_z = np.zeros_like(magnetic_field["B_rho"])
-    B_sub_theta_z = np.zeros_like(magnetic_field["B_theta"])
-    B_z = np.zeros_like(magnetic_field["|B|"])
-    B_zz = np.zeros_like(magnetic_field["|B|"])
-
-    # theta = 0
-    B_sup_theta_z[0] = (
-        magnetic_field["B^theta"][1] - magnetic_field["B^theta"][-1]
-    ) / (2 * dzeta)
-    B_sup_theta_zz[0] = (
-        magnetic_field["B^theta"][1]
-        - 2 * magnetic_field["B^theta"][0]
-        + magnetic_field["B^theta"][-1]
-    ) / (dzeta ** 2)
-    B_sup_zeta_z[0] = (magnetic_field["B^zeta"][1] - magnetic_field["B^zeta"][-1]) / (
-        2 * dzeta
+    B_sup_theta_z = np.convolve(magnetic_field["B^theta"], FD_COEF_1_4, "same") / dzeta
+    B_sup_theta_zz = (
+        np.convolve(magnetic_field["B^theta"], FD_COEF_2_4, "same") / dzeta ** 2
     )
-    B_sup_zeta_zz[0] = (
-        magnetic_field["B^zeta"][1]
-        - 2 * magnetic_field["B^zeta"][0]
-        + magnetic_field["B^zeta"][-1]
-    ) / (dzeta ** 2)
-    B_sub_rho_z[0] = (magnetic_field["B_rho"][1] - magnetic_field["B_rho"][-1]) / (
-        2 * dzeta
+    B_sup_zeta_z = np.convolve(magnetic_field["B^zeta"], FD_COEF_1_4, "same") / dzeta
+    B_sup_zeta_zz = (
+        np.convolve(magnetic_field["B^zeta"], FD_COEF_2_4, "same") / dzeta ** 2
     )
-    B_sub_theta_z[0] = (
-        magnetic_field["B_theta"][1] - magnetic_field["B_theta"][-1]
-    ) / (2 * dzeta)
-    B_z[0] = (magnetic_field["|B|"][1] - magnetic_field["|B|"][-1]) / (2 * dzeta)
-    B_zz[0] = (
-        magnetic_field["|B|"][1]
-        - 2 * magnetic_field["|B|"][0]
-        + magnetic_field["|B|"][-1]
-    ) / (dzeta ** 2)
-    # theta = (0,2pi)
-    for i in range(1, N - 1):
-        B_sup_theta_z[i] = (
-            magnetic_field["B^theta"][i + 1] - magnetic_field["B^theta"][i - 1]
-        ) / (2 * dzeta)
-        B_sup_theta_zz[i] = (
-            magnetic_field["B^theta"][i + 1]
-            - 2 * magnetic_field["B^theta"][i]
-            + magnetic_field["B^theta"][i - 1]
-        ) / (dzeta ** 2)
-        B_sup_zeta_z[i] = (
-            magnetic_field["B^zeta"][i + 1] - magnetic_field["B^zeta"][i - 1]
-        ) / (2 * dzeta)
-        B_sup_zeta_zz[i] = (
-            magnetic_field["B^zeta"][i + 1]
-            - 2 * magnetic_field["B^zeta"][i]
-            + magnetic_field["B^zeta"][i - 1]
-        ) / (dzeta ** 2)
-        B_sub_rho_z[i] = (
-            magnetic_field["B_rho"][i + 1] - magnetic_field["B_rho"][i - 1]
-        ) / (2 * dzeta)
-        B_sub_theta_z[i] = (
-            magnetic_field["B_theta"][i + 1] - magnetic_field["B_theta"][i - 1]
-        ) / (2 * dzeta)
-        B_z[i] = (magnetic_field["|B|"][i + 1] - magnetic_field["|B|"][i - 1]) / (
-            2 * dzeta
-        )
-        B_zz[i] = (
-            magnetic_field["|B|"][i + 1]
-            - 2 * magnetic_field["|B|"][i]
-            + magnetic_field["|B|"][i - 1]
-        ) / (dzeta ** 2)
-    # theta = 2pi
-    B_sup_theta_z[-1] = (
-        magnetic_field["B^theta"][0] - magnetic_field["B^theta"][-2]
-    ) / (2 * dzeta)
-    B_sup_theta_zz[-1] = (
-        magnetic_field["B^theta"][0]
-        - 2 * magnetic_field["B^theta"][-1]
-        + magnetic_field["B^theta"][-2]
-    ) / (dzeta ** 2)
-    B_sup_zeta_z[-1] = (magnetic_field["B^zeta"][0] - magnetic_field["B^zeta"][-2]) / (
-        2 * dzeta
-    )
-    B_sup_zeta_zz[-1] = (
-        magnetic_field["B^zeta"][0]
-        - 2 * magnetic_field["B^zeta"][-1]
-        + magnetic_field["B^zeta"][-2]
-    ) / (dzeta ** 2)
-    B_sub_rho_z[-1] = (magnetic_field["B_rho"][0] - magnetic_field["B_rho"][-2]) / (
-        2 * dzeta
-    )
-    B_sub_theta_z[-1] = (
-        magnetic_field["B_theta"][0] - magnetic_field["B_theta"][-2]
-    ) / (2 * dzeta)
-    B_z[-1] = (magnetic_field["|B|"][0] - magnetic_field["|B|"][-2]) / (2 * dzeta)
-    B_zz[-1] = B_tt[-1] = (
-        magnetic_field["|B|"][0]
-        - 2 * magnetic_field["|B|"][-1]
-        + magnetic_field["|B|"][-2]
-    ) / (dzeta ** 2)
+    B_sub_rho_z = np.convolve(magnetic_field["B_rho"], FD_COEF_1_4, "same") / dzeta
+    B_sub_theta_z = np.convolve(magnetic_field["B_theta"], FD_COEF_1_4, "same") / dzeta
+    B_z = np.convolve(magnetic_field["|B|"], FD_COEF_1_4, "same") / dzeta
+    B_zz = np.convolve(magnetic_field["|B|"], FD_COEF_2_4, "same") / dzeta ** 2
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_z"],
-        B_sup_theta_z,
+        magnetic_field["B^theta_z"][3:-2],
+        B_sup_theta_z[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^theta_z"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^theta_zz"],
-        B_sup_theta_zz,
+        magnetic_field["B^theta_zz"][3:-2],
+        B_sup_theta_zz[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^theta_zz"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_z"],
-        B_sup_zeta_z,
+        magnetic_field["B^zeta_z"][3:-2],
+        B_sup_zeta_z[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^zeta_z"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_zz"],
-        B_sup_zeta_zz,
+        magnetic_field["B^zeta_zz"][3:-2],
+        B_sup_zeta_zz[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_rho_z"],
-        B_sub_rho_z,
+        magnetic_field["B_rho_z"][3:-2],
+        B_sub_rho_z[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B_rho_z"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B_theta_z"],
-        B_sub_theta_z,
+        magnetic_field["B_theta_z"][3:-2],
+        B_sub_theta_z[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["B_theta_z"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_z"],
-        B_z,
+        magnetic_field["|B|_z"][3:-2],
+        B_z[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["|B|_z"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_zz"],
-        B_zz,
+        magnetic_field["|B|_zz"][3:-2],
+        B_zz[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_field["|B|_zz"])),
     )
 
     # mixed derivatives wrt theta & zeta
-    M = 540
-    N = 540
+    M = 125
+    N = 125
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
     dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
@@ -507,64 +325,40 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_sup_zeta = magnetic_field["B^zeta"].reshape((N, M))
     B = magnetic_field["|B|"].reshape((N, M))
 
-    B_sup_theta_t = np.zeros_like(B_sup_theta)
-    B_sup_zeta_t = np.zeros_like(B_sup_zeta)
-    B_t = np.zeros_like(B)
-
-    B_sup_theta_tz = np.zeros_like(B_sup_theta)
-    B_sup_zeta_tz = np.zeros_like(B_sup_zeta)
-    B_tz = np.zeros_like(B)
-
-    # theta = 0
-    B_sup_theta_t[:, 0] = (B_sup_theta[:, 1] - B_sup_theta[:, -1]) / (2 * dtheta)
-    B_sup_zeta_t[:, 0] = (B_sup_zeta[:, 1] - B_sup_zeta[:, -1]) / (2 * dtheta)
-    B_t[:, 0] = (B[:, 1] - B[:, -1]) / (2 * dtheta)
-    # theta = (0,2pi)
-    for i in range(1, M - 1):
-        B_sup_theta_t[:, i] = (B_sup_theta[:, i + 1] - B_sup_theta[:, i - 1]) / (
-            2 * dtheta
-        )
-        B_sup_zeta_t[:, i] = (B_sup_zeta[:, i + 1] - B_sup_zeta[:, i - 1]) / (
-            2 * dtheta
-        )
-        B_t[:, i] = (B[:, i + 1] - B[:, i - 1]) / (2 * dtheta)
-    # theta = 2pi
-    B_sup_theta_t[:, -1] = (B_sup_theta[:, 0] - B_sup_theta[:, -2]) / (2 * dtheta)
-    B_sup_zeta_t[:, -1] = (B_sup_zeta[:, 0] - B_sup_zeta[:, -2]) / (2 * dtheta)
-    B_t[:, -1] = (B[:, 0] - B[:, -2]) / (2 * dtheta)
-    # zeta = 0
-    B_sup_theta_tz[0, :] = (B_sup_theta_t[1, :] - B_sup_theta_t[-1, :]) / (2 * dzeta)
-    B_sup_zeta_tz[0, :] = (B_sup_zeta_t[1, :] - B_sup_zeta_t[-1, :]) / (2 * dzeta)
-    B_tz[0, :] = (B_t[1, :] - B_t[-1, :]) / (2 * dzeta)
-    # zeta = (0,2pi)
-    for i in range(1, N - 1):
-        B_sup_theta_tz[i, :] = (B_sup_theta_t[i + 1, :] - B_sup_theta_t[i - 1, :]) / (
-            2 * dzeta
-        )
-        B_sup_zeta_tz[i, :] = (B_sup_zeta_t[i + 1, :] - B_sup_zeta_t[i - 1, :]) / (
-            2 * dzeta
-        )
-        B_tz[i, :] = (B_t[i + 1, :] - B_t[i - 1, :]) / (2 * dzeta)
-    # zeta = 2pi
-    B_sup_theta_tz[-1, :] = (B_sup_theta_t[0, :] - B_sup_theta_t[-2, :]) / (2 * dzeta)
-    B_sup_zeta_tz[-1, :] = (B_sup_zeta_t[0, :] - B_sup_zeta_t[-2, :]) / (2 * dzeta)
-    B_tz[-1, :] = (B_t[0, :] - B_t[-2, :]) / (2 * dzeta)
+    B_sup_theta_tz = convolve2d(
+        B_sup_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_sup_zeta_tz = convolve2d(
+        B_sup_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_tz = convolve2d(
+        B,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
 
     np.testing.assert_allclose(
-        magnetic_field["B^theta_tz"],
-        B_sup_theta_tz.flatten(),
+        magnetic_field["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],
+        B_sup_theta_tz[2:-2, 2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(magnetic_field["B^theta_tz"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["B^zeta_tz"],
-        B_sup_zeta_tz.flatten(),
+        magnetic_field["B^zeta_tz"].reshape((N, M))[2:-2, 2:-2],
+        B_sup_zeta_tz[2:-2, 2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(magnetic_field["B^zeta_tz"])),
     )
     np.testing.assert_allclose(
-        magnetic_field["|B|_tz"],
-        B_tz.flatten(),
+        magnetic_field["|B|_tz"].reshape((N, M))[2:-2, 2:-2],
+        B_tz[2:-2, 2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(magnetic_field["|B|_tz"])),
     )
@@ -579,62 +373,52 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt rho
-    L = 201
+    L = 90
     grid = LinearGrid(L=L, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
     B2 = magnetic_field["|B|"] ** 2
 
-    B2_rho = np.zeros_like(B2)
     drho = grid.nodes[1, 0]
-    for i in range(1, L - 1):
-        B2_rho[i] = (B2[i + 1] - B2[i - 1]) / (2 * drho)
+    B2_rho = np.convolve(B2, FD_COEF_1_4, "same") / drho
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_rho"][1:-1],
-        B2_rho[1:-1],
+        magnetic_pressure["grad(|B|^2)_rho"][2:-2],
+        B2_rho[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(magnetic_pressure["grad(|B|^2)_rho"])),
     )
 
     # partial derivative wrt theta
-    M = 360
+    M = 90
     grid = LinearGrid(M=M, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
     B2 = magnetic_field["|B|"] ** 2
 
-    B2_theta = np.zeros_like(B2)
     dtheta = grid.nodes[1, 1]
-    B2_theta[0] = (B2[1] - B2[-1]) / (2 * dtheta)
-    for i in range(1, M - 1):
-        B2_theta[i] = (B2[i + 1] - B2[i - 1]) / (2 * dtheta)
-    B2_theta[-1] = (B2[0] - B2[-2]) / (2 * dtheta)
+    B2_theta = np.convolve(B2, FD_COEF_1_4, "same") / dtheta
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_theta"],
-        B2_theta,
+        magnetic_pressure["grad(|B|^2)_theta"][2:-2],
+        B2_theta[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_pressure["grad(|B|^2)_theta"])),
     )
 
     # partial derivative wrt zeta
-    N = 360
+    N = 90
     grid = LinearGrid(N=N, NFP=eq.NFP)
     magnetic_pressure = eq.compute_magnetic_pressure_gradient(grid)
     magnetic_field = eq.compute_magnetic_field(grid)
     B2 = magnetic_field["|B|"] ** 2
 
-    B2_zeta = np.zeros_like(B2)
     dzeta = grid.nodes[1, 2]
-    B2_zeta[0] = (B2[1] - B2[-1]) / (2 * dzeta)
-    for i in range(1, N - 1):
-        B2_zeta[i] = (B2[i + 1] - B2[i - 1]) / (2 * dzeta)
-    B2_zeta[-1] = (B2[0] - B2[-2]) / (2 * dzeta)
+    B2_zeta = np.convolve(B2, FD_COEF_1_4, "same") / dzeta
 
     np.testing.assert_allclose(
-        magnetic_pressure["grad(|B|^2)_zeta"],
-        B2_zeta,
+        magnetic_pressure["grad(|B|^2)_zeta"][2:-2],
+        B2_zeta[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(magnetic_pressure["grad(|B|^2)_zeta"])),
     )
@@ -649,62 +433,33 @@ def test_quasisymmetry(DummyStellarator):
     )
 
     # partial derivative wrt theta
-    M = 540
+    M = 120
     grid = LinearGrid(M=M, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]
 
-    Btilde_theta = np.zeros_like(Btilde)
     dtheta = grid.nodes[1, 1]
-    Btilde_theta[0] = (Btilde[1] - Btilde[-1]) / (2 * dtheta)
-    for i in range(1, M - 1):
-        Btilde_theta[i] = (Btilde[i + 1] - Btilde[i - 1]) / (2 * dtheta)
-    Btilde_theta[-1] = (Btilde[0] - Btilde[-2]) / (2 * dtheta)
+    Btilde_theta = np.convolve(Btilde, FD_COEF_1_4, "same") / dtheta
 
     np.testing.assert_allclose(
-        quasisymmetry["B*grad(|B|)_t"],
-        Btilde_theta,
+        quasisymmetry["B*grad(|B|)_t"][2:-2],
+        Btilde_theta[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(quasisymmetry["B*grad(|B|)_t"])),
     )
 
     # partial derivative wrt zeta
-    N = 540
+    N = 120
     grid = LinearGrid(N=N, NFP=eq.NFP)
     quasisymmetry = eq.compute_quasisymmetry(grid)
     Btilde = quasisymmetry["B*grad(|B|)"]
 
-    Btilde_zeta = np.zeros_like(Btilde)
     dzeta = grid.nodes[1, 2]
-    Btilde_zeta[0] = (Btilde[1] - Btilde[-1]) / (2 * dzeta)
-    for i in range(1, N - 1):
-        Btilde_zeta[i] = (Btilde[i + 1] - Btilde[i - 1]) / (2 * dzeta)
-    Btilde_zeta[-1] = (Btilde[0] - Btilde[-2]) / (2 * dzeta)
+    Btilde_zeta = np.convolve(Btilde, FD_COEF_1_4, "same") / dzeta
 
     np.testing.assert_allclose(
-        quasisymmetry["B*grad(|B|)_z"],
-        Btilde_zeta,
+        quasisymmetry["B*grad(|B|)_z"][2:-2],
+        Btilde_zeta[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(quasisymmetry["B*grad(|B|)_z"])),
     )
-
-
-def test_compute_flux_coords(SOLOVEV):
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-
-    rho = np.linspace(0.01, 0.99, 20)
-    theta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
-    zeta = np.linspace(0, 2 * np.pi, 20, endpoint=False)
-
-    nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
-    real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
-
-    flux_coords = eq.compute_flux_coords(real_coords)
-
-    # catch difference between 0 and 2*pi
-    if flux_coords[0, 1] > np.pi:  # theta[0] = 0
-        flux_coords = put(flux_coords, (0, 1), flux_coords[0, 1] - 2 * np.pi)
-
-    np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)

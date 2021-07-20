@@ -1134,10 +1134,10 @@ def get_parser():
         + "and three times (-ppp) to show all iterations.",
     )
     parser.add_argument(
-        "--vmec",
-        metavar="vmec_path",
+        "--guess",
+        metavar="path",
         default=None,
-        help="Path to VMEC data for initial guess.",
+        help="Path to DESC or VMEC equilibrium for initial guess.",
     )
     parser.add_argument(
         "--gpu",

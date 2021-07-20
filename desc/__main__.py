@@ -21,31 +21,24 @@ def main(cl_args=sys.argv[1:]):
 
     if ir.args.verbose:
         print(desc.BANNER)
-        print("Reading input from {}".format(ir.input_path))
-        print("Outputs will be written to {}".format(ir.output_path))
 
     from desc.backend import use_jax
     from desc.equilibrium import EquilibriaFamily
-    from desc.vmec import VMECIO
-
     from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
+
+    if ir.args.verbose:
+        print("Reading input from {}".format(ir.input_path))
+        print("Outputs will be written to {}".format(ir.output_path))
+
 
     # initialize
     equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input
-    if ir.args.vmec is not None:
-        equil_fam[0] = VMECIO.load(
-            ir.args.vmec,
-            L=ir.inputs[0]["L"],
-            M=ir.inputs[0]["M"],
-            N=ir.inputs[0]["N"],
-            spectral_indexing=ir.inputs[0]["spectral_indexing"],
-        )
-        equil_fam[0].inputs = ir.inputs[0]
-        equil_fam[0].objective = ir.inputs[0]["objective"]
-        equil_fam[0].optimizer = ir.inputs[0]["optimizer"]
-
+    if ir.args.guess is not None:
+        if ir.args.verbose:
+            print("Initial guess from {}".format(ir.args.guess))
+        equil_fam[0].set_initial_guess(ir.args.guess)
     # solve equilibrium
     equil_fam.solve_continuation(
         verbose=ir.args.verbose, checkpoint_path=ir.output_path

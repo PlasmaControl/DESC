@@ -307,14 +307,16 @@ class VMECIO:
         am[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         am[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=10).params
+            s_full, eq.pressure(r_full), order=10
+        ).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         ai[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=10).params
+            s_full, eq.iota(r_full), order=10
+        ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"
@@ -1243,9 +1245,11 @@ class VMECIO:
             ax[k].plot(coords["Rv_vmec"][:, :, k].T, coords["Zv_vmec"][:, :, k].T, "b-")
 
             ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
-            ax[k].plot(coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r:")
+            ax[k].plot(
+                coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r--"
+            )
             s_desc = ax[k].plot(
-                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r:"
+                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r--"
             )
 
             ax[k].axis("equal")

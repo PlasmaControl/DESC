@@ -392,13 +392,3 @@ def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
             c_new[i] = c_old[idx]
     return c_new
 
-
-def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
-    """Copy a state vector from one resolution to another."""
-    R_lmn, Z_lmn, L_lmn = unpack_state(x, len(old_R), len(old_Z))
-    R_lmn = copy_coeffs(R_lmn, old_R, new_R)
-    Z_lmn = copy_coeffs(Z_lmn, old_Z, new_Z)
-    L_lmn = copy_coeffs(L_lmn, old_L, new_L)
-
-    x = np.concatenate([R_lmn, Z_lmn, L_lmn])
-    return x

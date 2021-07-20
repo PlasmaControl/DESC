@@ -709,9 +709,9 @@ class _Objective(IOAble, ABC):
     def compute(self, **kwargs):
         """Compute the objective function."""
 
-    @abstractmethod
     def compute_scalar(self, **kwargs):
         """Compute the scalar form of the objective."""
+        return jnp.sum(self.compute(**kwargs) ** 2)
 
     @abstractmethod
     def callback(self, **kwargs):
@@ -913,23 +913,6 @@ class FixedBoundary(_Objective):
         self._check_dimensions()
 
     def _compute(self, Rb_lmn, Zb_lmn):
-        """Compute fixed-boundary errors.
-
-        Parameters
-        ----------
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
-
-        Returns
-        -------
-        Rb : ndarray
-            Boundary surface errors in R coordinate, in meters.
-        Zb : ndarray
-            Boundary surface errors in Z coordinate, in meters.
-
-        """
         Rb = Rb_lmn[self._idx_Rb] - self._R_target
         Zb = Zb_lmn[self._idx_Zb] - self._Z_target
         return Rb, Zb
@@ -952,24 +935,6 @@ class FixedBoundary(_Objective):
         """
         Rb, Zb = self._compute(Rb_lmn, Zb_lmn)
         return jnp.concatenate((Rb * self._R_weight, Zb * self._Z_weight))
-
-    def compute_scalar(self, Rb_lmn, Zb_lmn, **kwargs):
-        """Compute total fixed-boundary error.
-
-        Parameters
-        ----------
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface error, in meters.
-
-        """
-        return jnp.linalg.norm(self.compute(Rb_lmn, Zb_lmn))
 
     def callback(self, Rb_lmn, Zb_lmn, **kwargs):
         """Print fixed-boundary errors.
@@ -1106,19 +1071,6 @@ class FixedPressure(_Objective):
         self._check_dimensions()
 
     def _compute(self, p_l):
-        """Compute fixed-pressure profile errors.
-
-        Parameters
-        ----------
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-
-        Returns
-        -------
-        f : ndarray
-            Pressure profile errors, in Pascals.
-
-        """
         return p_l[self._idx] - self._target
 
     def compute(self, p_l, **kwargs):
@@ -1136,22 +1088,6 @@ class FixedPressure(_Objective):
 
         """
         return self._compute(p_l) * self._weight
-
-    def compute_scalar(self, p_l, **kwargs):
-        """Compute total fixed-pressure profile errors.
-
-        Parameters
-        ----------
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-
-        Returns
-        -------
-        f : ndarray
-            Pressure profile error, in Pascals.
-
-        """
-        return jnp.linalg.norm(self.compute(p_l))
 
     def callback(self, p_l, **kwargs):
         """Print fixed-pressure profile errors.
@@ -1280,19 +1216,6 @@ class FixedIota(_Objective):
         self._check_dimensions()
 
     def _compute(self, i_l):
-        """Compute fixed-iota profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        Returns
-        -------
-        f : ndarray
-            Pressure profile errors, in Pascals.
-
-        """
         return i_l[self._idx] - self._target
 
     def compute(self, i_l, **kwargs):
@@ -1310,22 +1233,6 @@ class FixedIota(_Objective):
 
         """
         return self._compute(i_l) * self._weight
-
-    def compute_scalar(self, i_l, **kwargs):
-        """Compute total fixed-iota profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        Returns
-        -------
-        f : ndarray
-            Pressure profile error, in Pascals.
-
-        """
-        return jnp.linalg.norm(self.compute(i_l))
 
     def callback(self, i_l, **kwargs):
         """Print fixed-iota profile errors.
@@ -1397,19 +1304,6 @@ class FixedPsi(_Objective):
         self._check_dimensions()
 
     def _compute(self, Psi):
-        """Compute fixed-Psi error.
-
-        Parameters
-        ----------
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f : ndarray
-            Total toroidal magnetic flux error, in Webers.
-
-        """
         return Psi - self._target
 
     def compute(self, Psi, **kwargs):
@@ -1427,22 +1321,6 @@ class FixedPsi(_Objective):
 
         """
         return self._compute(Psi) * self._weight
-
-    def compute_scalar(self, Psi, **kwargs):
-        """Compute fixed-Psi error.
-
-        Parameters
-        ----------
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f : ndarray
-            Total toroidal magnetic flux error, in Webers.
-
-        """
-        return jnp.linalg.norm(self.compute(Psi))
 
     def callback(self, Psi, **kwargs):
         """Print fixed-Psi error.
@@ -1540,27 +1418,6 @@ class LCFSBoundary(_Objective):
         self._check_dimensions()
 
     def _compute(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn):
-        """Compute last closed flux surface boundary errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
-
-        Returns
-        -------
-        Rb : ndarray
-            Boundary surface errors in R coordinate, in meters.
-        Zb : ndarray
-            Boundary surface errors in Z coordinate, in meters.
-
-        """
         Rb = jnp.dot(self._A_R, R_lmn) - Rb_lmn
         Zb = jnp.dot(self._A_Z, Z_lmn) - Zb_lmn
         return Rb, Zb
@@ -1587,28 +1444,6 @@ class LCFSBoundary(_Objective):
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
         return jnp.concatenate((Rb, Zb)) * self._weight
-
-    def compute_scalar(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
-        """Compute total last closed flux surface boundary error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors, in meters.
-
-        """
-        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn))
 
     def callback(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
         """Print last closed flux surface boundary errors.
@@ -1717,21 +1552,6 @@ class Volume(_Objective):
         self._check_dimensions()
 
     def _compute(self, R_lmn, Z_lmn):
-        """Compute plasma volume.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-
-        Returns
-        -------
-        V : float
-            Plasma volume, in cubic meters.
-
-        """
         data = compute_jacobian(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
         return jnp.atleast_1d(jnp.sum(jnp.abs(data["sqrt(g)"]) * self._grid.weights))
 
@@ -1753,24 +1573,6 @@ class Volume(_Objective):
         """
         V = self._compute(R_lmn, Z_lmn)
         return (V - self._target) * self._weight
-
-    def compute_scalar(self, R_lmn, Z_lmn, **kwargs):
-        """Compute plasma volume.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-
-        Returns
-        -------
-        V : float
-            Plasma volume, in cubic meters.
-
-        """
-        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn))
 
     def callback(self, R_lmn, Z_lmn, **kwargs):
         """Print plamsa volume.
@@ -1884,33 +1686,6 @@ class Energy(_Objective):
         self._check_dimensions()
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        """Compute MHD energy components.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        W : float
-            Total MHD energy in the plasma volume, in Joules.
-        W_B : float
-            Magnetic energy, in Joules.
-        W_p : float
-            Pressure energy, in Joules.
-
-        """
         data = compute_pressure(p_l, self._pressure)
         data = compute_magnetic_field_magnitude(
             R_lmn,
@@ -1961,32 +1736,6 @@ class Energy(_Objective):
         """
         W, W_B, B_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         return (W - self._target) * self._weight
-
-    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Compute MHD energy.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        W : float
-            Total MHD energy in the plasma volume, in Joules.
-
-        """
-        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print MHD energy.
@@ -2120,31 +1869,6 @@ class RadialForceBalance(_Objective):
         self._check_dimensions()
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        """Compute radial MHD force balance errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f_rho : ndarray
-            Radial MHD force balance error at each node, in Newtons.
-        f : ndarray
-            Total MHD force balance error at each node, in Newtons.
-
-        """
         data = compute_force_error_magnitude(
             R_lmn,
             Z_lmn,
@@ -2190,32 +1914,6 @@ class RadialForceBalance(_Objective):
         """
         f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         return (f_rho - self._target) * self._weight
-
-    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Compute total radial MHD force balance errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f_rho : ndarray
-            Total radial MHD force balance error, in Newtons.
-
-        """
-        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print radial MHD force balance error.
@@ -2339,31 +2037,6 @@ class HelicalForceBalance(_Objective):
         self._check_dimensions()
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        """Compute helical MHD force balance errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f_beta : ndarray
-            Helical MHD force balance error at each node, in Newtons.
-        f : ndarray
-            Total MHD force balance error at each node, in Newtons.
-
-        """
         data = compute_force_error_magnitude(
             R_lmn,
             Z_lmn,
@@ -2407,32 +2080,6 @@ class HelicalForceBalance(_Objective):
         """
         f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         return (f_beta - self._target) * self._weight
-
-    def compute_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Compute total helical MHD force balance errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f_beta : ndarray
-            Helical MHD force balance error at each node, in Newtons.
-
-        """
-        return jnp.linalg.norm(self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi))
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print helical MHD force balance error.

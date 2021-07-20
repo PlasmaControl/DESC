@@ -531,9 +531,10 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    offset : float
-        Rotation offset of poloidal coordinates, in the range [0, 1).
-        The poloidal coordinate of the first node on each surface is dtheta*offset.
+    rotation : {``'cos'``, ``'sin'``, False}
+        * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
+        * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
+        * ``False`` for no symmetry (Default), rotates halfway between other options
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
         pattern for radial coordinates
 
@@ -548,7 +549,15 @@ class ConcentricGrid(Grid):
     """
 
     def __init__(
-        self, L, M, N, NFP=1, sym=False, axis=False, offset=0, node_pattern="jacobi"
+        self,
+        L,
+        M,
+        N,
+        NFP=1,
+        sym=False,
+        axis=False,
+        rotation=False,
+        node_pattern="jacobi",
     ):
 
         self._L = L
@@ -557,7 +566,7 @@ class ConcentricGrid(Grid):
         self._NFP = NFP
         self._sym = sym
         self._axis = axis
-        self._offset = offset % 1.0
+        self._rotation = rotation
         self._node_pattern = node_pattern
 
         self._nodes, self._weights = self._create_nodes(
@@ -566,7 +575,7 @@ class ConcentricGrid(Grid):
             N=self.N,
             NFP=self.NFP,
             axis=self.axis,
-            offset=self._offset,
+            rotation=self._rotation,
             node_pattern=self.node_pattern,
         )
 
@@ -576,7 +585,7 @@ class ConcentricGrid(Grid):
         self._scale_weights()
 
     def _create_nodes(
-        self, L, M, N, NFP=1, axis=False, offset=0, node_pattern="jacobi"
+        self, L, M, N, NFP=1, axis=False, rotation=False, node_pattern="jacobi"
     ):
         """Create grid nodes and weights.
 
@@ -592,9 +601,10 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        offset : float
-            Rotation offset of poloidal coordinates, in the range [0, 1).
-            The poloidal coordinate of the first node on each surface is dtheta*offset.
+        rotation : {``'cos'``, ``'sin'``, False}
+            * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
+            * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
+            * ``False`` for no symmetry (Default), rotates halfway between other options
         node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
 
@@ -657,7 +667,15 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            theta = (theta + dtheta * self._offset) % (2 * np.pi)
+            if self._rotation is False:
+                offset = dtheta / 8
+            elif self._rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
+                offset = 0
+            elif self._rotation in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
+                offset = dtheta / 4
+            else:
+                raise ValueError(f"Unknown rotation type {self.rotation}")
+            theta = (theta + offset) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)

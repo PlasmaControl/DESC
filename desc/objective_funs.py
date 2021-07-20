@@ -1841,7 +1841,7 @@ class RadialForceBalance(_Objective):
                 NFP=eq.NFP,
                 sym=eq.sym,
                 axis=False,
-                offset=0,
+                rotation="cos",
                 node_pattern=eq.node_pattern,
             )
 
@@ -2009,7 +2009,7 @@ class HelicalForceBalance(_Objective):
                 NFP=eq.NFP,
                 sym=eq.sym,
                 axis=False,
-                offset=1 / 4,
+                rotation="sin",
                 node_pattern=eq.node_pattern,
             )
 

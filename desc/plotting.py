@@ -1517,8 +1517,130 @@ def plot_logo(savepath=None, **kwargs):
 
     return fig, ax
 
-def plot_field_lines(eq, rho, seed_thetas=0, phi_end=2*np.pi, grid=None, ax=None, B_interp=None, return_B_interp = False, **kwargs):
-    """Traces field lines on specified flux surface at specified initial theta seed locations, then plots them. 
+def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2*np.pi,ax=None, **kwargs):
+    """Traces field lines on specified flux surface at specified initial vartheta (:math:`\\vartheta`) seed locations, then plots them. 
+    Field lines traced by first finding the corresponding straight-field-line (SFL) coordinates :math:`(\\rho,\\vartheta,\phi)` for each field line, then converting those to the computational
+    :math:`(\\rho,\\theta,\phi)` coordiantes, then finally computing from those the toroidal :math:`(R,\phi,Z)` coordinates of each field line.
+    The SFL angle coordinates are found with the SFL relation:
+        
+        :math:`\\vartheta = \iota \phi + \\vartheta_0`
+        
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    rho : float
+        flux surface to trace field lines at
+    seed_thetas : float or array-like of floats
+        theta positions at which to seed magnetic field lines, if array-like, will plot multiple field lines
+    phi_end: float
+        phi to integrate field line until, in radians. Default is 2*pi
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+    field_line_coords : dict
+        dict containing the R,phi,Z coordinates of each field line traced. Dictionary entries are lists
+        corresponding to the field lines for each seed_theta given. Also contains the scipy IVP solutions for info
+        on how each line was integarted
+
+
+    """
+    if rho == 0:
+        raise NotImplementedError(
+                "Currently does not support field line tracing of the magnetic axis, please input 0 < rho < 1"
+            )
+        
+    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
+    
+    # check how many field lines to plot
+    if seed_thetas is list:
+        n_lines = len(seed_thetas)
+    elif isinstance(seed_thetas,np.ndarray):
+        n_lines = seed_thetas.size
+    else:
+        n_lines = 1
+    
+    phi0 = kwargs.get('phi0',0)
+    dphi = kwargs.get('dphi',1e-2) # spacing between points in phi, in radians
+    N_pts = int((phi_end-phi0)/dphi)
+    
+    grid_single_rho = Grid(nodes=np.array([[rho,0,0]])) # grid to get the iota value at the specified rho surface
+    iota = eq.compute_profiles(grid=grid_single_rho)['iota'][0] 
+    
+    varthetas = []
+    phi = np.linspace(phi0,phi_end,N_pts)
+    if n_lines>1:
+        for i in range(n_lines):
+            varthetas.append( seed_thetas[i] + iota*phi ) # list of varthetas corresponding to the field line
+    else:
+        varthetas.append( seed_thetas + iota*phi ) # list of varthetas corresponding to the field line
+    theta_coords = [] # list of nodes in (rho,theta,phi) corresponding to each (rho,vartheta,phi) node list
+    print("Calculating field line (rho,theta,zeta) coordinates corresponding to sfl coordinates")
+    for vartheta_list in varthetas:
+        rhos = rho*np.ones_like(vartheta_list)
+        sfl_coords = np.vstack((rhos,vartheta_list,phi)).T
+        theta_coords.append(eq.compute_theta_coords(sfl_coords))
+    
+    
+    # calculate R,phi,Z of nodes in grid
+    # only need to do this after finding the grid corresponding to desired rho, vartheta, phi
+    print("Calculating field line (R,phi,Z) coordinates corresponding to (rho,theta,zeta) coordinates")
+    field_line_coords = {"Rs" : [], "Zs" : [], "phis" : [], "seed_thetas": seed_thetas}
+    for coords in theta_coords:
+        grid = Grid(nodes=coords)
+        toroidal_coords = eq.compute_toroidal_coords(grid=grid)
+        field_line_coords["Rs"].append(toroidal_coords['R'])
+        field_line_coords["Zs"].append(toroidal_coords['Z'])
+        field_line_coords["phis"].append(phi)
+        
+    
+
+    for i in range(n_lines):
+        xline = np.asarray(field_line_coords["Rs"][i])*np.cos(field_line_coords["phis"][i])
+        yline = np.asarray(field_line_coords["Rs"][i])*np.sin(field_line_coords["phis"][i])
+    
+        ax.plot(xline, yline, field_line_coords["Zs"][i],linewidth=2)
+
+    ax.set_xlabel(_axis_labels_XYZ[0])
+    ax.set_ylabel(_axis_labels_XYZ[1])
+    ax.set_zlabel(_axis_labels_XYZ[2])
+    ax.set_title('%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface' %(n_lines,rho))
+    fig.set_tight_layout(True)
+
+    # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    return fig, ax, field_line_coords
+
+
+def plot_field_lines_real_space(eq, rho, seed_thetas=0, phi_end=2*np.pi, grid=None, ax=None, B_interp=None, return_B_interp = False, **kwargs):
+    """ ***Use plot_field_lines_sfl if plotting from a solved equilibrium, as that is faster and more accurate than real space interpolation***
+    Traces field lines on specified flux surface at specified initial theta seed locations, then plots them. 
     Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then integrating the field line
     from phi=0 up to the specified phi angle, by solving:
         
@@ -1534,8 +1656,6 @@ def plot_field_lines(eq, rho, seed_thetas=0, phi_end=2*np.pi, grid=None, ax=None
     ----------
     eq : Equilibrium
         object from which to plot
-    name : str
-        name of variable to plot
     rho : float
         flux surface to trace field lines at
     seed_thetas : float or array-like of floats

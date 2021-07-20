@@ -11,7 +11,7 @@ from desc.plotting import (
     plot_grid,
     plot_basis,
     _find_idx,
-    plot_field_lines
+    plot_field_lines_sfl
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -353,10 +353,13 @@ class TestPlotFieldLines(unittest.TestCase):
         self.assertEqual(idx,0)
     def test_field_line_Rbf(self):
         pass
-    # not sure what we want here... maybe first add some sanity checks on inputs (phi_end being positive, dp>0, etc)
+    
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_field_line(plot_eq):
-    fig,ax,_ = plot_field_lines(plot_eq,rho=1,seed_thetas=0,phi_end=2*np.pi)
+    fig,ax,_ = plot_field_lines_sfl(plot_eq,rho=1,seed_thetas=0,phi_end=2*np.pi)
     return fig
+def test_plot_field_lines(plot_eq):
+    fig,ax,_ = plot_field_lines_sfl(plot_eq,rho=1,seed_thetas=np.linspace(0,2*np.pi,4),phi_end=2*np.pi)
+    return fig
+
     
-    # then possible just an image comparison

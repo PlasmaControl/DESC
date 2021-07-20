@@ -3,7 +3,7 @@ from termcolor import colored
 import warnings
 from collections.abc import MutableSequence
 from desc.backend import use_jax
-from desc.utils import Timer, isalmostequal
+from desc.utils import Timer, isalmostequal, unpack_state
 from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
@@ -471,6 +471,7 @@ class Equilibrium(_Configuration, IOAble):
         Zb_modes = np.hstack(
             [self.surface.Z_basis.modes, np.zeros_like(Zb_lmn), Zb_lmn]
         )
+        R_lmn, Z_lmn, L_lmn = unpack_state(self.x0, self.R_basis.num_modes, self.Z_basis.num_modes)
         inputs = {
             "sym": self.sym,
             "NFP": self.NFP,
@@ -483,7 +484,9 @@ class Equilibrium(_Configuration, IOAble):
             "pressure": p_modes,
             "iota": i_modes,
             "surface": np.vstack((Rb_modes, Zb_modes)),
-            "x": self.x0,
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
             "objective": self.objective.name,
             "optimizer": self.optimizer.method,
         }

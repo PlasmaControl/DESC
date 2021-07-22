@@ -5,6 +5,7 @@ import warnings
 from scipy.constants import mu_0
 from inspect import getfullargspec
 
+from desc import config
 from desc.backend import jnp, jit, use_jax
 from desc.utils import Timer
 from desc.io import IOAble
@@ -90,35 +91,6 @@ class ObjectiveFunction(IOAble):
 
         self._dim_y = idx
 
-    def _set_objective_derivatives(self, use_jit=True, block_size="auto"):
-        """Set up derivatives of the objective functions.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-
-        """
-        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-        self._hess = Derivative(
-            self.compute_scalar,
-            mode="hess",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_x, self._dim_x),
-        )
-        self._jac = Derivative(
-            self.compute,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_f, self._dim_x),
-        )
-
-        if use_jit:
-            self.compute = jit(self.compute)
-            self.compute_scalar = jit(self.compute_scalar)
-
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
         # A = dc/dx
@@ -162,6 +134,35 @@ class ObjectiveFunction(IOAble):
         s[(~large,)] = 0
         self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
         self._y0 = np.dot(self._Ainv, self._b)
+
+    def _set_derivatives(self, use_jit=True, block_size="auto"):
+        """Set up derivatives of the objective functions.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+
+        """
+        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
+        self._hess = Derivative(
+            self.compute_scalar,
+            mode="hess",
+            use_jit=use_jit,
+            block_size=block_size,
+            shape=(self._dim_x, self._dim_x),
+        )
+        self._jac = Derivative(
+            self.compute,
+            mode="fwd",
+            use_jit=use_jit,
+            block_size=block_size,
+            shape=(self._dim_f, self._dim_x),
+        )
+
+        if use_jit:
+            self.compute = jit(self.compute)
+            self.compute_scalar = jit(self.compute_scalar)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build the constraints and objectives.
@@ -214,7 +215,7 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("linear constraint build")
 
-        self._set_objective_derivatives(self._use_jit)
+        self._set_derivatives(self._use_jit)
 
         self._built = True
         timer.stop("Objecive build")
@@ -353,24 +354,27 @@ class ObjectiveFunction(IOAble):
 
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        y = self.recover(x)
-        kwargs = self.unpack_state(y)
+        if config.get("device") == "gpu":
+            y = self.recover(x)
+            kwargs = self.unpack_state(y)
 
-        jac = np.array([[]])
-        for obj in self._objectives:
-            A = np.array([[]])  # A = df/dy
-            for arg in _arg_order_:
-                if arg in self._args:
-                    a = obj.derivatives[arg]
-                    if isinstance(a, Derivative):
-                        args = [kwargs[arg] for arg in obj.args]
-                        a = a.compute(*args)
-                    a = np.atleast_2d(a)
-                    A = np.hstack((A, a)) if A.size else a
-            jac = np.vstack((jac, A)) if jac.size else A
+            jac = np.array([[]])
+            for obj in self._objectives:
+                A = np.array([[]])  # A = df/dy
+                for arg in _arg_order_:
+                    if arg in self._args:
+                        a = obj.derivatives[arg]
+                        if isinstance(a, Derivative):
+                            args = [kwargs[arg] for arg in obj.args]
+                            a = a.compute(*args)
+                        a = np.atleast_2d(a)
+                        A = np.hstack((A, a)) if A.size else a
+                jac = np.vstack((jac, A)) if jac.size else A
 
-        return np.dot(jac, self._Z)  # Z = dy/dx
-        # return self._jac.compute(x)
+            return np.dot(jac, self._Z)  # Z = dy/dx
+
+        else:
+            return self._jac.compute(x)
 
     def jvp(self, x, v):
         """Compute Jacobian-vector product of the objective function."""
@@ -384,17 +388,17 @@ class ObjectiveFunction(IOAble):
         """Compute 3rd derivative jacobian-vector product of the objective function."""
         return Derivative.compute_jvp3(self.compute, 0, 0, 0, v1, v2, v3, x)
 
-    def compile(self, verbose=1, mode="auto"):
+    def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
 
         Parameters
         ----------
-        verbose : int, optional
-            Level of output.
         mode : {"auto", "lsq", "scalar", "all"}
             Whether to compile for least squares optimization or scalar optimization.
             "auto" compiles based on the type of objective,
             "all" compiles all derivatives.
+        verbose : int, optional
+            Level of output.
 
         """
         if not self._built:
@@ -439,7 +443,7 @@ class ObjectiveFunction(IOAble):
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x).block_until_ready()
+            J0 = self.jac(x)
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -619,12 +623,13 @@ class _Objective(IOAble, ABC):
                     self._scalar_derivatives[arg] = self._scalar_derivatives[
                         arg
                     ].compute(*args)
-                elif use_jit:  # JIT functions if not computing yet
-                    self.compute = jit(self.compute)
-                    self.compute_scalar = jit(self.compute_scalar)
             else:  # these derivatives are always zero
                 self._derivatives[arg] = np.zeros((self._dim_f, self._dimensions[arg]))
                 self._scalar_derivatives[arg] = np.zeros((1, self._dimensions[arg]))
+
+        if use_jit:
+            self.compute = jit(self.compute)
+            self.compute_scalar = jit(self.compute_scalar)
 
     def _check_dimensions(self):
         """Check that self.target = self.weight = self.dim_f."""

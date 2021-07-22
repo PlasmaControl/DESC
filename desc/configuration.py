@@ -58,7 +58,6 @@ class _Configuration(IOAble, ABC):
         "_L",
         "_M",
         "_N",
-        "_x",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -92,7 +91,6 @@ class _Configuration(IOAble, ABC):
                 spectral_indexing : str, type of Zernike indexing scheme to use, default is ``'ansi'``
                 bdry_mode : {``'lcfs'``, ``'poincare'``}, where the BC are enforced
                 axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-                x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
                 R_lmn : ndarray, spectral coefficients of R
                 Z_lmn : ndarray, spectral coefficients of Z
                 L_lmn : ndarray, spectral coefficients of lambda
@@ -277,9 +275,6 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
-
-        # state vector
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
         self._make_labels()
 
     @property
@@ -334,22 +329,6 @@ class _Configuration(IOAble, ABC):
     def N(self):
         """Maximum toroidal fourier mode number (int)."""
         return self._N
-
-    @property
-    def x(self):
-        """State vector x = [R_lmn, Z_lmn, L_lmn, Rb_lmn, Zb_lmn, p_l, i_l, Psi]."""
-        return np.concatenate(
-            (
-                np.atleast_1d(self._R_lmn),
-                np.atleast_1d(self._Z_lmn),
-                np.atleast_1d(self._L_lmn),
-                np.atleast_1d(self._surface.R_lmn),
-                np.atleast_1d(self._surface.Z_lmn),
-                np.atleast_1d(self._pressure.params),
-                np.atleast_1d(self._iota.params),
-                np.atleast_1d(self._Psi),
-            )
-        )
 
     @property
     def R_lmn(self):
@@ -502,6 +481,7 @@ class _Configuration(IOAble, ABC):
         A = self.compute_cross_section_area()
         return V / (2 * np.sqrt(np.pi * A ** 3))
 
+    # FIXME: update this now that x is no longer a property of Configuration
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]

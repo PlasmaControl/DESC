@@ -57,7 +57,6 @@ class Equilibrium(_Configuration, IOAble):
 
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
-        "_x0",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -72,7 +71,6 @@ class Equilibrium(_Configuration, IOAble):
     def __init__(self, inputs):
 
         super().__init__(inputs=inputs)
-        self._x0 = self._x
         self._L_grid = inputs.get("L_grid", self._L)
         self._M_grid = inputs.get("M_grid", self._M)
         self._N_grid = inputs.get("N_grid", self._N)
@@ -98,17 +96,6 @@ class Equilibrium(_Configuration, IOAble):
                 self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
             )
         )
-
-    @property
-    def x0(self):
-        """Return initial optimization vector before solution (ndarray)."""
-        if not hasattr(self, "_x0"):
-            self._x0 = None
-        return self._x0
-
-    @x0.setter
-    def x0(self, x0):
-        self._x0 = x0
 
     @property
     def L_grid(self):
@@ -437,7 +424,6 @@ class Equilibrium(_Configuration, IOAble):
             "bdry_mode": self.bdry_mode,
             "profiles": np.vstack((p_modes, i_modes)),
             "boundary": np.vstack((Rb_modes, Zb_modes)),
-            "x": self.x0,
             "objective": self.objective.name,
             "optimizer": self.optimizer.method,
         }

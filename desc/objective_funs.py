@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from termcolor import colored
 import warnings
 from scipy.constants import mu_0
+from inspect import getfullargspec
 
 from desc.backend import jnp, jit, use_jax
 from desc.utils import Timer
@@ -30,12 +31,14 @@ __all__ = [
     "HelicalForceBalance",
 ]
 
+# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+_arg_order_ = ("R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi")
+
 
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives."""
 
     _io_attrs_ = ["objectives", "constraints"]
-    _arg_order_ = ("R", "Z", "L", "Rb", "Zb", "pressure", "iota", "Psi")
 
     def __init__(self, objectives, constraints, eq=None, use_jit=True):
         """Initialize an Objective Function.
@@ -64,85 +67,29 @@ class ObjectiveFunction(IOAble):
         self._compiled = False
 
         if eq is not None:
-            self.build(eq)
+            self.build(eq, use_jit=self._use_jit)
 
-    def _set_constraint_derivatives(self, use_jit=True, block_size="auto"):
-        """Set up derivatives of the constraint functions.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-
-        """
-        self._derivatives = {}
-        self._derivatives["R"] = Derivative(
-            self.compute_constraints,
-            argnum=0,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_R),
-        )
-        self._derivatives["Z"] = Derivative(
-            self.compute_constraints,
-            argnum=1,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_Z),
-        )
-        self._derivatives["L"] = Derivative(
-            self.compute_constraints,
-            argnum=2,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_L),
-        )
-        self._derivatives["Rb"] = Derivative(
-            self.compute_constraints,
-            argnum=3,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_Rb),
-        )
-        self._derivatives["Zb"] = Derivative(
-            self.compute_constraints,
-            argnum=4,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_Zb),
-        )
-        self._derivatives["pressure"] = Derivative(
-            self.compute_constraints,
-            argnum=5,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_p),
-        )
-        self._derivatives["iota"] = Derivative(
-            self.compute_constraints,
-            argnum=6,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, self._dim_i),
-        )
-        self._derivatives["Psi"] = Derivative(
-            self.compute_constraints,
-            argnum=7,
-            mode="fwd",
-            use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_c, 1),
+    def _set_state_vector(self):
+        """Set state vector components, dimensions, and indicies."""
+        self._args = np.unique(
+            np.concatenate(
+                [
+                    np.concatenate([obj.args for obj in self._constraints]),
+                    np.concatenate([obj.args for obj in self._objectives]),
+                ]
+            )
         )
 
-        if use_jit:
-            self.compute_constraints = jit(self.compute_constraints)
+        self._dimensions = self._objectives[0]._dimensions
+
+        idx = 0
+        self._indicies = {}
+        for arg in _arg_order_:
+            if arg in self._args:
+                self._indicies[arg] = np.arange(idx, idx + self._dimensions[arg])
+                idx += self._dimensions[arg]
+
+        self._dim_x = idx
 
     def _set_objective_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective functions.
@@ -175,23 +122,15 @@ class ObjectiveFunction(IOAble):
 
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
-        # constraints are linear so variable values are irrelevant
-        args = (
-            np.zeros((self._dim_R,)),
-            np.zeros((self._dim_Z,)),
-            np.zeros((self._dim_L,)),
-            np.zeros((self._dim_Rb,)),
-            np.zeros((self._dim_Zb,)),
-            np.zeros((self._dim_p,)),
-            np.zeros((self._dim_i,)),
-            np.zeros((self._dim_Psi,)),
-        )
-
         # A = dc/dx
-        self._A = np.array([])
-        for arg in self._arg_order_:
-            A = self._derivatives[arg].compute(*args)
-            self._A = np.hstack((self._A, A)) if self._A.size else A
+        self._A = np.array([[]])
+        for obj in self._constraints:
+            A = np.array([[]])
+            for arg in _arg_order_:
+                if arg in self._args:
+                    a = np.atleast_2d(obj.derivatives[arg])
+                    A = np.hstack((A, a)) if A.size else a
+            self._A = np.vstack((self._A, A)) if self._A.size else A
 
         # c = A*x - b
         self._b = np.array([])
@@ -225,39 +164,22 @@ class ObjectiveFunction(IOAble):
         self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
         self._x0 = np.dot(self._Ainv, self._b)
 
-    def build(self, eq, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build the constraints and objectives.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
+        self._use_jit = use_jit
         timer = Timer()
         timer.start("Objecive build")
-
-        # state vector component dimensions
-        self._dim_R = eq.R_basis.num_modes
-        self._dim_Z = eq.Z_basis.num_modes
-        self._dim_L = eq.L_basis.num_modes
-        self._dim_Rb = eq.surface.R_basis.num_modes
-        self._dim_Zb = eq.surface.Z_basis.num_modes
-        self._dim_p = eq.pressure.params.size
-        self._dim_i = eq.iota.params.size
-        self._dim_Psi = 1
-        self._dim_x = (
-            self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-            + self._dim_Zb
-            + self._dim_p
-            + self._dim_i
-            + self._dim_Psi
-        )
 
         # build constraints
         self._dim_c = 0
@@ -267,7 +189,7 @@ class ObjectiveFunction(IOAble):
             if not constraint.built:
                 if verbose > 0:
                     print("Building constraint: " + constraint.name)
-                constraint.build(eq, verbose=verbose)
+                constraint.build(eq, use_jit=self._use_jit, verbose=verbose)
             self._dim_c += constraint.dim_f
 
         # build objectives
@@ -279,10 +201,10 @@ class ObjectiveFunction(IOAble):
             if not objective.built:
                 if verbose > 0:
                     print("Building objective: " + objective.name)
-                objective.build(eq, verbose=verbose)
+                objective.build(eq, use_jit=self._use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
 
-        self._set_constraint_derivatives(self._use_jit)
+        self._set_state_vector()
 
         # build linear constraint matrices
         if verbose > 0:
@@ -300,101 +222,55 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Objecive build")
 
-    def compute_constraints(self, R_lmn, Z_lmn, L_lmn, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the constraint equations.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal flux within the last closed flux surface, in Webers.
-
-        Returns
-        -------
-        f : float, ndarray
-            Constraint equation errors.
-
-        """
-        kwargs = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "Rb_lmn": Rb_lmn,
-            "Zb_lmn": Zb_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "Psi": Psi,
-        }
-        return jnp.concatenate([obj.compute(**kwargs) for obj in self._constraints])
-
-    def compute(self, x):
+    def compute(self, y):
         """Compute the objective function.
 
         Parameters
         ----------
-        x : ndarray
-            Full state vector x or optimization variable y.
+        y : ndarray
+            Optimization variables.
 
         Returns
         -------
-        f : float, ndarray
+        f : ndarray
             Objective function value(s).
 
         """
-        if x.size == self._dim_y:
-            x = self.recover(x)  # x is really y
+        if y.size != self._dim_y:
+            raise ValueError("Optimization vector is not the proper size.")
+        x = self.recover(y)
         kwargs = self.unpack_state(x)
 
         return jnp.concatenate([obj.compute(**kwargs) for obj in self._objectives])
 
-    def compute_scalar(self, x):
+    def compute_scalar(self, y):
         """Compute the scalar form of the objective.
 
         Parameters
         ----------
-        x : ndarray
-            Full state vector x or optimization variable y.
+        y : ndarray
+            Optimization variables.
 
         Returns
         -------
-        f : float, ndarray
+        f : float
             Objective function scalar value.
 
         """
-        if x.size == self._dim_y:
-            x = self.recover(x)  # x is really y
-        if x.size != self._dim_x:
-            raise ValueError("State vector is not the proper size.")
-        kwargs = self.unpack_state(x)
+        return jnp.sum(self.compute(y) ** 2)
 
-        return jnp.sum([obj.compute_scalar(**kwargs) for obj in self._objectives])
-
-    def callback(self, x):
+    def callback(self, y):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
-        x : ndarray
-            Full state vector x or optimization variable y.
+        y : ndarray
+            Optimization variables.
 
         """
-        if x.size == self._dim_y:
-            x = self.recover(x)  # x is really y
-        if x.size != self._dim_x:
-            raise ValueError("State vector is not the proper size.")
+        if y.size != self._dim_y:
+            raise ValueError("Optimization vector is not the proper size.")
+        x = self.recover(y)
         kwargs = self.unpack_state(x)
 
         for obj in self._objectives:
@@ -407,8 +283,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Full state vector of optimization variables.
-            x = [R_lmn, Z_lmn, L_lmn, Rb_lmn, Zb_lmn, p_l, i_l, Psi]
+            Full state vector.
 
         Returns
         -------
@@ -423,50 +298,8 @@ class ObjectiveFunction(IOAble):
             raise ValueError("State vector is not the proper size.")
 
         kwargs = {}
-        kwargs["R_lmn"] = x[: self._dim_R]
-        kwargs["Z_lmn"] = x[self._dim_R : self._dim_R + self._dim_Z]
-        kwargs["L_lmn"] = x[
-            self._dim_R + self._dim_Z : self._dim_R + self._dim_Z + self._dim_L
-        ]
-        kwargs["Rb_lmn"] = x[
-            self._dim_R
-            + self._dim_Z
-            + self._dim_L : self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-        ]
-        kwargs["Zb_lmn"] = x[
-            self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb : self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-            + self._dim_Zb
-        ]
-        kwargs["p_l"] = x[
-            self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-            + self._dim_Zb : self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-            + self._dim_Zb
-            + self._dim_p
-        ]
-        kwargs["i_l"] = x[
-            self._dim_R
-            + self._dim_Z
-            + self._dim_L
-            + self._dim_Rb
-            + self._dim_Zb
-            + self._dim_p : -self._dim_Psi
-        ]
-        kwargs["Psi"] = x[-self._dim_Psi :]
+        for arg in self._args:
+            kwargs[arg] = x[self._indicies[arg]]
         return kwargs
 
     def project(self, x):
@@ -489,17 +322,58 @@ class ObjectiveFunction(IOAble):
         y = self.project(x)
         return self._x0 + np.dot(self._Z, y)
 
-    def grad(self, x):
+    def x(self, eq):
+        """Return the full state vector x from the Equilibrium eq."""
+        kwargs = {
+            "R_lmn": np.atleast_1d(eq.R_lmn),
+            "Z_lmn": np.atleast_1d(eq.Z_lmn),
+            "L_lmn": np.atleast_1d(eq.L_lmn),
+            "Rb_lmn": np.atleast_1d(eq.surface.R_lmn),
+            "Zb_lmn": np.atleast_1d(eq.surface.Z_lmn),
+            "p_l": np.atleast_1d(eq.pressure.params),
+            "i_l": np.atleast_1d(eq.iota.params),
+            "Psi": np.atleast_1d(eq.Psi),
+        }
+
+        x = np.zeros((self._dim_x,))
+        for arg in self._args:
+            x[self._indicies[arg]] = kwargs[arg]
+
+        return x
+
+    def y(self, eq):
+        """Return the optimization variable y from the Equilibrium eq."""
+        return self.project(self.x(eq))
+
+    def grad(self, y):
         """Compute gradient vector of scalar form of the objective."""
-        return self._grad.compute(x)
+        return self._grad.compute(y)
 
-    def hess(self, x):
-        """Compute Hessian matrix of scalar form of the objective wrt to x."""
-        return self._hess.compute(x)
+    def hess(self, y):
+        """Compute Hessian matrix of scalar form of the objective wrt to y."""
+        return self._hess.compute(y)
 
-    def jac(self, x):
-        """Compute Jacobian matrx of vector form of the objective wrt to x."""
-        return self._jac.compute(x)
+    def jac(self, y):
+        """Compute Jacobian matrx of vector form of the objective wrt to y."""
+        x = self.recover(y)
+        kwargs = self.unpack_state(x)
+
+        jac = np.array([[]])
+        for obj in self._objectives:
+            A = np.array([[]])  # A = df/dx
+            for arg in _arg_order_:
+                if arg in self._args:
+                    a = obj.derivatives[arg]
+                    if isinstance(a, Derivative):
+                        args = [kwargs[arg] for arg in obj.args]
+                        a = a.compute(*args)
+                    a = np.atleast_2d(a)
+                    A = np.hstack((A, a)) if A.size else a
+            AZ = np.dot(A, self._Z)  # Z = dx/dy
+            jac = np.vstack((jac, AZ)) if jac.size else AZ
+
+        return jac  # jac = df/dy
+        # return self._jac.compute(x)
 
     def jvp(self, x, v):
         """Compute Jacobian-vector product of the objective function."""
@@ -600,6 +474,11 @@ class ObjectiveFunction(IOAble):
         return self._compiled
 
     @property
+    def args(self):
+        """list: Names (str) of arguments to the compute functions."""
+        return self._args
+
+    @property
     def dim_x(self):
         """int: Dimensional of the full state vector."""
         if not self._built:
@@ -687,6 +566,68 @@ class _Objective(IOAble, ABC):
         if eq is not None:
             self.build(eq, geometry)
 
+    def _set_dimensions(self, eq):
+        """Set state vector component dimensions."""
+        self._dimensions = {}
+        self._dimensions["R_lmn"] = eq.R_basis.num_modes
+        self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
+        self._dimensions["L_lmn"] = eq.L_basis.num_modes
+        self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
+        self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
+        self._dimensions["p_l"] = eq.pressure.params.size
+        self._dimensions["i_l"] = eq.iota.params.size
+        self._dimensions["Psi"] = 1
+
+    def _set_derivatives(self, use_jit=True, block_size="auto"):
+        """Set up derivatives of the objective wrt each argument."""
+        self._derivatives = {}
+        self._scalar_derivatives = {}
+        self._args = getfullargspec(self.compute)[0][1:]
+
+        # only used for linear objectives so variable values are irrelevant
+        kwargs = {
+            "R_lmn": np.zeros((self._dimensions["R_lmn"],)),
+            "Z_lmn": np.zeros((self._dimensions["Z_lmn"],)),
+            "L_lmn": np.zeros((self._dimensions["L_lmn"],)),
+            "Rb_lmn": np.zeros((self._dimensions["Rb_lmn"],)),
+            "Zb_lmn": np.zeros((self._dimensions["Zb_lmn"],)),
+            "p_l": np.zeros((self._dimensions["p_l"],)),
+            "i_l": np.zeros((self._dimensions["i_l"],)),
+            "Psi": np.zeros((self._dimensions["Psi"],)),
+        }
+        args = [kwargs[arg] for arg in self._args]
+
+        # constant derivatives are pre-computed, otherwise set up Derivative instance
+        for arg in _arg_order_:
+            if arg in self._args:  # derivative wrt arg
+                self._derivatives[arg] = Derivative(
+                    self.compute,
+                    argnum=self._args.index(arg),
+                    mode="fwd",
+                    use_jit=use_jit,
+                    block_size=block_size,
+                    shape=(self._dim_f, self._dimensions[arg]),
+                )
+                self._scalar_derivatives[arg] = Derivative(
+                    self.compute_scalar,
+                    argnum=self._args.index(arg),
+                    mode="fwd",
+                    use_jit=use_jit,
+                    block_size=block_size,
+                    shape=(self._dim_f, self._dimensions[arg]),
+                )
+                if self.linear:  # linear objectives have constant derivatives
+                    self._derivatives[arg] = self._derivatives[arg].compute(*args)
+                    self._scalar_derivatives[arg] = self._scalar_derivatives[
+                        arg
+                    ].compute(*args)
+                elif use_jit:  # JIT functions if not computing yet
+                    self.compute = jit(self.compute)
+                    self.compute_scalar = jit(self.compute_scalar)
+            else:  # these derivatives are always zero
+                self._derivatives[arg] = np.zeros((self._dim_f, self._dimensions[arg]))
+                self._scalar_derivatives[arg] = np.zeros((1, self._dimensions[arg]))
+
     def _check_dimensions(self):
         """Check that self.target = self.weight = self.dim_f."""
         if self._target.size == 1:
@@ -702,19 +643,19 @@ class _Objective(IOAble, ABC):
         return None
 
     @abstractmethod
-    def build(self, eq, geometry=None, verbose=1):
+    def build(self, eq, geometry=None, use_jit=True, verbose=1):
         """Build constant arrays."""
 
     @abstractmethod
-    def compute(self, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute the objective function."""
 
-    def compute_scalar(self, **kwargs):
+    def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
-        return jnp.sum(self.compute(**kwargs) ** 2)
+        return jnp.sum(self.compute(*args, **kwargs) ** 2)
 
     @abstractmethod
-    def callback(self, **kwargs):
+    def callback(self, *args):
         """Print the value(s) of the objective."""
 
     @property
@@ -741,6 +682,16 @@ class _Objective(IOAble, ABC):
     def built(self):
         """bool: Whether the transforms have been precomputed (or not)."""
         return self._built
+
+    @property
+    def args(self):
+        """list: Names (str) of arguments to the compute functions."""
+        return self._args
+
+    @property
+    def derivatives(self):
+        """dict: Derivatives of the function wrt the argument given by the dict keys."""
+        return self._derivatives
 
     @property
     def dim_f(self):
@@ -803,7 +754,7 @@ class FixedBoundary(_Objective):
         self._Z_modes = modes[1]
         super().__init__(surface, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, surface=None, verbose=1):
+    def build(self, eq, surface=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -812,6 +763,8 @@ class FixedBoundary(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         surface : Surface, optional
             Toroidal surface containing the Fourier modes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -909,8 +862,11 @@ class FixedBoundary(_Objective):
 
         self._target = np.concatenate((self._R_target, self._Z_target))
         self._weight = np.concatenate((self._R_weight, self._Z_weight))
-        self._built = True
         self._check_dimensions()
+
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, Rb_lmn, Zb_lmn):
         Rb = Rb_lmn[self._idx_Rb] - self._R_target
@@ -1003,7 +959,7 @@ class FixedPressure(_Objective):
         self._modes = modes
         super().__init__(profile, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, profile=None, verbose=1):
+    def build(self, eq, profile=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1012,6 +968,8 @@ class FixedPressure(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         profile : Profile, optional
             Profile containing the radial modes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1067,8 +1025,10 @@ class FixedPressure(_Objective):
         else:
             raise ValueError("weight must be the same size as modes")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, p_l):
         return p_l[self._idx] - self._target
@@ -1148,7 +1108,7 @@ class FixedIota(_Objective):
         self._modes = modes
         super().__init__(profile, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, profile=None, verbose=1):
+    def build(self, eq, profile=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1157,6 +1117,8 @@ class FixedIota(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         profile : Profile, optional
             Profile containing the radial modes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1212,8 +1174,10 @@ class FixedIota(_Objective):
         else:
             raise ValueError("weight must be the same size as modes")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, i_l):
         return i_l[self._idx] - self._target
@@ -1283,7 +1247,7 @@ class FixedPsi(_Objective):
         """
         super().__init__(geometry, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, geometry=None, verbose=1):
+    def build(self, eq, geometry=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1292,6 +1256,8 @@ class FixedPsi(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         geometry : unused
             This parameter is unused but included for the Objective API.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1300,8 +1266,10 @@ class FixedPsi(_Objective):
         if self._target[0] is None:  # use Equilibrium value
             self._target = np.atleast_1d(eq.Psi)
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, Psi):
         return Psi - self._target
@@ -1374,7 +1342,7 @@ class LCFSBoundary(_Objective):
         self._surface = surface
         super().__init__(surface, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, surface=None, verbose=1):
+    def build(self, eq, surface=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1383,6 +1351,8 @@ class LCFSBoundary(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         surface : FourierRZToroidalSurface, optional
             Toroidal surface containing the Fourier modes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1414,8 +1384,10 @@ class LCFSBoundary(_Objective):
             j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
             self._A_Z[j, i] = 1
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn):
         Rb = jnp.dot(self._A_R, R_lmn) - Rb_lmn
@@ -1518,7 +1490,7 @@ class Volume(_Objective):
                 )
             )
 
-    def build(self, eq, grid=None, verbose=1):
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1527,6 +1499,8 @@ class Volume(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1548,8 +1522,10 @@ class Volume(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, R_lmn, Z_lmn):
         data = compute_jacobian(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
@@ -1646,7 +1622,7 @@ class Energy(_Objective):
                 )
             )
 
-    def build(self, eq, grid=None, verbose=1):
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1655,6 +1631,8 @@ class Energy(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1682,8 +1660,10 @@ class Energy(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
         data = compute_pressure(p_l, self._pressure)
@@ -1818,7 +1798,7 @@ class RadialForceBalance(_Objective):
         self._grid = grid
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, verbose=1):
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1827,6 +1807,8 @@ class RadialForceBalance(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -1865,8 +1847,10 @@ class RadialForceBalance(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
         data = compute_force_error_magnitude(
@@ -1986,7 +1970,7 @@ class HelicalForceBalance(_Objective):
         self._grid = grid
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, verbose=1):
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1995,6 +1979,8 @@ class HelicalForceBalance(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -2033,8 +2019,10 @@ class HelicalForceBalance(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._built = True
         self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
         data = compute_force_error_magnitude(

@@ -13,9 +13,8 @@ from desc.grid import QuadratureGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
-    compute_pressure,
-    compute_jacobian,
-    compute_magnetic_field_magnitude,
+    compute_volume,
+    compute_energy,
     compute_force_error_magnitude,
 )
 
@@ -1528,8 +1527,8 @@ class Volume(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn):
-        data = compute_jacobian(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return jnp.atleast_1d(jnp.sum(jnp.abs(data["sqrt(g)"]) * self._grid.weights))
+        data = compute_volume(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        return data["V"]
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -1548,7 +1547,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        return (V - self._target) * self._weight
+        return (jnp.atleast_1d(V) - self._target) * self._weight
 
     def callback(self, R_lmn, Z_lmn, **kwargs):
         """Print plamsa volume.
@@ -1562,7 +1561,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        print("Plasma volume: {:10.3e} (m^3)".format(float(V)))
+        print("Plasma volume: {:10.3e} (m^3)".format(V))
         return None
 
     @property
@@ -1666,29 +1665,21 @@ class Energy(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_pressure(p_l, self._pressure)
-        data = compute_magnetic_field_magnitude(
+        data = compute_energy(
             R_lmn,
             Z_lmn,
             L_lmn,
             i_l,
+            p_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
-            data=data,
+            self._pressure,
+            self._gamma,
         )
-        W_B = jnp.atleast_1d(
-            jnp.sum(data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * self._grid.weights)
-            / (2 * mu_0)
-        )
-        W_p = jnp.atleast_1d(
-            jnp.sum(data["p"] * jnp.abs(data["sqrt(g)"]) * self._grid.weights)
-            / (self._gamma - 1)
-        )
-        W = W_B + W_p
-        return W, W_B, W_p
+        return data["W"], data["W_B"], data["W_p"]
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute MHD energy.
@@ -1714,8 +1705,8 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume, in Joules.
 
         """
-        W, W_B, B_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (W - self._target) * self._weight
+        W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return (jnp.atleast_1d(W) - self._target) * self._weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print MHD energy.
@@ -1738,9 +1729,9 @@ class Energy(_Objective):
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         print(
-            "Total MHD energy: {:10.3e}, ".format(float(W))
-            + "Magnetic Energy: {:10.3e}, ".format(float(W_B))
-            + "Pressure Energy: {:10.3e} ".format(float(W_p))
+            "Total MHD energy: {:10.3e}, ".format(W)
+            + "Magnetic Energy: {:10.3e}, ".format(W_B)
+            + "Pressure Energy: {:10.3e} ".format(W_p)
             + "(J)"
         )
         return None

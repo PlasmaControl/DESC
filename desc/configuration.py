@@ -34,6 +34,8 @@ from desc.compute_funs import (
     compute_magnetic_tension,
     compute_contravariant_current_density,
     compute_force_error_magnitude,
+    compute_volume,
+    compute_energy,
 )
 from desc.vmec_utils import (
     ptolemy_identity_rev,
@@ -872,8 +874,8 @@ class _Configuration(IOAble, ABC):
         R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
         Z_transform = Transform(grid, self.Z_basis, derivs=0, build=True)
 
-        data = compute_jacobian(self.R_lmn, self.Z_lmn, R_transform, Z_transform)
-        return jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
+        data = compute_volume(self.R_lmn, self.Z_lmn, R_transform, Z_transform)
+        return data["V"]
 
     def compute_cross_section_area(self):
         """Compute toroidally averaged cross-section area.
@@ -928,24 +930,21 @@ class _Configuration(IOAble, ABC):
         iota.grid = grid
         pressure.grid = grid
 
-        data = compute_pressure(self.pressure.params, pressure)
-        data = compute_magnetic_field_magnitude(
+        data = compute_energy(
             self.R_lmn,
             self.Z_lmn,
             self.L_lmn,
             self.iota.params,
+            self.pressure.params,
             self.Psi,
             R_transform,
             Z_transform,
             L_transform,
             iota,
-            data=data,
+            pressure,
+            gamma,
         )
-        W_B = np.sum(data["|B|"] ** 2 * np.abs(data["sqrt(g)"]) * grid.weights) / (
-            2 * mu_0
-        )
-        W_p = np.sum(data["p"] * np.abs(data["sqrt(g)"]) * grid.weights) / (gamma - 1)
-        return W_B + W_p
+        return data["W"]
 
     def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of

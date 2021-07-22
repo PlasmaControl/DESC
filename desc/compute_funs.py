@@ -1805,3 +1805,105 @@ def compute_force_error_magnitude(
     data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
 
     return data
+
+
+def compute_volume(
+    R_lmn, Z_lmn, R_transform, Z_transform, data=None,
+):
+    """Compute plasma volume.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) with volume key "V".
+
+    """
+    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform)
+    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
+    return data
+
+
+def compute_energy(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    i_l,
+    p_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
+    iota,
+    pressure,
+    gamma=0,
+    data=None,
+):
+    """Compute MHD energy. W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J).
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    p_l : ndarray
+        Spectral coefficients of p(rho) -- pressure profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    pressure : Profile
+        Transforms p_l coefficients to real space.
+    gamma : float
+        Adiabatic (compressional) index.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) with energy keys "W", "W_B", "W_p".
+
+    """
+    data = compute_pressure(p_l, pressure)
+    data = compute_magnetic_field_magnitude(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
+    )
+
+    data["W_B"] = jnp.sum(
+        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+    ) / (2 * mu_0)
+    data["W_p"] = jnp.sum(
+        data["p"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+    ) / (gamma - 1)
+    data["W"] = data["W_B"] + data["W_p"]
+
+    return data

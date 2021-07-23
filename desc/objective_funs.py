@@ -651,6 +651,7 @@ class _Objective(IOAble, ABC):
     @abstractmethod
     def build(self, eq, geometry=None, use_jit=True, verbose=1):
         """Build constant arrays."""
+        # TODO: most transforms are pre-computing more derivatives than required
 
     @abstractmethod
     def compute(self, *args, **kwargs):
@@ -1776,7 +1777,7 @@ class RadialForceBalance(_Objective):
 
     """
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1):
+    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
         """Initialize a RadialForceBalance Objective.
 
         Parameters
@@ -1791,9 +1792,12 @@ class RadialForceBalance(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
+        self._norm = norm
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
     def build(self, eq, grid=None, use_jit=True, verbose=1):
@@ -1864,10 +1868,13 @@ class RadialForceBalance(_Objective):
             self._iota,
             self._pressure,
         )
-        f_rho = (
-            data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"] * self._grid.weights
-        )
-        f = data["|F|"] * data["sqrt(g)"] * self._grid.weights
+        f_rho = data["F_rho"] * data["|grad(rho)|"]
+        f = data["|F|"]
+        if self._norm:
+            f_rho = f_rho / data["|grad(p)|"]
+            f = f / data["|grad(p)|"]
+        f_rho = f_rho * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self._grid.weights
         return f_rho, f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -1891,7 +1898,7 @@ class RadialForceBalance(_Objective):
         Returns
         -------
         f_rho : ndarray
-            Radial MHD force balance error at each node, in Newtons.
+            Radial MHD force balance error at each node (N).
 
         """
         f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -1917,11 +1924,25 @@ class RadialForceBalance(_Objective):
 
         """
         f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(N)"
         print(
             "Radial force error: {:10.3e}, ".format(jnp.linalg.norm(f_rho))
-            + "Total force error: {:10.3e} (N)".format(jnp.linalg.norm(f))
+            + "Total force error: {:10.3e} ".format(jnp.linalg.norm(f))
+            + units
         )
         return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
 
     @property
     def scalar(self):
@@ -1948,7 +1969,7 @@ class HelicalForceBalance(_Objective):
 
     """
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1):
+    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
         """Initialize a HelicalForceBalance Objective.
 
         Parameters
@@ -1963,9 +1984,12 @@ class HelicalForceBalance(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
+        self._norm = norm
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
     def build(self, eq, grid=None, use_jit=True, verbose=1):
@@ -2036,8 +2060,13 @@ class HelicalForceBalance(_Objective):
             self._iota,
             self._pressure,
         )
-        f_beta = data["F_beta"] * data["|beta|"] * data["sqrt(g)"] * self._grid.weights
-        f = data["|F|"] * data["sqrt(g)"] * self._grid.weights
+        f_beta = data["F_beta"] * data["|beta|"]
+        f = data["|F|"]
+        if self._norm:
+            f_beta = f_beta / data["|grad(p)|"]
+            f = f / data["|grad(p)|"]
+        f_beta = f_beta * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self._grid.weights
         return f_beta, f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -2087,11 +2116,25 @@ class HelicalForceBalance(_Objective):
 
         """
         f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(N)"
         print(
             "Helical force error: {:10.3e}, ".format(jnp.linalg.norm(f_beta))
-            + "Total force error: {:10.3e} (N)".format(jnp.linalg.norm(f))
+            + "Total force error: {:10.3e} ".format(jnp.linalg.norm(f))
+            + units
         )
         return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
 
     @property
     def scalar(self):
@@ -2112,7 +2155,9 @@ class HelicalForceBalance(_Objective):
 class QuasisymmetryFluxFunction(_Objective):
     """Quasi-symmetry flux function error."""
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, helicity=(1, 0)):
+    def __init__(
+        self, grid=None, eq=None, target=0, weight=1, norm=False, helicity=(1, 0)
+    ):
         """Initialize a QuasisymmetryFluxFunction Objective.
 
         Parameters
@@ -2127,11 +2172,14 @@ class QuasisymmetryFluxFunction(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
-        helicity : tuple, int
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+        helicity : tuple, optional
             Type of quasi-symmetry (M, N).
 
         """
         self._grid = grid
+        self._norm = norm
         self._helicity = helicity
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
@@ -2172,7 +2220,6 @@ class QuasisymmetryFluxFunction(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        # TODO: this is more derivatives than needed
         self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
         self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
         self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
@@ -2199,7 +2246,11 @@ class QuasisymmetryFluxFunction(_Objective):
             self._iota,
             self._helicity,
         )
-        return data["QS_FF"]
+        f = data["QS_FF"] * self._grid.weights
+        if self._norm:
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f / B ** 3
+        return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute quasi-symmetry flux function errors.
@@ -2220,10 +2271,9 @@ class QuasisymmetryFluxFunction(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node, in UNITS???.
+            Quasi-symmetry flux function error at each node (T^3).
 
         """
-        # TODO: add normalization factor?
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
         return (f - self._target) * self._weight
 
@@ -2245,18 +2295,35 @@ class QuasisymmetryFluxFunction(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        print("QS flux function error: {:10.3e} (T^3)".format(jnp.linalg.norm(f)))
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(T^3)"
+        print(
+            "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
+                self._helicity[0], self._helicity[1], jnp.linalg.norm(f)
+            )
+            + units
+        )
         return None
 
     @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
+
+    @property
     def helicity(self):
-        """tuple, int: Type of quasi-symmetry (M, N)."""
+        """tuple: Type of quasi-symmetry (M, N)."""
         return self._helicity
 
     @helicity.setter
     def helicity(self, helicity):
         self._helicity = helicity
-        # TODO: check that (M, N) are ints
 
     @property
     def scalar(self):
@@ -2277,7 +2344,7 @@ class QuasisymmetryFluxFunction(_Objective):
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error."""
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1):
+    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
         """Initialize a QuasisymmetryTripleProduct Objective.
 
         Parameters
@@ -2292,9 +2359,12 @@ class QuasisymmetryTripleProduct(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
+        self._norm = norm
         super().__init__(grid, eq=eq, target=target, weight=weight)
 
     def build(self, eq, grid=None, use_jit=True, verbose=1):
@@ -2334,7 +2404,6 @@ class QuasisymmetryTripleProduct(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        # TODO: this is more derivatives than needed
         self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
         self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
         self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
@@ -2360,7 +2429,12 @@ class QuasisymmetryTripleProduct(_Objective):
             self._L_transform,
             self._iota,
         )
-        return data["QS_TP"]
+        f = data["QS_TP"] * self._grid.weights
+        if self._norm:
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f * R ** 2 / B ** 4
+        return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute quasi-symmetry triple product errors.
@@ -2381,10 +2455,9 @@ class QuasisymmetryTripleProduct(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node, in UNITS???.
+            Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        # TODO: add normalization factor?
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
         return (f - self._target) * self._weight
 
@@ -2406,8 +2479,21 @@ class QuasisymmetryTripleProduct(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        print("QS triple product error: {:10.3e} (T^4/m^2)".format(jnp.linalg.norm(f)))
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(T^4/m^2)"
+        print("Quasi-symmetry error: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
         return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
 
     @property
     def scalar(self):

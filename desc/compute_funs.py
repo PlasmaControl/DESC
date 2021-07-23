@@ -722,7 +722,7 @@ def compute_contravariant_magnetic_field(
     """
     data = compute_toroidal_flux(Psi, iota, dr=dr + 1, data=data)
     data = compute_iota(i_l, iota, dr=dr, data=data)
-    data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dr + 1, dz=dz + 1, data=data)
+    data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, data=data)
     data = compute_jacobian(
         R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data,
     )
@@ -998,6 +998,7 @@ def compute_magnetic_field_magnitude(
         R_lmn, Z_lmn, R_transform, Z_transform, data=data
     )
 
+    # TODO: would it be simpler to compute this as B^theta*B_theta+B^zeta*B_zeta?
     data["|B|"] = jnp.sqrt(
         data["B^theta"] ** 2 * data["g_tt"]
         + data["B^zeta"] ** 2 * data["g_zz"]
@@ -1530,8 +1531,8 @@ def compute_B_dot_gradB(
         L_transform,
         iota,
         dr=0,
-        dt=2,
-        dz=2,
+        dt=dt + 1,
+        dz=dz + 1,
         data=data,
     )
 
@@ -1705,6 +1706,9 @@ def compute_force_error(
         dz=0,
         data=data,
     )
+    data = compute_contravariant_metric_coefficients(
+        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    )
 
     data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
         data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
@@ -1712,25 +1716,45 @@ def compute_force_error(
     data["F_theta"] = data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
     data["F_zeta"] = -data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
     data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
+    data["F"] = (
+        data["F_rho"] * data["e^rho"]
+        + data["F_theta"] * data["e^theta"]
+        + data["F_zeta"] * data["e^zeta"]
+    )
+
+    data["|F|"] = jnp.sqrt(
+        data["F_rho"] ** 2 * data["g^rr"]
+        + data["F_theta"] ** 2 * data["g^tt"]
+        + data["F_zeta"] ** 2 * data["g^zz"]
+        + 2 * data["F_rho"] * data["F_theta"] * data["g^rt"]
+        + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
+        + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
+    )
+    data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    data["|beta|"] = jnp.sqrt(
+        data["B^zeta"] ** 2 * data["g^tt"]
+        + data["B^theta"] ** 2 * data["g^zz"]
+        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+    )
+    data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
 
     return data
 
 
-def compute_force_error_magnitude(
+def compute_quasisymmetry_error(
     R_lmn,
     Z_lmn,
     L_lmn,
     i_l,
-    p_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
-    pressure,
+    helicity=(1, 0),
     data=None,
 ):
-    """Compute force error magnitude.
+    """Compute quasi-symmetry errors.
 
     Parameters
     ----------
@@ -1742,8 +1766,6 @@ def compute_force_error_magnitude(
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
-    p_l : ndarray
-        Spectral coefficients of p(rho) -- pressure profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -1754,55 +1776,60 @@ def compute_force_error_magnitude(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    pressure : Profile
-        Transforms p_l coefficients to real space.
+    helicity : tuple, int
+        Type of quasi-symmetry (M, N).
 
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) of force error magnitudes.
+        Dictionary of ndarray, shape(num_nodes,) of quasi-symmetry errors.
+        Key "QS_FF" is the flux function metric, key "QS_TP" is the triple product.
 
     """
-    data = compute_force_error(
+    data = compute_B_dot_gradB(
         R_lmn,
         Z_lmn,
         L_lmn,
         i_l,
-        p_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
-        pressure,
+        dr=0,
+        dt=1,
+        dz=1,
         data=data,
     )
-    data = compute_contravariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    # TODO: can remove this call if compute_|B| changed to use B_covariant
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
     )
 
-    data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
-    data["|beta|"] = jnp.sqrt(
-        data["B^zeta"] ** 2 * data["g^tt"]
-        + data["B^theta"] ** 2 * data["g^zz"]
-        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
-    )
+    M = helicity[0]
+    N = helicity[1]
 
-    data["F"] = (
-        data["F_rho"] * data["e^rho"]
-        + data["F_theta"] * data["e^theta"]
-        + data["F_zeta"] * data["e^zeta"]
-    )
-    data["|F|"] = jnp.sqrt(
-        data["F_rho"] ** 2 * data["g^rr"]
-        + data["F_theta"] ** 2 * data["g^tt"]
-        + data["F_zeta"] ** 2 * data["g^zz"]
-        + 2 * data["F_rho"] * data["F_theta"] * data["g^rt"]
-        + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
-        + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
-    )
+    # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
+    data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+    data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
 
-    data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+    # QS flux function (T^3)
+    data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * N * (
+        data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
+    ) - data["B*grad(|B|)"] * (M * data["G"] + N * data["I"]) / (M * data["iota"] - N)
+    # QS triple product (T^4/m^2)
+    data["QS_TP"] = (data["psi_r"] / data["sqrt(g)"]) * (
+        data["|B|_t"] * data["B*grad(|B|)_z"] - data["|B|_z"] * data["B*grad(|B|)_t"]
+    )
 
     return data
 
@@ -1829,7 +1856,7 @@ def compute_volume(
         Dictionary of ndarray, shape(num_nodes,) with volume key "V".
 
     """
-    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform)
+    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
     data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
     return data
 
@@ -1884,7 +1911,7 @@ def compute_energy(
         Dictionary of ndarray, shape(num_nodes,) with energy keys "W", "W_B", "W_p".
 
     """
-    data = compute_pressure(p_l, pressure)
+    data = compute_pressure(p_l, pressure, data=data)
     data = compute_magnetic_field_magnitude(
         R_lmn,
         Z_lmn,

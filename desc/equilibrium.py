@@ -6,7 +6,7 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.objective_funs import get_objective_function, ObjectiveFunction
+from desc.objective_funs import ObjectiveFunction
 from desc.optimize import Optimizer
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
@@ -352,18 +352,7 @@ class Equilibrium(_Configuration, IOAble):
             self._objective = objective
         elif isinstance(objective, str):
             self._set_transforms()
-            objective = get_objective_function(
-                objective,
-                R_transform=self.transforms["R"],
-                Z_transform=self.transforms["Z"],
-                L_transform=self.transforms["L"],
-                p_profile=self.pressure,
-                i_profile=self.iota,
-                BC_constraint=self.surface.get_constraint(
-                    self.R_basis, self.Z_basis, self.L_basis
-                ),
-            )
-            self.objective = objective
+            self.objective = None
         else:
             raise ValueError(
                 "objective should be of type 'ObjectiveFunction' or string, "
@@ -829,18 +818,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 break
 
             # objective function
-            objective = get_objective_function(
-                self.inputs[ii]["objective"],
-                R_transform=equil.transforms["R"],
-                Z_transform=equil.transforms["Z"],
-                L_transform=equil.transforms["L"],
-                p_profile=equil.pressure,
-                i_profile=equil.iota,
-                BC_constraint=equil.surface.get_constraint(
-                    R_basis=equil.R_basis, Z_basis=equil.Z_basis, L_basis=equil.L_basis,
-                ),
-                use_jit=True,
-            )
+            objective = None
             # reuse old objective if possible to avoid recompiling
             if objective.eq(self[ii - 1].objective):
                 equil.objective = self[ii - 1].objective

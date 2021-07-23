@@ -10,13 +10,14 @@ from desc.backend import jnp, jit, use_jax
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.grid import QuadratureGrid, ConcentricGrid
+from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
     compute_volume,
     compute_energy,
-    compute_force_error_magnitude,
+    compute_force_error,
+    compute_quasisymmetry_error,
 )
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "Energy",
     "RadialForceBalance",
     "HelicalForceBalance",
+    "QuasisymmetryFluxFunction",
+    "QuasisymmetryTripleProduct",
 ]
 
 # XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
@@ -1129,7 +1132,7 @@ class FixedIota(_Objective):
         if profile is not None:
             self._profile = profile
         if self._profile is None:
-            self._profile = eq.pressure
+            self._profile = eq.iota
         if not isinstance(self._profile, PowerSeriesProfile):
             raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
             # TODO: add implementation for SplineProfile & MTanhProfile
@@ -1848,7 +1851,7 @@ class RadialForceBalance(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_force_error_magnitude(
+        data = compute_force_error(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -1915,8 +1918,8 @@ class RadialForceBalance(_Objective):
         """
         f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         print(
-            "Radial force error: {:10.3e}, ".format(jnp.sum(jnp.absolute(f_rho)))
-            + "Total force error: {:10.3e} (N)".format(jnp.sum(jnp.absolute(f)))
+            "Radial force error: {:10.3e}, ".format(jnp.linalg.norm(f_rho))
+            + "Total force error: {:10.3e} (N)".format(jnp.linalg.norm(f))
         )
         return None
 
@@ -2020,7 +2023,7 @@ class HelicalForceBalance(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_force_error_magnitude(
+        data = compute_force_error(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -2085,8 +2088,8 @@ class HelicalForceBalance(_Objective):
         """
         f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         print(
-            "Helical force error: {:10.3e}, ".format(jnp.sum(jnp.absolute(f_beta)))
-            + "Total force error: {:10.3e} (N)".format(jnp.sum(jnp.absolute(f)))
+            "Helical force error: {:10.3e}, ".format(jnp.linalg.norm(f_beta))
+            + "Total force error: {:10.3e} (N)".format(jnp.linalg.norm(f))
         )
         return None
 
@@ -2106,81 +2109,317 @@ class HelicalForceBalance(_Objective):
         return "helical force"
 
 
-def get_objective_function(
-    objective,
-    R_transform,
-    Z_transform,
-    L_transform,
-    p_profile,
-    i_profile,
-    BC_constraint=None,
-    use_jit=True,
-):
-    """Get an objective function by name.
+class QuasisymmetryFluxFunction(_Objective):
+    """Quasi-symmetry flux function error."""
 
-    Parameters
-    ----------
-    objective : str
-        name of the desired objective function, eg ``'force'`` or ``'energy'``
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool
-        whether to just-in-time compile the objective and derivatives
+    def __init__(self, grid=None, eq=None, target=0, weight=1, helicity=(1, 0)):
+        """Initialize a QuasisymmetryFluxFunction Objective.
 
-    Returns
-    -------
-    obj_fun : ObjectiveFunction
-        objective initialized with the given transforms and constraints
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        helicity : tuple, int
+            Type of quasi-symmetry (M, N).
 
-    """
-    if objective == "force":
-        obj_fun = ForceErrorNodes(
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            p_profile=p_profile,
-            i_profile=i_profile,
-            BC_constraint=BC_constraint,
-            use_jit=use_jit,
-        )
-    elif objective == "galerkin":
-        obj_fun = ForceErrorGalerkin(
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            p_profile=p_profile,
-            i_profile=i_profile,
-            BC_constraint=BC_constraint,
-            use_jit=use_jit,
-        )
-    elif objective == "energy":
-        obj_fun = EnergyVolIntegral(
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            p_profile=p_profile,
-            i_profile=i_profile,
-            BC_constraint=BC_constraint,
-            use_jit=use_jit,
-        )
-    else:
-        raise ValueError(
-            colored(
-                "Requested Objective Function is not implemented. "
-                + "Available objective functions are: "
-                + "'force', 'lambda', 'galerkin', 'energy'",
-                "red",
+        """
+        self._grid = grid
+        self._helicity = helicity
+        super().__init__(grid, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = LinearGrid(
+                L=1,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=0.75,
             )
-        )
 
-    return obj_fun
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        # TODO: this is more derivatives than needed
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._helicity,
+        )
+        return data["QS_FF"]
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute quasi-symmetry flux function errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Quasi-symmetry flux function error at each node, in UNITS???.
+
+        """
+        # TODO: add normalization factor?
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print quasi-symmetry flux function error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        print("QS flux function error: {:10.3e} (T^3)".format(jnp.linalg.norm(f)))
+        return None
+
+    @property
+    def helicity(self):
+        """tuple, int: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        self._helicity = helicity
+        # TODO: check that (M, N) are ints
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "QS flux function"
+
+
+class QuasisymmetryTripleProduct(_Objective):
+    """Quasi-symmetry triple product error."""
+
+    def __init__(self, grid=None, eq=None, target=0, weight=1):
+        """Initialize a QuasisymmetryTripleProduct Objective.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+
+        """
+        self._grid = grid
+        super().__init__(grid, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = LinearGrid(
+                L=1,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=0.75,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        # TODO: this is more derivatives than needed
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        return data["QS_TP"]
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute quasi-symmetry triple product errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Quasi-symmetry flux function error at each node, in UNITS???.
+
+        """
+        # TODO: add normalization factor?
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print quasi-symmetry triple product error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        print("QS triple product error: {:10.3e} (T^4/m^2)".format(jnp.linalg.norm(f)))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "QS triple product"

@@ -1823,7 +1823,7 @@ def compute_quasisymmetry_error(
     data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
 
     # QS flux function (T^3)
-    data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * N * (
+    data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - data["B*grad(|B|)"] * (M * data["G"] + N * data["I"]) / (M * data["iota"] - N)
     # QS triple product (T^4/m^2)

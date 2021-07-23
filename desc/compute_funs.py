@@ -903,6 +903,9 @@ def compute_covariant_magnetic_field(
 
     # 1st order derivatives
     if dr > 0:
+        data["B_rho_r"] = dot(data["B_r"], data["e_rho"], 0) + dot(
+            data["B"], data["e_rho_r"], 0
+        )
         data["B_theta_r"] = dot(data["B_r"], data["e_theta"], 0) + dot(
             data["B"], data["e_theta_r"], 0
         )
@@ -913,6 +916,9 @@ def compute_covariant_magnetic_field(
         data["B_rho_t"] = dot(data["B_t"], data["e_rho"], 0) + dot(
             data["B"], data["e_rho_t"], 0
         )
+        data["B_theta_t"] = dot(data["B_t"], data["e_theta"], 0) + dot(
+            data["B"], data["e_theta_t"], 0
+        )
         data["B_zeta_t"] = dot(data["B_t"], data["e_zeta"], 0) + dot(
             data["B"], data["e_zeta_t"], 0
         )
@@ -922,6 +928,9 @@ def compute_covariant_magnetic_field(
         )
         data["B_theta_z"] = dot(data["B_z"], data["e_theta"], 0) + dot(
             data["B"], data["e_theta_z"], 0
+        )
+        data["B_zeta_z"] = dot(data["B_z"], data["e_zeta"], 0) + dot(
+            data["B"], data["e_zeta_z"], 0
         )
 
     return data
@@ -1432,7 +1441,7 @@ def compute_magnetic_tension(
     )
 
     # tension vector
-    data["(B*grad(|B|))B"] = (
+    data["(B*grad)B"] = (
         (data["B^theta"] * data["B^theta_t"] + data["B^zeta"] * data["B^theta_z"])
         * data["e_theta"]
         + (data["B^theta"] * data["B^zeta_t"] + data["B^zeta"] * data["B^zeta_z"])
@@ -1441,29 +1450,21 @@ def compute_magnetic_tension(
         + data["B^zeta"] ** 2 * data["e_zeta_z"]
         + data["B^theta"] * data["B^zeta"] * (data["e_theta_z"] + data["e_zeta_t"])
     )
+    # FIXME: Is this correct?
 
     # contravariant components
-    data["((B*grad(|B|))B)^rho"] = dot(data["(B*grad(|B|))B"], data["e^rho"], 0)
-    data["((B*grad(|B|))B)^theta"] = dot(data["(B*grad(|B|))B"], data["e^theta"], 0)
-    data["((B*grad(|B|))B)^zeta"] = dot(data["(B*grad(|B|))B"], data["e^zeta"], 0)
+    data["((B*grad)B)^rho"] = dot(data["(B*grad)B"], data["e^rho"], 0)
+    data["((B*grad)B)^theta"] = dot(data["(B*grad)B"], data["e^theta"], 0)
+    data["((B*grad)B)^zeta"] = dot(data["(B*grad)B"], data["e^zeta"], 0)
 
     # magnitude
-    data["|(B*grad(|B|))B|"] = jnp.sqrt(
-        data["((B*grad(|B|))B)^rho"] ** 2 * data["g_rr"]
-        + data["((B*grad(|B|))B)^theta"] ** 2 * data["g_tt"]
-        + data["((B*grad(|B|))B)^zeta"] ** 2 * data["g_zz"]
-        + 2
-        * data["((B*grad(|B|))B)^rho"]
-        * data["((B*grad(|B|))B)^theta"]
-        * data["g_rt"]
-        + 2
-        * data["((B*grad(|B|))B)^rho"]
-        * data["((B*grad(|B|))B)^zeta"]
-        * data["g_rz"]
-        + 2
-        * data["((B*grad(|B|))B)^theta"]
-        * data["((B*grad(|B|))B)^zeta"]
-        * data["g_tz"]
+    data["|(B*grad)B|"] = jnp.sqrt(
+        data["((B*grad)B)^rho"] ** 2 * data["g_rr"]
+        + data["((B*grad)B)^theta"] ** 2 * data["g_tt"]
+        + data["((B*grad)B)^zeta"] ** 2 * data["g_zz"]
+        + 2 * data["((B*grad)B)^rho"] * data["((B*grad)B)^theta"] * data["g_rt"]
+        + 2 * data["((B*grad)B)^rho"] * data["((B*grad)B)^zeta"] * data["g_rz"]
+        + 2 * data["((B*grad)B)^theta"] * data["((B*grad)B)^zeta"] * data["g_tz"]
     )
 
     return data

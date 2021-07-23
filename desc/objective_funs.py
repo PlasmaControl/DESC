@@ -14,10 +14,13 @@ from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
-    compute_volume,
-    compute_energy,
+    compute_contravariant_metric_coefficients,
+    compute_magnetic_field_magnitude,
+    compute_contravariant_current_density,
     compute_force_error,
     compute_quasisymmetry_error,
+    compute_volume,
+    compute_energy,
 )
 
 __all__ = [
@@ -30,6 +33,7 @@ __all__ = [
     "Energy",
     "RadialForceBalance",
     "HelicalForceBalance",
+    "RadialCurrent",
     "QuasisymmetryFluxFunction",
     "QuasisymmetryTripleProduct",
 ]
@@ -2090,7 +2094,7 @@ class HelicalForceBalance(_Objective):
         Returns
         -------
         f_beta : ndarray
-            Helical MHD force balance error at each node, in Newtons.
+            Helical MHD force balance error at each node (N).
 
         """
         f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -2150,6 +2154,193 @@ class HelicalForceBalance(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "helical force"
+
+
+class RadialCurrent(_Objective):
+    """Radial current."""
+
+    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
+        """Initialize a RadialCurrent Objective.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+
+        """
+        self._grid = grid
+        self._norm = norm
+        super().__init__(grid, eq=eq, target=target, weight=weight)
+
+    def build(self, eq, grid=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if grid is not None:
+            self._grid = grid
+        if self._grid is None:
+            self._grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation="sin",
+                node_pattern=eq.node_pattern,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
+        )
+        f = data["J^rho"] * jnp.sqrt(data["g^rr"])
+        if self._norm:
+            data = compute_magnetic_field_magnitude(
+                R_lmn,
+                Z_lmn,
+                L_lmn,
+                i_l,
+                Psi,
+                self._R_transform,
+                self._Z_transform,
+                self._L_transform,
+                self._iota,
+            )
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f * mu_0 / (B * R ** 2)
+        f = f * data["sqrt(g)"] * self._grid.weights
+        return f
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute radial current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Radial current at each node (A*m).
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print radial current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(A*m)"
+        print(+"Total radial current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
+        return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "radial current"
 
 
 class QuasisymmetryFluxFunction(_Objective):

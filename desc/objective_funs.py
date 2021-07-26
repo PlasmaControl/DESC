@@ -14,7 +14,8 @@ from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.compute_funs import (
-    compute_contravariant_metric_coefficients,
+    compute_rotational_transform,
+    compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
     compute_force_error,
@@ -29,11 +30,14 @@ __all__ = [
     "FixedIota",
     "FixedPsi",
     "LCFSBoundary",
+    "TargetIota",
     "Volume",
     "Energy",
     "RadialForceBalance",
     "HelicalForceBalance",
     "RadialCurrent",
+    "PoloidalCurrent",
+    "ToroidalCurrent",
     "QuasisymmetryFluxFunction",
     "QuasisymmetryTripleProduct",
 ]
@@ -353,10 +357,12 @@ class ObjectiveFunction(IOAble):
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
+        # TODO: add block method
         return self._grad.compute(x)
 
     def hess(self, x):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
+        # TODO: add block method
         return self._hess.compute(x)
 
     def jac(self, x):
@@ -394,6 +400,9 @@ class ObjectiveFunction(IOAble):
     def jvp3(self, argnum1, argnum2, argnum3, v1, v2, v3, x):
         """Compute 3rd derivative jacobian-vector product of the objective function."""
         return Derivative.compute_jvp3(self.compute, 0, 0, 0, v1, v2, v3, x)
+
+    # TODO: add function to compute derivatives wrt args
+    # give jacobian as optional argument
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -540,19 +549,13 @@ class ObjectiveFunction(IOAble):
 class _Objective(IOAble, ABC):
     """Objective (or constraint) used in the optimization of an Equilibrium."""
 
-    _io_attrs_ = [
-        "grid",
-        "target",
-        "weight",
-    ]
+    _io_attrs_ = ["grid", "target", "weight"]
 
-    def __init__(self, geometry=None, eq=None, target=0, weight=1):
+    def __init__(self, eq=None, target=0, weight=1):
         """Initialize an Objective.
 
         Parameters
         ----------
-        geometry : TBD, optional
-            Geometry defining where the objective is evaluated.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray
@@ -567,13 +570,8 @@ class _Objective(IOAble, ABC):
         self._weight = np.atleast_1d(weight)
         self._built = False
 
-        if self.scalar:
-            self._dim_f = 1
-        else:
-            self._dim_f = None
-
         if eq is not None:
-            self.build(eq, geometry)
+            self.build(eq)
 
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""
@@ -653,7 +651,7 @@ class _Objective(IOAble, ABC):
         return None
 
     @abstractmethod
-    def build(self, eq, geometry=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays."""
         # TODO: most transforms are pre-computing more derivatives than required
 
@@ -730,18 +728,16 @@ class FixedBoundary(_Objective):
 
     def __init__(
         self,
-        surface=None,
         eq=None,
         target=(None, None),
         weight=(1, 1),
+        surface=None,
         modes=(True, True),
     ):
         """Initialize a FixedBoundary Objective.
 
         Parameters
         ----------
-        surface : Surface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : tuple, float, ndarray, optional
@@ -750,38 +746,36 @@ class FixedBoundary(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             Tuple = (R_target, Z_target). len(target) = len(weight) = len(modes)
+        surface : Surface, optional
+            Toroidal surface containing the Fourier modes to evaluate at.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             Tuple = (R_modes, Z_modes). len(target) = len(weight) = len(modes).
             If True/False uses all/none of the surface modes.
 
         """
-        self._surface = surface
         self._R_target = target[0]
         self._Z_target = target[1]
         self._R_weight = np.atleast_1d(weight[0])
         self._Z_weight = np.atleast_1d(weight[1])
+        self._surface = surface
         self._R_modes = modes[0]
         self._Z_modes = modes[1]
-        super().__init__(surface, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, surface=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        surface : Surface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if surface is not None:
-            self._surface = surface
         if self._surface is None:
             self._surface = eq.surface
 
@@ -944,14 +938,12 @@ class FixedPressure(_Objective):
     """Fixes pressure coefficients."""
 
     def __init__(
-        self, profile=None, eq=None, target=None, weight=1, modes=True,
+        self, eq=None, target=None, weight=1, profile=None, modes=True,
     ):
         """Initialize a FixedPressure Objective.
 
         Parameters
         ----------
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : tuple, float, ndarray, optional
@@ -960,6 +952,8 @@ class FixedPressure(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(target) = len(weight) = len(modes)
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -968,25 +962,21 @@ class FixedPressure(_Objective):
         """
         self._profile = profile
         self._modes = modes
-        super().__init__(profile, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, profile=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if profile is not None:
-            self._profile = profile
         if self._profile is None:
             self._profile = eq.pressure
         if not isinstance(self._profile, PowerSeriesProfile):
@@ -1093,14 +1083,12 @@ class FixedIota(_Objective):
     """Fixes rotational transform coefficients."""
 
     def __init__(
-        self, profile=None, eq=None, target=None, weight=1, modes=True,
+        self, eq=None, target=None, weight=1, profile=None, modes=True,
     ):
         """Initialize a FixedIota Objective.
 
         Parameters
         ----------
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : tuple, float, ndarray, optional
@@ -1109,6 +1097,8 @@ class FixedIota(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(target) = len(weight) = len(modes)
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -1117,25 +1107,21 @@ class FixedIota(_Objective):
         """
         self._profile = profile
         self._modes = modes
-        super().__init__(profile, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, profile=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if profile is not None:
-            self._profile = profile
         if self._profile is None:
             self._profile = eq.iota
         if not isinstance(self._profile, PowerSeriesProfile):
@@ -1204,7 +1190,7 @@ class FixedIota(_Objective):
         Returns
         -------
         f : ndarray
-            Pressure profile errors, in Pascals.
+            Rotational transform profile errors.
 
         """
         return self._compute(i_l) * self._weight
@@ -1219,7 +1205,7 @@ class FixedIota(_Objective):
 
         """
         f = self._compute(i_l)
-        print("Fixed-iota profile error: {:10.3e} (Pa)".format(jnp.linalg.norm(f)))
+        print("Fixed-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
         return None
 
     @property
@@ -1241,13 +1227,11 @@ class FixedIota(_Objective):
 class FixedPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
 
-    def __init__(self, geometry=None, eq=None, target=None, weight=1):
+    def __init__(self, eq=None, target=None, weight=1):
         """Initialize a FixedIota Objective.
 
         Parameters
         ----------
-        geometry : unused
-            This parameter is unused but included for the Objective API.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, optional
@@ -1256,17 +1240,15 @@ class FixedPsi(_Objective):
             Weighting to apply to the Objective, relative to other Objectives.
 
         """
-        super().__init__(geometry, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, geometry=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        geometry : unused
-            This parameter is unused but included for the Objective API.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -1276,6 +1258,8 @@ class FixedPsi(_Objective):
         # set target value for Psi
         if self._target[0] is None:  # use Equilibrium value
             self._target = np.atleast_1d(eq.Psi)
+
+        self._dim_f = 1
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -1333,13 +1317,11 @@ class FixedPsi(_Objective):
 class LCFSBoundary(_Objective):
     """Boundary condition on the last closed flux surface."""
 
-    def __init__(self, surface=None, eq=None, target=0, weight=1):
+    def __init__(self, eq=None, target=0, weight=1, surface=None):
         """Initialize a LCFSBoundary Objective.
 
         Parameters
         ----------
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -1347,29 +1329,27 @@ class LCFSBoundary(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        surface : FourierRZToroidalSurface, optional
+            Toroidal surface containing the Fourier modes to evaluate at.
 
         """
         target = 0
         self._surface = surface
-        super().__init__(surface, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, surface=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if surface is not None:
-            self._surface = surface
         if self._surface is None:
             self._surface = eq.surface
 
@@ -1469,16 +1449,126 @@ class LCFSBoundary(_Objective):
         return "lcfs"
 
 
+class TargetIota(_Objective):
+    """Targets a rotational transform profile."""
+
+    def __init__(self, eq=None, target=1, weight=1, profile=None, grid=None):
+        """Initialize a TargetIota Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : tuple, float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(target) = len(weight) = len(modes)
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        grid : Grid, optional
+            Collocation grid containing the nodes to evaluate at.
+
+        """
+        self._profile = profile
+        self._grid = grid
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._profile is None:
+            self._profile = eq.iota
+        if self._grid is None:
+            self._grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, i_l):
+        data = compute_rotational_transform(i_l, self._iota)
+        return data["iota"] - self._target
+
+    def compute(self, i_l, **kwargs):
+        """Compute rotational transform profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        Returns
+        -------
+        f : ndarray
+            Rotational transform profile errors.
+
+        """
+        return self._compute(i_l) * self._weight
+
+    def callback(self, i_l, **kwargs):
+        """Print rotational transform profile errors.
+
+        Parameters
+        ----------
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+
+        """
+        f = self._compute(i_l)
+        print("Target-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "target-iota"
+
+
 class Volume(_Objective):
     """Plasma volume."""
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1):
+    def __init__(self, eq=None, target=0, weight=1, grid=None):
         """Initialize a Volume Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -1487,39 +1577,30 @@ class Volume(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
 
         """
         self._grid = grid
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-        if self._grid is not None and self._grid.node_pattern != "quad":
-            warnings.warn(
-                colored(
-                    "Volume objective requires 'quad' node pattern, "
-                    + "integration will be incorrect.",
-                    "yellow",
-                )
-            )
-
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
+        self._dim_f = 1
 
         timer = Timer()
         if verbose > 0:
@@ -1601,13 +1682,11 @@ class Energy(_Objective):
 
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, gamma=0):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0):
         """Initialize an Energy Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -1616,42 +1695,33 @@ class Energy(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         gamma : float, optional
             Adiabatic (compressional) index. Default = 0.
 
         """
         self._grid = grid
         self._gamma = gamma
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-        if self._grid is not None and self._grid.node_pattern != "quad":
-            warnings.warn(
-                colored(
-                    "Energy objective requires 'quad' node pattern, "
-                    + "integration will be incorrect.",
-                    "yellow",
-                )
-            )
-
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
+        self._dim_f = 1
 
         timer = Timer()
         if verbose > 0:
@@ -1781,13 +1851,11 @@ class RadialForceBalance(_Objective):
 
     """
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
         """Initialize a RadialForceBalance Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -1796,31 +1864,29 @@ class RadialForceBalance(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
         self._norm = norm
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = ConcentricGrid(
                 L=eq.L_grid,
@@ -1933,8 +1999,8 @@ class RadialForceBalance(_Objective):
         else:
             units = "(N)"
         print(
-            "Radial force error: {:10.3e}, ".format(jnp.linalg.norm(f_rho))
-            + "Total force error: {:10.3e} ".format(jnp.linalg.norm(f))
+            "Radial force: {:10.3e}, ".format(jnp.linalg.norm(f_rho))
+            + "Total force: {:10.3e} ".format(jnp.linalg.norm(f))
             + units
         )
         return None
@@ -1973,13 +2039,11 @@ class HelicalForceBalance(_Objective):
 
     """
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
         """Initialize a HelicalForceBalance Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -1988,31 +2052,29 @@ class HelicalForceBalance(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
         self._norm = norm
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = ConcentricGrid(
                 L=eq.L_grid,
@@ -2125,8 +2187,8 @@ class HelicalForceBalance(_Objective):
         else:
             units = "(N)"
         print(
-            "Helical force error: {:10.3e}, ".format(jnp.linalg.norm(f_beta))
-            + "Total force error: {:10.3e} ".format(jnp.linalg.norm(f))
+            "Helical force: {:10.3e}, ".format(jnp.linalg.norm(f_beta))
+            + "Total force: {:10.3e} ".format(jnp.linalg.norm(f))
             + units
         )
         return None
@@ -2159,13 +2221,11 @@ class HelicalForceBalance(_Objective):
 class RadialCurrent(_Objective):
     """Radial current."""
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
         """Initialize a RadialCurrent Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -2174,31 +2234,29 @@ class RadialCurrent(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
         self._norm = norm
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = ConcentricGrid(
                 L=eq.L_grid,
@@ -2246,10 +2304,10 @@ class RadialCurrent(_Objective):
             self._L_transform,
             self._iota,
         )
-        data = compute_contravariant_metric_coefficients(
+        data = compute_covariant_metric_coefficients(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
         )
-        f = data["J^rho"] * jnp.sqrt(data["g^rr"])
+        f = data["J^rho"] * jnp.sqrt(data["g_rr"])
         if self._norm:
             data = compute_magnetic_field_magnitude(
                 R_lmn,
@@ -2315,7 +2373,7 @@ class RadialCurrent(_Objective):
             units = "(normalized)"
         else:
             units = "(A*m)"
-        print(+"Total radial current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
+        print("Radial current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
         return None
 
     @property
@@ -2343,18 +2401,14 @@ class RadialCurrent(_Objective):
         return "radial current"
 
 
-class QuasisymmetryFluxFunction(_Objective):
-    """Quasi-symmetry flux function error."""
+class PoloidalCurrent(_Objective):
+    """Poloidal current."""
 
-    def __init__(
-        self, grid=None, eq=None, target=0, weight=1, norm=False, helicity=(1, 0)
-    ):
-        """Initialize a QuasisymmetryFluxFunction Objective.
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+        """Initialize a PoloidalCurrent Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -2363,34 +2417,400 @@ class QuasisymmetryFluxFunction(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
-        helicity : tuple, optional
-            Type of quasi-symmetry (M, N).
 
         """
         self._grid = grid
         self._norm = norm
-        self._helicity = helicity
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
+        if self._grid is None:
+            self._grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation="cos",
+                node_pattern=eq.node_pattern,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        data = compute_covariant_metric_coefficients(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
+        )
+        f = data["J^theta"] * jnp.sqrt(data["g_tt"])
+        if self._norm:
+            data = compute_magnetic_field_magnitude(
+                R_lmn,
+                Z_lmn,
+                L_lmn,
+                i_l,
+                Psi,
+                self._R_transform,
+                self._Z_transform,
+                self._L_transform,
+                self._iota,
+            )
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f * mu_0 / (B * R ** 2)
+        f = f * data["sqrt(g)"] * self._grid.weights
+        return f
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute poloidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Poloidal current at each node (A*m).
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print poloidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(A*m)"
+        print("Poloidal current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
+        return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "poloidal current"
+
+
+class ToroidalCurrent(_Objective):
+    """Toroidal current."""
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+        """Initialize a ToroidalCurrent Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+
+        """
+        self._grid = grid
+        self._norm = norm
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._grid is None:
+            self._grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation="cos",
+                node_pattern=eq.node_pattern,
+            )
+
+        self._dim_f = self._grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
+        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
+        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        data = compute_covariant_metric_coefficients(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
+        )
+        f = data["J^zeta"] * jnp.sqrt(data["g_zz"])
+        if self._norm:
+            data = compute_magnetic_field_magnitude(
+                R_lmn,
+                Z_lmn,
+                L_lmn,
+                i_l,
+                Psi,
+                self._R_transform,
+                self._Z_transform,
+                self._L_transform,
+                self._iota,
+            )
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f * mu_0 / (B * R ** 2)
+        f = f * data["sqrt(g)"] * self._grid.weights
+        return f
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute toroidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Toroidal current at each node (A*m).
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print toroidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(A*m)"
+        print("Toroidal current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
+        return None
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "toroidal current"
+
+
+class QuasisymmetryFluxFunction(_Objective):
+    """Quasi-symmetry flux function error."""
+
+    def __init__(
+        self, eq=None, target=0, weight=1, grid=None, helicity=(1, 0), norm=False
+    ):
+        """Initialize a QuasisymmetryFluxFunction Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        helicity : tuple, optional
+            Type of quasi-symmetry (M, N).
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+
+        """
+        self._grid = grid
+        self._helicity = helicity
+        self._norm = norm
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
         if self._grid is None:
             self._grid = LinearGrid(
                 L=1,
@@ -2499,15 +2919,6 @@ class QuasisymmetryFluxFunction(_Objective):
         return None
 
     @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        self._norm = norm
-
-    @property
     def helicity(self):
         """tuple: Type of quasi-symmetry (M, N)."""
         return self._helicity
@@ -2515,6 +2926,15 @@ class QuasisymmetryFluxFunction(_Objective):
     @helicity.setter
     def helicity(self, helicity):
         self._helicity = helicity
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
 
     @property
     def scalar(self):
@@ -2535,13 +2955,11 @@ class QuasisymmetryFluxFunction(_Objective):
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error."""
 
-    def __init__(self, grid=None, eq=None, target=0, weight=1, norm=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
         """Initialize a QuasisymmetryTripleProduct Objective.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
@@ -2550,31 +2968,29 @@ class QuasisymmetryTripleProduct(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
 
         """
         self._grid = grid
         self._norm = norm
-        super().__init__(grid, eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight)
 
-    def build(self, eq, grid=None, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        if grid is not None:
-            self._grid = grid
         if self._grid is None:
             self._grid = LinearGrid(
                 L=1,

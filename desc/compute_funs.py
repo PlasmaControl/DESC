@@ -81,7 +81,7 @@ def compute_toroidal_flux(
     return data
 
 
-def compute_iota(
+def compute_rotational_transform(
     i_l, iota, dr=0, data=None,
 ):
     """Compute rotational transform profile.
@@ -721,7 +721,7 @@ def compute_contravariant_magnetic_field(
 
     """
     data = compute_toroidal_flux(Psi, iota, dr=dr + 1, data=data)
-    data = compute_iota(i_l, iota, dr=dr, data=data)
+    data = compute_rotational_transform(i_l, iota, dr=dr, data=data)
     data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, data=data)
     data = compute_jacobian(
         R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data,

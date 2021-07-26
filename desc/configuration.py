@@ -24,7 +24,7 @@ from desc.basis import (
 )
 from desc.compute_funs import (
     compute_toroidal_flux,
-    compute_iota,
+    compute_rotational_transform,
     compute_pressure,
     compute_toroidal_coords,
     compute_cartesian_coords,
@@ -573,7 +573,7 @@ class _Configuration(IOAble, ABC):
         iota = self.iota.copy()
         iota.grid = grid
 
-        return compute_iota(self.iota.params, iota, dr=deriv)
+        return compute_rotational_transform(self.iota.params, iota, dr=deriv)
 
     def compute_pressure(self, grid=None, deriv=1):
         """Compute pressure profile.

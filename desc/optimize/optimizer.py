@@ -167,7 +167,7 @@ class Optimizer(IOAble):
 
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(x_init, args, verbose, mode=mode)
+            objective.compile(mode, verbose)
 
         # need some weird logic because scipy optimizers expect disp={0,1,2}
         # while we use verbose={0,1,2,3}
@@ -275,7 +275,7 @@ class Optimizer(IOAble):
 
             def jac_wrapped(x, *args):
                 allx.append(x)
-                return objective.jac_x(x, *args)
+                return objective.jac(x, *args)
 
             result = scipy.optimize.least_squares(
                 objective.compute,
@@ -298,7 +298,7 @@ class Optimizer(IOAble):
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            hess = objective.hess_x if "bfgs" not in self.method else "bfgs"
+            hess = objective.hess if "bfgs" not in self.method else "bfgs"
             result = fmintr(
                 objective.compute_scalar,
                 x0=x_init,

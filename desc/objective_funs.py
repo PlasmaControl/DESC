@@ -137,6 +137,7 @@ class ObjectiveFunction(IOAble):
         large = s > tol
         num = np.sum(large, dtype=int)
         self._Z = vh[num:, :].T.conj()
+        self._Zinv = np.linalg.pinv(self._Z, rcond=rcond)
         self._dim_x = self._Z.shape[1]
 
         uk = u[:, :K]
@@ -335,18 +336,9 @@ class ObjectiveFunction(IOAble):
 
     def y(self, eq):
         """Return the full state vector y from the Equilibrium eq."""
-        kwargs = {
-            "R_lmn": np.atleast_1d(eq.R_lmn),
-            "Z_lmn": np.atleast_1d(eq.Z_lmn),
-            "L_lmn": np.atleast_1d(eq.L_lmn),
-            "Rb_lmn": np.atleast_1d(eq.surface.R_lmn),
-            "Zb_lmn": np.atleast_1d(eq.surface.Z_lmn),
-            "p_l": np.atleast_1d(eq.pressure.params),
-            "i_l": np.atleast_1d(eq.iota.params),
-            "Psi": np.atleast_1d(eq.Psi),
-        }
-
+        kwargs = eq.get_args()
         y = np.zeros((self._dim_y,))
+
         for arg in self._args:
             y[self._indicies[arg]] = kwargs[arg]
         return y
@@ -354,6 +346,18 @@ class ObjectiveFunction(IOAble):
     def x(self, eq):
         """Return the optimization variable x from the Equilibrium eq."""
         return self.project(self.y(eq))
+
+    def get_args(self, x):
+        """Get arguments from the optimization vector x (or y)."""
+        if x.size == self._dim_x:
+            y = self.recover(x)
+        elif x.size == self._dim_y:
+            y = x
+
+        kwargs = {}
+        for arg in self._args:
+            kwargs[arg] = y[self._indicies[arg]]
+        return kwargs
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -532,6 +536,13 @@ class ObjectiveFunction(IOAble):
         return self._A
 
     @property
+    def Ainv(self):
+        """ndarray: Linear constraint matrix inverse: y0 = Ainv*b."""
+        if not self._built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+        return self._Ainv
+
+    @property
     def b(self):
         """ndarray: Linear constraint vector: A*x = b."""
         if not self._built:
@@ -544,6 +555,20 @@ class ObjectiveFunction(IOAble):
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._y0
+
+    @property
+    def Z(self):
+        """ndarray: Linear constraint nullspace: y = y0 + Z*x, dy/dx = Z."""
+        if not self._built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+        return self._Z
+
+    @property
+    def Zinv(self):
+        """ndarray: Linear constraint nullspace inverse: dx/dy = Zinv."""
+        if not self._built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+        return self._Zinv
 
 
 class _Objective(IOAble, ABC):
@@ -3116,3 +3141,32 @@ class QuasisymmetryTripleProduct(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "QS triple product"
+
+
+def get_objective_function(method):
+    """Get an objective function by name.
+
+    Parameters
+    ----------
+    method : str
+        Name of the desired objective function, eg ``'force'`` or ``'energy'``.
+
+    Returns
+    -------
+    obj_fun : ObjectiveFunction
+        Objective function with the desired objectives and constraints.
+
+    """
+    if method == "force":
+        objectives = (RadialForceBalance(), HelicalForceBalance())
+    elif method == "energy":
+        objectives = Energy()
+
+    constraints = (
+        FixedBoundary(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+        LCFSBoundary(),
+    )
+    return ObjectiveFunction(objectives, constraints)

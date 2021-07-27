@@ -4,6 +4,7 @@ import numpy as np
 import re
 from termcolor import colored
 import warnings
+from scipy.constants import mu_0
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import jacobi, fourier
@@ -582,11 +583,21 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name("Bpressure")
+                norm_data = eq.compute_magnetic_pressure_gradient(grid)[
+                    "|grad(|B|^2)|"
+                ] / (2 * mu_0)
+                norm_name_dict = {
+                    "base": "|grad(|B|^2)|",
+                    "sups": "",
+                    "subs": "",
+                    "power": "",
+                    "d": "",
+                    "units": "",
+                }
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name_dict = _format_name("|grad(p)|")
-            norm_name_dict["units"] = ""  # make unitless
-            norm_data = _compute(eq, norm_name_dict, grid)
+                norm_data = _compute(eq, norm_name_dict, grid)
+                norm_name_dict["units"] = ""  # make unitless
             data = data / np.nanmean(np.abs(norm_data))  # normalize
     figw = 5 * cols
     figh = 5 * rows
@@ -756,25 +767,16 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=colorblind_colors[2],
-            linestyle=":",
+            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=colorblind_colors[0],
+            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i],
-            Zr[:, -1, i],
-            color=colorblind_colors[1],
+            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i],
-            Zr[0, 0, i],
-            color=colorblind_colors[3],
+            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])
@@ -830,9 +832,9 @@ def _compute(eq, name, grid):
             out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
         elif name_dict["base"] == "J":
             out = eq.compute_current_density(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["Bpressure"]:
+        elif name_dict["base"] in ["|grad(|B|^2)|"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["Btension"]:
+        elif name_dict["base"] in ["|(B*grad)B|"]:
             out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
         elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
             out = eq.compute_force_error(grid)[_name_key(name_dict)]
@@ -922,10 +924,10 @@ def _format_name(name):
         "B": r"(\mathrm{T})",
         "|B|": r"(\mathrm{T})",
         "J": r"(\mathrm{A}/\mathrm{m}^2)",
-        "Bpressure": r"\mathrm{N}/\mathrm{m}^3",
-        "|Bpressure|": r"\mathrm{N}/\mathrm{m}^3",
-        "Btension": r"\mathrm{N}/\mathrm{m}^3",
-        "|Btension|": r"\mathrm{N}/\mathrm{m}^3",
+        "grad(|B|^2)": r"\mathrm{N}/\mathrm{m}^3",
+        "|grad(|B|^2)|": r"\mathrm{N}/\mathrm{m}^3",
+        "(B*grad)B": r"\mathrm{N}/\mathrm{m}^3",
+        "|(B*grad)B|": r"\mathrm{N}/\mathrm{m}^3",
         "F": r"(\mathrm{N}/\mathrm{m}^2)",
         "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
         "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",

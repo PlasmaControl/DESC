@@ -3,29 +3,27 @@ import copy
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
-from scipy.constants import mu_0
 
 from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
+from desc.profiles import Profile, PowerSeriesProfile
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
 )
 from desc.basis import (
-    PowerSeries,
     DoubleFourierSeries,
-    ZernikePolynomial,
     FourierZernikeBasis,
 )
 from desc.compute_funs import (
     compute_toroidal_flux,
     compute_rotational_transform,
     compute_pressure,
+    compute_lambda,
     compute_toroidal_coords,
     compute_cartesian_coords,
     compute_jacobian,
@@ -488,11 +486,7 @@ class _Configuration(IOAble, ABC):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
         L_label = ["L_{},{},{}".format(l, m, n) for l, m, n in self.L_basis.modes]
-
-        x_label = R_label + Z_label + L_label
-
-        self.xlabel = {i: val for i, val in enumerate(x_label)}
-        self.rev_xlabel = {val: i for i, val in self.xlabel.items()}
+        return None
 
     def get_xlabel_by_idx(self, idx):
         """Find which mode corresponds to a given entry in x.
@@ -533,7 +527,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute_toroidal_flux(self, grid=None, deriv=1):
+    def compute_toroidal_flux(self, grid=None, deriv=1, data=None):
         """Compute Compute toroidal magnetic flux profile.
 
         Parameters
@@ -552,9 +546,9 @@ class _Configuration(IOAble, ABC):
         iota = self.iota.copy()
         iota.grid = grid
 
-        return compute_toroidal_flux(self.Psi, iota, dr=deriv)
+        return compute_toroidal_flux(self.Psi, iota, dr=deriv, data=data)
 
-    def compute_iota(self, grid=None, deriv=1):
+    def compute_iota(self, grid=None, deriv=1, data=None):
         """Compute rotational transform profile.
 
         Parameters
@@ -573,9 +567,9 @@ class _Configuration(IOAble, ABC):
         iota = self.iota.copy()
         iota.grid = grid
 
-        return compute_rotational_transform(self.iota.params, iota, dr=deriv)
+        return compute_rotational_transform(self.iota.params, iota, dr=deriv, data=data)
 
-    def compute_pressure(self, grid=None, deriv=1):
+    def compute_pressure(self, grid=None, deriv=1, data=None):
         """Compute pressure profile.
 
         Parameters
@@ -594,9 +588,31 @@ class _Configuration(IOAble, ABC):
         pressure = self.pressure.copy()
         pressure.grid = grid
 
-        return compute_pressure(pressure.params, pressure, dr=deriv)
+        return compute_pressure(pressure.params, pressure, dr=deriv, data=data)
 
-    def compute_toroidal_coords(self, grid=None, deriv=0):
+    def compute_lambda(self, grid=None, deriv=0, data=None):
+        """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        data : dict
+            Dictionary of ndarray, shape(num_nodes,) of lambda values.
+            Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
+
+        """
+        L_transform = Transform(grid, self.L_basis, derivs=deriv, build=True)
+
+        return compute_lambda(
+            self.L_lmn, L_transform, dr=deriv, dt=deriv, dz=deriv, data=data
+        )
+
+    def compute_toroidal_coords(self, grid=None, deriv=0, data=None):
         """Compute toroidal coordinates (R, phi, Z).
 
         Parameters
@@ -623,9 +639,10 @@ class _Configuration(IOAble, ABC):
             dr=deriv,
             dt=deriv,
             dz=deriv,
+            data=data,
         )
 
-    def compute_cartesian_coords(self, grid=None):
+    def compute_cartesian_coords(self, grid=None, data=None):
         """Compute Cartesian coordinates (X, Y, Z).
 
         Parameters
@@ -644,10 +661,10 @@ class _Configuration(IOAble, ABC):
         Z_transform = Transform(grid, self.Z_basis, derivs=0, build=True)
 
         return compute_cartesian_coords(
-            self.R_lmn, self.Z_lmn, R_transform, Z_transform
+            self.R_lmn, self.Z_lmn, R_transform, Z_transform, data=data
         )
 
-    def compute_jacobian(self, grid=None, deriv=0):
+    def compute_jacobian(self, grid=None, deriv=0, data=None):
         """Compute coordinate system Jacobian.
 
         Parameters
@@ -675,9 +692,10 @@ class _Configuration(IOAble, ABC):
             dr=deriv,
             dt=deriv,
             dz=deriv,
+            data=data,
         )
 
-    def compute_magnetic_field(self, grid=None, deriv=0):
+    def compute_magnetic_field(self, grid=None, deriv=0, data=None):
         """Compute magnetic field components.
 
         Parameters
@@ -713,9 +731,10 @@ class _Configuration(IOAble, ABC):
             dr=deriv,
             dt=deriv,
             dz=deriv,
+            data=data,
         )
 
-    def compute_current_density(self, grid=None, deriv=0):
+    def compute_current_density(self, grid=None, deriv=0, data=None):
         """Compute contravariant current density components.
 
         Parameters
@@ -751,9 +770,10 @@ class _Configuration(IOAble, ABC):
             dr=deriv,
             dt=deriv,
             dz=deriv,
+            data=data,
         )
 
-    def compute_magnetic_pressure_gradient(self, grid=None):
+    def compute_magnetic_pressure_gradient(self, grid=None, data=None):
         """Compute magnetic pressure gradient.
 
         Parameters
@@ -770,9 +790,9 @@ class _Configuration(IOAble, ABC):
             covariant component of the magnetic pressure gradient grad(|B|^2).
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=1, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=1, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=2, build=True)
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=2, build=True)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -786,9 +806,10 @@ class _Configuration(IOAble, ABC):
             Z_transform,
             L_transform,
             iota,
+            data=data,
         )
 
-    def compute_magnetic_tension(self, grid=None):
+    def compute_magnetic_tension(self, grid=None, data=None):
         """Compute magnetic tension.
 
         Parameters
@@ -805,9 +826,9 @@ class _Configuration(IOAble, ABC):
             contravariant component of the magnetic tension vector (B*grad(|B|))B.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=1, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=1, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=2, build=True)
+        Z_transform = Transform(grid, self.Z_basis, derivs=2, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=2, build=True)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -821,9 +842,10 @@ class _Configuration(IOAble, ABC):
             Z_transform,
             L_transform,
             iota,
+            data=data,
         )
 
-    def compute_force_error(self, grid=None):
+    def compute_force_error(self, grid=None, data=None):
         """Compute force error magnitude.
 
         Parameters
@@ -858,6 +880,7 @@ class _Configuration(IOAble, ABC):
             L_transform,
             iota,
             pressure,
+            data=data,
         )
 
     def compute_volume(self):
@@ -986,6 +1009,7 @@ class _Configuration(IOAble, ABC):
             self.L_basis,
             derivs=np.array([[0, 0, 0], [0, 1, 0]]),
             method="direct1",
+            build=True,
         )
 
         # theta* = theta + lambda
@@ -1008,6 +1032,7 @@ class _Configuration(IOAble, ABC):
                 self.L_basis,
                 derivs=np.array([[0, 0, 0], [0, 1, 0]]),
                 method="direct1",
+                build=True,
             )
 
             theta_star_k = theta_k + transform.transform(self.L_lmn)
@@ -1123,8 +1148,10 @@ class _Configuration(IOAble, ABC):
         r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
         t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
-        r_coords = self.compute_toroidal_coords(r_grid)
-        t_coords = self.compute_toroidal_coords(t_grid)
+        r_coords = self.compute_lambda(r_grid)
+        t_coords = self.compute_lambda(t_grid)
+        r_coords = self.compute_toroidal_coords(r_grid, data=r_coords)
+        t_coords = self.compute_toroidal_coords(t_grid, data=t_coords)
 
         v_nodes = t_grid.nodes
         v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]

@@ -1,8 +1,10 @@
 import numpy as np
 import warnings
 from termcolor import colored
+
 from desc.utils import Timer
 from desc.backend import use_jax, jnp
+from desc.objective_funs import _arg_order_
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -10,6 +12,10 @@ __all__ = ["perturb", "optimal_perturb"]
 
 def perturb(
     eq,
+    objective,
+    dR=None,
+    dZ=None,
+    dL=None,
     dRb=None,
     dZb=None,
     dp=None,
@@ -27,31 +33,33 @@ def perturb(
     Parameters
     ----------
     eq : Equilibrium
-        equilibrium to perturb
-    dRb, dZb, dp, di, dPsi : ndarray or float
-        deltas for perturbations of R_boundary, Z_boundary, pressure, iota, and
-        toroidal flux.
+        Equilibrium to perturb.
+    objective : ObjectiveFunction
+        Objective function to satisfy.
+    dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+        Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
+        rotational transform, and total toroidal magnetic flux.
         Setting to None or zero ignores that term in the expansion.
     order : {0,1,2,3}
-        order of perturbation (0=none, 1=linear, 2=quadratic, etc)
+        Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
-        radius of the trust region, as a fraction of ||x||.
-        enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||
-        if a scalar uses same ratio for all steps, if an array uses the first element
-        for the first step and so on
+        Radius of the trust region, as a fraction of ||x||.
+        Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+        If a scalar, uses the same ratio for all steps. If an array, uses the first
+        element for the first step and so on.
     cutoff : float
-        relative cutoff for small singular values in pseudoinverse
+        Relative cutoff for small singular values in pseudo-inverse.
     Jx : ndarray, optional
-        jacobian matrix df/dx
+        Jacobian matrix df/dx.
     verbose : int
-        level of output to display
+        Level of output.
     copy : bool
-        whether to perturb the input equilibrium or make a copy. Defaults to True
+        Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 
     Returns
     -------
     eq_new : Equilibrium
-        perturbed equilibrium
+        Perturbed equilibrium.
 
     """
     if not use_jax:
@@ -62,14 +70,6 @@ def perturb(
                 "yellow",
             )
         )
-    if not eq.objective:
-        raise AttributeError(
-            "Equilibrium must have objective defined before perturbing."
-        )
-    if eq.objective.scalar:
-        raise AttributeError(
-            "Cannot perturb with a scalar objective: {}".format(eq.objective)
-        )
     if np.isscalar(tr_ratio):
         tr_ratio = tr_ratio * np.ones(order)
     elif len(tr_ratio) < order:
@@ -78,31 +78,53 @@ def perturb(
                 len(tr_ratio), order
             )
         )
-    eq.objective.build(verbose=verbose)
+
+    if not objective.built:
+        objective.build(eq, verbose=verbose)
+    if objective.scalar:
+        raise AttributeError(
+            "Cannot perturb with a scalar objective: {}".format(objective)
+        )
+
     deltas = {}
+    dim_c = 0
+    if dR is not None and np.any(dR):
+        deltas["R_lmn"] = dR
+        dim_c += dR.size
+    if dZ is not None and np.any(dZ):
+        deltas["Z_lmn"] = dZ
+        dim_c += dZ.size
+    if dL is not None and np.any(dL):
+        deltas["L_lmn"] = dL
+        dim_c += dL.size
     if dRb is not None and np.any(dRb):
         deltas["Rb_lmn"] = dRb
+        dim_c += dRb.size
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
+        dim_c += dZb.size
     if dp is not None and np.any(dp):
         deltas["p_l"] = dp
+        dim_c += dp.size
     if di is not None and np.any(di):
         deltas["i_l"] = di
+        dim_c += di.size
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
+        dim_c += dPsi.size
 
-    keys = ", ".join(deltas.keys())
     if verbose > 0:
-        print("Perturbing {}".format(keys))
+        print("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
 
-    arg_idx = {"Rb_lmn": 1, "Zb_lmn": 2, "p_l": 3, "i_l": 4, "Psi": 5}
-    if not eq.built:
-        eq.build(verbose)
-    y = eq.objective.BC_constraint.project(eq.x)
-    args = (y, eq.Rb_lmn, eq.Zb_lmn, eq.p_l, eq.i_l, eq.Psi)
+    dc = np.concatenate([deltas[arg] for arg in _arg_order_ if arg in deltas.keys()])
+    indicies = np.concatenate([objective.indicies[arg] for arg in deltas.keys()])
+    indicies.sort(kind="mergesort")
+    dxdc = np.dot(objective.Zinv[:, indicies], dc)
+
+    x = objective.x(eq)
     dx1 = 0
     dx2 = 0
     dx3 = 0
@@ -110,14 +132,14 @@ def perturb(
     # 1st order
     if order > 0:
 
-        RHS1 = eq.objective.compute(*args)
+        RHS1 = objective.compute(x)
 
         # 1st partial derivatives wrt state vector (x)
         if Jx is None:
             if verbose > 0:
                 print("Computing df")
             timer.start("df/dx computation")
-            Jx = eq.objective.jac_x(*args)
+            Jx = objective.jac(x)
             timer.stop("df/dx computation")
             if verbose > 1:
                 timer.disp("df/dx computation")
@@ -130,24 +152,20 @@ def perturb(
         timer.stop("df/dx factorization")
         if verbose > 1:
             timer.disp("df/dx factorization")
-        # once we have the SVD we don't need Jx anymore so can save some memory
-        del Jx
 
         # 1st partial derivatives wrt input parameters (c)
-        inds = tuple([arg_idx[key] for key in deltas])
-        dc = tuple([val for val in deltas.values()])
-        timer.start("df/dc computation ({})".format(keys))
-        RHS1 += eq.objective.jvp(inds, dc, *args)
-        timer.stop("df/dc computation ({})".format(keys))
+        timer.start("df/dc computation")
+        RHS1 += np.dot(Jx, dxdc)
+        timer.stop("df/dc computation")
         if verbose > 1:
-            timer.disp("df/dc computation ({})".format(keys))
+            timer.disp("df/dc computation")
 
         dx1, hit, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
             vt.T,
-            tr_ratio[0] * np.linalg.norm(y),
+            tr_ratio[0] * np.linalg.norm(x),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -157,16 +175,11 @@ def perturb(
     # 2nd order
     if order > 1:
 
-        inds = tuple([arg_idx[key] for key in deltas])
-        tangents = tuple([val for val in deltas.values()])
-        inds = (0, *inds)
-        tangents = (dx1, *tangents)
-
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        RHS2 = 0.5 * eq.objective.jvp2(inds, inds, tangents, tangents, *args)
+        RHS2 = 0.5 * objective.jvp(x, (dx1, dxdc))
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -190,12 +203,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (
-            1
-            / 6
-            * eq.objective.jvp3(inds, inds, inds, tangents, tangents, tangents, *args)
-        )
-        RHS3 += eq.objective.jvp2(0, inds, dx2, tangents, *args)
+        # FIXME: I don't think this is correct
+        RHS3 = 0.5 * objective.jvp(x, (dx1, dx2, dxdc))
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -217,23 +226,20 @@ def perturb(
     else:
         eq_new = eq
 
+    # update equilibrium arguments
+    dx = dx1 + dx2 + dx3
+    args_new = objective.get_args(x + dx)
+    for arg in args_new:
+        setattr(eq_new, arg, args_new[arg])
+
     # update input parameters
-    for key, dc in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + dc)
+    for key, value in deltas.items():
+        setattr(eq_new, key, getattr(eq_new, key) + value)
 
-    # update boundary constraint
-    if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
-        eq_new.objective.BC_constraint = eq.surface.get_constraint(
-            eq_new.R_basis, eq_new.Z_basis, eq_new.L_basis,
-        )
-
-    # update state vector
-    dy = dx1 + dx2 + dx3
-    eq_new.x = np.copy(eq_new.objective.BC_constraint.recover(y + dy))
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
-        print("||dx||/||x|| = {}".format(np.linalg.norm(dy) / np.linalg.norm(y)))
+        print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
 
     return eq_new
 

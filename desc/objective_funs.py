@@ -91,7 +91,7 @@ class ObjectiveFunction(IOAble):
             )
         )
 
-        self._dimensions = self._objectives[0]._dimensions
+        self._dimensions = self._objectives[0].dimensions
 
         idx = 0
         self._indicies = {}
@@ -99,6 +99,8 @@ class ObjectiveFunction(IOAble):
             if arg in self._args:
                 self._indicies[arg] = np.arange(idx, idx + self._dimensions[arg])
                 idx += self._dimensions[arg]
+            else:
+                self._indicies[arg] = np.array([])
 
         self._dim_y = idx
 
@@ -336,11 +338,9 @@ class ObjectiveFunction(IOAble):
 
     def y(self, eq):
         """Return the full state vector y from the Equilibrium eq."""
-        kwargs = eq.get_args()
         y = np.zeros((self._dim_y,))
-
         for arg in self._args:
-            y[self._indicies[arg]] = kwargs[arg]
+            y[self._indicies[arg]] = getattr(eq, arg)
         return y
 
     def x(self, eq):
@@ -394,19 +394,27 @@ class ObjectiveFunction(IOAble):
             return self._jac.compute(x)
 
     def jvp(self, x, v):
-        """Compute Jacobian-vector product of the objective function."""
-        return Derivative.compute_jvp(self.compute, 0, v, x)
+        """Compute Jacobian-vector product of the objective function.
 
-    def jvp2(self, argnum1, argnum2, v1, v2, x):
-        """Compute 2nd derivative Jacobian-vector product of the objective function."""
-        return Derivative.compute_jvp2(self.compute, 0, 0, v1, v2, x)
+        Parameters
+        ----------
+        x : ndarray
+            Optimization variables.
+        v : tuple, ndarray
+            Vectors to right-multiply the Jacobian by.
+            The number of vectors given determines the order of derivative taken.
 
-    def jvp3(self, argnum1, argnum2, argnum3, v1, v2, v3, x):
-        """Compute 3rd derivative jacobian-vector product of the objective function."""
-        return Derivative.compute_jvp3(self.compute, 0, 0, 0, v1, v2, v3, x)
-
-    # TODO: add function to compute derivatives wrt args
-    # give jacobian as optional argument
+        """
+        if not isinstance(v, tuple):
+            v = (v,)
+        if len(v) == 1:
+            return Derivative.compute_jvp(self.compute, 0, v[0], x)
+        elif len(v) == 2:
+            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x)
+        elif len(v) == 3:
+            return Derivative.compute_jvp3(self.compute, 0, 0, 0, v[0], v[1], v[2], x)
+        else:
+            raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -499,6 +507,16 @@ class ObjectiveFunction(IOAble):
     def args(self):
         """list: Names (str) of arguments to the compute functions."""
         return self._args
+
+    @property
+    def dimensions(self):
+        """dict: Dimensions of the argument given by the dict keys."""
+        return self._dimensions
+
+    @property
+    def indicies(self):
+        """dict: Indicies of the argument given by the dict keys in the state vector."""
+        return self._indicies
 
     @property
     def dim_y(self):
@@ -721,6 +739,11 @@ class _Objective(IOAble, ABC):
     def args(self):
         """list: Names (str) of arguments to the compute functions."""
         return self._args
+
+    @property
+    def dimensions(self):
+        """dict: Dimensions of the argument given by the dict keys."""
+        return self._dimensions
 
     @property
     def derivatives(self):

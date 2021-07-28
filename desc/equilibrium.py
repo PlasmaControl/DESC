@@ -59,7 +59,6 @@ class Equilibrium(_Configuration, IOAble):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_grid",
         "_node_pattern",
     ]
 
@@ -94,9 +93,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._L_grid
 
     @L_grid.setter
-    def L_grid(self, new):
-        if self.L_grid != new:
-            self._L_grid = new
+    def L_grid(self, L_grid):
+        if self.L_grid != L_grid:
+            self._L_grid = L_grid
 
     @property
     def M_grid(self):
@@ -106,9 +105,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._M_grid
 
     @M_grid.setter
-    def M_grid(self, new):
-        if self.M_grid != new:
-            self._M_grid = new
+    def M_grid(self, M_grid):
+        if self.M_grid != M_grid:
+            self._M_grid = M_grid
 
     @property
     def N_grid(self):
@@ -118,9 +117,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._N_grid
 
     @N_grid.setter
-    def N_grid(self, new):
-        if self.N_grid != new:
-            self._N_grid = new
+    def N_grid(self, N_grid):
+        if self.N_grid != N_grid:
+            self._N_grid = N_grid
 
     @property
     def node_pattern(self):
@@ -168,39 +167,6 @@ class Equilibrium(_Configuration, IOAble):
             "boundary": np.vstack((Rb_modes, Zb_modes)),
         }
         return Equilibrium(inputs=inputs)
-
-    def get_args(self):
-        """Get arguments."""
-        return {
-            "R_lmn": np.atleast_1d(self.R_lmn),
-            "Z_lmn": np.atleast_1d(self.Z_lmn),
-            "L_lmn": np.atleast_1d(self.L_lmn),
-            "Rb_lmn": np.atleast_1d(self.surface.R_lmn),
-            "Zb_lmn": np.atleast_1d(self.surface.Z_lmn),
-            "p_l": np.atleast_1d(self.pressure.params),
-            "i_l": np.atleast_1d(self.iota.params),
-            "Psi": np.atleast_1d(self.Psi),
-        }
-
-    def set_args(self, **kwargs):
-        """Set arguments."""
-        if "R_lmn" in kwargs:
-            self.R_lmn = kwargs.get("R_lmn")
-        if "Z_lmn" in kwargs:
-            self.Z_lmn = kwargs.get("Z_lmn")
-        if "L_lmn" in kwargs:
-            self.L_lmn = kwargs.get("L_lmn")
-        if "Rb_lmn" in kwargs:
-            self.surface.R_lmn = kwargs.get("Rb_lmn")
-        if "Zb_lmn" in kwargs:
-            self.surface.Z_lmn = kwargs.get("Zb_lmn")
-        if "p_l" in kwargs:
-            self.pressure.params = kwargs.get("p_l")
-        if "i_l" in kwargs:
-            self.iota.params = kwargs.get("i_l")
-        if "Psi" in kwargs:
-            self.Psi = kwargs.get("Psi")
-        return None
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
@@ -272,13 +238,17 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             objective.callback(result["x"])
 
-        self.set_args(**objective.get_args(result["x"]))
+        for key, value in objective.get_args(result["x"]).items():
+            setattr(self, key, value)
         self.solved = result["success"]
         return result
 
     def perturb(
         self,
-        objective=None,
+        objective="force",
+        dR=None,
+        dZ=None,
+        dL=None,
         dRb=None,
         dZb=None,
         dp=None,
@@ -320,40 +290,27 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        if objective is None:
-            # perturb with the given input parameter deltas
-            equil = perturb(
-                self,
-                dRb,
-                dZb,
-                dp,
-                di,
-                dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                cutoff=cutoff,
-                Jx=Jx,
-                verbose=verbose,
-                copy=copy,
-            )
-        else:
-            equil = optimal_perturb(
-                # find the deltas that optimize the objective, then perturb
-                self,
-                objective,
-                dRb,
-                dZb,
-                dp,
-                di,
-                dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                cutoff=cutoff,
-                Jx=Jx,
-                verbose=verbose,
-                copy=copy,
-            )
+        if isinstance(objective, str):
+            objective = get_objective_function(objective)
 
+        equil = perturb(
+            self,
+            objective,
+            dR=dR,
+            dZ=dZ,
+            dL=dL,
+            dRb=dRb,
+            dZb=dZb,
+            dp=dp,
+            di=di,
+            dPsi=dPsi,
+            order=order,
+            tr_ratio=tr_ratio,
+            cutoff=cutoff,
+            Jx=Jx,
+            verbose=verbose,
+            copy=copy,
+        )
         equil.solved = False
 
         if copy:
@@ -391,20 +348,20 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self.inputs = inputs
 
     @staticmethod
-    def _format_deltas(inputs, inputs_prev, equil):
+    def _format_deltas(inputs, equil):
         """Format the changes in continuation parameters.
 
         Parameters
         ----------
         inputs, inputs_prev : dict
-            dictionaries of continuation parameters for current and  previous step
+            Dictionary of continuation parameters for next step.
         equil : Equilibrium
-            equilibrium being perturbed
+            Equilibrium being perturbed.
 
         Returns
         -------
         deltas : dict
-            dictionary of delta values to be passed to equil.perturb
+            Dictionary of changes in parameter values.
 
         """
         deltas = {}
@@ -417,8 +374,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.NFP,
                 equil.sym,
             )
-            s.change_resolution(equil.M, equil.N)
-            Rb_lmn, Zb_lmn = s.R_mn, s.Z_mn
+            s.change_resolution(equil.L, equil.M, equil.N)
+            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
             s = ZernikeRZToroidalSection(
                 inputs["boundary"][:, 3],
@@ -428,8 +385,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.spectral_indexing,
                 equil.sym,
             )
-            s.change_resolution(equil.L, equil.M)
-            Rb_lmn, Zb_lmn = s.R_lm, s.Z_lm
+            s.change_resolution(equil.L, equil.M, equil.N)
+            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
 
         p_l = np.zeros_like(equil.pressure.params)
         i_l = np.zeros_like(equil.iota.params)
@@ -447,8 +404,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dp"] = p_l - equil.p_l
         if not np.allclose(i_l, equil.i_l):
             deltas["di"] = i_l - equil.i_l
-        if not np.allclose(inputs["Psi"], inputs_prev["Psi"]):
-            deltas["dPsi"] = inputs["Psi"] - inputs_prev["Psi"]
+        if not np.allclose(inputs["Psi"], equil.Psi):
+            deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
 
     def _print_iteration(self, ii, equil):
@@ -520,9 +477,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil = self[ii - 1].copy()
                 self.insert(ii, equil)
 
-                equil.L = self.inputs[ii]["L"]
-                equil.M = self.inputs[ii]["M"]
-                equil.N = self.inputs[ii]["N"]
+                equil.change_resolution(
+                    L=self.inputs[ii]["L"],
+                    M=self.inputs[ii]["M"],
+                    N=self.inputs[ii]["N"],
+                )
                 equil.L_grid = self.inputs[ii]["L_grid"]
                 equil.M_grid = self.inputs[ii]["M_grid"]
                 equil.N_grid = self.inputs[ii]["N_grid"]
@@ -531,14 +490,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self._print_iteration(ii, equil)
 
                 # figure out if we we need perturbations
-                deltas = self._format_deltas(
-                    self.inputs[ii], self.inputs[ii - 1], equil
-                )
+                deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
                     if verbose > 0:
                         print("Perturbing equilibrium")
                     equil.perturb(
+                        objective=self.inputs[ii]["objective"],
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,
@@ -560,14 +518,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self.save(checkpoint_path)
                 break
 
-            # optimization algorithm
-            optimizer = Optimizer(self.inputs[ii]["optimizer"])
-            # objective function to optimize
-            objective = get_objective_function(self.inputs[ii]["objective"])
-
             equil.solve(
-                optimizer=optimizer,
-                objective=objective,
+                optimizer=self.inputs[ii]["optimizer"],
+                objective=self.inputs[ii]["objective"],
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],

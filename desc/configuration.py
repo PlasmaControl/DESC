@@ -135,6 +135,9 @@ class _Configuration(IOAble, ABC):
         self._iota = PowerSeriesProfile(
             modes=profiles[:, 0], params=profiles[:, 2], name="iota"
         )
+        self._pressure.change_resolution(self._L)
+        self._iota.change_resolution(self._L)
+
         # format boundary
         if self.bdry_mode == "lcfs":
             self._surface = FourierRZToroidalSurface(
@@ -156,6 +159,7 @@ class _Configuration(IOAble, ABC):
             )
         else:
             raise ValueError("boundary should either have l=0 or n=0")
+        self._surface.change_resolution(self._L, self._M, self._N)
 
         axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
         self._axis = FourierRZCurve(
@@ -264,17 +268,19 @@ class _Configuration(IOAble, ABC):
 
         self._set_basis()
 
+        if L_change:
+            self._pressure.change_resolution(L=L)
+            self._iota.change_resolution(L=L)
+
         if N_change:
             self.axis.change_resolution(self.N)
-        # this is kind of a kludge for now
-        if self.bdry_mode == "lcfs":
-            self.surface.change_resolution(self.M, self.N)
-        elif self.bdry_mode == "poincare":
-            self.surface.change_resolution(self.L, self.M)
+
+        self.surface.change_resolution(self.L, self.M, self.N)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+
         self._make_labels()
 
     @property
@@ -313,22 +319,41 @@ class _Configuration(IOAble, ABC):
 
     @NFP.setter
     def NFP(self, NFP):
-        self._NFP = NFP
+        if self.NFP != NFP:
+            self._NFP = NFP
 
     @property
     def L(self):
         """Maximum radial mode number (int)."""
         return self._L
 
+    @L.setter
+    def L(self, L):
+        if self.L != L:
+            self._L = L
+            self.change_resolution(L=L)
+
     @property
     def M(self):
         """Maximum poloidal fourier mode number (int)."""
         return self._M
 
+    @M.setter
+    def M(self, M):
+        if self.M != M:
+            self._M = M
+            self.change_resolution(M=M)
+
     @property
     def N(self):
         """Maximum toroidal fourier mode number (int)."""
         return self._N
+
+    @N.setter
+    def N(self, N):
+        if self.N != N:
+            self._N = N
+            self.change_resolution(N=N)
 
     @property
     def R_lmn(self):

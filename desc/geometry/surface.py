@@ -1,19 +1,17 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import sign, copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
-from .core import Surface, cart2polvec, pol2cartvec
+from .core import Surface, pol2cartvec
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
 
 class FourierRZToroidalSurface(Surface):
-    """Toroidal surface represented by a double fourier series in poloidal angle
-    theta and toroidal angle phi/zeta
+    """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
     Parameters
     ----------
@@ -113,22 +111,22 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def NFP(self):
-        """number of toroidal field periods"""
+        """Number of (toroidal) field periods (int)."""
         return self._NFP
 
     @property
     def R_basis(self):
-        """Spectral basis for R double fourier series"""
+        """Spectral basis for R double Fourier series."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z double fourier series"""
+        """Spectral basis for Z double Fourier series."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Grid for computation."""
         return self._grid
 
     @grid.setter
@@ -144,8 +142,8 @@ class FourierRZToroidalSurface(Surface):
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
 
-    def change_resolution(self, M, N):
-        """Change the maximum poloidal and toroidal resolution"""
+    def change_resolution(self, L, M, N):
+        """Change the maximum poloidal and toroidal resolution."""
         R_modes_old = self.R_basis.modes
         Z_modes_old = self.Z_basis.modes
         self.R_basis.change_resolution(M=M, N=N)
@@ -156,7 +154,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R"""
+        """Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -170,7 +168,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z"""
+        """Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -183,7 +181,7 @@ class FourierRZToroidalSurface(Surface):
             )
 
     def get_coeffs(self, m, n=0):
-        """Get fourier coefficients for given mode number(s)"""
+        """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -204,7 +202,7 @@ class FourierRZToroidalSurface(Surface):
         return R, Z
 
     def set_coeffs(self, m, n=0, R=None, Z=None):
-        """set specific fourier coefficients"""
+        """Set specific Fourier coefficients."""
         m, n, R, Z = (
             np.atleast_1d(m),
             np.atleast_1d(n),
@@ -250,11 +248,11 @@ class FourierRZToroidalSurface(Surface):
         return R_transform, Z_transform
 
     def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature"""
+        """Compute gaussian and mean curvature."""
         raise NotImplementedError()
 
     def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0):
-        """Compute values using specified coefficients
+        """Compute values using specified coefficients.
 
         Parameters
         ----------
@@ -313,7 +311,7 @@ class FourierRZToroidalSurface(Surface):
         )
 
     def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
-        """Compute normal vector to surface on default grid
+        """Compute normal vector to surface on default grid.
 
         Parameters
         ----------
@@ -349,7 +347,7 @@ class FourierRZToroidalSurface(Surface):
         return N
 
     def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
-        """Compute surface area via quadrature
+        """Compute surface area via quadrature.
 
         Parameters
         ----------
@@ -376,21 +374,9 @@ class FourierRZToroidalSurface(Surface):
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return LCFSConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
-        )
-
 
 class ZernikeRZToroidalSection(Surface):
-    """A toroidal cross section represented by a zernike polynomial in R,Z
+    """A toroidal cross section represented by a Zernike polynomial in R,Z.
 
     Parameters
     ----------
@@ -513,17 +499,17 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def R_basis(self):
-        """Spectral basis for R zernike polynomial"""
+        """Spectral basis for R Zernike polynomial."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z zernike polynomial"""
+        """Spectral basis for Z Zernike polynomial."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Grid for computation."""
         return self._grid
 
     @grid.setter
@@ -539,8 +525,8 @@ class ZernikeRZToroidalSection(Surface):
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
 
-    def change_resolution(self, L, M):
-        """Change the maximum radial and poloidal resolution"""
+    def change_resolution(self, L, M, N):
+        """Change the maximum radial and poloidal resolution."""
         R_modes_old = self.R_basis.modes
         Z_modes_old = self.Z_basis.modes
         self.R_basis.change_resolution(L=L, M=M)
@@ -551,7 +537,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R"""
+        """Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -565,7 +551,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z"""
+        """Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -578,7 +564,7 @@ class ZernikeRZToroidalSection(Surface):
             )
 
     def get_coeffs(self, l, m=0):
-        """Get fourier coefficients for given mode number(s)"""
+        """Get Fourier coefficients for given mode number(s)."""
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -599,7 +585,7 @@ class ZernikeRZToroidalSection(Surface):
         return R, Z
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
-        """set specific fourier coefficients"""
+        """Set specific Fourier coefficients."""
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),
@@ -645,11 +631,11 @@ class ZernikeRZToroidalSection(Surface):
         return R_transform, Z_transform
 
     def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature"""
+        """Compute gaussian and mean curvature."""
         raise NotImplementedError()
 
     def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0):
-        """Compute values using specified coefficients
+        """Compute values using specified coefficients.
 
         Parameters
         ----------
@@ -679,7 +665,7 @@ class ZernikeRZToroidalSection(Surface):
         return jnp.stack([R, phi, Z], axis=1)
 
     def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
-        """Compute normal vector to surface on default grid
+        """Compute normal vector to surface on default grid.
 
         Parameters
         ----------
@@ -711,7 +697,7 @@ class ZernikeRZToroidalSection(Surface):
         return N
 
     def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
-        """Compute surface area via quadrature
+        """Compute surface area via quadrature.
 
         Parameters
         ----------
@@ -738,16 +724,4 @@ class ZernikeRZToroidalSection(Surface):
         N = jnp.cross(r_r, r_t, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
             2 * np.pi
-        )
-
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return PoincareConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
         )

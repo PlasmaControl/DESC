@@ -302,7 +302,7 @@ class Optimizer(IOAble):
             result = fmintr(
                 objective.compute_scalar,
                 x0=x_init,
-                grad=objective.grad_x,
+                grad=objective.grad,
                 hess=hess,
                 args=args,
                 method=method,
@@ -321,7 +321,7 @@ class Optimizer(IOAble):
             result = lsqtr(
                 objective.compute,
                 x0=x_init,
-                jac=objective.jac_x,
+                jac=objective.jac,
                 args=args,
                 x_scale=x_scale,
                 ftol=ftol,

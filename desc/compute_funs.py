@@ -1418,7 +1418,7 @@ def compute_magnetic_tension(
         contravariant component of the magnetic tension vector (B*grad(|B|))B.
 
     """
-    data = compute_contravariant_magnetic_field(
+    data = compute_contravariant_current_density(
         R_lmn,
         Z_lmn,
         L_lmn,
@@ -1429,28 +1429,38 @@ def compute_magnetic_tension(
         L_transform,
         iota,
         dr=0,
-        dt=1,
-        dz=1,
+        dt=0,
+        dz=0,
         data=data,
     )
-    data = compute_contravariant_basis(
-        R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=data
+    data = compute_magnetic_pressure_gradient(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
     )
-    data = compute_covariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+
+    data["(curl(B)xB)_rho"] = (
+        mu_0
+        * data["sqrt(g)"]
+        * (data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"])
+    )
+    data["(curl(B)xB)_theta"] = -mu_0 * data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    data["(curl(B)xB)_zeta"] = mu_0 * data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    data["(curl(B)xB)"] = (
+        data["(curl(B)xB)_rho"] * data["e^rho"]
+        + data["(curl(B)xB)_theta"] * data["e^theta"]
+        + data["(curl(B)xB)_zeta"] * data["e^zeta"]
     )
 
     # tension vector
-    data["(B*grad)B"] = (
-        (data["B^theta"] * data["B^theta_t"] + data["B^zeta"] * data["B^theta_z"])
-        * data["e_theta"]
-        + (data["B^theta"] * data["B^zeta_t"] + data["B^zeta"] * data["B^zeta_z"])
-        * data["e_zeta"]
-        + data["B^theta"] ** 2 * data["e_theta_t"]
-        + data["B^zeta"] ** 2 * data["e_zeta_z"]
-        + data["B^theta"] * data["B^zeta"] * (data["e_theta_z"] + data["e_zeta_t"])
-    )
-    # FIXME: Is this correct?
+    data["(B*grad)B"] = data["(curl(B)xB)"] + data["grad(|B|^2)"] / 2
 
     # contravariant components
     data["((B*grad)B)^rho"] = dot(data["(B*grad)B"], data["e^rho"], 0)
@@ -1714,8 +1724,8 @@ def compute_force_error(
     data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
         data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
     )
-    data["F_theta"] = data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
-    data["F_zeta"] = -data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
     data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
     data["F"] = (
         data["F_rho"] * data["e^rho"]

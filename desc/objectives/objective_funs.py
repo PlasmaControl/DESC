@@ -9,7 +9,7 @@ from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.configuration import _Configuration
 
-# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `y_index` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -60,13 +60,13 @@ class ObjectiveFunction(IOAble):
         self._dimensions = self._objectives[0].dimensions
 
         idx = 0
-        self._indicies = {}
+        self._y_index = {}
         for arg in arg_order:
             if arg in self._args:
-                self._indicies[arg] = np.arange(idx, idx + self._dimensions[arg])
+                self._y_index[arg] = np.arange(idx, idx + self._dimensions[arg])
                 idx += self._dimensions[arg]
             else:
-                self._indicies[arg] = np.array([])
+                self._y_index[arg] = np.array([])
 
         self._dim_y = idx
 
@@ -84,15 +84,21 @@ class ObjectiveFunction(IOAble):
 
         # c = A*y - b
         self._b = np.array([])
+        self._b_index = {}
         for obj in self._constraints:
             b = obj.target
+            arg = obj.b_arg
+            if arg in arg_order:
+                idx = np.arange(self._b.size, self._b.size + b.size)
+                self._b_index[arg] = (
+                    np.concatenate((self._b_index[arg], idx))
+                    if self._b_index[arg].size
+                    else idx
+                )
             self._b = np.hstack((self._b, b)) if self._b.size else b
+            # FIXME: finish this b_index stuff
 
-        # remove duplicate constraints
-        temp = np.hstack([self._A, self._b.reshape((-1, 1))])
-        temp = np.unique(temp, axis=0)
-        self._A = np.atleast_2d(temp[:, :-1])
-        self._b = temp[:, -1].flatten()
+        # TODO: handle duplicate constraints
 
         # SVD of A
         u, s, vh = np.linalg.svd(self._A, full_matrices=True)
@@ -202,30 +208,25 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Objecive build")
 
-    def rebuild_constraints(self, eq, verbose=1):
+    def rebuild_constraints(self, eq):
         """Rebuild the constraints.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        verbose : int, optional
-            Level of output.
 
         """
-        timer = Timer()
-
         for constraint in self._constraints:
             constraint.update_target(eq)
 
-        # build linear constraint matrices
-        if verbose > 0:
-            print("Building linear constraints")
-        timer.start("linear constraint build")
-        self._build_linear_constraints()
-        timer.stop("linear constraint build")
-        if verbose > 1:
-            timer.disp("linear constraint build")
+        # c = A*y - b
+        self._b = np.array([])
+        for obj in self._constraints:
+            b = obj.target
+            self._b = np.hstack((self._b, b)) if self._b.size else b
+
+        self._y0 = np.dot(self._Ainv, self._b)
 
     def compute(self, x):
         """Compute the objective function.
@@ -304,7 +305,7 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self._args:
-            kwargs[arg] = y[self._indicies[arg]]
+            kwargs[arg] = y[self._y_index[arg]]
         return kwargs
 
     def project(self, y):
@@ -331,7 +332,7 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector y from the Equilibrium eq."""
         y = np.zeros((self._dim_y,))
         for arg in self._args:
-            y[self._indicies[arg]] = getattr(eq, arg)
+            y[self._y_index[arg]] = getattr(eq, arg)
         return y
 
     def x(self, eq):
@@ -347,7 +348,7 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self._args:
-            kwargs[arg] = y[self._indicies[arg]]
+            kwargs[arg] = y[self._y_index[arg]]
         return kwargs
 
     def grad(self, x):
@@ -505,9 +506,14 @@ class ObjectiveFunction(IOAble):
         return self._dimensions
 
     @property
-    def indicies(self):
-        """dict: Indicies of the argument given by the dict keys in the state vector."""
-        return self._indicies
+    def b_index(self):
+        """dict: Indicies of the arguments in the linear constraint vector b."""
+        return self._b_index
+
+    @property
+    def y_index(self):
+        """dict: Indicies of the components of the full state vector y."""
+        return self._y_index
 
     @property
     def dim_y(self):
@@ -741,6 +747,14 @@ class _Objective(IOAble, ABC):
     def args(self):
         """list: Names (str) of arguments to the compute functions."""
         return self._args
+
+    @property
+    def b_arg(self):
+        """str: Names (str) of argument in the linear constraint vector b."""
+        if hasattr(self, "_b_arg"):
+            return self._b_arg
+        else:
+            return ""
 
     @property
     def dimensions(self):

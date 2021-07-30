@@ -118,10 +118,11 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
+    # FIXME: dxdx = Zinv @ (y_idx - Ainv @ b_idx) @ dc
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-    indicies = np.concatenate([objective.indicies[arg] for arg in deltas.keys()])
-    indicies.sort(kind="mergesort")
-    dxdc = np.dot(objective.Zinv[:, indicies], dc)
+    y_index = np.concatenate([objective.y_index[arg] for arg in deltas.keys()])
+    y_index.sort(kind="mergesort")
+    dxdc = np.dot(objective.Zinv[:, y_index], dc)
 
     x = objective.x(eq)
     dx1 = 0

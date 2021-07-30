@@ -7,12 +7,20 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.objective_funs import ObjectiveFunction, get_objective_function
-from desc.optimize import Optimizer
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
-from desc.perturbations import perturb, optimal_perturb
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.optimize import Optimizer
+from desc.objectives import (
+    ObjectiveFunction,
+    FixedBoundary,
+    FixedPressure,
+    FixedIota,
+    FixedPsi,
+    LCFSBoundary,
+    RadialForceBalance,
+    HelicalForceBalance,
+    Energy,
+)
+from desc.perturbations import perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -73,7 +81,7 @@ class Equilibrium(_Configuration, IOAble):
         self._solved = False
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -181,8 +189,8 @@ class Equilibrium(_Configuration, IOAble):
 
     def solve(
         self,
-        optimizer="lsq-exact",
-        objective="force",
+        optimizer,
+        objective,
         ftol=1e-6,
         xtol=1e-6,
         gtol=1e-6,
@@ -211,11 +219,6 @@ class Equilibrium(_Configuration, IOAble):
             Dictionary of additional options to pass to optimizer.
 
         """
-        if isinstance(optimizer, str):
-            optimizer = Optimizer(optimizer)
-        if isinstance(objective, str):
-            objective = get_objective_function(objective)
-
         if not objective.built:
             objective.build(self, verbose=verbose)
 
@@ -245,7 +248,7 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
-        objective="force",
+        objective,
         dR=None,
         dZ=None,
         dL=None,
@@ -290,9 +293,6 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        if isinstance(objective, str):
-            objective = get_objective_function(objective)
-
         equil = perturb(
             self,
             objective,
@@ -468,6 +468,22 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         for ii in range(start_from, len(self.inputs)):
             timer.start("Iteration {} total".format(ii + 1))
+
+            # TODO: make this more efficient (minimize re-building)
+            optimizer = Optimizer(self.inputs[ii]["optimizer"])
+            if self.inputs[ii]["objective"] == "force":
+                objectives = (RadialForceBalance(), HelicalForceBalance())
+            elif self.inputs[ii]["objective"] == "energy":
+                objectives = Energy()
+            constraints = (
+                FixedBoundary(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            objective = ObjectiveFunction(objectives, constraints)
+
             if ii == start_from:
                 equil = self[ii]
                 if verbose > 0:
@@ -496,7 +512,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     if verbose > 0:
                         print("Perturbing equilibrium")
                     equil.perturb(
-                        objective=self.inputs[ii]["objective"],
+                        objective=objective,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,
@@ -519,8 +535,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 break
 
             equil.solve(
-                optimizer=self.inputs[ii]["optimizer"],
-                objective=self.inputs[ii]["objective"],
+                optimizer=optimizer,
+                objective=objective,
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],

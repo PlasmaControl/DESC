@@ -2,9 +2,8 @@ import numpy as np
 import warnings
 from termcolor import colored
 
-from desc.utils import Timer
+from desc.utils import Timer, arg_order
 from desc.backend import use_jax, jnp
-from desc.objective_funs import _arg_order_
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -119,7 +118,7 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    dc = np.concatenate([deltas[arg] for arg in _arg_order_ if arg in deltas.keys()])
+    dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
     indicies = np.concatenate([objective.indicies[arg] for arg in deltas.keys()])
     indicies.sort(kind="mergesort")
     dxdc = np.dot(objective.Zinv[:, indicies], dc)
@@ -179,7 +178,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        RHS2 = 0.5 * objective.jvp(x, (dx1, dxdc))
+        tangent = dx1 + dxdc
+        RHS2 = 0.5 * objective.jvp(x, (tangent, tangent))
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -203,8 +203,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        # FIXME: I don't think this is correct
-        RHS3 = 0.5 * objective.jvp(x, (dx1, dx2, dxdc))
+        RHS3 = (1 / 6) * objective.jvp(x, (tangent, tangent, tangent))
+        RHS3 += objective.jvp(x, (dx2, tangent))
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -226,15 +226,17 @@ def perturb(
     else:
         eq_new = eq
 
+    # update input parameters
+    for key, value in deltas.items():
+        setattr(eq_new, key, getattr(eq_new, key) + value)
+
+    objective.rebuild_constraints(eq_new, verbose=verbose)
+
     # update equilibrium arguments
     dx = dx1 + dx2 + dx3
     args_new = objective.get_args(x + dx)
     for arg in args_new:
         setattr(eq_new, arg, args_new[arg])
-
-    # update input parameters
-    for key, value in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + value)
 
     timer.stop("Total perturbation")
     if verbose > 1:

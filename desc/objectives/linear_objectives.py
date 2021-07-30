@@ -10,44 +10,36 @@ from desc.compute_funs import compute_rotational_transform
 from .objective_funs import _Objective
 
 
-class FixedBoundary(_Objective):
-    """Fixes boundary coefficients."""
+class FixedBoundaryR(_Objective):
+    """Fixes boundary R coefficients."""
+
+    _b_arg = "Rb_lmn"
 
     def __init__(
-        self,
-        eq=None,
-        target=(None, None),
-        weight=(1, 1),
-        surface=None,
-        modes=(True, True),
+        self, eq=None, target=None, weight=1, surface=None, modes=True,
     ):
-        """Initialize a FixedBoundary Objective.
+        """Initialize a FixedBoundaryR Objective.
 
         Parameters
         ----------
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
-        target : tuple, float, ndarray, optional
-            Target value(s) of the objective. Tuple = (R_target, Z_target)
-            len(target) = len(weight) = len(modes). If None, uses surface coefficients.
+        target : float, ndarray, optional
+            Target value(s) of the objective. len(target) = len(weight) = len(modes).
+            If None, uses surface coefficients.
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
-            Tuple = (R_target, Z_target). len(target) = len(weight) = len(modes)
+            len(target) = len(weight) = len(modes)
         surface : Surface, optional
             Toroidal surface containing the Fourier modes to evaluate at.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
-            Tuple = (R_modes, Z_modes). len(target) = len(weight) = len(modes).
+            len(target) = len(weight) = len(modes).
             If True/False uses all/none of the surface modes.
 
         """
-        self._R_target = target[0]
-        self._Z_target = target[1]
-        self._R_weight = np.atleast_1d(weight[0])
-        self._Z_weight = np.atleast_1d(weight[1])
         self._surface = surface
-        self._R_modes = modes[0]
-        self._Z_modes = modes[1]
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -66,114 +58,66 @@ class FixedBoundary(_Objective):
         if self._surface is None:
             self._surface = eq.surface
 
-        # find inidies of R boundary modes to fix
-        if self._R_modes is False or self._R_modes is None:  # no modes
-            self._idx_Rb = np.array([], dtype=int)
-        elif self._R_modes is True:  # all modes in surface
-            self._idx_Rb = np.arange(self._surface.R_basis.num_modes)
-            idx_R = self._idx_Rb
+        # find indicies of R boundary modes to fix
+        if self._modes is False or self._modes is None:  # no modes
+            self._idx = np.array([], dtype=int)
+            idx = self._idx
+        elif self._modes is True:  # all modes in surface
+            self._idx = np.arange(self._surface.R_basis.num_modes)
+            idx = self._idx
         else:  # specified modes
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._R_modes.dtype],
+                "formats": 3 * [self._modes.dtype],
             }
-            _, self._idx_Rb, idx_R = np.intersect1d(
-                self._surface.R_basis.modes.view(dtype), self._R_modes.view(dtype)
+            _, self._idx, idx = np.intersect1d(
+                self._surface.R_basis.modes.view(dtype), self._modes.view(dtype)
             )
-            if self._idx_Rb.size < self._R_modes.shape[0]:
+            if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given R modes are not in the boundary surface, ",
+                        "Some of the given modes are not in the boundary surface, ",
                         +"these modes will not be fixed.",
                         "yellow",
                     )
                 )
 
-        # find inidies of Z boundary modes to fix
-        if self._Z_modes is False or self._Z_modes is None:  # no modes
-            self._idx_Zb = np.array([], dtype=int)
-        elif self._Z_modes is True:  # all modes in surface
-            self._idx_Zb = np.arange(self._surface.Z_basis.num_modes)
-            idx_Z = self._idx_Zb
-        else:  # specified modes
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._Z_modes.dtype],
-            }
-            _, self._idx_Zb, idx_Z = np.intersect1d(
-                self._surface.Z_basis.modes.view(dtype), self._Z_modes.view(dtype)
-            )
-            if self._idx_Zb.size < self._Z_modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given Z modes are not in the boundary surface, ",
-                        +"these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        dim_Rb = self._idx_Rb.size
-        dim_Zb = self._idx_Zb.size
-        self._dim_f = dim_Rb + dim_Zb
+        self._dim_f = self._idx.size
 
         # set target values for R boundary coefficients
-        if self._R_target is None:  # use surface coefficients
-            self._R_target = self._surface.R_lmn[self._idx_Rb]
-        elif self._R_target.size == 1:  # use scalar target for all modes
-            self._R_target = self._R_target * np.ones((dim_Rb,))
-        elif self._R_target.size == self._R_modes.shape[0]:  # use given array target
-            self._R_target = self._R_target[idx_R]
+        if self._target[0] is None:  # use surface coefficients
+            self._target = self._surface.R_lmn[self._idx]
+        elif self._target.size == 1:  # use scalar target for all modes
+            self._target = self._target * np.ones((self._dim_f,))
+        elif self._target.size == self._modes.shape[0]:  # use given array target
+            self._target = self._target[idx]
         else:
-            raise ValueError("R target must be the same size as R modes.")
-
-        # set target values for Z boundary coefficients
-        if self._Z_target is None:  # use surface coefficients
-            self._Z_target = self._surface.Z_lmn[self._idx_Zb]
-        elif self._Z_target.size == 1:  # use scalar target for all modes
-            self._Z_target = self._Z_target * np.ones((dim_Zb,))
-        elif self._Z_target.size == self._Z_modes.shape[0]:  # use given array target
-            self._Z_target = self._Z_target[idx_Z]
-        else:
-            raise ValueError("Z target must be the same size as Z modes.")
+            raise ValueError("Target must be the same size as modes.")
 
         # check R boundary weights
-        if self._R_weight.size == 1:  # use scalar weight for all modes
-            self._R_weight = self._R_weight * np.ones((dim_Rb,))
-        elif self._R_weight.size == self._R_modes.shape[0]:  # use given array weight
-            self._R_weight = self._R_weight[idx_R]
+        if self._weight.size == 1:  # use scalar weight for all modes
+            self._weight = self._weight * np.ones((self._dim_f,))
+        elif self._weight.size == self._modes.shape[0]:  # use given array weight
+            self._weight = self._weight[idx]
         else:
-            raise ValueError("R weight must be the same size as R modes.")
+            raise ValueError("Weight must be the same size as modes.")
 
-        # check Z boundary weights
-        if self._Z_weight.size == 1:  # use scalar weight for all modes
-            self._Z_weight = self._Z_weight * np.ones((dim_Zb,))
-        elif self._Z_weight.size == self._Z_modes.shape[0]:  # use given array weight
-            self._Z_weight = self._Z_weight[idx_Z]
-        else:
-            raise ValueError("Z weight must be the same size as Z modes.")
-
-        self._target = np.concatenate((self._R_target, self._Z_target))
-        self._weight = np.concatenate((self._R_weight, self._Z_weight))
         self._check_dimensions()
-
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, Rb_lmn, Zb_lmn):
-        Rb = Rb_lmn[self._idx_Rb] - self._R_target
-        Zb = Zb_lmn[self._idx_Zb] - self._Z_target
-        return Rb, Zb
+    def _compute(self, Rb_lmn):
+        Rb = Rb_lmn[self._idx] - self._target
+        return Rb
 
-    def compute(self, Rb_lmn, Zb_lmn, **kwargs):
-        """Compute fixed-boundary errors.
+    def compute(self, Rb_lmn, **kwargs):
+        """Compute fixed-boundary R errors.
 
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordiante.
 
         Returns
         -------
@@ -181,35 +125,25 @@ class FixedBoundary(_Objective):
             Boundary surface errors, in meters.
 
         """
-        Rb, Zb = self._compute(Rb_lmn, Zb_lmn)
-        return jnp.concatenate((Rb * self._R_weight, Zb * self._Z_weight))
+        Rb = self._compute(Rb_lmn)
+        return Rb * self._weight
 
-    def callback(self, Rb_lmn, Zb_lmn, **kwargs):
-        """Print fixed-boundary errors.
+    def callback(self, Rb_lmn, **kwargs):
+        """Print fixed-boundary R errors.
 
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordiante.
 
         """
-        Rb, Zb = self._compute(Rb_lmn, Zb_lmn)
-        f = jnp.concatenate((Rb, Zb))
-        print(
-            "Total fixed-boundary error: {:10.3e}, ".format(jnp.linalg.norm(f))
-            + "R fixed-boundary error: {:10.3e}, ".format(jnp.linalg.norm(Rb))
-            + "Z fixed-boundary error: {:10.3e} ".format(jnp.linalg.norm(Zb))
-            + "(m)"
-        )
+        Rb = self._compute(Rb_lmn)
+        print("R fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Rb)))
         return None
 
     def update_target(self, eq):
         """Update target values using an Equilibrium."""
-        self._R_target = eq.surface.R_lmn[self._idx_Rb]
-        self._Z_target = eq.surface.Z_lmn[self._idx_Zb]
-        self.target = np.concatenate((self._R_target, self._Z_target))
+        self.target = eq.surface.R_lmn[self._idx]
 
     @property
     def scalar(self):
@@ -224,11 +158,164 @@ class FixedBoundary(_Objective):
     @property
     def name(self):
         """Name of objective function (str)."""
-        return "fixed-boundary"
+        return "fixed-boundary R"
+
+
+class FixedBoundaryZ(_Objective):
+    """Fixes boundary Z coefficients."""
+
+    _b_arg = "Zb_lmn"
+
+    def __init__(
+        self, eq=None, target=None, weight=1, surface=None, modes=True,
+    ):
+        """Initialize a FixedBoundaryZ Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective. len(target) = len(weight) = len(modes).
+            If None, uses surface coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(target) = len(weight) = len(modes)
+        surface : Surface, optional
+            Toroidal surface containing the Fourier modes to evaluate at.
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the surface modes.
+
+        """
+        self._surface = surface
+        self._modes = modes
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._surface is None:
+            self._surface = eq.surface
+
+        # find indicies of Z boundary modes to fix
+        if self._modes is False or self._modes is None:  # no modes
+            self._idx = np.array([], dtype=int)
+            idx = self._idx
+        elif self._modes is True:  # all modes in surface
+            self._idx = np.arange(self._surface.Z_basis.num_modes)
+            idx = self._idx
+        else:  # specified modes
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [self._modes.dtype],
+            }
+            _, self._idx, idx = np.intersect1d(
+                self._surface.Z_basis.modes.view(dtype), self._modes.view(dtype)
+            )
+            if self._idx.size < self._modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the boundary surface, ",
+                        +"these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = self._idx.size
+
+        # set target values for Z boundary coefficients
+        if self._target[0] is None:  # use surface coefficients
+            self._target = self._surface.Z_lmn[self._idx]
+        elif self._target.size == 1:  # use scalar target for all modes
+            self._target = self._target * np.ones((self._dim_f,))
+        elif self._target.size == self._modes.shape[0]:  # use given array target
+            self._target = self._target[idx]
+        else:
+            raise ValueError("Target must be the same size as modes.")
+
+        # check Z boundary weights
+        if self._weight.size == 1:  # use scalar weight for all modes
+            self._weight = self._weight * np.ones((self._dim_f,))
+        elif self._weight.size == self._modes.shape[0]:  # use given array weight
+            self._weight = self._weight[idx]
+        else:
+            raise ValueError("Weight must be the same size as modes.")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, Zb_lmn):
+        Zb = Zb_lmn[self._idx] - self._target
+        return Zb
+
+    def compute(self, Zb_lmn, **kwargs):
+        """Compute fixed-boundary Z errors.
+
+        Parameters
+        ----------
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary surface errors, in meters.
+
+        """
+        Zb = self._compute(Zb_lmn)
+        return Zb * self._weight
+
+    def callback(self, Zb_lmn, **kwargs):
+        """Print fixed-boundary Z errors.
+
+        Parameters
+        ----------
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+
+        """
+        Zb = self._compute(Zb_lmn)
+        print("Z fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
+        return None
+
+    def update_target(self, eq):
+        """Update target values using an Equilibrium."""
+        self.target = eq.surface.Z_lmn[self._idx]
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "fixed-boundary Z"
 
 
 class FixedPressure(_Objective):
     """Fixes pressure coefficients."""
+
+    _b_arg = "p_l"
 
     def __init__(
         self, eq=None, target=None, weight=1, profile=None, modes=True,
@@ -379,6 +466,8 @@ class FixedPressure(_Objective):
 class FixedIota(_Objective):
     """Fixes rotational transform coefficients."""
 
+    _b_arg = "i_l"
+
     def __init__(
         self, eq=None, target=None, weight=1, profile=None, modes=True,
     ):
@@ -527,6 +616,8 @@ class FixedIota(_Objective):
 
 class FixedPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
+
+    _b_arg = "Psi"
 
     def __init__(self, eq=None, target=None, weight=1):
         """Initialize a FixedIota Objective.

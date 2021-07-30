@@ -1,6 +1,7 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    FixedBoundary,
+    FixedBoundaryR,
+    FixedBoundaryZ,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -22,7 +23,8 @@ from .nonlinear_objectives import (
 
 __all__ = [
     "ObjectiveFunction",
-    "FixedBoundary",
+    "FixedBoundaryR",
+    "FixedBoundaryZ",
     "FixedPressure",
     "FixedIota",
     "FixedPsi",

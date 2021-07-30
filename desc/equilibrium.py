@@ -11,7 +11,8 @@ from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.optimize import Optimizer
 from desc.objectives import (
     ObjectiveFunction,
-    FixedBoundary,
+    FixedBoundaryR,
+    FixedBoundaryZ,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -476,7 +477,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             elif self.inputs[ii]["objective"] == "energy":
                 objectives = Energy()
             constraints = (
-                FixedBoundary(),
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
                 FixedPressure(),
                 FixedIota(),
                 FixedPsi(),

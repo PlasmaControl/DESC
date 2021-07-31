@@ -1,6 +1,38 @@
 Changelog
 =========
 
+v0.4.10
+######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.9...v0.4.10>`_
+
+Bug Fixes:
+
+- Reordered import statements to ensure user requests to use GPU are handled correctly
+
+New Features:
+
+- Adds several new classes to represent different types/parameterizations of curves and surfaces, for plasma boundaries, coordinate surfaces, coils, magnetic axis etc
+- New classes also have several new methods that will be made into objectives in the future, such as area, length, curvature, etc.
+- Surfaces can be used as boundary conditions via surface.get_constraint method
+- Added new plot method to trace field lines and plot them in real space (R, phi, Z)
+
+
+v0.4.9
+######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.8...v0.4.9>`_
+
+Bug Fixes:
+
+- Fix a major bug in the least squares routine that set the initial regularization parameter to np.nan, meaning that the optimizer would stall as soon as it can no longer take full newton steps.
+
+New Features:
+
+- Adds a Cholesky factorization option for solving the least squares trust region problem. This can be faster, but less numerically stable due to squaring the condition number of the Jacobian. Often still produces good results since the trust region itself regularizes the solution enough to overcome the poor conditioning.
+- Methods that take Grid objects now also accept an ndarray of nodes or an integer specifying the number of nodes in each direction.
+- Added repr methods for string representations of more objects.
+
 
 v0.4.8
 ######

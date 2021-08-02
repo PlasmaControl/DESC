@@ -173,7 +173,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy1 = objective.recover(dx1)
+        dy1 = np.dot(objective.Z, dx1)
 
     # 2nd order
     if order > 1:
@@ -199,7 +199,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy2 = objective.recover(dx2)
+        dy2 = np.dot(objective.Z, dx2)
 
     # 3rd order
     if order > 2:
@@ -225,7 +225,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy3 = objective.recover(dx3)
+        dy3 = np.dot(objective.Z, dx3)
 
     # total perturbation
     dx = dx1 + dx2 + dx3

@@ -508,7 +508,11 @@ class Transform(IOAble):
         """
         if not self.built_pinv:
             self.build_pinv()
-        return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
+        if x.ndim > 1:
+            weights = self.grid.weights.reshape((-1, 1))
+        else:
+            weights = self.grid.weights
+        return jnp.matmul(self.matrices["pinv"], weights * x)
 
     def project(self, y):
         """Project vector y onto basis.

@@ -909,14 +909,7 @@ class _Configuration(IOAble, ABC):
         )
 
     def compute_volume(self):
-        """Compute plasma volume.
-
-        Returns
-        -------
-        volume : float
-            Plasma volume (m^3).
-
-        """
+        """Compute plasma volume (m^3)."""
         grid = QuadratureGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
 
         R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
@@ -926,14 +919,7 @@ class _Configuration(IOAble, ABC):
         return data["V"]
 
     def compute_cross_section_area(self):
-        """Compute toroidally averaged cross-section area.
-
-        Returns
-        -------
-        area : float
-            Cross section area (m^2).
-
-        """
+        """Compute toroidally averaged cross-section area (m^2)."""
         grid = QuadratureGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
 
         R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
@@ -951,6 +937,23 @@ class _Configuration(IOAble, ABC):
                 axis=1,
             )
         )
+
+    def compute_major_radius(self):
+        """Compute major radius (m)."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.pi * A)
+
+    def compute_minor_radius(self):
+        """Compute minor radius (m)."""
+        A = self.compute_cross_section_area()
+        return np.sqrt(A / np.pi)
+
+    def compute_aspect_ratio(self):
+        """Compute aspect ratio = major radius / minor radius."""
+        V = self.compute_volume()
+        A = self.compute_cross_section_area()
+        return V / (2 * np.sqrt(np.pi * A ** 3))
 
     def compute_energy(self, gamma=0):
         """Compute MHD energy.

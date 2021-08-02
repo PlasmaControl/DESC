@@ -29,7 +29,7 @@ def test_major_radius(DSHAPE):
 
     # DESC value
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    R_desc = eq.major_radius
+    R_desc = eq.compute_major_radius()
 
     assert abs(R_vmec - R_desc) < 5e-3
 
@@ -44,7 +44,7 @@ def test_minor_radius(DSHAPE):
 
     # DESC value
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    A_desc = eq.minor_radius
+    A_desc = eq.compute_minor_radius()
 
     assert abs(A_vmec - A_desc) < 5e-3
 
@@ -59,7 +59,7 @@ def test_aspect_ratio(DSHAPE):
 
     # DESC value
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    AR_desc = eq.aspect_ratio
+    AR_desc = eq.compute_aspect_ratio()
 
     assert abs(AR_vmec - AR_desc) < 5e-3
 

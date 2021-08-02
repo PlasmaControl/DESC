@@ -311,7 +311,6 @@ class Equilibrium(_Configuration, IOAble):
             order=order,
             tr_ratio=tr_ratio,
             cutoff=cutoff,
-            Jx=Jx,
             verbose=verbose,
             copy=copy,
         )

@@ -121,8 +121,12 @@ def perturb(
     # FIXME: dxdx = Zinv @ (y_idx - Ainv @ b_idx) @ dc
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
     y_index = np.concatenate([objective.y_index[arg] for arg in deltas.keys()])
+    b_index = np.concatenate([objective.b_index[arg] for arg in deltas.keys()])
     y_index.sort(kind="mergesort")
-    dxdc = np.dot(objective.Zinv[:, y_index], dc)
+    b_index.sort(kind="mergesort")
+    dxdc = np.dot(objective.Zinv[:, y_index], dc) - np.dot(
+        objective.Zinv, np.dot(objective.Ainv[:, b_index], dc)
+    )
 
     x = objective.x(eq)
     dx1 = 0
@@ -231,7 +235,7 @@ def perturb(
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
 
-    objective.rebuild_constraints(eq_new, verbose=verbose)
+    objective.rebuild_constraints(eq_new)
 
     # update equilibrium arguments
     dx = dx1 + dx2 + dx3

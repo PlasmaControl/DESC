@@ -87,16 +87,15 @@ class ObjectiveFunction(IOAble):
         self._b_index = {}
         for obj in self._constraints:
             b = obj.target
+            self._b = np.hstack((self._b, b)) if self._b.size else b
             arg = obj.b_arg
             if arg in arg_order:
                 idx = np.arange(self._b.size, self._b.size + b.size)
                 self._b_index[arg] = (
                     np.concatenate((self._b_index[arg], idx))
-                    if self._b_index[arg].size
+                    if arg in self._b_index
                     else idx
                 )
-            self._b = np.hstack((self._b, b)) if self._b.size else b
-            # FIXME: finish this b_index stuff
 
         # TODO: handle duplicate constraints
 

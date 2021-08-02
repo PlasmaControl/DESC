@@ -3,7 +3,7 @@ from termcolor import colored
 import warnings
 from collections.abc import MutableSequence
 
-from desc.backend import use_jax
+from desc.backend import use_jax, put
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
@@ -242,7 +242,10 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             objective.callback(result["x"])
 
-        for key, value in objective.get_args(result["x"]).items():
+        for key, value in objective.unpack_state(result["x"]).items():
+            value = put(  # parameter values below threshold are set to 0
+                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+            )
             setattr(self, key, value)
         self.solved = result["success"]
         return result
@@ -513,6 +516,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 if len(deltas) > 0:
                     if verbose > 0:
                         print("Perturbing equilibrium")
+                    # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
                         **deltas,

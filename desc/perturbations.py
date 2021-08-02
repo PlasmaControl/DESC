@@ -2,8 +2,8 @@ import numpy as np
 import warnings
 from termcolor import colored
 
+from desc.backend import use_jax, jnp, put
 from desc.utils import Timer, arg_order
-from desc.backend import use_jax, jnp
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -118,35 +118,40 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    # FIXME: dxdx = Zinv @ (y_idx - Ainv @ b_idx) @ dc
+    # perturbation deltas, as a vector of length dim_y
+    indicies = np.concatenate([objective.indicies[arg] for arg in deltas.keys()])
+    indicies.sort(kind="mergesort")
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-    y_index = np.concatenate([objective.y_index[arg] for arg in deltas.keys()])
-    b_index = np.concatenate([objective.b_index[arg] for arg in deltas.keys()])
-    y_index.sort(kind="mergesort")
-    b_index.sort(kind="mergesort")
-    dxdc = np.dot(objective.Zinv[:, y_index], dc) - np.dot(
-        objective.Zinv, np.dot(objective.Ainv[:, b_index], dc)
-    )
+    dc = np.dot(np.eye(objective.dim_y)[:, indicies], dc)
 
+    # state vectors
     x = objective.x(eq)
+    y = objective.y(eq)
+
+    # perturbation vectors
     dx1 = 0
     dx2 = 0
     dx3 = 0
+    dy1 = 0
+    dy2 = 0
+    dy3 = 0
 
     # 1st order
     if order > 0:
 
-        RHS1 = objective.compute(x)
+        RHS1 = objective.compute(y)
 
-        # 1st partial derivatives wrt state vector (x)
+        # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if Jx is None:
             if verbose > 0:
                 print("Computing df")
-            timer.start("df/dx computation")
-            Jx = objective.jac(x)
-            timer.stop("df/dx computation")
+            timer.start("df computation")
+            Jy = objective.jac(y)
+            Jx = np.dot(Jy, objective.Z)
+            RHS1 += np.dot(Jy, dc)
+            timer.stop("df computation")
             if verbose > 1:
-                timer.disp("df/dx computation")
+                timer.disp("df computation")
 
         if verbose > 0:
             print("Factoring df")
@@ -156,13 +161,6 @@ def perturb(
         timer.stop("df/dx factorization")
         if verbose > 1:
             timer.disp("df/dx factorization")
-
-        # 1st partial derivatives wrt input parameters (c)
-        timer.start("df/dc computation")
-        RHS1 += np.dot(Jx, dxdc)
-        timer.stop("df/dc computation")
-        if verbose > 1:
-            timer.disp("df/dc computation")
 
         dx1, hit, alpha = trust_region_step_exact_svd(
             RHS1,
@@ -175,6 +173,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy1 = objective.recover(dx1)
 
     # 2nd order
     if order > 1:
@@ -183,8 +182,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangent = dx1 + dxdc
-        RHS2 = 0.5 * objective.jvp(x, (tangent, tangent))
+        tangent = dy1 + dc
+        RHS2 = 0.5 * objective.jvp(y, (tangent, tangent))
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -200,6 +199,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy2 = objective.recover(dx2)
 
     # 3rd order
     if order > 2:
@@ -208,8 +208,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp(x, (tangent, tangent, tangent))
-        RHS3 += objective.jvp(x, (dx2, tangent))
+        RHS3 = (1 / 6) * objective.jvp(y, (tangent, tangent, tangent))
+        RHS3 += objective.jvp(y, (dy2, tangent))
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -225,8 +225,11 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy3 = objective.recover(dx3)
 
+    # total perturbation
     dx = dx1 + dx2 + dx3
+    dy = dy1 + dy2 + dy3
 
     if copy:
         eq_new = eq.copy()
@@ -239,9 +242,12 @@ def perturb(
     objective.rebuild_constraints(eq_new)
 
     # update other attributes
-    args = objective.get_args(x + dx)
+    args = objective.unpack_state(y + dy)
     for key, value in args.items():
         if key not in deltas:
+            value = put(  # parameter values below threshold are set to 0
+                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+            )
             setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")

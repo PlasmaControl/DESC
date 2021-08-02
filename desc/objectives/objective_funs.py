@@ -3,13 +3,12 @@ from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
 from desc import config
-from desc.backend import jnp, jit, use_jax, put
+from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer, arg_order
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.configuration import _Configuration
 
-# XXX: could use `y_index` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -60,13 +59,13 @@ class ObjectiveFunction(IOAble):
         self._dimensions = self._objectives[0].dimensions
 
         idx = 0
-        self._y_index = {}
+        self._indicies = {}
         for arg in arg_order:
             if arg in self._args:
-                self._y_index[arg] = np.arange(idx, idx + self._dimensions[arg])
+                self._indicies[arg] = np.arange(idx, idx + self._dimensions[arg])
                 idx += self._dimensions[arg]
             else:
-                self._y_index[arg] = np.array([])
+                self._indicies[arg] = np.array([])
 
         self._dim_y = idx
 
@@ -84,18 +83,9 @@ class ObjectiveFunction(IOAble):
 
         # c = A*y - b
         self._b = np.array([])
-        self._b_index = {}
         for obj in self._constraints:
             b = obj.target
             self._b = np.hstack((self._b, b)) if self._b.size else b
-            arg = obj.b_arg
-            if arg in arg_order:
-                idx = np.arange(self._b.size, self._b.size + b.size)
-                self._b_index[arg] = (
-                    np.concatenate((self._b_index[arg], idx))
-                    if arg in self._b_index
-                    else idx
-                )
 
         # TODO: handle duplicate constraints
 
@@ -233,7 +223,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables.
+            Optimization variables (x) or full state vector (y).
 
         Returns
         -------
@@ -241,11 +231,7 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        if x.size != self._dim_x:
-            raise ValueError("Optimization vector is not the proper size.")
-        y = self.recover(x)
-        kwargs = self.unpack_state(y)
-
+        kwargs = self.unpack_state(x)
         return jnp.concatenate([obj.compute(**kwargs) for obj in self._objectives])
 
     def compute_scalar(self, x):
@@ -254,7 +240,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables.
+            Optimization variables (x) or full state vector (y).
 
         Returns
         -------
@@ -270,7 +256,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables.
+            Optimization variables (x) or full state vector (y).
 
         """
         if x.size != self._dim_x:
@@ -282,29 +268,32 @@ class ObjectiveFunction(IOAble):
             obj.callback(**kwargs)
         return None
 
-    def unpack_state(self, y):
-        """Unpack the full state vector y into its components.
+    def unpack_state(self, x):
+        """Unpack the state vector x (or y) into its components.
 
         Parameters
         ----------
-        y : ndarray
-            Full state vector.
+        x : ndarray
+            Optimization variables (x) or full state vector (y).
 
         Returns
         -------
         kwargs : dict
-            Dictionary of the state components with the following keys:
-                "R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi"
+            Dictionary of the state components with argument names as keys.
 
         """
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        if y.size != self._dim_y:
-            raise ValueError("State vector is not the proper size.")
+        if x.size == self._dim_x:
+            y = self.recover(x)
+        elif x.size == self._dim_y:
+            y = x
+        else:
+            raise ValueError("Input vector dimension is invalid.")
 
         kwargs = {}
         for arg in self._args:
-            kwargs[arg] = y[self._y_index[arg]]
+            kwargs[arg] = y[self._indicies[arg]]
         return kwargs
 
     def project(self, y):
@@ -331,28 +320,12 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector y from the Equilibrium eq."""
         y = np.zeros((self._dim_y,))
         for arg in self._args:
-            y[self._y_index[arg]] = getattr(eq, arg)
+            y[self._indicies[arg]] = getattr(eq, arg)
         return y
 
     def x(self, eq):
         """Return the optimization variable x from the Equilibrium eq."""
         return self.project(self.y(eq))
-
-    def get_args(self, x):
-        """Get arguments from the optimization vector x (or y)."""
-        if x.size == self._dim_x:
-            y = self.recover(x)
-        elif x.size == self._dim_y:
-            y = x
-
-        kwargs = {}
-        for arg in self._args:
-            # parameter values below threshold are set to 0
-            value = y[self._y_index[arg]]
-            kwargs[arg] = put(
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
-            )
-        return kwargs
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -509,14 +482,9 @@ class ObjectiveFunction(IOAble):
         return self._dimensions
 
     @property
-    def b_index(self):
-        """dict: Indicies of the arguments in the linear constraint vector b."""
-        return self._b_index
-
-    @property
-    def y_index(self):
+    def indicies(self):
         """dict: Indicies of the components of the full state vector y."""
-        return self._y_index
+        return self._indicies
 
     @property
     def dim_y(self):

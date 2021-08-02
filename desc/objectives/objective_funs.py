@@ -347,7 +347,10 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self._args:
-            kwargs[arg] = y[self._y_index[arg]]
+            # parameter values below threshold are set to 0
+            value = y[self._y_index[arg]]
+            value[np.abs(value) < 10 * np.finfo(value.dtype).eps] = 0
+            kwargs[arg] = value
         return kwargs
 
     def grad(self, x):

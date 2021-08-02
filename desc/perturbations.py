@@ -226,22 +226,23 @@ def perturb(
             threshold=1e-6,
         )
 
+    dx = dx1 + dx2 + dx3
+
     if copy:
         eq_new = eq.copy()
     else:
         eq_new = eq
 
-    # update input parameters
+    # update perturbation attributes
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
-
     objective.rebuild_constraints(eq_new)
 
-    # update equilibrium arguments
-    dx = dx1 + dx2 + dx3
-    args_new = objective.get_args(x + dx)
-    for arg in args_new:
-        setattr(eq_new, arg, args_new[arg])
+    # update other attributes
+    args = objective.get_args(x + dx)
+    for key, value in args.items():
+        if key not in deltas:
+            setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
     if verbose > 1:

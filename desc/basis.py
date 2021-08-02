@@ -106,44 +106,32 @@ class Basis(IOAble, ABC):
     @property
     def L(self):
         """int: maximum radial resolution"""
-        if not hasattr(self, "_L"):
-            self._L = 0
-        return self._L
+        return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
         """int:  maximum poloidal resolution"""
-        if not hasattr(self, "_M"):
-            self._M = 0
-        return self._M
+        return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
         """int: maximum toroidal resolution"""
-        if not hasattr(self, "_N"):
-            self._N = 0
-        return self._N
+        return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
         """int: number of field periods"""
-        if not hasattr(self, "_NFP"):
-            self._NFP = 1
-        return self._NFP
+        return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
         """str: {``'cos'``, ``'sin'``, ``False``} type of symmetry"""
-        if not hasattr(self, "_sym"):
-            self._sym = False
-        return self._sym
+        return self.__dict__.setdefault("_sym", False)
 
     @property
     def modes(self):
         """ndarray: mode numbers [l,m,n]"""
-        if not hasattr(self, "_modes"):
-            self._modes = np.array([]).reshape((0, 3))
-        return self._modes
+        return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
 
     @modes.setter
     def modes(self, modes):
@@ -157,9 +145,7 @@ class Basis(IOAble, ABC):
     @property
     def spectral_indexing(self):
         """str: type of indexing used for the spectral basis"""
-        if not hasattr(self, "_spectral_indexing"):
-            self._spectral_indexing = "linear"
-        return self._spectral_indexing
+        return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     def __repr__(self):
         """string form of the object"""

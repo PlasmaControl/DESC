@@ -230,11 +230,11 @@ class Transform(IOAble):
             warnings.warn(
                 colored(
                     "fft method requires nodes to be sorted by toroidal angle in "
-                    + "ascending order, falling back to direct2 method",
+                    + "ascending order, falling back to direct1 method",
                     "yellow",
                 )
             )
-            self.method = "direct2"
+            self.method = "direct1"
             return
 
         if len(zeta_vals) > 1 and not islinspaced(zeta_vals):
@@ -509,10 +509,12 @@ class Transform(IOAble):
 
         """
         if not self.built_pinv:
-            raise RuntimeError(
-                "Transform must be precomputed with transform.build_pinv() before being used"
-            )
-        return jnp.matmul(self.matrices["pinv"], self.grid.weights * x)
+            self.build_pinv()
+        if x.ndim > 1:
+            weights = self.grid.weights.reshape((-1, 1))
+        else:
+            weights = self.grid.weights
+        return jnp.matmul(self.matrices["pinv"], weights * x)
 
     def project(self, y):
         """Project vector y onto basis.
@@ -605,9 +607,7 @@ class Transform(IOAble):
     @property
     def grid(self):
         """Grid : collocation grid for the transform."""
-        if not hasattr(self, "_grid"):
-            self._grid = None
-        return self._grid
+        return self.__dict__.setdefault("_grid", None)
 
     @grid.setter
     def grid(self, grid):
@@ -627,9 +627,7 @@ class Transform(IOAble):
     @property
     def basis(self):
         """Basis : spectral basis for the transform."""
-        if not hasattr(self, "_basis"):
-            self._basis = None
-        return self._basis
+        return self.__dict__.setdefault("_basis", None)
 
     @basis.setter
     def basis(self, basis):
@@ -693,16 +691,17 @@ class Transform(IOAble):
     @property
     def matrices(self):
         """dict of ndarray : transform matrices such that x=A*c."""
-        if not hasattr(self, "_matrices"):
-            self._matrices = {
+        return self.__dict__.setdefault(
+            "_matrices",
+            {
                 "direct1": {
                     i: {j: {k: {} for k in range(4)} for j in range(4)}
                     for i in range(4)
                 },
                 "fft": {i: {j: {} for j in range(4)} for i in range(4)},
                 "direct2": {i: {} for i in range(4)},
-            }
-        return self._matrices
+            },
+        )
 
     @property
     def num_nodes(self):
@@ -727,30 +726,22 @@ class Transform(IOAble):
     @property
     def built(self):
         """bool : whether the transform matrices have been built."""
-        if not hasattr(self, "_built"):
-            self._built = False
-        return self._built
+        return self.__dict__.setdefault("_built", False)
 
     @property
     def built_pinv(self):
         """bool : whether the pseudoinverse matrix has been built."""
-        if not hasattr(self, "_built_pinv"):
-            self._built_pinv = False
-        return self._built_pinv
+        return self.__dict__.setdefault("_built_pinv", False)
 
     @property
     def rcond(self):
         """float: reciprocal condition number for inverse transform."""
-        if not hasattr(self, "_rcond"):
-            self._rcond = "auto"
-        return self._rcond
+        return self.__dict__.setdefault("_rcond", "auto")
 
     @property
     def method(self):
         """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
-        if not hasattr(self, "_method"):
-            self._method = "direct1"
-        return self._method
+        return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter
     def method(self, method):

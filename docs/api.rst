@@ -128,6 +128,7 @@ Plotting
     desc.plotting.plot_grid
     desc.plotting.plot_basis
     desc.plotting.plot_logo
+    desc.plotting.plot_field_lines_sfl
 
 Profiles
 ********

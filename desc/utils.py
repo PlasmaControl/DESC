@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from termcolor import colored
-from desc.backend import jnp
 
 
 arg_order = ("R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi")
@@ -215,7 +214,7 @@ def equals(a, b):
         a == b
 
     """
-    if isinstance(a, (np.ndarray, jnp.ndarray)):
+    if hasattr(a, "shape") and hasattr(b, "shape"):
         return a.shape == b.shape and np.allclose(a, b)
     if isinstance(a, dict):
         if a.keys() != b.keys():

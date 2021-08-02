@@ -1,4 +1,5 @@
 import unittest
+import pytest
 import numpy as np
 from netCDF4 import Dataset
 
@@ -449,3 +450,11 @@ def test_vmec_save(DSHAPE, TmpDir):
 
     vmec.close
     desc.close
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_vmec_comparison(plot_eq):
+
+    vmec = "./tests/inputs/wout_SOLOVEV.nc"
+    fig, ax = VMECIO.plot_vmec_comparison(plot_eq, vmec)
+    return fig

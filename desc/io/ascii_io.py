@@ -12,6 +12,10 @@ def write_ascii(fname, eq):
         dictionary of equilibrium parameters.
 
     """
+    if eq.pressure.__class__.__name__ != "PowerSeriesProfile":
+        raise TypeError("Equilibrium must have power series profiles for ascii io")
+    if eq.iota.__class__.__name__ != "PowerSeriesProfile":
+        raise TypeError("Equilibrium must have power series profiles for ascii io")
 
     # open file
     file = open(fname, "w+")
@@ -25,14 +29,14 @@ def write_ascii(fname, eq):
     if eq.sym:
         nbdry = len(np.nonzero(eq.Rb_lmn)[0]) + len(np.nonzero(eq.Zb_lmn)[0])
         file.write("Nbdry = {:3d}\n".format(nbdry))
-        for k, (l, m, n) in enumerate(eq.Rb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
             if eq.Rb_lmn[k] != 0:
                 file.write(
                     "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
                         m, n, eq.Rb_lmn[k], 0
                     )
                 )
-        for k, (l, m, n) in enumerate(eq.Zb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.Z_basis.modes):
             if eq.Zb_lmn[k] != 0:
                 file.write(
                     "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
@@ -40,9 +44,9 @@ def write_ascii(fname, eq):
                     )
                 )
     else:
-        nbdry = eq.Rb_basis.num_modes
+        nbdry = eq.surface.R_basis.num_modes
         file.write("Nbdry = {:3d}\n".format(nbdry))
-        for k, (l, m, n) in enumerate(eq.Rb_basis.modes):
+        for k, (l, m, n) in enumerate(eq.surface.R_basis.modes):
             file.write(
                 "m: {:3d} n: {:3d} bR = {:16.8E} bZ = {:16.8E}\n".format(
                     m, n, eq.Rb_lmn[k], eq.Zb_lmn[k]
@@ -107,52 +111,76 @@ def read_ascii(filename):
         dictionary of equilibrium parameters.
 
     """
+    from desc.equilibrium import Equilibrium
+    from desc.utils import copy_coeffs, sign
 
     eq = {}
     f = open(filename, "r")
     lines = list(f)
     eq["NFP"] = int(lines[0].strip("\n").split()[-1])
-    eq["Psi_lcfs"] = float(lines[1].strip("\n").split()[-1])
+    eq["Psi"] = float(lines[1].strip("\n").split()[-1])
     lines = lines[2:]
 
     Nbdry = int(lines[0].strip("\n").split()[-1])
-    eq["bdry_idx"] = np.zeros((Nbdry, 2), dtype=int)
-    eq["bdryR"] = np.zeros(Nbdry)
-    eq["bdryZ"] = np.zeros(Nbdry)
+    bdry_idx = np.zeros((Nbdry, 2), dtype=int)
+    bdryR = np.zeros(Nbdry)
+    bdryZ = np.zeros(Nbdry)
     for i in range(Nbdry):
-        eq["bdry_idx"][i, 0] = int(lines[i + 1].strip("\n").split()[1])
-        eq["bdry_idx"][i, 1] = int(lines[i + 1].strip("\n").split()[3])
-        eq["bdryR"][i] = float(lines[i + 1].strip("\n").split()[6])
-        eq["bdryZ"][i] = float(lines[i + 1].strip("\n").split()[9])
+        bdry_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
+        bdry_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
+        bdryR[i] = float(lines[i + 1].strip("\n").split()[6])
+        bdryZ[i] = float(lines[i + 1].strip("\n").split()[9])
+    eq["boundary"] = np.hstack(
+        [
+            np.zeros((Nbdry, 1)),
+            bdry_idx,
+            bdryR.reshape((-1, 1)),
+            bdryZ.reshape((-1, 1)),
+        ]
+    )
     lines = lines[Nbdry + 1 :]
 
     Nprof = int(lines[0].strip("\n").split()[-1])
-    eq["cP"] = np.zeros(Nprof)
-    eq["cI"] = np.zeros(Nprof)
+    pl = np.zeros(Nprof).astype(int)
+    cP = np.zeros(Nprof)
+    cI = np.zeros(Nprof)
     for i in range(Nprof):
-        eq["cP"][i] = float(lines[i + 1].strip("\n").split()[4])
-        eq["cI"][i] = float(lines[i + 1].strip("\n").split()[7])
+        pl[i] = int(lines[i + 1].strip("\n").split()[1])
+        cP[i] = float(lines[i + 1].strip("\n").split()[4])
+        cI[i] = float(lines[i + 1].strip("\n").split()[7])
+    eq["profiles"] = np.hstack(
+        [pl.reshape((-1, 1)), cP.reshape((-1, 1)), cI.reshape((-1, 1))]
+    )
     lines = lines[Nprof + 1 :]
 
     NRZ = int(lines[0].strip("\n").split()[-1])
-    eq["zern_idx"] = np.zeros((NRZ, 3), dtype=int)
-    eq["cR"] = np.zeros(NRZ)
-    eq["cZ"] = np.zeros(NRZ)
+    zern_idx = np.zeros((NRZ, 3), dtype=int)
+    cR = np.zeros(NRZ)
+    cZ = np.zeros(NRZ)
+    cL = np.zeros(NRZ)
     for i in range(NRZ):
-        eq["zern_idx"][i, 0] = int(lines[i + 1].strip("\n").split()[1])
-        eq["zern_idx"][i, 1] = int(lines[i + 1].strip("\n").split()[3])
-        eq["zern_idx"][i, 2] = int(lines[i + 1].strip("\n").split()[5])
-        eq["cR"][i] = float(lines[i + 1].strip("\n").split()[8])
-        eq["cZ"][i] = float(lines[i + 1].strip("\n").split()[11])
+        zern_idx[i, 0] = int(lines[i + 1].strip("\n").split()[1])
+        zern_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
+        zern_idx[i, 2] = int(lines[i + 1].strip("\n").split()[5])
+        cR[i] = float(lines[i + 1].strip("\n").split()[8])
+        cZ[i] = float(lines[i + 1].strip("\n").split()[11])
+        cL[i] = float(lines[i + 1].strip("\n").split()[14])
     lines = lines[NRZ + 1 :]
 
-    NL = int(lines[0].strip("\n").split()[-1])
-    eq["lambda_idx"] = np.zeros((NL, 2), dtype=int)
-    eq["cL"] = np.zeros(NL)
-    for i in range(NL):
-        eq["lambda_idx"][i, 0] = int(lines[i + 1].strip("\n").split()[1])
-        eq["lambda_idx"][i, 1] = int(lines[i + 1].strip("\n").split()[3])
-        eq["cL"][i] = float(lines[i + 1].strip("\n").split()[6])
-    lines = lines[NL + 1 :]
+    eq["L"] = np.max(abs(zern_idx[:, 0]))
+    eq["M"] = np.max(abs(zern_idx[:, 1]))
+    eq["N"] = np.max(abs(zern_idx[:, 2]))
 
-    return eq
+    if np.all(
+        cR[np.where(sign(zern_idx[:, 1]) != sign(zern_idx[:, 2]))] == 0
+    ) and np.all(cZ[np.where(sign(zern_idx[:, 1]) == sign(zern_idx[:, 2]))] == 0):
+        eq["sym"] = True
+    else:
+        eq["sym"] = False
+
+    equil = Equilibrium(eq)
+    equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
+    equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)
+    equil.L_lmn = copy_coeffs(cL, zern_idx, equil.L_basis.modes)
+
+    return equil

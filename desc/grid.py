@@ -105,45 +105,33 @@ class Grid(IOAble):
 
     @property
     def L(self):
-        """int: radial grid resolution."""
-        if not hasattr(self, "_L"):
-            self._L = 0
-        return self._L
+        """int: Radial grid resolution."""
+        return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
-        """int: poloidal grid resolution."""
-        if not hasattr(self, "_M"):
-            self._M = 0
-        return self._M
+        """ int: Poloidal grid resolution."""
+        return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """int: toroidal grid resolution."""
-        if not hasattr(self, "_N"):
-            self._N = 0
-        return self._N
+        """ int: Toroidal grid resolution."""
+        return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
-        """int: number of (toroidal) field periods."""
-        if not hasattr(self, "_NFP"):
-            self._NFP = 1
-        return self._NFP
+        """ int: Number of (toroidal) field periods."""
+        return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
-        """bool: True for stellarator symmetry, False otherwise."""
-        if not hasattr(self, "_sym"):
-            self._sym = False
-        return self._sym
+        """ bool: True for stellarator symmetry, False otherwise."""
+        return self.__dict__.setdefault("_sym", False)
 
     @property
     def nodes(self):
-        """ndarray: node coordinates, in (rho,theta,zeta)."""
-        if not hasattr(self, "_nodes"):
-            self._nodes = np.array([]).reshape((0, 3))
-        return self._nodes
+        """ndarray: Node coordinates, in (rho,theta,zeta)."""
+        return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
     @nodes.setter
     def nodes(self, nodes):
@@ -151,10 +139,8 @@ class Grid(IOAble):
 
     @property
     def weights(self):
-        """ndarray: weight for each node, either exact quadrature or volume based."""
-        if not hasattr(self, "_weights"):
-            self._weights = np.array([]).reshape((0, 3))
-        return self._weights
+        """ndarray: Weight for each node, either exact quadrature or volume based."""
+        return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
 
     @weights.setter
     def weights(self, weights):
@@ -167,17 +153,13 @@ class Grid(IOAble):
 
     @property
     def axis(self):
-        """ndarray: indices of nodes at magnetic axis."""
-        if not hasattr(self, "_axis"):
-            self._axis = np.array([])
-        return self._axis
+        """ndarray: Indices of nodes at magnetic axis."""
+        return self.__dict__.setdefault("_axis", np.array([]))
 
     @property
     def node_pattern(self):
-        """str: pattern for placement of nodes in rho,theta,zeta."""
-        if not hasattr(self, "_node_pattern"):
-            self._node_pattern = None
-        return self._node_pattern
+        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
+        return self.__dict__.setdefault("_node_pattern", "custom")
 
     def __repr__(self):
         """str: string form of the object."""
@@ -378,7 +360,12 @@ class LinearGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self.NFP, axis=self.axis, endpoint=self.endpoint
+                L=L,
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                axis=len(self.axis) > 0,
+                endpoint=self.endpoint,
             )
             self._enforce_symmetry()
             self._sort_nodes()
@@ -386,10 +373,8 @@ class LinearGrid(Grid):
 
     @property
     def endpoint(self):
-        """bool: whether the grid is made of open or closed intervals."""
-        if not hasattr(self, "_endpoint"):
-            self._endpoint = False
-        return self._endpoint
+        """bool: Whether the grid is made of open or closed intervals."""
+        return self.__dict__.setdefault("_endpoint", False)
 
 
 class QuadratureGrid(Grid):
@@ -720,7 +705,12 @@ class ConcentricGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._weights = self._create_nodes(
-                L=L, M=M, N=N, NFP=self.NFP, node_pattern=self.node_pattern
+                L=L,
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                axis=len(self.axis) > 0,
+                node_pattern=self.node_pattern,
             )
             self._enforce_symmetry()
             self._sort_nodes()

@@ -95,11 +95,10 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def L_grid(self):
         """Radial resolution of grid in real space (int)."""
-        if not hasattr(self, "_L_grid"):
-            self._L_grid = (
-                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
-            )
-        return self._L_grid
+        return self.__dict__.setdefault(
+            "_L_grid",
+            self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid,
+        )
 
     @L_grid.setter
     def L_grid(self, L_grid):
@@ -109,9 +108,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def M_grid(self):
         """Poloidal resolution of grid in real space (int)."""
-        if not hasattr(self, "_M_grid"):
-            self._M_grid = 1
-        return self._M_grid
+        return self.__dict__.setdefault("_M_grid", 1)
 
     @M_grid.setter
     def M_grid(self, M_grid):
@@ -121,9 +118,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def N_grid(self):
         """Toroidal resolution of grid in real space (int)."""
-        if not hasattr(self, "_N_grid"):
-            self._N_grid = 0
-        return self._N_grid
+        return self.__dict__.setdefault("_N_grid", 0)
 
     @N_grid.setter
     def N_grid(self, N_grid):
@@ -133,9 +128,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def node_pattern(self):
         """Pattern for placement of nodes in curvilinear coordinates (str)."""
-        if not hasattr(self, "_node_pattern"):
-            self._node_pattern = None
-        return self._node_pattern
+        return self.__dict__.setdefault("_node_pattern", None)
 
     @property
     def solved(self):

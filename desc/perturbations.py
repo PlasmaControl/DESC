@@ -23,7 +23,6 @@ def perturb(
     order=2,
     tr_ratio=0.1,
     cutoff=1e-6,
-    Jx=None,
     verbose=1,
     copy=True,
 ):
@@ -48,8 +47,6 @@ def perturb(
         element for the first step and so on.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
-    Jx : ndarray, optional
-        Jacobian matrix df/dx.
     verbose : int
         Level of output.
     copy : bool
@@ -142,16 +139,15 @@ def perturb(
         RHS1 = objective.compute(y)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
-        if Jx is None:
-            if verbose > 0:
-                print("Computing df")
-            timer.start("df computation")
-            Jy = objective.jac(y)
-            Jx = np.dot(Jy, objective.Z)
-            RHS1 += np.dot(Jy, dc)
-            timer.stop("df computation")
-            if verbose > 1:
-                timer.disp("df computation")
+        if verbose > 0:
+            print("Computing df")
+        timer.start("df computation")
+        Jy = objective.jac(y)
+        Jx = np.dot(Jy, objective.Z)
+        RHS1 += np.dot(Jy, dc)
+        timer.stop("df computation")
+        if verbose > 1:
+            timer.disp("df computation")
 
         if verbose > 0:
             print("Factoring df")

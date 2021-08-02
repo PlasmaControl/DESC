@@ -16,14 +16,14 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["objectives", "constraints"]
 
-    def __init__(self, objectives, constraints, eq=None, use_jit=True):
+    def __init__(self, objectives, constraints=(), eq=None, use_jit=True):
         """Initialize an Objective Function.
 
         Parameters
         ----------
-        objectives : Objective, tuple
+        objectives : tuple of Objective
             List of objectives to be targeted during optimization.
-        constraints : Objective, tuple
+        constraints : tuple of Objective, optional
             List of objectives to be used as constraints during optimization.
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
@@ -33,7 +33,7 @@ class ObjectiveFunction(IOAble):
         """
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
-        if not isinstance(constraints, tuple):
+        elif not isinstance(constraints, tuple):
             constraints = (constraints,)
 
         self._objectives = objectives

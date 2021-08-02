@@ -3,7 +3,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
-from desc.objective_funs import ObjectiveFunction, FixedPressure
+from desc.objectives import ObjectiveFunction, FixedPressure
 from desc.perturbations import perturb
 
 

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
 from desc import config
-from desc.backend import jnp, jit, use_jax
+from desc.backend import jnp, jit, use_jax, put
 from desc.utils import Timer, arg_order
 from desc.io import IOAble
 from desc.derivatives import Derivative
@@ -349,8 +349,9 @@ class ObjectiveFunction(IOAble):
         for arg in self._args:
             # parameter values below threshold are set to 0
             value = y[self._y_index[arg]]
-            value[np.abs(value) < 10 * np.finfo(value.dtype).eps] = 0
-            kwargs[arg] = value
+            kwargs[arg] = put(
+                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+            )
         return kwargs
 
     def grad(self, x):

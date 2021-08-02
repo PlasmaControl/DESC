@@ -6,7 +6,7 @@ from desc.grid import Grid
 
 
 def test_compute_volume(DSHAPE):
-    """Tests plasma volume computation."""
+    """Test plasma volume computation."""
 
     # VMEC value
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
@@ -21,7 +21,7 @@ def test_compute_volume(DSHAPE):
 
 
 def test_major_radius(DSHAPE):
-    """Tests major radius computation."""
+    """Test major radius computation."""
 
     # VMEC value
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
@@ -36,7 +36,7 @@ def test_major_radius(DSHAPE):
 
 
 def test_minor_radius(DSHAPE):
-    """Tests minor radius computation."""
+    """Test minor radius computation."""
 
     # VMEC value
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
@@ -51,7 +51,7 @@ def test_minor_radius(DSHAPE):
 
 
 def test_aspect_ratio(DSHAPE):
-    """Tests aspect ratio computation."""
+    """Test aspect ratio computation."""
 
     # VMEC value
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
@@ -66,7 +66,7 @@ def test_aspect_ratio(DSHAPE):
 
 
 def test_magnetic_axis_guess(DummyStellarator):
-    """Tests that the magnetic axis initial guess is used correctly."""
+    """Test that the magnetic axis initial guess is used correctly."""
 
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
@@ -85,7 +85,7 @@ def test_magnetic_axis_guess(DummyStellarator):
 
 
 def test_compute_theta_coords(SOLOVEV):
-    """Test root finding for theta(theta*, lambda(theta))"""
+    """Test root finding for theta(theta*,lambda(theta))."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
@@ -108,7 +108,7 @@ def test_compute_theta_coords(SOLOVEV):
 
 
 def test_compute_flux_coords(SOLOVEV):
-    """Test root finding for (rho,theta,zeta) from (R,phi,Z)"""
+    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
@@ -127,6 +127,30 @@ def test_compute_flux_coords(SOLOVEV):
         flux_coords[0, 1] = flux_coords[0, 1] - 2 * np.pi
 
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
+
+
+def test_is_nested(self):
+    """Test check for nested flux surfaces."""
+
+    inputs = {
+        "L": 4,
+        "M": 2,
+        "N": 0,
+        "NFP": 1,
+        "Psi": 1.0,
+        "profiles": np.array([[0, 0, 0.23]]),
+        "boundary": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
+        "index": "fringe",
+    }
+
+    eq1 = Equilibrium(inputs)
+    eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
+    eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
+    eq2 = Equilibrium(inputs)
+    eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
+    eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
+    self.assertTrue(eq1.is_nested())
+    self.assertFalse(eq2.is_nested())
 
 
 # can't test booz_xform because it can't be installed by Travis

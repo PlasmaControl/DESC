@@ -702,7 +702,7 @@ class ZernikePolynomial(Basis):
 
         # some logic here to use the fastest method, assuming that you're not using
         # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 26) and (len(modes) < 400):
+        if unique and (np.max(modes[:, 0]) <= 24):
             radial_fun = zernike_radial_poly
         else:
             radial_fun = zernike_radial
@@ -933,7 +933,7 @@ class FourierZernikeBasis(Basis):
 
         # some logic here to use the fastest method, assuming that you're not using
         # "unique" within jit/AD since that doesn't work
-        if unique and (np.max(modes[:, 0]) <= 26) and (len(modes) < 400):
+        if unique and (np.max(modes[:, 0]) <= 24):
             radial_fun = zernike_radial_poly
         else:
             radial_fun = zernike_radial
@@ -1043,7 +1043,7 @@ def polyval_vec(p, x, prec=None):
     )
     unq_p = p[pidx]
 
-    if prec is not None and prec > 16:
+    if prec is not None and prec > 18:
         # TODO: possibly multithread this bit
         mpmath.mp.dps = prec
         y = np.array([np.asarray(mpmath.polyval(list(pi), unq_x)) for pi in unq_p])
@@ -1147,7 +1147,7 @@ def zernike_radial_poly(rho, l, m, dr=0):
     lmax = np.max(l)
     coeffs = polyder_vec(coeffs, dr)
     # this should give accuracy of ~1e-10 in the eval'd polynomials
-    prec = int(0.4 * lmax + 6.6)
+    prec = int(0.4 * lmax + 8.4)
     return polyval_vec(coeffs, rho, prec=prec).T
 
 
@@ -1292,6 +1292,13 @@ def _fourier(theta, m, NFP, dt):
     return m_abs ** dt * jnp.sin(m_abs * theta + shift)
 
 
+def _binom_body_fun(i, b_n):
+    b, n = b_n
+    num = n + 1 - i
+    den = i
+    return (b * num / den, n)
+
+
 @jit
 @jnp.vectorize
 def binom(n, k):
@@ -1313,15 +1320,19 @@ def binom(n, k):
     """
     # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L68
     kx = k.astype(int)
-
-    def body_fun(i, b_n):
-        b, n = b_n
-        num = n + 1 - i
-        den = i
-        return (b * num / den, n)
-
-    b, n = fori_loop(1, 1 + kx, body_fun, (1.0, n))
+    b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
     return b
+
+
+def _jacobi_body_fun(kk, d_p_a_b_x):
+    d, p, alpha, beta, x = d_p_a_b_x
+    k = kk + 1.0
+    t = 2 * k + alpha + beta
+    d = (
+        (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
+    ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+    p = d + p
+    return (d, p, alpha, beta, x)
 
 
 @jit
@@ -1360,20 +1371,11 @@ def jacobi(n, alpha, beta, x, dx=0):
     alpha += dx
     beta += dx
 
-    def body_fun(kk, d_p_a_b_x):
-        d, p, alpha, beta, x = d_p_a_b_x
-        k = kk + 1.0
-        t = 2 * k + alpha + beta
-        d = (
-            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
-        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
-        p = d + p
-        return (d, p, alpha, beta, x)
 
     d = (alpha + beta + 2) * (x - 1) / (2 * (alpha + 1))
     p = d + 1
     d, p, alpha, beta, x = fori_loop(
-        0, jnp.maximum(n - 1, 0).astype(int), body_fun, (d, p, alpha, beta, x)
+        0, jnp.maximum(n - 1, 0).astype(int), _jacobi_body_fun, (d, p, alpha, beta, x)
     )
     out = binom(n + alpha, n) * p
     # should be complex for n<0, but it gets replaced elsewhere so just return 0 here

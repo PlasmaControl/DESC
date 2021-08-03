@@ -23,14 +23,19 @@ class Basis(IOAble, ABC):
     def _enforce_symmetry(self):
         """Enforces stellarator symmetry"""
 
+        assert self.sym in [
+            "sin",
+            "sine",
+            "cos",
+            "cosine",
+            False,
+        ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
-        elif self.sym is not False:
-            raise ValueError(f"Unknown symmetry type {self.sym}")
 
     def _sort_modes(self):
         """Sorts modes for use with FFT"""
@@ -610,6 +615,10 @@ class ZernikePolynomial(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
+        assert spectral_indexing in [
+            "ansi",
+            "fringe",
+        ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
         self._L = L
@@ -638,9 +647,6 @@ class ZernikePolynomial(Basis):
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
                 ]
-
-        else:
-            raise ValueError("Unknown spectral_indexing: {}".format(spectral_indexing))
 
         pol = [
             [(l, m), (l, -m)] if m != 0 else [(l, m)] for l, m in flatten_list(pol_posm)
@@ -829,6 +835,10 @@ class FourierZernikeBasis(Basis):
             each row is one basis function with modes (l,m,n)
 
         """
+        assert spectral_indexing in [
+            "ansi",
+            "fringe",
+        ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
         self._L = L
@@ -857,9 +867,6 @@ class FourierZernikeBasis(Basis):
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
                 ]
-
-        else:
-            raise ValueError("Unknown spectral_indexing: {}".format(spectral_indexing))
 
         pol = [
             [(l, m), (l, -m)] if m != 0 else [(l, m)] for l, m in flatten_list(pol_posm)
@@ -1328,9 +1335,9 @@ def _jacobi_body_fun(kk, d_p_a_b_x):
     d, p, alpha, beta, x = d_p_a_b_x
     k = kk + 1.0
     t = 2 * k + alpha + beta
-    d = (
-        (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
-    ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+    d = ((t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d) / (
+        2 * (k + alpha + 1) * (k + alpha + beta + 1) * t
+    )
     p = d + p
     return (d, p, alpha, beta, x)
 
@@ -1370,7 +1377,6 @@ def jacobi(n, alpha, beta, x, dx=0):
     n -= dx
     alpha += dx
     beta += dx
-
 
     d = (alpha + beta + 2) * (x - 1) / (2 * (alpha + 1))
     p = d + 1

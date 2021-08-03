@@ -45,6 +45,16 @@ class TestBasis(unittest.TestCase):
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    def test_zernike_coeffs(self):
+        basis = FourierZernikeBasis(L=40, M=40, N=0, spectral_indexing="ansi")
+        l, m = basis.modes[:, :2].T
+        coeffs = zernike_radial_coeffs(l, m, exact=False)
+        assert coeffs.dtype == np.int64
+        basis = FourierZernikeBasis(L=60, M=30, N=0, spectral_indexing="fringe")
+        l, m = basis.modes[:, :2].T
+        coeffs = zernike_radial_coeffs(l, m, exact=False)
+        assert coeffs.dtype == np.float64
+
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]
@@ -52,24 +62,46 @@ class TestBasis(unittest.TestCase):
         grid = LinearGrid(L=20)
         r = grid.nodes[:, 0]
         mpmath.mp.dps = 100
-        exact = np.array(
+        exactf = np.array(
+            [np.asarray(mpmath.polyval(list(ci), r), dtype=float) for ci in coeffs]
+        ).T
+        exactdf = np.array(
             [
-                np.asarray(mpmath.polyval(list(ci), r, derivative=True), dtype=float)
-                for ci in coeffs
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 1)
             ]
-        )
+        ).T
+        exactddf = np.array(
+            [
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 2)
+            ]
+        ).T
+        exactdddf = np.array(
+            [
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 3)
+            ]
+        ).T
+
         mpmath.mp.dps = 15
-        exactf = exact[:, 0, :].T
-        exactdf = exact[:, 1, :].T
         approx1f = zernike_radial(r[:, np.newaxis], l, m)
         approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
+        approx1ddf = zernike_radial(r[:, np.newaxis], l, m, dr=2)
+        approx1dddf = zernike_radial(r[:, np.newaxis], l, m, dr=3)
         approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
         approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
+        approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
+        approx2dddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=3)
 
         np.testing.assert_allclose(approx1f, exactf, atol=1e-12)
         np.testing.assert_allclose(approx1df, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx1ddf, exactddf, atol=1e-12)
+        np.testing.assert_allclose(approx1dddf, exactdddf, atol=1e-12)
         np.testing.assert_allclose(approx2f, exactf, atol=1e-12)
         np.testing.assert_allclose(approx2df, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx2ddf, exactddf, atol=1e-12)
+        np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
 
     def test_powers(self):
         """Tests powers function"""
@@ -213,3 +245,21 @@ class TestBasis(unittest.TestCase):
         assert "L=6" in s
         assert "M=3" in s
         assert "N=0" in s
+
+    def test_zernike_indexing(self):
+
+        basis = ZernikePolynomial(L=8, M=4, spectral_indexing="ansi")
+        assert (basis.modes == [8, 4, 0]).all(axis=1).any()
+        assert not (basis.modes == [8, 8, 0]).all(axis=1).any()
+
+        basis = ZernikePolynomial(L=10, M=4, spectral_indexing="fringe")
+        assert (basis.modes == [10, 0, 0]).all(axis=1).any()
+        assert not (basis.modes == [10, 2, 0]).all(axis=1).any()
+
+        basis = FourierZernikeBasis(L=8, M=4, N=0, spectral_indexing="ansi")
+        assert (basis.modes == [8, 4, 0]).all(axis=1).any()
+        assert not (basis.modes == [8, 8, 0]).all(axis=1).any()
+
+        basis = FourierZernikeBasis(L=10, M=4, N=0, spectral_indexing="fringe")
+        assert (basis.modes == [10, 0, 0]).all(axis=1).any()
+        assert not (basis.modes == [10, 2, 0]).all(axis=1).any()

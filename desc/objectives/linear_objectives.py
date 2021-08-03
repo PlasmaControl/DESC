@@ -172,7 +172,12 @@ class FixedBoundaryZ(_Objective):
     _b_arg = "Zb_lmn"
 
     def __init__(
-        self, eq=None, target=None, weight=1, surface=None, modes=True,
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        surface=None,
+        modes=True,
     ):
         """Initialize a FixedBoundaryZ Objective.
 
@@ -323,7 +328,12 @@ class FixedPressure(_Objective):
     _b_arg = "p_l"
 
     def __init__(
-        self, eq=None, target=None, weight=1, profile=None, modes=True,
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        profile=None,
+        modes=True,
     ):
         """Initialize a FixedPressure Objective.
 
@@ -474,7 +484,12 @@ class FixedIota(_Objective):
     _b_arg = "i_l"
 
     def __init__(
-        self, eq=None, target=None, weight=1, profile=None, modes=True,
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        profile=None,
+        modes=True,
     ):
         """Initialize a FixedIota Objective.
 

@@ -46,7 +46,7 @@ class Transform(IOAble):
         basis,
         derivs=0,
         rcond="auto",
-        build=False,
+        build=True,
         build_pinv=False,
         method="auto",
     ):
@@ -363,7 +363,7 @@ class Transform(IOAble):
         if self.method == "direct1":
             for d in self.derivatives:
                 self._matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d
+                    self.grid.nodes, d, unique=True
                 )
 
         if self.method in ["fft", "direct2"]:
@@ -373,7 +373,7 @@ class Transform(IOAble):
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
-                    self.fft_nodes, d, modes=temp_modes
+                    self.fft_nodes, d, modes=temp_modes, unique=True
                 )
         if self.method == "direct2":
             temp_d = np.hstack(
@@ -384,7 +384,7 @@ class Transform(IOAble):
             )
             for d in temp_d:
                 self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_nodes, d, modes=temp_modes
+                    self.dft_nodes, d, modes=temp_modes, unique=True
                 )
 
         self._built = True
@@ -509,7 +509,9 @@ class Transform(IOAble):
 
         """
         if not self.built_pinv:
-            self.build_pinv()
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build_pinv() before being used"
+            )
         if x.ndim > 1:
             weights = self.grid.weights.reshape((-1, 1))
         else:

@@ -1,7 +1,6 @@
 import unittest
 import numpy as np
 
-from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.objectives import ObjectiveFunction, FixedPressure
 from desc.perturbations import perturb

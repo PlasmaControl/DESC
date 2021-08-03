@@ -12,7 +12,7 @@ from desc.plotting import (
     plot_basis,
     plot_coefficients,
     _find_idx,
-    plot_field_lines_sfl
+    plot_field_lines_sfl,
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -289,13 +289,13 @@ def test_plot_cov_basis(plot_eq):
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_tension(plot_eq):
-    fig, ax = plot_2d(plot_eq, "Btension")
+    fig, ax = plot_2d(plot_eq, "|(B*grad)B|")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(plot_eq):
-    fig, ax = plot_2d(plot_eq, "Bpressure")
+    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|")
     return fig
 
 
@@ -392,23 +392,29 @@ class TestPlotBasis(unittest.TestCase):
         fig, ax = plot_basis(basis)
         return fig
 
+
 class TestPlotFieldLines(unittest.TestCase):
     def test_find_idx(self):
         # pick the first grid node point, add epsilon to it, check it returns idx of 0
-        grid = LinearGrid(L=2,M=2,N=2,axis=False)
+        grid = LinearGrid(L=2, M=2, N=2, axis=False)
         epsilon = np.finfo(float).eps
-        test_point = grid.nodes[0,:] + epsilon
-        idx = _find_idx(*test_point,grid=grid)
-        self.assertEqual(idx,0)
+        test_point = grid.nodes[0, :] + epsilon
+        idx = _find_idx(*test_point, grid=grid)
+        self.assertEqual(idx, 0)
+
     def test_field_line_Rbf(self):
         pass
-    
+
+
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_field_line(plot_eq):
-    fig,ax,_ = plot_field_lines_sfl(plot_eq,rho=1,seed_thetas=0,phi_end=2*np.pi)
-    return fig
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_field_lines(plot_eq):
-    fig,ax,_ = plot_field_lines_sfl(plot_eq,rho=1,seed_thetas=np.linspace(0,2*np.pi,4),phi_end=2*np.pi)
+    fig, ax, _ = plot_field_lines_sfl(plot_eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
     return fig
 
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_field_lines(plot_eq):
+    fig, ax, _ = plot_field_lines_sfl(
+        plot_eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
+    )
+    return fig

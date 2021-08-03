@@ -110,6 +110,7 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
+        # FIXME: this no longer works
         # apply boundary conditions
         BC = eq.surface.get_constraint(
             eq.R_basis,
@@ -275,7 +276,7 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute_jacobian(Grid(np.array([[1, 0, 0]])))["g"])
+        signgs[:] = sign(eq.compute_jacobian(Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -538,7 +539,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            jacobian_half_grid["g"]
+            jacobian_half_grid["sqrt(g)"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -827,7 +828,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         data = (
-            (current_full_grid["J^theta"] * jacobian_full_grid["g"])
+            (current_full_grid["J^theta"] * jacobian_full_grid["sqrt(g)"])
             .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((full_grid.L, -1))
@@ -874,7 +875,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         data = (
-            (current_full_grid["J^zeta"] * jacobian_full_grid["g"])
+            (current_full_grid["J^zeta"] * jacobian_full_grid["sqrt(g)"])
             .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((full_grid.L, -1))

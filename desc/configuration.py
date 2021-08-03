@@ -27,6 +27,8 @@ from desc.compute_funs import (
     compute_toroidal_coords,
     compute_cartesian_coords,
     compute_jacobian,
+    compute_covariant_basis,
+    compute_contravariant_basis,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,
     compute_magnetic_tension,
@@ -482,26 +484,6 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
 
-    @property
-    def major_radius(self):
-        """Major radius (m)."""
-        V = self.compute_volume()
-        A = self.compute_cross_section_area()
-        return V / (2 * np.pi * A)
-
-    @property
-    def minor_radius(self):
-        """Minor radius (m)."""
-        A = self.compute_cross_section_area()
-        return np.sqrt(A / np.pi)
-
-    @property
-    def aspect_ratio(self):
-        """Aspect ratio = major radius / minor radius."""
-        V = self.compute_volume()
-        A = self.compute_cross_section_area()
-        return V / (2 * np.sqrt(np.pi * A ** 3))
-
     # FIXME: update this now that x is no longer a property of Configuration
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
@@ -569,7 +551,7 @@ class _Configuration(IOAble, ABC):
 
         return compute_toroidal_flux(self.Psi, iota, dr=deriv, data=data)
 
-    def compute_iota(self, grid=None, deriv=1, data=None):
+    def compute_rotational_transform(self, grid=None, deriv=1, data=None):
         """Compute rotational transform profile.
 
         Parameters
@@ -627,7 +609,7 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
 
         """
-        L_transform = Transform(grid, self.L_basis, derivs=deriv, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=deriv)
 
         return compute_lambda(
             self.L_lmn, L_transform, dr=deriv, dt=deriv, dz=deriv, data=data
@@ -649,8 +631,8 @@ class _Configuration(IOAble, ABC):
             Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=deriv)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv)
 
         return compute_toroidal_coords(
             self.R_lmn,
@@ -678,8 +660,8 @@ class _Configuration(IOAble, ABC):
             Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=0)
+        Z_transform = Transform(grid, self.Z_basis, derivs=0)
 
         return compute_cartesian_coords(
             self.R_lmn, self.Z_lmn, R_transform, Z_transform, data=data
@@ -702,10 +684,72 @@ class _Configuration(IOAble, ABC):
             system Jacobian sqrt(g).
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
 
         return compute_jacobian(
+            self.R_lmn,
+            self.Z_lmn,
+            R_transform,
+            Z_transform,
+            dr=deriv,
+            dt=deriv,
+            dz=deriv,
+            data=data,
+        )
+
+    def compute_covariant_basis(self, grid=None, deriv=0, data=None):
+        """Compute covariant basis vectors.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        data : dict
+            Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors.
+            Keys are of the form 'e_x_y', meaning the covariant basis vector in the x
+            direction, differentiated wrt y.
+
+        """
+        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
+
+        return compute_covariant_basis(
+            self.R_lmn,
+            self.Z_lmn,
+            R_transform,
+            Z_transform,
+            dr=deriv,
+            dt=deriv,
+            dz=deriv,
+            data=data,
+        )
+
+    def compute_contravariant_basis(self, grid=None, deriv=0, data=None):
+        """Compute contravariant basis vectors.
+
+        Parameters
+        ----------
+        grid : Grid, ndarray, optional
+            Collocation grid containing the (rho, theta, zeta) coordinates of
+            the nodes to evaluate at.
+
+        Returns
+        -------
+        data : dict
+            Dictionary of ndarray, shape(num_nodes,) of contravariant basis vectors.
+            Keys are of the form 'e^x_y', meaning the contravariant basis vector in the x
+            direction, differentiated wrt y.
+
+        """
+        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
+
+        return compute_contravariant_basis(
             self.R_lmn,
             self.Z_lmn,
             R_transform,
@@ -733,9 +777,9 @@ class _Configuration(IOAble, ABC):
             magnetic field magnitude |B|.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=deriv + 1, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
+        L_transform = Transform(grid, self.L_basis, derivs=deriv + 1)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -772,9 +816,9 @@ class _Configuration(IOAble, ABC):
             component of the current density J, differentiated wrt y.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 2, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 2, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=deriv + 2, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=deriv + 2)
+        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 2)
+        L_transform = Transform(grid, self.L_basis, derivs=deriv + 2)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -811,9 +855,9 @@ class _Configuration(IOAble, ABC):
             covariant component of the magnetic pressure gradient grad(|B|^2).
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=2, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=2)
+        Z_transform = Transform(grid, self.Z_basis, derivs=2)
+        L_transform = Transform(grid, self.L_basis, derivs=2)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -847,9 +891,9 @@ class _Configuration(IOAble, ABC):
             contravariant component of the magnetic tension vector (B*grad(|B|))B.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=2, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=2)
+        Z_transform = Transform(grid, self.Z_basis, derivs=2)
+        L_transform = Transform(grid, self.L_basis, derivs=2)
         iota = self.iota.copy()
         iota.grid = grid
 
@@ -881,9 +925,9 @@ class _Configuration(IOAble, ABC):
             Dictionary of ndarray, shape(num_nodes,) of force error magnitudes.
 
         """
-        R_transform = Transform(grid, self.R_basis, derivs=2, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=2, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=2)
+        Z_transform = Transform(grid, self.Z_basis, derivs=2)
+        L_transform = Transform(grid, self.L_basis, derivs=2)
         iota = self.iota.copy()
         pressure = self.pressure.copy()
         iota.grid = grid
@@ -908,8 +952,8 @@ class _Configuration(IOAble, ABC):
         """Compute plasma volume (m^3)."""
         grid = QuadratureGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
 
-        R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=1)
 
         data = compute_volume(self.R_lmn, self.Z_lmn, R_transform, Z_transform)
         return data["V"]
@@ -918,8 +962,8 @@ class _Configuration(IOAble, ABC):
         """Compute toroidally averaged cross-section area (m^2)."""
         grid = QuadratureGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
 
-        R_transform = Transform(grid, self.R_basis, derivs=0, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, build=True)
+        R_transform = Transform(grid, self.R_basis, derivs=1)
+        Z_transform = Transform(grid, self.Z_basis, derivs=1)
 
         data = compute_jacobian(self.R_lmn, self.Z_lmn, R_transform, Z_transform)
 

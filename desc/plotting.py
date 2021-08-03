@@ -840,9 +840,15 @@ def _compute(eq, name, grid):
         elif name_dict["base"] == "vartheta":
             lmbda = eq.compute_toroidal_coords(grid)["lambda"]
             out = grid.nodes[:, 1] + lmbda
-        elif name_dict["base"] in ["psi", "p", "iota"]:
-            out = eq.compute_profiles(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["R", "Z", "lambda"]:
+        elif name_dict["base"] == "psi":
+            out = eq.compute_toroidal_flux(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "p":
+            out = eq.compute_pressure(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "iota":
+            out = eq.compute_rotational_transform(grid)[_name_key(name_dict)]
+        elif name_dict["base"] == "lambda":
+            out = eq.compute_lambda(grid)[_name_key(name_dict)]
+        elif name_dict["base"] in ["R", "Z"]:
             out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
         elif name_dict["base"] == "g":
             out = eq.compute_jacobian(grid)[_name_key(name_dict)]
@@ -1596,7 +1602,7 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     grid_single_rho = Grid(
         nodes=np.array([[rho, 0, 0]])
     )  # grid to get the iota value at the specified rho surface
-    iota = eq.compute_profiles(grid=grid_single_rho)["iota"][0]
+    iota = eq.compute_rotational_transform(grid=grid_single_rho)["iota"][0]
 
     varthetas = []
     phi = np.linspace(phi0, phi_end, N_pts)

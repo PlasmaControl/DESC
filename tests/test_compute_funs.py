@@ -46,9 +46,9 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=2,
-        dt=2,
-        dz=2,
+        dr=1,
+        dt=0,
+        dz=0,
     )
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
@@ -102,9 +102,9 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=2,
+        dr=0,
         dt=2,
-        dz=2,
+        dz=0,
     )
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
@@ -186,8 +186,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=2,
-        dt=2,
+        dr=0,
+        dt=0,
         dz=2,
     )
 
@@ -272,33 +272,42 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=2,
-        dt=2,
-        dz=2,
+        dr=0,
+        dt=1,
+        dz=1,
     )
 
     B_sup_theta = data["B^theta"].reshape((N, M))
     B_sup_zeta = data["B^zeta"].reshape((N, M))
     B = data["|B|"].reshape((N, M))
 
-    B_sup_theta_tz = convolve2d(
-        B_sup_theta,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
-    B_sup_zeta_tz = convolve2d(
-        B_sup_zeta,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
-    B_tz = convolve2d(
-        B,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
+    B_sup_theta_tz = (
+        convolve2d(
+            B_sup_theta,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
+    B_sup_zeta_tz = (
+        convolve2d(
+            B_sup_zeta,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
+    B_tz = (
+        convolve2d(
+            B,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
 
     np.testing.assert_allclose(
         data["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],
@@ -339,6 +348,17 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
+    data = compute_magnetic_field_magnitude(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+    )
     data = compute_magnetic_pressure_gradient(
         eq.R_lmn,
         eq.Z_lmn,
@@ -349,6 +369,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
+        data=data,
     )
     B2_r = np.convolve(data["|B|"], FD_COEF_1_4, "same") / drho
 

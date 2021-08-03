@@ -126,10 +126,10 @@ class TestGrid(unittest.TestCase):
         NFP = 1
 
         grid_ansi = ConcentricGrid(
-            M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
+            M, M, N, NFP, sym=False, axis=True, rotation="cos", node_pattern="linear"
         )
         grid_fringe = ConcentricGrid(
-            2 * M, M, N, NFP, sym=True, axis=True, node_pattern="linear"
+            2 * M, M, N, NFP, sym=True, axis=True, rotation="cos", node_pattern="linear"
         )
 
         ansi_nodes = np.stack(
@@ -222,7 +222,7 @@ class TestGrid(unittest.TestCase):
         }
 
         eq = Equilibrium(inputs)
-        g = eq.compute_jacobian(eq.grid)
+        g = eq.compute_jacobian()
         vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
 
         self.assertAlmostEqual(vol, vol_quad)

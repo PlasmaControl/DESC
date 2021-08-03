@@ -6,7 +6,7 @@ from shapely.geometry import LineString, MultiLineString
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs, opsindex
+from desc.utils import copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.profiles import Profile, PowerSeriesProfile

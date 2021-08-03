@@ -155,7 +155,12 @@ def compute_pressure(
 
 
 def compute_lambda(
-    L_lmn, L_transform, dr=0, dt=0, dz=0, data=None,
+    L_lmn,
+    L_transform,
+    dr=0,
+    dt=0,
+    dz=0,
+    data=None,
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
 

@@ -1310,16 +1310,16 @@ def _binom_body_fun(i, b_n):
 @jnp.vectorize
 def binom(n, k):
     """Binomial coefficient.
-    
+
     Implementation is only correct for positive integer n,k and n>=k
-    
+
     Parameters
     ----------
     n : int, array-like
         number of things to choose from
     k : int, array-like
         number of things chosen
-        
+
     Returns
     -------
     val : int, float, array-like
@@ -1346,13 +1346,13 @@ def _jacobi_body_fun(kk, d_p_a_b_x):
 @jnp.vectorize
 def jacobi(n, alpha, beta, x, dx=0):
     """Jacobi polynomial evaluation
-    
+
     Implementation is only correct for non-negative integer coefficients, returns 0 otherwise
-    
+
     Parameters
     ----------
     n : int, array_like
-        Degree of the polynomial. 
+        Degree of the polynomial.
     alpha : int, array_like
         Parameter
     beta : int, array_like

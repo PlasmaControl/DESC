@@ -346,7 +346,11 @@ def compute_toroidal_coords(
 
 
 def compute_cartesian_coords(
-    R_lmn, Z_lmn, R_transform, Z_transform, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
 ):
     """Compute Cartesian coordinates (X, Y, Z).
 
@@ -378,7 +382,14 @@ def compute_cartesian_coords(
 
 
 def compute_covariant_basis(
-    R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    dr=0,
+    dt=0,
+    dz=0,
+    data=None,
 ):
     """Compute covariant basis vectors.
 
@@ -466,7 +477,14 @@ def compute_covariant_basis(
 
 
 def compute_jacobian(
-    R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    dr=0,
+    dt=0,
+    dz=0,
+    data=None,
 ):
     """Compute coordinate system Jacobian.
 
@@ -524,30 +542,111 @@ def compute_jacobian(
     # 2nd order derivatives
     if dr > 1:
         data["sqrt(g)_rr"] = (
-            dot(data["e_rho_rr"], cross(data["e_theta"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_rr"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rr"], 0), 0,)
-            + 2 * dot(data["e_rho_r"], cross(data["e_theta_r"], data["e_zeta"], 0), 0,)
-            + 2 * dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_r"], 0), 0,)
-            + 2 * dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_r"], 0), 0,)
+            dot(
+                data["e_rho_rr"],
+                cross(data["e_theta"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_rr"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta"], data["e_zeta_rr"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_r"],
+                cross(data["e_theta_r"], data["e_zeta"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_r"],
+                cross(data["e_theta"], data["e_zeta_r"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho"],
+                cross(data["e_theta_r"], data["e_zeta_r"], 0),
+                0,
+            )
         )
     if dt > 1:
         data["sqrt(g)_tt"] = (
-            dot(data["e_rho_tt"], cross(data["e_theta"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_tt"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tt"], 0), 0,)
-            + 2 * dot(data["e_rho_t"], cross(data["e_theta_t"], data["e_zeta"], 0), 0,)
-            + 2 * dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_t"], 0), 0,)
-            + 2 * dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_t"], 0), 0,)
+            dot(
+                data["e_rho_tt"],
+                cross(data["e_theta"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_tt"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta"], data["e_zeta_tt"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_t"],
+                cross(data["e_theta_t"], data["e_zeta"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_t"],
+                cross(data["e_theta"], data["e_zeta_t"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho"],
+                cross(data["e_theta_t"], data["e_zeta_t"], 0),
+                0,
+            )
         )
     if dz > 1:
         data["sqrt(g)_zz"] = (
-            dot(data["e_rho_zz"], cross(data["e_theta"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_zz"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_zz"], 0), 0,)
-            + 2 * dot(data["e_rho_z"], cross(data["e_theta_z"], data["e_zeta"], 0), 0,)
-            + 2 * dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_z"], 0), 0,)
-            + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_z"], 0), 0,)
+            dot(
+                data["e_rho_zz"],
+                cross(data["e_theta"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_zz"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta"], data["e_zeta_zz"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_z"],
+                cross(data["e_theta_z"], data["e_zeta"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho_z"],
+                cross(data["e_theta"], data["e_zeta_z"], 0),
+                0,
+            )
+            + 2
+            * dot(
+                data["e_rho"],
+                cross(data["e_theta_z"], data["e_zeta_z"], 0),
+                0,
+            )
         )
     if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
         raise NotImplementedError
@@ -555,22 +654,65 @@ def compute_jacobian(
         raise NotImplementedError
     if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
         data["sqrt(g)_tz"] = (
-            dot(data["e_rho_tz"], cross(data["e_theta"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho_z"], cross(data["e_theta_t"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_t"], 0), 0,)
-            + dot(data["e_rho_t"], cross(data["e_theta_z"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_tz"], data["e_zeta"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_t"], 0), 0,)
-            + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_z"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_z"], 0), 0,)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tz"], 0), 0,)
+            dot(
+                data["e_rho_tz"],
+                cross(data["e_theta"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho_z"],
+                cross(data["e_theta_t"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho_z"],
+                cross(data["e_theta"], data["e_zeta_t"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho_t"],
+                cross(data["e_theta_z"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_tz"], data["e_zeta"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_z"], data["e_zeta_t"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho_t"],
+                cross(data["e_theta"], data["e_zeta_z"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta_t"], data["e_zeta_z"], 0),
+                0,
+            )
+            + dot(
+                data["e_rho"],
+                cross(data["e_theta"], data["e_zeta_tz"], 0),
+                0,
+            )
         )
 
     return data
 
 
 def compute_contravariant_basis(
-    R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    dr=0,
+    dt=0,
+    dz=0,
+    data=None,
 ):
     """Compute contravariant basis vectors.
 
@@ -601,7 +743,14 @@ def compute_contravariant_basis(
     """
     if data is None or "sqrt(g)" not in data:
         data = compute_jacobian(
-            R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data,
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+            dr=dr,
+            dt=dt,
+            dz=dz,
+            data=data,
         )
 
     data["e^rho"] = cross(data["e_theta"], data["e_zeta"], 0) / data["sqrt(g)"]
@@ -612,7 +761,11 @@ def compute_contravariant_basis(
 
 
 def compute_covariant_metric_coefficients(
-    R_lmn, Z_lmn, R_transform, Z_transform, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
 ):
     """Compute metric coefficients.
 
@@ -637,7 +790,14 @@ def compute_covariant_metric_coefficients(
     """
     if data is None or "e_rho" not in data:
         data = compute_covariant_basis(
-            R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=data,
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+            dr=0,
+            dt=0,
+            dz=0,
+            data=data,
         )
 
     data["g_rr"] = dot(data["e_rho"], data["e_rho"], 0)
@@ -651,7 +811,11 @@ def compute_covariant_metric_coefficients(
 
 
 def compute_contravariant_metric_coefficients(
-    R_lmn, Z_lmn, R_transform, Z_transform, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
 ):
     """Compute reciprocal metric coefficients.
 
@@ -676,7 +840,14 @@ def compute_contravariant_metric_coefficients(
     """
     if data is None or "e^rho" not in data:
         data = compute_contravariant_basis(
-            R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=data,
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+            dr=0,
+            dt=0,
+            dz=0,
+            data=data,
         )
 
     data["g^rr"] = dot(data["e^rho"], data["e^rho"], 0)
@@ -745,7 +916,14 @@ def compute_contravariant_magnetic_field(
     data = compute_rotational_transform(i_l, iota, dr=dr, data=data)
     data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, data=data)
     data = compute_jacobian(
-        R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data,
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        dr=dr,
+        dt=dt,
+        dz=dz,
+        data=data,
     )
 
     data["B0"] = data["psi_r"] / data["sqrt(g)"]
@@ -843,9 +1021,11 @@ def compute_contravariant_magnetic_field(
         -data["B0_t"] * data["lambda_zz"] - data["B0_z"] * data["lambda_tz"]
         -data["B0"] * data["lambda_tzz"]
         data["B^zeta_tz"] = data["B0_tz"] * (1 + data["lambda_t"])
-        +data["B0_t"] * data["lambda_tz"] + data["B0_z"] * data["lambda_tt"] + data[
-            "B0"
-        ] * data["lambda_ttz"]
+        (
+            +data["B0_t"] * data["lambda_tz"]
+            + data["B0_z"] * data["lambda_tt"]
+            + data["B0"] * data["lambda_ttz"]
+        )
 
     return data
 
@@ -1867,7 +2047,11 @@ def compute_quasisymmetry_error(
 
 
 def compute_volume(
-    R_lmn, Z_lmn, R_transform, Z_transform, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
 ):
     """Compute plasma volume.
 

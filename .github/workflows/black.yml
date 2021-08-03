@@ -8,13 +8,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Check files using the black formatter
-        uses: rickstaa/action-black@v1
-        id: action_black
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
         with:
-          black_args: "."
+          python-version: 3.8      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black==21.7b0
+      - name: Check files using the black formatter
+        run: |
+          black --version
+          black desc/ tests/
       - name: Annotate diff changes using reviewdog
-        if: steps.action_black.outputs.is_formatted == 'true'
         uses: reviewdog/action-suggester@v1
         with:
           tool_name: blackfmt

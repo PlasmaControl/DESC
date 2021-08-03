@@ -40,10 +40,17 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_mn, [5, 1,],
+            c.R_mn,
+            [
+                5,
+                1,
+            ],
         )
         np.testing.assert_allclose(
-            c.Z_mn, [1,],
+            c.Z_mn,
+            [
+                1,
+            ],
         )
 
         s = c.copy()
@@ -85,10 +92,17 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_lm, [5, 1,],
+            c.R_lm,
+            [
+                5,
+                1,
+            ],
         )
         np.testing.assert_allclose(
-            c.Z_lm, [1,],
+            c.Z_lm,
+            [
+                1,
+            ],
         )
 
         s = c.copy()

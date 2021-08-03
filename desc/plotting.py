@@ -760,16 +760,25 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
+            Rv[:, :, i].T,
+            Zv[:, :, i].T,
+            color=colorblind_colors[2],
+            linestyle=":",
         )
         ax[i].plot(
-            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
+            Rr[:, :, i],
+            Zr[:, :, i],
+            color=colorblind_colors[0],
         )
         ax[i].plot(
-            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
+            Rr[:, -1, i],
+            Zr[:, -1, i],
+            color=colorblind_colors[1],
         )
         ax[i].scatter(
-            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
+            Rr[0, 0, i],
+            Zr[0, 0, i],
+            color=colorblind_colors[3],
         )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])
@@ -1520,13 +1529,13 @@ def plot_logo(savepath=None, **kwargs):
 
 
 def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **kwargs):
-    """Traces field lines on specified flux surface at specified initial vartheta (:math:`\\vartheta`) seed locations, then plots them. 
+    """Traces field lines on specified flux surface at specified initial vartheta (:math:`\\vartheta`) seed locations, then plots them.
     Field lines traced by first finding the corresponding straight-field-line (SFL) coordinates :math:`(\\rho,\\vartheta,\phi)` for each field line, then converting those to the computational
     :math:`(\\rho,\\theta,\phi)` coordiantes, then finally computing from those the toroidal :math:`(R,\phi,Z)` coordinates of each field line.
     The SFL angle coordinates are found with the SFL relation:
-        
+
         :math:`\\vartheta = \iota \phi + \\vartheta_0`
-        
+
 
     Parameters
     ----------
@@ -1666,13 +1675,13 @@ def plot_field_lines_real_space(
     return_B_interp=False,
     **kwargs
 ):
-    """ ***Use plot_field_lines_sfl if plotting from a solved equilibrium, as that is faster and more accurate than real space interpolation***
-    Traces field lines on specified flux surface at specified initial theta seed locations, then plots them. 
+    """***Use plot_field_lines_sfl if plotting from a solved equilibrium, as that is faster and more accurate than real space interpolation***
+    Traces field lines on specified flux surface at specified initial theta seed locations, then plots them.
     Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then integrating the field line
     from phi=0 up to the specified phi angle, by solving:
-        
+
     :math:`\\frac{dR}{d\phi} = \\frac{RB_R}{B_{\phi}} , \\frac{dZ}{d\phi} = \\frac{RB_Z}{B_{\phi}}`
-    
+
     :math:`B_R = \mathbf{B} \cdot \hat{\mathbf{R}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{R}} = B^{\\theta} \\frac{\partial R}{\partial \\theta} + B^{\zeta} \\frac{\partial R}{\partial \zeta}`
 
     :math:`B_Z = \mathbf{B} \cdot \hat{\mathbf{Z}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{Z}} = B^{\\theta} \\frac{\partial Z}{\partial \\theta} + B^{\zeta} \\frac{\partial Z}{\partial \zeta}`
@@ -1696,7 +1705,7 @@ def plot_field_lines_real_space(
     B_interp : dict of scipy.interpolate.rbf.Rbf or equivalent call signature interplators, optional
         if not None, uses the passed-in interpolation objects instead of fitting the magnetic field with Rbf's. Useful
         if have already ran plot_field_lines once and want to change the seed thetas or how far to integrate in phi.
-        Dict should have the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to the interplating object for 
+        Dict should have the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to the interplating object for
         each cylindrical component of the magnetic field.
     return_B_interp: bool, default False
         If true, in addition to returning the fig, axis and field line coordinates, will also return the dictionary of interpolating radial basis functions
@@ -1716,7 +1725,7 @@ def plot_field_lines_real_space(
     B_interp : dict, only returned if return_B_interp is True
         dict of scipy.interpolate.rbf.Rbf or equivalent call signature interplators, which interpolate the cylindrical
         components of magnetic field in (R,phi,Z)
-        Dict has the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to the interplating object for 
+        Dict has the following keys: ['B_R'], ['B_Z'], and ['B_phi'], corresponding to the interplating object for
         each cylindrical component of the magnetic field, and the interpolators have call signature
         B(R,phi,Z) = interpolator(R,phi,Z)
 
@@ -1878,8 +1887,8 @@ def _find_idx(rho0, theta0, phi0, grid):
 
 
 def _field_line_Rbf(rho, theta0, phi_end, grid, toroidal_coords, B_interp, phi0=0):
-    """ Takes the initial poloidal angle you want to seed a field line at (at phi=0),
-        and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi, the R,Z,Phi coordinates of the field line trajectory"""
+    """Takes the initial poloidal angle you want to seed a field line at (at phi=0),
+    and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi, the R,Z,Phi coordinates of the field line trajectory"""
     Rs = toroidal_coords["R"]
     Zs = toroidal_coords["Z"]
 
@@ -1900,7 +1909,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, toroidal_coords, B_interp, phi0=
     y0 = [fR[0], fZ[0]]
 
     def rhs(phi, y):
-        """ RHS of magnetic field line eqn"""
+        """RHS of magnetic field line eqn"""
         dRdphi = (
             y[0]
             * B_interp["B_R"](y[0], y[1], np.mod(phi, 2 * np.pi))

@@ -37,7 +37,10 @@ class TestRZCurve(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 5, 0)
         np.testing.assert_allclose(
-            c.R_n, [5,],
+            c.R_n,
+            [
+                5,
+            ],
         )
         np.testing.assert_allclose(c.Z_n, [])
 
@@ -128,7 +131,10 @@ class TestPlanarCurve(unittest.TestCase):
         np.testing.assert_allclose(r, 2)
         c.set_coeffs(0, 3)
         np.testing.assert_allclose(
-            c.r_n, [3,],
+            c.r_n,
+            [
+                3,
+            ],
         )
 
         c.normal = [1, 2, 3]

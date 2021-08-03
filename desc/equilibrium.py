@@ -182,7 +182,10 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP,
+                L=self.L_grid,
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
             )
         else:
             raise ValueError(

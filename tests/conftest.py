@@ -114,7 +114,6 @@ def DummyStellarator(tmpdir_factory):
         "optimizer": "lsq-exact",
     }
     eq = Equilibrium(inputs=inputs)
-    eq.build()
     eq.save(output_path)
 
     DummyStellarator_out = {

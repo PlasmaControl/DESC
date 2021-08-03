@@ -237,7 +237,14 @@ def compute_lambda(
 
 
 def compute_toroidal_coords(
-    R_lmn, Z_lmn, R_transform, Z_transform, dr=0, dt=0, dz=0, data=None,
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    dr=0,
+    dt=0,
+    dz=0,
+    data=None,
 ):
     """Compute toroidal coordinates (R, phi, Z).
 

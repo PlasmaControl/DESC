@@ -121,7 +121,10 @@ def compute_rotational_transform(
 
 
 def compute_pressure(
-    p_l, pressure, dr=0, data=None,
+    p_l,
+    pressure,
+    dr=0,
+    data=None,
 ):
     """Compute pressure profile.
 

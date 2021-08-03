@@ -48,7 +48,10 @@ def cross(a, b, axis):
 
 
 def compute_toroidal_flux(
-    Psi, iota, dr=0, data=None,
+    Psi,
+    iota,
+    dr=0,
+    data=None,
 ):
     """Compute toroidal magnetic flux profile.
 

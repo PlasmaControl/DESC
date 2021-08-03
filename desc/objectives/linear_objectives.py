@@ -16,7 +16,12 @@ class FixedBoundaryR(_Objective):
     _b_arg = "Rb_lmn"
 
     def __init__(
-        self, eq=None, target=None, weight=1, surface=None, modes=True,
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        surface=None,
+        modes=True,
     ):
         """Initialize a FixedBoundaryR Objective.
 

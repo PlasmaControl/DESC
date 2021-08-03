@@ -235,14 +235,14 @@ class FourierRZToroidalSurface(Surface):
             grid,
             self.R_basis,
             derivs=np.array(
-                [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 1, 0], [0, 0, 2], [0, 1, 1]]
+                [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 0, 2], [0, 1, 1]]
             ),
         )
         Z_transform = Transform(
             grid,
             self.Z_basis,
             derivs=np.array(
-                [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 1, 0], [0, 0, 2], [0, 1, 1]]
+                [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 0, 1], [0, 0, 2], [0, 1, 1]]
             ),
         )
         return R_transform, Z_transform

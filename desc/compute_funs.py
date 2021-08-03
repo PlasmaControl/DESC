@@ -85,7 +85,10 @@ def compute_toroidal_flux(
 
 
 def compute_rotational_transform(
-    i_l, iota, dr=0, data=None,
+    i_l,
+    iota,
+    dr=0,
+    data=None,
 ):
     """Compute rotational transform profile.
 

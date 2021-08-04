@@ -140,50 +140,50 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta ** 2
 
     np.testing.assert_allclose(
-        data["B^theta_t"][3:-2],
-        B_sup_theta_t[3:-2],
+        data["B^theta_t"][23:-2],
+        B_sup_theta_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^theta_t"])),
     )
     np.testing.assert_allclose(
-        data["B^theta_tt"][3:-2],
-        B_sup_theta_tt[3:-2],
+        data["B^theta_tt"][2:-2],
+        B_sup_theta_tt[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(data["B^theta_tt"])),
     )
     np.testing.assert_allclose(
-        data["B^zeta_t"][3:-2],
-        B_sup_zeta_t[3:-2],
+        data["B^zeta_t"][2:-2],
+        B_sup_zeta_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_t"])),
     )
     np.testing.assert_allclose(
-        data["B^zeta_tt"][3:-2],
-        B_sup_zeta_tt[3:-2],
+        data["B^zeta_tt"][2:-2],
+        B_sup_zeta_tt[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(data["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
-        data["B_rho_t"][3:-2],
-        B_sub_rho_t[3:-2],
+        data["B_rho_t"][2:-2],
+        B_sub_rho_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B_rho_t"])),
     )
     np.testing.assert_allclose(
-        data["B_zeta_t"][3:-2],
-        B_sub_zeta_t[3:-2],
+        data["B_zeta_t"][2:-2],
+        B_sub_zeta_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B_zeta_t"])),
     )
     np.testing.assert_allclose(
-        data["|B|_t"][3:-2],
-        B_t[3:-2],
+        data["|B|_t"][2:-2],
+        B_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["|B|_t"])),
     )
     np.testing.assert_allclose(
-        data["|B|_tt"][3:-2],
-        B_tt[3:-2],
+        data["|B|_tt"][2:-2],
+        B_tt[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(data["|B|_tt"])),
     )
@@ -239,50 +239,50 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_zz = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dzeta ** 2
 
     np.testing.assert_allclose(
-        data["B^theta_z"][3:-2],
-        B_sup_theta_z[3:-2],
+        data["B^theta_z"][2:-2],
+        B_sup_theta_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^theta_z"])),
     )
     np.testing.assert_allclose(
-        data["B^theta_zz"][3:-2],
-        B_sup_theta_zz[3:-2],
+        data["B^theta_zz"][2:-2],
+        B_sup_theta_zz[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^theta_zz"])),
     )
     np.testing.assert_allclose(
-        data["B^zeta_z"][3:-2],
-        B_sup_zeta_z[3:-2],
+        data["B^zeta_z"][2:-2],
+        B_sup_zeta_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z"])),
     )
     np.testing.assert_allclose(
-        data["B^zeta_zz"][3:-2],
-        B_sup_zeta_zz[3:-2],
+        data["B^zeta_zz"][2:-2],
+        B_sup_zeta_zz[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
-        data["B_rho_z"][3:-2],
-        B_sub_rho_z[3:-2],
+        data["B_rho_z"][2:-2],
+        B_sub_rho_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B_rho_z"])),
     )
     np.testing.assert_allclose(
-        data["B_theta_z"][3:-2],
-        B_sub_theta_z[3:-2],
+        data["B_theta_z"][2:-2],
+        B_sub_theta_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B_theta_z"])),
     )
     np.testing.assert_allclose(
-        data["|B|_z"][3:-2],
-        B_z[3:-2],
+        data["|B|_z"][2:-2],
+        B_z[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["|B|_z"])),
     )
     np.testing.assert_allclose(
-        data["|B|_zz"][3:-2],
-        B_zz[3:-2],
+        data["|B|_zz"][2:-2],
+        B_zz[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["|B|_zz"])),
     )
@@ -311,8 +311,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         iota,
         dr=0,
-        dt=1,
-        dz=1,
+        dt=2,
+        dz=2,
     )
 
     B_sup_theta = data["B^theta"].reshape((N, M))
@@ -412,8 +412,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
 
     np.testing.assert_allclose(
-        data["grad(|B|^2)_rho"][2:-2],
-        B2_r[2:-2],
+        data["grad(|B|^2)_rho"][3:-2],
+        B2_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(data["grad(|B|^2)_rho"])),
     )

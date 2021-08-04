@@ -5,6 +5,7 @@ from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
 from desc.compute_funs import (
+    compute_covariant_magnetic_field,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,
     compute_B_dot_gradB,
@@ -36,7 +37,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
-    data = compute_magnetic_field_magnitude(
+    data = compute_covariant_magnetic_field(
         eq.R_lmn,
         eq.Z_lmn,
         eq.L_lmn,
@@ -52,8 +53,9 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
-    B_sub_theta_r = np.convolve(data["B_theta"], FD_COEF_1_4, "same") / drho
     B_sup_zeta_r = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / drho
+    B_sub_rho_r = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / drho
+    B_sub_theta_r = np.convolve(data["B_theta"], FD_COEF_1_4, "same") / drho
     B_sub_zeta_r = np.convolve(data["B_zeta"], FD_COEF_1_4, "same") / drho
 
     np.testing.assert_allclose(
@@ -67,6 +69,12 @@ def test_magnetic_field_derivatives(DummyStellarator):
         B_sup_zeta_r[3:-2],
         rtol=1e-2,
         atol=1e-2 * np.nanmean(np.abs(data["B^zeta_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B_rho_r"][3:-2],
+        B_sub_rho_r[3:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.nanmean(np.abs(data["B_rho_r"])),
     )
     np.testing.assert_allclose(
         data["B_theta_r"][3:-2],
@@ -371,7 +379,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         iota,
         data=data,
     )
-    B2_r = np.convolve(data["|B|"], FD_COEF_1_4, "same") / drho
+    B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
 
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][2:-2],

@@ -1274,7 +1274,7 @@ class QuasisymmetryFluxFunction(_Objective):
                 N=2 * eq.N_grid + 1,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=0.75,
+                rho=1,
             )
 
         self._dim_f = self._grid.num_nodes
@@ -1454,7 +1454,7 @@ class QuasisymmetryTripleProduct(_Objective):
                 N=2 * eq.N_grid + 1,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=0.75,
+                rho=1,
             )
 
         self._dim_f = self._grid.num_nodes

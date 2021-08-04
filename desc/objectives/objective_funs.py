@@ -718,14 +718,6 @@ class _Objective(IOAble, ABC):
         return self._args
 
     @property
-    def b_arg(self):
-        """str: Names (str) of argument in the linear constraint vector b."""
-        if hasattr(self, "_b_arg"):
-            return self._b_arg
-        else:
-            return ""
-
-    @property
     def dimensions(self):
         """dict: Dimensions of the argument given by the dict keys."""
         return self._dimensions

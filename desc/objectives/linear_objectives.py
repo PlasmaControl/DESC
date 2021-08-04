@@ -13,8 +13,6 @@ from .objective_funs import _Objective
 class FixedBoundaryR(_Objective):
     """Fixes boundary R coefficients."""
 
-    _b_arg = "Rb_lmn"
-
     def __init__(
         self,
         eq=None,
@@ -168,8 +166,6 @@ class FixedBoundaryR(_Objective):
 
 class FixedBoundaryZ(_Objective):
     """Fixes boundary Z coefficients."""
-
-    _b_arg = "Zb_lmn"
 
     def __init__(
         self,
@@ -325,8 +321,6 @@ class FixedBoundaryZ(_Objective):
 class FixedPressure(_Objective):
     """Fixes pressure coefficients."""
 
-    _b_arg = "p_l"
-
     def __init__(
         self,
         eq=None,
@@ -481,8 +475,6 @@ class FixedPressure(_Objective):
 class FixedIota(_Objective):
     """Fixes rotational transform coefficients."""
 
-    _b_arg = "i_l"
-
     def __init__(
         self,
         eq=None,
@@ -636,8 +628,6 @@ class FixedIota(_Objective):
 
 class FixedPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
-
-    _b_arg = "Psi"
 
     def __init__(self, eq=None, target=None, weight=1):
         """Initialize a FixedIota Objective.

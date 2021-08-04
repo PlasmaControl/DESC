@@ -74,7 +74,9 @@ class FixedBoundaryR(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.R_basis.modes.view(dtype), self._modes.view(dtype)
+                self._surface.R_basis.modes.view(dtype),
+                self._modes.view(dtype),
+                return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
@@ -228,7 +230,9 @@ class FixedBoundaryZ(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.Z_basis.modes.view(dtype), self._modes.view(dtype)
+                self._surface.Z_basis.modes.view(dtype),
+                self._modes.view(dtype),
+                return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
@@ -384,7 +388,9 @@ class FixedPressure(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.view(dtype), self._modes.view(dtype)
+                self._profile.basis.modes.view(dtype),
+                self._modes.view(dtype),
+                return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
@@ -538,7 +544,9 @@ class FixedIota(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.view(dtype), self._modes.view(dtype)
+                self._profile.basis.modes.view(dtype),
+                self._modes.view(dtype),
+                return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(

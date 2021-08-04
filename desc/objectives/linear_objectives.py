@@ -74,15 +74,15 @@ class FixedBoundaryR(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.R_basis.modes.view(dtype),
+                self._surface.R_basis.modes.astype(self._modes.dtype).view(dtype),
                 self._modes.view(dtype),
                 return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given modes are not in the boundary surface, ",
-                        +"these modes will not be fixed.",
+                        "Some of the given modes are not in the boundary surface, "
+                        + "these modes will not be fixed.",
                         "yellow",
                     )
                 )
@@ -230,15 +230,15 @@ class FixedBoundaryZ(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.Z_basis.modes.view(dtype),
+                self._surface.Z_basis.modes.astype(self._modes.dtype).view(dtype),
                 self._modes.view(dtype),
                 return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given modes are not in the boundary surface, ",
-                        +"these modes will not be fixed.",
+                        "Some of the given modes are not in the boundary surface, "
+                        + "these modes will not be fixed.",
                         "yellow",
                     )
                 )
@@ -388,15 +388,15 @@ class FixedPressure(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.view(dtype),
+                self._profile.basis.modes.astype(self._modes.dtype).view(dtype),
                 self._modes.view(dtype),
                 return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given modes are not in the pressure profile, ",
-                        +"these modes will not be fixed.",
+                        "Some of the given modes are not in the pressure profile, "
+                        + "these modes will not be fixed.",
                         "yellow",
                     )
                 )
@@ -544,15 +544,15 @@ class FixedIota(_Objective):
                 "formats": 3 * [self._modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.view(dtype),
+                self._profile.basis.modes.astype(self._modes.dtype).view(dtype),
                 self._modes.view(dtype),
                 return_indices=True,
             )
             if self._idx.size < self._modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given modes are not in the iota profile, ",
-                        +"these modes will not be fixed.",
+                        "Some of the given modes are not in the iota profile, "
+                        + "these modes will not be fixed.",
                         "yellow",
                     )
                 )

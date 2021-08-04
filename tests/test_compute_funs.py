@@ -100,6 +100,20 @@ def test_magnetic_field_derivatives(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
+    data = compute_covariant_magnetic_field(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        dr=1,
+        dt=1,
+        dz=1,
+    )
     data = compute_magnetic_field_magnitude(
         eq.R_lmn,
         eq.Z_lmn,
@@ -113,6 +127,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         dr=0,
         dt=2,
         dz=0,
+        data=data,
     )
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
@@ -184,6 +199,20 @@ def test_magnetic_field_derivatives(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
+    data = compute_covariant_magnetic_field(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        dr=1,
+        dt=1,
+        dz=1,
+    )
     data = compute_magnetic_field_magnitude(
         eq.R_lmn,
         eq.Z_lmn,
@@ -197,6 +226,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         dr=0,
         dt=0,
         dz=2,
+        data=data,
     )
 
     B_sup_theta_z = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dzeta

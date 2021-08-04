@@ -69,6 +69,7 @@ class FixedBoundaryR(_Objective):
             self._idx = np.arange(self._surface.R_basis.num_modes)
             idx = self._idx
         else:  # specified modes
+            self._modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [self._modes.dtype],
@@ -225,6 +226,7 @@ class FixedBoundaryZ(_Objective):
             self._idx = np.arange(self._surface.Z_basis.num_modes)
             idx = self._idx
         else:  # specified modes
+            self._modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [self._modes.dtype],
@@ -383,6 +385,7 @@ class FixedPressure(_Objective):
             self._idx = np.arange(self._profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
+            self._modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [self._modes.dtype],
@@ -539,6 +542,7 @@ class FixedIota(_Objective):
             self._idx = np.arange(self._profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
+            self._modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [self._modes.dtype],

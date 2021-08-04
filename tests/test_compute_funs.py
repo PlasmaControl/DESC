@@ -48,8 +48,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
         L_transform,
         iota,
         dr=1,
-        dt=0,
-        dz=0,
+        dt=1,
+        dz=1,
     )
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho

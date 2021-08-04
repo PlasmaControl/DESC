@@ -29,6 +29,7 @@ from desc.compute_funs import (
     compute_jacobian,
     compute_covariant_basis,
     compute_contravariant_basis,
+    compute_covariant_magnetic_field,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,
     compute_magnetic_tension,
@@ -783,7 +784,21 @@ class _Configuration(IOAble, ABC):
         iota = self.iota.copy()
         iota.grid = grid
 
-        return compute_magnetic_field_magnitude(
+        data = compute_covariant_magnetic_field(
+            self.R_lmn,
+            self.Z_lmn,
+            self.L_lmn,
+            self.i_l,
+            self.Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            dr=deriv,
+            dt=deriv,
+            dz=deriv,
+        )
+        data = compute_magnetic_field_magnitude(
             self.R_lmn,
             self.Z_lmn,
             self.L_lmn,
@@ -798,6 +813,7 @@ class _Configuration(IOAble, ABC):
             dz=deriv,
             data=data,
         )
+        return data
 
     def compute_current_density(self, grid=None, deriv=0, data=None):
         """Compute contravariant current density components.

@@ -28,4 +28,4 @@ jobs:
           tool_name: blackfmt
       - name: Fail if not formatted
         run: |
-          exit ${{ env.BLAC_RETURN_CODE }}
+          exit ${{ env.BLACK_RETURN_CODE }}

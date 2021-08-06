@@ -1189,25 +1189,25 @@ def zernike_radial(r, l, m, dr=0):
     n = (l - m) // 2
     s = (-1) ** n
     if dr == 0:
-        out = r ** m * jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        out = r ** m * _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
     elif dr == 1:
-        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
         out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
     elif dr == 2:
-        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
         out = (
             m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
             - 2 * 4 * m * r ** m * df
             + r ** m * (16 * r ** 2 * d2f - 4 * df)
         )
     elif dr == 3:
-        f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
-        d3f = jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        d3f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
         out = (
             (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
             - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
@@ -1267,6 +1267,7 @@ def powers(rho, l, dr=0):
     return polyval_vec(coeffs, rho).T
 
 
+@jit
 def fourier(theta, m, NFP=1, dt=0):
     """Fourier series.
 
@@ -1287,12 +1288,7 @@ def fourier(theta, m, NFP=1, dt=0):
         basis function(s) evaluated at specified points
 
     """
-    return _fourier(theta, m, NFP, dt)
-
-
-@jit
-@jnp.vectorize
-def _fourier(theta, m, NFP, dt):
+    theta, m, NFP, dt = map(jnp.asarray, (theta, m, NFP, dt))
     m_pos = (m >= 0).astype(int)
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
@@ -1308,7 +1304,7 @@ def _binom_body_fun(i, b_n):
 
 @jit
 @jnp.vectorize
-def binom(n, k):
+def _binom(n, k):
     """Binomial coefficient.
 
     Implementation is only correct for positive integer n,k and n>=k
@@ -1325,6 +1321,7 @@ def binom(n, k):
     val : int, float, array-like
         number of possible combinations
     """
+    n, k = map(jnp.asarray, (n, k))
     # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L68
     kx = k.astype(int)
     b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
@@ -1344,7 +1341,7 @@ def _jacobi_body_fun(kk, d_p_a_b_x):
 
 @jit
 @jnp.vectorize
-def jacobi(n, alpha, beta, x, dx=0):
+def _jacobi(n, alpha, beta, x, dx=0):
     """Jacobi polynomial evaluation
 
     Implementation is only correct for non-negative integer coefficients, returns 0 otherwise
@@ -1365,6 +1362,7 @@ def jacobi(n, alpha, beta, x, dx=0):
     P : ndarray
         Values of the Jacobi polynomial
     """
+    n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
     # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L144
     # coefficient for derivative
     c = (
@@ -1383,7 +1381,7 @@ def jacobi(n, alpha, beta, x, dx=0):
     d, p, alpha, beta, x = fori_loop(
         0, jnp.maximum(n - 1, 0).astype(int), _jacobi_body_fun, (d, p, alpha, beta, x)
     )
-    out = binom(n + alpha, n) * p
+    out = _binom(n + alpha, n) * p
     # should be complex for n<0, but it gets replaced elsewhere so just return 0 here
     out = jnp.where(n < 0, 0, out)
     # other edge cases

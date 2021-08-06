@@ -6,9 +6,9 @@ from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
-from desc.backend import jnp, put
+from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import unpack_state, copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
@@ -593,9 +593,9 @@ class _Configuration(IOAble, ABC):
             if grid.ndim == 1:
                 grid = np.tile(grid, (3, 1))
             grid = Grid(grid, sort=False)
-        R_transform = Transform(grid, self.R_basis, derivs=derivs)
-        Z_transform = Transform(grid, self.Z_basis, derivs=derivs)
-        L_transform = Transform(grid, self.L_basis, derivs=derivs)
+        R_transform = Transform(grid, self.R_basis, derivs=derivs, build=True)
+        Z_transform = Transform(grid, self.Z_basis, derivs=derivs, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=derivs, build=True)
         return R_transform, Z_transform, L_transform
 
     def compute_profiles(self, grid=None):
@@ -1281,7 +1281,7 @@ class _Configuration(IOAble, ABC):
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
-    def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
+    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of
         straight field-line coordinates (rho, theta*, zeta).
 
@@ -1290,6 +1290,8 @@ class _Configuration(IOAble, ABC):
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             coordinate.
+        L_lmn : ndarray
+            spectral coefficients for lambda. Defaults to self.L_lmn
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1302,9 +1304,9 @@ class _Configuration(IOAble, ABC):
             a given coordinate nan will be returned for those values
 
         """
-        rho = flux_coords[:, 0]
-        theta_star = flux_coords[:, 1]
-        zeta = flux_coords[:, 2]
+        if L_lmn is None:
+            L_lmn = self.L_lmn
+        rho, theta_star, zeta = flux_coords.T
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
         if jnp.any(rho) <= 0:
@@ -1313,51 +1315,44 @@ class _Configuration(IOAble, ABC):
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates
 
-        theta_k = theta_star
-        grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-
-        transform = Transform(
-            grid,
-            self.L_basis,
-            derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-            method="direct1",
-        )
-
+        nodes = flux_coords.copy()
+        A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
         # theta* = theta + lambda
-        theta_star_k = theta_k + transform.transform(self.L_lmn)
-        err = theta_star - theta_star_k
+        lmbda = jnp.dot(A0, L_lmn)
+        k = 0
+
+        def cond_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            theta_star_k = nodes[:, 1] + lmbda
+            err = theta_star - theta_star_k
+            return jnp.any(jnp.abs(err) > tol) & (k < maxiter)
 
         # Newton method for root finding
-        k = 0
-        while jnp.any(abs(err) > tol) and k < maxiter:
-            lmbda = transform.transform(self.L_lmn, 0, 0, 0)
-            lmbda_t = transform.transform(self.L_lmn, 0, 1, 0)
-            f = theta_star - theta_k - lmbda
+        def body_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            A1 = self.L_basis.evaluate(nodes, (0, 1, 0))
+            lmbda_t = jnp.dot(A1, L_lmn)
+            f = theta_star - nodes[:, 1] - lmbda
             df = -1 - lmbda_t
-
-            theta_k = theta_k - f / df
-
-            grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-            transform = Transform(
-                grid,
-                self.L_basis,
-                derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-                method="direct1",
-            )
-
-            theta_star_k = theta_k + transform.transform(self.L_lmn)
-            err = theta_star - theta_star_k
+            nodes = put(nodes, opsindex[:, 1], nodes[:, 1] - f / df)
+            A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
+            lmbda = jnp.dot(A0, L_lmn)
             k += 1
+            return (nodes, k, lmbda)
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(abs(err) > tol)
-            rho = put(rho, i, np.nan)
-            theta_k = put(theta_k, i, np.nan)
-            zeta = put(zeta, i, np.nan)
+        nodes, k, lmbda = jit(while_loop, static_argnums=(0, 1))(
+            cond_fun, body_fun, (nodes, k, lmbda)
+        )
+        theta_star_k = nodes[:, 1] + lmbda
+        err = theta_star - theta_star_k
+        noconverge = jnp.abs(err) > tol
+        nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
 
-        return jnp.vstack([rho, theta_k, zeta]).T
+        return nodes
 
-    def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
+    def compute_flux_coords(
+        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
+    ):
         """Find the flux coordinates (rho, theta, zeta) that correspond to a set of
         real space coordinates (R, phi, Z).
 
@@ -1365,6 +1360,8 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2d array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+        R_lmn, Z_lmn : ndarray
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
         tol : float
             Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
         maxiter : int > 0
@@ -1380,56 +1377,75 @@ class _Configuration(IOAble, ABC):
             nan will be returned for those values
 
         """
-        R = real_coords[:, 0]
-        phi = real_coords[:, 1]
-        Z = real_coords[:, 2]
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if jnp.any(R) <= 0:
-            raise ValueError("R values must be positive")
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
 
-        R0, phi0, Z0 = self.axis.compute_coordinates(grid=phi).T
-        theta = jnp.arctan2(Z - Z0, R - R0)
-        rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
-        grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
+        R, phi, Z = real_coords.T
+        R = jnp.abs(R)
 
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
+        # nearest neighbor search on coarse grid for initial guess
+        nodes = ConcentricGrid(L=20, M=10, N=0).nodes
+        AR = self.R_basis.evaluate(nodes)
+        AZ = self.Z_basis.evaluate(nodes)
+        Rg = jnp.dot(AR, R_lmn)
+        Zg = jnp.dot(AZ, Z_lmn)
+        distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
+        idx = jnp.argmin(distance, axis=1)
 
-        Rk = R_transform.transform(self.R_lmn)
-        Zk = Z_transform.transform(self.Z_lmn)
-        eR = R - Rk
-        eZ = Z - Zk
-
+        rhok = nodes[idx, 0]
+        thetak = nodes[idx, 1]
+        Rk = Rg[idx]
+        Zk = Zg[idx]
         k = 0
-        while jnp.any(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol) and k < maxiter:
-            Rr = R_transform.transform(self.R_lmn, 1, 0, 0)
-            Rt = R_transform.transform(self.R_lmn, 0, 1, 0)
-            Zr = Z_transform.transform(self.Z_lmn, 1, 0, 0)
-            Zt = Z_transform.transform(self.Z_lmn, 0, 1, 0)
+
+        def cond_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+
+        def body_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            nodes = jnp.array([rhok, thetak, phi]).T
+            ARr = self.R_basis.evaluate(nodes, (1, 0, 0))
+            Rr = jnp.dot(ARr, R_lmn)
+            AZr = self.Z_basis.evaluate(nodes, (1, 0, 0))
+            Zr = jnp.dot(AZr, Z_lmn)
+            ARt = self.R_basis.evaluate(nodes, (0, 1, 0))
+            Rt = jnp.dot(ARt, R_lmn)
+            AZt = self.Z_basis.evaluate(nodes, (0, 1, 0))
+            Zt = jnp.dot(AZt, Z_lmn)
 
             tau = Rt * Zr - Rr * Zt
-            theta += (Zr * eR - Rr * eZ) / tau
-            rho += (Rt * eZ - Zt * eR) / tau
-            # negative rho -> rotate theta instead
-            theta = jnp.where(rho < 0, -theta % (2 * np.pi), theta % (2 * np.pi))
-            rho = jnp.clip(rho, rhomin, 1)
-
-            grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
-            R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-            Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
-
-            Rk = R_transform.transform(self.R_lmn)
-            Zk = Z_transform.transform(self.Z_lmn)
             eR = R - Rk
             eZ = Z - Zk
-            k += 1
+            thetak += (Zr * eR - Rr * eZ) / tau
+            rhok += (Rt * eZ - Zt * eR) / tau
+            # negative rho -> rotate theta instead
+            thetak = jnp.where(
+                rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
+            )
+            rhok = jnp.abs(rhok)
+            rhok = jnp.clip(rhok, rhomin, 1)
+            nodes = jnp.array([rhok, thetak, phi]).T
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol)
-            rho = put(rho, i, np.nan)
-            theta = put(theta, i, np.nan)
-            phi = put(phi, i, np.nan)
+            AR = self.R_basis.evaluate(nodes, (0, 0, 0))
+            Rk = jnp.dot(AR, R_lmn)
+            AZ = self.Z_basis.evaluate(nodes, (0, 0, 0))
+            Zk = jnp.dot(AZ, Z_lmn)
+            k += 1
+            return (k, rhok, thetak, Rk, Zk)
+
+        k, rhok, thetak, Rk, Zk = while_loop(
+            cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
+        )
+
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        rho = jnp.where(noconverge, jnp.nan, rhok)
+        theta = jnp.where(noconverge, jnp.nan, thetak)
+        phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta, phi]).T
 
@@ -1558,26 +1574,34 @@ class _Configuration(IOAble, ABC):
         eq_sfl.change_resolution(L, M, N)
 
         R_sfl_transform = Transform(
-            sfl_grid, eq_sfl.R_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
         )
         R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
         del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
         Z_sfl_transform = Transform(
-            sfl_grid, eq_sfl.Z_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
         )
         Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
         del Z_sfl_transform
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
         R_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.surface.R_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.R_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.surface.Z_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.Z_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
         del Z_sfl_bdry_transform
@@ -1704,7 +1728,7 @@ class _Configuration(IOAble, ABC):
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym="cos")
         else:
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym=None)
-        transform = Transform(grid, basis, build_pinv=True)
+        transform = Transform(grid, basis, build=False, build_pinv=True)
         m = basis.modes[:, 1]
         n = basis.modes[:, 2]
 

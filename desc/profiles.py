@@ -130,6 +130,7 @@ class PowerSeriesProfile(Profile):
             grid,
             self.basis,
             derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            build=True,
         )
         return transform
 
@@ -160,6 +161,7 @@ class PowerSeriesProfile(Profile):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+        self._transform.build()
 
     @property
     def params(self):

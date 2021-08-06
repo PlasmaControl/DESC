@@ -112,7 +112,11 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        BC = eq.surface.get_constraint(eq.R_basis, eq.Z_basis, eq.L_basis,)
+        BC = eq.surface.get_constraint(
+            eq.R_basis,
+            eq.Z_basis,
+            eq.L_basis,
+        )
         eq.x = BC.make_feasible(eq.x)
 
         return eq
@@ -488,11 +492,17 @@ class VMECIO:
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
             cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
-            sin_transform = Transform(grid=grid, basis=sin_basis, build_pinv=True)
-            cos_transform = Transform(grid=grid, basis=cos_basis, build_pinv=True)
+            sin_transform = Transform(
+                grid=grid, basis=sin_basis, build=False, build_pinv=True
+            )
+            cos_transform = Transform(
+                grid=grid, basis=cos_basis, build=False, build_pinv=True
+            )
         else:
             full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
-            full_transform = Transform(grid=grid, basis=full_basis, build_pinv=True)
+            full_transform = Transform(
+                grid=grid, basis=full_basis, build=False, build_pinv=True
+            )
 
         rmin_surf = file.createVariable("rmin_surf", np.float64)
         rmin_surf.long_name = "minimum R coordinate range"

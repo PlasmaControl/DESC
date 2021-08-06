@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from termcolor import colored
 
 from desc.backend import jnp, put
-from desc.basis import jacobi_coeffs
+from desc.basis import zernike_radial_coeffs
 from desc.optimize.constraint import LinearEqualityConstraint
 from desc.grid import LinearGrid
 from desc.transform import Transform
@@ -676,7 +676,7 @@ def _get_gauge_bc(R_basis, Z_basis, L_basis):
     mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
     l_lmn = L_modes[mnpos, :]
     if len(l_lmn) > 0:
-        c = jacobi_coeffs(l_lmn[:, 0], l_lmn[:, 1])
+        c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
     else:
         c = np.zeros((0, 0))
 

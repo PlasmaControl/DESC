@@ -19,8 +19,12 @@ jobs:
       - name: Check files using the black formatter
         run: |
           black --version
+          black --check desc/ tests/ || black_return_code=$?
           black desc/ tests/
       - name: Annotate diff changes using reviewdog
         uses: reviewdog/action-suggester@v1
         with:
           tool_name: blackfmt
+      - name: Fail if not formatted
+        run: |
+          exit $black_return_code

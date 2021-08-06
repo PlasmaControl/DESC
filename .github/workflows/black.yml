@@ -1,4 +1,4 @@
-name: black-action
+name: black formatting
 
 on: [pull_request, workflow_dispatch]
 
@@ -20,6 +20,7 @@ jobs:
         run: |
           black --version
           black --check desc/ tests/ || black_return_code=$?
+          echo "BLACK_RETURN_CODE=$black_return_code" >> GITHUB_ENV
           black desc/ tests/
       - name: Annotate diff changes using reviewdog
         uses: reviewdog/action-suggester@v1
@@ -27,4 +28,4 @@ jobs:
           tool_name: blackfmt
       - name: Fail if not formatted
         run: |
-          exit $black_return_code
+          exit ${{ env.BLAC_RETURN_CODE }}

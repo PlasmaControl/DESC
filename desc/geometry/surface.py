@@ -105,7 +105,10 @@ class FourierRZToroidalSurface(Surface):
         self.rho = rho
         if grid is None:
             grid = LinearGrid(
-                rho=self.rho, M=2 * self.M + 1, N=2 * self.N + 1, endpoint=True,
+                rho=self.rho,
+                M=2 * self.M + 1,
+                N=2 * self.N + 1,
+                endpoint=True,
             )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
@@ -553,7 +556,7 @@ class ZernikeRZToroidalSection(Surface):
         self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
         self._L = L
         self._M = M
-        
+
     @property
     def R_lmn(self):
         """Spectral coefficients for R"""

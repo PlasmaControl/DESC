@@ -79,7 +79,14 @@ class TestIsNested(unittest.TestCase):
             "N": 0,
             "NFP": 1,
             "Psi": 1.0,
-            "pressure": np.array([[0, 0,]]),
+            "pressure": np.array(
+                [
+                    [
+                        0,
+                        0,
+                    ]
+                ]
+            ),
             "iota": np.array([[0, 0.23]]),
             "surface": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
             "index": "fringe",

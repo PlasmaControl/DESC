@@ -20,7 +20,10 @@ class TestProfiles(unittest.TestCase):
         eq2.solve()
 
         np.testing.assert_allclose(
-            eq1.x, eq2.x, rtol=1e-05, atol=1e-08,
+            eq1.x,
+            eq2.x,
+            rtol=1e-05,
+            atol=1e-08,
         )
 
     def test_close_values(self):

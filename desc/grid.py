@@ -112,22 +112,22 @@ class Grid(IOAble):
 
     @property
     def M(self):
-        """ int: poloidal grid resolution"""
+        """int: poloidal grid resolution"""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """ int: toroidal grid resolution"""
+        """int: toroidal grid resolution"""
         return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
-        """ int: number of field periods"""
+        """int: number of field periods"""
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
-        """ bool: True for stellarator symmetry, False otherwise"""
+        """bool: True for stellarator symmetry, False otherwise"""
         return self.__dict__.setdefault("_sym", False)
 
     @property

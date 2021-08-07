@@ -136,14 +136,30 @@ class TestGrid(unittest.TestCase):
             [
                 np.array([0, 1, 1, 1, 1, 1]),
                 np.array(
-                    [0, 0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5,]
+                    [
+                        0,
+                        0,
+                        2 * np.pi / 5,
+                        4 * np.pi / 5,
+                        6 * np.pi / 5,
+                        8 * np.pi / 5,
+                    ]
                 ),
                 np.zeros((int((M + 1) * (M + 2) / 2),)),
             ]
         ).T
         fringe_nodes = np.stack(
             [
-                np.array([0, 0.5, 0.5, 1, 1, 1,]),
+                np.array(
+                    [
+                        0,
+                        0.5,
+                        0.5,
+                        1,
+                        1,
+                        1,
+                    ]
+                ),
                 np.array(
                     [
                         2 / 3 * np.pi,

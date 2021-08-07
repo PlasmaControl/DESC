@@ -4,7 +4,7 @@ from .core_io import IO, Reader, Writer
 
 
 class PickleIO(IO):
-    """Class to wrap ABC IO for pickle file format. """
+    """Class to wrap ABC IO for pickle file format."""
 
     def __init__(self):
         """Initialize PickleIO instance"""

@@ -31,7 +31,6 @@ def main(cl_args=sys.argv[1:]):
         print("Reading input from {}".format(ir.input_path))
         print("Outputs will be written to {}".format(ir.output_path))
 
-
     # initialize
     equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input

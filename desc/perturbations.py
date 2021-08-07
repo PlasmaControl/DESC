@@ -78,7 +78,7 @@ def perturb(
                 len(tr_ratio), order
             )
         )
-
+    eq.objective.build(verbose=verbose)
     deltas = {}
     if dRb is not None and np.any(dRb):
         deltas["Rb_lmn"] = dRb

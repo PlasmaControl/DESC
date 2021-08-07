@@ -564,12 +564,13 @@ class Equilibrium(_Configuration, IOAble):
             dictionary of additional options to pass to optimizer
 
         """
-        if self.optimizer is None:
+        if self.optimizer is None or self.objective is None:
             raise AttributeError(
                 "Equilibrium must have objective and optimizer defined before solving."
             )
-        self.objective = self.objective.name
 
+        # make sure objective is up to date
+        self.objective = self.objective.name
         args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
 
         self.x0 = self.x
@@ -877,6 +878,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         verbose=verbose,
                         copy=False,
                     )
+
             if not equil.is_nested():
                 warnings.warn(
                     colored(
@@ -915,7 +917,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             equil.optimizer = optimizer
 
-            equil.build(verbose)
             equil.solve(
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],

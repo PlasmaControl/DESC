@@ -64,6 +64,7 @@ if use_jax:
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
     from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
+    from jax.scipy.special import gammaln
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"
@@ -92,6 +93,7 @@ if use_jax:
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
+    from scipy.special import gammaln
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing"

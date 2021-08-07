@@ -86,7 +86,6 @@ Objective Functions
 
     desc.objective_funs.get_objective_function
     desc.objective_funs.ForceErrorNodes
-    desc.objective_funs.ForceErrorGalerkin
     desc.objective_funs.EnergyVolIntegral
     desc.objective_funs.QuasisymmetryTripleProduct
     desc.objective_funs.QuasisymmetryFluxFunction

@@ -28,9 +28,9 @@ class Equilibrium(_Configuration, IOAble):
     Psi : float (optional)
         total toroidal flux (in Webers) within LCFS. Default 1.0
     NFP : int (optional)
-        number of field periods Default surface.NFP or 1
+        number of field periods Default ``surface.NFP`` or 1
     L : int (optional)
-        Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+        Radial resolution. Default 2*M for ``spectral_indexing=='fringe'``, else M
     M : int (optional)
         Poloidal resolution. Default surface.M or 1
     N : int (optional)
@@ -42,7 +42,7 @@ class Equilibrium(_Configuration, IOAble):
     N_grid : int (optional)
         resolution of real space nodes in toroidal direction
     node_pattern : str (optional)
-        pattern of nodes in real space. Default is "jacobi"
+        pattern of nodes in real space. Default is ``'jacobi'``
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure

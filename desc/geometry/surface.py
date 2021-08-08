@@ -69,7 +69,9 @@ class FourierRZToroidalSurface(Surface):
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
-        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+        R_lmn, Z_lmn, modes_R, modes_Z = map(
+            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+        )
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
@@ -465,7 +467,9 @@ class ZernikeRZToroidalSection(Surface):
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
-        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+        R_lmn, Z_lmn, modes_R, modes_Z = map(
+            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+        )
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)

@@ -1,6 +1,7 @@
 import numpy as np
 from termcolor import colored
 import warnings
+import numbers
 from collections.abc import MutableSequence
 from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal, unpack_state
@@ -119,9 +120,21 @@ class Equilibrium(_Configuration, IOAble):
             **kwargs,
         )
         self._x0 = self.x
-        assert (L_grid is None) or (int(L_grid) == L_grid)
-        assert (M_grid is None) or (int(M_grid) == M_grid)
-        assert (N_grid is None) or (int(N_grid) == N_grid)
+        assert (L_grid is None) or (
+            isinstance(L_grid, numbers.Real)
+            and (L_grid == int(L_grid))
+            and (L_grid >= 0)
+        ), "L_grid should be a non-negative integer or None, got {L_grid}"
+        assert (M_grid is None) or (
+            isinstance(M_grid, numbers.Real)
+            and (M_grid == int(M_grid))
+            and (M_grid >= 0)
+        ), "M_grid should be a non-negative integer or None, got {M_grid}"
+        assert (N_grid is None) or (
+            isinstance(N_grid, numbers.Real)
+            and (N_grid == int(N_grid))
+            and (N_grid >= 0)
+        ), "N_grid should be a non-negative integer or None, got {N_grid}"
         self._L_grid = L_grid if L_grid is not None else self.L
         self._M_grid = M_grid if M_grid is not None else self.M
         self._N_grid = N_grid if N_grid is not None else self.N

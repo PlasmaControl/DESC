@@ -128,7 +128,11 @@ class _Configuration(IOAble, ABC):
         **kwargs,
     ):
 
-        assert spectral_indexing in [None, "ansi", "fringe"]
+        assert spectral_indexing in [
+            None,
+            "ansi",
+            "fringe",
+        ], f"spectral_indexing should be one of 'ansi', 'fringe', None, got {spectral_indexing}"
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing
         elif spectral_indexing is None:
@@ -136,10 +140,14 @@ class _Configuration(IOAble, ABC):
         else:
             self._spectral_indexing = spectral_indexing
 
-        assert isinstance(Psi, numbers.Number)
+        assert isinstance(
+            Psi, numbers.Real
+        ), f"Psi should be a real integer or float, got {type(Psi)}"
         self._Psi = float(Psi)
 
-        assert (NFP is None) or isinstance(NFP, numbers.Real)
+        assert (NFP is None) or isinstance(
+            NFP, numbers.Real
+        ), f"NFP should be a real integer or float, got {type(NFP)}"
         if NFP is not None:
             self._NFP = NFP
         elif hasattr(surface, "NFP"):
@@ -149,7 +157,11 @@ class _Configuration(IOAble, ABC):
         else:
             self._NFP = 1
 
-        assert sym in [None, True, False]
+        assert sym in [
+            None,
+            True,
+            False,
+        ], f"sym should be one of True, False, None, got {sym}"
         if sym is None and hasattr(surface, "sym"):
             self._sym = surface.sym
         elif sym is None:
@@ -165,9 +177,15 @@ class _Configuration(IOAble, ABC):
             self._Z_sym = False
 
         # resolution
-        assert (L is None) or (isinstance(L, numbers.Real) and (L == int(L)))
-        assert (M is None) or (isinstance(M, numbers.Real) and (M == int(M)))
-        assert (N is None) or (isinstance(N, numbers.Real) and (N == int(N)))
+        assert (L is None) or (
+            isinstance(L, numbers.Real) and (L == int(L)) and (L >= 0)
+        ), f"L should be a non-negative integer or None, got {L}"
+        assert (M is None) or (
+            isinstance(M, numbers.Real) and (M == int(M)) and (M >= 0)
+        ), f"M should be a non-negative integer or None, got {M}"
+        assert (N is None) or (
+            isinstance(N, numbers.Real) and (N == int(N)) and (N >= 0)
+        ), f"N should be a non-negative integer or None, got {N}"
         if N is not None:
             self._N = int(N)
         elif hasattr(surface, "N"):

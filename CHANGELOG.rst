@@ -16,7 +16,7 @@ New Features:
 - Added straight field line method for plotting field line traces from a solved equilibrium.
 - A new method has been implemented that uses identities for the zernike polynomials in terms of jacobi polynomials, and a stable iterative evaluation for the jacobi polynomials and binomial coefficients. Accuracy seems on par or better than the old method using extended precision, at least for a given amount of computation time. There is some overhead from JIT compilation, but seems to pay off well for high resolution
 - Added new "unique" option for ``basis.evaluate`` to first reduce the work by finding unique combos of nodes/modes. Previously this was done inside each basis function evaluation, but doing it on the outside should be more efficient and makes the underlying functions differentiable.
-Refactored fourier series evaluation to shift the arguments for evaluating derivatives rather than using recursion and conditionals.
+- Refactored fourier series evaluation to shift the arguments for evaluating derivatives rather than using recursion and conditionals.
 
 
 v0.4.10

@@ -223,7 +223,7 @@ def perturb(
 
     # update boundary constraint
     if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
-        eq_new.objective.BC_constraint = eq.surface.get_constraint(
+        eq_new.objective.BC_constraint = eq_new.surface.get_constraint(
             eq_new.R_basis,
             eq_new.Z_basis,
             eq_new.L_basis,

@@ -1,8 +1,26 @@
 Changelog
 =========
 
+v0.4.11
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.10...v0.4.11>`_
+
+Bug fixes:
+
+- Transforms used in the profile class weren't built by default, causing them to be built when first called which is under jit, meaning they would be recomputed every time instead of caching the transform as expected. Updated to now build transforms by default.
+
+New Features:
+
+- DESC version number is now saved in hdf5 output files as ``__version__`` field.
+- Added straight field line method for plotting field line traces from a solved equilibrium.
+- A new method has been implemented that uses identities for the zernike polynomials in terms of jacobi polynomials, and a stable iterative evaluation for the jacobi polynomials and binomial coefficients. Accuracy seems on par or better than the old method using extended precision, at least for a given amount of computation time. There is some overhead from JIT compilation, but seems to pay off well for high resolution
+- Added new "unique" option for ``basis.evaluate`` to first reduce the work by finding unique combos of nodes/modes. Previously this was done inside each basis function evaluation, but doing it on the outside should be more efficient and makes the underlying functions differentiable.
+Refactored fourier series evaluation to shift the arguments for evaluating derivatives rather than using recursion and conditionals.
+
+
 v0.4.10
-######
+#######
 
 `Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.9...v0.4.10>`_
 

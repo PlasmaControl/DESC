@@ -373,16 +373,16 @@ class VMECIO:
         Rmajor_p = file.createVariable("Rmajor_p", np.float64)
         Rmajor_p.long_name = "major radius"
         Rmajor_p.units = "m"
-        Rmajor_p[:] = eq.major_radius
+        Rmajor_p[:] = eq.compute_major_radius()
 
         Aminor_p = file.createVariable("Aminor_p", np.float64)
         Aminor_p.long_name = "minor radius"
         Aminor_p.units = "m"
-        Aminor_p[:] = eq.minor_radius
+        Aminor_p[:] = eq.compute_minor_radius()
 
         aspect = file.createVariable("aspect", np.float64)
         aspect.long_name = "aspect ratio = R_major / A_minor"
-        aspect[:] = eq.aspect_ratio
+        aspect[:] = eq.compute_aspect_ratio()
 
         volume_p = file.createVariable("volume_p", np.float64)
         volume_p.long_name = "plasma volume"

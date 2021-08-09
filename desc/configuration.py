@@ -988,7 +988,7 @@ class _Configuration(IOAble, ABC):
         return np.mean(
             np.sum(
                 np.reshape(  # sqrt(g) / R * weight = dArea
-                    np.abs(data["g"] / data["R"]) * weights, (N, -1)
+                    np.abs(data["sqrt(g)"] / data["R"]) * weights, (N, -1)
                 ),
                 axis=1,
             )

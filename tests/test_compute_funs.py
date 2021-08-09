@@ -452,7 +452,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         iota,
         data=data,
     )
-    B2_t = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dtheta
+    B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
 
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
@@ -495,7 +495,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         iota,
         data=data,
     )
-    B2_z = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dzeta
+    B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
 
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],

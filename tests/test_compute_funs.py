@@ -429,6 +429,17 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
+    data = compute_magnetic_field_magnitude(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+    )
     data = compute_magnetic_pressure_gradient(
         eq.R_lmn,
         eq.Z_lmn,
@@ -439,6 +450,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
+        data=data,
     )
     B2_t = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dtheta
 

@@ -140,7 +140,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta ** 2
 
     np.testing.assert_allclose(
-        data["B^theta_t"][23:-2],
+        data["B^theta_t"][2:-2],
         B_sup_theta_t[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^theta_t"])),
@@ -460,6 +460,17 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     iota = eq.iota.copy()
     iota.grid = grid
 
+    data = compute_magnetic_field_magnitude(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+    )
     data = compute_magnetic_pressure_gradient(
         eq.R_lmn,
         eq.Z_lmn,
@@ -470,6 +481,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
+        data=data,
     )
     B2_z = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dzeta
 

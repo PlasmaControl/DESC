@@ -1449,7 +1449,7 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
+    def is_nested(self, nsurfs=10, ntheta=20, zetas=np.linspace(0,2*np.pi,4,endpoint=False), Nt=45, Nr=20):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Parameters
@@ -1458,8 +1458,8 @@ class _Configuration(IOAble, ABC):
             number of radial surfaces to check (Default value = 10)
         ntheta : int, optional
             number of sfl poloidal contours to check (Default value = 20)
-        zeta : float, optional
-            toroidal plane to check (Default value = 0)
+        zetas : array of floats, optional
+            toroidal planes to check (Default value is 0 for axisymmetric configurations and linspace(0,2*pi,4,endpoint=False) otherwise)
         Nt : int, optional
             number of theta points to use for the r contours (Default value = 45)
         Nr : int, optional
@@ -1471,33 +1471,38 @@ class _Configuration(IOAble, ABC):
             whether or not the surfaces are nested
 
         """
-        r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
-        t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
+        planes_nested_bools = []
+        if self._N == 0:
+            zetas = [0]
+        for zeta in zetas:
+            r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
+            t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
-        r_coords = self.compute_toroidal_coords(r_grid)
-        t_coords = self.compute_toroidal_coords(t_grid)
+            r_coords = self.compute_toroidal_coords(r_grid)
+            t_coords = self.compute_toroidal_coords(t_grid)
 
-        v_nodes = t_grid.nodes
-        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-        v_grid = Grid(v_nodes)
-        v_coords = self.compute_toroidal_coords(v_grid)
+            v_nodes = t_grid.nodes
+            v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
+            v_grid = Grid(v_nodes)
+            v_coords = self.compute_toroidal_coords(v_grid)
 
-        # rho contours
-        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
-        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+            # rho contours
+            Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+            Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
 
-        # theta contours
-        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
-        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+            # theta contours
+            Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+            Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
 
-        rline = MultiLineString(
-            [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
-        )
-        vline = MultiLineString(
-            [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
-        )
+            rline = MultiLineString(
+                [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
+            )
+            vline = MultiLineString(
+                [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
+            )
 
-        return rline.is_simple and vline.is_simple
+            planes_nested_bools.append( rline.is_simple and vline.is_simple)
+        return np.all(planes_nested_bools)
 
     def to_sfl(
         self,

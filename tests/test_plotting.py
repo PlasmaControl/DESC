@@ -277,11 +277,13 @@ def test_plot_surfaces(plot_eq):
     return fig
 
 
+
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison(DSHAPE):
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
     fig, ax = plot_comparison(eqf)
     return fig
+
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)

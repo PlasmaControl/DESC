@@ -1449,7 +1449,14 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, nsurfs=10, ntheta=20, zetas=np.linspace(0,2*np.pi,4,endpoint=False), Nt=45, Nr=20):
+    def is_nested(
+        self,
+        nsurfs=10,
+        ntheta=20,
+        zetas=np.linspace(0, 2 * np.pi, 4, endpoint=False),
+        Nt=45,
+        Nr=20,
+    ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Parameters
@@ -1501,7 +1508,7 @@ class _Configuration(IOAble, ABC):
                 [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
             )
 
-            planes_nested_bools.append( rline.is_simple and vline.is_simple)
+            planes_nested_bools.append(rline.is_simple and vline.is_simple)
         return np.all(planes_nested_bools)
 
     def to_sfl(

@@ -162,12 +162,12 @@ class TestGrid(unittest.TestCase):
                 ),
                 np.array(
                     [
-                        2 / 3 * np.pi,
-                        2 / 3 * np.pi / 3,
-                        2 * np.pi / 3 + 2 / 3 * np.pi / 3,
-                        2 / 3 * np.pi / 5,
-                        2 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        4 * np.pi / 5 + 2 / 3 * np.pi / 5,
+                        0,
+                        0,
+                        2 * np.pi / 3,
+                        0,
+                        2 * np.pi / 5,
+                        4 * np.pi / 5,
                     ]
                 ),
                 np.zeros((6,)),
@@ -178,6 +178,10 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
         self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
+
+    def test_concentric_grid_rotation(self):
+        # TODO: add test for rotation = {"cos", "sin", False}
+        pass
 
     def test_quadrature_grid(self):
 
@@ -220,10 +224,11 @@ class TestGrid(unittest.TestCase):
             "bdry_mode": "lcfs",
             "node_pattern": "quad",
         }
-
         eq = Equilibrium(inputs)
-        g = eq.compute_jacobian()
-        vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
+
+        grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        g = eq.compute_jacobian(grid)
+        vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         self.assertAlmostEqual(vol, vol_quad)
 

@@ -94,7 +94,7 @@ def test_compute_theta_coords(SOLOVEV):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
+    coords = eq.compute_lambda(Grid(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -127,30 +127,6 @@ def test_compute_flux_coords(SOLOVEV):
         flux_coords[0, 1] = flux_coords[0, 1] - 2 * np.pi
 
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
-
-
-def test_is_nested(self):
-    """Test check for nested flux surfaces."""
-
-    inputs = {
-        "L": 4,
-        "M": 2,
-        "N": 0,
-        "NFP": 1,
-        "Psi": 1.0,
-        "profiles": np.array([[0, 0, 0.23]]),
-        "boundary": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
-        "index": "fringe",
-    }
-
-    eq1 = Equilibrium(inputs)
-    eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
-    eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
-    eq2 = Equilibrium(inputs)
-    eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
-    eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
-    self.assertTrue(eq1.is_nested())
-    self.assertFalse(eq2.is_nested())
 
 
 # can't test booz_xform because it can't be installed by Travis

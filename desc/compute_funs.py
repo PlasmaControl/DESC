@@ -643,9 +643,15 @@ def compute_magnetic_field(
     magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
 
     # cylindrical components (R,Z,phi)
-    magnetic_field["B_R"] = magnetic_field['B^theta']*cov_basis['e_theta'][0,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][0,:]
-    magnetic_field["B_Z"] = magnetic_field['B^theta']*cov_basis['e_theta'][2,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][2,:]
-    magnetic_field["B_phi"] = toroidal_coords["R"]*magnetic_field['B^zeta']
+    magnetic_field["B_R"] = (
+        magnetic_field["B^theta"] * cov_basis["e_theta"][0, :]
+        + magnetic_field["B^zeta"] * cov_basis["e_zeta"][0, :]
+    )
+    magnetic_field["B_Z"] = (
+        magnetic_field["B^theta"] * cov_basis["e_theta"][2, :]
+        + magnetic_field["B^zeta"] * cov_basis["e_zeta"][2, :]
+    )
+    magnetic_field["B_phi"] = toroidal_coords["R"] * magnetic_field["B^zeta"]
 
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 
@@ -802,9 +808,15 @@ def compute_magnetic_field_axis(
     magnetic_field["B_zeta"] = dot(magnetic_field["B"], cov_basis["e_zeta"], 0)
 
     # cylindrical components (R,Z,phi)
-    magnetic_field["B_R"] = magnetic_field['B^theta']*cov_basis['e_theta'][0,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][0,:]
-    magnetic_field["B_Z"] = magnetic_field['B^theta']*cov_basis['e_theta'][2,:] + magnetic_field['B^zeta']*cov_basis['e_zeta'][2,:]
-    magnetic_field["B_phi"] = toroidal_coords["R"]*magnetic_field['B^zeta']
+    magnetic_field["B_R"] = (
+        magnetic_field["B^theta"] * cov_basis["e_theta"][0, :]
+        + magnetic_field["B^zeta"] * cov_basis["e_zeta"][0, :]
+    )
+    magnetic_field["B_Z"] = (
+        magnetic_field["B^theta"] * cov_basis["e_theta"][2, :]
+        + magnetic_field["B^zeta"] * cov_basis["e_zeta"][2, :]
+    )
+    magnetic_field["B_phi"] = toroidal_coords["R"] * magnetic_field["B^zeta"]
 
     return magnetic_field, jacobian, cov_basis, toroidal_coords, profiles
 
@@ -1576,25 +1588,22 @@ def compute_magnetic_tension(
         * (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"])
     )
 
-    magnetic_tension['t1'] = ((
-            magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
-            + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        )
-        * cov_basis["e_theta"])
-    magnetic_tension['t2'] = ((
-            magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
-            + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        )
-        * cov_basis["e_zeta"])
+    magnetic_tension["t1"] = (
+        magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
+        + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
+    ) * cov_basis["e_theta"]
+    magnetic_tension["t2"] = (
+        magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
+        + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
+    ) * cov_basis["e_zeta"]
 
-    magnetic_tension['t3'] =  magnetic_field["B^theta"] ** 2 * cov_basis["e_theta_t"]
-    magnetic_tension['t4'] =  magnetic_field["B^zeta"] ** 2 * cov_basis["e_zeta_z"]
-    magnetic_tension['t5'] = ( magnetic_field["B^theta"]
+    magnetic_tension["t3"] = magnetic_field["B^theta"] ** 2 * cov_basis["e_theta_t"]
+    magnetic_tension["t4"] = magnetic_field["B^zeta"] ** 2 * cov_basis["e_zeta_z"]
+    magnetic_tension["t5"] = (
+        magnetic_field["B^theta"]
         * magnetic_field["B^zeta"]
         * (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"])
     )
-
-
 
     # magnetic tension covariant components
     magnetic_tension["((B*grad(|B|))B)_rho"] = dot(
@@ -1607,59 +1616,78 @@ def compute_magnetic_tension(
         magnetic_tension["(B*grad(|B|))B"], cov_basis["e_zeta"], 0
     )
 
-    magnetic_tension["((B*grad(|B|))B)_rho2"] = ((
+    magnetic_tension["((B*grad(|B|))B)_rho2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], cov_basis["e_rho"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], cov_basis["e_rho"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],cov_basis['e_rho'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_rho"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_rho"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),cov_basis["e_rho"],0)
-    )
+        )
+        * dot(cov_basis["e_zeta"], cov_basis["e_rho"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_rho"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_rho"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]), cov_basis["e_rho"], 0
+            )
+        )
     )
 
-    magnetic_tension["((B*grad(|B|))B)_theta2"] = ((
+    magnetic_tension["((B*grad(|B|))B)_theta2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], cov_basis["e_theta"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],cov_basis['e_theta'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_theta"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_theta"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),cov_basis["e_theta"],0)
+        )
+        * dot(cov_basis["e_zeta"], cov_basis["e_theta"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_theta"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),
+                cov_basis["e_theta"],
+                0,
+            )
+        )
     )
-    )
-    magnetic_tension["((B*grad(|B|))B)_zeta2"] = ((
+    magnetic_tension["((B*grad(|B|))B)_zeta2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], cov_basis["e_zeta"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],cov_basis['e_zeta'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_zeta"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_zeta"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),cov_basis["e_zeta"],0)
+        )
+        * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]), cov_basis["e_zeta"], 0
+            )
+        )
     )
-    )
-
 
     # magnetic tension contravariant components
     magnetic_tension["((B*grad(|B|))B)^rho"] = dot(
@@ -1671,60 +1699,79 @@ def compute_magnetic_tension(
     magnetic_tension["((B*grad(|B|))B)^zeta"] = dot(
         magnetic_tension["(B*grad(|B|))B"], con_basis["e^zeta"], 0
     )
-    
-    magnetic_tension["((B*grad(|B|))B)^rho2"] = ((
+
+    magnetic_tension["((B*grad(|B|))B)^rho2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], con_basis["e^rho"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], con_basis["e^rho"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],con_basis['e^rho'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_rho"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_rho"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),con_basis["e^rho"],0)
-    )
+        )
+        * dot(cov_basis["e_zeta"], con_basis["e^rho"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_rho"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_rho"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]), con_basis["e^rho"], 0
+            )
+        )
     )
 
-    magnetic_tension["((B*grad(|B|))B)^theta2"] = ((
+    magnetic_tension["((B*grad(|B|))B)^theta2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], con_basis["e^theta"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], con_basis["e^theta"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],con_basis['e^theta'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_theta"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_theta"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),con_basis["e^theta"],0)
+        )
+        * dot(cov_basis["e_zeta"], con_basis["e^theta"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_theta"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),
+                con_basis["e^theta"],
+                0,
+            )
+        )
     )
-    )
-    magnetic_tension["((B*grad(|B|))B)^zeta2"] = ((
+    magnetic_tension["((B*grad(|B|))B)^zeta2"] = (
+        (
             magnetic_field["B^theta"] * magnetic_field["B^theta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^theta_z"]
-        ) * dot(
-        cov_basis["e_theta"], con_basis["e^zeta"], 0
-    )
-    + (
+        )
+        * dot(cov_basis["e_theta"], con_basis["e^zeta"], 0)
+        + (
             magnetic_field["B^theta"] * magnetic_field["B^zeta_t"]
             + magnetic_field["B^zeta"] * magnetic_field["B^zeta_z"]
-        ) * dot(cov_basis['e_zeta'],con_basis['e^zeta'],0)
-    + (magnetic_field["B^theta"] ** 2 ) * dot(cov_basis["e_theta_t"],cov_basis["e_zeta"],0)
-    + (magnetic_field["B^zeta"] ** 2 ) * dot(cov_basis["e_zeta_z"],cov_basis["e_zeta"],0)
-    + ( magnetic_field["B^theta"]
-        * magnetic_field["B^zeta"]
-        * dot((cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]),con_basis["e^zeta"],0)
+        )
+        * dot(cov_basis["e_zeta"], con_basis["e^zeta"], 0)
+        + (magnetic_field["B^theta"] ** 2)
+        * dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
+        + (magnetic_field["B^zeta"] ** 2)
+        * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
+        + (
+            magnetic_field["B^theta"]
+            * magnetic_field["B^zeta"]
+            * dot(
+                (cov_basis["e_theta_z"] + cov_basis["e_zeta_t"]), con_basis["e^zeta"], 0
+            )
+        )
     )
-    )
-    
 
     # magnetic tension magnitude
     magnetic_tension["|(B*grad(|B|))B|"] = jnp.sqrt(
@@ -1735,7 +1782,7 @@ def compute_magnetic_tension(
         + magnetic_tension["((B*grad(|B|))B)^zeta"] ** 2
         * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
     )
-# computed with covariant components 
+    # computed with covariant components
     magnetic_tension["|(B*grad(|B|))B|_cov"] = jnp.sqrt(
         magnetic_tension["((B*grad(|B|))B)_rho"] ** 2
         * dot(con_basis["e^rho"], con_basis["e^rho"], 0)
@@ -1744,8 +1791,8 @@ def compute_magnetic_tension(
         + magnetic_tension["((B*grad(|B|))B)_zeta"] ** 2
         * dot(con_basis["e^zeta"], con_basis["e^zeta"], 0)
     )
-# FIXME : magnitude of Btension computed with covariant and contravariant components differs, Btension calculation is probably not entirely correct
-#  Need to recheck and dix
+    # FIXME : magnitude of Btension computed with covariant and contravariant components differs, Btension calculation is probably not entirely correct
+    #  Need to recheck and dix
 
     # scaled magnetic tension
     magnetic_tension["Btension"] = magnetic_tension["|(B*grad(|B|))B|"] / (2 * mu_0)

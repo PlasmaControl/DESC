@@ -391,4 +391,3 @@ def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
         if len(idx):
             c_new[i] = c_old[idx]
     return c_new
-

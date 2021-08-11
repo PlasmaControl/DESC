@@ -112,22 +112,22 @@ class Grid(IOAble):
 
     @property
     def M(self):
-        """ int: poloidal grid resolution"""
+        """int: poloidal grid resolution"""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """ int: toroidal grid resolution"""
+        """int: toroidal grid resolution"""
         return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
-        """ int: number of field periods"""
+        """int: number of field periods"""
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
-        """ bool: True for stellarator symmetry, False otherwise"""
+        """bool: True for stellarator symmetry, False otherwise"""
         return self.__dict__.setdefault("_sym", False)
 
     @property
@@ -299,19 +299,22 @@ class LinearGrid(Grid):
         # rho
         if rho is not None:
             r = np.atleast_1d(rho)
-            r0 = r[0]
             self._L = r.size
+        elif self.L == 0:
+            r = np.array([], dtype=float)
         elif self.L == 1:
             r = np.array([1.0])
-            r0 = 0
         else:
             if axis:
                 r0 = 0
             else:
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
-        dr = (1 - r0) / self.L
-        if dr == 0:
+        if self.L > 0:
+            dr = (1 - r[0]) / self.L
+            if dr == 0:
+                dr = 1
+        else:
             dr = 1
 
         # theta/vartheta
@@ -320,7 +323,10 @@ class LinearGrid(Grid):
             self._M = t.size
         else:
             t = np.linspace(0, 2 * np.pi, self.M, endpoint=endpoint)
-        dt = 2 * np.pi / self.M
+        if self.M > 0:
+            dt = 2 * np.pi / self.M
+        else:
+            dt = 2 * np.pi
 
         # zeta/phi
         if zeta is not None:
@@ -328,7 +334,10 @@ class LinearGrid(Grid):
             self._N = z.size
         else:
             z = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=endpoint)
-        dz = 2 * np.pi / self.NFP / self.N
+        if self.N > 0:
+            dz = 2 * np.pi / self.NFP / self.N
+        else:
+            dz = 2 * np.pi / self.NFP
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()

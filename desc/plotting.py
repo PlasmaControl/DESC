@@ -2,6 +2,7 @@ from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
 import re
+import numbers
 from termcolor import colored
 import warnings
 from scipy.interpolate import Rbf
@@ -19,8 +20,19 @@ colorblind_colors = [
     (0.9500, 0.9000, 0.2500),  # yellow
     (0.3500, 0.7000, 0.9000),  # sky blue
     (0.8000, 0.6000, 0.7000),  # reddish purple
-    (0.9000, 0.6000, 0.0000),
-]  # orange
+    (0.9000, 0.6000, 0.0000),  # orange
+]
+sequential_colors = [
+    "#c80016",  # red
+    "#dc5b0e",  # burnt orange
+    "#f0b528",  # light orange
+    "#dce953",  # yellow
+    "#7acf7c",  # green
+    "#1fb7c9",  # teal
+    "#2192e3",  # medium blue
+    "#4f66d4",  # blue-violet
+    "#7436a5",  # purple
+]
 dashes = [
     (1.0, 0.0, 0.0, 0.0, 0.0, 0.0),  # solid
     (3.7, 1.6, 0.0, 0.0, 0.0, 0.0),  # dashed
@@ -659,19 +671,23 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     return fig, ax
 
 
-def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
+def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     """Plot flux surfaces.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
-    name : str
-        name of variable to plot
-    r_grid : Grid, optional
-        grid of coordinates to plot rho contours at
-    t_grid : Grid, optional
-        grid of coordinates to plot theta coordinates at
+    rho : int or array-like
+        values of rho to plot contours of. If an integer, plot that many contours
+        linearly spaced in (0,1)
+    theta : int or array-like
+        values of theta to plot contours of. If an integer, plot that many contours
+        linearly spaced in (0,2pi)
+    zeta : int or array-like or None
+        values of zeta to plot contours at. If an integer, plot that many contours
+        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
+        equilibria or 6 for non-axisymmetric cases.
     ax : matplotlib AxesSubplot, optional
         axis to plot on
 
@@ -683,51 +699,59 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         axes being plotted to
 
     """
-    if r_grid is None and t_grid is None:
+    NR = kwargs.pop("NR", 50)
+    NT = kwargs.pop("NT", 180)
+    figsize = kwargs.pop("figsize", None)
+    theta_color = kwargs.pop("theta_color", colorblind_colors[2])
+    theta_ls = kwargs.pop("theta_ls", ":")
+    rho_color = kwargs.pop("rho_color", colorblind_colors[0])
+    rho_ls = kwargs.pop("rho_ls", "-")
+    lcfs_color = kwargs.pop("lcfs_color", colorblind_colors[1])
+    lcfs_ls = kwargs.pop("lcfs_ls", "-")
+    axis_color = kwargs.pop("axis_color", colorblind_colors[3])
+    axis_alpha = kwargs.pop("axis_alpha", 1)
+    axis_marker = kwargs.pop("axis_marker", "o")
+    axis_size = kwargs.pop("axis_size", 36)
+    label = kwargs.pop("label", "")
+    if len(kwargs):
+        raise ValueError(
+            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+        )
 
-        if eq.N == 0:
-            nzeta = int(kwargs.get("nzeta", 1))
-        else:
-            nzeta = int(kwargs.get("nzeta", 6))
-        nfp = eq.NFP
-        grid_kwargs = {
-            "L": 8,
-            "NFP": nfp,
-            "theta": np.linspace(0, 2 * np.pi, 180, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
-        }
-        r_grid = _get_grid(**grid_kwargs)
-        zeta = np.unique(r_grid.nodes[:, 2])
-        grid_kwargs = {
-            "L": 50,
-            "NFP": nfp,
-            "theta": np.linspace(0, 2 * np.pi, 8, endpoint=False),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
-        }
-        t_grid = _get_grid(**grid_kwargs)
-
-    elif r_grid is None:
-        zeta = np.unique(t_grid.nodes[:, 2])
-        nzeta = zeta.size
-        grid_kwargs = {"L": 8, "M": 180, "zeta": zeta}
-        r_grid = _get_grid(**grid_kwargs)
-    elif t_grid is None:
-        zeta = np.unique(r_grid.nodes[:, 2])
-        nzeta = zeta.size
-        grid_kwargs = {"L": 50, "M": 8, "zeta": zeta}
-        t_grid = _get_grid(**grid_kwargs)
+    nfp = eq.NFP
+    if isinstance(rho, numbers.Integral):
+        rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
     else:
-        zeta = np.unique(r_grid.nodes[:, 2])
-        t_zeta = np.unique(t_grid.nodes[:, 2])
-        nzeta = zeta.size
-        if zeta.size != t_zeta.size or not np.allclose(zeta, t_zeta):
-            raise ValueError(
-                colored(
-                    "r_grid and t_grid should have the same zeta planes, "
-                    + "got r_grid={}, t_grid{}".format(zeta, t_zeta),
-                    "red",
-                )
-            )
+        rho = np.atleast_1d(rho)
+    if isinstance(theta, numbers.Integral):
+        theta = np.linspace(0, 2 * np.pi, theta, endpoint=False)
+    else:
+        theta = np.atleast_1d(theta)
+    if isinstance(zeta, numbers.Integral):
+        zeta = np.linspace(0, 2 * np.pi / nfp, zeta)
+    elif zeta is None:
+        if eq.N == 0:
+            zeta = np.array([0])
+        else:
+            zeta = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
+    else:
+        zeta = np.atleast_1d(zeta)
+    nzeta = len(zeta)
+
+    grid_kwargs = {
+        "rho": rho,
+        "NFP": nfp,
+        "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
+        "zeta": zeta,
+    }
+    r_grid = _get_grid(**grid_kwargs)
+    grid_kwargs = {
+        "rho": np.linspace(0, 1, NR),
+        "NFP": nfp,
+        "theta": theta,
+        "zeta": zeta,
+    }
+    t_grid = _get_grid(**grid_kwargs)
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
     # PEST-like flux coordinates
@@ -749,28 +773,46 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
 
     figw = 4 * cols
     figh = 5 * rows
+    if figsize is None:
+        figsize = (figw, figh)
     fig, ax = _format_ax(
         ax,
         rows=rows,
         cols=cols,
-        figsize=kwargs.get("figsize", (figw, figh)),
+        figsize=figsize,
         equal=True,
     )
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T, Zv[:, :, i].T, color=colorblind_colors[2], linestyle=":",
+            Rv[:, :, i].T,
+            Zv[:, :, i].T,
+            color=theta_color,
+            linestyle=theta_ls,
         )
         ax[i].plot(
-            Rr[:, :, i], Zr[:, :, i], color=colorblind_colors[0],
+            Rr[:, :, i],
+            Zr[:, :, i],
+            color=rho_color,
+            linestyle=rho_ls,
         )
         ax[i].plot(
-            Rr[:, -1, i], Zr[:, -1, i], color=colorblind_colors[1],
+            Rr[:, -1, i],
+            Zr[:, -1, i],
+            color=lcfs_color,
+            linestyle=lcfs_ls,
+            label=(label if i == 0 else ""),
         )
-        ax[i].scatter(
-            Rr[0, 0, i], Zr[0, 0, i], color=colorblind_colors[3],
-        )
+        if rho[0] == 0:
+            ax[i].scatter(
+                Rr[0, 0, i],
+                Zr[0, 0, i],
+                color=axis_color,
+                alpha=axis_alpha,
+                marker=axis_marker,
+                s=axis_size,
+            )
 
         ax[i].set_xlabel(_axis_labels_RPZ[0])
         ax[i].set_ylabel(_axis_labels_RPZ[2])
@@ -780,6 +822,113 @@ def plot_surfaces(eq, r_grid=None, t_grid=None, ax=None, **kwargs):
         )
 
     fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_comparison(
+    eqs,
+    rho=8,
+    theta=8,
+    zeta=None,
+    ax=None,
+    cmap="rainbow",
+    colors=None,
+    linestyles=None,
+    labels=None,
+    **kwargs,
+):
+    """Plot comparison between flux surfaces of multiple equilibria
+
+    Parameters
+    ----------
+    eqs : array-like of Equilibrium or EquilibriaFamily
+        equilibria to compare
+    rho : int or array-like
+        values of rho to plot contours of. If an integer, plot that many contours
+        linearly spaced in (0,1)
+    theta : int or array-like
+        values of theta to plot contours of. If an integer, plot that many contours
+        linearly spaced in (0,2pi)
+    zeta : int or array-like or None
+        values of zeta to plot contours at. If an integer, plot that many contours
+        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
+        equilibria or 6 for non-axisymmetric cases.
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+    cmap : str or matplotlib ColorMap
+        colormap to use for plotting, discretized into len(eqs) colors.
+    colors : array-like
+        array the same length as eqs of colors to use for each equilibrium.
+        Overrides `cmap`
+    linestyles : array-like
+        array the same length as eqs of linestyles to use for each equilibrium
+    labels : array-like
+        array the same length as eqs of labels to apply to each equilibrium
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    figsize = kwargs.pop("figsize", None)
+    neq = len(eqs)
+    if colors is None:
+        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if linestyles is None:
+        linestyles = ["-" for i in range(neq)]
+    if labels is None:
+        labels = [str(i) for i in range(neq)]
+    N = np.max([eq.N for eq in eqs])
+    nfp = eqs[0].NFP
+    if isinstance(zeta, numbers.Integral):
+        zeta = np.linspace(0, 2 * np.pi / nfp, zeta)
+    elif zeta is None:
+        if N == 0:
+            zeta = np.array([0])
+        else:
+            zeta = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
+    else:
+        zeta = np.atleast_1d(zeta)
+    nzeta = len(zeta)
+    rows = np.floor(np.sqrt(nzeta)).astype(int)
+    cols = np.ceil(nzeta / rows).astype(int)
+
+    figw = 4 * cols
+    figh = 5 * rows
+    if figsize is None:
+        figsize = (figw, figh)
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=figsize,
+        equal=True,
+    )
+    ax = np.atleast_1d(ax).flatten()
+    for i, eq in enumerate(eqs):
+        fig, ax = plot_surfaces(
+            eq,
+            rho,
+            theta,
+            zeta,
+            ax,
+            theta_color=colors[i % len(colors)],
+            theta_ls=linestyles[i % len(linestyles)],
+            rho_color=colors[i % len(colors)],
+            rho_ls=linestyles[i % len(linestyles)],
+            lcfs_color=colors[i % len(colors)],
+            lcfs_ls=linestyles[i % len(linestyles)],
+            axis_color=colors[i % len(colors)],
+            axis_alpha=0,
+            axis_marker="o",
+            axis_size=0,
+            label=labels[i % len(labels)],
+        )
+    if any(labels):
+        fig.legend()
     return fig, ax
 
 
@@ -1664,7 +1813,7 @@ def plot_field_lines_real_space(
     ax=None,
     B_interp=None,
     return_B_interp=False,
-    **kwargs
+    **kwargs,
 ):
     """***Use plot_field_lines_sfl if plotting from a solved equilibrium, as that is faster and more accurate than real space interpolation***
     Traces field lines on specified flux surface at specified initial theta seed locations, then plots them.

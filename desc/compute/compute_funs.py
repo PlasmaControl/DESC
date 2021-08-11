@@ -396,7 +396,7 @@ def compute_covariant_basis(
     dr=0,
     dt=0,
     dz=0,
-    drtz=1,
+    drtz=0,
     data=None,
 ):
     """Compute covariant basis vectors.
@@ -539,7 +539,7 @@ def compute_jacobian(
     dr=0,
     dt=0,
     dz=0,
-    drtz=1,
+    drtz=0,
     data=None,
 ):
     """Compute coordinate system Jacobian.
@@ -1709,6 +1709,7 @@ def compute_B_dot_gradB(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute the quantity B*grad(|B|) and its partial derivatives.
@@ -1739,6 +1740,8 @@ def compute_B_dot_gradB(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -1757,10 +1760,10 @@ def compute_B_dot_gradB(
         Z_transform,
         L_transform,
         iota,
-        dr=0,
+        dr=dr + 1,
         dt=dt + 1,
         dz=dz + 1,
-        drtz=0,
+        drtz=drtz + 1,
         data=data,
     )
 
@@ -1879,8 +1882,8 @@ def compute_force_error(
     R_transform,
     Z_transform,
     L_transform,
-    iota,
     pressure,
+    iota,
     data=None,
 ):
     """Compute force error components.
@@ -1905,10 +1908,10 @@ def compute_force_error(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    iota : Profile
-        Transforms i_l coefficients to real space.
     pressure : Profile
         Transforms p_l coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
 
     Returns
     -------

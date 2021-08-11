@@ -3,6 +3,7 @@ import copy
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
+from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble
@@ -19,23 +20,11 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
+import desc.compute as compute_funs
 from desc.compute import (
-    compute_toroidal_flux,
-    compute_pressure,
-    compute_rotational_transform,
-    compute_lambda,
-    compute_toroidal_coords,
-    compute_cartesian_coords,
-    compute_covariant_basis,
-    compute_contravariant_basis,
+    arg_order,
+    data_index,
     compute_jacobian,
-    compute_covariant_magnetic_field,
-    compute_magnetic_field_magnitude,
-    compute_magnetic_pressure_gradient,
-    compute_magnetic_tension,
-    compute_contravariant_current_density,
-    compute_force_error,
-    compute_volume,
     compute_energy,
 )
 from desc.vmec_utils import (
@@ -531,448 +520,61 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute_toroidal_flux(self, grid=None, deriv=1, data=None):
-        """Compute Compute toroidal magnetic flux profile.
+    def compute(self, name, grid=None, data=None):
+        """Compute the quantity given by name on grid.
 
         Parameters
         ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
+        name : str
+            Name of the quantity to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
 
         Returns
         -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of toroidal magnetic flux profile.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        data : ndarray
+            Computed quantity.
 
         """
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        return compute_toroidal_flux(self.Psi, iota, dr=deriv, data=data)
-
-    def compute_rotational_transform(self, grid=None, deriv=1, data=None):
-        """Compute rotational transform profile.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of rotational transform profile.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
-
-        """
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        return compute_rotational_transform(self.iota.params, iota, dr=deriv, data=data)
-
-    def compute_pressure(self, grid=None, deriv=1, data=None):
-        """Compute pressure profile.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of pressure profile.
-            Keys are of the form 'X_y' meaning the derivative of X wrt to y.
-
-        """
-        pressure = self.pressure.copy()
-        pressure.grid = grid
-
-        return compute_pressure(pressure.params, pressure, dr=deriv, data=data)
-
-    def compute_lambda(self, grid=None, deriv=0, data=None):
-        """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of lambda values.
-            Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
-
-        """
-        L_transform = Transform(grid, self.L_basis, derivs=deriv)
-
-        return compute_lambda(
-            self.L_lmn, L_transform, dr=deriv, dt=deriv, dz=deriv, data=data
-        )
-
-    def compute_toroidal_coords(self, grid=None, deriv=0, data=None):
-        """Compute toroidal coordinates (R, phi, Z).
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-            Keys are of the form 'X_y' meaning the derivative of X wrt y.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv)
-
-        return compute_toroidal_coords(
-            self.R_lmn,
-            self.Z_lmn,
-            R_transform,
-            Z_transform,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-
-    def compute_cartesian_coords(self, grid=None, data=None):
-        """Compute Cartesian coordinates (X, Y, Z).
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=0)
-        Z_transform = Transform(grid, self.Z_basis, derivs=0)
-
-        return compute_cartesian_coords(
-            self.R_lmn, self.Z_lmn, R_transform, Z_transform, data=data
-        )
-
-    def compute_jacobian(self, grid=None, deriv=0, data=None):
-        """Compute coordinate system Jacobian.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of coordinate system Jacobian.
-            Keys are of the form 'sqrt(g)_x', meaning the x derivative of the coordinate
-            system Jacobian sqrt(g).
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
-
-        return compute_jacobian(
-            self.R_lmn,
-            self.Z_lmn,
-            R_transform,
-            Z_transform,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-
-    def compute_covariant_basis(self, grid=None, deriv=0, data=None):
-        """Compute covariant basis vectors.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors.
-            Keys are of the form 'e_x_y', meaning the covariant basis vector in the x
-            direction, differentiated wrt y.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
-
-        return compute_covariant_basis(
-            self.R_lmn,
-            self.Z_lmn,
-            R_transform,
-            Z_transform,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-
-    def compute_contravariant_basis(self, grid=None, deriv=0, data=None):
-        """Compute contravariant basis vectors.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of contravariant basis vectors.
-            Keys are of the form 'e^x_y', meaning the contravariant basis vector in the x
-            direction, differentiated wrt y.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
-
-        return compute_contravariant_basis(
-            self.R_lmn,
-            self.Z_lmn,
-            R_transform,
-            Z_transform,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-
-    def compute_magnetic_field(self, grid=None, deriv=0, data=None):
-        """Compute magnetic field components.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of magnetic field magnitude.
-            Keys are of the form '|B|_x', meaning the x derivative of the
-            magnetic field magnitude |B|.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 1)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 1)
-        L_transform = Transform(grid, self.L_basis, derivs=deriv + 1)
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        data = compute_covariant_magnetic_field(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.i_l,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-        )
-        data = compute_magnetic_field_magnitude(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.iota.params,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-        return data
-
-    def compute_current_density(self, grid=None, deriv=0, data=None):
-        """Compute contravariant current density components.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of contravariant current density
-            components. Keys are of the form 'J^x_y', meaning the x contravariant (J^x)
-            component of the current density J, differentiated wrt y.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=deriv + 2)
-        Z_transform = Transform(grid, self.Z_basis, derivs=deriv + 2)
-        L_transform = Transform(grid, self.L_basis, derivs=deriv + 2)
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        return compute_contravariant_current_density(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.iota.params,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            dr=deriv,
-            dt=deriv,
-            dz=deriv,
-            data=data,
-        )
-
-    def compute_magnetic_pressure_gradient(self, grid=None, data=None):
-        """Compute magnetic pressure gradient.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of magnetic pressure gradient
-            components and magnitude. Keys are of the form 'grad(|B|^2)_x', meaning the x
-            covariant component of the magnetic pressure gradient grad(|B|^2).
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=2)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2)
-        L_transform = Transform(grid, self.L_basis, derivs=2)
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        return compute_magnetic_pressure_gradient(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.iota.params,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            data=data,
-        )
-
-    def compute_magnetic_tension(self, grid=None, data=None):
-        """Compute magnetic tension.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of magnetic tension vector components
-            and magnitude. Keys are of the form '((B*grad(|B|))B)^x', meaning the x
-            contravariant component of the magnetic tension vector (B*grad(|B|))B.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=2)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2)
-        L_transform = Transform(grid, self.L_basis, derivs=2)
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        return compute_magnetic_tension(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.iota.params,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            data=data,
-        )
-
-    def compute_force_error(self, grid=None, data=None):
-        """Compute force error magnitude.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        data : dict
-            Dictionary of ndarray, shape(num_nodes,) of force error magnitudes.
-
-        """
-        R_transform = Transform(grid, self.R_basis, derivs=2)
-        Z_transform = Transform(grid, self.Z_basis, derivs=2)
-        L_transform = Transform(grid, self.L_basis, derivs=2)
-        iota = self.iota.copy()
-        pressure = self.pressure.copy()
-        iota.grid = grid
-        pressure.grid = grid
-
-        return compute_force_error(
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.iota.params,
-            self.pressure.params,
-            self.Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
-            iota,
-            pressure,
-            data=data,
-        )
-
-    def compute_volume(self):
-        """Compute plasma volume (m^3)."""
-        grid = QuadratureGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1)
-        Z_transform = Transform(grid, self.Z_basis, derivs=1)
-
-        data = compute_volume(self.R_lmn, self.Z_lmn, R_transform, Z_transform)
-        return data["V"]
+        if name not in data_index:
+            raise ValueError("Unrecognized value '{}'.".format(name))
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
+
+        fun = getattr(compute_funs, data_index[name]["fun"])
+        sig = signature(fun)
+
+        order = data_index[name]["order"]
+        derivs = {
+            key: value
+            for key, value in data_index[name]["kwargs"].items()
+            if key in ["dr", "dt", "dz", "drtz"]
+        }
+        if len(derivs):
+            order += max(derivs.values())
+
+        inputs = {"data": data}
+        for arg in sig.parameters.keys():
+            if arg in arg_order:
+                inputs[arg] = getattr(self, arg)
+            elif arg == "R_transform":
+                inputs[arg] = Transform(grid, self.R_basis, derivs=order)
+            elif arg == "Z_transform":
+                inputs[arg] = Transform(grid, self.Z_basis, derivs=order)
+            elif arg == "L_transform":
+                inputs[arg] = Transform(grid, self.L_basis, derivs=order)
+            elif arg == "pressure":
+                inputs[arg] = self.pressure.copy()
+                inputs[arg].grid = grid
+            elif arg == "iota":
+                inputs[arg] = self.iota.copy()
+                inputs[arg].grid = grid
+        inputs.update(data_index[name]["kwargs"])
+
+        data = fun(**inputs)
+        return data[name]
+
+    # TODO: replace these with real compute functions
 
     def compute_cross_section_area(self):
         """Compute toroidally averaged cross-section area (m^2)."""

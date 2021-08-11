@@ -11,6 +11,7 @@ from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier
+from desc.compute import data_index
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -41,8 +42,8 @@ dashes = [
     (6.4, 1.6, 1.0, 1.6, 0.0, 0.0),  # dot dash
     (3.0, 1.6, 1.0, 1.6, 1.0, 1.6),  # dot dot dash
     (6.0, 4.0, 0.0, 0.0, 0.0, 0.0),  # long dash
-    (1.0, 1.6, 3.0, 1.6, 3.0, 1.6),
-]  # dash dash dot
+    (1.0, 1.6, 3.0, 1.6, 3.0, 1.6),  # dash dash dot
+]
 matplotlib.rcdefaults()
 rcParams["font.family"] = "DejaVu Serif"
 rcParams["mathtext.fontset"] = "cm"
@@ -201,6 +202,33 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
+def _compute(eq, name, grid):
+    """Compute quantity specified by name on grid for Equilibrium eq.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    name : str
+        Name of variable to plot.
+    grid : Grid
+        Grid of coordinates to evaluate at.
+
+    Returns
+    -------
+    data : float array of shape (M, L, N)
+        Computed quantity.
+
+    """
+    if name not in data_index:
+        raise ValueError("Unrecognized value '{}'.".format(name))
+    if data_index[name]["dim"] != 1:
+        raise ValueError("Plot quantities must be locally scalar values.")
+
+    data = eq.compute(name, grid)
+    return data.reshape((grid.M, grid.L, grid.N), order="F")
+
+
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     """Plot spectral coefficient magnitudes vs spectral mode number.
 
@@ -296,8 +324,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    name_dict = _format_name(name)
-    data = _compute(eq, name_dict, grid)
+    data = _compute(eq, name, grid)
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
     # reshape data to 1D
@@ -310,7 +337,9 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
         ax.plot(grid.nodes[:, plot_axes[0]], data)
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_ylabel(_name_label(name_dict))
+    ax.set_ylabel(
+        r"$" + data_index[name]["label"] + "~(" + data_index[name]["units"] + ")$"
+    )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -350,23 +379,21 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    name_dict = _format_name(name)
-    data = _compute(eq, name_dict, grid)
+    data = _compute(eq, name, grid)
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        if name_dict["base"] not in ["F", "|F|"]:
-            return ValueError(colored("Can only normalize F or |F|", "red"))
+        if name != "|F|":
+            return ValueError(colored("Can only normalize |F|.", "red"))
         else:
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name_dict = _format_name("Bpressure")
+                norm_name = "|grad(|B|^2)|"
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name("|grad(p)|")
-            norm_name_dict["units"] = ""  # make unitless
-            norm_data = _compute(eq, norm_name_dict, grid)
+                norm_name = "|grad(p)|"
+            norm_data = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -418,9 +445,17 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
     ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_title(_name_label(name_dict))
+    ax.set_title(
+        "$" + data_index[name]["label"] + "$ ($" + data_index[name]["units"] + "$)"
+    )
     if norm_F:
-        ax.set_title("%s / |%s|" % (name_dict["base"], _name_label(norm_name_dict)))
+        ax.set_title(
+            "%s / %s"
+            % (
+                "$" + data_index[name]["label"] + "$",
+                "$" + data_index[norm_name]["label"] + "$",
+            )
+        )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -459,8 +494,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    name_dict = _format_name(name)
-    data = _compute(eq, name_dict, grid)
+    data = _compute(eq, name, grid)
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -514,7 +548,9 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     ax.set_xlabel(_axis_labels_XYZ[0])
     ax.set_ylabel(_axis_labels_XYZ[1])
     ax.set_zlabel(_axis_labels_XYZ[2])
-    ax.set_title(_name_label(name_dict))
+    ax.set_title(
+        "$" + data_index[name]["label"] + "$ ($" + data_index[name]["units"] + "$)"
+    )
     fig.set_tight_layout(True)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
@@ -590,31 +626,20 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
-    name_dict = _format_name(name)
-    data = _compute(eq, name_dict, grid)
+    data = _compute(eq, name, grid)
     if norm_F:
-        if name_dict["base"] not in ["F", "|F|"]:
-            return ValueError(colored("Can only normalize F or |F|", "red"))
+        if name != "|F|":
+            return ValueError(colored("Can only normalize |F|.", "red"))
         else:
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_data = eq.compute_magnetic_pressure_gradient(grid)[
-                    "|grad(|B|^2)|"
-                ] / (2 * mu_0)
-                norm_name_dict = {
-                    "base": "|grad(|B|^2)|",
-                    "sups": "",
-                    "subs": "",
-                    "power": "",
-                    "d": "",
-                    "units": "",
-                }
+                norm_name = "|grad(|B|^2)|"
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name_dict = _format_name("|grad(p)|")
-                norm_data = _compute(eq, norm_name_dict, grid)
-                norm_name_dict["units"] = ""  # make unitless
+                norm_name = "|grad(p)|"
+            norm_data = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
+
     figw = 5 * cols
     figh = 5 * rows
     fig, ax = _format_ax(
@@ -664,17 +689,19 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            _name_label(name_dict)
+            data_index[name]["label"]
+            + " "
+            + data_index[name]["units"]
             + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
                 eq.NFP * zeta[i] / (2 * np.pi)
             )
         )
         if norm_F:
             ax[i].set_title(
-                "%s / |%s| $\\zeta \\cdot NFP/2\\pi = %3.3f$ "
+                "%s / %s $\\zeta \\cdot NFP/2\\pi = %3.3f$ "
                 % (
-                    name_dict["base"],
-                    _name_label(norm_name_dict),
+                    "$" + data_index[name]["label"] + "$",
+                    "$" + data_index[norm_name]["label"] + "$",
                     eq.NFP * zeta[i] / (2 * np.pi),
                 )
             )
@@ -941,290 +968,6 @@ def plot_comparison(
     if any(labels):
         fig.legend()
     return fig, ax
-
-
-def _compute(eq, name, grid):
-    """Compute value specified by name on grid for equilibrium eq.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        object from which to plot
-    name : str
-        name of variable to plot
-    grid : Grid
-        grid of coordinates to calcuulate at
-
-    Returns
-    -------
-    out, float array of shape (M, L, N)
-        computed values
-
-    """
-    if not isinstance(name, dict):
-        name_dict = _format_name(name)
-    else:
-        name_dict = name
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        # primary calculations
-        if name_dict["base"] == "e":
-            if name_dict["subs"] in ["rho", "theta", "zeta"]:
-                out = eq.compute_covariant_basis(grid)[_name_key(name_dict)]
-            if name_dict["sups"] in ["rho", "theta", "zeta"]:
-                out = eq.compute_contravariant_basis(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["rho", "theta", "zeta"]:
-            idx = ["rho", "theta", "zeta"].index(name_dict["base"])
-            out = grid.nodes[:, idx]
-        elif name_dict["base"] == "vartheta":
-            lmbda = eq.compute_toroidal_coords(grid)["lambda"]
-            out = grid.nodes[:, 1] + lmbda
-        elif name_dict["base"] == "psi":
-            out = eq.compute_toroidal_flux(grid)[_name_key(name_dict)]
-        elif name_dict["base"] == "p":
-            out = eq.compute_pressure(grid)[_name_key(name_dict)]
-        elif name_dict["base"] == "iota":
-            out = eq.compute_rotational_transform(grid)[_name_key(name_dict)]
-        elif name_dict["base"] == "lambda":
-            out = eq.compute_lambda(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["R", "Z"]:
-            out = eq.compute_toroidal_coords(grid)[_name_key(name_dict)]
-        elif name_dict["base"] == "g":
-            out = eq.compute_jacobian(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["B", "|B|"]:
-            out = eq.compute_magnetic_field(grid)[_name_key(name_dict)]
-        elif name_dict["base"] == "J":
-            out = eq.compute_current_density(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["|grad(|B|^2)|"]:
-            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["|(B*grad)B|"]:
-            out = eq.compute_magnetic_pressure_gradient(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["F", "|F|", "|grad(p)|", "|grad(rho)|", "|beta|"]:
-            out = eq.compute_force_error(grid)[_name_key(name_dict)]
-        elif name_dict["base"] in ["|grad(psi)|", "B*grad(|B|)"]:
-            out = eq.compute_quasisymmetry(grid)[_name_key(name_dict)]
-        else:
-            raise NotImplementedError(
-                "No output for base named '{}'.".format(name_dict["base"])
-            )
-
-    if (out.ndim == 2) and (out.shape[0] == 3):
-        # for now only do norms of vectors
-        # TODO: allow plotting individual vector components
-        out = np.linalg.norm(out, axis=0)
-    # secondary calculations
-    power = name_dict["power"]
-    if power != "":
-        try:
-            power = float(power)
-        except ValueError:
-            # handle fractional exponents
-            if "/" in power:
-                frac = power.split("/")
-                power = frac[0] / frac[1]
-            else:
-                raise ValueError(
-                    "Could not convert string to float: '{}'".format(power)
-                )
-        out = out ** power
-
-    return out.reshape((grid.M, grid.L, grid.N), order="F")
-
-
-def _format_name(name):
-    """Parse name string into dictionary.
-
-    Parameters
-    ----------
-    name : str
-
-    Returns
-    -------
-    parsed name : dict
-
-    """
-    name_dict = {"base": "", "sups": "", "subs": "", "power": "", "d": "", "units": ""}
-    if "**" in name:
-        parsename, power = name.split("**")
-        if "_" in power or "^" in power:
-            raise SyntaxError(
-                "Power operands must come after components and derivatives."
-            )
-    else:
-        power = ""
-        parsename = name
-    name_dict["power"] += power
-    if "_" in parsename:
-        split = parsename.split("_")
-        if len(split) == 3:
-            name_dict["base"] += split[0]
-            name_dict["subs"] += split[1]
-            name_dict["d"] += split[2]
-        elif "^" in split[0]:
-            name_dict["base"], name_dict["sups"] = split[0].split("^")
-            name_dict["d"] = split[1]
-        elif len(split) == 2:
-            name_dict["base"], other = split
-            if other in ["rho", "theta", "zeta", "beta", "TP", "FF"]:
-                name_dict["subs"] = other
-            else:
-                name_dict["d"] = other
-        else:
-            raise SyntaxError("String format is not valid.")
-    elif "^" in parsename:
-        name_dict["base"], name_dict["sups"] = parsename.split("^")
-    else:
-        name_dict["base"] = parsename
-
-    units = {
-        "e": "",
-        "rho": "",
-        "theta": r"(\mathrm{rad})",
-        "zeta": r"(\mathrm{rad})",
-        "vartheta": r"(\mathrm{rad})",
-        "psi": r"(\mathrm{Webers})",
-        "p": r"(\mathrm{Pa})",
-        "iota": "",
-        "R": r"(\mathrm{m})",
-        "Z": r"(\mathrm{m})",
-        "lambda": "",
-        "g": r"(\mathrm{m}^3)",
-        "B": r"(\mathrm{T})",
-        "|B|": r"(\mathrm{T})",
-        "J": r"(\mathrm{A}/\mathrm{m}^2)",
-        "grad(|B|^2)": r"\mathrm{N}/\mathrm{m}^3",
-        "|grad(|B|^2)|": r"\mathrm{N}/\mathrm{m}^3",
-        "(B*grad)B": r"\mathrm{N}/\mathrm{m}^3",
-        "|(B*grad)B|": r"\mathrm{N}/\mathrm{m}^3",
-        "F": r"(\mathrm{N}/\mathrm{m}^2)",
-        "|F|": r"(\mathrm{N}/\mathrm{m}^3)",
-        "|grad(p)|": r"(\mathrm{N}/\mathrm{m}^3)",
-        "|grad(rho)|": r"(\mathrm{m}^{-1})",
-        "|beta|": r"(\mathrm{m}^{-1})",
-        "|grad(psi)|": r"(\mathrm{T} \cdot \mathrm{m})",
-        "B*grad(|B|)": r"(\mathrm{T}^2/\mathrm{m})",
-    }
-    name_dict["units"] = units[name_dict["base"]]
-    if name_dict["power"]:
-        name_dict["units"] += "^" + name_dict["power"]
-
-    return name_dict
-
-
-def _name_label(name_dict):
-    """Create label for name dictionary.
-
-    Parameters
-    ----------
-    name_dict : dict
-        name dictionary created by format_name method
-
-    Returns
-    -------
-    label : str
-
-    """
-    esc = r"\\"[:-1]
-
-    if "mag" in name_dict["base"]:
-        base = "|" + re.sub("mag", "", name_dict["base"]) + "|"
-    elif "Bpressure" in name_dict["base"]:
-        base = "\\nabla(B^2 /(2\\mu_0))"
-    elif "Btension" in name_dict["base"]:
-        base = "(B \\cdot \\nabla)B"
-    else:
-        base = name_dict["base"]
-
-    if "grad" in base:
-        idx = base.index("grad")
-        base = base[:idx] + "\\nabla" + base[idx + 4 :]
-    if "rho" in base:
-        idx = base.index("rho")
-        base = base[:idx] + "\\" + base[idx:]
-    if "vartheta" in base:
-        idx = base.index("vartheta")
-        base = base[:idx] + "\\" + base[idx:]
-    elif "theta" in base:
-        idx = base.index("theta")
-        base = base[:idx] + "\\" + base[idx:]
-    if "zeta" in base:
-        idx = base.index("zeta")
-        base = base[:idx] + "\\" + base[idx:]
-    if "lambda" in base:
-        idx = base.index("lambda")
-        base = base[:idx] + "\\" + base[idx:]
-    if "iota" in base:
-        idx = base.index("iota")
-        base = base[:idx] + "\\" + base[idx:]
-    if "psi" in base:
-        idx = base.index("psi")
-        base = base[:idx] + "\\" + base[idx:]
-    if "beta" in base:
-        idx = base.index("beta")
-        base = base[:idx] + "\\" + base[idx:]
-
-    if name_dict["d"] != "":
-        dstr0 = "d"
-        dstr1 = "/d" + name_dict["d"]
-        if name_dict["power"] != "":
-            dstr0 = "(" + dstr0
-            dstr1 = dstr1 + ")^{" + name_dict["power"] + "}"
-        else:
-            pass
-    else:
-        dstr0 = ""
-        dstr1 = ""
-
-    if name_dict["power"] != "":
-        if name_dict["d"] != "":
-            pstr = ""
-        else:
-            pstr = name_dict["power"]
-    else:
-        pstr = ""
-
-    if name_dict["sups"] != "":
-        supstr = "^{" + esc + name_dict["sups"] + " " + pstr + "}"
-    elif pstr != "":
-        supstr = "^{" + pstr + "}"
-    else:
-        supstr = ""
-
-    if name_dict["subs"] != "":
-        if name_dict["subs"] in ["TP", "FF"]:
-            substr = "_{" + name_dict["subs"] + "}"
-        else:
-            substr = "_{" + esc + name_dict["subs"] + "}"
-    else:
-        substr = ""
-    label = (
-        r"$" + dstr0 + base + supstr + substr + dstr1 + "~" + name_dict["units"] + "$"
-    )
-    return label
-
-
-def _name_key(name_dict):
-    """Reconstruct name for dictionary key used in Equilibrium compute methods.
-
-    Parameters
-    ----------
-    name_dict : dict
-        name dictionary created by format_name method
-
-    Returns
-    -------
-    name_key : str
-
-    """
-    out = name_dict["base"]
-    if name_dict["sups"] != "":
-        out += "^" + name_dict["sups"]
-    if name_dict["subs"] != "":
-        out += "_" + name_dict["subs"]
-    if name_dict["d"] != "":
-        out += "_" + name_dict["d"]
-    return out
 
 
 def plot_grid(grid, **kwargs):

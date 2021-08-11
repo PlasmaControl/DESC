@@ -1449,14 +1449,7 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(
-        self,
-        nsurfs=10,
-        ntheta=20,
-        zetas=np.linspace(0, 2 * np.pi, 4, endpoint=False),
-        Nt=45,
-        Nr=20,
-    ):
+    def is_nested(self, nsurfs=10, ntheta=20, nzeta=None, Nt=45, Nr=20):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Parameters
@@ -1465,8 +1458,11 @@ class _Configuration(IOAble, ABC):
             number of radial surfaces to check (Default value = 10)
         ntheta : int, optional
             number of sfl poloidal contours to check (Default value = 20)
-        zetas : array of floats, optional
-            toroidal planes to check (Default value is 0 for axisymmetric configurations and linspace(0,2*pi,4,endpoint=False) otherwise)
+        nzeta : int, optional
+            Number of toroidal planes to check, by default checks
+            the zeta=0 plane for axisymmetric configuration 
+            and 5 planes evenly spacedin zeta between 0 and 2*np.pi/NFP for non-axisymmetric,
+            otherwise uses nzeta planes linearly spaced between 0 and 2pi in zeta
         Nt : int, optional
             number of theta points to use for the r contours (Default value = 45)
         Nr : int, optional
@@ -1479,8 +1475,15 @@ class _Configuration(IOAble, ABC):
 
         """
         planes_nested_bools = []
-        if self._N == 0:
-            zetas = [0]
+        if nzeta is None:
+            zetas = (
+                [0]
+                if self.N is 0
+                else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
+            )
+        elif isinstance(nzeta, int):
+            zetas = np.linspace(0, 2 * np.pi, nzeta, endpoint=False)
+
         for zeta in zetas:
             r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
             t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)

@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
-from desc.compute_funs import compute_rotational_transform
+from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
 
 

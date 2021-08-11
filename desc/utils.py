@@ -3,9 +3,6 @@ import warnings
 from termcolor import colored
 
 
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi")
-
-
 # Helper Classes -----------------------------------------------------------------------
 
 

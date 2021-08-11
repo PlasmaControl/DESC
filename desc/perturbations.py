@@ -3,7 +3,8 @@ import warnings
 from termcolor import colored
 
 from desc.backend import use_jax, jnp, put
-from desc.utils import Timer, arg_order
+from desc.utils import Timer
+from desc.compute import arg_order
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]

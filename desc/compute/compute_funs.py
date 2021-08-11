@@ -2,8 +2,6 @@ import numpy as np
 from desc.backend import jnp
 from scipy.constants import mu_0
 
-"""These functions perform the core calculations of physical quantities."""
-
 
 def dot(a, b, axis):
     """Batched vector dot product.
@@ -84,6 +82,40 @@ def compute_toroidal_flux(
     return data
 
 
+def compute_pressure(
+    p_l,
+    pressure,
+    dr=0,
+    data=None,
+):
+    """Compute pressure profile.
+
+    Parameters
+    ----------
+    p_l : ndarray
+        Spectral coefficients of p(rho) -- pressure profile.
+    pressure : Profile
+        Transforms p_l coefficients to real space.
+    dr : int, optional
+        Order of derivative wrt the radial coordinate, rho.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of pressure profile.
+        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+
+    """
+    if data is None:
+        data = {}
+
+    data["p"] = pressure.compute(p_l, dr=0)
+    if dr > 0:
+        data["p_r"] = pressure.compute(p_l, dr=1)
+
+    return data
+
+
 def compute_rotational_transform(
     i_l,
     iota,
@@ -120,46 +152,13 @@ def compute_rotational_transform(
     return data
 
 
-def compute_pressure(
-    p_l,
-    pressure,
-    dr=0,
-    data=None,
-):
-    """Compute pressure profile.
-
-    Parameters
-    ----------
-    p_l : ndarray
-        Spectral coefficients of p(rho) -- pressure profile.
-    pressure : Profile
-        Transforms p_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of pressure profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
-
-    """
-    if data is None:
-        data = {}
-
-    data["p"] = pressure.compute(p_l, dr=0)
-    if dr > 0:
-        data["p_r"] = pressure.compute(p_l, dr=1)
-
-    return data
-
-
 def compute_lambda(
     L_lmn,
     L_transform,
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
@@ -176,6 +175,8 @@ def compute_lambda(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -204,11 +205,11 @@ def compute_lambda(
         data["lambda_tt"] = L_transform.transform(L_lmn, 0, 2, 0)
     if dz > 1:
         data["lambda_zz"] = L_transform.transform(L_lmn, 0, 0, 2)
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         data["lambda_rt"] = L_transform.transform(L_lmn, 1, 1, 0)
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         data["lambda_rz"] = L_transform.transform(L_lmn, 1, 0, 1)
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["lambda_tz"] = L_transform.transform(L_lmn, 0, 1, 1)
 
     # 3rd order derivatives
@@ -218,19 +219,19 @@ def compute_lambda(
         data["lambda_ttt"] = L_transform.transform(L_lmn, 0, 3, 0)
     if dz > 2:
         data["lambda_zzz"] = L_transform.transform(L_lmn, 0, 0, 3)
-    if dr > 1 and dt > 0 and (dr > 2 or dt > 2):
+    if dr > 1 and dt > 0 and drtz > 2:
         data["lambda_rrt"] = L_transform.transform(L_lmn, 2, 1, 0)
-    if dr > 0 and dt > 1 and (dr > 2 or dt > 2):
+    if dr > 0 and dt > 1 and drtz > 2:
         data["lambda_rtt"] = L_transform.transform(L_lmn, 1, 2, 0)
-    if dr > 1 and dz > 0 and (dr > 2 or dz > 2):
+    if dr > 1 and dz > 0 and drtz > 2:
         data["lambda_rrz"] = L_transform.transform(L_lmn, 2, 0, 1)
-    if dr > 0 and dz > 1 and (dr > 2 or dz > 2):
+    if dr > 0 and dz > 1 and drtz > 2:
         data["lambda_rzz"] = L_transform.transform(L_lmn, 1, 0, 2)
-    if dt > 1 and dz > 0 and (dt > 2 or dz > 2):
+    if dt > 1 and dz > 0 and drtz > 2:
         data["lambda_ttz"] = L_transform.transform(L_lmn, 0, 2, 1)
-    if dt > 0 and dz > 1 and (dt > 2 or dz > 2):
+    if dt > 0 and dz > 1 and drtz > 2:
         data["lambda_tzz"] = L_transform.transform(L_lmn, 0, 1, 2)
-    if dr > 0 and dt > 0 and dz > 0 and (dr > 2 or dt > 2 or dz > 2):
+    if dr > 0 and dt > 0 and dz > 0 and drtz > 2:
         data["lambda_rtz"] = L_transform.transform(L_lmn, 1, 1, 1)
 
     return data
@@ -244,6 +245,7 @@ def compute_toroidal_coords(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute toroidal coordinates (R, phi, Z).
@@ -264,6 +266,8 @@ def compute_toroidal_coords(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -300,13 +304,13 @@ def compute_toroidal_coords(
     if dz > 1:
         data["R_zz"] = R_transform.transform(R_lmn, 0, 0, 2)
         data["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2)
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         data["R_rt"] = R_transform.transform(R_lmn, 1, 1, 0)
         data["Z_rt"] = Z_transform.transform(Z_lmn, 1, 1, 0)
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         data["R_rz"] = R_transform.transform(R_lmn, 1, 0, 1)
         data["Z_rz"] = Z_transform.transform(Z_lmn, 1, 0, 1)
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["R_tz"] = R_transform.transform(R_lmn, 0, 1, 1)
         data["Z_tz"] = Z_transform.transform(Z_lmn, 0, 1, 1)
 
@@ -320,25 +324,25 @@ def compute_toroidal_coords(
     if dz > 2:
         data["R_zzz"] = R_transform.transform(R_lmn, 0, 0, 3)
         data["Z_zzz"] = Z_transform.transform(Z_lmn, 0, 0, 3)
-    if dr > 1 and dt > 0 and (dr > 2 or dt > 2):
+    if dr > 1 and dt > 0 and drtz > 2:
         data["R_rrt"] = R_transform.transform(R_lmn, 2, 1, 0)
         data["Z_rrt"] = Z_transform.transform(Z_lmn, 2, 1, 0)
-    if dr > 0 and dt > 1 and (dr > 2 or dt > 2):
+    if dr > 0 and dt > 1 and drtz > 2:
         data["R_rtt"] = R_transform.transform(R_lmn, 1, 2, 0)
         data["Z_rtt"] = Z_transform.transform(Z_lmn, 1, 2, 0)
-    if dr > 1 and dz > 0 and (dr > 2 or dz > 2):
+    if dr > 1 and dz > 0 and drtz > 2:
         data["R_rrz"] = R_transform.transform(R_lmn, 2, 0, 1)
         data["Z_rrz"] = Z_transform.transform(Z_lmn, 2, 0, 1)
-    if dr > 0 and dz > 1 and (dr > 2 or dz > 2):
+    if dr > 0 and dz > 1 and drtz > 2:
         data["R_rzz"] = R_transform.transform(R_lmn, 1, 0, 2)
         data["Z_rzz"] = Z_transform.transform(Z_lmn, 1, 0, 2)
-    if dt > 1 and dz > 0 and (dt > 2 or dz > 2):
+    if dt > 1 and dz > 0 and drtz > 2:
         data["R_ttz"] = R_transform.transform(R_lmn, 0, 2, 1)
         data["Z_ttz"] = Z_transform.transform(Z_lmn, 0, 2, 1)
-    if dt > 0 and dz > 1 and (dt > 2 or dz > 2):
+    if dt > 0 and dz > 1 and drtz > 2:
         data["R_tzz"] = R_transform.transform(R_lmn, 0, 1, 2)
         data["Z_tzz"] = Z_transform.transform(Z_lmn, 0, 1, 2)
-    if dr > 0 and dt > 0 and dz > 0 and (dr > 2 or dt > 2 or dz > 2):
+    if dr > 0 and dt > 0 and dz > 0 and drtz > 2:
         data["R_rtz"] = R_transform.transform(R_lmn, 1, 1, 1)
         data["Z_rtz"] = Z_transform.transform(Z_lmn, 1, 1, 1)
 
@@ -371,7 +375,10 @@ def compute_cartesian_coords(
         Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
     """
-    data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
+    if data is None or "R" not in data:
+        data = compute_toroidal_coords(
+            R_lmn, Z_lmn, R_transform, Z_transform, data=data
+        )
 
     phi = R_transform.grid.nodes[:, 2]
     data["X"] = data["R"] * np.cos(phi)
@@ -389,6 +396,7 @@ def compute_covariant_basis(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute covariant basis vectors.
@@ -409,6 +417,8 @@ def compute_covariant_basis(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -426,6 +436,7 @@ def compute_covariant_basis(
         dr=dr + 1,
         dt=dt + 1,
         dz=dz + 1,
+        drtz=drtz + 1,
         data=data,
     )
 
@@ -460,18 +471,62 @@ def compute_covariant_basis(
         data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]])
         data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]])
         data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]])
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
         data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
         data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]])
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]])
         data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
         data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]])
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
         data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]])
         data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]])
+
+    return data
+
+
+def compute_contravariant_basis(
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
+):
+    """Compute contravariant basis vectors.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of contravariant basis vectors.
+        Keys are of the form 'e^x_y', meaning the contravariant basis vector in the x
+        direction, differentiated wrt y.
+
+    """
+    if data is None or "sqrt(g)" not in data:
+        data = compute_jacobian(
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+            data=data,
+        )
+
+    data["e^rho"] = cross(data["e_theta"], data["e_zeta"], 0) / data["sqrt(g)"]
+    data["e^theta"] = cross(data["e_zeta"], data["e_rho"], 0) / data["sqrt(g)"]
+    data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]])
 
     return data
 
@@ -484,6 +539,7 @@ def compute_jacobian(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute coordinate system Jacobian.
@@ -504,6 +560,8 @@ def compute_jacobian(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -514,7 +572,15 @@ def compute_jacobian(
 
     """
     data = compute_covariant_basis(
-        R_lmn, Z_lmn, R_transform, Z_transform, dr=dr, dt=dt, dz=dz, data=data
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        dr=dr,
+        dt=dt,
+        dz=dz,
+        drtz=drtz,
+        data=data,
     )
 
     data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"], 0), 0)
@@ -648,11 +714,11 @@ def compute_jacobian(
                 0,
             )
         )
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         raise NotImplementedError
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         raise NotImplementedError
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["sqrt(g)_tz"] = (
             dot(
                 data["e_rho_tz"],
@@ -704,62 +770,6 @@ def compute_jacobian(
     return data
 
 
-def compute_contravariant_basis(
-    R_lmn,
-    Z_lmn,
-    R_transform,
-    Z_transform,
-    dr=0,
-    dt=0,
-    dz=0,
-    data=None,
-):
-    """Compute contravariant basis vectors.
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of contravariant basis vectors.
-        Keys are of the form 'e^x_y', meaning the contravariant basis vector in the x
-        direction, differentiated wrt y.
-
-    """
-    if data is None or "sqrt(g)" not in data:
-        data = compute_jacobian(
-            R_lmn,
-            Z_lmn,
-            R_transform,
-            Z_transform,
-            dr=dr,
-            dt=dt,
-            dz=dz,
-            data=data,
-        )
-
-    data["e^rho"] = cross(data["e_theta"], data["e_zeta"], 0) / data["sqrt(g)"]
-    data["e^theta"] = cross(data["e_zeta"], data["e_rho"], 0) / data["sqrt(g)"]
-    data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]])
-
-    return data
-
-
 def compute_covariant_metric_coefficients(
     R_lmn,
     Z_lmn,
@@ -788,15 +798,12 @@ def compute_covariant_metric_coefficients(
         product of the covariant basis vectors e_x and e_y.
 
     """
-    if data is None or "e_rho" not in data:
+    if data is None:
         data = compute_covariant_basis(
             R_lmn,
             Z_lmn,
             R_transform,
             Z_transform,
-            dr=0,
-            dt=0,
-            dz=0,
             data=data,
         )
 
@@ -844,9 +851,6 @@ def compute_contravariant_metric_coefficients(
             Z_lmn,
             R_transform,
             Z_transform,
-            dr=0,
-            dt=0,
-            dz=0,
             data=data,
         )
 
@@ -873,6 +877,7 @@ def compute_contravariant_magnetic_field(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute contravariant magnetic field components.
@@ -903,6 +908,8 @@ def compute_contravariant_magnetic_field(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -914,7 +921,9 @@ def compute_contravariant_magnetic_field(
     """
     data = compute_toroidal_flux(Psi, iota, dr=dr + 1, data=data)
     data = compute_rotational_transform(i_l, iota, dr=dr, data=data)
-    data = compute_lambda(L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, data=data)
+    data = compute_lambda(
+        L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, drtz=drtz + 1, data=data
+    )
     data = compute_jacobian(
         R_lmn,
         Z_lmn,
@@ -923,6 +932,7 @@ def compute_contravariant_magnetic_field(
         dr=dr,
         dt=dt,
         dz=dz,
+        drtz=drtz,
         data=data,
     )
 
@@ -1004,11 +1014,11 @@ def compute_contravariant_magnetic_field(
         -2 * data["B0_z"] * data["lambda_zz"] - data["B0"] * data["lambda_zzz"]
         data["B^zeta_zz"] = data["B0_zz"] * (1 + data["lambda_t"])
         +2 * data["B0_z"] * data["lambda_tz"] + data["B0"] * data["lambda_tzz"]
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         raise NotImplementedError
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         raise NotImplementedError
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["B0_tz"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
@@ -1095,6 +1105,7 @@ def compute_covariant_magnetic_field(
         dr=dr,
         dt=dt,
         dz=dz,
+        drtz=1,
         data=data,
     )
 
@@ -1150,6 +1161,7 @@ def compute_magnetic_field_magnitude(
     dr=0,
     dt=0,
     dz=0,
+    drtz=1,
     data=None,
 ):
     """Compute magnetic field magnitude.
@@ -1180,6 +1192,8 @@ def compute_magnetic_field_magnitude(
         Order of derivative wrt the poloidal coordinate, theta.
     dz : int, optional
         Order of derivative wrt the toroidal coordinate, zeta.
+    drtz : int, optional
+        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -1202,6 +1216,7 @@ def compute_magnetic_field_magnitude(
         dr=dr,
         dt=dt,
         dz=dz,
+        drtz=drtz,
         data=data,
     )
     data = compute_covariant_metric_coefficients(
@@ -1398,11 +1413,11 @@ def compute_magnetic_field_magnitude(
                 + 2 * dot(data["e_theta_z"], data["e_zeta_z"], 0)
             )
         ) / data["|B|"] - data["|B|_z"] ** 2 / data["|B|"]
-    if dr > 0 and dt > 0 and (dr > 1 or dt > 1):
+    if dr > 0 and dt > 0 and drtz > 1:
         raise NotImplementedError
-    if dr > 0 and dz > 0 and (dr > 1 or dz > 1):
+    if dr > 0 and dz > 0 and drtz > 1:
         raise NotImplementedError
-    if dt > 0 and dz > 0 and (dt > 1 or dz > 1):
+    if dt > 0 and dz > 0 and drtz > 1:
         data["|B|_tz"] = (
             data["B^theta_z"]
             * (
@@ -1745,6 +1760,7 @@ def compute_B_dot_gradB(
         dr=0,
         dt=dt + 1,
         dz=dz + 1,
+        drtz=0,
         data=data,
     )
 
@@ -1756,14 +1772,14 @@ def compute_B_dot_gradB(
     if dr > 0:
         raise NotImplementedError
     if dt > 0:
-        data["B*grad(|B|)_t"] = (
+        data["(B*grad(|B|))_t"] = (
             data["B^theta_t"] * data["|B|_t"]
             + data["B^zeta_t"] * data["|B|_z"]
             + data["B^theta"] * data["|B|_tt"]
             + data["B^zeta"] * data["|B|_tz"]
         )
     if dz > 0:
-        data["B*grad(|B|)_z"] = (
+        data["(B*grad(|B|))_z"] = (
             data["B^theta_z"] * data["|B|_t"]
             + data["B^zeta_z"] * data["|B|_z"]
             + data["B^theta"] * data["|B|_tz"]
@@ -1857,8 +1873,8 @@ def compute_force_error(
     R_lmn,
     Z_lmn,
     L_lmn,
-    i_l,
     p_l,
+    i_l,
     Psi,
     R_transform,
     Z_transform,
@@ -1877,10 +1893,10 @@ def compute_force_error(
         Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-    i_l : ndarray
-        Spectral coefficients of iota(rho) -- rotational transform profile.
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -2081,8 +2097,8 @@ def compute_energy(
     R_lmn,
     Z_lmn,
     L_lmn,
-    i_l,
     p_l,
+    i_l,
     Psi,
     R_transform,
     Z_transform,
@@ -2102,10 +2118,10 @@ def compute_energy(
         Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-    i_l : ndarray
-        Spectral coefficients of iota(rho) -- rotational transform profile.
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform

@@ -4,7 +4,7 @@ from scipy.signal import convolve2d
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
-from desc.compute_funs import (
+from desc.compute import (
     compute_covariant_magnetic_field,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,

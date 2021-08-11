@@ -19,16 +19,16 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
-from desc.compute_funs import (
+from desc.compute import (
     compute_toroidal_flux,
-    compute_rotational_transform,
     compute_pressure,
+    compute_rotational_transform,
     compute_lambda,
     compute_toroidal_coords,
     compute_cartesian_coords,
-    compute_jacobian,
     compute_covariant_basis,
     compute_contravariant_basis,
+    compute_jacobian,
     compute_covariant_magnetic_field,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,

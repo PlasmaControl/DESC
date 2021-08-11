@@ -5,7 +5,7 @@ from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.transform import Transform
-from desc.compute_funs import (
+from desc.compute import (
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,

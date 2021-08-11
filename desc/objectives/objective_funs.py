@@ -4,9 +4,10 @@ from inspect import getfullargspec
 
 from desc import config
 from desc.backend import use_jax, jnp, jit
-from desc.utils import Timer, arg_order
+from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
+from desc.compute import arg_order
 
 # XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
 

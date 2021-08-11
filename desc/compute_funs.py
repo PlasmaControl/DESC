@@ -788,7 +788,9 @@ def compute_magnetic_field_axis(
     magnetic_field = {}
     magnetic_field["B0"] = profiles["psi_r"] / jacobian["g"]
     magnetic_field["B0"] = put(
-        magnetic_field["B0"], axis, profiles["psi_rr"][axis] / jacobian["g_r"][axis],
+        magnetic_field["B0"],
+        axis,
+        profiles["psi_rr"][axis] / jacobian["g_r"][axis],
     )
 
     # contravariant components
@@ -1470,7 +1472,7 @@ def compute_magnetic_tension(
     p_profile,
     i_profile,
 ):
-    """Compute magnetic tension vector and its magnitude. 
+    """Compute magnetic tension vector and its magnitude.
     ** Currently not implemented correctly **
 
     Parameters
@@ -2733,95 +2735,95 @@ def compute_quasisymmetry(
         )
     ) / magnetic_field["|B|"] - magnetic_field["|B|_z"] ** 2 / magnetic_field["|B|"]
     magnetic_field["|B|_tz"] = (
-        (
-            magnetic_field["B^theta_z"]
+        magnetic_field["B^theta_z"]
+        * (
+            magnetic_field["B^zeta_t"]
+            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^theta_t"]
+            * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+            + magnetic_field["B^theta"]
+            * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
+        )
+        + magnetic_field["B^theta"]
+        * (
+            magnetic_field["B^zeta_tz"]
+            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^theta_tz"]
+            * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
+            + magnetic_field["B^theta_z"]
+            * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
+        )
+        + magnetic_field["B^theta"]
+        * (
+            magnetic_field["B^zeta_t"]
             * (
-                magnetic_field["B^zeta_t"]
-                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^theta_t"]
-                * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
-                + magnetic_field["B^theta"]
-                * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
+                dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
+                + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
             )
+            + 2
+            * magnetic_field["B^theta_t"]
+            * dot(cov_basis["e_theta_z"], cov_basis["e_theta"], 0)
             + magnetic_field["B^theta"]
             * (
-                magnetic_field["B^zeta_tz"]
-                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^theta_tz"]
-                * dot(cov_basis["e_theta"], cov_basis["e_theta"], 0)
-                + magnetic_field["B^theta_z"]
-                * dot(cov_basis["e_theta_t"], cov_basis["e_theta"], 0)
-            )
-            + magnetic_field["B^theta"]
-            * (
-                magnetic_field["B^zeta_t"]
-                * (
-                    dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
-                    + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
-                )
-                + 2
-                * magnetic_field["B^theta_t"]
-                * dot(cov_basis["e_theta_z"], cov_basis["e_theta"], 0)
-                + magnetic_field["B^theta"]
-                * (
-                    dot(cov_basis["e_theta_tz"], cov_basis["e_theta"], 0)
-                    + dot(cov_basis["e_theta_t"], cov_basis["e_theta_z"], 0)
-                )
-            )
-            + magnetic_field["B^zeta_z"]
-            * (
-                magnetic_field["B^theta_t"]
-                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^zeta_t"]
-                * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^zeta"]
-                * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
-            )
-            + magnetic_field["B^zeta"]
-            * (
-                magnetic_field["B^theta_tz"]
-                * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^zeta_tz"]
-                * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^zeta_z"]
-                * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
-            )
-            + magnetic_field["B^zeta"]
-            * (
-                magnetic_field["B^theta_t"]
-                * (
-                    dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
-                    + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
-                )
-                + 2
-                * magnetic_field["B^zeta_t"]
-                * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
-                + magnetic_field["B^zeta"]
-                * (
-                    dot(cov_basis["e_zeta_tz"], cov_basis["e_zeta"], 0)
-                    + dot(cov_basis["e_zeta_t"], cov_basis["e_zeta_z"], 0)
-                )
-            )
-            + (
-                magnetic_field["B^theta_z"] * magnetic_field["B^zeta"]
-                + magnetic_field["B^theta"] * magnetic_field["B^zeta_z"]
-            )
-            * (
-                dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
-                + dot(cov_basis["e_zeta_t"], cov_basis["e_theta"], 0)
-            )
-            + magnetic_field["B^theta"]
-            * magnetic_field["B^zeta"]
-            * (
-                dot(cov_basis["e_theta_tz"], cov_basis["e_zeta"], 0)
-                + dot(cov_basis["e_zeta_tz"], cov_basis["e_theta"], 0)
-                + dot(cov_basis["e_theta_t"], cov_basis["e_zeta_z"], 0)
-                + dot(cov_basis["e_zeta_t"], cov_basis["e_theta_z"], 0)
+                dot(cov_basis["e_theta_tz"], cov_basis["e_theta"], 0)
+                + dot(cov_basis["e_theta_t"], cov_basis["e_theta_z"], 0)
             )
         )
-        / magnetic_field["|B|"]
-        - magnetic_field["|B|_t"] * magnetic_field["|B|_z"] / magnetic_field["|B|"]
-    )
+        + magnetic_field["B^zeta_z"]
+        * (
+            magnetic_field["B^theta_t"]
+            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^zeta_t"]
+            * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^zeta"]
+            * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
+        )
+        + magnetic_field["B^zeta"]
+        * (
+            magnetic_field["B^theta_tz"]
+            * dot(cov_basis["e_theta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^zeta_tz"]
+            * dot(cov_basis["e_zeta"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^zeta_z"]
+            * dot(cov_basis["e_zeta_t"], cov_basis["e_zeta"], 0)
+        )
+        + magnetic_field["B^zeta"]
+        * (
+            magnetic_field["B^theta_t"]
+            * (
+                dot(cov_basis["e_theta_z"], cov_basis["e_zeta"], 0)
+                + dot(cov_basis["e_theta"], cov_basis["e_zeta_z"], 0)
+            )
+            + 2
+            * magnetic_field["B^zeta_t"]
+            * dot(cov_basis["e_zeta_z"], cov_basis["e_zeta"], 0)
+            + magnetic_field["B^zeta"]
+            * (
+                dot(cov_basis["e_zeta_tz"], cov_basis["e_zeta"], 0)
+                + dot(cov_basis["e_zeta_t"], cov_basis["e_zeta_z"], 0)
+            )
+        )
+        + (
+            magnetic_field["B^theta_z"] * magnetic_field["B^zeta"]
+            + magnetic_field["B^theta"] * magnetic_field["B^zeta_z"]
+        )
+        * (
+            dot(cov_basis["e_theta_t"], cov_basis["e_zeta"], 0)
+            + dot(cov_basis["e_zeta_t"], cov_basis["e_theta"], 0)
+        )
+        + magnetic_field["B^theta"]
+        * magnetic_field["B^zeta"]
+        * (
+            dot(cov_basis["e_theta_tz"], cov_basis["e_zeta"], 0)
+            + dot(cov_basis["e_zeta_tz"], cov_basis["e_theta"], 0)
+            + dot(cov_basis["e_theta_t"], cov_basis["e_zeta_z"], 0)
+            + dot(cov_basis["e_zeta_t"], cov_basis["e_theta_z"], 0)
+        )
+    ) / magnetic_field["|B|"] - magnetic_field["|B|_t"] * magnetic_field[
+        "|B|_z"
+    ] / magnetic_field[
+        "|B|"
+    ]
 
     # contravariant basis vectors
     con_basis = {}

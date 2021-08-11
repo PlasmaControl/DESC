@@ -137,7 +137,8 @@ class hdf5Reader(hdf5IO, Reader):
                             obj,
                             attr,
                             cls.load(
-                                load_from=loc[attr], file_format=self._file_format_,
+                                load_from=loc[attr],
+                                file_format=self._file_format_,
                             ),
                         )
                     else:
@@ -184,7 +185,8 @@ class hdf5Reader(hdf5IO, Reader):
                     cls = pydoc.locate(cls_name)
                     if cls is not None:
                         thedict[key] = cls.load(
-                            load_from=loc[key], file_format=self._file_format_,
+                            load_from=loc[key],
+                            file_format=self._file_format_,
                         )
                     else:
                         warnings.warn(
@@ -236,7 +238,8 @@ class hdf5Reader(hdf5IO, Reader):
                     if cls is not None:
                         thelist.append(
                             cls.load(
-                                load_from=loc[str(i)], file_format=self._file_format_,
+                                load_from=loc[str(i)],
+                                file_format=self._file_format_,
                             ),
                         )
                     else:

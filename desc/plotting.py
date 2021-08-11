@@ -775,15 +775,27 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=figsize,
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
         ax[i].plot(
-            Rv[:, :, i].T, Zv[:, :, i].T, color=theta_color, linestyle=theta_ls,
+            Rv[:, :, i].T,
+            Zv[:, :, i].T,
+            color=theta_color,
+            linestyle=theta_ls,
         )
         ax[i].plot(
-            Rr[:, :, i], Zr[:, :, i], color=rho_color, linestyle=rho_ls,
+            Rr[:, :, i],
+            Zr[:, :, i],
+            color=rho_color,
+            linestyle=rho_ls,
         )
         ax[i].plot(
             Rr[:, -1, i],
@@ -888,7 +900,13 @@ def plot_comparison(
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=figsize,
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
     for i, eq in enumerate(eqs):
         fig, ax = plot_surfaces(

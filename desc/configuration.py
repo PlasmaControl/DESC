@@ -1482,7 +1482,7 @@ class _Configuration(IOAble, ABC):
                 else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
             )
         else:
-            zetas = np.linspace(0, 2 * np.pi, nzeta, endpoint=False)
+            zetas = np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False)
 
         for zeta in zetas:
             r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)

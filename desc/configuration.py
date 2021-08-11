@@ -1459,10 +1459,10 @@ class _Configuration(IOAble, ABC):
         ntheta : int, optional
             number of sfl poloidal contours to check (Default value = 20)
         nzeta : int, optional
-            Number of toroidal planes to check, by default checks
-            the zeta=0 plane for axisymmetric configuration 
-            and 5 planes evenly spacedin zeta between 0 and 2*np.pi/NFP for non-axisymmetric,
-            otherwise uses nzeta planes linearly spaced between 0 and 2pi in zeta
+            Number of toroidal planes to check, by default checks the zeta=0
+            plane for axisymmetric equilibria and 5 planes evenly spaced in
+            zeta between 0 and 2pi/NFP for non-axisymmetric, otherwise uses
+            nzeta planes linearly spaced  in zeta between 0 and 2pi/NFP
         Nt : int, optional
             number of theta points to use for the r contours (Default value = 45)
         Nr : int, optional
@@ -1481,7 +1481,7 @@ class _Configuration(IOAble, ABC):
                 if self.N is 0
                 else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
             )
-        elif isinstance(nzeta, int):
+        else:
             zetas = np.linspace(0, 2 * np.pi, nzeta, endpoint=False)
 
         for zeta in zetas:

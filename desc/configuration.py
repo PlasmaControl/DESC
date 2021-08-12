@@ -520,7 +520,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute(self, name, grid=None, data=None):
+    def compute(self, name, grid=None, data={}):
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -544,32 +544,28 @@ class _Configuration(IOAble, ABC):
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)
 
-        order = data_index[name]["order"]
-        derivs = {
-            key: value
-            for key, value in data_index[name]["kwargs"].items()
-            if key in ["dr", "dt", "dz", "drtz"]
-        }
-        if len(derivs):
-            order += max(derivs.values())
-
         inputs = {"data": data}
         for arg in sig.parameters.keys():
             if arg in arg_order:
                 inputs[arg] = getattr(self, arg)
             elif arg == "R_transform":
-                inputs[arg] = Transform(grid, self.R_basis, derivs=order)
+                inputs[arg] = Transform(
+                    grid, self.R_basis, derivs=data_index[name]["R_derivs"]
+                )
             elif arg == "Z_transform":
-                inputs[arg] = Transform(grid, self.Z_basis, derivs=order)
+                inputs[arg] = Transform(
+                    grid, self.Z_basis, derivs=data_index[name]["Z_derivs"]
+                )
             elif arg == "L_transform":
-                inputs[arg] = Transform(grid, self.L_basis, derivs=order)
+                inputs[arg] = Transform(
+                    grid, self.L_basis, derivs=data_index[name]["L_derivs"]
+                )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
                 inputs[arg] = self.iota.copy()
                 inputs[arg].grid = grid
-        inputs.update(data_index[name]["kwargs"])
 
         data = fun(**inputs)
         return data[name]

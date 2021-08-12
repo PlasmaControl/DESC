@@ -1,6 +1,8 @@
 import numpy as np
-from desc.backend import jnp
 from scipy.constants import mu_0
+
+from desc.backend import jnp
+from desc.compute import data_index
 
 
 def dot(a, b, axis):
@@ -48,8 +50,7 @@ def cross(a, b, axis):
 def compute_toroidal_flux(
     Psi,
     iota,
-    dr=0,
-    data=None,
+    data={},
 ):
     """Compute toroidal magnetic flux profile.
 
@@ -59,8 +60,6 @@ def compute_toroidal_flux(
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
 
     Returns
     -------
@@ -69,24 +68,20 @@ def compute_toroidal_flux(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    if data is None:
-        data = {}
-
     # toroidal flux (Wb) divided by 2 pi
     rho = iota.grid.nodes[:, 0]
+
     data["psi"] = Psi * rho ** 2 / (2 * jnp.pi)
-    if dr > 0:
-        data["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
-    if dr > 1:
-        data["psi_rr"] = 2 * Psi * np.ones_like(rho) / (2 * jnp.pi)
+    data["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
+    data["psi_rr"] = 2 * Psi * np.ones_like(rho) / (2 * jnp.pi)
+
     return data
 
 
 def compute_pressure(
     p_l,
     pressure,
-    dr=0,
-    data=None,
+    data={},
 ):
     """Compute pressure profile.
 
@@ -96,8 +91,6 @@ def compute_pressure(
         Spectral coefficients of p(rho) -- pressure profile.
     pressure : Profile
         Transforms p_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
 
     Returns
     -------
@@ -106,12 +99,8 @@ def compute_pressure(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    if data is None:
-        data = {}
-
     data["p"] = pressure.compute(p_l, dr=0)
-    if dr > 0:
-        data["p_r"] = pressure.compute(p_l, dr=1)
+    data["p_r"] = pressure.compute(p_l, dr=1)
 
     return data
 
@@ -119,8 +108,7 @@ def compute_pressure(
 def compute_rotational_transform(
     i_l,
     iota,
-    dr=0,
-    data=None,
+    data={},
 ):
     """Compute rotational transform profile.
 
@@ -130,8 +118,6 @@ def compute_rotational_transform(
         Spectral coefficients of iota(rho) -- rotational transform profile.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
 
     Returns
     -------
@@ -140,14 +126,115 @@ def compute_rotational_transform(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    if data is None:
-        data = {}
-
     data["iota"] = iota.compute(i_l, dr=0)
-    if dr > 0:
-        data["iota_r"] = iota.compute(i_l, dr=1)
-    if dr > 1:
-        data["iota_rr"] = iota.compute(i_l, dr=2)
+    data["iota_r"] = iota.compute(i_l, dr=1)
+    data["iota_rr"] = iota.compute(i_l, dr=2)
+
+    return data
+
+
+def compute_R(
+    R_lmn,
+    R_transform,
+    data={},
+):
+    """Compute toroidal coordinate R.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'R_x' meaning the derivative of R wrt x.
+
+    """
+    keys = [
+        "R",
+        "R_r",
+        "R_t",
+        "R_z",
+        "R_rr",
+        "R_tt",
+        "R_zz",
+        "R_rt",
+        "R_rz",
+        "R_tz",
+        "R_rrr",
+        "R_ttt",
+        "R_zzz",
+        "R_rrt",
+        "R_rtt",
+        "R_rrz",
+        "R_rzz",
+        "R_ttz",
+        "R_tzz",
+        "R_rtz",
+    ]
+
+    for key in keys:
+        if np.array(
+            [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+        ).all():
+            data[key] = R_transform.transform(R_lmn, *data_index[key]["R_derivs"][0])
+
+    return data
+
+
+def compute_Z(
+    Z_lmn,
+    Z_transform,
+    data={},
+):
+    """Compute toroidal coordinate Z.
+
+    Parameters
+    ----------
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'Z_x' meaning the derivative of Z wrt x.
+
+    """
+    keys = [
+        "Z",
+        "Z_r",
+        "Z_t",
+        "Z_z",
+        "Z_rr",
+        "Z_tt",
+        "Z_zz",
+        "Z_rt",
+        "Z_rz",
+        "Z_tz",
+        "Z_rrr",
+        "Z_ttt",
+        "Z_zzz",
+        "Z_rrt",
+        "Z_rtt",
+        "Z_rrz",
+        "Z_rzz",
+        "Z_ttz",
+        "Z_tzz",
+        "Z_rtz",
+    ]
+
+    for key in keys:
+        if np.array(
+            [d in Z_transform.derivatives.tolist() for d in data_index[key]["Z_derivs"]]
+        ).all():
+            data[key] = Z_transform.transform(Z_lmn, *data_index[key]["Z_derivs"][0])
 
     return data
 
@@ -155,11 +242,7 @@ def compute_rotational_transform(
 def compute_lambda(
     L_lmn,
     L_transform,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=1,
-    data=None,
+    data={},
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
 
@@ -169,14 +252,6 @@ def compute_lambda(
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -185,166 +260,31 @@ def compute_lambda(
         Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
 
     """
-    if data is None:
-        data = {}
+    keys = [
+        "lambda",
+        "lambda_r",
+        "lambda_t",
+        "lambda_z",
+        "lambda_rr",
+        "lambda_tt",
+        "lambda_zz",
+        "lambda_rt",
+        "lambda_rz",
+        "lambda_tz",
+        "lambda_rrt",
+        "lambda_rtt",
+        "lambda_rrz",
+        "lambda_rzz",
+        "lambda_ttz",
+        "lambda_tzz",
+        "lambda_rtz",
+    ]
 
-    data["lambda"] = L_transform.transform(L_lmn)
-
-    # 1st order derivatives
-    if dr > 0:
-        data["lambda_r"] = L_transform.transform(L_lmn, 1, 0, 0)
-    if dt > 0:
-        data["lambda_t"] = L_transform.transform(L_lmn, 0, 1, 0)
-    if dz > 0:
-        data["lambda_z"] = L_transform.transform(L_lmn, 0, 0, 1)
-
-    # 2nd order derivatives
-    if dr > 1:
-        data["lambda_rr"] = L_transform.transform(L_lmn, 2, 0, 0)
-    if dt > 1:
-        data["lambda_tt"] = L_transform.transform(L_lmn, 0, 2, 0)
-    if dz > 1:
-        data["lambda_zz"] = L_transform.transform(L_lmn, 0, 0, 2)
-    if dr > 0 and dt > 0 and drtz > 1:
-        data["lambda_rt"] = L_transform.transform(L_lmn, 1, 1, 0)
-    if dr > 0 and dz > 0 and drtz > 1:
-        data["lambda_rz"] = L_transform.transform(L_lmn, 1, 0, 1)
-    if dt > 0 and dz > 0 and drtz > 1:
-        data["lambda_tz"] = L_transform.transform(L_lmn, 0, 1, 1)
-
-    # 3rd order derivatives
-    if dr > 2:
-        data["lambda_rrr"] = L_transform.transform(L_lmn, 3, 0, 0)
-    if dt > 2:
-        data["lambda_ttt"] = L_transform.transform(L_lmn, 0, 3, 0)
-    if dz > 2:
-        data["lambda_zzz"] = L_transform.transform(L_lmn, 0, 0, 3)
-    if dr > 1 and dt > 0 and drtz > 2:
-        data["lambda_rrt"] = L_transform.transform(L_lmn, 2, 1, 0)
-    if dr > 0 and dt > 1 and drtz > 2:
-        data["lambda_rtt"] = L_transform.transform(L_lmn, 1, 2, 0)
-    if dr > 1 and dz > 0 and drtz > 2:
-        data["lambda_rrz"] = L_transform.transform(L_lmn, 2, 0, 1)
-    if dr > 0 and dz > 1 and drtz > 2:
-        data["lambda_rzz"] = L_transform.transform(L_lmn, 1, 0, 2)
-    if dt > 1 and dz > 0 and drtz > 2:
-        data["lambda_ttz"] = L_transform.transform(L_lmn, 0, 2, 1)
-    if dt > 0 and dz > 1 and drtz > 2:
-        data["lambda_tzz"] = L_transform.transform(L_lmn, 0, 1, 2)
-    if dr > 0 and dt > 0 and dz > 0 and drtz > 2:
-        data["lambda_rtz"] = L_transform.transform(L_lmn, 1, 1, 1)
-
-    return data
-
-
-def compute_toroidal_coords(
-    R_lmn,
-    Z_lmn,
-    R_transform,
-    Z_transform,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=1,
-    data=None,
-):
-    """Compute toroidal coordinates (R, phi, Z).
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-        Keys are of the form 'X_y' meaning the derivative of X wrt y.
-
-    """
-    if data is None:
-        data = {}
-
-    data["R"] = R_transform.transform(R_lmn)
-    data["Z"] = Z_transform.transform(Z_lmn)
-    data["0"] = jnp.zeros_like(data["R"])
-
-    # 1st order derivatives
-    if dr > 0:
-        data["R_r"] = R_transform.transform(R_lmn, 1, 0, 0)
-        data["Z_r"] = Z_transform.transform(Z_lmn, 1, 0, 0)
-    if dt > 0:
-        data["R_t"] = R_transform.transform(R_lmn, 0, 1, 0)
-        data["Z_t"] = Z_transform.transform(Z_lmn, 0, 1, 0)
-    if dz > 0:
-        data["R_z"] = R_transform.transform(R_lmn, 0, 0, 1)
-        data["Z_z"] = Z_transform.transform(Z_lmn, 0, 0, 1)
-
-    # 2nd order derivatives
-    if dr > 1:
-        data["R_rr"] = R_transform.transform(R_lmn, 2, 0, 0)
-        data["Z_rr"] = Z_transform.transform(Z_lmn, 2, 0, 0)
-    if dt > 1:
-        data["R_tt"] = R_transform.transform(R_lmn, 0, 2, 0)
-        data["Z_tt"] = Z_transform.transform(Z_lmn, 0, 2, 0)
-    if dz > 1:
-        data["R_zz"] = R_transform.transform(R_lmn, 0, 0, 2)
-        data["Z_zz"] = Z_transform.transform(Z_lmn, 0, 0, 2)
-    if dr > 0 and dt > 0 and drtz > 1:
-        data["R_rt"] = R_transform.transform(R_lmn, 1, 1, 0)
-        data["Z_rt"] = Z_transform.transform(Z_lmn, 1, 1, 0)
-    if dr > 0 and dz > 0 and drtz > 1:
-        data["R_rz"] = R_transform.transform(R_lmn, 1, 0, 1)
-        data["Z_rz"] = Z_transform.transform(Z_lmn, 1, 0, 1)
-    if dt > 0 and dz > 0 and drtz > 1:
-        data["R_tz"] = R_transform.transform(R_lmn, 0, 1, 1)
-        data["Z_tz"] = Z_transform.transform(Z_lmn, 0, 1, 1)
-
-    # 3rd order derivatives
-    if dr > 2:
-        data["R_rrr"] = R_transform.transform(R_lmn, 3, 0, 0)
-        data["Z_rrr"] = Z_transform.transform(Z_lmn, 3, 0, 0)
-    if dt > 2:
-        data["R_ttt"] = R_transform.transform(R_lmn, 0, 3, 0)
-        data["Z_ttt"] = Z_transform.transform(Z_lmn, 0, 3, 0)
-    if dz > 2:
-        data["R_zzz"] = R_transform.transform(R_lmn, 0, 0, 3)
-        data["Z_zzz"] = Z_transform.transform(Z_lmn, 0, 0, 3)
-    if dr > 1 and dt > 0 and drtz > 2:
-        data["R_rrt"] = R_transform.transform(R_lmn, 2, 1, 0)
-        data["Z_rrt"] = Z_transform.transform(Z_lmn, 2, 1, 0)
-    if dr > 0 and dt > 1 and drtz > 2:
-        data["R_rtt"] = R_transform.transform(R_lmn, 1, 2, 0)
-        data["Z_rtt"] = Z_transform.transform(Z_lmn, 1, 2, 0)
-    if dr > 1 and dz > 0 and drtz > 2:
-        data["R_rrz"] = R_transform.transform(R_lmn, 2, 0, 1)
-        data["Z_rrz"] = Z_transform.transform(Z_lmn, 2, 0, 1)
-    if dr > 0 and dz > 1 and drtz > 2:
-        data["R_rzz"] = R_transform.transform(R_lmn, 1, 0, 2)
-        data["Z_rzz"] = Z_transform.transform(Z_lmn, 1, 0, 2)
-    if dt > 1 and dz > 0 and drtz > 2:
-        data["R_ttz"] = R_transform.transform(R_lmn, 0, 2, 1)
-        data["Z_ttz"] = Z_transform.transform(Z_lmn, 0, 2, 1)
-    if dt > 0 and dz > 1 and drtz > 2:
-        data["R_tzz"] = R_transform.transform(R_lmn, 0, 1, 2)
-        data["Z_tzz"] = Z_transform.transform(Z_lmn, 0, 1, 2)
-    if dr > 0 and dt > 0 and dz > 0 and drtz > 2:
-        data["R_rtz"] = R_transform.transform(R_lmn, 1, 1, 1)
-        data["Z_rtz"] = Z_transform.transform(Z_lmn, 1, 1, 1)
+    for key in keys:
+        if np.array(
+            [d in L_transform.derivatives.tolist() for d in data_index[key]["L_derivs"]]
+        ).all():
+            data[key] = L_transform.transform(L_lmn, *data_index[key]["L_derivs"][0])
 
     return data
 
@@ -354,7 +294,7 @@ def compute_cartesian_coords(
     Z_lmn,
     R_transform,
     Z_transform,
-    data=None,
+    data={},
 ):
     """Compute Cartesian coordinates (X, Y, Z).
 
@@ -375,15 +315,14 @@ def compute_cartesian_coords(
         Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
     """
-    if data is None or "R" not in data:
-        data = compute_toroidal_coords(
-            R_lmn, Z_lmn, R_transform, Z_transform, data=data
-        )
+    if "R" not in data:
+        data = compute_R(R_lmn, R_transform, data=data)
+    if "Z" not in data:
+        data = compute_Z(Z_lmn, Z_transform, data=data)
 
     phi = R_transform.grid.nodes[:, 2]
     data["X"] = data["R"] * np.cos(phi)
     data["Y"] = data["R"] * np.sin(phi)
-    data["Z"] = data["Z"]
 
     return data
 
@@ -393,11 +332,7 @@ def compute_covariant_basis(
     Z_lmn,
     R_transform,
     Z_transform,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=0,
-    data=None,
+    data={},
 ):
     """Compute covariant basis vectors.
 
@@ -411,14 +346,6 @@ def compute_covariant_basis(
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
         Transforms Z_lmn coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -428,61 +355,167 @@ def compute_covariant_basis(
         direction, differentiated wrt y.
 
     """
-    data = compute_toroidal_coords(
-        R_lmn,
-        Z_lmn,
-        R_transform,
-        Z_transform,
-        dr=dr + 1,
-        dt=dt + 1,
-        dz=dz + 1,
-        drtz=drtz + 1,
-        data=data,
-    )
+    if "R" not in data:
+        data = compute_R(R_lmn, R_transform, data=data)
+    if "Z" not in data:
+        data = compute_Z(Z_lmn, Z_transform, data=data)
+    data["0"] = jnp.zeros_like(data["R"])
 
-    data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]])
-    data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]])
-    data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]])
+    # 0th order derivatives
+    key = "e_rho"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_r"], data["0"], data["Z_r"]])
+    key = "e_theta"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_t"], data["0"], data["Z_t"]])
+    key = "e_zeta"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_z"], data["R"], data["Z_z"]])
 
     # 1st order derivatives
-    if dr > 0:
-        data["e_rho_r"] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]])
-        data["e_theta_r"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
-        data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]])
-    if dt > 0:
-        data["e_rho_t"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
-        data["e_theta_t"] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]])
-        data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]])
-    if dz > 0:
-        data["e_rho_z"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]])
-        data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]])
-        data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]])
+    key = "e_rho_r"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]])
+    key = "e_rho_t"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
+    key = "e_rho_z"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]])
+    key = "e_theta_r"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
+    key = "e_theta_t"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]])
+    key = "e_theta_z"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]])
+    key = "e_zeta_r"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]])
+    key = "e_zeta_t"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]])
+    key = "e_zeta_z"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]])
 
     # 2nd order derivatives
-    if dr > 1:
-        data["e_rho_rr"] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]])
-        data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
-        data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]])
-    if dt > 1:
-        data["e_rho_tt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
-        data["e_theta_tt"] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]])
-        data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]])
-    if dz > 1:
-        data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]])
-        data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]])
-        data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]])
-    if dr > 0 and dt > 0 and drtz > 1:
-        data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
-        data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
-        data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]])
-    if dr > 0 and dz > 0 and drtz > 1:
-        data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]])
-        data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
-        data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]])
-    if dt > 0 and dz > 0 and drtz > 1:
-        data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
-        data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]])
-        data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]])
+    key = "e_rho_rr"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]])
+    key = "e_rho_tt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
+    key = "e_rho_zz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]])
+    key = "e_rho_rt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
+    key = "e_rho_rz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]])
+    key = "e_rho_tz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
+    key = "e_theta_rr"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
+    key = "e_theta_tt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]])
+    key = "e_theta_zz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]])
+    key = "e_theta_rt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
+    key = "e_theta_rz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
+    key = "e_theta_tz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]])
+    key = "e_zeta_rr"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]])
+    key = "e_zeta_tt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]])
+    key = "e_zeta_zz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]])
+    key = "e_zeta_rt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]])
+    key = "e_zeta_rz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]])
+    key = "e_zeta_tz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]])
 
     return data
 
@@ -492,7 +525,7 @@ def compute_contravariant_basis(
     Z_lmn,
     R_transform,
     Z_transform,
-    data=None,
+    data={},
 ):
     """Compute contravariant basis vectors.
 
@@ -515,7 +548,7 @@ def compute_contravariant_basis(
         direction, differentiated wrt y.
 
     """
-    if data is None or "sqrt(g)" not in data:
+    if "sqrt(g)" not in data:
         data = compute_jacobian(
             R_lmn,
             Z_lmn,
@@ -536,11 +569,7 @@ def compute_jacobian(
     Z_lmn,
     R_transform,
     Z_transform,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=0,
-    data=None,
+    data={},
 ):
     """Compute coordinate system Jacobian.
 
@@ -554,14 +583,6 @@ def compute_jacobian(
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
         Transforms Z_lmn coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -576,38 +597,50 @@ def compute_jacobian(
         Z_lmn,
         R_transform,
         Z_transform,
-        dr=dr,
-        dt=dt,
-        dz=dz,
-        drtz=drtz,
         data=data,
     )
 
-    data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"], 0), 0)
+    key = "sqrt(g)"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"], 0), 0)
 
     # 1st order derivatives
-    if dr > 0:
-        data["sqrt(g)_r"] = (
+    key = "sqrt(g)_r"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"], 0), 0)
         )
-    if dt > 0:
-        data["sqrt(g)_t"] = (
+    key = "sqrt(g)_t"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_t"], 0), 0)
         )
-    if dz > 0:
-        data["sqrt(g)_z"] = (
+    key = "sqrt(g)_z"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta"], 0), 0)
             + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_z"], 0), 0)
         )
 
     # 2nd order derivatives
-    if dr > 1:
-        data["sqrt(g)_rr"] = (
+    key = "sqrt(g)_rr"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(
                 data["e_rho_rr"],
                 cross(data["e_theta"], data["e_zeta"], 0),
@@ -642,8 +675,11 @@ def compute_jacobian(
                 0,
             )
         )
-    if dt > 1:
-        data["sqrt(g)_tt"] = (
+    key = "sqrt(g)_tt"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(
                 data["e_rho_tt"],
                 cross(data["e_theta"], data["e_zeta"], 0),
@@ -678,8 +714,11 @@ def compute_jacobian(
                 0,
             )
         )
-    if dz > 1:
-        data["sqrt(g)_zz"] = (
+    key = "sqrt(g)_zz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(
                 data["e_rho_zz"],
                 cross(data["e_theta"], data["e_zeta"], 0),
@@ -714,12 +753,11 @@ def compute_jacobian(
                 0,
             )
         )
-    if dr > 0 and dt > 0 and drtz > 1:
-        raise NotImplementedError
-    if dr > 0 and dz > 0 and drtz > 1:
-        raise NotImplementedError
-    if dt > 0 and dz > 0 and drtz > 1:
-        data["sqrt(g)_tz"] = (
+    key = "sqrt(g)_tz"
+    if np.array(
+        [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+    ).all():
+        data[key] = (
             dot(
                 data["e_rho_tz"],
                 cross(data["e_theta"], data["e_zeta"], 0),
@@ -874,10 +912,6 @@ def compute_contravariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=1,
     data=None,
 ):
     """Compute contravariant magnetic field components.
@@ -902,14 +936,6 @@ def compute_contravariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -919,20 +945,14 @@ def compute_contravariant_magnetic_field(
         component of the magnetic field, differentiated wrt y.
 
     """
-    data = compute_toroidal_flux(Psi, iota, dr=dr + 1, data=data)
-    data = compute_rotational_transform(i_l, iota, dr=dr, data=data)
-    data = compute_lambda(
-        L_lmn, L_transform, dr=dr, dt=dt + 1, dz=dz + 1, drtz=drtz + 1, data=data
-    )
+    data = compute_toroidal_flux(Psi, iota, data=data)
+    data = compute_rotational_transform(i_l, iota, data=data)
+    data = compute_lambda(L_lmn, L_transform, data=data)
     data = compute_jacobian(
         R_lmn,
         Z_lmn,
         R_transform,
         Z_transform,
-        dr=dr,
-        dt=dt,
-        dz=dz,
-        drtz=drtz,
         data=data,
     )
 
@@ -943,7 +963,9 @@ def compute_contravariant_magnetic_field(
     data["B"] = data["B^theta"] * data["e_theta"] + data["B^zeta"] * data["e_zeta"]
 
     # 1st order derivatives
-    if dr > 0:
+    if ([2, 0, 0] == R_transform.derivatives).all(axis=1).any() and (
+        [1, 1, 0] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_r"] = (
             data["psi_rr"] / data["sqrt(g)"]
             - data["psi_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
@@ -960,7 +982,9 @@ def compute_contravariant_magnetic_field(
             + data["B^zeta_r"] * data["e_zeta"]
             + data["B^zeta"] * data["e_zeta_r"]
         )
-    if dt > 0:
+    if ([0, 2, 0] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 2, 0] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_t"] = -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2
         data["B^theta_t"] = (
             data["B0_t"] * (data["iota"] - data["lambda_z"])
@@ -975,7 +999,9 @@ def compute_contravariant_magnetic_field(
             + data["B^zeta_t"] * data["e_zeta"]
             + data["B^zeta"] * data["e_zeta_t"]
         )
-    if dz > 0:
+    if ([0, 0, 2] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 0, 2] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_z"] = -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
         data["B^theta_z"] = (
             data["B0_z"] * (data["iota"] - data["lambda_z"])
@@ -992,9 +1018,9 @@ def compute_contravariant_magnetic_field(
         )
 
     # 2nd order derivatives
-    if dr > 1:
-        raise NotImplementedError
-    if dt > 1:
+    if ([0, 3, 0] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 3, 0] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_tt"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
@@ -1004,7 +1030,9 @@ def compute_contravariant_magnetic_field(
         -2 * data["B0_t"] * data["lambda_tz"] - data["B0"] * data["lambda_ttz"]
         data["B^zeta_tt"] = data["B0_tt"] * (1 + data["lambda_t"])
         +2 * data["B0_t"] * data["lambda_tt"] + data["B0"] * data["lambda_ttt"]
-    if dz > 1:
+    if ([0, 0, 3] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 0, 3] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_zz"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
@@ -1014,11 +1042,9 @@ def compute_contravariant_magnetic_field(
         -2 * data["B0_z"] * data["lambda_zz"] - data["B0"] * data["lambda_zzz"]
         data["B^zeta_zz"] = data["B0_zz"] * (1 + data["lambda_t"])
         +2 * data["B0_z"] * data["lambda_tz"] + data["B0"] * data["lambda_tzz"]
-    if dr > 0 and dt > 0 and drtz > 1:
-        raise NotImplementedError
-    if dr > 0 and dz > 0 and drtz > 1:
-        raise NotImplementedError
-    if dt > 0 and dz > 0 and drtz > 1:
+    if ([1, 1, 1] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 2, 1] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B0_tz"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
@@ -1050,9 +1076,6 @@ def compute_covariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
-    dr=0,
-    dt=0,
-    dz=0,
     data=None,
 ):
     """Compute covariant magnetic field components.
@@ -1077,12 +1100,6 @@ def compute_covariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
 
     Returns
     -------
@@ -1102,10 +1119,6 @@ def compute_covariant_magnetic_field(
         Z_transform,
         L_transform,
         iota,
-        dr=dr,
-        dt=dt,
-        dz=dz,
-        drtz=1,
         data=data,
     )
 
@@ -1114,7 +1127,9 @@ def compute_covariant_magnetic_field(
     data["B_zeta"] = dot(data["B"], data["e_zeta"], 0)
 
     # 1st order derivatives
-    if dr > 0:
+    if ([2, 0, 0] == R_transform.derivatives).all(axis=1).any() and (
+        [1, 1, 0] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B_rho_r"] = dot(data["B_r"], data["e_rho"], 0) + dot(
             data["B"], data["e_rho_r"], 0
         )
@@ -1124,7 +1139,9 @@ def compute_covariant_magnetic_field(
         data["B_zeta_r"] = dot(data["B_r"], data["e_zeta"], 0) + dot(
             data["B"], data["e_zeta_r"], 0
         )
-    if dt > 0:
+    if ([0, 2, 0] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 2, 0] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B_rho_t"] = dot(data["B_t"], data["e_rho"], 0) + dot(
             data["B"], data["e_rho_t"], 0
         )
@@ -1134,7 +1151,9 @@ def compute_covariant_magnetic_field(
         data["B_zeta_t"] = dot(data["B_t"], data["e_zeta"], 0) + dot(
             data["B"], data["e_zeta_t"], 0
         )
-    if dz > 0:
+    if ([0, 0, 2] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 0, 2] == L_transform.derivatives
+    ).all(axis=1).any():
         data["B_rho_z"] = dot(data["B_z"], data["e_rho"], 0) + dot(
             data["B"], data["e_rho_z"], 0
         )
@@ -1158,10 +1177,6 @@ def compute_magnetic_field_magnitude(
     Z_transform,
     L_transform,
     iota,
-    dr=0,
-    dt=0,
-    dz=0,
-    drtz=1,
     data=None,
 ):
     """Compute magnetic field magnitude.
@@ -1186,14 +1201,6 @@ def compute_magnetic_field_magnitude(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------
@@ -1213,10 +1220,6 @@ def compute_magnetic_field_magnitude(
         Z_transform,
         L_transform,
         iota,
-        dr=dr,
-        dt=dt,
-        dz=dz,
-        drtz=drtz,
         data=data,
     )
     data = compute_covariant_metric_coefficients(
@@ -1231,9 +1234,9 @@ def compute_magnetic_field_magnitude(
     )
 
     # 1st order derivatives
-    if dr > 0:
-        raise NotImplementedError
-    if dt > 0:
+    if ([0, 0, 2] == R_transform.derivatives).all(axis=1).any() and (
+        [0, 0, 2] == L_transform.derivatives
+    ).all(axis=1).any():
         data["|B|_t"] = (
             data["B^theta"]
             * (

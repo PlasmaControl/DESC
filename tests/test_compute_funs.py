@@ -325,24 +325,33 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_sup_zeta = magnetic_field["B^zeta"].reshape((N, M))
     B = magnetic_field["|B|"].reshape((N, M))
 
-    B_sup_theta_tz = convolve2d(
-        B_sup_theta,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
-    B_sup_zeta_tz = convolve2d(
-        B_sup_zeta,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
-    B_tz = convolve2d(
-        B,
-        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-        mode="same",
-        boundary="wrap",
-    ) / (dtheta * dzeta)
+    B_sup_theta_tz = (
+        convolve2d(
+            B_sup_theta,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
+    B_sup_zeta_tz = (
+        convolve2d(
+            B_sup_zeta,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
+    B_tz = (
+        convolve2d(
+            B,
+            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+            mode="same",
+            boundary="wrap",
+        )
+        / (dtheta * dzeta)
+    )
 
     np.testing.assert_allclose(
         magnetic_field["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],

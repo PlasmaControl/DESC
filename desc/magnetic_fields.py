@@ -6,6 +6,7 @@ from desc.backend import jnp
 from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d
+from desc.derivatives import Derivative
 
 
 class MagneticField(IOAble, ABC):
@@ -78,6 +79,23 @@ class SplineMagneticField(MagneticField):
         # TODO: precompute derivative matrices
 
     def compute_magnetic_field(self, grid, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            parameters to pass to scalar potential function
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
 
         if isinstance(grid, Grid):
             Rq, phiq, Zq = grid.nodes.T
@@ -152,14 +170,10 @@ class SplineMagneticField(MagneticField):
         kp = int(mgrid["kp"][()])
         nfp = mgrid["nfp"][()].data
         nextcur = int(mgrid["nextcur"][()])
-        cur = mgrid["raw_coil_cur"][()]
         rMin = mgrid["rmin"][()]
         rMax = mgrid["rmax"][()]
         zMin = mgrid["zmin"][()]
         zMax = mgrid["zmax"][()]
-
-        mgrid_mode = mgrid["mgrid_mode"][()]
-        mode = bytearray(mgrid_mode).decode("utf-8")
 
         br = np.zeros([kp, jz, ir])
         bp = np.zeros([kp, jz, ir])
@@ -190,3 +204,51 @@ class SplineMagneticField(MagneticField):
             period = 2 * np.pi / (nfp)
 
         return cls(Rgrid, pgrid, Zgrid, br, bp, bz, method, extrap, period)
+
+
+class ScalarPotentialField(MagneticField):
+    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the scalar potential. Should have a signature of
+        the form potential(R,phi,Z,*params) -> ndarray.
+        R,phi,Z are arrays of cylindrical coordinates.
+    params : tuple, optional
+        default parameters to pass to potential function
+
+    """
+
+    def __init__(self, potential, params=()):
+        self._potential = potential
+        self._params = params
+
+    def compute_magnetic_field(self, coords, params=None):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            parameters to pass to scalar potential function
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+        if params is None:
+            params = self._params
+        r, p, z = coords.T
+        funR = lambda x: self._potential(x, p, z, *params)
+        funP = lambda x: self._potential(r, x, z, *params)
+        funZ = lambda x: self._potential(r, p, x, *params)
+        br = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
+        bp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
+        bz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
+        return jnp.array([br, bp / r, bz]).T

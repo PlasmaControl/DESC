@@ -13,6 +13,27 @@ class MagneticField(IOAble, ABC):
 
     _io_attrs_ = []
 
+    def __mul__(self, x):
+        if np.isscalar(x):
+            return ScaledMagneticField(x, self)
+        else:
+            return NotImplemented
+
+    def __rmul__(self, x):
+        return self.__mul__(x)
+
+    def __add__(self, x):
+        if isinstance(x, _MagneticField):
+            return SumMagneticField(self, x)
+        else:
+            return NotImplemented
+
+    def __neg__(self):
+        return ScaledMagneticField(-1, self)
+
+    def __sub__(self, x):
+        return self.__add__(-x)
+
     @abstractmethod
     def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
         """Compute magnetic field at a set of points

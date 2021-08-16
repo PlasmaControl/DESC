@@ -16,21 +16,10 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
     FourierRZCurve,
 )
-from desc.basis import (
-    DoubleFourierSeries,
-    FourierZernikeBasis,
-)
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 import desc.compute as compute_funs
-from desc.compute import (
-    arg_order,
-    data_index,
-    compute_jacobian,
-    compute_energy,
-)
-from desc.vmec_utils import (
-    ptolemy_identity_rev,
-    zernike_to_fourier,
-)
+from desc.compute import arg_order, data_index
+from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
 
 class _Configuration(IOAble, ABC):
@@ -567,8 +556,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.iota.copy()
                 inputs[arg].grid = grid
 
-        data = fun(**inputs)
-        return data[name]
+        return fun(**inputs)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of
@@ -764,23 +752,25 @@ class _Configuration(IOAble, ABC):
         r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
         t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
-        r_coords = self.compute_lambda(r_grid)
-        t_coords = self.compute_lambda(t_grid)
-        r_coords = self.compute_toroidal_coords(r_grid, data=r_coords)
-        t_coords = self.compute_toroidal_coords(t_grid, data=t_coords)
-
         v_nodes = t_grid.nodes
-        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
+        v_nodes[:, 1] = t_grid.nodes[:, 1] - self.compute("lambda", t_grid)["lambda"]
         v_grid = Grid(v_nodes)
-        v_coords = self.compute_toroidal_coords(v_grid)
 
         # rho contours
-        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
-        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+        Rr = self.compute("R", r_grid)["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[
+            :, :, 0
+        ]
+        Zr = self.compute("Z", r_grid)["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[
+            :, :, 0
+        ]
 
         # theta contours
-        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
-        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+        Rv = self.compute("R", v_grid)["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[
+            :, :, 0
+        ]
+        Zv = self.compute("Z", v_grid)["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[
+            :, :, 0
+        ]
 
         rline = MultiLineString(
             [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
@@ -847,15 +837,13 @@ class _Configuration(IOAble, ABC):
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
 
-        toroidal_coords = self.compute_toroidal_coords(grid)
         theta = grid.nodes[:, 1]
-        vartheta = theta + toroidal_coords["lambda"]
+        vartheta = theta + self.compute("lambda", grid)["lambda"]
         sfl_grid = grid
         sfl_grid.nodes[:, 1] = vartheta
 
-        bdry_coords = self.compute_toroidal_coords(bdry_grid)
         bdry_theta = bdry_grid.nodes[:, 1]
-        bdry_vartheta = bdry_theta + bdry_coords["lambda"]
+        bdry_vartheta = bdry_theta + self.compute("lambda", bdry_grid)["lambda"]
         bdry_sfl_grid = bdry_grid
         bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
 
@@ -868,13 +856,13 @@ class _Configuration(IOAble, ABC):
         R_sfl_transform = Transform(
             sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
         )
-        R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
+        R_lmn_sfl = R_sfl_transform.fit(self.compute("R", grid)["R"])
         del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
         Z_sfl_transform = Transform(
             sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
         )
-        Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
+        Z_lmn_sfl = Z_sfl_transform.fit(self.compute("Z", grid)["Z"])
         del Z_sfl_transform
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
@@ -885,7 +873,7 @@ class _Configuration(IOAble, ABC):
             build_pinv=True,
             rcond=rcond,
         )
-        Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
+        Rb_lmn_sfl = R_sfl_bdry_transform.fit(self.compute("R", bdry_grid)["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
@@ -895,7 +883,7 @@ class _Configuration(IOAble, ABC):
             build_pinv=True,
             rcond=rcond,
         )
-        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
+        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(self.compute("Z", bdry_grid)["Z"])
         del Z_sfl_bdry_transform
 
         eq_sfl.Rb_lmn = Rb_lmn_sfl
@@ -1032,7 +1020,7 @@ class _Configuration(IOAble, ABC):
             grid = LinearGrid(
                 M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP, rho=rho[k]
             )
-            data = self.compute_magnetic_field(grid)
+            data = self.compute("|B|", grid)
             B_mn[k, :] = transform.fit(data["|B|"])
             Bt_mn[k, :] = transform.fit(data["B_theta"])
             Bz_mn[k, :] = transform.fit(data["B_zeta"])

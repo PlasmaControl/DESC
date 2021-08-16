@@ -226,7 +226,7 @@ def _compute(eq, name, grid):
         raise ValueError("Plot quantities must be locally scalar values.")
 
     data = eq.compute(name, grid)
-    return data.reshape((grid.M, grid.L, grid.N), order="F")
+    return data[name].reshape((grid.M, grid.L, grid.N), order="F")
 
 
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
@@ -498,7 +498,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        coords = eq.compute_cartesian_coords(grid)
+        coords = eq.compute("X", grid)
     X = coords["X"].reshape((grid.M, grid.L, grid.N), order="F")
     Y = coords["Y"].reshape((grid.M, grid.L, grid.N), order="F")
     Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
@@ -651,9 +651,8 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute_toroidal_coords(grid)
-    R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    R = eq.compute("R", grid)["R"].reshape((grid.M, grid.L, grid.N), order="F")
+    Z = eq.compute("Z", grid)["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
     contourf_kwargs = {}
     if log:
@@ -689,20 +688,24 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            data_index[name]["label"]
-            + " "
+            "$"
+            + data_index[name]["label"]
+            + "$ ($"
             + data_index[name]["units"]
+            + "$)"
             + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
                 eq.NFP * zeta[i] / (2 * np.pi)
             )
         )
         if norm_F:
             ax[i].set_title(
-                "%s / %s $\\zeta \\cdot NFP/2\\pi = %3.3f$ "
+                "%s / %s, %s"
                 % (
                     "$" + data_index[name]["label"] + "$",
                     "$" + data_index[norm_name]["label"] + "$",
-                    eq.NFP * zeta[i] / (2 * np.pi),
+                    "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                        eq.NFP * zeta[i] / (2 * np.pi)
+                    ),
                 )
             )
     fig.set_tight_layout(True)
@@ -798,16 +801,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
-    r_coords = eq.compute_toroidal_coords(r_grid)
-    v_coords = eq.compute_toroidal_coords(v_grid)
-
     # rho contours
-    Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Rr = eq.compute("R", r_grid)["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Zr = eq.compute("Z", r_grid)["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
 
     # vartheta contours
-    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Rv = eq.compute("R", v_grid)["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Zv = eq.compute("Z", v_grid)["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1485,7 +1485,7 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     grid_single_rho = Grid(
         nodes=np.array([[rho, 0, 0]])
     )  # grid to get the iota value at the specified rho surface
-    iota = eq.compute_rotational_transform(grid=grid_single_rho)["iota"][0]
+    iota = eq.compute("iota", grid_single_rho)["iota"][0]
 
     varthetas = []
     phi = np.linspace(phi0, phi_end, N_pts)
@@ -1517,9 +1517,8 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
-        toroidal_coords = eq.compute_toroidal_coords(grid=grid)
-        field_line_coords["Rs"].append(toroidal_coords["R"])
-        field_line_coords["Zs"].append(toroidal_coords["Z"])
+        field_line_coords["Rs"].append(eq.compute("R", grid)["R"])
+        field_line_coords["Zs"].append(eq.compute("Z", grid)["Z"])
         field_line_coords["phis"].append(phi)
 
     for i in range(n_lines):
@@ -1644,17 +1643,18 @@ def plot_field_lines_real_space(
     else:
         n_lines = 1
     phi0 = kwargs.get("phi0", 0)
-    # calculate R,phi,Z of nodes in grid
-    toroidal_coords = eq.compute_toroidal_coords(grid=grid)
-    # calculate cylindrical B
-    magnetic_field = eq.compute_magnetic_field(grid=grid)
 
+    # calculate toroidal coordinates
     phis = grid.nodes[:, 2]
+    Rs = eq.compute("R", grid)["R"]
+    Zs = eq.compute("Z", grid)["Z"]
+
+    # calculate cylindrical B
+    magnetic_field = eq.compute("B", grid=grid)
     BR = magnetic_field["B_R"]
     BZ = magnetic_field["B_Z"]
     Bphi = magnetic_field["B_phi"]
-    Rs = toroidal_coords["R"]
-    Zs = toroidal_coords["Z"]
+
     if B_interp is None:  # must fit RBfs to interpolate B field in R,phi,Z
         print(
             "Fitting magnetic field with radial basis functions in R,phi,Z (may take a few minutes)"
@@ -1674,7 +1674,7 @@ def plot_field_lines_real_space(
     if n_lines > 1:
         for theta in seed_thetas:
             field_line_Rs, field_line_phis, field_line_Zs, sol = _field_line_Rbf(
-                rho, theta, phi_end, grid, toroidal_coords, B_interp, phi0
+                rho, theta, phi_end, grid, Rs, Zs, B_interp, phi0
             )
             field_line_coords["Rs"].append(field_line_Rs)
             field_line_coords["Zs"].append(field_line_Zs)
@@ -1683,7 +1683,7 @@ def plot_field_lines_real_space(
 
     else:
         field_line_Rs, field_line_phis, field_line_Zs, sol = _field_line_Rbf(
-            rho, seed_thetas, phi_end, grid, toroidal_coords, B_interp, phi0
+            rho, seed_thetas, phi_end, grid, Rs, Zs, B_interp, phi0
         )
         field_line_coords["Rs"].append(field_line_Rs)
         field_line_coords["Zs"].append(field_line_Zs)
@@ -1785,12 +1785,10 @@ def _find_idx(rho0, theta0, phi0, grid):
     return idx_pt
 
 
-def _field_line_Rbf(rho, theta0, phi_end, grid, toroidal_coords, B_interp, phi0=0):
+def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     """Takes the initial poloidal angle you want to seed a field line at (at phi=0),
     and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi,
     the R,Z,Phi coordinates of the field line trajectory."""
-    Rs = toroidal_coords["R"]
-    Zs = toroidal_coords["Z"]
 
     fR = []
     fZ = []

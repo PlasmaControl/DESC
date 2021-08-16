@@ -914,6 +914,9 @@ def compute_contravariant_magnetic_field(
         data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
     if check_derivs("B", R_transform, Z_transform, L_transform):
         data["B"] = data["B^theta"] * data["e_theta"] + data["B^zeta"] * data["e_zeta"]
+        data["B_R"] = data["B"][0, :]
+        data["B_phi"] = data["B"][1, :]
+        data["B_Z"] = data["B"][2, :]
 
     # 1st order derivatives
     if check_derivs("B0_r", R_transform, Z_transform, L_transform):

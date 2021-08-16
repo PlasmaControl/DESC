@@ -52,6 +52,20 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
+Geometry
+********
+
+.. autosummary::
+   :toctree: _api/geometry/
+   :recursive:
+   :template: class.rst
+
+    desc.geometry.FourierRZCurve
+    desc.geometry.FourierXYZCurve
+    desc.geometry.FourierPlanarCurve
+    desc.geometry.FourierRZToroidalSurface
+    desc.geometry.ZernikeRZToroidalSection
+    
 Grid
 ****
 
@@ -86,7 +100,6 @@ Objective Functions
 
     desc.objective_funs.get_objective_function
     desc.objective_funs.ForceErrorNodes
-    desc.objective_funs.ForceErrorGalerkin
     desc.objective_funs.EnergyVolIntegral
     desc.objective_funs.QuasisymmetryTripleProduct
     desc.objective_funs.QuasisymmetryFluxFunction
@@ -128,6 +141,7 @@ Plotting
     desc.plotting.plot_grid
     desc.plotting.plot_basis
     desc.plotting.plot_logo
+    desc.plotting.plot_field_lines_sfl
 
 Profiles
 ********

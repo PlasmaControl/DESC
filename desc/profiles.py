@@ -2,10 +2,9 @@ import numpy as np
 from termcolor import colored
 from abc import ABC, abstractmethod
 import warnings
-import copy
 import scipy.optimize
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, jit
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.interpolate import interp1d
@@ -67,16 +66,17 @@ class Profile(IOAble, ABC):
     def compute(params=None, grid=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.params"""
 
-    def copy(self, deepcopy=True):
-        """Return a (deep)copy of this profile."""
-        if deepcopy:
-            new = copy.deepcopy(self)
-        else:
-            new = copy.copy(self)
-        return new
-
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         return self.compute(params, grid, dr, dt, dz)
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )
 
 
 class PowerSeriesProfile(Profile):
@@ -130,8 +130,15 @@ class PowerSeriesProfile(Profile):
             grid,
             self.basis,
             derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            build=True,
         )
         return transform
+
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", basis={})".format(self.basis)
+        return s
 
     @property
     def basis(self):
@@ -154,6 +161,7 @@ class PowerSeriesProfile(Profile):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+        self._transform.build()
 
     @property
     def params(self):
@@ -404,6 +412,12 @@ class SplineProfile(Profile):
             grid = Grid(np.empty((0, 3)))
         self.grid = grid
 
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", method={}, num_knots={})".format(self._method, len(self._knots))
+        return s
+
     @property
     def grid(self):
         """Default grid for computation"""
@@ -627,6 +641,12 @@ class MTanhProfile(Profile):
             grid = Grid(np.empty((0, 3)))
         self.grid = grid
 
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", num_params={})".format(len(self._params))
+        return s
+
     @property
     def grid(self):
         """Default grid for computation"""
@@ -709,7 +729,7 @@ class MTanhProfile(Profile):
                 / (width ** 3 * (e2z + 1) ** 3)
             )
             f = (
-                jnp.polyval(jnp.polyder(core_poly[::-1], 2)) * dz ** 2
+                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz ** 2
                 + jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * ddz
             )
 
@@ -820,7 +840,7 @@ class MTanhProfile(Profile):
             )
             / w
         )
-
+        fun = jit(fun)
         ped0 = np.clip(interp1d([0.93], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         off0 = np.clip(interp1d([0.98], x, y, "cubic2", extrap=True), 0, np.inf)[0]
         default_pmax = np.array([np.inf, np.inf, 1.02, 0.2, np.inf])

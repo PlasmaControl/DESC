@@ -2,8 +2,22 @@ import unittest
 import numpy as np
 import mpmath
 from desc.grid import LinearGrid
-from desc.basis import polyder_vec, polyval_vec, powers, jacobi, fourier, jacobi_coeffs
-from desc.basis import PowerSeries, DoubleFourierSeries, FourierZernikeBasis
+from desc.basis import (
+    polyder_vec,
+    polyval_vec,
+    powers,
+    zernike_radial,
+    zernike_radial_poly,
+    zernike_radial_coeffs,
+    fourier,
+)
+from desc.basis import (
+    PowerSeries,
+    FourierSeries,
+    DoubleFourierSeries,
+    ZernikePolynomial,
+    FourierZernikeBasis,
+)
 
 
 class TestBasis(unittest.TestCase):
@@ -31,27 +45,63 @@ class TestBasis(unittest.TestCase):
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    def test_zernike_coeffs(self):
+        basis = FourierZernikeBasis(L=40, M=40, N=0, spectral_indexing="ansi")
+        l, m = basis.modes[:, :2].T
+        coeffs = zernike_radial_coeffs(l, m, exact=False)
+        assert coeffs.dtype == np.int64
+        basis = FourierZernikeBasis(L=60, M=30, N=0, spectral_indexing="fringe")
+        l, m = basis.modes[:, :2].T
+        coeffs = zernike_radial_coeffs(l, m, exact=False)
+        assert coeffs.dtype == np.float64
+
     def test_polyval_exact(self):
-        basis = FourierZernikeBasis(L=80, M=2, N=0)
-        l, m = basis.modes[:, 0], basis.modes[:, 1]
-        coeffs = jacobi_coeffs(l, m, exact=True)
+        basis = FourierZernikeBasis(L=80, M=40, N=0)
+        l, m = basis.modes[::40, 0], basis.modes[::40, 1]
+        coeffs = zernike_radial_coeffs(l, m, exact=True)
         grid = LinearGrid(L=20)
         r = grid.nodes[:, 0]
         mpmath.mp.dps = 100
-        exact = np.array(
+        exactf = np.array(
+            [np.asarray(mpmath.polyval(list(ci), r), dtype=float) for ci in coeffs]
+        ).T
+        exactdf = np.array(
             [
-                np.asarray(mpmath.polyval(list(ci), r, derivative=True), dtype=float)
-                for ci in coeffs
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 1)
             ]
-        )
-        mpmath.mp.dps = 15
-        exactf = exact[:, 0, :].T
-        exactdf = exact[:, 1, :].T
-        approxf = jacobi(r, l, m)
-        approxdf = jacobi(r, l, m, dr=1)
+        ).T
+        exactddf = np.array(
+            [
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 2)
+            ]
+        ).T
+        exactdddf = np.array(
+            [
+                np.asarray(mpmath.polyval(list(ci), r), dtype=float)
+                for ci in polyder_vec(coeffs, 3)
+            ]
+        ).T
 
-        np.testing.assert_allclose(approxf, exactf, atol=1e-12)
-        np.testing.assert_allclose(approxdf, exactdf, atol=1e-12)
+        mpmath.mp.dps = 15
+        approx1f = zernike_radial(r[:, np.newaxis], l, m)
+        approx1df = zernike_radial(r[:, np.newaxis], l, m, dr=1)
+        approx1ddf = zernike_radial(r[:, np.newaxis], l, m, dr=2)
+        approx1dddf = zernike_radial(r[:, np.newaxis], l, m, dr=3)
+        approx2f = zernike_radial_poly(r[:, np.newaxis], l, m)
+        approx2df = zernike_radial_poly(r[:, np.newaxis], l, m, dr=1)
+        approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
+        approx2dddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=3)
+
+        np.testing.assert_allclose(approx1f, exactf, atol=1e-12)
+        np.testing.assert_allclose(approx1df, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx1ddf, exactddf, atol=1e-12)
+        np.testing.assert_allclose(approx1dddf, exactdddf, atol=1e-12)
+        np.testing.assert_allclose(approx2f, exactf, atol=1e-12)
+        np.testing.assert_allclose(approx2df, exactdf, atol=1e-12)
+        np.testing.assert_allclose(approx2ddf, exactddf, atol=1e-12)
+        np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
 
     def test_powers(self):
         """Tests powers function"""
@@ -67,8 +117,8 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
-    def test_jacobi(self):
-        """Tests jacobi function"""
+    def test_zernike_radial(self):
+        """Tests zernike_radial function"""
         l = np.array([3, 4, 6])
         m = np.array([1, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
@@ -96,11 +146,15 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
         correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
 
-        values = jacobi(r, l, m, 0)
-        derivs = jacobi(r, l, m, 1)
+        values1 = zernike_radial(r[:, np.newaxis], l, m, 0)
+        derivs1 = zernike_radial(r[:, np.newaxis], l, m, 1)
+        values2 = zernike_radial_poly(r[:, np.newaxis], l, m, 0)
+        derivs2 = zernike_radial_poly(r[:, np.newaxis], l, m, 1)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(values1, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs1, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
     def test_fourier(self):
         """Tests fourier function"""
@@ -110,8 +164,8 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([np.sin(t), np.ones_like(t), np.cos(t)]).T
         correct_ders = np.array([np.cos(t), np.zeros_like(t), -np.sin(t)]).T
 
-        values = fourier(t, m, dt=0)
-        derivs = fourier(t, m, dt=1)
+        values = fourier(t[:, np.newaxis], m, dt=0)
+        derivs = fourier(t[:, np.newaxis], m, dt=1)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
@@ -155,3 +209,57 @@ class TestBasis(unittest.TestCase):
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    def test_change_resolution(self):
+
+        ps = PowerSeries(L=4)
+        ps.change_resolution(L=6)
+        assert len(ps.modes) == 7
+
+        fs = FourierSeries(N=3)
+        fs.change_resolution(N=2)
+        assert len(fs.modes) == 5
+
+        dfs = DoubleFourierSeries(M=3, N=4)
+        dfs.change_resolution(M=2, N=1)
+        assert len(dfs.modes) == 15
+
+        zp = ZernikePolynomial(L=0, M=3, spectral_indexing="ansi")
+        zp.change_resolution(L=3, M=3)
+        assert len(zp.modes) == 10
+
+        zp2 = ZernikePolynomial(L=0, M=3, spectral_indexing="fringe")
+        zp2.change_resolution(L=6, M=3)
+        assert len(zp2.modes) == 16
+
+        fz = FourierZernikeBasis(L=6, M=3, N=0)
+        fz.change_resolution(L=6, M=3, N=1)
+        assert len(fz.modes) == 48
+
+    def test_repr(self):
+
+        fz = FourierZernikeBasis(L=6, M=3, N=0)
+        s = str(fz)
+        assert "FourierZernikeBasis" in s
+        assert "fringe" in s
+        assert "L=6" in s
+        assert "M=3" in s
+        assert "N=0" in s
+
+    def test_zernike_indexing(self):
+
+        basis = ZernikePolynomial(L=8, M=4, spectral_indexing="ansi")
+        assert (basis.modes == [8, 4, 0]).all(axis=1).any()
+        assert not (basis.modes == [8, 8, 0]).all(axis=1).any()
+
+        basis = ZernikePolynomial(L=10, M=4, spectral_indexing="fringe")
+        assert (basis.modes == [10, 0, 0]).all(axis=1).any()
+        assert not (basis.modes == [10, 2, 0]).all(axis=1).any()
+
+        basis = FourierZernikeBasis(L=8, M=4, N=0, spectral_indexing="ansi")
+        assert (basis.modes == [8, 4, 0]).all(axis=1).any()
+        assert not (basis.modes == [8, 8, 0]).all(axis=1).any()
+
+        basis = FourierZernikeBasis(L=10, M=4, N=0, spectral_indexing="fringe")
+        assert (basis.modes == [10, 0, 0]).all(axis=1).any()
+        assert not (basis.modes == [10, 2, 0]).all(axis=1).any()

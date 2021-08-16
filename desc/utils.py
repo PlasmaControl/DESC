@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from termcolor import colored
-from desc.backend import jnp
 
 # Helper Classes -------------------------------------------------------------
 
@@ -239,7 +238,7 @@ def equals(a, b):
         a == b
 
     """
-    if isinstance(a, (np.ndarray, jnp.ndarray)):
+    if hasattr(a, "shape") and hasattr(b, "shape"):
         return a.shape == b.shape and np.allclose(a, b)
     if isinstance(a, dict):
         if a.keys() != b.keys():
@@ -376,6 +375,13 @@ def sign(x):
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
+
+    modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
+    if modes_old.ndim == 1:
+        modes_old = modes_old.reshape((-1, 1))
+    if modes_new.ndim == 1:
+        modes_new = modes_new.reshape((-1, 1))
+
     num_modes = modes_new.shape[0]
     if c_new is None:
         c_new = np.zeros((num_modes,))
@@ -385,14 +391,3 @@ def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
         if len(idx):
             c_new[i] = c_old[idx]
     return c_new
-
-
-def expand_state(x, old_R, new_R, old_Z, new_Z, old_L, new_L):
-    """Copy a state vector from one resolution to another."""
-    R_lmn, Z_lmn, L_lmn = unpack_state(x, len(old_R), len(old_Z))
-    R_lmn = copy_coeffs(R_lmn, old_R, new_R)
-    Z_lmn = copy_coeffs(Z_lmn, old_Z, new_Z)
-    L_lmn = copy_coeffs(L_lmn, old_L, new_L)
-
-    x = np.concatenate([R_lmn, Z_lmn, L_lmn])
-    return x

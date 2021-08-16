@@ -3,8 +3,7 @@ import warnings
 from termcolor import colored
 from desc.utils import Timer
 from desc.backend import use_jax, jnp
-from desc.boundary_conditions import get_boundary_condition
-from desc.optimize.tr_subproblems import trust_region_step_exact
+from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
 
@@ -79,7 +78,7 @@ def perturb(
                 len(tr_ratio), order
             )
         )
-
+    eq.objective.build(verbose=verbose)
     deltas = {}
     if dRb is not None and np.any(dRb):
         deltas["Rb_lmn"] = dRb
@@ -143,9 +142,7 @@ def perturb(
         if verbose > 1:
             timer.disp("df/dc computation ({})".format(keys))
 
-        dx1, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx1, hit, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
@@ -174,15 +171,13 @@ def perturb(
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx2, hit, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
             vt.T,
             tr_ratio[1] * np.linalg.norm(dx1),
-            initial_alpha=None,
+            initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -205,15 +200,13 @@ def perturb(
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3, hit, alpha = trust_region_step_exact(
-            n,
-            m,
+        dx3, hit, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
             vt.T,
             tr_ratio[2] * np.linalg.norm(dx2),
-            initial_alpha=None,
+            initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -230,8 +223,11 @@ def perturb(
 
     # update boundary constraint
     if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
-        eq_new.constraint = eq.objective.BC_constraint.name
-        eq_new.objective.BC_constraint = eq_new.constraint
+        eq_new.objective.BC_constraint = eq.surface.get_constraint(
+            eq_new.R_basis,
+            eq_new.Z_basis,
+            eq_new.L_basis,
+        )
 
     # update state vector
     dy = dx1 + dx2 + dx3
@@ -424,12 +420,9 @@ def optimal_perturb(
 
         LHS = LHS[:, c_idx]  # restrict optimization space
         uA, sA, vtA = np.linalg.svd(LHS, full_matrices=False)
-        mA, nA = LHS.shape
 
         # find optimal perturbation
-        dc1_opt, hit, alpha = trust_region_step_exact(
-            nA,
-            mA,
+        dc1_opt, hit, alpha_c = trust_region_step_exact_svd(
             RHS_1g,
             uA,
             sA,
@@ -452,12 +445,9 @@ def optimal_perturb(
         RHS_1f = f + np.matmul(Fc, dc1)
 
         uJ, sJ, vtJ = np.linalg.svd(Fx, full_matrices=False)
-        mJ, nJ = Fx.shape
 
         # apply optimal perturbation
-        dx1, hit, alpha = trust_region_step_exact(
-            nJ,
-            mJ,
+        dx1, hit, alpha_x = trust_region_step_exact_svd(
             RHS_1f,
             uJ,
             sJ,
@@ -497,15 +487,13 @@ def optimal_perturb(
             timer.disp("d^2g computation")
 
         # find optimal perturbation
-        dc2_opt, hit, alpha = trust_region_step_exact(
-            nA,
-            mA,
+        dc2_opt, hit, alpha_c = trust_region_step_exact_svd(
             RHS_2g,
             uA,
             sA,
             vtA.T,
             tr_ratio[0] * np.linalg.norm(dc1_opt),
-            initial_alpha=None,
+            initial_alpha=alpha_c / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -521,15 +509,13 @@ def optimal_perturb(
         RHS_2f += np.matmul(Fc, dc2)
 
         # apply optimal perturbation
-        dx2, hit, alpha = trust_region_step_exact(
-            nJ,
-            mJ,
+        dx2, hit, alpha_x = trust_region_step_exact_svd(
             RHS_2f,
             uJ,
             sJ,
             vtJ.T,
             tr_ratio[0] * np.linalg.norm(y),
-            initial_alpha=None,
+            initial_alpha=alpha_x / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
@@ -551,8 +537,11 @@ def optimal_perturb(
 
     # update boundary constraint
     if "Rb_lmn" in inputs or "Zb_lmn" in inputs:
-        eq_new.constraint = eq.objective.BC_constraint.name
-        eq_new.objective.BC_constraint = eq_new.constraint
+        eq_new.objective.BC_constraint = eq.surface.get_constraint(
+            eq_new.R_basis,
+            eq_new.Z_basis,
+            eq_new.L_basis,
+        )
 
     # update state vector
     dc = dc1 + dc2 + dc3

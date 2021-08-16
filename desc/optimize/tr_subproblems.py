@@ -1,5 +1,5 @@
 import numpy as np
-from desc.backend import jnp, cho_factor, cho_solve, qr
+from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
 from desc.utils import isalmostequal
 
 
@@ -149,57 +149,8 @@ def solve_trust_region_2d_subspace(
     return p, False, initial_alpha
 
 
-def solve_lsq_trust_region_exact(
-    grad, jac, scale, trust_radius, f, initial_alpha=None, **kwargs
-):
-    """Solve a trust-region problem arising in least-squares using near exact method
-
-    Parameters
-    ----------
-    grad : ndarray
-        gradient of objective function
-    jac : OptimizerDerivative
-        jacobian of objective function
-    scale : ndarray
-        scaling array for gradient and jacobian
-    trust_radius : float
-        Radius of a trust region.
-    f : ndarray
-        residual vector
-    initial_alpha : float, optional
-        Initial guess for alpha, which might be available from a previous
-        iteration. If None, determined automatically.
-
-    Returns
-    -------
-    p : ndarray, shape (n,)
-        Found solution of a trust-region problem.
-    hits_boundary : bool
-        True if the proposed step is on the boundary of the trust region.
-    alpha : float
-        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
-        Sometimes called Levenberg-Marquardt parameter.
-
-    """
-
-    rtol = kwargs.get("rtol", 0.01)
-    max_iter = kwargs.get("max_iter", 10)
-    threshold = kwargs.get("threshold", None)
-    m, n = jac.shape
-    if not hasattr(jac, "svd"):
-        raise ValueError("exact trust region method only works with svd derivative")
-    if not isalmostequal(scale):
-        raise ValueError(
-            "exact trust region method does not currently work with diagonal scaling"
-        )
-    u, s, v = jac.svd()
-    return trust_region_step_exact(
-        n, m, f, u, s, v, trust_radius, initial_alpha, rtol, max_iter, threshold
-    )
-
-
-def trust_region_step_exact(
-    n, m, f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
+def trust_region_step_exact_svd(
+    f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method
 
@@ -208,10 +159,6 @@ def trust_region_step_exact(
 
     Parameters
     ----------
-    n : int
-        Number of variables.
-    m : int
-        Number of residuals.
     f : ndarray
         Vector of residuals
     u : ndarray
@@ -261,7 +208,7 @@ def trust_region_step_exact(
 
     # Check if J has full rank and try Gauss-Newton step.
     if threshold is None:
-        threshold = np.finfo(s.dtype).eps * m * s[0]
+        threshold = np.finfo(s.dtype).eps * f.size * s[0]
     else:
         threshold *= s[0]
     large = s > threshold
@@ -297,6 +244,92 @@ def trust_region_step_exact(
             break
 
     p = -v.dot(suf / (s ** 2 + alpha))
+
+    # Make the norm of p equal to Delta; p is changed only slightly during this.
+    # This is done to prevent p from lying outside the trust region
+    # (which can cause problems later).
+    p *= Delta / np.linalg.norm(p)
+
+    return p, True, alpha
+
+
+def trust_region_step_exact_cho(
+    g, B, Delta, initial_alpha=None, rtol=0.01, max_iter=10
+):
+    """Solve a trust-region problem using a semi-exact method
+
+    Solves problems of the form
+        (B + alpha*I)*p = -g,  ||p|| < Delta
+    for symmetric positive definite B
+
+    Parameters
+    ----------
+    g : ndarray
+        gradient vector
+    B : ndarray
+        Hessian or approximate hessian
+    Delta : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha, which might be available from a previous
+        iteration. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure. Namely, the
+        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+    max_iter : int, optional
+        Maximum allowed number of iterations for the root-finding procedure.
+
+    Returns
+    -------
+    p : ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        Positive value such that (B + alpha*I)*p = -g.
+        Sometimes called Levenberg-Marquardt parameter.
+
+    """
+
+    # try full newton step
+    R, lower = cho_factor(B)
+    p = cho_solve((R, lower), -g)
+    if np.linalg.norm(p) <= Delta:
+        return p, False, 0.0
+
+    alpha_upper = np.linalg.norm(g) / Delta
+    alpha_lower = 0.0
+
+    if initial_alpha is None or initial_alpha == 0:
+        alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
+    else:
+        alpha = initial_alpha
+
+    # algorithm 4.3 from Nocedal & Wright
+    for it in range(max_iter):
+        if alpha < alpha_lower or alpha > alpha_upper:
+            alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
+
+        Bi = B + alpha * jnp.eye(B.shape[0])
+        R, lower = cho_factor(Bi)
+        p = cho_solve((R, lower), -g)
+        p_norm = np.linalg.norm(p)
+        phi = p_norm - Delta
+        if phi < 0:
+            alpha_upper = alpha
+        if phi > 0:
+            alpha_lower = alpha
+
+        q = solve_triangular(R.T, p, lower=(not lower))
+        q_norm = np.linalg.norm(q)
+
+        alpha += (p_norm / q_norm) ** 2 * phi / Delta
+        if np.abs(phi) < rtol * Delta:
+            break
+
+    Bi = B + alpha * jnp.eye(B.shape[0])
+    R, lower = cho_factor(Bi)
+    p = cho_solve((R, lower), -g)
 
     # Make the norm of p equal to Delta; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region

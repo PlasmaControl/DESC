@@ -32,10 +32,6 @@ class ObjectiveFunction(IOAble, ABC):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -51,8 +47,6 @@ class ObjectiveFunction(IOAble, ABC):
         "R_transform",
         "Z_transform",
         "L_transform",
-        "Rb_transform",
-        "Zb_transform",
         "p_profile",
         "i_profile",
         "BC_constraint",
@@ -66,8 +60,6 @@ class ObjectiveFunction(IOAble, ABC):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -77,8 +69,6 @@ class ObjectiveFunction(IOAble, ABC):
         self.R_transform = R_transform
         self.Z_transform = Z_transform
         self.L_transform = L_transform
-        self.Rb_transform = Rb_transform
-        self.Zb_transform = Zb_transform
         self.p_profile = p_profile
         self.i_profile = i_profile
         self.BC_constraint = BC_constraint
@@ -96,6 +86,7 @@ class ObjectiveFunction(IOAble, ABC):
         self._check_transforms()
         self.set_derivatives(self.use_jit)
         self.compiled = False
+        self.built = False
         if not self.use_jit:
             self.compiled = True
 
@@ -113,14 +104,6 @@ class ObjectiveFunction(IOAble, ABC):
             (self.derivatives[:, None] == self.L_transform.derivatives).all(-1).any(-1)
         ):
             self.L_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.Rb_transform.derivatives).all(-1).any(-1)
-        ):
-            self.Rb_transform.change_derivatives(self.derivatives, build=False)
-        if not all(
-            (self.derivatives[:, None] == self.Zb_transform.derivatives).all(-1).any(-1)
-        ):
-            self.Zb_transform.change_derivatives(self.derivatives, build=False)
 
     def set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective function.
@@ -152,6 +135,41 @@ class ObjectiveFunction(IOAble, ABC):
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
 
+    def build(self, rebuild=False, verbose=1):
+        """Precompute the transform matrices to be used in optimization
+
+        Parameters
+        ----------
+        rebuild : bool
+            whether to force recalculation of transforms that have already been built
+        verbose : int, optional
+            level of output
+        """
+        if self.built and not rebuild:
+            return
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+        if not self.R_transform.built:
+            self.R_transform.build()
+        if not self.Z_transform.built:
+            self.Z_transform.build()
+        if not self.L_transform.built:
+            self.L_transform.build()
+        if hasattr(self.p_profile, "_transform") and not (
+            self.p_profile._transform.built
+        ):
+            self.p_profile._transform.build()
+        if hasattr(self.i_profile, "_transform") and not (
+            self.i_profile._transform.built
+        ):
+            self.i_profile._transform.build()
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        self.built = True
+
     def compile(self, x, args, verbose=1, mode="auto"):
         """Call the necessary functions to ensure the function is compiled.
 
@@ -180,6 +198,8 @@ class ObjectiveFunction(IOAble, ABC):
             mode = "scalar"
         elif mode == "auto":
             mode = "lsq"
+
+        self.build(verbose=verbose)
 
         if verbose > 0:
             print("Compiling objective function and derivatives")
@@ -378,293 +398,6 @@ class ObjectiveFunction(IOAble, ABC):
         return f(*args).reshape(tuple(dims))
 
 
-class ForceErrorGalerkin(ObjectiveFunction):
-    """Minimizes spectral coefficients of force balance residual.
-
-    Parameters
-    ----------
-    R_transform : Transform
-        transforms R_lmn coefficients to real space
-    Z_transform : Transform
-        transforms Z_lmn coefficients to real space
-    L_transform : Transform
-        transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
-    p_profile: Profile
-        transforms p_l coefficients to real space
-    i_profile: Profile
-        transforms i_l coefficients to real space
-    BC_constraint : BoundaryCondition
-        linear constraint to enforce boundary conditions
-    use_jit : bool, optional
-        whether to just-in-time compile the objective and derivatives
-
-    """
-
-    def __init__(
-        self,
-        R_transform,
-        Z_transform,
-        L_transform,
-        Rb_transform,
-        Zb_transform,
-        p_profile,
-        i_profile,
-        BC_constraint,
-        use_jit=True,
-    ):
-
-        super().__init__(
-            R_transform,
-            Z_transform,
-            L_transform,
-            Rb_transform,
-            Zb_transform,
-            p_profile,
-            i_profile,
-            BC_constraint,
-            use_jit,
-        )
-
-        if self.R_transform.grid.node_pattern != "quad":
-            warnings.warn(
-                colored(
-                    "Galerkin method requires 'quad' pattern nodes, "
-                    + "force error calculated will be incorrect",
-                    "yellow",
-                )
-            )
-
-    @property
-    def scalar(self):
-        """Wether default "compute" method is a scalar or vector (bool)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "galerkin"
-
-    @property
-    def derivatives(self):
-        """Which derivatives are needed to compute (ndarray)."""
-        # TODO: different derivatives for R,Z,L,p,i ?
-        # old axis derivatives
-        # axis = np.array([[2, 1, 0], [1, 2, 0], [1, 1, 1], [2, 2, 0]])
-        derivatives = np.array(
-            [
-                [0, 0, 0],
-                [1, 0, 0],
-                [0, 1, 0],
-                [0, 0, 1],
-                [2, 0, 0],
-                [0, 2, 0],
-                [0, 0, 2],
-                [1, 1, 0],
-                [1, 0, 1],
-                [0, 1, 1],
-            ]
-        )
-        return derivatives
-
-    def compute(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute spectral coefficients of force balance residual by quadrature.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : ndarray
-            force error in radial and helical directions at each node
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-
-        f_rho = self.R_transform.project(
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = self.Z_transform.project(
-            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-        )
-
-        residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
-        return residual
-
-    def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Compute the integral of the force balance residual by quadrature.
-
-        eg int(`|F_R|` + `|F_Z|`)
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        Returns
-        -------
-        f : float
-            total force balance error
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-        f = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
-        return f
-
-    def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
-        """Print the integral errors for toroidal components of the force balance.
-
-        Parameters
-        ----------
-        x : ndarray
-            optimization state vector
-        Rb_lmn : ndarray
-            array of fourier coefficients for R boundary
-        Zb_lmn : ndarray
-            array of fourier coefficients for Z boundary
-        p_l : ndarray
-            series coefficients for pressure profile
-        i_l : ndarray
-            series coefficients for iota profile
-        Psi : float
-            toroidal flux within the last closed flux surface in webers
-
-        """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        weights = self.R_transform.grid.weights
-
-        f_rho = jnp.sum(
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = jnp.sum(
-            force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
-        )
-        f_tot = jnp.sum(force_error["|F|"] * jacobian["g"] * weights)
-
-        print(
-            "int(|F|): {:10.3e}  ".format(f_tot)
-            + "int(|F_rho|): {:10.3e}  int(|F_beta|): {:10.3e}".format(f_rho, f_beta)
-        )
-        return None
-
-
 class ForceErrorNodes(ObjectiveFunction):
     """Minimizes equilibrium force balance error in physical space.
 
@@ -676,10 +409,6 @@ class ForceErrorNodes(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -901,10 +630,6 @@ class EnergyVolIntegral(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -921,8 +646,6 @@ class EnergyVolIntegral(ObjectiveFunction):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -933,8 +656,6 @@ class EnergyVolIntegral(ObjectiveFunction):
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             p_profile,
             i_profile,
             BC_constraint,
@@ -1119,10 +840,6 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1352,10 +1069,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1372,8 +1085,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         R_transform,
         Z_transform,
         L_transform,
-        Rb_transform,
-        Zb_transform,
         p_profile,
         i_profile,
         BC_constraint,
@@ -1384,8 +1095,6 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             p_profile,
             i_profile,
             BC_constraint,
@@ -1636,8 +1345,6 @@ def get_objective_function(
     R_transform,
     Z_transform,
     L_transform,
-    Rb_transform,
-    Zb_transform,
     p_profile,
     i_profile,
     BC_constraint=None,
@@ -1655,10 +1362,6 @@ def get_objective_function(
         transforms Z_lmn coefficients to real space
     L_transform : Transform
         transforms L_lmn coefficients to real space
-    Rb_transform : Transform
-        transforms Rb_lmn coefficients to real space
-    Zb_transform : Transform
-        transforms Zb_lmn coefficients to real space
     p_profile: Profile
         transforms p_l coefficients to real space
     i_profile: Profile
@@ -1679,8 +1382,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,
@@ -1691,8 +1392,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,
@@ -1703,8 +1402,6 @@ def get_objective_function(
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=Rb_transform,
-            Zb_transform=Zb_transform,
             p_profile=p_profile,
             i_profile=i_profile,
             BC_constraint=BC_constraint,

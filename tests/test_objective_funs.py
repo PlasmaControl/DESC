@@ -26,13 +26,11 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
         R_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         Z_basis = FourierZernikeBasis(L=-1, M=2, N=0)
         L_basis = FourierZernikeBasis(L=-1, M=2, N=0)
-        RZb_basis = DoubleFourierSeries(M=3, N=0)
         PI_basis = PowerSeries(L=3)
 
         R_transform = Transform(RZ_grid, R_basis)
         Z_transform = Transform(RZ_grid, Z_basis)
         L_transform = Transform(RZ_grid, L_basis)
-        RZb_transform = Transform(RZ_grid, RZb_basis)
         PI_transform = Transform(RZ_grid, PI_basis)
 
         errr_mode = "force"
@@ -41,8 +39,6 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
             R_transform=R_transform,
             Z_transform=Z_transform,
             L_transform=L_transform,
-            Rb_transform=RZb_transform,
-            Zb_transform=RZb_transform,
             p_profile=PI_transform,
             i_profile=PI_transform,
         )
@@ -54,8 +50,6 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
                 R_transform=R_transform,
                 Z_transform=Z_transform,
                 L_transform=L_transform,
-                Rb_transform=RZb_transform,
-                Zb_transform=RZb_transform,
                 p_profile=PI_transform,
                 i_profile=PI_transform,
             )
@@ -69,8 +63,6 @@ class TestObjectiveFunctionFactory(unittest.TestCase):
                 R_transform=R_transform,
                 Z_transform=Z_transform,
                 L_transform=L_transform,
-                Rb_transform=RZb_transform,
-                Zb_transform=RZb_transform,
                 p_profile=PI_transform,
                 i_profile=PI_transform,
             )

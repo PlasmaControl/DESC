@@ -6,13 +6,18 @@ from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
-from desc.backend import jnp, put
+from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble
-from desc.utils import unpack_state, copy_coeffs
+from desc.utils import unpack_state, copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.objective_funs import get_objective_function
 from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
+from desc.geometry import (
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+    FourierRZCurve,
+)
 from desc.basis import (
     PowerSeries,
     DoubleFourierSeries,
@@ -61,19 +66,15 @@ class _Configuration(IOAble, ABC):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
-        "_Rb_lmn",
-        "_Zb_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "_Rb_basis",
-        "_Zb_basis",
+        "_surface",
+        "_axis",
         "_pressure",
         "_iota",
         "_spectral_indexing",
         "_bdry_mode",
-        "_boundary",
-        "_profiles",
     ]
 
     def __init__(self, inputs):
@@ -108,8 +109,8 @@ class _Configuration(IOAble, ABC):
             self._L = inputs["L"]
             self._M = inputs["M"]
             self._N = inputs["N"]
-            self._profiles = inputs["profiles"]
-            self._boundary = inputs["boundary"]
+            profiles = inputs["profiles"]
+            boundary = inputs["boundary"]
         except:
             raise ValueError(colored("input dict does not contain proper keys", "red"))
 
@@ -123,7 +124,7 @@ class _Configuration(IOAble, ABC):
         self._children = []
 
         # stellarator symmetry for bases
-        if self._sym:
+        if self.sym:
             self._R_sym = "cos"
             self._Z_sym = "sin"
         else:
@@ -135,14 +136,41 @@ class _Configuration(IOAble, ABC):
 
         # format profiles
         self._pressure = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 1], name="pressure"
+            modes=profiles[:, 0], params=profiles[:, 1], name="pressure"
         )
         self._iota = PowerSeriesProfile(
-            modes=self._profiles[:, 0], params=self._profiles[:, 2], name="iota"
+            modes=profiles[:, 0], params=profiles[:, 2], name="iota"
         )
         # format boundary
-        self._Rb_lmn, self._Zb_lmn = format_boundary(
-            self._boundary, self.Rb_basis, self.Zb_basis, self.bdry_mode
+        if self.bdry_mode == "lcfs":
+            self._surface = FourierRZToroidalSurface(
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, 1:3].astype(int),
+                boundary[:, 1:3].astype(int),
+                self.NFP,
+                self.sym,
+            )
+        elif self.bdry_mode == "poincare":
+            self._surface = ZernikeRZToroidalSection(
+                boundary[:, 3],
+                boundary[:, 4],
+                boundary[:, :2].astype(int),
+                boundary[:, :2].astype(int),
+                self.spectral_indexing,
+                self.sym,
+            )
+        else:
+            raise ValueError("boundary should either have l=0 or n=0")
+
+        axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
+        self._axis = FourierRZCurve(
+            axis[:, 1],
+            axis[:, 2],
+            axis[:, 0].astype(int),
+            NFP=self.NFP,
+            sym=self.sym,
+            name="axis",
         )
 
         # check if state vector is provided
@@ -153,22 +181,19 @@ class _Configuration(IOAble, ABC):
             )
         # default initial guess
         except:
-            axis = inputs.get(
-                "axis", self._boundary[np.where(self._boundary[:, 1] == 0)[0], 2:]
-            )
             # check if R is provided
             try:
                 self._R_lmn = inputs["R_lmn"]
             except:
                 self._R_lmn = initial_guess(
-                    self.R_basis, self.Rb_lmn, self.Rb_basis, axis[:, 0:-1]
+                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis[:, 0:-1]
                 )
             # check if Z is provided
             try:
                 self._Z_lmn = inputs["Z_lmn"]
             except:
                 self._Z_lmn = initial_guess(
-                    self.Z_basis, self.Zb_lmn, self.Zb_basis, axis[:, (0, -1)]
+                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis[:, (0, -1)]
                 )
             # check if lambda is provided
             try:
@@ -176,6 +201,10 @@ class _Configuration(IOAble, ABC):
             except:
                 self._L_lmn = np.zeros((self.L_basis.num_modes,))
             self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+
+        # this makes sure the axis has the correct coefficients
+        self.axis.change_resolution(self.N)
+        self._axis = self.axis
 
     def _set_basis(self):
 
@@ -204,57 +233,15 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
 
-        if np.all(self._boundary[:, 0] == 0):
-            self._Rb_basis = DoubleFourierSeries(
-                M=self.M, N=self.N, NFP=self.NFP, sym=self._R_sym
-            )
-            self._Zb_basis = DoubleFourierSeries(
-                M=self.M, N=self.N, NFP=self.NFP, sym=self._Z_sym
-            )
-        elif np.all(self._boundary[:, 2] == 0):
-            self._Rb_basis = ZernikePolynomial(
-                L=self.L, M=self.M, sym=self._R_sym, index=self.spectral_indexing
-            )
-            self._Zb_basis = ZernikePolynomial(
-                L=self.L, M=self.M, sym=self._Z_sym, index=self.spectral_indexing
-            )
-        else:
-            raise ValueError("boundary should either have l=0 or n=0")
-
-        nonzero_modes = self._boundary[
-            np.argwhere(self._boundary[:, 3:] != np.array([0, 0]))[:, 0]
-        ]
-        if nonzero_modes.size and (
-            self.L < np.max(abs(nonzero_modes[:, 0]))
-            or self.M < np.max(abs(nonzero_modes[:, 1]))
-            or self.N < np.max(abs(nonzero_modes[:, 2]))
-        ):
-            warnings.warn(
-                colored(
-                    "Configuration resolution does not fully resolve boundary inputs, "
-                    + "Configuration L,M,N={},{},{}, ".format(self.L, self.M, self.N)
-                    + "boundary resolution L,M,N={},{},{}".format(
-                        int(np.max(abs(nonzero_modes[:, 0]))),
-                        int(np.max(abs(nonzero_modes[:, 1]))),
-                        int(np.max(abs(nonzero_modes[:, 2]))),
-                    ),
-                    "yellow",
-                )
-            )
-
     @property
     def parent(self):
         """Pointer to the equilibrium this was derived from."""
-        if not hasattr(self, "_parent"):
-            self._parent = None
-        return self._parent
+        return self.__dict__.setdefault("_parent", None)
 
     @property
     def children(self):
         """List of configurations that were derived from this one."""
-        if not hasattr(self, "_children"):
-            self._children = []
-        return self._children
+        return self.__dict__.setdefault("_children", [])
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -296,21 +283,16 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
-        old_modes_Rb = self.Rb_basis.modes
-        old_modes_Zb = self.Zb_basis.modes
 
         self._set_basis()
 
-        # format boundary
-        full_Rb_lmn, full_Zb_lmn = format_boundary(
-            self._boundary, self.Rb_basis, self.Zb_basis, self.bdry_mode
-        )
-        self._Rb_lmn = copy_coeffs(
-            self.Rb_lmn, old_modes_Rb, self.Rb_basis.modes, full_Rb_lmn
-        )
-        self._Zb_lmn = copy_coeffs(
-            self.Zb_lmn, old_modes_Zb, self.Zb_basis.modes, full_Zb_lmn
-        )
+        if N_change:
+            self.axis.change_resolution(self.N)
+        # this is kind of a kludge for now
+        if self.bdry_mode == "lcfs":
+            self.surface.change_resolution(self.M, self.N)
+        elif self.bdry_mode == "poincare":
+            self.surface.change_resolution(self.L, self.M)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -319,6 +301,11 @@ class _Configuration(IOAble, ABC):
         # state vector
         self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
         self._make_labels()
+
+    @property
+    def surface(self):
+        """geometric surface defining boundary conditions"""
+        return self._surface
 
     @property
     def spectral_indexing(self):
@@ -413,20 +400,57 @@ class _Configuration(IOAble, ABC):
     @property
     def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        return self._Rb_lmn
+        if self.bdry_mode == "lcfs":
+            return self.surface.R_mn
+        elif self.bdry_mode == "poincare":
+            return self.surface.R_lm
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
-        self._Rb_lmn = Rb_lmn
+        if self.bdry_mode == "lcfs":
+            self.surface.R_mn = Rb_lmn
+        elif self.bdry_mode == "poincare":
+            self.surface.R_lm = Rb_lmn
 
     @property
     def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        return self._Zb_lmn
+        if self.bdry_mode == "lcfs":
+            return self.surface.Z_mn
+        elif self.bdry_mode == "poincare":
+            return self.surface.Z_lm
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
-        self._Zb_lmn = Zb_lmn
+        if self.bdry_mode == "lcfs":
+            self.surface.Z_mn = Zb_lmn
+        elif self.bdry_mode == "poincare":
+            self.surface.Z_lm = Zb_lmn
+
+    @property
+    def Ra_n(self):
+        """R coefficients for axis Fourier series."""
+        return self.axis.R_n
+
+    @property
+    def Za_n(self):
+        """Z coefficients for axis Fourier series."""
+        return self.axis.Z_n
+
+    @property
+    def axis(self):
+        """Curve object representing the magnetic axis."""
+        return self._axis
+
+    @axis.setter
+    def axis(self, new):
+        if isinstance(new, FourierRZCurve):
+            new.change_resolution(self.N)
+            self._axis = new
+        else:
+            raise TypeError(
+                f"axis should be of type FourierRZCurve or a subclass, got {new}"
+            )
 
     @property
     def pressure(self):
@@ -488,16 +512,6 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
-
-    @property
-    def Rb_basis(self):
-        """Spectral basis for R at the boundary (Basis)."""
-        return self._Rb_basis
-
-    @property
-    def Zb_basis(self):
-        """Spectral basis for Z at the boundary (Basis)."""
-        return self._Zb_basis
 
     @property
     def major_radius(self):
@@ -568,12 +582,28 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
+    def _get_transforms(self, grid=None, derivs=0):
+        """get transforms with a specific grid"""
+        if grid is None:
+            grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
+        if not isinstance(grid, Grid):
+            if np.isscalar(grid):
+                grid = LinearGrid(L=grid, M=grid, N=grid, NFP=self.NFP)
+            grid = np.atleast_1d(grid)
+            if grid.ndim == 1:
+                grid = np.tile(grid, (3, 1))
+            grid = Grid(grid, sort=False)
+        R_transform = Transform(grid, self.R_basis, derivs=derivs, build=True)
+        Z_transform = Transform(grid, self.Z_basis, derivs=derivs, build=True)
+        L_transform = Transform(grid, self.L_basis, derivs=derivs, build=True)
+        return R_transform, Z_transform, L_transform
+
     def compute_profiles(self, grid=None):
         """Compute magnetic flux, pressure, and rotational transform profiles.
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -584,16 +614,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         profiles = compute_profiles(
             self.Psi,
@@ -616,7 +641,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -627,17 +652,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        # TODO: option to return intermediate variables for all these
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         toroidal_coords = compute_toroidal_coords(
             self.Psi,
@@ -660,7 +679,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -671,16 +690,11 @@ class _Configuration(IOAble, ABC):
             Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=0, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=0, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
             self.Psi,
@@ -703,7 +717,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -715,16 +729,11 @@ class _Configuration(IOAble, ABC):
             the x direction, differentiated wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (cov_basis, toroidal_coords) = compute_covariant_basis(
             self.Psi,
@@ -747,7 +756,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -759,16 +768,11 @@ class _Configuration(IOAble, ABC):
             system jacobian g.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -791,7 +795,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -803,16 +807,11 @@ class _Configuration(IOAble, ABC):
             in the x direction, differentiated wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
             self.Psi,
@@ -835,7 +834,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -848,16 +847,11 @@ class _Configuration(IOAble, ABC):
             derivative wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_field,
@@ -886,7 +880,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -898,16 +892,11 @@ class _Configuration(IOAble, ABC):
             component of the current, with the derivative wrt to y.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             current_density,
@@ -937,7 +926,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -949,16 +938,11 @@ class _Configuration(IOAble, ABC):
             magnetic pressure gradient.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_pressure,
@@ -990,7 +974,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -1002,16 +986,11 @@ class _Configuration(IOAble, ABC):
             magnitude.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             magnetic_tension,
@@ -1043,7 +1022,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Collocation grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at.
 
@@ -1055,16 +1034,11 @@ class _Configuration(IOAble, ABC):
             force error.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             force_error,
@@ -1094,13 +1068,13 @@ class _Configuration(IOAble, ABC):
     def compute_energy(self, grid=None):
         """Compute total MHD energy,
         :math:`W=\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
-        
+
         where DESC assumes :math:`\gamma=0`.
         Also computes the individual components (magnetic and pressure)
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1112,16 +1086,11 @@ class _Configuration(IOAble, ABC):
             MHD energy (W_B + W_p)
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=2, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=2, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=2, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             energy,
@@ -1151,7 +1120,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1163,16 +1132,11 @@ class _Configuration(IOAble, ABC):
         and the flux function metric has the key 'QS_FF'.
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=3, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=3, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=3, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=3)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (
             quasisymmetry,
@@ -1204,7 +1168,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1214,16 +1178,11 @@ class _Configuration(IOAble, ABC):
             plasma volume in m^3
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1239,14 +1198,14 @@ class _Configuration(IOAble, ABC):
             iota,
         )
 
-        return np.sum(np.abs(jacobian["g"]) * grid.weights)
+        return np.sum(np.abs(jacobian["g"]) * R_transform.grid.weights)
 
     def compute_cross_section_area(self, grid=None):
         """Compute toroidally averaged cross-section area.
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             Quadrature grid containing the (rho, theta, zeta) coordinates of
             the nodes to evaluate at
 
@@ -1256,16 +1215,11 @@ class _Configuration(IOAble, ABC):
             cross section area in m^2
 
         """
-        if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=0, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
-        iota.grid = grid
+        iota.grid = R_transform.grid
 
         (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
             self.Psi,
@@ -1281,8 +1235,8 @@ class _Configuration(IOAble, ABC):
             iota,
         )
 
-        N = np.unique(grid.nodes[:, -1]).size  # number of toroidal angles
-        weights = grid.weights / (2 * np.pi / N)  # remove toroidal weights
+        N = np.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
+        weights = R_transform.grid.weights / (2 * np.pi / N)  # remove toroidal weights
         return np.mean(
             np.sum(
                 np.reshape(  # sqrt(g) / R * weight = dArea
@@ -1297,7 +1251,7 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid, optional
+        grid : Grid, ndarray, optional
             grid to use for computation. If None, a QuadratureGrid is created
 
         Returns
@@ -1307,26 +1261,17 @@ class _Configuration(IOAble, ABC):
             describe the shape of unstable perturbations
 
         """
-        if grid is None:
-            grid = QuadratureGrid(L=self.L, M=self.M, N=self.N)
-
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="auto")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="auto")
-        L_transform = Transform(grid, self.L_basis, derivs=1, method="auto")
+        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
         pressure = self.pressure.copy()
-        pressure.grid = grid
+        pressure.grid = R_transform.grid
         iota = self.iota.copy()
         iota.grid = grid
-        Rb_transform = Transform(grid, self.Rb_basis, derivs=1, method="auto")
-        Zb_transform = Transform(grid, self.Zb_basis, derivs=1, method="auto")
 
         obj = get_objective_function(
             "energy",
             R_transform,
             Z_transform,
             L_transform,
-            Rb_transform,
-            Zb_transform,
             pressure,
             iota,
             BC_constraint=None,
@@ -1336,7 +1281,7 @@ class _Configuration(IOAble, ABC):
         dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
         return dW
 
-    def compute_theta_coords(self, flux_coords, tol=1e-6, maxiter=20):
+    def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of
         straight field-line coordinates (rho, theta*, zeta).
 
@@ -1345,6 +1290,8 @@ class _Configuration(IOAble, ABC):
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             coordinate.
+        L_lmn : ndarray
+            spectral coefficients for lambda. Defaults to self.L_lmn
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1357,62 +1304,55 @@ class _Configuration(IOAble, ABC):
             a given coordinate nan will be returned for those values
 
         """
-        rho = flux_coords[:, 0]
-        theta_star = flux_coords[:, 1]
-        zeta = flux_coords[:, 2]
+        if L_lmn is None:
+            L_lmn = self.L_lmn
+        rho, theta_star, zeta = flux_coords.T
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if jnp.any(rho) <= 0:
+        if jnp.any(rho < 0):
             raise ValueError("rho values must be positive")
 
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates
 
-        theta_k = theta_star
-        grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-
-        transform = Transform(
-            grid,
-            self.L_basis,
-            derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-            method="direct1",
-        )
-
+        nodes = flux_coords.copy()
+        A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
         # theta* = theta + lambda
-        theta_star_k = theta_k + transform.transform(self.L_lmn)
-        err = theta_star - theta_star_k
+        lmbda = jnp.dot(A0, L_lmn)
+        k = 0
+
+        def cond_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            theta_star_k = nodes[:, 1] + lmbda
+            err = theta_star - theta_star_k
+            return jnp.any(jnp.abs(err) > tol) & (k < maxiter)
 
         # Newton method for root finding
-        k = 0
-        while jnp.any(abs(err) > tol) and k < maxiter:
-            lmbda = transform.transform(self.L_lmn, 0, 0, 0)
-            lmbda_t = transform.transform(self.L_lmn, 0, 1, 0)
-            f = theta_star - theta_k - lmbda
+        def body_fun(nodes_k_lmbda):
+            nodes, k, lmbda = nodes_k_lmbda
+            A1 = self.L_basis.evaluate(nodes, (0, 1, 0))
+            lmbda_t = jnp.dot(A1, L_lmn)
+            f = theta_star - nodes[:, 1] - lmbda
             df = -1 - lmbda_t
-
-            theta_k = theta_k - f / df
-
-            grid = Grid(jnp.vstack([rho, theta_k, zeta]).T, sort=False)
-            transform = Transform(
-                grid,
-                self.L_basis,
-                derivs=np.array([[0, 0, 0], [0, 1, 0]]),
-                method="direct1",
-            )
-
-            theta_star_k = theta_k + transform.transform(self.L_lmn)
-            err = theta_star - theta_star_k
+            nodes = put(nodes, opsindex[:, 1], nodes[:, 1] - f / df)
+            A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
+            lmbda = jnp.dot(A0, L_lmn)
             k += 1
+            return (nodes, k, lmbda)
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(abs(err) > tol)
-            rho = put(rho, i, np.nan)
-            theta_k = put(theta_k, i, np.nan)
-            zeta = put(zeta, i, np.nan)
+        nodes, k, lmbda = jit(while_loop, static_argnums=(0, 1))(
+            cond_fun, body_fun, (nodes, k, lmbda)
+        )
+        theta_star_k = nodes[:, 1] + lmbda
+        err = theta_star - theta_star_k
+        noconverge = jnp.abs(err) > tol
+        nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
 
-        return jnp.vstack([rho, theta_k, zeta]).T
+        return nodes
 
-    def compute_flux_coords(self, real_coords, tol=1e-6, maxiter=20, rhomin=1e-6):
+    def compute_flux_coords(
+        self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
+    ):
         """Find the flux coordinates (rho, theta, zeta) that correspond to a set of
         real space coordinates (R, phi, Z).
 
@@ -1420,6 +1360,8 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2d array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+        R_lmn, Z_lmn : ndarray
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
         tol : float
             Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
         maxiter : int > 0
@@ -1435,85 +1377,79 @@ class _Configuration(IOAble, ABC):
             nan will be returned for those values
 
         """
-        R = real_coords[:, 0]
-        phi = real_coords[:, 1]
-        Z = real_coords[:, 2]
         if maxiter <= 0:
             raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if jnp.any(R) <= 0:
-            raise ValueError("R values must be positive")
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
 
-        R0, Z0 = self.compute_axis_location(zeta=phi)
-        theta = jnp.arctan2(Z - Z0, R - R0)
-        rho = 0.5 * jnp.ones_like(theta)  # TODO: better initial guess
-        grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
+        R, phi, Z = real_coords.T
+        R = jnp.abs(R)
 
-        R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-        Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
+        # nearest neighbor search on coarse grid for initial guess
+        nodes = ConcentricGrid(L=20, M=10, N=0).nodes
+        AR = self.R_basis.evaluate(nodes)
+        AZ = self.Z_basis.evaluate(nodes)
+        Rg = jnp.dot(AR, R_lmn)
+        Zg = jnp.dot(AZ, Z_lmn)
+        distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
+        idx = jnp.argmin(distance, axis=1)
 
-        Rk = R_transform.transform(self.R_lmn)
-        Zk = Z_transform.transform(self.Z_lmn)
-        eR = R - Rk
-        eZ = Z - Zk
-
+        rhok = nodes[idx, 0]
+        thetak = nodes[idx, 1]
+        Rk = Rg[idx]
+        Zk = Zg[idx]
         k = 0
-        while jnp.any(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol) and k < maxiter:
-            Rr = R_transform.transform(self.R_lmn, 1, 0, 0)
-            Rt = R_transform.transform(self.R_lmn, 0, 1, 0)
-            Zr = Z_transform.transform(self.Z_lmn, 1, 0, 0)
-            Zt = Z_transform.transform(self.Z_lmn, 0, 1, 0)
+
+        def cond_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+
+        def body_fun(k_rhok_thetak_Rk_Zk):
+            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
+            nodes = jnp.array([rhok, thetak, phi]).T
+            ARr = self.R_basis.evaluate(nodes, (1, 0, 0))
+            Rr = jnp.dot(ARr, R_lmn)
+            AZr = self.Z_basis.evaluate(nodes, (1, 0, 0))
+            Zr = jnp.dot(AZr, Z_lmn)
+            ARt = self.R_basis.evaluate(nodes, (0, 1, 0))
+            Rt = jnp.dot(ARt, R_lmn)
+            AZt = self.Z_basis.evaluate(nodes, (0, 1, 0))
+            Zt = jnp.dot(AZt, Z_lmn)
 
             tau = Rt * Zr - Rr * Zt
-            theta += (Zr * eR - Rr * eZ) / tau
-            rho += (Rt * eZ - Zt * eR) / tau
-            # negative rho -> rotate theta instead
-            theta = jnp.where(rho < 0, -theta % (2 * np.pi), theta % (2 * np.pi))
-            rho = jnp.clip(rho, rhomin, 1)
-
-            grid = Grid(jnp.vstack([rho, theta, phi]).T, sort=False)
-            R_transform = Transform(grid, self.R_basis, derivs=1, method="direct1")
-            Z_transform = Transform(grid, self.Z_basis, derivs=1, method="direct1")
-
-            Rk = R_transform.transform(self.R_lmn)
-            Zk = Z_transform.transform(self.Z_lmn)
             eR = R - Rk
             eZ = Z - Zk
-            k += 1
+            thetak += (Zr * eR - Rr * eZ) / tau
+            rhok += (Rt * eZ - Zt * eR) / tau
+            # negative rho -> rotate theta instead
+            thetak = jnp.where(
+                rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
+            )
+            rhok = jnp.abs(rhok)
+            rhok = jnp.clip(rhok, rhomin, 1)
+            nodes = jnp.array([rhok, thetak, phi]).T
 
-        if k >= maxiter:  # didn't converge for all, mark those as nan
-            i = np.where(jnp.sqrt((eR) ** 2 + (eZ) ** 2) > tol)
-            rho = put(rho, i, np.nan)
-            theta = put(theta, i, np.nan)
-            phi = put(phi, i, np.nan)
+            AR = self.R_basis.evaluate(nodes, (0, 0, 0))
+            Rk = jnp.dot(AR, R_lmn)
+            AZ = self.Z_basis.evaluate(nodes, (0, 0, 0))
+            Zk = jnp.dot(AZ, Z_lmn)
+            k += 1
+            return (k, rhok, thetak, Rk, Zk)
+
+        k, rhok, thetak, Rk, Zk = while_loop(
+            cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
+        )
+
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        rho = jnp.where(noconverge, jnp.nan, rhok)
+        theta = jnp.where(noconverge, jnp.nan, thetak)
+        phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def compute_axis_location(self, zeta=0):
-        """Find the axis location on specified zeta plane(s).
-
-        Parameters
-        ----------
-        zeta : float or array-like of float
-            zeta planes to find axis on
-
-        Returns
-        -------
-        R0 : ndarray
-            R coordinate of axis on specified zeta planes
-        Z0 : ndarray
-            Z coordinate of axis on specified zeta planes
-
-        """
-        z = np.atleast_1d(zeta).flatten()
-        r = np.zeros_like(z)
-        t = np.zeros_like(z)
-        nodes = np.array([r, t, z]).T
-        R0 = np.dot(self.R_basis.evaluate(nodes), self.R_lmn)
-        Z0 = np.dot(self.Z_basis.evaluate(nodes), self.Z_lmn)
-
-        return R0, Z0
-
-    def is_nested(self, nsurfs=10, ntheta=20, zeta=0, Nt=45, Nr=20):
+    def is_nested(self, nsurfs=10, ntheta=20, nzeta=None, Nt=45, Nr=20):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Parameters
@@ -1522,8 +1458,11 @@ class _Configuration(IOAble, ABC):
             number of radial surfaces to check (Default value = 10)
         ntheta : int, optional
             number of sfl poloidal contours to check (Default value = 20)
-        zeta : float, optional
-            toroidal plane to check (Default value = 0)
+        nzeta : int, optional
+            Number of toroidal planes to check, by default checks the zeta=0
+            plane for axisymmetric equilibria and 5 planes evenly spaced in
+            zeta between 0 and 2pi/NFP for non-axisymmetric, otherwise uses
+            nzeta planes linearly spaced  in zeta between 0 and 2pi/NFP
         Nt : int, optional
             number of theta points to use for the r contours (Default value = 45)
         Nr : int, optional
@@ -1535,33 +1474,45 @@ class _Configuration(IOAble, ABC):
             whether or not the surfaces are nested
 
         """
-        r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
-        t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
+        planes_nested_bools = []
+        if nzeta is None:
+            zetas = (
+                [0]
+                if self.N is 0
+                else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
+            )
+        else:
+            zetas = np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False)
 
-        r_coords = self.compute_toroidal_coords(r_grid)
-        t_coords = self.compute_toroidal_coords(t_grid)
+        for zeta in zetas:
+            r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
+            t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
-        v_nodes = t_grid.nodes
-        v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-        v_grid = Grid(v_nodes)
-        v_coords = self.compute_toroidal_coords(v_grid)
+            r_coords = self.compute_toroidal_coords(r_grid)
+            t_coords = self.compute_toroidal_coords(t_grid)
 
-        # rho contours
-        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
-        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+            v_nodes = t_grid.nodes
+            v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
+            v_grid = Grid(v_nodes)
+            v_coords = self.compute_toroidal_coords(v_grid)
 
-        # theta contours
-        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
-        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+            # rho contours
+            Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+            Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
 
-        rline = MultiLineString(
-            [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
-        )
-        vline = MultiLineString(
-            [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
-        )
+            # theta contours
+            Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+            Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
 
-        return rline.is_simple and vline.is_simple
+            rline = MultiLineString(
+                [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
+            )
+            vline = MultiLineString(
+                [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
+            )
+
+            planes_nested_bools.append(rline.is_simple and vline.is_simple)
+        return np.all(planes_nested_bools)
 
     def to_sfl(
         self,
@@ -1638,26 +1589,34 @@ class _Configuration(IOAble, ABC):
         eq_sfl.change_resolution(L, M, N)
 
         R_sfl_transform = Transform(
-            sfl_grid, eq_sfl.R_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
         )
         R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
         del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
         Z_sfl_transform = Transform(
-            sfl_grid, eq_sfl.Z_basis, build_pinv=True, rcond=rcond
+            sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
         )
         Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
         del Z_sfl_transform
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
         R_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.Rb_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.R_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
-            bdry_sfl_grid, eq_sfl.Zb_basis, build_pinv=True, rcond=rcond
+            bdry_sfl_grid,
+            eq_sfl.surface.Z_basis,
+            build=False,
+            build_pinv=True,
+            rcond=rcond,
         )
         Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
         del Z_sfl_bdry_transform
@@ -1784,7 +1743,7 @@ class _Configuration(IOAble, ABC):
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym="cos")
         else:
             basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym=None)
-        transform = Transform(grid, basis, build_pinv=True)
+        transform = Transform(grid, basis, build=False, build_pinv=True)
         m = basis.modes[:, 1]
         n = basis.modes[:, 2]
 
@@ -1819,54 +1778,6 @@ class _Configuration(IOAble, ABC):
         if filename is not None:
             b.write_boozmn(filename)
         return b
-
-
-def format_boundary(boundary, Rb_basis, Zb_basis, mode="lcfs"):
-    """Format boundary arrays and converts between real and fourier representations.
-
-    Parameters
-    ----------
-    boundary : ndarray, shape(Nbdry,5)
-        array of fourier coeffs [l, m, n, Rb_lmn, Zb_lmn]
-        or array of real space coordinates, [rho, theta, phi, R, Z]
-    Rb_basis : DoubleFourierSeries
-        spectral basis for Rb_lmn coefficients
-    Zb_basis : DoubleFourierSeries
-        spectral basis for Zb_lmn coefficients
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
-
-    Returns
-    -------
-    Rb_lmn : ndarray
-        spectral coefficients for R boundary
-    Zb_lmn : ndarray
-        spectral coefficients for Z boundary
-
-    """
-    Rb_lmn = np.zeros((Rb_basis.num_modes,))
-    Zb_lmn = np.zeros((Zb_basis.num_modes,))
-
-    if mode == "lcfs":
-        # boundary is on m,n LCFS
-        for m, n, R1, Z1 in boundary[:, 1:]:
-            idx_R = np.where((Rb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            idx_Z = np.where((Zb_basis.modes[:, 1:] == [int(m), int(n)]).all(axis=1))[0]
-            Rb_lmn[idx_R] = R1
-            Zb_lmn[idx_Z] = Z1
-    elif mode == "poincare":
-        # boundary is on l,m poincare section
-        for l, m, R1, Z1 in boundary[:, (0, 1, 3, 4)]:
-            idx_R = np.where((Rb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
-            idx_Z = np.where((Zb_basis.modes[:, :2] == [int(l), int(m)]).all(axis=1))[0]
-            Rb_lmn[idx_R] = R1
-            Zb_lmn[idx_Z] = Z1
-    else:
-        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-    return Rb_lmn.astype(float), Zb_lmn.astype(float)
 
 
 def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):

@@ -1451,7 +1451,6 @@ def compute_magnetic_field_magnitude(
     return data
 
 
-# FIXME: add entries to data index
 def compute_magnetic_pressure_gradient(
     R_lmn,
     Z_lmn,
@@ -1512,46 +1511,50 @@ def compute_magnetic_pressure_gradient(
     )
 
     # covariant components
-    data["grad(|B|^2)_rho"] = (
-        data["B^theta"] * data["B_theta_r"]
-        + data["B_theta"] * data["B^theta_r"]
-        + data["B^zeta"] * data["B_zeta_r"]
-        + data["B_zeta"] * data["B^zeta_r"]
-    )
-    data["grad(|B|^2)_theta"] = (
-        data["B^theta"] * data["B_theta_t"]
-        + data["B_theta"] * data["B^theta_t"]
-        + data["B^zeta"] * data["B_zeta_t"]
-        + data["B_zeta"] * data["B^zeta_t"]
-    )
-    data["grad(|B|^2)_zeta"] = (
-        data["B^theta"] * data["B_theta_z"]
-        + data["B_theta"] * data["B^theta_z"]
-        + data["B^zeta"] * data["B_zeta_z"]
-        + data["B_zeta"] * data["B^zeta_z"]
-    )
+    if check_derivs("grad(|B|^2)_rho", R_transform, Z_transform, L_transform):
+        data["grad(|B|^2)_rho"] = (
+            data["B^theta"] * data["B_theta_r"]
+            + data["B_theta"] * data["B^theta_r"]
+            + data["B^zeta"] * data["B_zeta_r"]
+            + data["B_zeta"] * data["B^zeta_r"]
+        )
+    if check_derivs("grad(|B|^2)_theta", R_transform, Z_transform, L_transform):
+        data["grad(|B|^2)_theta"] = (
+            data["B^theta"] * data["B_theta_t"]
+            + data["B_theta"] * data["B^theta_t"]
+            + data["B^zeta"] * data["B_zeta_t"]
+            + data["B_zeta"] * data["B^zeta_t"]
+        )
+    if check_derivs("grad(|B|^2)_zeta", R_transform, Z_transform, L_transform):
+        data["grad(|B|^2)_zeta"] = (
+            data["B^theta"] * data["B_theta_z"]
+            + data["B_theta"] * data["B^theta_z"]
+            + data["B^zeta"] * data["B_zeta_z"]
+            + data["B_zeta"] * data["B^zeta_z"]
+        )
 
     # gradient vector
-    data["grad(|B|^2)"] = (
-        data["grad(|B|^2)_rho"] * data["e^rho"]
-        + data["grad(|B|^2)_theta"] * data["e^theta"]
-        + data["grad(|B|^2)_zeta"] * data["e^zeta"]
-    )
+    if check_derivs("grad(|B|^2)", R_transform, Z_transform, L_transform):
+        data["grad(|B|^2)"] = (
+            data["grad(|B|^2)_rho"] * data["e^rho"]
+            + data["grad(|B|^2)_theta"] * data["e^theta"]
+            + data["grad(|B|^2)_zeta"] * data["e^zeta"]
+        )
 
     # magnitude
-    data["|grad(|B|^2)|"] = jnp.sqrt(
-        data["grad(|B|^2)_rho"] ** 2 * data["g^rr"]
-        + data["grad(|B|^2)_theta"] ** 2 * data["g^tt"]
-        + data["grad(|B|^2)_zeta"] ** 2 * data["g^zz"]
-        + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_theta"] * data["g^rt"]
-        + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_zeta"] * data["g^rz"]
-        + 2 * data["grad(|B|^2)_theta"] * data["grad(|B|^2)_zeta"] * data["g^tz"]
-    )
+    if check_derivs("|grad(|B|^2)|", R_transform, Z_transform, L_transform):
+        data["|grad(|B|^2)|"] = jnp.sqrt(
+            data["grad(|B|^2)_rho"] ** 2 * data["g^rr"]
+            + data["grad(|B|^2)_theta"] ** 2 * data["g^tt"]
+            + data["grad(|B|^2)_zeta"] ** 2 * data["g^zz"]
+            + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_theta"] * data["g^rt"]
+            + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_zeta"] * data["g^rz"]
+            + 2 * data["grad(|B|^2)_theta"] * data["grad(|B|^2)_zeta"] * data["g^tz"]
+        )
 
     return data
 
 
-# FIXME: add entries to data index
 def compute_magnetic_tension(
     R_lmn,
     Z_lmn,
@@ -1620,36 +1623,41 @@ def compute_magnetic_tension(
         data=data,
     )
 
-    data["(curl(B)xB)_rho"] = (
-        mu_0
-        * data["sqrt(g)"]
-        * (data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"])
-    )
-    data["(curl(B)xB)_theta"] = -mu_0 * data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
-    data["(curl(B)xB)_zeta"] = mu_0 * data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
-    data["(curl(B)xB)"] = (
-        data["(curl(B)xB)_rho"] * data["e^rho"]
-        + data["(curl(B)xB)_theta"] * data["e^theta"]
-        + data["(curl(B)xB)_zeta"] * data["e^zeta"]
-    )
+    if check_derivs("(curl(B)xB)_rho", R_transform, Z_transform, L_transform):
+        data["(curl(B)xB)_rho"] = (
+            mu_0
+            * data["sqrt(g)"]
+            * (data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"])
+        )
+    if check_derivs("(curl(B)xB)_theta", R_transform, Z_transform, L_transform):
+        data["(curl(B)xB)_theta"] = (
+            -mu_0 * data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+        )
+    if check_derivs("(curl(B)xB)_zeta", R_transform, Z_transform, L_transform):
+        data["(curl(B)xB)_zeta"] = (
+            mu_0 * data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+        )
+    if check_derivs("curl(B)xB", R_transform, Z_transform, L_transform):
+        data["(curl(B)xB)"] = (
+            data["(curl(B)xB)_rho"] * data["e^rho"]
+            + data["(curl(B)xB)_theta"] * data["e^theta"]
+            + data["(curl(B)xB)_zeta"] * data["e^zeta"]
+        )
 
     # tension vector
-    data["(B*grad)B"] = data["(curl(B)xB)"] + data["grad(|B|^2)"] / 2
-
-    # contravariant components
-    data["((B*grad)B)^rho"] = dot(data["(B*grad)B"], data["e^rho"], 0)
-    data["((B*grad)B)^theta"] = dot(data["(B*grad)B"], data["e^theta"], 0)
-    data["((B*grad)B)^zeta"] = dot(data["(B*grad)B"], data["e^zeta"], 0)
-
-    # magnitude
-    data["|(B*grad)B|"] = jnp.sqrt(
-        data["((B*grad)B)^rho"] ** 2 * data["g_rr"]
-        + data["((B*grad)B)^theta"] ** 2 * data["g_tt"]
-        + data["((B*grad)B)^zeta"] ** 2 * data["g_zz"]
-        + 2 * data["((B*grad)B)^rho"] * data["((B*grad)B)^theta"] * data["g_rt"]
-        + 2 * data["((B*grad)B)^rho"] * data["((B*grad)B)^zeta"] * data["g_rz"]
-        + 2 * data["((B*grad)B)^theta"] * data["((B*grad)B)^zeta"] * data["g_tz"]
-    )
+    if check_derivs("(B*grad)B", R_transform, Z_transform, L_transform):
+        data["(B*grad)B"] = data["(curl(B)xB)"] + data["grad(|B|^2)"] / 2
+        data["((B*grad)B)_rho"] = dot(data["(B*grad)B"], data["e_rho"], 0)
+        data["((B*grad)B)_theta"] = dot(data["(B*grad)B"], data["e_theta"], 0)
+        data["((B*grad)B)_zeta"] = dot(data["(B*grad)B"], data["e_zeta"], 0)
+        data["|(B*grad)B|"] = jnp.sqrt(
+            data["((B*grad)B)_rho"] ** 2 * data["g^rr"]
+            + data["((B*grad)B)_theta"] ** 2 * data["g^tt"]
+            + data["((B*grad)B)_zeta"] ** 2 * data["g^zz"]
+            + 2 * data["((B*grad)B)_rho"] * data["((B*grad)B)_theta"] * data["g^rt"]
+            + 2 * data["((B*grad)B)_rho"] * data["((B*grad)B)_zeta"] * data["g^rz"]
+            + 2 * data["((B*grad)B)_theta"] * data["((B*grad)B)_zeta"] * data["g^tz"]
+        )
 
     return data
 

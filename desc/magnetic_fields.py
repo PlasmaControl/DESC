@@ -7,6 +7,7 @@ from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d
 
+
 class MagneticField(IOAble, ABC):
 
     _io_attrs_ = []
@@ -33,10 +34,28 @@ class SplineMagneticField(MagneticField):
         toroidal magnetic field on grid
     BZ : array-like, shape(NR,Nphi,NZ)
         vertical magnetic field on grid
-    
+    method : str
+        interpolation method
+    extrap : bool
+        whether to extrapolate beyond the domain of known field values or return nan
+    period : float
+        period in the toroidal direction (usually 2pi/NFP)
+
     """
-    
-    def __init__(self, R,phi,Z,BR,Bphi,BZ, method="cubic", extrap=False, period=0):
+
+    _io_attrs_ = [
+        "_R",
+        "_phi",
+        "_Z",
+        "_BR",
+        "_Bphi",
+        "_BZ",
+        "_method",
+        "_extrap",
+        "_period",
+    ]
+
+    def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
 
         R, phi, Z = np.atleast_1d(R), np.atleast_1d(phi), np.atleast_1d(Z)
         assert R.ndim == 1
@@ -65,32 +84,82 @@ class SplineMagneticField(MagneticField):
         else:
             Rq, phiq, Zq = grid.T
 
-        BRq = interp3d(Rq, phiq, Zq, self._R, self._phi, self._Z, self._BR,
-                       self._method, (dR, dp, dZ), self._extrap, self._period)
-        Bphiq = interp3d(Rq, phiq, Zq, self._R, self._phi, self._Z, self._Bphi,
-                       self._method, (dR, dp, dZ), self._extrap, self._period)
-        BZq = interp3d(Rq, phiq, Zq, self._R, self._phi, self._Z, self._BZ,
-                       self._method, (dR, dp, dZ), self._extrap, self._period)
+        BRq = interp3d(
+            Rq,
+            phiq,
+            Zq,
+            self._R,
+            self._phi,
+            self._Z,
+            self._BR,
+            self._method,
+            (dR, dp, dZ),
+            self._extrap,
+            self._period,
+        )
+        Bphiq = interp3d(
+            Rq,
+            phiq,
+            Zq,
+            self._R,
+            self._phi,
+            self._Z,
+            self._Bphi,
+            self._method,
+            (dR, dp, dZ),
+            self._extrap,
+            self._period,
+        )
+        BZq = interp3d(
+            Rq,
+            phiq,
+            Zq,
+            self._R,
+            self._phi,
+            self._Z,
+            self._BZ,
+            self._method,
+            (dR, dp, dZ),
+            self._extrap,
+            self._period,
+        )
 
         return jnp.array([BRq, Bphiq, BZq]).T
 
     @classmethod
-    def from_mgrid(cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=0):
+    def from_mgrid(
+        cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=None
+    ):
+        """Create a SplineMagneticField from an "mgrid" file from MAKEGRID
 
+        Parameters
+        ----------
+        mgrid_file : str or path-like
+            path to mgrid file in netCDF format
+        extcur : array-like
+            currents for each subset of the field
+        method : str
+            interpolation method
+        extrap : bool
+            whether to extrapolate beyond the domain of known field values or return nan
+        period : float
+            period in the toroidal direction (usually 2pi/NFP)
+
+        """
         mgrid = Dataset(mgrid_file, "r")
-        ir = int(mgrid['ir'][()])
-        jz = int(mgrid['jz'][()])
-        kp = int(mgrid['kp'][()])
-        nfp = mgrid['nfp'][()].data
-        nextcur = int(mgrid['nextcur'][()])
-        cur = mgrid['raw_coil_cur'][()]
-        rMin = mgrid['rmin'][()]
-        rMax = mgrid['rmax'][()]
-        zMin = mgrid['zmin'][()]
-        zMax = mgrid['zmax'][()]
+        ir = int(mgrid["ir"][()])
+        jz = int(mgrid["jz"][()])
+        kp = int(mgrid["kp"][()])
+        nfp = mgrid["nfp"][()].data
+        nextcur = int(mgrid["nextcur"][()])
+        cur = mgrid["raw_coil_cur"][()]
+        rMin = mgrid["rmin"][()]
+        rMax = mgrid["rmax"][()]
+        zMin = mgrid["zmin"][()]
+        zMax = mgrid["zmax"][()]
 
-        mgrid_mode = mgrid['mgrid_mode'][()]
-        mode = bytearray(mgrid_mode).decode('utf-8')
+        mgrid_mode = mgrid["mgrid_mode"][()]
+        mode = bytearray(mgrid_mode).decode("utf-8")
 
         br = np.zeros([kp, jz, ir])
         bp = np.zeros([kp, jz, ir])
@@ -102,20 +171,22 @@ class SplineMagneticField(MagneticField):
             scale = extcur[i]
 
             # sum up contributions from different coils
-            coil_id = "%03d"%(i+1,)
-            br[:,:,:] += scale * mgrid['br_'+coil_id][()]
-            bp[:,:,:] += scale * mgrid['bp_'+coil_id][()]
-            bz[:,:,:] += scale * mgrid['bz_'+coil_id][()]
+            coil_id = "%03d" % (i + 1,)
+            br[:, :, :] += scale * mgrid["br_" + coil_id][()]
+            bp[:, :, :] += scale * mgrid["bp_" + coil_id][()]
+            bz[:, :, :] += scale * mgrid["bz_" + coil_id][()]
         mgrid.close()
 
         # shift axes to correct order
-        br = np.moveaxis(br, (0,1,2), (1,2,0))
-        bp = np.moveaxis(bp, (0,1,2), (1,2,0))
-        bz = np.moveaxis(bz, (0,1,2), (1,2,0))
-        
+        br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
+        bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
+        bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
+
         # re-compute grid knots in radial and vertical direction
         Rgrid = np.linspace(rMin, rMax, ir)
         Zgrid = np.linspace(zMin, zMax, jz)
-        pgrid = 2.0*np.pi/(nfp*kp) * np.arange(kp)
+        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+        if period is None:
+            period = 2 * np.pi / (nfp)
 
         return cls(Rgrid, pgrid, Zgrid, br, bp, bz, method, extrap, period)

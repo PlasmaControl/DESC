@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from netCDF4 import Dataset
 
-from desc.backend import jnp
+from desc.backend import jnp, jit, odeint
 from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d
@@ -71,7 +71,7 @@ class ScaledMagneticField(MagneticField):
         scaling factor for magnetic field
     field : MagneticField
         base field to be scaled
-        
+
     """
 
     _io_attrs = MagneticField._io_attrs_ + ["_field", "_scalar"]
@@ -101,7 +101,7 @@ class ScaledMagneticField(MagneticField):
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points, in cylindrical 
+            scaled magnetic field at specified points, in cylindrical
             form [BR, Bphi,BZ]
 
         """
@@ -146,7 +146,7 @@ class SumMagneticField(MagneticField):
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points, in cylindrical 
+            scaled magnetic field at specified points, in cylindrical
             form [BR, Bphi,BZ]
 
         """
@@ -398,3 +398,54 @@ class ScalarPotentialField(MagneticField):
         bp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
         bz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
         return jnp.array([br, bp / r, bz]).T
+
+
+def field_line_integrate(
+    r0, z0, phis, field, params=(), rtol=1e-8, atol=1e-8, maxstep=1000
+):
+    """Trace field lines by integration
+
+    Parameters
+    ----------
+    r0, z0 : array-like
+        initial starting coordinates for r,z on phi=phis[0] plane
+    phis : array-like
+        strictly increasing array of toroidal angles to output r,z at
+        Note that phis is the geometric toroidal angle for positive Bphi,
+        and the negative toroidal angle for negative Bphi
+    field : MagneticField
+        source of magnetic field to integrate
+    params: tuple
+        parameters passed to field
+    rtol, atol : float
+        relative and absolute tolerances for ode integration
+    maxstep : int
+        maximum number of steps between different phis
+
+    Returns
+    -------
+    r, z : ndarray
+        arrays of r, z coordinates at specified phi angles
+
+    """
+    r0, z0 = map(jnp.asarray, (r0, z0))
+    assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    rshape = r0.shape
+    r0 = r0.flatten()
+    z0 = z0.flatten()
+    x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+
+    @jit
+    def odefun(rpz, s):
+        rpz = rpz.reshape((3, -1)).T
+        r = rpz[:, 0]
+        br, bp, bz = field.compute_magnetic_field(rpz, params).T
+        return jnp.array(
+            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+        ).squeeze()
+
+    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
+    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+    r = x[:, :, 0].T.reshape((len(phis), *rshape))
+    z = x[:, :, 2].T.reshape((len(phis), *rshape))
+    return r, z

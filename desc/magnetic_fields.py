@@ -14,8 +14,24 @@ class MagneticField(IOAble, ABC):
     _io_attrs_ = []
 
     @abstractmethod
-    def compute_magnetic_field(self, grid, params, dR, dp, dZ):
-        """compute magnetic field on a grid in real (R, phi, Z) space"""
+    def compute_magnetic_field(self, grid, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            parameters to pass to scalar potential function
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
 
 
 class SplineMagneticField(MagneticField):
@@ -224,7 +240,7 @@ class ScalarPotentialField(MagneticField):
         self._potential = potential
         self._params = params
 
-    def compute_magnetic_field(self, coords, params=None):
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
         """Compute magnetic field at a set of points
 
         Parameters
@@ -233,6 +249,8 @@ class ScalarPotentialField(MagneticField):
             cylindrical coordinates to evaluate field at [R,phi,Z]
         params : tuple, optional
             parameters to pass to scalar potential function
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
 
         Returns
         -------
@@ -240,6 +258,10 @@ class ScalarPotentialField(MagneticField):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
+        if any([(dR != 0), (dp != 0), (dZ != 0)]):
+            raise NotImplementedError(
+                "Derivatives of scalar potential fields have not been implemented"
+            )
         if isinstance(coords, Grid):
             coords = coords.nodes
         if params is None:

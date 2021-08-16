@@ -10,6 +10,11 @@ from desc.derivatives import Derivative
 
 
 class MagneticField(IOAble, ABC):
+    """Base class for all magnetic fields
+
+    Subclasses must implement the "compute_magnetic_field" method
+
+    """
 
     _io_attrs_ = []
 
@@ -23,7 +28,7 @@ class MagneticField(IOAble, ABC):
         return self.__mul__(x)
 
     def __add__(self, x):
-        if isinstance(x, _MagneticField):
+        if isinstance(x, MagneticField):
             return SumMagneticField(self, x)
         else:
             return NotImplemented
@@ -55,12 +60,27 @@ class MagneticField(IOAble, ABC):
         """
 
 
-class ScaledMagneticField(_MagneticField):
+class ScaledMagneticField(MagneticField):
+    """Magnetic field scaled by a scalar value
+
+    ie B_new = scalar * B_old
+
+    Parameters
+    ----------
+    scalar : float, int
+        scaling factor for magnetic field
+    field : MagneticField
+        base field to be scaled
+        
+    """
+
+    _io_attrs = MagneticField._io_attrs_ + ["_field", "_scalar"]
+
     def __init__(self, scalar, field):
         assert np.isscalar(scalar), "scalar must actually be a scalar value"
         assert isinstance(
-            field, _MagneticField
-        ), "field should be a subclass of _MagneticField, got type {}".format(
+            field, MagneticField
+        ), "field should be a subclass of MagneticField, got type {}".format(
             type(field)
         )
         self._scalar = scalar
@@ -90,11 +110,21 @@ class ScaledMagneticField(_MagneticField):
         )
 
 
-class SumMagneticField(_MagneticField):
+class SumMagneticField(MagneticField):
+    """Sum of two or more magnetic field sources
+
+    Parameters
+    ----------
+    fields : MagneticField
+        two or more MagneticFields to add together
+    """
+
+    _io_attrs = MagneticField._io_attrs_ + ["_fields"]
+
     def __init__(self, *fields):
         assert all(
-            [isinstance(field, _MagneticField) for field in fields]
-        ), "fields should each be a subclass of _MagneticField, got {}".format(
+            [isinstance(field, MagneticField) for field in fields]
+        ), "fields should each be a subclass of MagneticField, got {}".format(
             [type(field) for field in fields]
         )
         self._fields = fields

@@ -839,6 +839,13 @@ def compute_contravariant_metric_coefficients(
     if check_derivs("g^tz", R_transform, Z_transform):
         data["g^tz"] = dot(data["e^theta"], data["e^zeta"], 0)
 
+    if check_derivs("|grad(rho)|", R_transform, Z_transform):
+        data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    if check_derivs("|grad(theta)|", R_transform, Z_transform):
+        data["|grad(theta)|"] = jnp.sqrt(data["g^tt"])
+    if check_derivs("|grad(zeta)|", R_transform, Z_transform):
+        data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
+
     return data
 
 
@@ -1725,7 +1732,7 @@ def compute_B_dot_gradB(
             + data["B^theta"] * data["|B|_tt"]
             + data["B^zeta"] * data["|B|_tz"]
         )
-    if check_derivs("(B*grad(|B|))_", R_transform, Z_transform, L_transform):
+    if check_derivs("(B*grad(|B|))_z", R_transform, Z_transform, L_transform):
         data["(B*grad(|B|))_z"] = (
             data["B^theta_z"] * data["|B|_t"]
             + data["B^zeta_z"] * data["|B|_z"]
@@ -1863,7 +1870,7 @@ def compute_force_error(
         force error.
 
     """
-    data = compute_pressure(p_l, pressure, dr=1, data=data)
+    data = compute_pressure(p_l, pressure, data=data)
     data = compute_contravariant_current_density(
         R_lmn,
         Z_lmn,
@@ -1874,42 +1881,46 @@ def compute_force_error(
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=0,
-        dz=0,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(
         R_lmn, Z_lmn, R_transform, Z_transform, data=data
     )
 
-    data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-        data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
-    )
-    data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
-    data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
-    data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
-    data["F"] = (
-        data["F_rho"] * data["e^rho"]
-        + data["F_theta"] * data["e^theta"]
-        + data["F_zeta"] * data["e^zeta"]
-    )
+    if check_derivs("F_rho", R_transform, Z_transform, L_transform):
+        data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
+            data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
+        )
+    if check_derivs("F_theta", R_transform, Z_transform, L_transform):
+        data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    if check_derivs("F_zeta", R_transform, Z_transform, L_transform):
+        data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    if check_derivs("F_beta", R_transform, Z_transform, L_transform):
+        data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
+    if check_derivs("F", R_transform, Z_transform, L_transform):
+        data["F"] = (
+            data["F_rho"] * data["e^rho"]
+            + data["F_theta"] * data["e^theta"]
+            + data["F_zeta"] * data["e^zeta"]
+        )
+    if check_derivs("|F|", R_transform, Z_transform, L_transform):
+        data["|F|"] = jnp.sqrt(
+            data["F_rho"] ** 2 * data["g^rr"]
+            + data["F_theta"] ** 2 * data["g^tt"]
+            + data["F_zeta"] ** 2 * data["g^zz"]
+            + 2 * data["F_rho"] * data["F_theta"] * data["g^rt"]
+            + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
+            + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
+        )
 
-    data["|F|"] = jnp.sqrt(
-        data["F_rho"] ** 2 * data["g^rr"]
-        + data["F_theta"] ** 2 * data["g^tt"]
-        + data["F_zeta"] ** 2 * data["g^zz"]
-        + 2 * data["F_rho"] * data["F_theta"] * data["g^rt"]
-        + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
-        + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
-    )
-    data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
-    data["|beta|"] = jnp.sqrt(
-        data["B^zeta"] ** 2 * data["g^tt"]
-        + data["B^theta"] ** 2 * data["g^zz"]
-        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
-    )
-    data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+    if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
+        data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+    if check_derivs("|beta|", R_transform, Z_transform, L_transform):
+        data["|beta|"] = jnp.sqrt(
+            data["B^zeta"] ** 2 * data["g^tt"]
+            + data["B^theta"] ** 2 * data["g^zz"]
+            - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+        )
 
     return data
 
@@ -1969,9 +1980,6 @@ def compute_quasisymmetry_error(
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=1,
-        dz=1,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -1992,17 +2000,28 @@ def compute_quasisymmetry_error(
     N = helicity[1]
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-    data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-    data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+    if check_derivs("I", R_transform, Z_transform, L_transform):
+        data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(
+            data["sqrt(g)"]
+        )
+    if check_derivs("G", R_transform, Z_transform, L_transform):
+        data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(
+            data["sqrt(g)"]
+        )
 
     # QS flux function (T^3)
-    data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * (
-        data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
-    ) - data["B*grad(|B|)"] * (M * data["G"] + N * data["I"]) / (M * data["iota"] - N)
+    if check_derivs("QS_FF", R_transform, Z_transform, L_transform):
+        data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * (
+            data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
+        ) - (M * data["G"] + N * data["I"]) / (M * data["iota"] - N) * data[
+            "B*grad(|B|)"
+        ]
     # QS triple product (T^4/m^2)
-    data["QS_TP"] = (data["psi_r"] / data["sqrt(g)"]) * (
-        data["|B|_t"] * data["B*grad(|B|)_z"] - data["|B|_z"] * data["B*grad(|B|)_t"]
-    )
+    if check_derivs("QS_TP", R_transform, Z_transform, L_transform):
+        data["QS_TP"] = (data["psi_r"] / data["sqrt(g)"]) * (
+            data["|B|_t"] * data["(B*grad(|B|))_z"]
+            - data["|B|_z"] * data["(B*grad(|B|))_t"]
+        )
 
     return data
 

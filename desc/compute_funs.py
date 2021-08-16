@@ -437,6 +437,15 @@ def compute_jacobian(
         cov_basis["e_rho"], cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0), 0
     )
 
+    jacobian["g_rad"] = jnp.linalg.norm(
+        cross(cov_basis["e_theta"], cov_basis["e_zeta"], 0), axis=0
+    )
+    jacobian["g_pol"] = jnp.linalg.norm(
+        cross(cov_basis["e_zeta"], cov_basis["e_rho"], 0), axis=0
+    )
+    jacobian["g_tor"] = jnp.linalg.norm(
+        cross(cov_basis["e_rho"], cov_basis["e_theta"], 0), axis=0
+    )
     return jacobian, cov_basis, toroidal_coords
 
 

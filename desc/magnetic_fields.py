@@ -14,7 +14,7 @@ class MagneticField(IOAble, ABC):
     _io_attrs_ = []
 
     @abstractmethod
-    def compute_magnetic_field(self, grid, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
         """Compute magnetic field at a set of points
 
         Parameters
@@ -32,6 +32,79 @@ class MagneticField(IOAble, ABC):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
+
+
+class ScaledMagneticField(_MagneticField):
+    def __init__(self, scalar, field):
+        assert np.isscalar(scalar), "scalar must actually be a scalar value"
+        assert isinstance(
+            field, _MagneticField
+        ), "field should be a subclass of _MagneticField, got type {}".format(
+            type(field)
+        )
+        self._scalar = scalar
+        self._field = field
+
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            parameters to pass to scalar potential function
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            scaled magnetic field at specified points, in cylindrical 
+            form [BR, Bphi,BZ]
+
+        """
+        return self._scalar * self._field.compute_magnetic_field(
+            grid, params=None, dR=0, dp=0, dZ=0
+        )
+
+
+class SumMagneticField(_MagneticField):
+    def __init__(self, *fields):
+        assert all(
+            [isinstance(field, _MagneticField) for field in fields]
+        ), "fields should each be a subclass of _MagneticField, got {}".format(
+            [type(field) for field in fields]
+        )
+        self._fields = fields
+
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            parameters to pass to scalar potential function. If None,
+            uses the default parameters for each field. If a tuple, should have
+            one entry for each component field.
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            scaled magnetic field at specified points, in cylindrical 
+            form [BR, Bphi,BZ]
+
+        """
+        if params is None:
+            params = [None] * len(self._fields)
+        B = 0
+        for i, field in enumerate(self._fields):
+            B += field.compute_magnetic_field(coords, params[i], dR=dR, dp=dp, dZ=dZ)
+        return B
 
 
 class SplineMagneticField(MagneticField):
@@ -94,7 +167,7 @@ class SplineMagneticField(MagneticField):
 
         # TODO: precompute derivative matrices
 
-    def compute_magnetic_field(self, grid, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
         """Compute magnetic field at a set of points
 
         Parameters

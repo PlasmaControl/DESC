@@ -6,6 +6,7 @@ from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.transform import Transform
 from desc.compute import (
+    data_index,
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
@@ -63,8 +64,12 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=1, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=1, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["V"]["Z_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -189,9 +194,15 @@ class Energy(_Objective):
         self._iota.grid = self._grid
         self._pressure.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=1, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=1, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=1, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["W"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["W"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -367,9 +378,15 @@ class RadialForceBalance(_Objective):
         self._iota.grid = self._grid
         self._pressure.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["F_rho"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -394,14 +411,11 @@ class RadialForceBalance(_Objective):
             self._iota,
             self._pressure,
         )
-        f_rho = data["F_rho"] * data["|grad(rho)|"]
-        f = data["|F|"]
+        f = data["F_rho"] * data["|grad(rho)|"]
         if self._norm:
-            f_rho = f_rho / data["|grad(p)|"]
             f = f / data["|grad(p)|"]
-        f_rho = f_rho * data["sqrt(g)"] * self._grid.weights
         f = f * data["sqrt(g)"] * self._grid.weights
-        return f_rho, f
+        return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute radial MHD force balance errors.
@@ -427,8 +441,8 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f_rho - self._target) * self._weight
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return (f - self._target) * self._weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print radial MHD force balance error.
@@ -449,16 +463,12 @@ class RadialForceBalance(_Objective):
             Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         """
-        f_rho, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         if self._norm:
             units = "(normalized)"
         else:
             units = "(N)"
-        print(
-            "Radial force: {:10.3e}, ".format(jnp.linalg.norm(f_rho))
-            + "Total force: {:10.3e} ".format(jnp.linalg.norm(f))
-            + units
-        )
+        print("Radial force: {:10.3e}, ".format(jnp.linalg.norm(f)) + units)
         return None
 
     @property
@@ -490,7 +500,7 @@ class HelicalForceBalance(_Objective):
     """Helical MHD force balance.
 
     F_beta = sqrt(g) J^rho
-    beta = B^zeta grad(theta) - B^theta grad(zeta)
+    beta = -B^zeta grad(theta) + B^theta grad(zeta)
     f_beta = F_beta |beta| dV  (N)
 
     """
@@ -555,9 +565,15 @@ class HelicalForceBalance(_Objective):
         self._iota.grid = self._grid
         self._pressure.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["F_beta"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["F_beta"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -582,14 +598,11 @@ class HelicalForceBalance(_Objective):
             self._iota,
             self._pressure,
         )
-        f_beta = data["F_beta"] * data["|beta|"]
-        f = data["|F|"]
+        f = data["F_beta"] * data["|beta|"]
         if self._norm:
-            f_beta = f_beta / data["|grad(p)|"]
             f = f / data["|grad(p)|"]
-        f_beta = f_beta * data["sqrt(g)"] * self._grid.weights
         f = f * data["sqrt(g)"] * self._grid.weights
-        return f_beta, f
+        return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute helical MHD force balance errors.
@@ -611,12 +624,12 @@ class HelicalForceBalance(_Objective):
 
         Returns
         -------
-        f_beta : ndarray
+        f : ndarray
             Helical MHD force balance error at each node (N).
 
         """
-        f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f_beta - self._target) * self._weight
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        return (f - self._target) * self._weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print helical MHD force balance error.
@@ -637,16 +650,12 @@ class HelicalForceBalance(_Objective):
             Total toroidal magnetic flux within the last closed flux surface, in Webers.
 
         """
-        f_beta, f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         if self._norm:
             units = "(normalized)"
         else:
             units = "(N)"
-        print(
-            "Helical force: {:10.3e}, ".format(jnp.linalg.norm(f_beta))
-            + "Total force: {:10.3e} ".format(jnp.linalg.norm(f))
-            + units
-        )
+        print("Helical force: {:10.3e}, ".format(jnp.linalg.norm(f)) + units)
         return None
 
     @property
@@ -735,9 +744,15 @@ class RadialCurrent(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["J^rho"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["J^rho"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -918,9 +933,15 @@ class PoloidalCurrent(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["J^theta"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["J^theta"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1101,9 +1122,15 @@ class ToroidalCurrent(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=2, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=2, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=2, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["J^zeta"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["J^zeta"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1287,9 +1314,15 @@ class QuasisymmetryFluxFunction(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["QS_FF"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["QS_FF"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1467,9 +1500,15 @@ class QuasisymmetryTripleProduct(_Objective):
         self._iota = eq.iota.copy()
         self._iota.grid = self._grid
 
-        self._R_transform = Transform(self._grid, eq.R_basis, derivs=3, build=True)
-        self._Z_transform = Transform(self._grid, eq.Z_basis, derivs=3, build=True)
-        self._L_transform = Transform(self._grid, eq.L_basis, derivs=3, build=True)
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["QS_TP"]["Z_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

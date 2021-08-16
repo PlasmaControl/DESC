@@ -674,7 +674,6 @@ class _Objective(IOAble, ABC):
     @abstractmethod
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays."""
-        # TODO: most transforms are pre-computing more derivatives than required
 
     @abstractmethod
     def compute(self, *args, **kwargs):

@@ -394,10 +394,8 @@ def compute_covariant_basis(
         direction, differentiated wrt y.
 
     """
-    if "R" not in data:
-        data = compute_R(R_lmn, R_transform, data=data)
-    if "Z" not in data:
-        data = compute_Z(Z_lmn, Z_transform, data=data)
+    data = compute_R(R_lmn, R_transform, data=data)
+    data = compute_Z(Z_lmn, Z_transform, data=data)
     data["0"] = jnp.zeros_like(data["R"])
 
     # 0th order derivatives
@@ -1764,7 +1762,7 @@ def compute_contravariant_current_density(
     Z_transform,
     L_transform,
     iota,
-    data=None,
+    data={},
 ):
     """Compute contravariant current density components.
 
@@ -1844,7 +1842,7 @@ def compute_force_error(
     L_transform,
     pressure,
     iota,
-    data=None,
+    data={},
 ):
     """Compute force error components.
 
@@ -1947,7 +1945,7 @@ def compute_quasisymmetry_error(
     L_transform,
     iota,
     helicity=(1, 0),
-    data=None,
+    data={},
 ):
     """Compute quasi-symmetry errors.
 
@@ -2050,7 +2048,7 @@ def compute_energy(
     iota,
     pressure,
     gamma=0,
-    data=None,
+    data={},
 ):
     """Compute MHD energy. W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J).
 
@@ -2120,7 +2118,7 @@ def compute_geometry(
     Z_lmn,
     R_transform,
     Z_transform,
-    data=None,
+    data={},
 ):
     """Compute plasma volume.
 

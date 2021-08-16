@@ -373,10 +373,10 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self._grid
+        self._iota = eq.iota.copy()
         self._pressure.grid = self._grid
+        self._iota.grid = self._grid
 
         self._R_transform = Transform(
             self._grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
@@ -402,14 +402,14 @@ class RadialForceBalance(_Objective):
             R_lmn,
             Z_lmn,
             L_lmn,
-            i_l,
             p_l,
+            i_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
-            self._iota,
             self._pressure,
+            self._iota,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         if self._norm:
@@ -589,14 +589,14 @@ class HelicalForceBalance(_Objective):
             R_lmn,
             Z_lmn,
             L_lmn,
-            i_l,
             p_l,
+            i_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
-            self._iota,
             self._pressure,
+            self._iota,
         )
         f = data["F_beta"] * data["|beta|"]
         if self._norm:

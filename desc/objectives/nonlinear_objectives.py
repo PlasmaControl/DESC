@@ -11,8 +11,8 @@ from desc.compute import (
     compute_contravariant_current_density,
     compute_force_error,
     compute_quasisymmetry_error,
-    compute_volume,
     compute_energy,
+    compute_geometry,
 )
 from .objective_funs import _Objective
 
@@ -76,7 +76,7 @@ class Volume(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn):
-        data = compute_volume(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
         return data["V"]
 
     def compute(self, R_lmn, Z_lmn, **kwargs):

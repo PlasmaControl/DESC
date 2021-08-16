@@ -21,8 +21,8 @@ from .compute_funs import (
     compute_contravariant_current_density,
     compute_force_error,
     compute_quasisymmetry_error,
-    compute_volume,
     compute_energy,
+    compute_geometry,
 )
 
 # defines the order in which objective arguments get concatenated into the state vector
@@ -52,6 +52,6 @@ __all__ = [
     "compute_contravariant_current_density",
     "compute_force_error",
     "compute_quasisymmetry_error",
-    "compute_volume",
     "compute_energy",
+    "compute_geometry",
 ]

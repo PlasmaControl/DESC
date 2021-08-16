@@ -765,7 +765,7 @@ data_index = {
     # Jacobian
     "sqrt(g)": {
         "label": "\\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -773,7 +773,7 @@ data_index = {
     },
     "sqrt(g)_r": {
         "label": "\\partial_{\\rho} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -789,7 +789,7 @@ data_index = {
     },
     "sqrt(g)_t": {
         "label": "\\partial_{\\theta} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -805,7 +805,7 @@ data_index = {
     },
     "sqrt(g)_z": {
         "label": "\\partial_{\\zeta} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -821,7 +821,7 @@ data_index = {
     },
     "sqrt(g)_rr": {
         "label": "\\partial_{\\rho\\rho} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -850,7 +850,7 @@ data_index = {
     },
     "sqrt(g)_tt": {
         "label": "\\partial_{\\theta\\theta} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -879,7 +879,7 @@ data_index = {
     },
     "sqrt(g)_zz": {
         "label": "\\partial_{\\zeta\\zeta} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -908,7 +908,7 @@ data_index = {
     },
     "sqrt(g)_tz": {
         "label": "\\partial_{\\theta\\zeta} \\sqrt{g}",
-        "units": "m^3",
+        "units": "m^{3}",
         "fun": "compute_jacobian",
         "dim": 1,
         "R_derivs": [
@@ -942,7 +942,7 @@ data_index = {
     # covariant metric coefficients
     "g_rr": {
         "label": "g_{\\rho\\rho}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[1, 0, 0]],
@@ -950,7 +950,7 @@ data_index = {
     },
     "g_tt": {
         "label": "g_{\\theta\\theta}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[0, 1, 0]],
@@ -958,7 +958,7 @@ data_index = {
     },
     "g_zz": {
         "label": "g_{\\zeta\\zeta}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [0, 0, 1]],
@@ -966,7 +966,7 @@ data_index = {
     },
     "g_rt": {
         "label": "g_{\\rho\\theta}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[1, 0, 0], [0, 1, 0]],
@@ -974,7 +974,7 @@ data_index = {
     },
     "g_rz": {
         "label": "g_{\\rho\\zeta}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[1, 0, 0], [0, 0, 1]],
@@ -982,7 +982,7 @@ data_index = {
     },
     "g_tz": {
         "label": "g_{\\theta\\zeta}",
-        "units": "m^2",
+        "units": "m^{2}",
         "fun": "compute_covariant_metric_coefficients",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -1109,7 +1109,7 @@ data_index = {
     },
     "B0_r": {
         "label": "\\psi'' / \\sqrt{g} - \\psi' \\partial_{\\rho} \\sqrt{g} / g",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1126,7 +1126,7 @@ data_index = {
     },
     "B^theta_r": {
         "label": "\\partial_{\\rho} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1143,7 +1143,7 @@ data_index = {
     },
     "B^zeta_r": {
         "label": "\\partial_{\\rho} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1177,7 +1177,7 @@ data_index = {
     },
     "B0_t": {
         "label": "-\\psi' \\partial_{\\theta} \\sqrt{g} / g",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1194,7 +1194,7 @@ data_index = {
     },
     "B^theta_t": {
         "label": "\\partial_{\\theta} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1211,7 +1211,7 @@ data_index = {
     },
     "B^zeta_t": {
         "label": "\\partial_{\\theta} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1245,7 +1245,7 @@ data_index = {
     },
     "B0_z": {
         "label": "-\\psi' \\partial_{\\zeta} \\sqrt{g} / g",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1262,7 +1262,7 @@ data_index = {
     },
     "B^theta_z": {
         "label": "\\partial_{\\zeta} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1279,7 +1279,7 @@ data_index = {
     },
     "B^zeta_z": {
         "label": "\\partial_{\\zeta} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1314,7 +1314,7 @@ data_index = {
     "B0_tt": {
         "label": "-\\psi' \\partial_{\\theta\\theta} \\sqrt{g} / g + "
         + "2 \\psi' (\\partial_{\\theta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1344,7 +1344,7 @@ data_index = {
     },
     "B^theta_tt": {
         "label": "\\partial_{\\theta\\theta} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1374,7 +1374,7 @@ data_index = {
     },
     "B^zeta_tt": {
         "label": "\\partial_{\\theta\\theta} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1405,7 +1405,7 @@ data_index = {
     "B0_zz": {
         "label": "-\\psi' \\partial_{\\zeta\\zeta} \\sqrt{g} / g + "
         + "2 \\psi' (\\partial_{\\zeta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1435,7 +1435,7 @@ data_index = {
     },
     "B^theta_zz": {
         "label": "\\partial_{\\zeta\\zeta} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1465,7 +1465,7 @@ data_index = {
     },
     "B^zeta_zz": {
         "label": "\\partial_{\\zeta\\zeta} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1497,7 +1497,7 @@ data_index = {
         "label": "-\\psi' \\partial_{\\theta\\zeta} \\sqrt{g} / g + "
         + "2 \\psi' \\partial_{\\theta} \\sqrt{g} \\partial_{\\zeta} \\sqrt{g} / "
         + "(\\sqrt{g})^{3}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1531,7 +1531,7 @@ data_index = {
     },
     "B^theta_tz": {
         "label": "\\partial_{\\theta\\zeta} B^{\\theta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1565,7 +1565,7 @@ data_index = {
     },
     "B^zeta_tz": {
         "label": "\\partial_{\\theta\\zeta} B^{\\zeta}",
-        "units": "T m^{-1}",
+        "units": "T \\cdot m^{-1}",
         "fun": "compute_contravariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1600,7 +1600,7 @@ data_index = {
     # covariant magnetic field
     "B_rho": {
         "label": "B_{\\rho}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -1609,7 +1609,7 @@ data_index = {
     },
     "B_theta": {
         "label": "B_{\\theta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -1618,7 +1618,7 @@ data_index = {
     },
     "B_zeta": {
         "label": "B_{\\zeta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -1627,7 +1627,7 @@ data_index = {
     },
     "B_rho_r": {
         "label": "\\partial_{\\rho} B_{\\rho}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1644,7 +1644,7 @@ data_index = {
     },
     "B_theta_r": {
         "label": "\\partial_{\\rho} B_{\\theta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1661,7 +1661,7 @@ data_index = {
     },
     "B_zeta_r": {
         "label": "\\partial_{\\rho} B_{\\zeta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1678,7 +1678,7 @@ data_index = {
     },
     "B_rho_t": {
         "label": "\\partial_{\\theta} B_{\\rho}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1695,7 +1695,7 @@ data_index = {
     },
     "B_theta_t": {
         "label": "\\partial_{\\theta} B_{\\theta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1712,7 +1712,7 @@ data_index = {
     },
     "B_zeta_t": {
         "label": "\\partial_{\\theta} B_{\\zeta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1729,7 +1729,7 @@ data_index = {
     },
     "B_rho_z": {
         "label": "\\partial_{\\zeta} B_{\\rho}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1746,7 +1746,7 @@ data_index = {
     },
     "B_theta_z": {
         "label": "\\partial_{\\zeta} B_{\\theta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1763,7 +1763,7 @@ data_index = {
     },
     "B_zeta_z": {
         "label": "\\partial_{\\zeta} B_{\\zeta}",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_covariant_magnetic_field",
         "dim": 1,
         "R_derivs": [
@@ -1944,7 +1944,7 @@ data_index = {
     # B dot grad(B)
     "B*grad(|B|)": {
         "label": "\\mathbf{B} \\cdot \\nabla B",
-        "units": "T^2 m^{-1}",
+        "units": "T^2 \\cdot m^{-1}",
         "fun": "compute_B_dot_gradB",
         "dim": 1,
         "R_derivs": [
@@ -1972,7 +1972,7 @@ data_index = {
     },
     "(B*grad(|B|))_t": {
         "label": "\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla B)",
-        "units": "T^2 m^{-1}",
+        "units": "T^2 \\cdot m^{-1}",
         "fun": "compute_B_dot_gradB",
         "dim": 1,
         "R_derivs": [
@@ -2020,7 +2020,7 @@ data_index = {
     },
     "(B*grad(|B|))_z": {
         "label": "\\partial_{\\zeta} (\\mathbf{B} \\cdot \\nabla B)",
-        "units": "T^2 m^{-1}",
+        "units": "T^2 \\cdot m^{-1}",
         "fun": "compute_B_dot_gradB",
         "dim": 1,
         "R_derivs": [
@@ -2071,7 +2071,7 @@ data_index = {
     # contravarian current density
     "J^rho": {
         "label": "J^{\\rho}",
-        "units": "A m^{-3}",
+        "units": "A \\cdot m^{-3}",
         "fun": "compute_contravariant_current_density",
         "dim": 1,
         "R_derivs": [
@@ -2099,7 +2099,7 @@ data_index = {
     },
     "J^theta": {
         "label": "J^{\\theta}",
-        "units": "A m^{-3}",
+        "units": "A \\cdot m^{-3}",
         "fun": "compute_contravariant_current_density",
         "dim": 1,
         "R_derivs": [
@@ -2135,7 +2135,7 @@ data_index = {
     },
     "J^zeta": {
         "label": "J^{\\zeta}",
-        "units": "A m^{-3}",
+        "units": "A \\cdot m^{-3}",
         "fun": "compute_contravariant_current_density",
         "dim": 1,
         "R_derivs": [
@@ -2171,7 +2171,7 @@ data_index = {
     },
     "J": {
         "label": "\\mathbf{J}",
-        "units": "A m^{-2}",
+        "units": "A \\cdot m^{-2}",
         "fun": "compute_contravariant_current_density",
         "dim": 3,
         "R_derivs": [
@@ -2211,7 +2211,7 @@ data_index = {
     # force error
     "F_rho": {
         "label": "F_{\\rho}",
-        "units": "N m^{-2}",
+        "units": "N \\cdot m^{-2}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [
@@ -2250,7 +2250,7 @@ data_index = {
     },
     "F_theta": {
         "label": "F_{\\theta}",
-        "units": "N m^{-2}",
+        "units": "N \\cdot m^{-2}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [
@@ -2278,7 +2278,7 @@ data_index = {
     },
     "F_zeta": {
         "label": "F_{\\zeta}",
-        "units": "N m^{-2}",
+        "units": "N \\cdot m^{-2}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [
@@ -2334,7 +2334,7 @@ data_index = {
     },
     "F": {
         "label": "\\mathbf{J} \\times \\mathbf{B} - \\nabla p",
-        "units": "N m^{-3}",
+        "units": "N \\cdot m^{-3}",
         "fun": "compute_force_error",
         "dim": 3,
         "R_derivs": [
@@ -2374,7 +2374,7 @@ data_index = {
     },
     "|F|": {
         "label": "|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|",
-        "units": "N m^{-3}",
+        "units": "N \\cdot m^{-3}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [
@@ -2414,7 +2414,7 @@ data_index = {
     },
     "|grad(p)|": {
         "label": "|\\nabla p|",
-        "units": "N m^{-3}",
+        "units": "N \\cdot m^{-3}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -2423,7 +2423,7 @@ data_index = {
     },
     "|beta|": {
         "label": "|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
-        "units": "T m^{-2}",
+        "units": "T \\cdot m^{-2}",
         "fun": "compute_force_error",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -2433,7 +2433,7 @@ data_index = {
     # quasi-symmetry
     "I": {
         "label": "I",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_quasisymmetry_error",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -2442,7 +2442,7 @@ data_index = {
     },
     "G": {
         "label": "G",
-        "units": "T m",
+        "units": "T \\cdot m",
         "fun": "compute_quasisymmetry_error",
         "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -2481,7 +2481,7 @@ data_index = {
     "QS_TP": {
         "label": "\\nabla \\psi \\times \\nabla B \\cdot \\nabla "
         + "(\\mathbf{B} \\cdot \\nabla B)",
-        "units": "T^{4} m^{-2}",
+        "units": "T^{4} \\cdot m^{-2}",
         "fun": "compute_quasisymmetry_error",
         "dim": 1,
         "R_derivs": [
@@ -2532,30 +2532,73 @@ data_index = {
             [0, 1, 2],
         ],
     },
-    # volume
-    "V": {
-        "label": "V",
-        "units": "m^3",
-        "fun": "compute_volume",
-        "dim": 0,
-    },
     # energy
     "W": {
         "label": "W",
         "units": "J",
         "fun": "compute_energy",
         "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
     "W_B": {
         "label": "W_B",
         "units": "J",
         "fun": "compute_energy",
         "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
     "W_p": {
         "label": "W_p",
         "units": "J",
         "fun": "compute_energy",
         "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "L_derivs": [[0, 0, 0]],
+    },
+    # geometry
+    "V": {
+        "label": "V",
+        "units": "m^{3}",
+        "fun": "compute_geometry",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
+    "A": {
+        "label": "A",
+        "units": "m^{2}",
+        "fun": "compute_geometry",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
+    "R0": {
+        "label": "R_{0}",
+        "units": "m",
+        "fun": "compute_geometry",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
+    "a": {
+        "label": "a",
+        "units": "m",
+        "fun": "compute_geometry",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
+    "R0/a": {
+        "label": "R_{0} / a",
+        "units": "",
+        "fun": "compute_geometry",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
 }

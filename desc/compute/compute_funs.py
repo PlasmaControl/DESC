@@ -2026,37 +2026,6 @@ def compute_quasisymmetry_error(
     return data
 
 
-def compute_volume(
-    R_lmn,
-    Z_lmn,
-    R_transform,
-    Z_transform,
-    data=None,
-):
-    """Compute plasma volume.
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) with volume key "V".
-
-    """
-    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
-    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
-    return data
-
-
 def compute_energy(
     R_lmn,
     Z_lmn,
@@ -2121,12 +2090,60 @@ def compute_energy(
         data=data,
     )
 
-    data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
-    ) / (2 * mu_0)
-    data["W_p"] = jnp.sum(
-        data["p"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
-    ) / (gamma - 1)
-    data["W"] = data["W_B"] + data["W_p"]
+    if check_derivs("W_B", R_transform, Z_transform, L_transform):
+        data["W_B"] = jnp.sum(
+            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+        ) / (2 * mu_0)
+    if check_derivs("W_p", R_transform, Z_transform, L_transform):
+        data["W_p"] = jnp.sum(
+            data["p"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+        ) / (gamma - 1)
+    if check_derivs("W", R_transform, Z_transform, L_transform):
+        data["W"] = data["W_B"] + data["W_p"]
+
+    return data
+
+
+def compute_geometry(
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
+):
+    """Compute plasma volume.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) with volume key "V".
+
+    """
+    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
+
+    N = jnp.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
+    weights = R_transform.grid.weights / (2 * jnp.pi / N)  # remove toroidal weights
+
+    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
+    data["A"] = jnp.mean(
+        jnp.sum(  # sqrt(g) / R * weight = dArea
+            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * weights, (N, -1)),
+            axis=1,
+        )
+    )
+    data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
+    data["a"] = jnp.sqrt(data["A"] / jnp.pi)
+    data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
 
     return data

@@ -106,7 +106,7 @@ class ScaledMagneticField(MagneticField):
 
         """
         return self._scalar * self._field.compute_magnetic_field(
-            grid, params=None, dR=0, dp=0, dZ=0
+            coords, params=None, dR=0, dp=0, dZ=0
         )
 
 
@@ -237,10 +237,10 @@ class SplineMagneticField(MagneticField):
 
         """
 
-        if isinstance(grid, Grid):
-            Rq, phiq, Zq = grid.nodes.T
+        if isinstance(coords, Grid):
+            Rq, phiq, Zq = coords.nodes.T
         else:
-            Rq, phiq, Zq = grid.T
+            Rq, phiq, Zq = coords.T
 
         BRq = interp3d(
             Rq,

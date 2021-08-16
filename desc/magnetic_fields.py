@@ -59,6 +59,9 @@ class MagneticField(IOAble, ABC):
 
         """
 
+    def __call__(self, coords, params=None, dR=0, dp=0, dZ=0):
+        return self.compute_magnetic_field(coords, params, dR, dp, dZ)
+
 
 class ScaledMagneticField(MagneticField):
     """Magnetic field scaled by a scalar value

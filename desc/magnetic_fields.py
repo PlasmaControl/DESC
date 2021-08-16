@@ -256,7 +256,7 @@ class SplineMagneticField(MagneticField):
             self._method,
             (dR, dp, dZ),
             self._extrap,
-            self._period,
+            (None, self._period, None),
         )
         Bphiq = interp3d(
             Rq,
@@ -269,7 +269,7 @@ class SplineMagneticField(MagneticField):
             self._method,
             (dR, dp, dZ),
             self._extrap,
-            self._period,
+            (None, self._period, None),
         )
         BZq = interp3d(
             Rq,
@@ -282,7 +282,7 @@ class SplineMagneticField(MagneticField):
             self._method,
             (dR, dp, dZ),
             self._extrap,
-            self._period,
+            (None, self._period, None),
         )
 
         return jnp.array([BRq, Bphiq, BZq]).T
@@ -347,6 +347,46 @@ class SplineMagneticField(MagneticField):
             period = 2 * np.pi / (nfp)
 
         return cls(Rgrid, pgrid, Zgrid, br, bp, bz, method, extrap, period)
+
+    @classmethod
+    def from_field(
+        cls, field, R, phi, Z, params=(), method="cubic", extrap=False, period=None
+    ):
+        """Create a splined magnetic field from another field for faster evaluation
+
+        Parameters
+        ----------
+        field : MagneticField or callable
+            field to interpolate. If a callable, should take a vector of
+            cylindrical coordinates and return the field in cylindrical components
+        R, phi, Z : ndarray
+            1d arrays of interpolation nodes in cylindrical coordinates
+        params : tuple, optional
+            parameters passed to field
+        method : str
+            spline method for SplineMagneticField
+        extrap : bool
+            whether to extrapolate splines beyond specified R,phi,Z
+        period : float
+            period for phi coordinate. Usually 2pi/NFP
+
+        """
+        R, phi, Z = map(np.asarray, (R, phi, Z))
+        rr, pp, zz = np.meshgrid(R, phi, Z, indexing="ij")
+        shp = rr.shape
+        coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
+        BR, BP, BZ = field(coords, *params).T
+        return cls(
+            R,
+            phi,
+            Z,
+            BR.reshape(shp),
+            BP.reshape(shp),
+            BZ.reshape(shp),
+            method,
+            extrap,
+            period,
+        )
 
 
 class ScalarPotentialField(MagneticField):

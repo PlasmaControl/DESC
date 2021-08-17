@@ -52,6 +52,20 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
+Geometry
+********
+
+.. autosummary::
+   :toctree: _api/geometry/
+   :recursive:
+   :template: class.rst
+
+    desc.geometry.FourierRZCurve
+    desc.geometry.FourierXYZCurve
+    desc.geometry.FourierPlanarCurve
+    desc.geometry.FourierRZToroidalSurface
+    desc.geometry.ZernikeRZToroidalSection
+    
 Grid
 ****
 

@@ -286,6 +286,9 @@ class hdf5Writer(hdf5IO, Writer):
 
         # save name of object class
         loc.create_dataset("__class__", data=fullname(obj))
+        from desc import __version__
+
+        loc.create_dataset("__version__", data=__version__)
         for attr in obj._io_attrs_:
             try:
                 data = getattr(obj, attr)

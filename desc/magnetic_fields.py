@@ -110,7 +110,7 @@ class ScaledMagneticField(MagneticField):
 
         """
         return self._scalar * self._field.compute_magnetic_field(
-            coords, params=None, dR=0, dp=0, dZ=0
+            coords, params, dR, dp, dZ
         )
 
 
@@ -154,7 +154,7 @@ class SumMagneticField(MagneticField):
             form [BR, Bphi,BZ]
 
         """
-        if params is None:
+        if (params is None) or (len(params) == 0):
             params = [None] * len(self._fields)
         B = 0
         for i, field in enumerate(self._fields):
@@ -204,15 +204,16 @@ class ToroidalMagneticField(MagneticField):
         """
         if isinstance(coords, Grid):
             coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
 
-        if (dR != 0) or (dZ != 0):
+        if (dp != 0) or (dZ != 0):
             return jnp.zeros_like(coords)
         bp = (
             self._B0
             * self._R0
-            * math.factorial(dp)
-            * (-1) ** dp
-            / coords[:, 0] ** (dp + 1)
+            * math.factorial(dR)
+            * (-1) ** dR
+            / coords[:, 0] ** (dR + 1)
         )
         brz = jnp.zeros_like(bp)
         return jnp.array([brz, bp, brz]).T
@@ -254,6 +255,7 @@ class VerticalMagneticField(MagneticField):
         """
         if isinstance(coords, Grid):
             coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
 
         if (dR != 0) or (dp != 0) or (dZ != 0):
             return jnp.zeros_like(coords)
@@ -320,10 +322,12 @@ class PoloidalMagneticField(MagneticField):
             )
         if isinstance(coords, Grid):
             coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+
         R, phi, Z = coords.T
         r = jnp.sqrt((R - self._R0) ** 2 + Z ** 2)
         theta = jnp.arctan2(Z, R - self._R0)
-        br = r * jnp.sin(theta)
+        br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
         bz = r * jnp.cos(theta)
         bmag = self._B0 * self._iota / self._R0
@@ -410,9 +414,9 @@ class SplineMagneticField(MagneticField):
         """
 
         if isinstance(coords, Grid):
-            Rq, phiq, Zq = coords.nodes.T
-        else:
-            Rq, phiq, Zq = coords.T
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        Rq, phiq, Zq = coords.T
 
         BRq = interp3d(
             Rq,
@@ -600,7 +604,9 @@ class ScalarPotentialField(MagneticField):
             )
         if isinstance(coords, Grid):
             coords = coords.nodes
-        if params is None:
+        coords = jnp.atleast_2d(coords)
+
+        if (params is None) or (len(params) == 0):
             params = self._params
         r, p, z = coords.T
         funR = lambda x: self._potential(x, p, z, *params)
@@ -640,7 +646,7 @@ def field_line_integrate(
         arrays of r, z coordinates at specified phi angles
 
     """
-    r0, z0 = map(jnp.asarray, (r0, z0))
+    r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
     rshape = r0.shape
     r0 = r0.flatten()

@@ -1,6 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from netCDF4 import Dataset
+import math
 
 from desc.backend import jnp, jit, odeint
 from desc.io import IOAble
@@ -159,6 +160,174 @@ class SumMagneticField(MagneticField):
         for i, field in enumerate(self._fields):
             B += field.compute_magnetic_field(coords, params[i], dR=dR, dp=dp, dZ=dZ)
         return B
+
+
+class ToroidalMagneticField(MagneticField):
+    """Magnetic field purely in the toroidal (phi) direction
+
+    Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
+    is the field strength on axis
+
+    Parameters
+    ----------
+    B0 : float
+        field strength on axis
+    R0 : major radius of axis
+
+    """
+
+    _io_attrs_ = MagneticField._io_attrs_ + ["_B0", "_R0"]
+
+    def __init__(self, B0, R0):
+        assert np.isscalar(B0), "B0 must be a scalar"
+        assert np.isscalar(R0), "R0 must be a scalar"
+        self._B0 = B0
+        self._R0 = R0
+
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            unused by this method
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+
+        if (dR != 0) or (dZ != 0):
+            return jnp.zeros_like(coords)
+        bp = (
+            self._B0
+            * self._R0
+            * math.factorial(dp)
+            * (-1) ** dp
+            / coords[:, 0] ** (dp + 1)
+        )
+        brz = jnp.zeros_like(bp)
+        return jnp.array([brz, bp, brz]).T
+
+
+class VerticalMagneticField(MagneticField):
+    """Uniform magnetic field purely in the vertical (Z) direction
+
+    Parameters
+    ----------
+    B0 : float
+        field strength
+
+    """
+
+    _io_attrs_ = MagneticField._io_attrs_ + ["_B0"]
+
+    def __init__(self, B0):
+        assert np.isscalar(B0), "B0 must be a scalar"
+        self._B0 = B0
+
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            unused by this method
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+
+        if (dR != 0) or (dp != 0) or (dZ != 0):
+            return jnp.zeros_like(coords)
+        bz = self._B0 * jnp.ones_like(coords[:, 2])
+        brp = jnp.zeros_like(bz)
+        return jnp.array([brp, brp, bz]).T
+
+
+class PoloidalMagneticField(MagneticField):
+    """Pure poloidal magnetic field (ie in theta direction)
+
+    Field strength is B0*iota*r/R0 where B0 is the toroidal field on axis,
+    R0 is the major radius of the axis, iota is the desired rotational transform,
+    and r is the minor radius centered on the magnetic axis.
+
+    Combined with a toroidal field with the same B0 and R0, creates an
+    axisymmetric field with rotational transform iota
+
+    Note that the divergence of such a field is proportional to Z/R so is generally
+    nonzero except on the midplane, but still serves as a useful test case
+
+    Parameters
+    ----------
+    B0 : float
+        field strength on axis
+    R0 : float
+        major radius of magnetic axis
+    iota : float
+        desired rotational transform
+
+    """
+
+    _io_attrs_ = MagneticField._io_attrs_ + ["_B0", "_R0", "_iota"]
+
+    def __init__(self, B0, R0, iota):
+        assert np.isscalar(B0), "B0 must be a scalar"
+        assert np.isscalar(R0), "R0 must be a scalar"
+        assert np.isscalar(iota), "iota must be a scalar"
+        self._B0 = B0
+        self._R0 = R0
+        self._iota = iota
+
+    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+        """Compute magnetic field at a set of points
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical coordinates to evaluate field at [R,phi,Z]
+        params : tuple, optional
+            unused by this method
+        dR, dp, dZ : int, optional
+            order of derivative to take in R,phi,Z directions
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+
+        """
+        if (dR != 0) or (dp != 0) or (dZ != 0):
+            raise NotImplementedError(
+                "Derivatives of poloidal fields have not been implemented"
+            )
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+        R, phi, Z = coords.T
+        r = jnp.sqrt((R - self._R0) ** 2 + Z ** 2)
+        theta = jnp.arctan2(Z, R - self._R0)
+        br = r * jnp.sin(theta)
+        bp = jnp.zeros_like(br)
+        bz = r * jnp.cos(theta)
+        bmag = self._B0 * self._iota / self._R0
+        return bmag * jnp.array([br, bp, bz]).T
 
 
 class SplineMagneticField(MagneticField):

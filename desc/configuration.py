@@ -549,6 +549,20 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid, self.L_basis, derivs=data_index[name]["L_derivs"]
                 )
+            elif arg == "B_transform":
+                inputs[arg] = Transform(
+                    grid,
+                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.R_basis.sym),
+                    derivs=0,
+                    build_pinv=True,
+                )
+            elif arg == "nu_transform":
+                inputs[arg] = Transform(
+                    grid,
+                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.L_basis.sym),
+                    derivs=0,
+                    build_pinv=True,
+                )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid

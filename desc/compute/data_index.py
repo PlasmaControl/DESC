@@ -2945,6 +2945,24 @@ data_index = {
         "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
+    "nu": {
+        "label": "\\nu",
+        "units": "rad",
+        "fun": "compute_quasisymmetry_error",
+        "dim": 1,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
+    "|B|_mn": {
+        "label": "B_{mn}^{Boozer}",
+        "units": "T",
+        "fun": "compute_quasisymmetry_error",
+        "dim": 0,
+        "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "Z_derivs": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+    },
     "QS_FF": {
         "label": "(\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B - "
         + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",

@@ -3,6 +3,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import data_index
+from desc.grid import Grid
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -55,11 +56,11 @@ def dot(a, b, axis=-1):
     Parameters
     ----------
     a : array-like
-        first array of vectors
+        First array of vectors.
     b : array-like
-        second array of vectors
+        Second array of vectors.
     axis : int
-        axis along which vectors are stored
+        Axis along which vectors are stored.
 
     Returns
     -------
@@ -76,11 +77,11 @@ def cross(a, b, axis=-1):
     Parameters
     ----------
     a : array-like
-        first array of vectors
+        First array of vectors.
     b : array-like
-        second array of vectors
+        Second array of vectors.
     axis : int
-        axis along which vectors are stored
+        Axis along which vectors are stored.
 
     Returns
     -------
@@ -1507,7 +1508,6 @@ def compute_magnetic_tension(
         data=data,
     )
 
-    # TODO: compute with cross product instead of explicity with each term?
     if check_derivs("(curl(B)xB)_rho", R_transform, Z_transform, L_transform):
         data["(curl(B)xB)_rho"] = (
             mu_0
@@ -1523,7 +1523,7 @@ def compute_magnetic_tension(
             mu_0 * data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
         )
     if check_derivs("curl(B)xB", R_transform, Z_transform, L_transform):
-        data["(curl(B)xB)"] = (
+        data["curl(B)xB"] = (
             data["(curl(B)xB)_rho"] * data["e^rho"].T
             + data["(curl(B)xB)_theta"] * data["e^theta"].T
             + data["(curl(B)xB)_zeta"] * data["e^zeta"].T
@@ -1531,7 +1531,7 @@ def compute_magnetic_tension(
 
     # tension vector
     if check_derivs("(B*grad)B", R_transform, Z_transform, L_transform):
-        data["(B*grad)B"] = data["(curl(B)xB)"] + data["grad(|B|^2)"] / 2
+        data["(B*grad)B"] = data["curl(B)xB"] + data["grad(|B|^2)"] / 2
         data["((B*grad)B)_rho"] = dot(data["(B*grad)B"], data["e_rho"])
         data["((B*grad)B)_theta"] = dot(data["(B*grad)B"], data["e_theta"])
         data["((B*grad)B)_zeta"] = dot(data["(B*grad)B"], data["e_zeta"])
@@ -1827,6 +1827,8 @@ def compute_quasisymmetry_error(
     R_transform,
     Z_transform,
     L_transform,
+    B_transform,
+    nu_transform,
     iota,
     helicity=(1, 0),
     data={},
@@ -1851,6 +1853,10 @@ def compute_quasisymmetry_error(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
+    B_transform : Transform
+        Transforms spectral coefficients of B(rho,theta,zeta) to real space.
+    nu_transform : Transform
+        Transforms spectral coefficients of nu(rho,theta,zeta) to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
     helicity : tuple, int
@@ -1892,15 +1898,38 @@ def compute_quasisymmetry_error(
     M = helicity[0]
     N = helicity[1]
 
+    idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(
-            data["sqrt(g)"]
-        )
+        B_theta_mn = B_transform.fit(data["B_theta"])
+        data["I"] = B_theta_mn[idx0]
     if check_derivs("G", R_transform, Z_transform, L_transform):
-        data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(
-            data["sqrt(g)"]
-        )
+        B_zeta_mn = B_transform.fit(data["B_zeta"])
+        data["G"] = B_zeta_mn[idx0]
+
+    # QS Boozer harmonics
+    lambda_mn = nu_transform.fit(data["lambda"])
+    nu_mn = jnp.zeros_like(lambda_mn)
+    for k, (l, m, n) in enumerate(nu_transform.basis.modes):
+        if m != 0:
+            idx = jnp.where((B_transform.basis.modes == [0, -m, n]).all(axis=1))[0]
+            nu_mn[k] = (B_theta_mn[idx] / m - data["I"] * lambda_mn[k]) / (
+                data["G"] + data["iota"][0] * data["I"]
+            )
+        elif n != 0:
+            idx = jnp.where((B_transform.basis.modes == [0, m, -n]).all(axis=1))[0]
+            nu_mn[k] = (B_zeta_mn[idx] / n - data["I"] * lambda_mn[k]) / (
+                data["G"] + data["iota"][0] * data["I"]
+            )
+    data["nu"] = nu_transform.transform(nu_mn)
+
+    b_nodes = nu_transform.grid.nodes
+    b_nodes[:, 2] = b_nodes[:, 2] - data["nu"]
+    b_nodes[:, 1] = b_nodes[:, 1] - data["lambda"] - data["iota"] * data["nu"]
+    b_grid = Grid(b_nodes)
+    B_transform.grid = b_grid
+    data["|B|_mn"] = B_transform.fit(data["|B|"])
 
     # QS flux function (T^3)
     if check_derivs("QS_FF", R_transform, Z_transform, L_transform):

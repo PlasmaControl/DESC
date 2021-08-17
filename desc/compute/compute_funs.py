@@ -49,7 +49,7 @@ def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
     return R_flag and Z_flag and L_flag
 
 
-def dot(a, b, axis):
+def dot(a, b, axis=-1):
     """Batched vector dot product.
 
     Parameters
@@ -70,7 +70,7 @@ def dot(a, b, axis):
     return jnp.sum(a * b, axis=axis, keepdims=False)
 
 
-def cross(a, b, axis):
+def cross(a, b, axis=-1):
     """Batched vector cross product.
 
     Parameters
@@ -400,69 +400,69 @@ def compute_covariant_basis(
 
     # 0th order derivatives
     if check_derivs("e_rho", R_transform, Z_transform):
-        data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]])
+        data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]]).T
     if check_derivs("e_theta", R_transform, Z_transform):
-        data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]])
+        data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]]).T
     if check_derivs("e_zeta", R_transform, Z_transform):
-        data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]])
+        data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]]).T
 
     # 1st order derivatives
     if check_derivs("e_rho_r", R_transform, Z_transform):
-        data["e_rho_r"] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]])
+        data["e_rho_r"] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]]).T
     if check_derivs("e_rho_t", R_transform, Z_transform):
-        data["e_rho_t"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
+        data["e_rho_t"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
     if check_derivs("e_rho_z", R_transform, Z_transform):
-        data["e_rho_z"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]])
+        data["e_rho_z"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]]).T
     if check_derivs("e_theta_r", R_transform, Z_transform):
-        data["e_theta_r"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]])
+        data["e_theta_r"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
     if check_derivs("e_theta_t", R_transform, Z_transform):
-        data["e_theta_t"] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]])
+        data["e_theta_t"] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]]).T
     if check_derivs("e_theta_z", R_transform, Z_transform):
-        data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]])
+        data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]]).T
     if check_derivs("e_zeta_r", R_transform, Z_transform):
-        data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]])
+        data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]]).T
     if check_derivs("e_zeta_t", R_transform, Z_transform):
-        data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]])
+        data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]]).T
     if check_derivs("e_zeta_z", R_transform, Z_transform):
-        data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]])
+        data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]]).T
 
     # 2nd order derivatives
     if check_derivs("e_rho_rr", R_transform, Z_transform):
-        data["e_rho_rr"] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]])
+        data["e_rho_rr"] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]]).T
     if check_derivs("e_rho_tt", R_transform, Z_transform):
-        data["e_rho_tt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
+        data["e_rho_tt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
     if check_derivs("e_rho_zz", R_transform, Z_transform):
-        data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]])
+        data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]]).T
     if check_derivs("e_rho_rt", R_transform, Z_transform):
-        data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
+        data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
     if check_derivs("e_rho_rz", R_transform, Z_transform):
-        data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]])
+        data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]]).T
     if check_derivs("e_rho_tz", R_transform, Z_transform):
-        data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
+        data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
     if check_derivs("e_theta_rr", R_transform, Z_transform):
-        data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]])
+        data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
     if check_derivs("e_theta_tt", R_transform, Z_transform):
-        data["e_theta_tt"] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]])
+        data["e_theta_tt"] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]]).T
     if check_derivs("e_theta_zz", R_transform, Z_transform):
-        data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]])
+        data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]]).T
     if check_derivs("e_theta_rt", R_transform, Z_transform):
-        data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]])
+        data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
     if check_derivs("e_theta_rz", R_transform, Z_transform):
-        data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]])
+        data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
     if check_derivs("e_theta_tz", R_transform, Z_transform):
-        data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]])
+        data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
     if check_derivs("e_zeta_rr", R_transform, Z_transform):
-        data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]])
+        data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
     if check_derivs("e_zeta_tt", R_transform, Z_transform):
-        data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]])
+        data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]]).T
     if check_derivs("e_zeta_zz", R_transform, Z_transform):
-        data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]])
+        data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]]).T
     if check_derivs("e_zeta_rt", R_transform, Z_transform):
-        data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]])
+        data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]]).T
     if check_derivs("e_zeta_rz", R_transform, Z_transform):
-        data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]])
+        data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]]).T
     if check_derivs("e_zeta_tz", R_transform, Z_transform):
-        data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]])
+        data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]]).T
 
     return data
 
@@ -505,11 +505,11 @@ def compute_contravariant_basis(
         )
 
     if check_derivs("e^rho", R_transform, Z_transform):
-        data["e^rho"] = cross(data["e_theta"], data["e_zeta"], 0) / data["sqrt(g)"]
+        data["e^rho"] = (cross(data["e_theta"], data["e_zeta"]).T / data["sqrt(g)"]).T
     if check_derivs("e^theta", R_transform, Z_transform):
-        data["e^theta"] = cross(data["e_zeta"], data["e_rho"], 0) / data["sqrt(g)"]
+        data["e^theta"] = (cross(data["e_zeta"], data["e_rho"]).T / data["sqrt(g)"]).T
     if check_derivs("e^zeta", R_transform, Z_transform):
-        data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]])
+        data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
 
     return data
 
@@ -551,186 +551,67 @@ def compute_jacobian(
     )
 
     if check_derivs("sqrt(g)", R_transform, Z_transform):
-        data["sqrt(g)"] = dot(
-            data["e_rho"], cross(data["e_theta"], data["e_zeta"], 0), 0
-        )
+        data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"]))
 
     # 1st order derivatives
     if check_derivs("sqrt(g)_r", R_transform, Z_transform):
         data["sqrt(g)_r"] = (
-            dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"], 0), 0)
+            dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"]))
         )
     if check_derivs("sqrt(g)_t", R_transform, Z_transform):
         data["sqrt(g)_t"] = (
-            dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_t"], 0), 0)
+            dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_t"]))
         )
     if check_derivs("sqrt(g)_z", R_transform, Z_transform):
         data["sqrt(g)_z"] = (
-            dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta"], 0), 0)
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_z"], 0), 0)
+            dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_z"]))
         )
 
     # 2nd order derivatives
     if check_derivs("sqrt(g)_rr", R_transform, Z_transform):
         data["sqrt(g)_rr"] = (
-            dot(
-                data["e_rho_rr"],
-                cross(data["e_theta"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_rr"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta"], data["e_zeta_rr"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_r"],
-                cross(data["e_theta_r"], data["e_zeta"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_r"],
-                cross(data["e_theta"], data["e_zeta_r"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho"],
-                cross(data["e_theta_r"], data["e_zeta_r"], 0),
-                0,
-            )
+            dot(data["e_rho_rr"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_rr"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rr"]))
+            + 2 * dot(data["e_rho_r"], cross(data["e_theta_r"], data["e_zeta"]))
+            + 2 * dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_r"]))
+            + 2 * dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_r"]))
         )
     if check_derivs("sqrt(g)_tt", R_transform, Z_transform):
         data["sqrt(g)_tt"] = (
-            dot(
-                data["e_rho_tt"],
-                cross(data["e_theta"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_tt"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta"], data["e_zeta_tt"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_t"],
-                cross(data["e_theta_t"], data["e_zeta"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_t"],
-                cross(data["e_theta"], data["e_zeta_t"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho"],
-                cross(data["e_theta_t"], data["e_zeta_t"], 0),
-                0,
-            )
+            dot(data["e_rho_tt"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_tt"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tt"]))
+            + 2 * dot(data["e_rho_t"], cross(data["e_theta_t"], data["e_zeta"]))
+            + 2 * dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_t"]))
+            + 2 * dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_t"]))
         )
     if check_derivs("sqrt(g)_zz", R_transform, Z_transform):
         data["sqrt(g)_zz"] = (
-            dot(
-                data["e_rho_zz"],
-                cross(data["e_theta"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_zz"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta"], data["e_zeta_zz"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_z"],
-                cross(data["e_theta_z"], data["e_zeta"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho_z"],
-                cross(data["e_theta"], data["e_zeta_z"], 0),
-                0,
-            )
-            + 2
-            * dot(
-                data["e_rho"],
-                cross(data["e_theta_z"], data["e_zeta_z"], 0),
-                0,
-            )
+            dot(data["e_rho_zz"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_zz"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_zz"]))
+            + 2 * dot(data["e_rho_z"], cross(data["e_theta_z"], data["e_zeta"]))
+            + 2 * dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_z"]))
+            + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_z"]))
         )
     if check_derivs("sqrt(g)_tz", R_transform, Z_transform):
         data["sqrt(g)_tz"] = (
-            dot(
-                data["e_rho_tz"],
-                cross(data["e_theta"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho_z"],
-                cross(data["e_theta_t"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho_z"],
-                cross(data["e_theta"], data["e_zeta_t"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho_t"],
-                cross(data["e_theta_z"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_tz"], data["e_zeta"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_z"], data["e_zeta_t"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho_t"],
-                cross(data["e_theta"], data["e_zeta_z"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta_t"], data["e_zeta_z"], 0),
-                0,
-            )
-            + dot(
-                data["e_rho"],
-                cross(data["e_theta"], data["e_zeta_tz"], 0),
-                0,
-            )
+            dot(data["e_rho_tz"], cross(data["e_theta"], data["e_zeta"]))
+            + dot(data["e_rho_z"], cross(data["e_theta_t"], data["e_zeta"]))
+            + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_t"]))
+            + dot(data["e_rho_t"], cross(data["e_theta_z"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_tz"], data["e_zeta"]))
+            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_t"]))
+            + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_z"]))
+            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_z"]))
+            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tz"]))
         )
 
     return data
@@ -773,17 +654,17 @@ def compute_covariant_metric_coefficients(
     )
 
     if check_derivs("g_rr", R_transform, Z_transform):
-        data["g_rr"] = dot(data["e_rho"], data["e_rho"], 0)
+        data["g_rr"] = dot(data["e_rho"], data["e_rho"])
     if check_derivs("g_tt", R_transform, Z_transform):
-        data["g_tt"] = dot(data["e_theta"], data["e_theta"], 0)
+        data["g_tt"] = dot(data["e_theta"], data["e_theta"])
     if check_derivs("g_zz", R_transform, Z_transform):
-        data["g_zz"] = dot(data["e_zeta"], data["e_zeta"], 0)
+        data["g_zz"] = dot(data["e_zeta"], data["e_zeta"])
     if check_derivs("g_rt", R_transform, Z_transform):
-        data["g_rt"] = dot(data["e_rho"], data["e_theta"], 0)
+        data["g_rt"] = dot(data["e_rho"], data["e_theta"])
     if check_derivs("g_rz", R_transform, Z_transform):
-        data["g_rz"] = dot(data["e_rho"], data["e_zeta"], 0)
+        data["g_rz"] = dot(data["e_rho"], data["e_zeta"])
     if check_derivs("g_tz", R_transform, Z_transform):
-        data["g_tz"] = dot(data["e_theta"], data["e_zeta"], 0)
+        data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
 
     return data
 
@@ -825,17 +706,17 @@ def compute_contravariant_metric_coefficients(
     )
 
     if check_derivs("g^rr", R_transform, Z_transform):
-        data["g^rr"] = dot(data["e^rho"], data["e^rho"], 0)
+        data["g^rr"] = dot(data["e^rho"], data["e^rho"])
     if check_derivs("g^tt", R_transform, Z_transform):
-        data["g^tt"] = dot(data["e^theta"], data["e^theta"], 0)
+        data["g^tt"] = dot(data["e^theta"], data["e^theta"])
     if check_derivs("g^zz", R_transform, Z_transform):
-        data["g^zz"] = dot(data["e^zeta"], data["e^zeta"], 0)
+        data["g^zz"] = dot(data["e^zeta"], data["e^zeta"])
     if check_derivs("g^rt", R_transform, Z_transform):
-        data["g^rt"] = dot(data["e^rho"], data["e^theta"], 0)
+        data["g^rt"] = dot(data["e^rho"], data["e^theta"])
     if check_derivs("g^rz", R_transform, Z_transform):
-        data["g^rz"] = dot(data["e^rho"], data["e^zeta"], 0)
+        data["g^rz"] = dot(data["e^rho"], data["e^zeta"])
     if check_derivs("g^tz", R_transform, Z_transform):
-        data["g^tz"] = dot(data["e^theta"], data["e^zeta"], 0)
+        data["g^tz"] = dot(data["e^theta"], data["e^zeta"])
 
     if check_derivs("|grad(rho)|", R_transform, Z_transform):
         data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
@@ -911,10 +792,12 @@ def compute_contravariant_magnetic_field(
     if check_derivs("B^zeta", R_transform, Z_transform, L_transform):
         data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
     if check_derivs("B", R_transform, Z_transform, L_transform):
-        data["B"] = data["B^theta"] * data["e_theta"] + data["B^zeta"] * data["e_zeta"]
-        data["B_R"] = data["B"][0, :]
-        data["B_phi"] = data["B"][1, :]
-        data["B_Z"] = data["B"][2, :]
+        data["B"] = (
+            data["B^theta"] * data["e_theta"].T + data["B^zeta"] * data["e_zeta"].T
+        ).T
+        data["B_R"] = data["B"][:, 0]
+        data["B_phi"] = data["B"][:, 1]
+        data["B_Z"] = data["B"][:, 2]
 
     # 1st order derivatives
     if check_derivs("B0_r", R_transform, Z_transform, L_transform):
@@ -932,11 +815,11 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B_r", R_transform, Z_transform, L_transform):
         data["B_r"] = (
-            data["B^theta_r"] * data["e_theta"]
-            + data["B^theta"] * data["e_theta_r"]
-            + data["B^zeta_r"] * data["e_zeta"]
-            + data["B^zeta"] * data["e_zeta_r"]
-        )
+            data["B^theta_r"] * data["e_theta"].T
+            + data["B^theta"] * data["e_theta_r"].T
+            + data["B^zeta_r"] * data["e_zeta"].T
+            + data["B^zeta"] * data["e_zeta_r"].T
+        ).T
     if check_derivs("B0_t", R_transform, Z_transform, L_transform):
         data["B0_t"] = -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2
     if check_derivs("B^theta_t", R_transform, Z_transform, L_transform):
@@ -950,11 +833,11 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B_t", R_transform, Z_transform, L_transform):
         data["B_t"] = (
-            data["B^theta_t"] * data["e_theta"]
-            + data["B^theta"] * data["e_theta_t"]
-            + data["B^zeta_t"] * data["e_zeta"]
-            + data["B^zeta"] * data["e_zeta_t"]
-        )
+            data["B^theta_t"] * data["e_theta"].T
+            + data["B^theta"] * data["e_theta_t"].T
+            + data["B^zeta_t"] * data["e_zeta"].T
+            + data["B^zeta"] * data["e_zeta_t"].T
+        ).T
     if check_derivs("B0_z", R_transform, Z_transform, L_transform):
         data["B0_z"] = -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
     if check_derivs("B^theta_z", R_transform, Z_transform, L_transform):
@@ -968,11 +851,11 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B_z", R_transform, Z_transform, L_transform):
         data["B_z"] = (
-            data["B^theta_z"] * data["e_theta"]
-            + data["B^theta"] * data["e_theta_z"]
-            + data["B^zeta_z"] * data["e_zeta"]
-            + data["B^zeta"] * data["e_zeta_z"]
-        )
+            data["B^theta_z"] * data["e_theta"].T
+            + data["B^theta"] * data["e_theta_z"].T
+            + data["B^zeta_z"] * data["e_zeta"].T
+            + data["B^zeta"] * data["e_zeta_z"].T
+        ).T
 
     # 2nd order derivatives
     if check_derivs("B0_tt", R_transform, Z_transform, L_transform):
@@ -1081,48 +964,48 @@ def compute_covariant_magnetic_field(
 
     # 0th order terms
     if check_derivs("B_rho", R_transform, Z_transform, L_transform):
-        data["B_rho"] = dot(data["B"], data["e_rho"], 0)
+        data["B_rho"] = dot(data["B"], data["e_rho"])
     if check_derivs("B_theta", R_transform, Z_transform, L_transform):
-        data["B_theta"] = dot(data["B"], data["e_theta"], 0)
+        data["B_theta"] = dot(data["B"], data["e_theta"])
     if check_derivs("B_zeta", R_transform, Z_transform, L_transform):
-        data["B_zeta"] = dot(data["B"], data["e_zeta"], 0)
+        data["B_zeta"] = dot(data["B"], data["e_zeta"])
 
     # 1st order derivatives
     if check_derivs("B_rho_r", R_transform, Z_transform, L_transform):
-        data["B_rho_r"] = dot(data["B_r"], data["e_rho"], 0) + dot(
-            data["B"], data["e_rho_r"], 0
+        data["B_rho_r"] = dot(data["B_r"], data["e_rho"]) + dot(
+            data["B"], data["e_rho_r"]
         )
     if check_derivs("B_theta_r", R_transform, Z_transform, L_transform):
-        data["B_theta_r"] = dot(data["B_r"], data["e_theta"], 0) + dot(
-            data["B"], data["e_theta_r"], 0
+        data["B_theta_r"] = dot(data["B_r"], data["e_theta"]) + dot(
+            data["B"], data["e_theta_r"]
         )
     if check_derivs("B_zeta_r", R_transform, Z_transform, L_transform):
-        data["B_zeta_r"] = dot(data["B_r"], data["e_zeta"], 0) + dot(
-            data["B"], data["e_zeta_r"], 0
+        data["B_zeta_r"] = dot(data["B_r"], data["e_zeta"]) + dot(
+            data["B"], data["e_zeta_r"]
         )
     if check_derivs("B_rho_t", R_transform, Z_transform, L_transform):
-        data["B_rho_t"] = dot(data["B_t"], data["e_rho"], 0) + dot(
-            data["B"], data["e_rho_t"], 0
+        data["B_rho_t"] = dot(data["B_t"], data["e_rho"]) + dot(
+            data["B"], data["e_rho_t"]
         )
     if check_derivs("B_theta_t", R_transform, Z_transform, L_transform):
-        data["B_theta_t"] = dot(data["B_t"], data["e_theta"], 0) + dot(
-            data["B"], data["e_theta_t"], 0
+        data["B_theta_t"] = dot(data["B_t"], data["e_theta"]) + dot(
+            data["B"], data["e_theta_t"]
         )
     if check_derivs("B_zeta_t", R_transform, Z_transform, L_transform):
-        data["B_zeta_t"] = dot(data["B_t"], data["e_zeta"], 0) + dot(
-            data["B"], data["e_zeta_t"], 0
+        data["B_zeta_t"] = dot(data["B_t"], data["e_zeta"]) + dot(
+            data["B"], data["e_zeta_t"]
         )
     if check_derivs("B_rho_z", R_transform, Z_transform, L_transform):
-        data["B_rho_z"] = dot(data["B_z"], data["e_rho"], 0) + dot(
-            data["B"], data["e_rho_z"], 0
+        data["B_rho_z"] = dot(data["B_z"], data["e_rho"]) + dot(
+            data["B"], data["e_rho_z"]
         )
     if check_derivs("B_theta_z", R_transform, Z_transform, L_transform):
-        data["B_theta_z"] = dot(data["B_z"], data["e_theta"], 0) + dot(
-            data["B"], data["e_theta_z"], 0
+        data["B_theta_z"] = dot(data["B_z"], data["e_theta"]) + dot(
+            data["B"], data["e_theta_z"]
         )
     if check_derivs("B_zeta_z", R_transform, Z_transform, L_transform):
-        data["B_zeta_z"] = dot(data["B_z"], data["e_zeta"], 0) + dot(
-            data["B"], data["e_zeta_z"], 0
+        data["B_zeta_z"] = dot(data["B_z"], data["e_zeta"]) + dot(
+            data["B"], data["e_zeta_z"]
         )
 
     return data
@@ -1205,19 +1088,19 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_t"] * data["g_tz"]
                 + data["B^theta_t"] * data["g_tt"]
-                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_t"] * data["g_tz"]
                 + data["B^zeta_t"] * data["g_zz"]
-                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
             )
             + data["B^theta"]
             * data["B^zeta"]
             * (
-                dot(data["e_theta_t"], data["e_zeta"], 0)
-                + dot(data["e_zeta_t"], data["e_theta"], 0)
+                dot(data["e_theta_t"], data["e_zeta"])
+                + dot(data["e_zeta_t"], data["e_theta"])
             )
         ) / data["|B|"]
     if check_derivs("|B|_z", R_transform, Z_transform, L_transform):
@@ -1226,19 +1109,19 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_z"] * data["g_tz"]
                 + data["B^theta_z"] * data["g_tt"]
-                + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"], 0)
+                + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_z"] * data["g_tz"]
                 + data["B^zeta_z"] * data["g_zz"]
-                + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"], 0)
+                + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"])
             )
             + data["B^theta"]
             * data["B^zeta"]
             * (
-                dot(data["e_theta_z"], data["e_zeta"], 0)
-                + dot(data["e_zeta_z"], data["e_theta"], 0)
+                dot(data["e_theta_z"], data["e_zeta"])
+                + dot(data["e_zeta_z"], data["e_theta"])
             )
         ) / data["|B|"]
 
@@ -1250,65 +1133,65 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_t"] * data["g_tz"]
                 + data["B^theta_t"] * data["g_tt"]
-                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_tt"] * data["g_tz"]
                 + data["B^theta_tt"] * data["g_tt"]
-                + data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_t"]
                 * (
-                    dot(data["e_theta_t"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_t"], 0)
+                    dot(data["e_theta_t"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_t"])
                 )
-                + 2 * data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + 2 * data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"])
                 + data["B^theta"]
                 * (
-                    dot(data["e_theta_tt"], data["e_theta"], 0)
-                    + dot(data["e_theta_t"], data["e_theta_t"], 0)
+                    dot(data["e_theta_tt"], data["e_theta"])
+                    + dot(data["e_theta_t"], data["e_theta_t"])
                 )
             )
             + data["B^zeta_t"]
             * (
                 data["B^theta_t"] * data["g_tz"]
                 + data["B^zeta_t"] * data["g_zz"]
-                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_tt"] * data["g_tz"]
                 + data["B^zeta_tt"] * data["g_zz"]
-                + data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_t"]
                 * (
-                    dot(data["e_theta_t"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_t"], 0)
+                    dot(data["e_theta_t"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_t"])
                 )
-                + 2 * data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + 2 * data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"])
                 + data["B^zeta"]
                 * (
-                    dot(data["e_zeta_tt"], data["e_zeta"], 0)
-                    + dot(data["e_zeta_t"], data["e_zeta_t"], 0)
+                    dot(data["e_zeta_tt"], data["e_zeta"])
+                    + dot(data["e_zeta_t"], data["e_zeta_t"])
                 )
             )
             + (data["B^theta_t"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_t"])
             * (
-                dot(data["e_theta_t"], data["e_zeta"], 0)
-                + dot(data["e_zeta_t"], data["e_theta"], 0)
+                dot(data["e_theta_t"], data["e_zeta"])
+                + dot(data["e_zeta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * data["B^zeta"]
             * (
-                dot(data["e_theta_tt"], data["e_zeta"], 0)
-                + dot(data["e_zeta_tt"], data["e_theta"], 0)
-                + 2 * dot(data["e_zeta_t"], data["e_theta_t"], 0)
+                dot(data["e_theta_tt"], data["e_zeta"])
+                + dot(data["e_zeta_tt"], data["e_theta"])
+                + 2 * dot(data["e_zeta_t"], data["e_theta_t"])
             )
         ) / data["|B|"] - data["|B|_t"] ** 2 / data["|B|"]
     if check_derivs("|B|_zz", R_transform, Z_transform, L_transform):
@@ -1317,65 +1200,65 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_z"] * data["g_tz"]
                 + data["B^theta_z"] * data["g_tt"]
-                + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"], 0)
+                + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_zz"] * data["g_tz"]
                 + data["B^theta_zz"] * data["g_tt"]
-                + data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"], 0)
+                + data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_z"]
                 * (
-                    dot(data["e_theta_z"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_z"], 0)
+                    dot(data["e_theta_z"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_z"])
                 )
-                + 2 * data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"], 0)
+                + 2 * data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"])
                 + data["B^theta"]
                 * (
-                    dot(data["e_theta_zz"], data["e_theta"], 0)
-                    + dot(data["e_theta_z"], data["e_theta_z"], 0)
+                    dot(data["e_theta_zz"], data["e_theta"])
+                    + dot(data["e_theta_z"], data["e_theta_z"])
                 )
             )
             + data["B^zeta_z"]
             * (
                 data["B^theta_z"] * data["g_tz"]
                 + data["B^zeta_z"] * data["g_zz"]
-                + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"], 0)
+                + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_zz"] * data["g_tz"]
                 + data["B^zeta_zz"] * data["g_zz"]
-                + data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"], 0)
+                + data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_z"]
                 * (
-                    dot(data["e_theta_z"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_z"], 0)
+                    dot(data["e_theta_z"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_z"])
                 )
-                + 2 * data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"], 0)
+                + 2 * data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"])
                 + data["B^zeta"]
                 * (
-                    dot(data["e_zeta_zz"], data["e_zeta"], 0)
-                    + dot(data["e_zeta_z"], data["e_zeta_z"], 0)
+                    dot(data["e_zeta_zz"], data["e_zeta"])
+                    + dot(data["e_zeta_z"], data["e_zeta_z"])
                 )
             )
             + (data["B^theta_z"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_z"])
             * (
-                dot(data["e_theta_z"], data["e_zeta"], 0)
-                + dot(data["e_zeta_z"], data["e_theta"], 0)
+                dot(data["e_theta_z"], data["e_zeta"])
+                + dot(data["e_zeta_z"], data["e_theta"])
             )
             + data["B^theta"]
             * data["B^zeta"]
             * (
-                dot(data["e_theta_zz"], data["e_zeta"], 0)
-                + dot(data["e_zeta_zz"], data["e_theta"], 0)
-                + 2 * dot(data["e_theta_z"], data["e_zeta_z"], 0)
+                dot(data["e_theta_zz"], data["e_zeta"])
+                + dot(data["e_zeta_zz"], data["e_theta"])
+                + 2 * dot(data["e_theta_z"], data["e_zeta_z"])
             )
         ) / data["|B|"] - data["|B|_z"] ** 2 / data["|B|"]
     # TODO: |B|_rt
@@ -1386,66 +1269,66 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_t"] * data["g_tz"]
                 + data["B^theta_t"] * data["g_tt"]
-                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_tz"] * data["g_tz"]
                 + data["B^theta_tz"] * data["g_tt"]
-                + data["B^theta_z"] * dot(data["e_theta_t"], data["e_theta"], 0)
+                + data["B^theta_z"] * dot(data["e_theta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * (
                 data["B^zeta_t"]
                 * (
-                    dot(data["e_theta_z"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_z"], 0)
+                    dot(data["e_theta_z"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_z"])
                 )
-                + 2 * data["B^theta_t"] * dot(data["e_theta_z"], data["e_theta"], 0)
+                + 2 * data["B^theta_t"] * dot(data["e_theta_z"], data["e_theta"])
                 + data["B^theta"]
                 * (
-                    dot(data["e_theta_tz"], data["e_theta"], 0)
-                    + dot(data["e_theta_t"], data["e_theta_z"], 0)
+                    dot(data["e_theta_tz"], data["e_theta"])
+                    + dot(data["e_theta_t"], data["e_theta_z"])
                 )
             )
             + data["B^zeta_z"]
             * (
                 data["B^theta_t"] * data["g_tz"]
                 + data["B^zeta_t"] * data["g_zz"]
-                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_tz"] * data["g_tz"]
                 + data["B^zeta_tz"] * data["g_zz"]
-                + data["B^zeta_z"] * dot(data["e_zeta_t"], data["e_zeta"], 0)
+                + data["B^zeta_z"] * dot(data["e_zeta_t"], data["e_zeta"])
             )
             + data["B^zeta"]
             * (
                 data["B^theta_t"]
                 * (
-                    dot(data["e_theta_z"], data["e_zeta"], 0)
-                    + dot(data["e_theta"], data["e_zeta_z"], 0)
+                    dot(data["e_theta_z"], data["e_zeta"])
+                    + dot(data["e_theta"], data["e_zeta_z"])
                 )
-                + 2 * data["B^zeta_t"] * dot(data["e_zeta_z"], data["e_zeta"], 0)
+                + 2 * data["B^zeta_t"] * dot(data["e_zeta_z"], data["e_zeta"])
                 + data["B^zeta"]
                 * (
-                    dot(data["e_zeta_tz"], data["e_zeta"], 0)
-                    + dot(data["e_zeta_t"], data["e_zeta_z"], 0)
+                    dot(data["e_zeta_tz"], data["e_zeta"])
+                    + dot(data["e_zeta_t"], data["e_zeta_z"])
                 )
             )
             + (data["B^theta_z"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_z"])
             * (
-                dot(data["e_theta_t"], data["e_zeta"], 0)
-                + dot(data["e_zeta_t"], data["e_theta"], 0)
+                dot(data["e_theta_t"], data["e_zeta"])
+                + dot(data["e_zeta_t"], data["e_theta"])
             )
             + data["B^theta"]
             * data["B^zeta"]
             * (
-                dot(data["e_theta_tz"], data["e_zeta"], 0)
-                + dot(data["e_zeta_tz"], data["e_theta"], 0)
-                + dot(data["e_theta_t"], data["e_zeta_z"], 0)
-                + dot(data["e_zeta_t"], data["e_theta_z"], 0)
+                dot(data["e_theta_tz"], data["e_zeta"])
+                + dot(data["e_zeta_tz"], data["e_theta"])
+                + dot(data["e_theta_t"], data["e_zeta_z"])
+                + dot(data["e_zeta_t"], data["e_theta_z"])
             )
         ) / data["|B|"] - data["|B|_t"] * data["|B|_z"] / data["|B|"]
 
@@ -1537,10 +1420,10 @@ def compute_magnetic_pressure_gradient(
     # gradient vector
     if check_derivs("grad(|B|^2)", R_transform, Z_transform, L_transform):
         data["grad(|B|^2)"] = (
-            data["grad(|B|^2)_rho"] * data["e^rho"]
-            + data["grad(|B|^2)_theta"] * data["e^theta"]
-            + data["grad(|B|^2)_zeta"] * data["e^zeta"]
-        )
+            data["grad(|B|^2)_rho"] * data["e^rho"].T
+            + data["grad(|B|^2)_theta"] * data["e^theta"].T
+            + data["grad(|B|^2)_zeta"] * data["e^zeta"].T
+        ).T
 
     # magnitude
     if check_derivs("|grad(|B|^2)|", R_transform, Z_transform, L_transform):
@@ -1624,6 +1507,7 @@ def compute_magnetic_tension(
         data=data,
     )
 
+    # TODO: compute with cross product instead of explicity with each term?
     if check_derivs("(curl(B)xB)_rho", R_transform, Z_transform, L_transform):
         data["(curl(B)xB)_rho"] = (
             mu_0
@@ -1640,17 +1524,17 @@ def compute_magnetic_tension(
         )
     if check_derivs("curl(B)xB", R_transform, Z_transform, L_transform):
         data["(curl(B)xB)"] = (
-            data["(curl(B)xB)_rho"] * data["e^rho"]
-            + data["(curl(B)xB)_theta"] * data["e^theta"]
-            + data["(curl(B)xB)_zeta"] * data["e^zeta"]
-        )
+            data["(curl(B)xB)_rho"] * data["e^rho"].T
+            + data["(curl(B)xB)_theta"] * data["e^theta"].T
+            + data["(curl(B)xB)_zeta"] * data["e^zeta"].T
+        ).T
 
     # tension vector
     if check_derivs("(B*grad)B", R_transform, Z_transform, L_transform):
         data["(B*grad)B"] = data["(curl(B)xB)"] + data["grad(|B|^2)"] / 2
-        data["((B*grad)B)_rho"] = dot(data["(B*grad)B"], data["e_rho"], 0)
-        data["((B*grad)B)_theta"] = dot(data["(B*grad)B"], data["e_theta"], 0)
-        data["((B*grad)B)_zeta"] = dot(data["(B*grad)B"], data["e_zeta"], 0)
+        data["((B*grad)B)_rho"] = dot(data["(B*grad)B"], data["e_rho"])
+        data["((B*grad)B)_theta"] = dot(data["(B*grad)B"], data["e_theta"])
+        data["((B*grad)B)_zeta"] = dot(data["(B*grad)B"], data["e_zeta"])
         data["|(B*grad)B|"] = jnp.sqrt(
             data["((B*grad)B)_rho"] ** 2 * data["g^rr"]
             + data["((B*grad)B)_theta"] ** 2 * data["g^tt"]
@@ -1822,10 +1706,10 @@ def compute_contravariant_current_density(
         )
     if check_derivs("J", R_transform, Z_transform, L_transform):
         data["J"] = (
-            data["J^rho"] * data["e_rho"]
-            + data["J^theta"] * data["e_theta"]
-            + data["J^zeta"] * data["e_zeta"]
-        )
+            data["J^rho"] * data["e_rho"].T
+            + data["J^theta"] * data["e_theta"].T
+            + data["J^zeta"] * data["e_zeta"].T
+        ).T
 
     return data
 
@@ -1908,10 +1792,10 @@ def compute_force_error(
         data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
     if check_derivs("F", R_transform, Z_transform, L_transform):
         data["F"] = (
-            data["F_rho"] * data["e^rho"]
-            + data["F_theta"] * data["e^theta"]
-            + data["F_zeta"] * data["e^zeta"]
-        )
+            data["F_rho"] * data["e^rho"].T
+            + data["F_theta"] * data["e^theta"].T
+            + data["F_zeta"] * data["e^zeta"].T
+        ).T
     if check_derivs("|F|", R_transform, Z_transform, L_transform):
         data["|F|"] = jnp.sqrt(
             data["F_rho"] ** 2 * data["g^rr"]

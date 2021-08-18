@@ -31,9 +31,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r tests/requirements.txt
       - name: Test with pytest
-        run: pwd
-        run: lscpu
         run: |
+          pwd
+          lscpu
           python -m pytest --durations=0 --cov=desc/ --mpl
       - name: Upload coverage
         uses: codecov/codecov-action@v2

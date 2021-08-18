@@ -15,7 +15,6 @@ from desc.compute_funs import (
 
 __all__ = [
     "ForceErrorNodes",
-    "ForceErrorGalerkin",
     "EnergyVolIntegral",
     "get_objective_function",
 ]
@@ -1387,16 +1386,6 @@ def get_objective_function(
             BC_constraint=BC_constraint,
             use_jit=use_jit,
         )
-    elif objective == "galerkin":
-        obj_fun = ForceErrorGalerkin(
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            p_profile=p_profile,
-            i_profile=i_profile,
-            BC_constraint=BC_constraint,
-            use_jit=use_jit,
-        )
     elif objective == "energy":
         obj_fun = EnergyVolIntegral(
             R_transform=R_transform,
@@ -1412,7 +1401,7 @@ def get_objective_function(
             colored(
                 "Requested Objective Function is not implemented. "
                 + "Available objective functions are: "
-                + "'force', 'lambda', 'galerkin', 'energy'",
+                + "'force', 'lambda', 'energy'",
                 "red",
             )
         )

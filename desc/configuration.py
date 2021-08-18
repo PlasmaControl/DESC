@@ -2,12 +2,13 @@ import numpy as np
 import copy
 import warnings
 import math
+import numbers
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
 
 from desc.backend import jnp, jit, put, while_loop
-from desc.io import IOAble
+from desc.io import IOAble, load
 from desc.utils import unpack_state, copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
@@ -17,6 +18,8 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
+    Surface,
+    Curve,
 )
 from desc.basis import (
     PowerSeries,
@@ -51,6 +54,39 @@ class _Configuration(IOAble, ABC):
     It contains information about a plasma state, including the
     shapes of flux surfaces and profile inputs. It can compute additional
     information, such as the magnetic field and plasma currents.
+
+    Parameters
+    ----------
+    Psi : float (optional)
+        total toroidal flux (in Webers) within LCFS. Default 1.0
+    NFP : int (optional)
+        number of field periods Default surface.NFP or 1
+    L : int (optional)
+        Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+    M : int (optional)
+        Poloidal resolution. Default surface.M or 1
+    N : int (optional)
+        Toroidal resolution. Default surface.N or 0
+    pressure : Profile or ndarray shape(k,2) (optional)
+        Pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero pressure
+    iota : Profile or ndarray shape(k,2) (optional)
+        Rotational transform profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero rotational transform
+    surface: Surface or ndarray shape(k,5) (optional)
+        Fixed boundary surface shape, as a Surface object or array of
+        spectral mode numbers and coefficients of the form [l, m, n, R, Z].
+        Default is a FourierRZToroidalSurface with major radius 10 and
+        minor radius 1
+    axis : Curve or ndarray shape(k,3) (optional)
+        Initial guess for the magnetic axis as a Curve object or ndarray
+        of mode numbers and spectral coefficints of the form [n, R, Z].
+        Default is the centroid of the surface.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. Default surface.sym or False.
+    spectral_indexing : str (optional)
+        Type of Zernike indexing scheme to use. Default ``'ansi'``
+
     """
 
     _io_attrs_ = [
@@ -62,7 +98,6 @@ class _Configuration(IOAble, ABC):
         "_L",
         "_M",
         "_N",
-        "_x",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -77,52 +112,62 @@ class _Configuration(IOAble, ABC):
         "_bdry_mode",
     ]
 
-    def __init__(self, inputs):
-        """Initialize a Configuration.
+    def __init__(
+        self,
+        Psi=1.0,
+        NFP=None,
+        L=None,
+        M=None,
+        N=None,
+        pressure=None,
+        iota=None,
+        surface=None,
+        axis=None,
+        sym=None,
+        spectral_indexing=None,
+        **kwargs,
+    ):
 
-        Parameters
-        ----------
-        inputs : dict
-            Dictionary of inputs with the following required keys:
-                Psi : float, total toroidal flux (in Webers) within LCFS
-                NFP : int, number of field periods
-                L : int, radial resolution
-                M : int, poloidal resolution
-                N : int, toroidal resolution
-                profiles : ndarray, array of profile coeffs [l, p_l, i_l]
-                boundary : ndarray, array of boundary coeffs [m, n, Rb_lmn, Zb_lmn]
-            And the following optional keys:
-                sym : bool, is the problem stellarator symmetric or not, default is False
-                spectral_indexing : str, type of Zernike indexing scheme to use, default is ``'ansi'``
-                bdry_mode : {``'lcfs'``, ``'poincare'``}, where the BC are enforced
-                axis : ndarray, array of magnetic axis coeffs [n, R0_n, Z0_n]
-                x : ndarray, state vector [R_lmn, Z_lmn, L_lmn]
-                R_lmn : ndarray, spectral coefficients of R
-                Z_lmn : ndarray, spectral coefficients of Z
-                L_lmn : ndarray, spectral coefficients of lambda
+        assert spectral_indexing in [
+            None,
+            "ansi",
+            "fringe",
+        ], f"spectral_indexing should be one of 'ansi', 'fringe', None, got {spectral_indexing}"
+        if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
+            self._spectral_indexing = surface.spectral_indexing
+        elif spectral_indexing is None:
+            self._spectral_indexing = "ansi"
+        else:
+            self._spectral_indexing = spectral_indexing
 
-        """
-        self.inputs = inputs
-        try:
-            self._Psi = float(inputs["Psi"])
-            self._NFP = inputs["NFP"]
-            self._L = inputs["L"]
-            self._M = inputs["M"]
-            self._N = inputs["N"]
-            profiles = inputs["profiles"]
-            boundary = inputs["boundary"]
-        except:
-            raise ValueError(colored("input dict does not contain proper keys", "red"))
+        assert isinstance(
+            Psi, numbers.Real
+        ), f"Psi should be a real integer or float, got {type(Psi)}"
+        self._Psi = float(Psi)
 
-        # optional inputs
-        self._sym = inputs.get("sym", False)
-        self._spectral_indexing = inputs.get("spectral_indexing", "fringe")
-        self._bdry_mode = inputs.get("bdry_mode", "lcfs")
+        assert (NFP is None) or isinstance(
+            NFP, numbers.Real
+        ), f"NFP should be a real integer or float, got {type(NFP)}"
+        if NFP is not None:
+            self._NFP = NFP
+        elif hasattr(surface, "NFP"):
+            self._NFP = surface.NFP
+        elif hasattr(axis, "NFP"):
+            self._NFP = axis.NFP
+        else:
+            self._NFP = 1
 
-        # keep track of where it came from
-        self._parent = None
-        self._children = []
-
+        assert sym in [
+            None,
+            True,
+            False,
+        ], f"sym should be one of True, False, None, got {sym}"
+        if sym is None and hasattr(surface, "sym"):
+            self._sym = surface.sym
+        elif sym is None:
+            self._sym = False
+        else:
+            self._sym = sym
         # stellarator symmetry for bases
         if self.sym:
             self._R_sym = "cos"
@@ -131,83 +176,38 @@ class _Configuration(IOAble, ABC):
             self._R_sym = False
             self._Z_sym = False
 
-        # create bases
-        self._set_basis()
-
-        # format profiles
-        self._pressure = PowerSeriesProfile(
-            modes=profiles[:, 0], params=profiles[:, 1], name="pressure"
-        )
-        self._iota = PowerSeriesProfile(
-            modes=profiles[:, 0], params=profiles[:, 2], name="iota"
-        )
-        # format boundary
-        if self.bdry_mode == "lcfs":
-            self._surface = FourierRZToroidalSurface(
-                boundary[:, 3],
-                boundary[:, 4],
-                boundary[:, 1:3].astype(int),
-                boundary[:, 1:3].astype(int),
-                self.NFP,
-                self.sym,
-            )
-        elif self.bdry_mode == "poincare":
-            self._surface = ZernikeRZToroidalSection(
-                boundary[:, 3],
-                boundary[:, 4],
-                boundary[:, :2].astype(int),
-                boundary[:, :2].astype(int),
-                self.spectral_indexing,
-                self.sym,
-            )
+        # resolution
+        assert (L is None) or (
+            isinstance(L, numbers.Real) and (L == int(L)) and (L >= 0)
+        ), f"L should be a non-negative integer or None, got {L}"
+        assert (M is None) or (
+            isinstance(M, numbers.Real) and (M == int(M)) and (M >= 0)
+        ), f"M should be a non-negative integer or None, got {M}"
+        assert (N is None) or (
+            isinstance(N, numbers.Real) and (N == int(N)) and (N >= 0)
+        ), f"N should be a non-negative integer or None, got {N}"
+        if N is not None:
+            self._N = int(N)
+        elif hasattr(surface, "N"):
+            self._N = surface.N
         else:
-            raise ValueError("boundary should either have l=0 or n=0")
+            self._N = 0
 
-        axis = inputs.get("axis", boundary[np.where(boundary[:, 1] == 0)[0], 2:])
-        self._axis = FourierRZCurve(
-            axis[:, 1],
-            axis[:, 2],
-            axis[:, 0].astype(int),
-            NFP=self.NFP,
-            sym=self.sym,
-            name="axis",
-        )
+        if M is not None:
+            self._M = int(M)
+        elif hasattr(surface, "M"):
+            self._M = surface.M
+        else:
+            self._M = 1
 
-        # check if state vector is provided
-        try:
-            self._x = inputs["x"]
-            self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-                self.x, self.R_basis.num_modes, self.Z_basis.num_modes
-            )
-        # default initial guess
-        except:
-            # check if R is provided
-            try:
-                self._R_lmn = inputs["R_lmn"]
-            except:
-                self._R_lmn = initial_guess(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axis[:, 0:-1]
-                )
-            # check if Z is provided
-            try:
-                self._Z_lmn = inputs["Z_lmn"]
-            except:
-                self._Z_lmn = initial_guess(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axis[:, (0, -1)]
-                )
-            # check if lambda is provided
-            try:
-                self._L_lmn = inputs["L_lmn"]
-            except:
-                self._L_lmn = np.zeros((self.L_basis.num_modes,))
-            self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+        if L is not None:
+            self._L = int(L)
+        elif hasattr(surface, "L") and (surface.L > 0):
+            self._L = surface.L
+        else:
+            self._L = self.M if (self.spectral_indexing == "ansi") else 2 * self.M
 
-        # this makes sure the axis has the correct coefficients
-        self.axis.change_resolution(self.N)
-        self._axis = self.axis
-
-    def _set_basis(self):
-
+        # bases
         self._R_basis = FourierZernikeBasis(
             L=self.L,
             M=self.M,
@@ -232,6 +232,354 @@ class _Configuration(IOAble, ABC):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
+
+        # surface and axis
+        if surface is None:
+            self._surface = FourierRZToroidalSurface(NFP=self.NFP)
+            self._bdry_mode = "lcfs"
+        elif isinstance(surface, Surface):
+            self._surface = surface
+            if isinstance(surface, FourierRZToroidalSurface):
+                self._bdry_mode = "lcfs"
+            if isinstance(surface, ZernikeRZToroidalSection):
+                self._bdry_mode = "poincare"
+        elif isinstance(surface, jnp.ndarray):
+            if np.all(surface[:, 0] == 0):
+                self._bdry_mode = "lcfs"
+            elif np.all(surface[:, 2] == 0):
+                self._bdry_mode = "poincare"
+            else:
+                raise ValueError("boundary should either have l=0 or n=0")
+            if self.bdry_mode == "lcfs":
+                self._surface = FourierRZToroidalSurface(
+                    surface[:, 3],
+                    surface[:, 4],
+                    surface[:, 1:3].astype(int),
+                    surface[:, 1:3].astype(int),
+                    self.NFP,
+                    self.sym,
+                )
+            elif self.bdry_mode == "poincare":
+                self._surface = ZernikeRZToroidalSection(
+                    surface[:, 3],
+                    surface[:, 4],
+                    surface[:, :2].astype(int),
+                    surface[:, :2].astype(int),
+                    self.spectral_indexing,
+                    self.sym,
+                )
+        else:
+            raise TypeError("Got unknown surface type {}".format(surface))
+
+        if isinstance(axis, FourierRZCurve):
+            self._axis = axis
+        elif isinstance(axis, jnp.ndarray):
+            self._axis = FourierRZCurve(
+                axis[:, 1],
+                axis[:, 2],
+                axis[:, 0].astype(int),
+                NFP=self.NFP,
+                sym=self.sym,
+                name="axis",
+            )
+        elif axis is None:  # use the center of surface
+            # TODO: make this method of surface, surface.get_axis()?
+            if isinstance(self.surface, FourierRZToroidalSurface):
+                self._axis = FourierRZCurve(
+                    R_n=self.surface.R_lmn[
+                        np.where(self.surface.R_basis.modes[:, 1] == 0)
+                    ],
+                    Z_n=self.surface.Z_lmn[
+                        np.where(self.surface.Z_basis.modes[:, 1] == 0)
+                    ],
+                    modes_R=self.surface.R_basis.modes[
+                        np.where(self.surface.R_basis.modes[:, 1] == 0)[0], -1
+                    ],
+                    modes_Z=self.surface.Z_basis.modes[
+                        np.where(self.surface.Z_basis.modes[:, 1] == 0)[0], -1
+                    ],
+                    NFP=self.NFP,
+                )
+            elif isinstance(self.surface, ZernikeRZToroidalSection):
+                self._axis = FourierRZCurve(
+                    R_n=self.surface.R_lmn[
+                        np.where(
+                            (self.surface.R_basis.modes[:, 0] == 0)
+                            & (self.surface.R_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    Z_n=self.surface.Z_lmn[
+                        np.where(
+                            (self.surface.Z_basis.modes[:, 0] == 0)
+                            & (self.surface.Z_basis.modes[:, 1] == 0)
+                        )
+                    ].sum(),
+                    modes_R=[0],
+                    modes_Z=[0],
+                    NFP=self.NFP,
+                )
+        else:
+            raise TypeError("Got unknown axis type {}".format(axis))
+
+        # make sure field periods agree
+        eqNFP = self.NFP
+        surfNFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+        axNFP = self.axis.NFP
+        if not (eqNFP == surfNFP == axNFP):
+            raise ValueError(
+                "Unequal number of field periods for equilirium "
+                + f"{eqNFP}, surface {surfNFP}, and axis {axNFP}"
+            )
+
+        # profiles
+        if isinstance(pressure, Profile):
+            self._pressure = pressure
+        elif isinstance(pressure, jnp.ndarray):
+            self._pressure = PowerSeriesProfile(
+                modes=pressure[:, 0], params=pressure[:, 1], name="pressure"
+            )
+        elif pressure is None:
+            self._pressure = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="pressure"
+            )
+        else:
+            raise TypeError("Got unknown pressure profile {}".format(pressure))
+
+        if isinstance(iota, Profile):
+            self.iota = iota
+        elif isinstance(iota, jnp.ndarray):
+            self._iota = PowerSeriesProfile(
+                modes=iota[:, 0], params=iota[:, 1], name="iota"
+            )
+        elif iota is None:
+            self._iota = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="iota"
+            )
+        else:
+            raise TypeError("Got unknown iota profile {}".format(iota))
+
+        # keep track of where it came from
+        self._parent = None
+        self._children = []
+
+        self._R_lmn = np.zeros(self.R_basis.num_modes)
+        self._Z_lmn = np.zeros(self.Z_basis.num_modes)
+        self._L_lmn = np.zeros(self.L_basis.num_modes)
+        self.set_initial_guess()
+        if "R_lmn" in kwargs:
+            self.R_lmn = kwargs.pop("R_lmn")
+        if "Z_lmn" in kwargs:
+            self.Z_lmn = kwargs.pop("Z_lmn")
+        if "L_lmn" in kwargs:
+            self.L_lmn = kwargs.pop("L_lmn")
+
+    # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
+    # TODO: make this kwargs instead?
+    def set_initial_guess(self, *args):
+        """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
+
+        Parameters
+        ----------
+        args :
+            either:
+              - No arguments, in which case eq.surface will be used
+              - Another Surface object which will be scaled to generate the initial guess
+                (optionally a Curve object may be supplied as an iniital guess for the axis)
+              - Another Equilibrium, where its flux surfaces will be used as an initial guess
+              - File path to VMEC or DESC equilibrium, which will be loaded and used
+                as the initial guess
+
+        Examples
+        --------
+        Use existing equil.surface and scales down for guess:
+
+        >>> equil.set_initial_guess()
+
+        Use supplied Surface and scales down for guess. Assumes axis is centroid
+        of user supplied surface:
+
+        >>> equil.set_initial_guess(surface)
+
+        Use supplied Surface and a supplied Curve for axis and scales between
+        them for guess:
+
+        >>> equil.set_initial_guess(surface, curve)
+
+        Use the flux surfaces from an existing Equilibrium:
+
+        >>> equil.set_initial_guess(equil2)
+
+        Use flux surfaces from existing Equilibrium or VMEC output stored on disk:
+
+        >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
+
+        """
+        nargs = len(args)
+        if nargs > 2:
+            raise ValueError(
+                "set_initial_guess should be called with 0,1 or 2 arguments"
+            )
+        if nargs == 0:
+            if hasattr(self, "_surface"):
+                # use whatever surface is already assigned
+                if hasattr(self, "_axis"):
+                    axisR = np.array([self.axis.R_basis.modes[:, -1], self.axis.R_n]).T
+                    axisZ = np.array([self.axis.Z_basis.modes[:, -1], self.axis.Z_n]).T
+                else:
+                    axisR = None
+                    axisZ = None
+                self.R_lmn = self._initial_guess_surface(
+                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
+                )
+                self.Z_lmn = self._initial_guess_surface(
+                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
+                )
+            else:
+                raise ValueError(
+                    "set_initial_guess called with no arguments but no surface is assigned"
+                )
+        else:  # nargs > 0
+            if isinstance(args[0], Surface):
+                surface = args[0]
+                if nargs > 1:
+                    if isinstance(args[1], FourierRZCurve):
+                        axis = args[1]
+                        axisR = np.array([axis.R_basis.modes[:, -1], axis.R_n]).T
+                        axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
+                    else:
+                        raise TypeError(
+                            "Don't know how to initialize from object type {}".format(
+                                type(args[1])
+                            )
+                        )
+                else:
+                    axisR = None
+                    axisZ = None
+                self.R_lmn = self._initial_guess_surface(
+                    self.R_basis, surface.R_lmn, surface.R_basis, axisR
+                )
+                self.Z_lmn = self._initial_guess_surface(
+                    self.Z_basis, surface.Z_lmn, surface.Z_basis, axisZ
+                )
+            elif isinstance(args[0], _Configuration):
+                eq = args[0]
+                if nargs > 1:
+                    raise ValueError(
+                        "set_initial_guess got unknown additional argument {}".format(
+                            args[1]
+                        )
+                    )
+                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
+                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
+            elif isinstance(args[0], str):
+                # from file
+                path = args[0]
+                file_format = None
+                if nargs > 1:
+                    if isinstance(args[1], str):
+                        file_format = args[1]
+                    else:
+                        raise ValueError(
+                            "set_initial_guess got unknown additional argument {}".format(
+                                args[1]
+                            )
+                        )
+                try:  # is it desc?
+                    eq = load(path, file_format)
+                except:
+                    try:  # maybe its vmec
+                        from desc.vmec import VMECIO
+
+                        eq = VMECIO.load(path)
+                    except:  # its neither
+                        raise ValueError(
+                            "Could not load equilibrium from path {}, please make sure it is a valid DESC or VMEC equilibrium".format(
+                                path
+                            )
+                        )
+                if not isinstance(eq, _Configuration):
+                    if hasattr(eq, "equilibria"):  # its a family!
+                        eq = eq[-1]
+                    else:
+                        raise TypeError(
+                            "Cannot initialize equilibrium from loaded object of type {}".format(
+                                type(eq)
+                            )
+                        )
+                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
+                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
+                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
+            else:
+                raise ValueError(
+                    "Can't initialize equilibrium from args {}".format(args)
+                )
+
+    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode=None):
+        """Create an initial guess from the boundary coefficients and magnetic axis guess.
+
+        Parameters
+        ----------
+        x_basis : FourierZernikeBais
+            basis of the flux surfaces (for R, Z, or Lambda).
+        b_lmn : ndarray, shape(b_basis.num_modes,)
+            vector of boundary coefficients associated with b_basis.
+        b_basis : Basis
+            basis of the boundary surface (for Rb or Zb)
+        axis : ndarray, shape(num_modes,2)
+            coefficients of the magnetic axis. axis[i, :] = [n, x0].
+            Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
+        mode : str
+            One of 'lcfs', 'poincare'.
+            Whether the boundary condition is specified by the last closed flux surface
+            (rho=1) or the Poincare section (zeta=0).
+
+        Returns
+        -------
+        x_lmn : ndarray
+            vector of flux surface coefficients associated with x_basis.
+
+        """
+        x_lmn = np.zeros((x_basis.num_modes,))
+        if mode is None:
+            # auto detect based on mode numbers
+            if np.all(b_basis.modes[:, 0] == 0):
+                mode = "lcfs"
+            elif np.all(b_basis.modes[:, 2] == 0):
+                mode = "poincare"
+            else:
+                raise ValueError("Surface should have either l=0 or n=0")
+        if mode == "lcfs":
+            if axis is None:
+                axidx = np.where(b_basis.modes[:, 1] == 0)[0]
+                axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
+            for k, (l, m, n) in enumerate(b_basis.modes):
+                # index of basis mode with lowest radial power (l = |m|)
+                idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
+                if m == 0:  # magnetic axis only affects m=0 modes
+                    # index of basis mode with second lowest radial power (l = |m| + 2)
+                    idx2 = np.where(
+                        (x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1)
+                    )[0]
+                    ax = np.where(axis[:, 0] == n)[0]
+                    if ax.size:
+                        a_n = axis[ax[0], 1]  # use provided axis guess
+                    else:
+                        a_n = b_lmn[k]  # use boundary centroid as axis
+                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2
+                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2
+                else:
+                    x_lmn[idx0] = b_lmn[k]
+
+        elif mode == "poincare":
+            for k, (l, m, n) in enumerate(b_basis.modes):
+                idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
+                x_lmn[idx] = b_lmn[k]
+
+        else:
+            raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
+
+        return x_lmn
 
     @property
     def parent(self):
@@ -284,7 +632,9 @@ class _Configuration(IOAble, ABC):
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self._set_basis()
+        self.R_basis.change_resolution(self.L, self.M, self.N)
+        self.Z_basis.change_resolution(self.L, self.M, self.N)
+        self.L_basis.change_resolution(self.L, self.M, self.N)
 
         if N_change:
             self.axis.change_resolution(self.N)
@@ -298,8 +648,6 @@ class _Configuration(IOAble, ABC):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
-        # state vector
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
         self._make_labels()
 
     @property
@@ -358,13 +706,12 @@ class _Configuration(IOAble, ABC):
     @property
     def x(self):
         """Optimization state vector (ndarray)."""
-        return self._x
+        return jnp.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
 
     @x.setter
     def x(self, x):
-        self._x = x
-        self._R_lmn, self._Z_lmn, self._L_lmn = unpack_state(
-            self.x, self.R_basis.num_modes, self.Z_basis.num_modes
+        self.R_lmn, self.Z_lmn, self.L_lmn = unpack_state(
+            x, self.R_basis.num_modes, self.Z_basis.num_modes
         )
 
     @property
@@ -374,8 +721,7 @@ class _Configuration(IOAble, ABC):
 
     @R_lmn.setter
     def R_lmn(self, R_lmn):
-        self._R_lmn = R_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+        self._R_lmn[:] = R_lmn
 
     @property
     def Z_lmn(self):
@@ -384,8 +730,7 @@ class _Configuration(IOAble, ABC):
 
     @Z_lmn.setter
     def Z_lmn(self, Z_lmn):
-        self._Z_lmn = Z_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+        self._Z_lmn[:] = Z_lmn
 
     @property
     def L_lmn(self):
@@ -394,38 +739,25 @@ class _Configuration(IOAble, ABC):
 
     @L_lmn.setter
     def L_lmn(self, L_lmn):
-        self._L_lmn = L_lmn
-        self._x = np.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
+        self._L_lmn[:] = L_lmn
 
     @property
     def Rb_lmn(self):
         """Spectral coefficients of R at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.R_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.R_lm
+        return self.surface.R_lmn
 
     @Rb_lmn.setter
     def Rb_lmn(self, Rb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.R_mn = Rb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.R_lm = Rb_lmn
+        self.surface.R_lmn = Rb_lmn
 
     @property
     def Zb_lmn(self):
         """Spectral coefficients of Z at the boundary (ndarray)."""
-        if self.bdry_mode == "lcfs":
-            return self.surface.Z_mn
-        elif self.bdry_mode == "poincare":
-            return self.surface.Z_lm
+        return self.surface.Z_lmn
 
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
-        if self.bdry_mode == "lcfs":
-            self.surface.Z_mn = Zb_lmn
-        elif self.bdry_mode == "poincare":
-            self.surface.Z_lm = Zb_lmn
+        self.surface.Z_lmn = Zb_lmn
 
     @property
     def Ra_n(self):
@@ -1778,58 +2110,3 @@ class _Configuration(IOAble, ABC):
         if filename is not None:
             b.write_boozmn(filename)
         return b
-
-
-def initial_guess(x_basis, b_lmn, b_basis, axis, mode="lcfs"):
-    """Create an initial guess from the boundary coefficients and magnetic axis guess.
-
-    Parameters
-    ----------
-    x_basis : FourierZernikeBais
-        basis of the flux surfaces (for R, Z, or Lambda).
-    b_lmn : ndarray, shape(b_basis.num_modes,)
-        vector of boundary coefficients associated with b_basis.
-    b_basis : Basis
-        basis of the boundary surface (for Rb or Zb)
-    axis : ndarray, shape(num_modes,2)
-        coefficients of the magnetic axis. axis[i, :] = [n, x0].
-        Only used for 'lcfs' boundary mode.
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
-
-    Returns
-    -------
-    x_lmn : ndarray
-        vector of flux surface coefficients associated with x_basis.
-
-    """
-    x_lmn = np.zeros((x_basis.num_modes,))
-
-    if mode == "lcfs":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            # index of basis mode with lowest radial power (l = |m|)
-            idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-            if m == 0:  # magnetic axis only affects m=0 modes
-                # index of basis mode with second lowest radial power (l = |m| + 2)
-                idx2 = np.where((x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1))[0]
-                ax = np.where(axis[:, 0] == n)[0]
-                if ax.size:
-                    a_n = axis[ax[0], 1]  # use provided axis guess
-                else:
-                    a_n = b_lmn[k]  # use boundary centroid as axis
-                x_lmn[idx0] = (b_lmn[k] + a_n) / 2
-                x_lmn[idx2] = (b_lmn[k] - a_n) / 2
-            else:
-                x_lmn[idx0] = b_lmn[k]
-
-    elif mode == "poincare":
-        for k, (l, m, n) in enumerate(b_basis.modes):
-            idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
-            x_lmn[idx] = b_lmn[k]
-
-    else:
-        raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-    return x_lmn

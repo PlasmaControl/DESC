@@ -25,7 +25,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
         """Load a VMEC netCDF file as a Equilibrium.
 
         Parameters
@@ -39,7 +39,7 @@ class VMECIO:
         N : int, optional
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
-            Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
+            Type of Zernike indexing scheme to use. (Default = ``'fringe'``)
 
         Returns
         -------
@@ -59,8 +59,6 @@ class VMECIO:
         default_L = {
             "ansi": inputs["M"],
             "fringe": 2 * inputs["M"],
-            "chevron": inputs["M"],
-            "house": 2 * inputs["M"],
         }
         inputs["L"] = L if L >= 0 else default_L[inputs["spectral_indexing"]]
 
@@ -84,20 +82,22 @@ class VMECIO:
         # profiles
         preset = file.dimensions["preset"].size
         p0 = file.variables["presf"][0] / file.variables["am"][0]
-        inputs["profiles"] = np.zeros((preset, 3))
-        inputs["profiles"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["profiles"][:, 1] = file.variables["am"][:] * p0
-        inputs["profiles"][:, 2] = file.variables["ai"][:]
+        inputs["pressure"] = np.zeros((preset, 2))
+        inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["pressure"][:, 1] = file.variables["am"][:] * p0
+        inputs["iota"] = np.zeros((preset, 2))
+        inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["iota"][:, 1] = file.variables["ai"][:]
 
         file.close
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        inputs["surface"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
 
         # initialize Equilibrium
-        eq = Equilibrium(inputs=inputs)
+        eq = Equilibrium(**inputs)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)

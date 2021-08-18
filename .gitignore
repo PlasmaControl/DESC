@@ -4,6 +4,7 @@
 *.gif
 __pycache__/
 .ipynb_checkpoints/
+htmlcov/
 *.pyc
 .coverage
 matlab/

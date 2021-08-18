@@ -40,14 +40,14 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_mn,
+            c.R_lmn,
             [
                 5,
                 1,
             ],
         )
         np.testing.assert_allclose(
-            c.Z_mn,
+            c.Z_lmn,
             [
                 1,
             ],
@@ -58,9 +58,9 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
 
         c.change_resolution(5, 5)
         with pytest.raises(ValueError):
-            c.R_mn = s.R_mn
+            c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
-            c.Z_mn = s.Z_mn
+            c.Z_lmn = s.Z_lmn
 
 
 class TestZernikeRZToroidalSection(unittest.TestCase):
@@ -92,14 +92,14 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, 0)
         np.testing.assert_allclose(
-            c.R_lm,
+            c.R_lmn,
             [
                 5,
                 1,
             ],
         )
         np.testing.assert_allclose(
-            c.Z_lm,
+            c.Z_lmn,
             [
                 1,
             ],
@@ -110,6 +110,6 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
 
         c.change_resolution(5, 5)
         with pytest.raises(ValueError):
-            c.R_lm = s.R_lm
+            c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
-            c.Z_lm = s.Z_lm
+            c.Z_lmn = s.Z_lmn

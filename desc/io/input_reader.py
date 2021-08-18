@@ -171,8 +171,9 @@ class InputReader:
             "spectral_indexing": "fringe",
             "node_pattern": "jacobi",
             "bdry_mode": "lcfs",
-            "profiles": np.atleast_2d((0, 0.0, 0.0)),
-            "boundary": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
+            "pressure": np.atleast_2d((0, 0.0)),
+            "iota": np.atleast_2d((0, 0.0)),
+            "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
 
@@ -382,14 +383,14 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
-                prof_idx = np.where(inputs["profiles"][:, 0] == l)[0]
+                prof_idx = np.where(inputs["pressure"][:, 0] == l)[0]
                 if prof_idx.size == 0:
-                    prof_idx = np.atleast_1d(inputs["profiles"].shape[0])
-                    inputs["profiles"] = np.pad(
-                        inputs["profiles"], ((0, 1), (0, 0)), mode="constant"
+                    prof_idx = np.atleast_1d(inputs["pressure"].shape[0])
+                    inputs["pressure"] = np.pad(
+                        inputs["pressure"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["profiles"][prof_idx[0], 0] = l
-                inputs["profiles"][prof_idx[0], 1] = p_l
+                    inputs["pressure"][prof_idx[0], 0] = l
+                inputs["pressure"][prof_idx[0], 1] = p_l
                 flag = True
             match = re.search(r"\si\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -398,14 +399,14 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
-                prof_idx = np.where(inputs["profiles"][:, 0] == l)[0]
+                prof_idx = np.where(inputs["iota"][:, 0] == l)[0]
                 if prof_idx.size == 0:
-                    prof_idx = np.atleast_1d(inputs["profiles"].shape[0])
-                    inputs["profiles"] = np.pad(
-                        inputs["profiles"], ((0, 1), (0, 0)), mode="constant"
+                    prof_idx = np.atleast_1d(inputs["iota"].shape[0])
+                    inputs["iota"] = np.pad(
+                        inputs["iota"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["profiles"][prof_idx[0], 0] = l
-                inputs["profiles"][prof_idx[0], 2] = i_l
+                    inputs["iota"][prof_idx[0], 0] = l
+                inputs["iota"][prof_idx[0], 1] = i_l
                 flag = True
 
             # boundary surface coefficients
@@ -417,17 +418,17 @@ class InputReader:
                     if re.search(r"\d", x)
                 ][1]
                 bdry_idx = np.where(
-                    (inputs["boundary"][:, :3] == [l, m, n]).all(axis=1)
+                    (inputs["surface"][:, :3] == [l, m, n]).all(axis=1)
                 )[0]
                 if bdry_idx.size == 0:
-                    bdry_idx = np.atleast_1d(inputs["boundary"].shape[0])
-                    inputs["boundary"] = np.pad(
-                        inputs["boundary"], ((0, 1), (0, 0)), mode="constant"
+                    bdry_idx = np.atleast_1d(inputs["surface"].shape[0])
+                    inputs["surface"] = np.pad(
+                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["boundary"][bdry_idx[0], 0] = l
-                    inputs["boundary"][bdry_idx[0], 1] = m
-                    inputs["boundary"][bdry_idx[0], 2] = n
-                inputs["boundary"][bdry_idx[0], 3] = R1
+                    inputs["surface"][bdry_idx[0], 0] = l
+                    inputs["surface"][bdry_idx[0], 1] = m
+                    inputs["surface"][bdry_idx[0], 2] = n
+                inputs["surface"][bdry_idx[0], 3] = R1
                 flag = True
             match = re.search(r"Z1\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -437,17 +438,17 @@ class InputReader:
                     if re.search(r"\d", x)
                 ][1]
                 bdry_idx = np.where(
-                    (inputs["boundary"][:, :3] == [l, m, n]).all(axis=1)
+                    (inputs["surface"][:, :3] == [l, m, n]).all(axis=1)
                 )[0]
                 if bdry_idx.size == 0:
-                    bdry_idx = np.atleast_1d(inputs["boundary"].shape[0])
-                    inputs["boundary"] = np.pad(
-                        inputs["boundary"], ((0, 1), (0, 0)), mode="constant"
+                    bdry_idx = np.atleast_1d(inputs["surface"].shape[0])
+                    inputs["surface"] = np.pad(
+                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["boundary"][bdry_idx[0], 0] = l
-                    inputs["boundary"][bdry_idx[0], 1] = m
-                    inputs["boundary"][bdry_idx[0], 2] = n
-                inputs["boundary"][bdry_idx[0], 4] = Z1
+                    inputs["surface"][bdry_idx[0], 0] = l
+                    inputs["surface"][bdry_idx[0], 1] = m
+                    inputs["surface"][bdry_idx[0], 2] = n
+                inputs["surface"][bdry_idx[0], 4] = Z1
                 flag = True
 
             # magnetic axis coefficients
@@ -495,7 +496,7 @@ class InputReader:
         # error handling
         if np.any(inputs["M"] == 0):
             raise IOError(colored("M_pol is not assigned", "red"))
-        if np.sum(inputs["boundary"]) == 0:
+        if np.sum(inputs["surface"]) == 0:
             raise IOError(colored("Fixed-boundary surface is not assigned", "red"))
         arrs = [
             "L",
@@ -527,8 +528,8 @@ class InputReader:
         if np.sum(inputs["N_grid"]) == 0:
             inputs["N_grid"] = np.rint(1.5 * inputs["N"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
-            axis_idx = np.where(inputs["boundary"][:, 1] == 0)[0]
-            inputs["axis"] = inputs["boundary"][axis_idx, 2:]
+            axis_idx = np.where(inputs["surface"][:, 1] == 0)[0]
+            inputs["axis"] = inputs["surface"][axis_idx, 2:]
         if None in inputs["L"]:
             default_L = {
                 "ansi": inputs["M"],
@@ -554,13 +555,13 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            inputs_ii["profiles"][:, 1] *= inputs_ii["pres_ratio"]
+            inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
-                inputs_ii["boundary"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
+                inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
             )
-            inputs_ii["boundary"][:, 3] *= bdry_factor
-            inputs_ii["boundary"][:, 4] *= bdry_factor
+            inputs_ii["surface"][:, 3] *= bdry_factor
+            inputs_ii["surface"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
         return inputs_list
@@ -628,11 +629,24 @@ class InputReader:
         f.write("node_pattern = {} \n".format(inputs[0]["node_pattern"]))
 
         f.write("\n# pressure and rotational transform profiles \n")
-        for (l, p, i) in inputs[0]["profiles"]:
+        ls = np.unique(
+            np.concatenate([inputs[0]["pressure"][:, 0], inputs[0]["iota"][:, 0]])
+        )
+        for l in ls:
+            idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
+            if len(idxp):
+                p = inputs[0]["pressure"][idxp[0], 1]
+            else:
+                p = 0.0
+            idxi = np.where(l == inputs[0]["iota"][:, 0])[0]
+            if len(idxi):
+                i = inputs[0]["iota"][idxi[0], 1]
+            else:
+                i = 0.0
             f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
 
         f.write("\n# fixed-boundary surface shape \n")
-        for (l, m, n, R1, Z1) in inputs[0]["boundary"]:
+        for (l, m, n, R1, Z1) in inputs[0]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(l), int(m), int(n), R1, Z1
@@ -1120,10 +1134,10 @@ def get_parser():
         + "and three times (-ppp) to show all iterations.",
     )
     parser.add_argument(
-        "--vmec",
-        metavar="vmec_path",
+        "--guess",
+        metavar="path",
         default=None,
-        help="Path to VMEC data for initial guess.",
+        help="Path to DESC or VMEC equilibrium for initial guess.",
     )
     parser.add_argument(
         "--gpu",

@@ -1,6 +1,28 @@
 Changelog
 =========
 
+v0.4.12
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.11...v0.4.12>`_
+
+New Features:
+
+- New function ``plot_comparison`` to plot comparison between multiple DESC equilibria
+- ``plot_surfaces`` now has a more intuitive API - instead of specifying grids, the user specifies the specific rho/theta contours to plot
+- ``equil.is_nested`` now checks more toroidal planes for non-axisymmetric equilibria by default
+- Updates ``Equilibrium`` to make creating them more straightforward.
+  - Instead of a dictionary of arrays and values, init method now takes individual arguments. These can either be objects of the correct type (ie ``Surface`` objects for boundary condiitons, ``Profile`` for pressure and iota etc,) or ndarrays which will get parsed into objects of the correct type (for backwards compatibility)
+  - Also introduces more options for generating initial guesses, and a new dedicated method ``equilibrium.set_initial_guess()``. The default is to scale the boundary surface that is assigned to the equilibrium, but another surface (and axis) can be supplied as an argument to the function to use that surface instead for the initial guess. It also accepts another ``Equilibrium`` instance, or a path to a saved DESC or VMEC equilibrium which will be loaded and its flux surfaces will be used as the initial guess.
+  - Command line interface updated to allow for initial guesses from DESC or VMEC solutions using ``--guess=path`` (this also replaces the old ``--vmec`` flag)
+- Adds classes for representing various types of magnetic fields
+  - Base class for all magnetic field types defining the ``compute_magnetic_field`` API and methods for combining fields
+  - ``SplineMagneticField`` for dealing with mgrid files and splining expensive to compute fields
+  - ``ScalarPotentialField`` for vacuum fields that can be written as B=grad(Phi)
+  - basic field types for testing, such as toroidal, poloidal, vertical
+  - field line integration function for tracing field lines in R,phi,Z, using JAX for differentiability
+
+
 v0.4.11
 #######
 

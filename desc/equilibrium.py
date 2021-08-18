@@ -476,17 +476,7 @@ class Equilibrium(_Configuration, IOAble):
     @property
     def initial(self):
         """Return initial equilibrium state from which it was solved (Equilibrium)."""
-        # TODO: fix this with new x etc
-        p_modes = np.array([self.pressure.basis.modes[:, 0], self.p_l]).T
-        i_modes = np.array([self.iota.basis.modes[:, 0], self.i_l]).T
-        Rb_lmn = self.Rb_lmn.reshape((-1, 1))
-        Zb_lmn = self.Zb_lmn.reshape((-1, 1))
-        Rb_modes = np.hstack(
-            [self.surface.R_basis.modes, Rb_lmn, np.zeros_like(Rb_lmn)]
-        )
-        Zb_modes = np.hstack(
-            [self.surface.Z_basis.modes, np.zeros_like(Zb_lmn), Zb_lmn]
-        )
+
         R_lmn, Z_lmn, L_lmn = unpack_state(
             self.x0, self.R_basis.num_modes, self.Z_basis.num_modes
         )
@@ -499,9 +489,9 @@ class Equilibrium(_Configuration, IOAble):
             "N": self.N,
             "spectral_indexing": self.spectral_indexing,
             "bdry_mode": self.bdry_mode,
-            "pressure": p_modes,
-            "iota": i_modes,
-            "surface": np.vstack((Rb_modes, Zb_modes)),
+            "pressure": self.pressure,
+            "iota": self.iota,
+            "surface": self.surface,
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
             "L_lmn": L_lmn,

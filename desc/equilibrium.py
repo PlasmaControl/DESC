@@ -62,7 +62,7 @@ class Equilibrium(_Configuration, IOAble):
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
-        Type of Zernike indexing scheme to use. Default ``'fringe'``
+        Type of Zernike indexing scheme to use. Default ``'ansi'``
     objective : str or ObjectiveFunction (optional)
         function to solve for equilibrium solution
     optimizer : str or Optimzer (optional)

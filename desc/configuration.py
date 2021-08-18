@@ -85,7 +85,7 @@ class _Configuration(IOAble, ABC):
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
-        Type of Zernike indexing scheme to use. Default ``'fringe'``
+        Type of Zernike indexing scheme to use. Default ``'ansi'``
 
     """
 
@@ -136,7 +136,7 @@ class _Configuration(IOAble, ABC):
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing
         elif spectral_indexing is None:
-            self._spectral_indexing = "fringe"
+            self._spectral_indexing = "ansi"
         else:
             self._spectral_indexing = spectral_indexing
 

@@ -372,8 +372,6 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-        # if len(kwargs):
-        #     raise ValueError("Got unknown keyword arguments: {}".format(kwargs.keys()))
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -390,6 +388,31 @@ class _Configuration(IOAble, ABC):
               - Another Equilibrium, where its flux surfaces will be used as an initial guess
               - File path to VMEC or DESC equilibrium, which will be loaded and used
                 as the initial guess
+
+        Examples
+        --------
+        Use existing equil.surface and scales down for guess:
+
+        >>> equil.set_initial_guess()
+
+        Use supplied Surface and scales down for guess. Assumes axis is centroid
+        of user supplied surface:
+
+        >>> equil.set_initial_guess(surface)
+
+        Use supplied Surface and a supplied Curve for axis and scales between
+        them for guess:
+
+        >>> equil.set_initial_guess(surface, curve)
+
+        Use the flux surfaces from an existing Equilibrium:
+
+        >>> equil.set_initial_guess(equil2)
+
+        Use flux surfaces from existing Equilibrium or VMEC output stored on disk:
+
+        >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
+
         """
         nargs = len(args)
         if nargs > 2:
@@ -625,7 +648,6 @@ class _Configuration(IOAble, ABC):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
-        # state vector
         self._make_labels()
 
     @property

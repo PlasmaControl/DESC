@@ -15,9 +15,9 @@ class TestConstructor(unittest.TestCase):
 
         eq = Equilibrium()
 
-        self.assertEqual(eq.spectral_indexing, "fringe")
+        self.assertEqual(eq.spectral_indexing, "ansi")
         self.assertEqual(eq.NFP, 1)
-        self.assertEqual(eq.L, 2)
+        self.assertEqual(eq.L, 1)
         self.assertEqual(eq.M, 1)
         self.assertEqual(eq.N, 0)
         self.assertEqual(eq.sym, False)
@@ -110,9 +110,9 @@ class TestConstructor(unittest.TestCase):
 
     def test_supplied_coeffs(self):
 
-        R_lmn = np.random.random(4)
-        Z_lmn = np.random.random(4)
-        L_lmn = np.random.random(4)
+        R_lmn = np.random.random(3)
+        Z_lmn = np.random.random(3)
+        L_lmn = np.random.random(3)
         eq = Equilibrium(R_lmn=R_lmn, Z_lmn=Z_lmn, L_lmn=L_lmn)
         np.testing.assert_allclose(R_lmn, eq.R_lmn)
         np.testing.assert_allclose(Z_lmn, eq.Z_lmn)
@@ -153,7 +153,7 @@ class TestInitialGuess(unittest.TestCase):
 
     def test_guess_from_file(self):
 
-        eq1 = Equilibrium(L=24, M=12, sym=True)
+        eq1 = Equilibrium(L=24, M=12, sym=True, spectral_indexing="fringe")
         path = "./tests/inputs/SOLOVEV_output.h5"
         eq1.set_initial_guess(path)
         eq2 = EquilibriaFamily.load(path)

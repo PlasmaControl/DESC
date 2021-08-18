@@ -89,7 +89,7 @@ class TestIsNested(unittest.TestCase):
             ),
             "iota": np.array([[0, 0.23]]),
             "surface": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
-            "index": "fringe",
+            "spectral_indexing": "fringe",
         }
 
         eq1 = Equilibrium(**inputs)

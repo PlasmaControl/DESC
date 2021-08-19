@@ -1810,7 +1810,7 @@ class _Configuration(IOAble, ABC):
         if nzeta is None:
             zetas = (
                 [0]
-                if self.N is 0
+                if self.N == 0
                 else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
             )
         else:

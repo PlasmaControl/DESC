@@ -124,9 +124,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=0,
         dt=2,
-        dz=0,
         data=data,
     )
 
@@ -223,8 +221,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=0,
         dz=2,
         data=data,
     )

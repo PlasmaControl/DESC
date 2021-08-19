@@ -651,8 +651,9 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     )
     ax = np.atleast_1d(ax).flatten()
 
-    R = eq.compute("R", grid)["R"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = eq.compute("Z", grid)["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    coords = eq.compute("R", grid)
+    R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
+    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
 
     contourf_kwargs = {}
     if log:
@@ -802,12 +803,14 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    Rr = eq.compute("R", r_grid)["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Zr = eq.compute("Z", r_grid)["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    r_coords = eq.compute("R", r_grid)
+    Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
 
     # vartheta contours
-    Rv = eq.compute("R", v_grid)["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv = eq.compute("Z", v_grid)["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    v_coords = eq.compute("R", v_grid)
+    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1517,8 +1520,9 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
-        field_line_coords["Rs"].append(eq.compute("R", grid)["R"])
-        field_line_coords["Zs"].append(eq.compute("Z", grid)["Z"])
+        toroidal_coords = eq.compute("R", grid)
+        field_line_coords["Rs"].append(toroidal_coords["R"])
+        field_line_coords["Zs"].append(toroidal_coords["Z"])
         field_line_coords["phis"].append(phi)
 
     for i in range(n_lines):
@@ -1645,12 +1649,13 @@ def plot_field_lines_real_space(
     phi0 = kwargs.get("phi0", 0)
 
     # calculate toroidal coordinates
-    phis = grid.nodes[:, 2]
-    Rs = eq.compute("R", grid)["R"]
-    Zs = eq.compute("Z", grid)["Z"]
+    toroidal_coords = eq.compute("phi", grid)
+    Rs = toroidal_coords["R"]
+    Zs = toroidal_coords["Z"]
+    phis = toroidal_coords["phi"]
 
     # calculate cylindrical B
-    magnetic_field = eq.compute("B", grid=grid)
+    magnetic_field = eq.compute("B", grid)
     BR = magnetic_field["B_R"]
     BZ = magnetic_field["B_Z"]
     Bphi = magnetic_field["B_phi"]

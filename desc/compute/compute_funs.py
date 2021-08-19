@@ -28,16 +28,13 @@ def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
     """
     if "R_derivs" not in data_index[key]:
         R_flag = True
+        Z_flag = True
     else:
         R_flag = np.array(
             [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
         ).all()
-
-    if "Z_derivs" not in data_index[key]:
-        Z_flag = True
-    else:
         Z_flag = np.array(
-            [d in Z_transform.derivatives.tolist() for d in data_index[key]["Z_derivs"]]
+            [d in Z_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
         ).all()
 
     if "L_derivs" not in data_index[key]:
@@ -92,6 +89,30 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
+def compute_flux_coords(
+    iota,
+    data={},
+):
+    """Compute flux coordinates (rho,theta,zeta).
+
+    Parameters
+    ----------
+    iota : Profile
+        Transforms i_l coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of flux coordinates.
+
+    """
+    data["rho"] = iota.grid.nodes[:, 0]
+    data["theta"] = iota.grid.nodes[:, 1]
+    data["zeta"] = iota.grid.nodes[:, 2]
+
+    return data
+
+
 def compute_toroidal_flux(
     Psi,
     iota,
@@ -113,12 +134,158 @@ def compute_toroidal_flux(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
-    # toroidal flux (Wb) divided by 2 pi
-    rho = iota.grid.nodes[:, 0]
+    data = compute_flux_coords(iota, data=data)
 
-    data["psi"] = Psi * rho ** 2 / (2 * jnp.pi)
-    data["psi_r"] = 2 * Psi * rho / (2 * jnp.pi)
-    data["psi_rr"] = 2 * Psi * np.ones_like(rho) / (2 * jnp.pi)
+    data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
+    data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
+    data["psi_rr"] = 2 * Psi * np.ones_like(data["rho"]) / (2 * jnp.pi)
+
+    return data
+
+
+def compute_toroidal_coords(
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data={},
+):
+    """Compute toroidal coordinates (R,phi,Z).
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
+
+    """
+    derivs = [
+        "",
+        "_r",
+        "_t",
+        "_z",
+        "_rr",
+        "_tt",
+        "_zz",
+        "_rt",
+        "_rz",
+        "_tz",
+        "_rrr",
+        "_ttt",
+        "_zzz",
+        "_rrt",
+        "_rtt",
+        "_rrz",
+        "_rzz",
+        "_ttz",
+        "_tzz",
+        "_rtz",
+    ]
+
+    for d in derivs:
+        keyR = "R" + d
+        keyZ = "Z" + d
+        if check_derivs(keyR, R_transform, Z_transform):
+            data[keyR] = R_transform.transform(R_lmn, *data_index[keyR]["R_derivs"][0])
+            data[keyZ] = Z_transform.transform(Z_lmn, *data_index[keyZ]["R_derivs"][0])
+
+    return data
+
+
+def compute_cartesian_coords(
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data={},
+):
+    """Compute Cartesian coordinates (X,Y,Z).
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
+
+    """
+    data = compute_flux_coords(R_transform)
+    data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
+
+    data["phi"] = data["zeta"]
+    data["X"] = data["R"] * jnp.cos(data["phi"])
+    data["Y"] = data["R"] * jnp.sin(data["phi"])
+
+    return data
+
+
+def compute_lambda(
+    L_lmn,
+    L_transform,
+    data={},
+):
+    """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
+
+    Parameters
+    ----------
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of lambda values.
+        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
+
+    """
+    keys = [
+        "lambda",
+        "lambda_r",
+        "lambda_t",
+        "lambda_z",
+        "lambda_rr",
+        "lambda_tt",
+        "lambda_zz",
+        "lambda_rt",
+        "lambda_rz",
+        "lambda_tz",
+        "lambda_rrr",
+        "lambda_ttt",
+        "lambda_zzz",
+        "lambda_rrt",
+        "lambda_rtt",
+        "lambda_rrz",
+        "lambda_rzz",
+        "lambda_ttz",
+        "lambda_tzz",
+        "lambda_rtz",
+    ]
+
+    for key in keys:
+        if check_derivs(key, L_transform=L_transform):
+            data[key] = L_transform.transform(L_lmn, *data_index[key]["L_derivs"][0])
 
     return data
 
@@ -178,195 +345,6 @@ def compute_rotational_transform(
     return data
 
 
-def compute_R(
-    R_lmn,
-    R_transform,
-    data={},
-):
-    """Compute toroidal coordinate R.
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-        Keys are of the form 'R_x' meaning the derivative of R wrt x.
-
-    """
-    keys = [
-        "R",
-        "R_r",
-        "R_t",
-        "R_z",
-        "R_rr",
-        "R_tt",
-        "R_zz",
-        "R_rt",
-        "R_rz",
-        "R_tz",
-        "R_rrr",
-        "R_ttt",
-        "R_zzz",
-        "R_rrt",
-        "R_rtt",
-        "R_rrz",
-        "R_rzz",
-        "R_ttz",
-        "R_tzz",
-        "R_rtz",
-    ]
-
-    for key in keys:
-        if check_derivs(key, R_transform=R_transform):
-            data[key] = R_transform.transform(R_lmn, *data_index[key]["R_derivs"][0])
-
-    return data
-
-
-def compute_Z(
-    Z_lmn,
-    Z_transform,
-    data={},
-):
-    """Compute toroidal coordinate Z.
-
-    Parameters
-    ----------
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-        Keys are of the form 'Z_x' meaning the derivative of Z wrt x.
-
-    """
-    keys = [
-        "Z",
-        "Z_r",
-        "Z_t",
-        "Z_z",
-        "Z_rr",
-        "Z_tt",
-        "Z_zz",
-        "Z_rt",
-        "Z_rz",
-        "Z_tz",
-        "Z_rrr",
-        "Z_ttt",
-        "Z_zzz",
-        "Z_rrt",
-        "Z_rtt",
-        "Z_rrz",
-        "Z_rzz",
-        "Z_ttz",
-        "Z_tzz",
-        "Z_rtz",
-    ]
-
-    for key in keys:
-        if check_derivs(key, Z_transform=Z_transform):
-            data[key] = Z_transform.transform(Z_lmn, *data_index[key]["Z_derivs"][0])
-
-    return data
-
-
-def compute_lambda(
-    L_lmn,
-    L_transform,
-    data={},
-):
-    """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
-
-    Parameters
-    ----------
-    L_lmn : ndarray
-        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-    L_transform : Transform
-        Transforms L_lmn coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of lambda values.
-        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
-
-    """
-    keys = [
-        "lambda",
-        "lambda_r",
-        "lambda_t",
-        "lambda_z",
-        "lambda_rr",
-        "lambda_tt",
-        "lambda_zz",
-        "lambda_rt",
-        "lambda_rz",
-        "lambda_tz",
-        "lambda_rrr",
-        "lambda_ttt",
-        "lambda_zzz",
-        "lambda_rrt",
-        "lambda_rtt",
-        "lambda_rrz",
-        "lambda_rzz",
-        "lambda_ttz",
-        "lambda_tzz",
-        "lambda_rtz",
-    ]
-
-    for key in keys:
-        if check_derivs(key, L_transform=L_transform):
-            data[key] = L_transform.transform(L_lmn, *data_index[key]["L_derivs"][0])
-
-    return data
-
-
-def compute_cartesian_coords(
-    R_lmn,
-    Z_lmn,
-    R_transform,
-    Z_transform,
-    data={},
-):
-    """Compute Cartesian coordinates (X, Y, Z).
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
-
-    """
-    data = compute_R(R_lmn, R_transform, data=data)
-    data = compute_Z(Z_lmn, Z_transform, data=data)
-
-    phi = R_transform.grid.nodes[:, 2]
-    data["X"] = data["R"] * np.cos(phi)
-    data["Y"] = data["R"] * np.sin(phi)
-
-    return data
-
-
 def compute_covariant_basis(
     R_lmn,
     Z_lmn,
@@ -395,8 +373,7 @@ def compute_covariant_basis(
         direction, differentiated wrt y.
 
     """
-    data = compute_R(R_lmn, R_transform, data=data)
-    data = compute_Z(Z_lmn, Z_transform, data=data)
+    data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
     data["0"] = jnp.zeros_like(data["R"])
 
     # 0th order derivatives

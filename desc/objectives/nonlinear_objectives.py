@@ -68,7 +68,7 @@ class Volume(_Objective):
             self._grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["V"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -198,7 +198,7 @@ class Energy(_Objective):
             self._grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["W"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["W"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["W"]["L_derivs"], build=True
@@ -382,7 +382,7 @@ class RadialForceBalance(_Objective):
             self._grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["F_rho"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
@@ -569,7 +569,7 @@ class HelicalForceBalance(_Objective):
             self._grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["F_beta"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["F_beta"]["L_derivs"], build=True
@@ -748,7 +748,7 @@ class RadialCurrent(_Objective):
             self._grid, eq.R_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^rho"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["J^rho"]["L_derivs"], build=True
@@ -937,7 +937,7 @@ class PoloidalCurrent(_Objective):
             self._grid, eq.R_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^theta"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["J^theta"]["L_derivs"], build=True
@@ -1126,7 +1126,7 @@ class ToroidalCurrent(_Objective):
             self._grid, eq.R_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^zeta"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["J^zeta"]["L_derivs"], build=True
@@ -1318,7 +1318,7 @@ class QuasisymmetryFluxFunction(_Objective):
             self._grid, eq.R_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["QS_FF"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["QS_FF"]["L_derivs"], build=True
@@ -1504,7 +1504,7 @@ class QuasisymmetryTripleProduct(_Objective):
             self._grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["QS_TP"]["Z_derivs"], build=True
+            self._grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
             self._grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True

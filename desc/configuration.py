@@ -543,7 +543,7 @@ class _Configuration(IOAble, ABC):
                 )
             elif arg == "Z_transform":
                 inputs[arg] = Transform(
-                    grid, self.Z_basis, derivs=data_index[name]["Z_derivs"]
+                    grid, self.Z_basis, derivs=data_index[name]["R_derivs"]
                 )
             elif arg == "L_transform":
                 inputs[arg] = Transform(
@@ -771,20 +771,14 @@ class _Configuration(IOAble, ABC):
         v_grid = Grid(v_nodes)
 
         # rho contours
-        Rr = self.compute("R", r_grid)["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[
-            :, :, 0
-        ]
-        Zr = self.compute("Z", r_grid)["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[
-            :, :, 0
-        ]
+        r_coords = self.compute("R", r_grid)
+        Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+        Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
 
         # theta contours
-        Rv = self.compute("R", v_grid)["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[
-            :, :, 0
-        ]
-        Zv = self.compute("Z", v_grid)["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[
-            :, :, 0
-        ]
+        v_coords = self.compute("R", v_grid)
+        Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+        Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
 
         rline = MultiLineString(
             [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
@@ -851,11 +845,13 @@ class _Configuration(IOAble, ABC):
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
 
+        toroidal_coords = self.compute("R", grid)
         theta = grid.nodes[:, 1]
         vartheta = theta + self.compute("lambda", grid)["lambda"]
         sfl_grid = grid
         sfl_grid.nodes[:, 1] = vartheta
 
+        bdry_coords = self.compute("R", bdry_grid)
         bdry_theta = bdry_grid.nodes[:, 1]
         bdry_vartheta = bdry_theta + self.compute("lambda", bdry_grid)["lambda"]
         bdry_sfl_grid = bdry_grid
@@ -870,13 +866,13 @@ class _Configuration(IOAble, ABC):
         R_sfl_transform = Transform(
             sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
         )
-        R_lmn_sfl = R_sfl_transform.fit(self.compute("R", grid)["R"])
+        R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
         del R_sfl_transform  # these can take up a lot of memory so delete when done.
 
         Z_sfl_transform = Transform(
             sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
         )
-        Z_lmn_sfl = Z_sfl_transform.fit(self.compute("Z", grid)["Z"])
+        Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
         del Z_sfl_transform
         L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
 
@@ -887,7 +883,7 @@ class _Configuration(IOAble, ABC):
             build_pinv=True,
             rcond=rcond,
         )
-        Rb_lmn_sfl = R_sfl_bdry_transform.fit(self.compute("R", bdry_grid)["R"])
+        Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
         del R_sfl_bdry_transform
 
         Z_sfl_bdry_transform = Transform(
@@ -897,7 +893,7 @@ class _Configuration(IOAble, ABC):
             build_pinv=True,
             rcond=rcond,
         )
-        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(self.compute("Z", bdry_grid)["Z"])
+        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
         del Z_sfl_bdry_transform
 
         eq_sfl.Rb_lmn = Rb_lmn_sfl

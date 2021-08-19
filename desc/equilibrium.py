@@ -122,7 +122,7 @@ class Equilibrium(_Configuration, IOAble):
             spectral_indexing,
             **kwargs,
         )
-        self._x0 = self.x
+
         assert (L_grid is None) or (
             isinstance(L_grid, numbers.Real)
             and (L_grid == int(L_grid))
@@ -143,13 +143,6 @@ class Equilibrium(_Configuration, IOAble):
         self._N_grid = N_grid if N_grid is not None else self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
         self._solved = False
-        self._objective = None
-        self._optimizer = None
-        self._set_grid()
-        self._transforms = {}
-        self._set_transforms()
-        self.objective = objective
-        self.optimizer = optimizer
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -216,33 +209,6 @@ class Equilibrium(_Configuration, IOAble):
     @solved.setter
     def solved(self, solved):
         self._solved = solved
-
-    @property
-    def initial(self):
-        """Return initial equilibrium state from which it was solved (Equilibrium)."""
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            self.x0, self.R_basis.num_modes, self.Z_basis.num_modes
-        )
-        inputs = {
-            "sym": self.sym,
-            "NFP": self.NFP,
-            "Psi": self.Psi,
-            "L": self.L,
-            "M": self.M,
-            "N": self.N,
-            "spectral_indexing": self.spectral_indexing,
-            "bdry_mode": self.bdry_mode,
-            "pressure": self.pressure,
-            "iota": self.iota,
-            "surface": self.surface,
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "objective": self.objective.name,
-            "optimizer": self.optimizer.method,
-        }
-        return Equilibrium(**inputs)
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""

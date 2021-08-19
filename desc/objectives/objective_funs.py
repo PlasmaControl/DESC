@@ -34,7 +34,7 @@ class ObjectiveFunction(IOAble):
         """
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
-        elif not isinstance(constraints, tuple):
+        if not isinstance(constraints, tuple):
             constraints = (constraints,)
 
         self._objectives = objectives
@@ -95,19 +95,25 @@ class ObjectiveFunction(IOAble):
         rcond = np.finfo(self._A.dtype).eps * max(M, N)
 
         # Z = null space of A
-        tol = np.amax(s) * rcond
-        large = s > tol
-        num = np.sum(large, dtype=int)
-        self._Z = vh[num:, :].T.conj()
-        self._Zinv = self._Z.T
-        self._dim_x = self._Z.shape[1]
-
-        uk = u[:, :K]
-        vhk = vh[:K, :]
-        s = np.divide(1, s, where=large, out=s)
-        s[(~large,)] = 0
-        self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
-        self._y0 = np.dot(self._Ainv, self._b)
+        if self._constraints:
+            tol = np.amax(s) * rcond
+            large = s > tol
+            num = np.sum(large, dtype=int)
+            uk = u[:, :K]
+            vhk = vh[:K, :]
+            s = np.divide(1, s, where=large, out=s)
+            s[(~large,)] = 0
+            self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+            self._y0 = np.dot(self._Ainv, self._b)
+            self._Z = vh[num:, :].T.conj()
+            self._Zinv = self._Z.T
+            self._dim_x = self._Z.shape[1]
+        else:
+            self._Ainv = np.array([[]])
+            self._y0 = np.zeros((self._dim_y,))
+            self._Z = np.eye(self._dim_y)
+            self._Zinv = self._Z.T
+            self._dim_x = self._dim_y
 
     def _set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective functions.
@@ -515,7 +521,7 @@ class ObjectiveFunction(IOAble):
 
     @property
     def A(self):
-        """ndarray: Linear constraint matrix: A*x = b."""
+        """ndarray: Linear constraint matrix: A*y = b."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._A
@@ -529,7 +535,7 @@ class ObjectiveFunction(IOAble):
 
     @property
     def b(self):
-        """ndarray: Linear constraint vector: A*x = b."""
+        """ndarray: Linear constraint vector: A*y = b."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._b

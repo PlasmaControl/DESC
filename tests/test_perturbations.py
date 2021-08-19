@@ -2,7 +2,13 @@ import unittest
 import numpy as np
 
 from desc.equilibrium import Equilibrium
-from desc.objectives import ObjectiveFunction, FixedPressure
+from desc.objectives import (
+    ObjectiveFunction,
+    FixedBoundaryR,
+    FixedBoundaryZ,
+    FixedPressure,
+    TargetIota,
+)
 from desc.perturbations import perturb
 
 
@@ -20,18 +26,31 @@ class TestPerturbations(unittest.TestCase):
             "L": 2,
             "M": 1,
             "N": 0,
-            "pressure": np.array([[0, 0]]),
+            "pressure": np.array([[0, 0], [2, 0]]),
             "iota": np.array([[0, 0]]),
             "surface": np.array([[0, -1, 0, 0, 1], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0]]),
         }
-        dp = 1e3 * np.array([1, 0, -1])  # perturbed pressure profile
+        eq_orig = Equilibrium(**inputs)
+        eq_orig.change_resolution(N=1)
 
-        eq_old = Equilibrium(**inputs)
-        objective = ObjectiveFunction(FixedPressure(), eq=eq_old)
+        # perturbations
+        dp = 1e3 * np.array([1, 0, -1])
+        dRb = np.array([-0.2, 0, 0, 0.1, 0.2])
+        dZb = np.array([0.1, -0.2, 0, -0.2])
 
-        eq_new = perturb(eq_old, objective, dp=dp, order=1, verbose=2, copy=True)
+        obj_pres = ObjectiveFunction(FixedPressure(), eq=eq_orig)
+        obj_bdry = ObjectiveFunction(
+            TargetIota(), (FixedBoundaryR(), FixedBoundaryZ()), eq=eq_orig
+        )
 
-        np.testing.assert_allclose(eq_new.p_l, dp)
+        eq_pres = perturb(eq_orig, obj_pres, dp=dp, order=1, verbose=2, copy=True)
+        eq_bdry = perturb(
+            eq_orig, obj_bdry, dRb=dRb, dZb=dZb, order=1, verbose=2, copy=True
+        )
+
+        np.testing.assert_allclose(eq_pres.p_l, eq_orig.p_l + dp)
+        np.testing.assert_allclose(eq_bdry.Rb_lmn, eq_orig.Rb_lmn + dRb)
+        np.testing.assert_allclose(eq_bdry.Zb_lmn, eq_orig.Zb_lmn + dZb)
 
     def test_perturb_2D(self):
         """Nonlinear test function to check perturb convergence rates."""

@@ -43,6 +43,7 @@ class FourierRZCurve(Curve):
         "_R_transform",
         "_Z_transform",
         "_sym",
+        "_NFP",
     ]
 
     def __init__(
@@ -63,6 +64,12 @@ class FourierRZCurve(Curve):
         if modes_Z is None:
             modes_Z = modes_R
 
+        if R_n.size == 0:
+            raise ValueError("At least 1 coefficient for R must be supplied")
+        if Z_n.size == 0:
+            Z_n = np.array([0.0])
+            modes_Z = np.array([0])
+
         modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
 
         assert issubclass(modes_R.dtype.type, np.integer)
@@ -76,6 +83,8 @@ class FourierRZCurve(Curve):
         self._sym = sym
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
+        N = max(NR, NZ)
+        self._NFP = NFP
         self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
         self._Z_basis = FourierSeries(NZ, NFP, sym="sin" if sym else False)
 
@@ -83,7 +92,7 @@ class FourierRZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
         if grid is None:
-            grid = LinearGrid(N=2 * max(NR, NZ) + 1, endpoint=True)
+            grid = LinearGrid(N=2 * N + 1, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -104,19 +113,14 @@ class FourierRZCurve(Curve):
         return self._Z_basis
 
     @property
+    def NFP(self):
+        """Number of field periods."""
+        return self._NFP
+
+    @property
     def grid(self):
         """Default grid for computation."""
         return self._grid
-
-    def change_resolution(self, N):
-        """Change the maximum toroidal resolution."""
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(N=N)
-        self.Z_basis.change_resolution(N=N)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
-        self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
 
     @grid.setter
     def grid(self, new):
@@ -130,6 +134,22 @@ class FourierRZCurve(Curve):
             )
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
+
+    @property
+    def N(self):
+        """Maximum mode number"""
+        return max(self.R_basis.N, self.Z_basis.N)
+
+    def change_resolution(self, N):
+        """Change the maximum toroidal resolution."""
+        R_modes_old = self.R_basis.modes
+        Z_modes_old = self.Z_basis.modes
+        self.R_basis.change_resolution(N=N)
+        self.Z_basis.change_resolution(N=N)
+        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+        self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
+        self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+        self._N = N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -444,6 +464,11 @@ class FourierXYZCurve(Curve):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+
+    @property
+    def N(self):
+        """Maximum mode number"""
+        return self.basis.N
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""
@@ -766,7 +791,7 @@ class FourierPlanarCurve(Curve):
         self.normal = normal
         self.center = center
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, endpoint=True)
+            grid = LinearGrid(N=2 * self.N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
         self.name = name
@@ -792,6 +817,11 @@ class FourierPlanarCurve(Curve):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
         self._transform.grid = self.grid
+
+    @property
+    def N(self):
+        """Maximum mode number"""
+        return self.basis.N
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""

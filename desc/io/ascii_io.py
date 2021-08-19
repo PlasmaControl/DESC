@@ -96,7 +96,6 @@ def write_ascii(fname, eq):
     file.close()
 
 
-# FIXME: this is all wrong now with the class structure
 def read_ascii(filename):
     """reads a previously generated DESC ascii output file
 
@@ -130,7 +129,7 @@ def read_ascii(filename):
         bdry_idx[i, 1] = int(lines[i + 1].strip("\n").split()[3])
         bdryR[i] = float(lines[i + 1].strip("\n").split()[6])
         bdryZ[i] = float(lines[i + 1].strip("\n").split()[9])
-    eq["boundary"] = np.hstack(
+    eq["surface"] = np.hstack(
         [
             np.zeros((Nbdry, 1)),
             bdry_idx,
@@ -148,9 +147,8 @@ def read_ascii(filename):
         pl[i] = int(lines[i + 1].strip("\n").split()[1])
         cP[i] = float(lines[i + 1].strip("\n").split()[4])
         cI[i] = float(lines[i + 1].strip("\n").split()[7])
-    eq["profiles"] = np.hstack(
-        [pl.reshape((-1, 1)), cP.reshape((-1, 1)), cI.reshape((-1, 1))]
-    )
+    eq["pressure"] = np.hstack([pl.reshape((-1, 1)), cP.reshape((-1, 1))])
+    eq["iota"] = np.hstack([pl.reshape((-1, 1)), cI.reshape((-1, 1))])
     lines = lines[Nprof + 1 :]
 
     NRZ = int(lines[0].strip("\n").split()[-1])
@@ -170,6 +168,7 @@ def read_ascii(filename):
     eq["L"] = np.max(abs(zern_idx[:, 0]))
     eq["M"] = np.max(abs(zern_idx[:, 1]))
     eq["N"] = np.max(abs(zern_idx[:, 2]))
+    eq["spectral_indexing"] = "fringe"
 
     if np.all(
         cR[np.where(sign(zern_idx[:, 1]) != sign(zern_idx[:, 2]))] == 0
@@ -178,7 +177,7 @@ def read_ascii(filename):
     else:
         eq["sym"] = False
 
-    equil = Equilibrium(eq)
+    equil = Equilibrium(**eq)
     equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
     equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)
     equil.L_lmn = copy_coeffs(cL, zern_idx, equil.L_basis.modes)

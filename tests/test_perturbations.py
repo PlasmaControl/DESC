@@ -20,12 +20,13 @@ class TestPerturbations(unittest.TestCase):
             "L": 2,
             "M": 1,
             "N": 0,
-            "profiles": np.zeros((1, 3)),  # no pressure
-            "boundary": np.array([[0, -1, 0, 0, 1], [0, 0, 0, 5, 0], [0, 1, 0, 1, 0]]),
+            "pressure": np.array([[0, 0]]),
+            "iota": np.array([[0, 0]]),
+            "surface": np.array([[0, -1, 0, 0, 1], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0]]),
         }
         dp = 1e3 * np.array([1, 0, -1])  # perturbed pressure profile
 
-        eq_old = Equilibrium(inputs=inputs)
+        eq_old = Equilibrium(**inputs)
         objective = ObjectiveFunction(FixedPressure(), eq=eq_old)
 
         eq_new = perturb(eq_old, objective, dp=dp, order=1, verbose=2, copy=True)

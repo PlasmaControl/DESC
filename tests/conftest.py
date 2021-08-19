@@ -96,8 +96,9 @@ def DummyStellarator(tmpdir_factory):
         "L": 4,
         "M": 2,
         "N": 2,
-        "profiles": np.array([[0, 1e4, 0.5], [2, -2e4, 0.5], [4, 1e4, 0]]),
-        "boundary": np.array(
+        "pressure": np.array([[0, 1e4], [2, -2e4], [4, 1e4]]),
+        "iota": np.array([[0, 0.5], [2, 0.5]]),
+        "surface": np.array(
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
@@ -109,11 +110,11 @@ def DummyStellarator(tmpdir_factory):
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "bdry_mode": "lcfs",
         "objective": "force",
         "optimizer": "lsq-exact",
     }
-    eq = Equilibrium(inputs=inputs)
+    eq = Equilibrium(**inputs)
+    eq.build()
     eq.save(output_path)
 
     DummyStellarator_out = {

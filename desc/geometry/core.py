@@ -52,6 +52,12 @@ class Curve(IOAble, ABC):
 
     @property
     @abstractmethod
+    def N(self):
+        """Maximum toroidal mode number"""
+        pass
+
+    @property
+    @abstractmethod
     def grid(self):
         """Grid for computation."""
 
@@ -79,7 +85,7 @@ class Curve(IOAble, ABC):
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
-    _io_attrs_ = ["_name", "_grid", "_sym"]
+    _io_attrs_ = ["_name", "_grid", "_sym", "_L", "_M", "_N"]
 
     @property
     def name(self):
@@ -89,6 +95,21 @@ class Surface(IOAble, ABC):
     @name.setter
     def name(self, new):
         self._name = new
+
+    @property
+    def L(self):
+        """maximum radial mode number"""
+        return self._L
+
+    @property
+    def M(self):
+        """maximum poloidal mode number"""
+        return self._M
+
+    @property
+    def N(self):
+        """maximum toroidal mode number"""
+        return self._N
 
     @property
     def sym(self):

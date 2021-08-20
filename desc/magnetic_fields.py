@@ -6,7 +6,7 @@ import math
 from desc.backend import jnp, jit, odeint
 from desc.io import IOAble
 from desc.grid import Grid
-from desc.interpolate import interp3d
+from desc.interpolate import interp3d, _approx_df
 from desc.derivatives import Derivative
 
 
@@ -370,6 +370,7 @@ class SplineMagneticField(MagneticField):
         "_method",
         "_extrap",
         "_period",
+        "_derivs",
     ]
 
     def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
@@ -392,7 +393,21 @@ class SplineMagneticField(MagneticField):
         self._extrap = extrap
         self._period = period
 
-        # TODO: precompute derivative matrices
+        self._derivs = {}
+        self._derivs["BR"] = self._approx_derivs(self._BR)
+        self._derivs["Bphi"] = self._approx_derivs(self._Bphi)
+        self._derivs["BZ"] = self._approx_derivs(self._BZ)
+
+    def _approx_derivs(self, Bi):
+        tempdict = {}
+        tempdict["fx"] = _approx_df(self._R, Bi, self._method, 0)
+        tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
+        tempdict["fz"] = _approx_df(self._Z, Bi, self._method, 2)
+        tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
+        tempdict["fxz"] = _approx_df(self._Z, tempdict["fx"], self._method, 2)
+        tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
+        tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+        return tempdict
 
     def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
         """Compute magnetic field at a set of points
@@ -430,6 +445,7 @@ class SplineMagneticField(MagneticField):
             (dR, dp, dZ),
             self._extrap,
             (None, self._period, None),
+            **self._derivs["BR"],
         )
         Bphiq = interp3d(
             Rq,
@@ -443,6 +459,7 @@ class SplineMagneticField(MagneticField):
             (dR, dp, dZ),
             self._extrap,
             (None, self._period, None),
+            **self._derivs["Bphi"],
         )
         BZq = interp3d(
             Rq,
@@ -456,6 +473,7 @@ class SplineMagneticField(MagneticField):
             (dR, dp, dZ),
             self._extrap,
             (None, self._period, None),
+            **self._derivs["BZ"],
         )
 
         return jnp.array([BRq, Bphiq, BZq]).T

@@ -11,6 +11,6 @@ The table below contains a list of variables that are used in the code and that 
 
   
 .. csv-table:: List of Variables
-   :file: ./_build/variables.csv
+   :file: variables.csv
    :widths: 10, 10, 10, 50, 20
    :header-rows: 1

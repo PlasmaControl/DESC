@@ -5,83 +5,29 @@ from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import Grid
 
 
-def test_compute_volume(DSHAPE):
-    """Test plasma volume computation."""
+def test_compute_geometry(DSHAPE):
+    """Test computation of plasma geometric values."""
 
-    # VMEC value
+    # VMEC values
     file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
     V_vmec = float(file.variables["volume_p"][-1])
+    R0_vmec = float(file.variables["Rmajor_p"][-1])
+    a_vmec = float(file.variables["Aminor_p"][-1])
+    ar_vmec = float(file.variables["aspect"][-1])
     file.close
 
-    # DESC value
+    # DESC values
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    V_desc = eq.compute_volume()
+    data = eq.compute["R0/a"]
+    V_desc = data["V"]
+    R0_desc = data["R0"]
+    a_desc = data["a"]
+    ar_desc = data["R0/a"]
 
     assert abs(V_vmec - V_desc) < 5e-3
-
-
-def test_major_radius(DSHAPE):
-    """Test major radius computation."""
-
-    # VMEC value
-    file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    R_vmec = float(file.variables["Rmajor_p"][-1])
-    file.close
-
-    # DESC value
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    R_desc = eq.compute_major_radius()
-
-    assert abs(R_vmec - R_desc) < 5e-3
-
-
-def test_minor_radius(DSHAPE):
-    """Test minor radius computation."""
-
-    # VMEC value
-    file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    A_vmec = float(file.variables["Aminor_p"][-1])
-    file.close
-
-    # DESC value
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    A_desc = eq.compute_minor_radius()
-
-    assert abs(A_vmec - A_desc) < 5e-3
-
-
-def test_aspect_ratio(DSHAPE):
-    """Test aspect ratio computation."""
-
-    # VMEC value
-    file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    AR_vmec = float(file.variables["aspect"][-1])
-    file.close
-
-    # DESC value
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    AR_desc = eq.compute_aspect_ratio()
-
-    assert abs(AR_vmec - AR_desc) < 5e-3
-
-
-def test_magnetic_axis_guess(DummyStellarator):
-    """Test that the magnetic axis initial guess is used correctly."""
-
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
-    zeta = np.linspace(0, 2 * np.pi, num=33, endpoint=False) / eq.NFP
-
-    # axis guess for Dummy Stellarator:
-    R0 = 3.4 + 0.2 * np.cos(eq.NFP * zeta)
-    Z0 = -0.2 * np.sin(eq.NFP * zeta)
-
-    # axis location as input
-    R0_eq, phi0, Z0_eq = eq.axis.compute_coordinates(grid=zeta).T
-
-    np.testing.assert_allclose(R0_eq, R0, rtol=0, atol=1e-6)
-    np.testing.assert_allclose(Z0_eq, Z0, rtol=0, atol=1e-6)
+    assert abs(R0_vmec - R0_desc) < 5e-3
+    assert abs(a_vmec - a_desc) < 5e-3
+    assert abs(ar_vmec - ar_desc) < 5e-3
 
 
 def test_compute_theta_coords(SOLOVEV):
@@ -94,7 +40,7 @@ def test_compute_theta_coords(SOLOVEV):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute_lambda(Grid(nodes, sort=False))
+    coords = eq.compute("lambda", Grid(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -117,7 +63,7 @@ def test_compute_flux_coords(SOLOVEV):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
+    coords = eq.compute("lambda", Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
     flux_coords = np.array(eq.compute_flux_coords(real_coords))

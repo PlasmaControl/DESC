@@ -168,7 +168,7 @@ def test_2d_g_tz(plot_eq):
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_2d(plot_eq, "g", grid=grid)
+    fig, ax = plot_2d(plot_eq, "sqrt(g)", grid=grid)
     return fig
 
 
@@ -180,7 +180,7 @@ def test_2d_g_rz(plot_eq):
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_2d(plot_eq, "g", grid=grid)
+    fig, ax = plot_2d(plot_eq, "sqrt(g)", grid=grid)
     return fig
 
 

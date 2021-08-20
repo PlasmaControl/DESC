@@ -1,16 +1,18 @@
 """data_index containts all of the quantities calculated by the compute functions.
 
-label = (str) title of the quantity in LaTeX format
-units = (str) units of the quantity in LaTeX format
-fun = (str) function name in compute_funs.py that computes the quantity
-dim = (int) dimension of the quantity: 0-D, 1-D, or 3-D
+label = (str) Title of the quantity in LaTeX format.
+units = (str) Units of the quantity in LaTeX format.
+utits_long (str) Full units without abbreviations.
+description (str) Description of the quantity.
+fun = (str) Function name in compute_funs.py that computes the quantity.
+dim = (int) Dimension of the quantity: 0-D, 1-D, or 3-D.
 """
 
 data_index = {
     # flux coordinates
     "rho": {
         "label": "\\rho",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Radial coordinate, proportional to the square root of the toroidal flux",
         "fun": "compute_flux_coords",
@@ -450,7 +452,7 @@ data_index = {
     # lambda
     "lambda": {
         "label": "\\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function",
         "fun": "compute_lambda",
@@ -459,7 +461,7 @@ data_index = {
     },
     "lambda_r": {
         "label": "\\partial_{\\rho} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, first radial derivative",
         "fun": "compute_lambda",
@@ -468,7 +470,7 @@ data_index = {
     },
     "lambda_t": {
         "label": "\\partial_{\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, first poloidal derivative",
         "fun": "compute_lambda",
@@ -477,7 +479,7 @@ data_index = {
     },
     "lambda_z": {
         "label": "\\partial_{\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, first toroidal derivative",
         "fun": "compute_lambda",
@@ -486,7 +488,7 @@ data_index = {
     },
     "lambda_rr": {
         "label": "\\partial_{\\rho\\rho} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second radial derivative",
         "fun": "compute_lambda",
@@ -495,7 +497,7 @@ data_index = {
     },
     "lambda_tt": {
         "label": "\\partial_{\\theta\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second poloidal derivative",
         "fun": "compute_lambda",
@@ -504,7 +506,7 @@ data_index = {
     },
     "lambda_zz": {
         "label": "\\partial_{\\zeta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second toroidal derivative",
         "fun": "compute_lambda",
@@ -513,7 +515,7 @@ data_index = {
     },
     "lambda_rt": {
         "label": "\\partial_{\\rho\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second derivative wrt to radius and poloidal angle",
         "fun": "compute_lambda",
@@ -522,7 +524,7 @@ data_index = {
     },
     "lambda_rz": {
         "label": "\\partial_{\\rho\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second derivative wrt to radius and toroidal angle",
         "fun": "compute_lambda",
@@ -531,7 +533,7 @@ data_index = {
     },
     "lambda_tz": {
         "label": "\\partial_{\\theta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, second derivative wrt to poloidal and toroidal angles",
         "fun": "compute_lambda",
@@ -540,7 +542,7 @@ data_index = {
     },
     "lambda_rrr": {
         "label": "\\partial_{\\rho\\rho\\rho} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third radial derivative",
         "fun": "compute_lambda",
@@ -549,7 +551,7 @@ data_index = {
     },
     "lambda_ttt": {
         "label": "\\partial_{\\theta\\theta\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third poloidal derivative",
         "fun": "compute_lambda",
@@ -558,7 +560,7 @@ data_index = {
     },
     "lambda_zzz": {
         "label": "\\partial_{\\zeta\\zeta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third toroidal derivative",
         "fun": "compute_lambda",
@@ -567,7 +569,7 @@ data_index = {
     },
     "lambda_rrt": {
         "label": "\\partial_{\\rho\\rho\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative, wrt to radius twice and poloidal angle",
         "fun": "compute_lambda",
@@ -576,7 +578,7 @@ data_index = {
     },
     "lambda_rtt": {
         "label": "\\partial_{\\rho\\theta\\theta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to radius and poloidal angle twice",
         "fun": "compute_lambda",
@@ -585,7 +587,7 @@ data_index = {
     },
     "lambda_rrz": {
         "label": "\\partial_{\\rho\\rho\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to radius twice and toroidal angle",
         "fun": "compute_lambda",
@@ -594,7 +596,7 @@ data_index = {
     },
     "lambda_rzz": {
         "label": "\\partial_{\\rho\\zeta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to radius and toroidal angle twice",
         "fun": "compute_lambda",
@@ -603,7 +605,7 @@ data_index = {
     },
     "lambda_ttz": {
         "label": "\\partial_{\\theta\\theta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to poloidal angle twice and toroidal angle",
         "fun": "compute_lambda",
@@ -612,7 +614,7 @@ data_index = {
     },
     "lambda_tzz": {
         "label": "\\partial_{\\theta\\zeta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to poloidal angle  and toroidal angle twice",
         "fun": "compute_lambda",
@@ -621,7 +623,7 @@ data_index = {
     },
     "lambda_rtz": {
         "label": "\\partial_{\\rho\\theta\\zeta} \\lambda",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Poloidal stream function, third derivative wrt to radius, poloidal angle, and toroidal angle",
         "fun": "compute_lambda",
@@ -648,7 +650,7 @@ data_index = {
     # rotational transform
     "iota": {
         "label": "\\iota",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Rotational transform",
         "fun": "compute_rotational_transform",
@@ -656,7 +658,7 @@ data_index = {
     },
     "iota_r": {
         "label": "\\partial_{\\rho} \\iota",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Rotational transform, first radial derivative",
         "fun": "compute_rotational_transform",
@@ -664,7 +666,7 @@ data_index = {
     },
     "iota_rr": {
         "label": "\\partial_{\\rho\\rho} \\iota",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Rotational transform, second radial derivative",
         "fun": "compute_rotational_transform",
@@ -2982,7 +2984,7 @@ data_index = {
     },
     "R0/a": {
         "label": "R_{0} / a",
-        "units": "",
+        "units": "~",
         "units_long": "None",
         "description": "Aspect ratio",
         "fun": "compute_geometry",

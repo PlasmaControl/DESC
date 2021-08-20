@@ -1,7 +1,5 @@
 import numpy as np
 import copy
-import warnings
-import math
 import numbers
 
 from termcolor import colored
@@ -10,7 +8,7 @@ from shapely.geometry import LineString, MultiLineString
 from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
-from desc.io import IOAble
+from desc.io import IOAble, load
 from desc.utils import copy_coeffs, opsindex
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
@@ -20,7 +18,6 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
     FourierRZCurve,
     Surface,
-    Curve,
 )
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 import desc.compute as compute_funs
@@ -108,11 +105,10 @@ class _Configuration(IOAble, ABC):
         **kwargs,
     ):
 
-        assert spectral_indexing in [
-            None,
-            "ansi",
-            "fringe",
-        ], f"spectral_indexing should be one of 'ansi', 'fringe', None, got {spectral_indexing}"
+        assert spectral_indexing in [None, "ansi", "fringe",], (
+            f"spectral_indexing should be one of 'ansi', 'fringe', None, got "
+            + "{spectral_indexing}"
+        )
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing
         elif spectral_indexing is None:
@@ -356,18 +352,17 @@ class _Configuration(IOAble, ABC):
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
     def set_initial_guess(self, *args):
-        """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn
+        """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
         ----------
         args :
             either:
-              - No arguments, in which case eq.surface will be used
-              - Another Surface object which will be scaled to generate the initial guess
-                (optionally a Curve object may be supplied as an iniital guess for the axis)
-              - Another Equilibrium, where its flux surfaces will be used as an initial guess
-              - File path to VMEC or DESC equilibrium, which will be loaded and used
-                as the initial guess
+              - No arguments, in which case eq.surface will be scaled for the guess.
+              - Another Surface object, which will be scaled to generate the guess.
+                Optionally a Curve object may also be supplied for the magnetic axis.
+              - Another Equilibrium, whose flux surfaces will be used.
+              - File path to a VMEC or DESC equilibrium, which will be loaded and used.
 
         Examples
         --------
@@ -397,7 +392,7 @@ class _Configuration(IOAble, ABC):
         nargs = len(args)
         if nargs > 2:
             raise ValueError(
-                "set_initial_guess should be called with 0,1 or 2 arguments"
+                "set_initial_guess should be called with 0, 1 or 2 arguments."
             )
         if nargs == 0:
             if hasattr(self, "_surface"):
@@ -416,7 +411,8 @@ class _Configuration(IOAble, ABC):
                 )
             else:
                 raise ValueError(
-                    "set_initial_guess called with no arguments but no surface is assigned"
+                    "set_initial_guess called with no arguments, "
+                    + "but no surface is assigned."
                 )
         else:  # nargs > 0
             if isinstance(args[0], Surface):
@@ -445,7 +441,7 @@ class _Configuration(IOAble, ABC):
                 eq = args[0]
                 if nargs > 1:
                     raise ValueError(
-                        "set_initial_guess got unknown additional argument {}".format(
+                        "set_initial_guess got unknown additional argument {}.".format(
                             args[1]
                         )
                     )
@@ -461,9 +457,8 @@ class _Configuration(IOAble, ABC):
                         file_format = args[1]
                     else:
                         raise ValueError(
-                            "set_initial_guess got unknown additional argument {}".format(
-                                args[1]
-                            )
+                            "set_initial_guess got unknown additional argument "
+                            + "{}.".format(args[1])
                         )
                 try:  # is it desc?
                     eq = load(path, file_format)
@@ -474,25 +469,23 @@ class _Configuration(IOAble, ABC):
                         eq = VMECIO.load(path)
                     except:  # its neither
                         raise ValueError(
-                            "Could not load equilibrium from path {}, please make sure it is a valid DESC or VMEC equilibrium".format(
-                                path
-                            )
+                            "Could not load equilibrium from path {}, ".format(path)
+                            + "please make sure it is a valid DESC or VMEC equilibrium."
                         )
                 if not isinstance(eq, _Configuration):
                     if hasattr(eq, "equilibria"):  # its a family!
                         eq = eq[-1]
                     else:
                         raise TypeError(
-                            "Cannot initialize equilibrium from loaded object of type {}".format(
-                                type(eq)
-                            )
+                            "Cannot initialize equilibrium from loaded object of type "
+                            + "{}".format(type(eq))
                         )
                 self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
                 self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
                 self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
             else:
                 raise ValueError(
-                    "Can't initialize equilibrium from args {}".format(args)
+                    "Can't initialize equilibrium from args {}.".format(args)
                 )
 
     def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode=None):
@@ -1022,7 +1015,7 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         real_coords : ndarray, shape(k,3)
-            2d array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+            2D array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
         tol : float
@@ -1141,7 +1134,7 @@ class _Configuration(IOAble, ABC):
         if nzeta is None:
             zetas = (
                 [0]
-                if self.N is 0
+                if self.N == 0
                 else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
             )
         else:
@@ -1152,12 +1145,12 @@ class _Configuration(IOAble, ABC):
             t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
             r_coords = self.compute("R", r_grid)
-            t_coords = self.compute("lambda", t_grid, data={})  # FIXME: shouldn't need to pass data={}
+            t_coords = self.compute("lambda", t_grid, data={})  # FIXME: no data={}
 
             v_nodes = t_grid.nodes
             v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
             v_grid = Grid(v_nodes)
-            v_coords = self.compute("R", v_grid, data={})  # FIXME: shouldn't need to pass data={}
+            v_coords = self.compute("R", v_grid, data={})  # FIXME: no data={}
 
             # rho contours
             Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
@@ -1190,12 +1183,12 @@ class _Configuration(IOAble, ABC):
     ):
         """Transform this equilibrium to use straight field line coordinates.
 
-        Uses a least squares fit to find FourierZernike coefficients of R,Z,Rb,Zb with
-        respect to the straight field line coordinates, rather than the boundary coordinates.
-        The new lambda value will be zero.
+        Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
+        with respect to the straight field line coordinates, rather than the boundary
+        coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have flux surfaces that look correct, the
-        force balance error will likely be significantly higher than the original equilibrium.
+        NOTE: Though the converted equilibrium will have the same flux surfaces,
+        the force balance error will likely be higher than the original equilibrium.
 
         Parameters
         ----------
@@ -1220,7 +1213,7 @@ class _Configuration(IOAble, ABC):
         -------
         eq_sfl : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
-            Only returned if "copy" is True, otherwise modifies the current equilibrium in place.
+            Only returned if "copy" is True, otherwise modifies the current equilibrium.
 
         """
         L = L or int(1.5 * self.L)

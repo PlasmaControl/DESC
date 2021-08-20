@@ -6,23 +6,33 @@
 
 # -- Path setup --------------------------------------------------------------
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-
-
-# -- Project information -----------------------------------------------------
-
 import sys
 import os
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../"))
 import desc
+from desc.compute.data_index import data_index
+import csv
+
+# -- Create list of variables ------------------------------------------------
+
+with open("_build/variables.csv", "w", newline="") as f:
+    fieldnames = ["Name", "Label", "Units", "Description", "Compute function"]
+    writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+
+    writer.writeheader()
+    keys = data_index.keys()
+    for key in keys:
+        d = {}
+        d["Name"] = "``" + key + "``"
+        d["Label"] = ":math:`" + data_index[key]["label"].replace("$", "") + "`"
+        d["Units"] = data_index[key]["units_long"]
+        d["Description"] = data_index[key]["description"]
+        d["Compute function"] = "``" + data_index[key]["fun"] + "``"
+        writer.writerow(d)
+
+# -- Project information -----------------------------------------------------
 
 project = "DESC"
 copyright = "2020, Plasma Control Group at Princeton University"

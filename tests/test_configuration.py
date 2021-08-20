@@ -171,4 +171,4 @@ class TestInitialGuess(unittest.TestCase):
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])
         eq.set_initial_guess(surface, axis)
 
-        np.testing.assert_allclose(eq.compute["V"]["V"], 2 * 10 * np.pi * np.pi * 2 * 1)
+        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2 * 1)

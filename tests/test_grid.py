@@ -227,8 +227,9 @@ class TestGrid(unittest.TestCase):
         }
 
         eq = Equilibrium(**inputs)
-        g = eq.compute("sqrt(g)")
-        vol_quad = np.sum(np.abs(g["sqrt(g)"]) * eq.grid.weights)
+        grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        g = eq.compute("sqrt(g)", grid)
+        vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         self.assertAlmostEqual(vol, vol_quad)
 

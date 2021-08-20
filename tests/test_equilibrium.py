@@ -18,7 +18,7 @@ def test_compute_geometry(DSHAPE):
 
     # DESC values
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    data = eq.compute["R0/a"]
+    data = eq.compute("R0/a")
     V_desc = data["V"]
     R0_desc = data["R0"]
     a_desc = data["a"]
@@ -63,7 +63,7 @@ def test_compute_flux_coords(SOLOVEV):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("lambda", Grid(nodes, sort=False))
+    coords = eq.compute("R", Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
     flux_coords = np.array(eq.compute_flux_coords(real_coords))

@@ -47,9 +47,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=1,
-        dt=1,
-        dz=1,
     )
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
@@ -110,9 +107,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=1,
-        dt=1,
-        dz=1,
     )
     data = compute_magnetic_field_magnitude(
         eq.R_lmn,
@@ -124,7 +118,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dt=2,
         data=data,
     )
 
@@ -207,9 +200,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=1,
-        dt=1,
-        dz=1,
     )
     data = compute_magnetic_field_magnitude(
         eq.R_lmn,
@@ -221,7 +211,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dz=2,
         data=data,
     )
 
@@ -306,9 +295,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=2,
-        dz=2,
     )
 
     B_sup_theta = data["B^theta"].reshape((N, M))
@@ -530,9 +516,6 @@ def test_quasisymmetry(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=1,
-        dz=1,
     )
     Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
 
@@ -564,9 +547,6 @@ def test_quasisymmetry(DummyStellarator):
         Z_transform,
         L_transform,
         iota,
-        dr=0,
-        dt=1,
-        dz=1,
     )
     Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
 

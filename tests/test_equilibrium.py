@@ -1,7 +1,7 @@
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily
 from desc.grid import Grid
 
 

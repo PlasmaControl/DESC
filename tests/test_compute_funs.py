@@ -520,10 +520,10 @@ def test_quasisymmetry(DummyStellarator):
     Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
 
     np.testing.assert_allclose(
-        data["B*grad(|B|)_t"][2:-2],
+        data["(B*grad(|B|))_t"][2:-2],
         Btilde_t[2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B*grad(|B|)_t"])),
+        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
     )
 
     # partial derivative wrt zeta
@@ -551,8 +551,8 @@ def test_quasisymmetry(DummyStellarator):
     Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
 
     np.testing.assert_allclose(
-        data["B*grad(|B|)_z"][2:-2],
+        data["(B*grad(|B|))_z"][2:-2],
         Btilde_z[2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B*grad(|B|)_t"])),
+        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
     )

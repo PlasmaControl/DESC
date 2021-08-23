@@ -10,6 +10,13 @@ from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
 
 
+"""Linear objective functions must be of the form `A*x-b`, where:
+    - `A` is a constant matrix that can be pre-computed
+    - `x` is a vector of one or more arguments included in `compute.arg_order`
+    - `b` is the desired vector set by `objective.target`
+"""
+
+
 class FixedBoundaryR(_Objective):
     """Fixes boundary R coefficients."""
 

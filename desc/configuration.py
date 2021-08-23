@@ -246,6 +246,7 @@ class _Configuration(IOAble, ABC):
                 )
         else:
             raise TypeError("Got unknown surface type {}".format(surface))
+        self._surface.change_resolution(self.L, self.M, self.N)
 
         if isinstance(axis, FourierRZCurve):
             self._axis = axis

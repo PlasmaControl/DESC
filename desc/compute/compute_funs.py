@@ -1795,7 +1795,7 @@ def compute_force_error(
     return data
 
 
-def compute_quasisymmetry_error(
+def compute_boozer_coords(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -1806,6 +1806,114 @@ def compute_quasisymmetry_error(
     L_transform,
     B_transform,
     nu_transform,
+    iota,
+    data={},
+):
+    """Compute Boozer coordinates.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    B_transform : Transform
+        Transforms spectral coefficients of B(rho,theta,zeta) to real space.
+    nu_transform : Transform
+        Transforms spectral coefficients of nu(rho,theta,zeta) to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of Boozer harmonics.
+
+    """
+    data = compute_magnetic_field_magnitude(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
+    )
+    # TODO: can remove this call if compute_|B| changed to use B_covariant
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
+    )
+
+    idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+
+    # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
+    if check_derivs("I", R_transform, Z_transform, L_transform):
+        B_theta_mn = B_transform.fit(data["B_theta"])
+        data["I"] = B_theta_mn[idx0]
+    if check_derivs("G", R_transform, Z_transform, L_transform):
+        B_zeta_mn = B_transform.fit(data["B_zeta"])
+        data["G"] = B_zeta_mn[idx0]
+
+    # QS Boozer harmonics
+    lambda_mn = nu_transform.fit(data["lambda"])
+    nu_mn = jnp.zeros_like(lambda_mn)
+    for k, (l, m, n) in enumerate(nu_transform.basis.modes):
+        if m != 0:
+            idx = jnp.where((B_transform.basis.modes == [0, -m, n]).all(axis=1))[0]
+            nu_mn[k] = (B_theta_mn[idx] / m - data["I"] * lambda_mn[k]) / (
+                data["G"] + data["iota"][0] * data["I"]
+            )
+        elif n != 0:
+            idx = jnp.where((B_transform.basis.modes == [0, m, -n]).all(axis=1))[0]
+            nu_mn[k] = (B_zeta_mn[idx] / n - data["I"] * lambda_mn[k]) / (
+                data["G"] + data["iota"][0] * data["I"]
+            )
+    data["nu"] = nu_transform.transform(nu_mn)
+
+    if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
+        b_nodes = nu_transform.grid.nodes
+        b_nodes[:, 2] = b_nodes[:, 2] - data["nu"]
+        b_nodes[:, 1] = b_nodes[:, 1] - data["lambda"] - data["iota"] * data["nu"]
+        b_grid = Grid(b_nodes)
+        B_transform.grid = b_grid
+        data["|B|_mn"] = B_transform.fit(data["|B|"])
+
+    return data
+
+
+def compute_quasisymmetry_error(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    i_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
     iota,
     helicity=(1, 0),
     data={},
@@ -1830,10 +1938,6 @@ def compute_quasisymmetry_error(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    B_transform : Transform
-        Transforms spectral coefficients of B(rho,theta,zeta) to real space.
-    nu_transform : Transform
-        Transforms spectral coefficients of nu(rho,theta,zeta) to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
     helicity : tuple, int
@@ -1875,38 +1979,15 @@ def compute_quasisymmetry_error(
     M = helicity[0]
     N = helicity[1]
 
-    idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
-
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        B_theta_mn = B_transform.fit(data["B_theta"])
-        data["I"] = B_theta_mn[idx0]
+        data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(
+            data["sqrt(g)"]
+        )
     if check_derivs("G", R_transform, Z_transform, L_transform):
-        B_zeta_mn = B_transform.fit(data["B_zeta"])
-        data["G"] = B_zeta_mn[idx0]
-
-    # QS Boozer harmonics
-    lambda_mn = nu_transform.fit(data["lambda"])
-    nu_mn = jnp.zeros_like(lambda_mn)
-    for k, (l, m, n) in enumerate(nu_transform.basis.modes):
-        if m != 0:
-            idx = jnp.where((B_transform.basis.modes == [0, -m, n]).all(axis=1))[0]
-            nu_mn[k] = (B_theta_mn[idx] / m - data["I"] * lambda_mn[k]) / (
-                data["G"] + data["iota"][0] * data["I"]
-            )
-        elif n != 0:
-            idx = jnp.where((B_transform.basis.modes == [0, m, -n]).all(axis=1))[0]
-            nu_mn[k] = (B_zeta_mn[idx] / n - data["I"] * lambda_mn[k]) / (
-                data["G"] + data["iota"][0] * data["I"]
-            )
-    data["nu"] = nu_transform.transform(nu_mn)
-
-    b_nodes = nu_transform.grid.nodes
-    b_nodes[:, 2] = b_nodes[:, 2] - data["nu"]
-    b_nodes[:, 1] = b_nodes[:, 1] - data["lambda"] - data["iota"] * data["nu"]
-    b_grid = Grid(b_nodes)
-    B_transform.grid = b_grid
-    data["|B|_mn"] = B_transform.fit(data["|B|"])
+        data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(
+            data["sqrt(g)"]
+        )
 
     # QS flux function (T^3)
     if check_derivs("QS_FF", R_transform, Z_transform, L_transform):

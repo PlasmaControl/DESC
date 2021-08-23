@@ -16,6 +16,7 @@ from .nonlinear_objectives import (
     RadialCurrent,
     PoloidalCurrent,
     ToroidalCurrent,
+    QuasisymmetryBoozer,
     QuasisymmetryFluxFunction,
     QuasisymmetryTripleProduct,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "RadialCurrent",
     "PoloidalCurrent",
     "ToroidalCurrent",
+    "QuasisymmetryBoozer",
     "QuasisymmetryFluxFunction",
     "QuasisymmetryTripleProduct",
 ]

@@ -4,6 +4,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
+from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import (
     data_index,
@@ -11,6 +12,7 @@ from desc.compute import (
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
     compute_force_error,
+    compute_boozer_coords,
     compute_quasisymmetry_error,
     compute_energy,
     compute_geometry,
@@ -1248,6 +1250,222 @@ class ToroidalCurrent(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "toroidal current"
+
+
+class QuasisymmetryBoozer(_Objective):
+    """Quasi-symmetry Boozer harmonics error."""
+
+    def __init__(
+        self, eq=None, target=0, weight=1, grid=None, helicity=(1, 0), norm=False
+    ):
+        """Initialize a QuasisymmetryBoozer Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        helicity : tuple, optional
+            Type of quasi-symmetry (M, N).
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+
+        """
+        self._grid = grid
+        self._helicity = helicity
+        self._norm = norm
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._grid is None:
+            self._grid = LinearGrid(
+                L=1,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=1,
+            )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self._grid
+
+        self._R_transform = Transform(
+            self._grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self._grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self._grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
+        )
+        self._B_transform = Transform(
+            self._grid,
+            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.R_basis.sym),
+            derivs=data_index["|B|_mn"]["R_derivs"],
+            build=True,
+            build_pinv=True,
+        )
+        self._nu_transform = Transform(
+            self._grid,
+            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.L_basis.sym),
+            derivs=data_index["|B|_mn"]["L_derivs"],
+            build=True,
+            build_pinv=True,
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        M = self._helicity[0]
+        N = self._helicity[1]
+        self._idx_00 = np.where(
+            (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
+        )[0]
+        self._idx_MN = np.where(
+            (self._B_transform.basis.modes == [0, M, N]).all(axis=1)
+        )[0]
+        self._idx = np.ones((self._B_transform.basis.num_modes,), bool)
+        self._idx[np.concatenate((self._idx_00, self._idx_MN))] = False
+
+        self._dim_f = np.sum(self._idx)
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_boozer_coords(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._B_transform,
+            self._nu_transform,
+            self._iota,
+        )
+        b_mn = data["|B|_mn"]
+        if self._norm:
+            b_mn = b_mn / b_mn[self._idx_00]
+        return b_mn[self._idx]
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute quasi-symmetry flux function errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        Returns
+        -------
+        f : ndarray
+            Quasi-symmetry flux function error at each node (T^3).
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (f - self._target) * self._weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print quasi-symmetry flux function error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+
+        """
+        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        if self._norm:
+            units = "(normalized)"
+        else:
+            units = "(T)"
+        print(
+            "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
+                self._helicity[0], self._helicity[1], jnp.linalg.norm(f)
+            )
+            + units
+        )
+        return None
+
+    @property
+    def helicity(self):
+        """tuple: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        self._helicity = helicity
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        self._norm = norm
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "QS Boozer"
 
 
 class QuasisymmetryFluxFunction(_Objective):

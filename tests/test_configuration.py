@@ -77,13 +77,73 @@ class TestConstructor(unittest.TestCase):
         np.testing.assert_allclose(eq.p_l, [10, 0, 5])
         np.testing.assert_allclose(eq.i_l, [1, 0, 3])
         self.assertIsInstance(eq.surface, FourierRZToroidalSurface)
-        np.testing.assert_allclose(eq.Rb_lmn, [0, 0, 0, 0, 10, 1, 0.1, 0, 0])
-        np.testing.assert_allclose(eq.Zb_lmn, [0, 0, 0, 0, 0, 1, 0.1, 0, 0])
+        np.testing.assert_allclose(
+            eq.Rb_lmn,
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                10.0,
+                1.0,
+                0.0,
+                0.0,
+                0.1,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        )
+        np.testing.assert_allclose(
+            eq.Zb_lmn,
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.1,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+        )
 
         inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
         eq = Equilibrium(**inputs)
         self.assertEqual(eq.bdry_mode, "poincare")
-        np.testing.assert_allclose(eq.Rb_lmn, [10, 0, 1])
+        np.testing.assert_allclose(
+            eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )
 
     def test_asserts(self):
 

@@ -11,6 +11,13 @@ from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
+from desc.objectives import (
+    ObjectiveFunction,
+    FixedBoundaryR,
+    FixedBoundaryZ,
+    LCFSBoundary,
+    Volume,
+)
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
@@ -109,14 +116,13 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        # FIXME: this no longer works
         # apply boundary conditions
-        BC = eq.surface.get_constraint(
-            eq.R_basis,
-            eq.Z_basis,
-            eq.L_basis,
+        objective = ObjectiveFunction(
+            Volume(), (FixedBoundaryR(), FixedBoundaryZ(), LCFSBoundary()), eq
         )
-        eq.x = BC.make_feasible(eq.x)
+        args = objective.unpack_state(objective.make_feasible(objective.y(eq)))
+        for key, value in args.items():
+            setattr(eq, key, value)
 
         return eq
 
@@ -275,7 +281,7 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute_jacobian(Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -372,21 +378,21 @@ class VMECIO:
         Rmajor_p = file.createVariable("Rmajor_p", np.float64)
         Rmajor_p.long_name = "major radius"
         Rmajor_p.units = "m"
-        Rmajor_p[:] = eq.compute_major_radius()
+        Rmajor_p[:] = eq.compute("R0")
 
         Aminor_p = file.createVariable("Aminor_p", np.float64)
         Aminor_p.long_name = "minor radius"
         Aminor_p.units = "m"
-        Aminor_p[:] = eq.compute_minor_radius()
+        Aminor_p[:] = eq.compute("a")
 
         aspect = file.createVariable("aspect", np.float64)
         aspect.long_name = "aspect ratio = R_major / A_minor"
-        aspect[:] = eq.compute_aspect_ratio()
+        aspect[:] = eq.compute("R0/a")
 
         volume_p = file.createVariable("volume_p", np.float64)
         volume_p.long_name = "plasma volume"
         volume_p.units = "m^3"
-        volume_p[:] = eq.compute_volume()
+        volume_p[:] = eq.compute("V")
 
         timer.stop("parameters")
         if verbose > 1:
@@ -487,7 +493,7 @@ class VMECIO:
         # derived quantities (approximate conversion)
 
         grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=1)
-        coords = eq.compute_toroidal_coords(grid)
+        coords = eq.compute("R", grid)
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
             cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
@@ -518,8 +524,9 @@ class VMECIO:
         zmax_surf.units = "m"
         zmax_surf[:] = np.amax(np.abs(coords["Z"]))
 
+        # half grid quantities
         half_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half)
-        jacobian_half_grid = eq.compute_jacobian(half_grid)
+        data_half_grid = eq.compute("|B|", half_grid)
 
         # Jacobian
         timer.start("Jacobian")
@@ -538,7 +545,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            jacobian_half_grid["sqrt(g)"]
+            data_half_grid["sqrt(g)"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -557,8 +564,6 @@ class VMECIO:
         if verbose > 1:
             timer.disp("Jacobian")
 
-        B_field_half_grid = eq.compute_magnetic_field(half_grid)
-
         # |B|
         timer.start("|B|")
         if verbose > 0:
@@ -576,7 +581,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            B_field_half_grid["|B|"]
+            data_half_grid["|B|"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -616,7 +621,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            B_field_half_grid["B^theta"]
+            data_half_grid["B^theta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -656,7 +661,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            B_field_half_grid["B^zeta"]
+            data_half_grid["B^zeta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -675,8 +680,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B^zeta")
 
+        # full grid quantities
         full_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full)
-        B_field_full_grid = eq.compute_magnetic_field(full_grid)
+        data_full_grid = eq.compute("J", full_grid)
 
         # B_psi
         timer.start("B_psi")
@@ -698,7 +704,7 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
-        data = B_field_full_grid["B_rho"].reshape(
+        data = data_full_grid["B_rho"].reshape(
             full_grid.M, full_grid.L, full_grid.N, order="F"
         ).transpose((1, 0, 2)).reshape((full_grid.L, -1)) / (2 * r_full[:, np.newaxis])
         # B_rho -> B_psi conversion: d(rho)/d(s) = 1/(2*rho)
@@ -742,7 +748,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            B_field_half_grid["B_theta"]
+            data_full_grid["B_theta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -782,7 +788,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            B_field_half_grid["B_zeta"]
+            data_full_grid["B_zeta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -800,9 +806,6 @@ class VMECIO:
         timer.stop("B_zeta")
         if verbose > 1:
             timer.disp("B_zeta")
-
-        jacobian_full_grid = eq.compute_jacobian(full_grid)
-        current_full_grid = eq.compute_current_density(full_grid)
 
         # J^theta * sqrt(g)
         timer.start("J^theta")
@@ -827,7 +830,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         data = (
-            (current_full_grid["J^theta"] * jacobian_full_grid["sqrt(g)"])
+            (data_full_grid["J^theta"] * data_full_grid["sqrt(g)"])
             .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((full_grid.L, -1))
@@ -874,7 +877,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         data = (
-            (current_full_grid["J^zeta"] * jacobian_full_grid["sqrt(g)"])
+            (data_full_grid["J^zeta"] * data_full_grid["sqrt(g)"])
             .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((full_grid.L, -1))

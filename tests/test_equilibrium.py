@@ -105,8 +105,8 @@ def _compute_coords(equil):
 
     # find theta angles corresponding to desired theta* angles
     v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-    r_coords = equil.compute_toroidal_coords(r_grid)
-    v_coords = equil.compute_toroidal_coords(v_grid)
+    r_coords = equil.compute("R", r_grid)
+    v_coords = equil.compute("Z", v_grid)
 
     # rho contours
     Rr1 = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
@@ -119,6 +119,7 @@ def _compute_coords(equil):
     Rv1 = np.swapaxes(Rv1, 0, 1)
     Zv1 = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
     Zv1 = np.swapaxes(Zv1, 0, 1)
+
     return Rr1, Zr1, Rv1, Zv1
 
 

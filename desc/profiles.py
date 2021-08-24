@@ -7,7 +7,7 @@ import scipy.optimize
 from desc.backend import jnp, put, jit
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.interpolate import interp1d
+from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
 from desc.basis import PowerSeries
 from desc.utils import copy_coeffs
@@ -399,7 +399,7 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
 
     def __init__(self, values, knots=None, grid=None, method="cubic2", name=None):
 
@@ -412,6 +412,9 @@ class SplineProfile(Profile):
         self._knots = knots
         self._params = values
         self._method = method
+        self._Dx = _approx_df(
+            self._knots, np.eye(self._knots.size), self._method, axis=0
+        )
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
@@ -505,7 +508,8 @@ class SplineProfile(Profile):
             return jnp.zeros_like(xq)
         x = self._knots
         f = params
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
+        df = self._Dx @ f
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
         return fq
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):

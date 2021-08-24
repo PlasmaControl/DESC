@@ -129,7 +129,7 @@ def interp2d(
     fxy=None,
     **kwargs,
 ):
-    """Interpolate a 1d function
+    """Interpolate a 2d function
 
     Parameters
     ----------
@@ -182,6 +182,7 @@ def interp2d(
     """
 
     xq, yq, x, y, f = map(jnp.asarray, (xq, yq, x, y, f))
+    period, extrap = map(np.asarray, (period, extrap))
     if len(x) != f.shape[0] or x.ndim != 1:
         raise ValueError("x and f must be arrays of equal length")
     if len(y) != f.shape[1] or y.ndim != 1:
@@ -380,6 +381,7 @@ def interp3d(
         function value at query points
     """
     xq, yq, zq, x, y, z, f = map(jnp.asarray, (xq, yq, zq, x, y, z, f))
+    period, extrap = map(np.asarray, (period, extrap))
     if len(x) != f.shape[0] or x.ndim != 1:
         raise ValueError("x and f must be arrays of equal length")
     if len(y) != f.shape[1] or y.ndim != 1:
@@ -390,6 +392,7 @@ def interp3d(
     periodx, periody, periodz = np.broadcast_to(
         np.where(period == None, 0, period), (3,)
     )
+
     derivative_x, derivative_y, derivative_z = np.broadcast_to(
         np.where(derivative == None, 0, derivative), (3,)
     )

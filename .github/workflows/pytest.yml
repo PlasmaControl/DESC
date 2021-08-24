@@ -34,11 +34,16 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov=desc/ --mpl
+          python -m pytest --durations=0 --cov-report xml:cov.xml --cov=desc/ --mpl
+      - name: save coverage file
+        uses: actions/upload-artifact@v2
+        with:
+          name: my-artifact
+          path: ./cov.xml
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:
           name: codecov-umbrella # optional
-          fail_ci_if_error: false # optional (default = false)
-          files: ./.coverage
+          files: ./cov.xml
+          fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)

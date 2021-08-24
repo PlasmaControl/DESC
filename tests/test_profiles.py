@@ -2,8 +2,8 @@ import numpy as np
 import unittest
 import pytest
 from desc.io import InputReader
-from desc.equilibrium import Equilibrium
 from desc.profiles import PowerSeriesProfile
+from desc.equilibrium import Equilibrium
 
 
 class TestProfiles(unittest.TestCase):

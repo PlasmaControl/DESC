@@ -1163,8 +1163,8 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute("R", r_grid)
-        v_coords_desc = equil.compute("R", v_grid)
+        r_coords_desc = equil.compute("R", r_grid, data={})
+        v_coords_desc = equil.compute("R", v_grid, data={})
 
         # rho contours
         Rr_desc = r_coords_desc["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")

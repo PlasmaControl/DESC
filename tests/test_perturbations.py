@@ -8,7 +8,7 @@ from desc.objectives import (
     FixedBoundaryZ,
     FixedPressure,
     LCFSBoundary,
-    Volume,
+    TargetIota,
 )
 from desc.perturbations import perturb
 
@@ -41,7 +41,7 @@ class TestPerturbations(unittest.TestCase):
 
         obj_pres = ObjectiveFunction(FixedPressure(), eq=eq_orig)
         obj_bdry = ObjectiveFunction(
-            Volume(),
+            TargetIota(),
             (FixedBoundaryR(), FixedBoundaryZ(), LCFSBoundary()),
             eq=eq_orig,
         )

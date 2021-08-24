@@ -223,8 +223,8 @@ class Equilibrium(_Configuration, IOAble):
 
     def solve(
         self,
-        optimizer,
-        objective,
+        optimizer=None,
+        objective=None,
         ftol=1e-6,
         xtol=1e-6,
         gtol=1e-6,
@@ -237,8 +237,10 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
         objective : ObjectiveFunction
-            Objective function to solve.
+            Objective function to solve. Default = fixed-boundary force balance.
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -253,6 +255,19 @@ class Equilibrium(_Configuration, IOAble):
             Dictionary of additional options to pass to optimizer.
 
         """
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
+        if objective is None:
+            objectives = (RadialForceBalance(), HelicalForceBalance())
+            constraints = (
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            objective = ObjectiveFunction(objectives, constraints)
         if not objective.built:
             objective.build(self, verbose=verbose)
 

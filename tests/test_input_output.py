@@ -242,6 +242,6 @@ def test_ascii_io(plot_eq, tmpdir_factory):
     eq1 = plot_eq
     write_ascii(tmp_path, eq1)
     eq2 = read_ascii(tmp_path)
-    assert np.allclose(eq1.R_lmn, eq2.R_lmnx)
-    assert np.allclose(eq1.Z_lmn, eq2.Z_lmnx)
-    assert np.allclose(eq1.L_lmn, eq2.L_lmnx)
+    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq1.L_lmn, eq2.L_lmn)

@@ -91,7 +91,7 @@ def cross(a, b, axis=-1):
 
 def compute_flux_coords(
     iota,
-    data={},
+    data=None,
 ):
     """Compute flux coordinates (rho,theta,zeta).
 
@@ -106,6 +106,9 @@ def compute_flux_coords(
         Dictionary of ndarray, shape(num_nodes,) of flux coordinates.
 
     """
+    if data is None:
+        data = {}
+
     data["rho"] = iota.grid.nodes[:, 0]
     data["theta"] = iota.grid.nodes[:, 1]
     data["zeta"] = iota.grid.nodes[:, 2]
@@ -116,7 +119,7 @@ def compute_flux_coords(
 def compute_toroidal_flux(
     Psi,
     iota,
-    data={},
+    data=None,
 ):
     """Compute toroidal magnetic flux profile.
 
@@ -148,7 +151,7 @@ def compute_toroidal_coords(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute toroidal coordinates (R,phi,Z).
 
@@ -170,6 +173,9 @@ def compute_toroidal_coords(
         Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
+    if data is None:
+        data = {}
+
     derivs = [
         "",
         "_r",
@@ -208,7 +214,7 @@ def compute_cartesian_coords(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute Cartesian coordinates (X,Y,Z).
 
@@ -229,7 +235,7 @@ def compute_cartesian_coords(
         Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
     """
-    data = compute_flux_coords(R_transform)
+    data = compute_flux_coords(R_transform, data=data)
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     data["phi"] = data["zeta"]
@@ -242,7 +248,7 @@ def compute_cartesian_coords(
 def compute_lambda(
     L_lmn,
     L_transform,
-    data={},
+    data=None,
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
 
@@ -260,6 +266,9 @@ def compute_lambda(
         Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
 
     """
+    if data is None:
+        data = {}
+
     keys = [
         "lambda",
         "lambda_r",
@@ -293,7 +302,7 @@ def compute_lambda(
 def compute_pressure(
     p_l,
     pressure,
-    data={},
+    data=None,
 ):
     """Compute pressure profile.
 
@@ -311,6 +320,9 @@ def compute_pressure(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
+    if data is None:
+        data = {}
+
     data["p"] = pressure.compute(p_l, dr=0)
     data["p_r"] = pressure.compute(p_l, dr=1)
 
@@ -320,7 +332,7 @@ def compute_pressure(
 def compute_rotational_transform(
     i_l,
     iota,
-    data={},
+    data=None,
 ):
     """Compute rotational transform profile.
 
@@ -338,6 +350,9 @@ def compute_rotational_transform(
         Keys are of the form 'X_y' meaning the derivative of X wrt to y.
 
     """
+    if data is None:
+        data = {}
+
     data["iota"] = iota.compute(i_l, dr=0)
     data["iota_r"] = iota.compute(i_l, dr=1)
     data["iota_rr"] = iota.compute(i_l, dr=2)
@@ -350,7 +365,7 @@ def compute_covariant_basis(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute covariant basis vectors.
 
@@ -450,7 +465,7 @@ def compute_contravariant_basis(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute contravariant basis vectors.
 
@@ -473,7 +488,7 @@ def compute_contravariant_basis(
         direction, differentiated wrt y.
 
     """
-    if "sqrt(g)" not in data:
+    if data is None or "sqrt(g)" not in data:
         data = compute_jacobian(
             R_lmn,
             Z_lmn,
@@ -497,7 +512,7 @@ def compute_jacobian(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute coordinate system Jacobian.
 
@@ -600,7 +615,7 @@ def compute_covariant_metric_coefficients(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute metric coefficients.
 
@@ -652,7 +667,7 @@ def compute_contravariant_metric_coefficients(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute reciprocal metric coefficients.
 
@@ -716,7 +731,7 @@ def compute_contravariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute contravariant magnetic field components.
 
@@ -894,7 +909,7 @@ def compute_covariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute covariant magnetic field components.
 
@@ -999,7 +1014,7 @@ def compute_magnetic_field_magnitude(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute magnetic field magnitude.
 
@@ -1323,7 +1338,7 @@ def compute_magnetic_pressure_gradient(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute magnetic pressure gradient.
 
@@ -1427,7 +1442,7 @@ def compute_magnetic_tension(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute magnetic tension.
 
@@ -1534,7 +1549,7 @@ def compute_B_dot_gradB(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute the quantity B*grad(|B|) and its partial derivatives.
 
@@ -1623,7 +1638,7 @@ def compute_contravariant_current_density(
     Z_transform,
     L_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute contravariant current density components.
 
@@ -1703,7 +1718,7 @@ def compute_force_error(
     L_transform,
     pressure,
     iota,
-    data={},
+    data=None,
 ):
     """Compute force error components.
 
@@ -1807,7 +1822,7 @@ def compute_boozer_coords(
     B_transform,
     nu_transform,
     iota,
-    data={},
+    data=None,
 ):
     """Compute Boozer coordinates.
 
@@ -1916,7 +1931,7 @@ def compute_quasisymmetry_error(
     L_transform,
     iota,
     helicity=(1, 0),
-    data={},
+    data=None,
 ):
     """Compute quasi-symmetry errors.
 
@@ -2019,7 +2034,7 @@ def compute_energy(
     iota,
     pressure,
     gamma=0,
-    data={},
+    data=None,
 ):
     """Compute MHD energy. W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J).
 
@@ -2089,7 +2104,7 @@ def compute_geometry(
     Z_lmn,
     R_transform,
     Z_transform,
-    data={},
+    data=None,
 ):
     """Compute plasma volume.
 

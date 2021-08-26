@@ -87,28 +87,28 @@ def perturb(
     dim_c = 0
     if dR is not None and np.any(dR):
         deltas["R_lmn"] = dR
-        dim_c += dR.size
+        dim_c += np.atleast_1d(dR).size
     if dZ is not None and np.any(dZ):
         deltas["Z_lmn"] = dZ
-        dim_c += dZ.size
+        dim_c += np.atleast_1d(dZ).size
     if dL is not None and np.any(dL):
         deltas["L_lmn"] = dL
-        dim_c += dL.size
+        dim_c += np.atleast_1d(dL).size
     if dRb is not None and np.any(dRb):
         deltas["Rb_lmn"] = dRb
-        dim_c += dRb.size
+        dim_c += np.atleast_1d(dRb).size
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
-        dim_c += dZb.size
+        dim_c += np.atleast_1d(dZb).size
     if dp is not None and np.any(dp):
         deltas["p_l"] = dp
-        dim_c += dp.size
+        dim_c += np.atleast_1d(dp).size
     if di is not None and np.any(di):
         deltas["i_l"] = di
-        dim_c += di.size
+        dim_c += np.atleast_1d(di).size
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
-        dim_c += dPsi.size
+        dim_c += np.atleast_1d(dPsi).size
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -222,11 +222,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy3 = np.dot(objective.Z, dx3)
-
-    # total perturbation
-    dx = dx1 + dx2 + dx3
-    dy = dy1 + dy2 + dy3
+        # dy3 = np.dot(objective.Z, dx3)
 
     if copy:
         eq_new = eq.copy()
@@ -239,7 +235,8 @@ def perturb(
     objective.rebuild_constraints(eq_new)
 
     # update other attributes
-    args = objective.unpack_state(y + dy)
+    dx = dx1 + dx2 + dx3
+    args = objective.unpack_state(x + dx)
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

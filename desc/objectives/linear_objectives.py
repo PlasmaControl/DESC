@@ -48,8 +48,8 @@ class FixedBoundaryR(_Objective):
             If True/False uses all/none of the surface modes.
 
         """
-        self._surface = surface
-        self._modes = modes
+        self.surface = surface
+        self.modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -65,28 +65,38 @@ class FixedBoundaryR(_Objective):
             Level of output.
 
         """
-        if self._surface is None:
-            self._surface = eq.surface
+        if (
+            self.surface is None
+            or (
+                self.surface.L,
+                self.surface.M,
+                self.surface.N,
+            )
+            != (eq.surface.L, eq.surface.M, eq.surface.N)
+        ):
+            self.surface = eq.surface
 
         # find indicies of R boundary modes to fix
-        if self._modes is False or self._modes is None:  # no modes
+        if self.modes is False or self.modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self._modes is True:  # all modes in surface
-            self._idx = np.arange(self._surface.R_basis.num_modes)
+        elif self.modes is True:  # all modes in surface
+            modes = self.surface.R_basis.modes
+            self._idx = np.arange(self.surface.R_basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            self._modes = np.atleast_2d(self._modes)
+            modes = np.atleast_2d(self.modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._modes.dtype],
+                "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.R_basis.modes.astype(self._modes.dtype).view(dtype),
-                self._modes.view(dtype),
+                self.surface.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
                 return_indices=True,
             )
-            if self._idx.size < self._modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the boundary surface, "
@@ -97,23 +107,14 @@ class FixedBoundaryR(_Objective):
 
         self._dim_f = self._idx.size
 
-        # set target values for R boundary coefficients
-        if self._target[0] is None:  # use surface coefficients
-            self._target = self._surface.R_lmn[self._idx]
-        elif self._target.size == 1:  # use scalar target for all modes
-            self._target = self._target * np.ones((self._dim_f,))
-        elif self._target.size == self._modes.shape[0]:  # use given array target
-            self._target = self._target[idx]
-        else:
-            raise ValueError("Target must be the same size as modes.")
-
-        # check R boundary weights
-        if self._weight.size == 1:  # use scalar weight for all modes
-            self._weight = self._weight * np.ones((self._dim_f,))
-        elif self._weight.size == self._modes.shape[0]:  # use given array weight
-            self._weight = self._weight[idx]
-        else:
-            raise ValueError("Weight must be the same size as modes.")
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._weight[idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[idx]
+        # use surface coefficients as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = self.surface.R_lmn[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -121,7 +122,7 @@ class FixedBoundaryR(_Objective):
         self._built = True
 
     def _compute(self, Rb_lmn):
-        Rb = Rb_lmn[self._idx] - self._target
+        Rb = Rb_lmn[self._idx] - self.target
         return Rb
 
     def compute(self, Rb_lmn, **kwargs):
@@ -139,7 +140,7 @@ class FixedBoundaryR(_Objective):
 
         """
         Rb = self._compute(Rb_lmn)
-        return Rb * self._weight
+        return Rb * self.weight
 
     def callback(self, Rb_lmn, **kwargs):
         """Print fixed-boundary R errors.
@@ -205,8 +206,8 @@ class FixedBoundaryZ(_Objective):
             If True/False uses all/none of the surface modes.
 
         """
-        self._surface = surface
-        self._modes = modes
+        self.surface = surface
+        self.modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -222,28 +223,38 @@ class FixedBoundaryZ(_Objective):
             Level of output.
 
         """
-        if self._surface is None:
-            self._surface = eq.surface
+        if (
+            self.surface is None
+            or (
+                self.surface.L,
+                self.surface.M,
+                self.surface.N,
+            )
+            != (eq.surface.L, eq.surface.M, eq.surface.N)
+        ):
+            self.surface = eq.surface
 
         # find indicies of Z boundary modes to fix
-        if self._modes is False or self._modes is None:  # no modes
+        if self.modes is False or self.modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self._modes is True:  # all modes in surface
-            self._idx = np.arange(self._surface.Z_basis.num_modes)
+        elif self.modes is True:  # all modes in surface
+            modes = self.surface.Z_basis.modes
+            self._idx = np.arange(self.surface.Z_basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            self._modes = np.atleast_2d(self._modes)
+            modes = np.atleast_2d(self.modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._modes.dtype],
+                "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._surface.Z_basis.modes.astype(self._modes.dtype).view(dtype),
-                self._modes.view(dtype),
+                self.surface.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
                 return_indices=True,
             )
-            if self._idx.size < self._modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the boundary surface, "
@@ -254,23 +265,14 @@ class FixedBoundaryZ(_Objective):
 
         self._dim_f = self._idx.size
 
-        # set target values for Z boundary coefficients
-        if self._target[0] is None:  # use surface coefficients
-            self._target = self._surface.Z_lmn[self._idx]
-        elif self._target.size == 1:  # use scalar target for all modes
-            self._target = self._target * np.ones((self._dim_f,))
-        elif self._target.size == self._modes.shape[0]:  # use given array target
-            self._target = self._target[idx]
-        else:
-            raise ValueError("Target must be the same size as modes.")
-
-        # check Z boundary weights
-        if self._weight.size == 1:  # use scalar weight for all modes
-            self._weight = self._weight * np.ones((self._dim_f,))
-        elif self._weight.size == self._modes.shape[0]:  # use given array weight
-            self._weight = self._weight[idx]
-        else:
-            raise ValueError("Weight must be the same size as modes.")
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._weight[idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[idx]
+        # use surface coefficients as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = self.surface.R_lmn[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -278,7 +280,7 @@ class FixedBoundaryZ(_Objective):
         self._built = True
 
     def _compute(self, Zb_lmn):
-        Zb = Zb_lmn[self._idx] - self._target
+        Zb = Zb_lmn[self._idx] - self.target
         return Zb
 
     def compute(self, Zb_lmn, **kwargs):
@@ -296,7 +298,7 @@ class FixedBoundaryZ(_Objective):
 
         """
         Zb = self._compute(Zb_lmn)
-        return Zb * self._weight
+        return Zb * self.weight
 
     def callback(self, Zb_lmn, **kwargs):
         """Print fixed-boundary Z errors.
@@ -362,8 +364,8 @@ class FixedPressure(_Objective):
             If True/False uses all/none of the profile modes.
 
         """
-        self._profile = profile
-        self._modes = modes
+        self.profile = profile
+        self.modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -379,30 +381,33 @@ class FixedPressure(_Objective):
             Level of output.
 
         """
-        if self._profile is None:
-            self._profile = eq.pressure
-        if not isinstance(self._profile, PowerSeriesProfile):
+        if self.profile is None or self.profile.params.size != eq.L + 1:
+            self.profile = eq.pressure
+        if not isinstance(self.profile, PowerSeriesProfile):
             raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
             # TODO: add implementation for SplineProfile & MTanhProfile
 
-        # find inidies of profile modes to fix
-        if self._modes is False or self._modes is None:  # no modes
+        # find inidies of pressure modes to fix
+        if self.modes is False or self.modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
-        elif self._modes is True:  # all modes in profile
-            self._idx = np.arange(self._profile.basis.num_modes)
+            idx = self._idx
+        elif self.modes is True:  # all modes in profile
+            modes = self.profile.basis.modes
+            self._idx = np.arange(self.profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            self._modes = np.atleast_2d(self._modes)
+            modes = np.atleast_2d(self.modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._modes.dtype],
+                "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.astype(self._modes.dtype).view(dtype),
-                self._modes.view(dtype),
+                self.profile.basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
                 return_indices=True,
             )
-            if self._idx.size < self._modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the pressure profile, "
@@ -413,23 +418,14 @@ class FixedPressure(_Objective):
 
         self._dim_f = self._idx.size
 
-        # set target values for pressure coefficients
-        if self._target[0] is None:  # use profile coefficients
-            self._target = self._profile.params[self._idx]
-        elif self._target.size == 1:  # use scalar target for all modes
-            self._target = self._target * np.ones((self._dim_f,))
-        elif self._target.size == self._modes.shape[0]:  # use given array target
-            self._target = self._target[idx]
-        else:
-            raise ValueError("target must be the same size as modes")
-
-        # check weights
-        if self._weight.size == 1:  # use scalar weight for all modes
-            self._weight = self._weight * np.ones((self._dim_f,))
-        elif self._weight.size == self._modes.shape[0]:  # use given array weight
-            self._weight = self._weight[idx]
-        else:
-            raise ValueError("weight must be the same size as modes")
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._weight[idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[idx]
+        # use profile parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = self.profile.params[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -437,7 +433,7 @@ class FixedPressure(_Objective):
         self._built = True
 
     def _compute(self, p_l):
-        return p_l[self._idx] - self._target
+        return p_l[self._idx] - self.target
 
     def compute(self, p_l, **kwargs):
         """Compute fixed-pressure profile errors.
@@ -453,7 +449,7 @@ class FixedPressure(_Objective):
             Pressure profile errors, in Pascals.
 
         """
-        return self._compute(p_l) * self._weight
+        return self._compute(p_l) * self.weight
 
     def callback(self, p_l, **kwargs):
         """Print fixed-pressure profile errors.
@@ -519,8 +515,8 @@ class FixedIota(_Objective):
             If True/False uses all/none of the profile modes.
 
         """
-        self._profile = profile
-        self._modes = modes
+        self.profile = profile
+        self.modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -536,30 +532,33 @@ class FixedIota(_Objective):
             Level of output.
 
         """
-        if self._profile is None:
-            self._profile = eq.iota
-        if not isinstance(self._profile, PowerSeriesProfile):
+        if self.profile is None or self.profile.params.size != eq.L + 1:
+            self.profile = eq.iota
+        if not isinstance(self.profile, PowerSeriesProfile):
             raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
             # TODO: add implementation for SplineProfile & MTanhProfile
 
-        # find inidies of profile modes to fix
-        if self._modes is False or self._modes is None:  # no modes
+        # find inidies of iota modes to fix
+        if self.modes is False or self.modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
-        elif self._modes is True:  # all modes in profile
-            self._idx = np.arange(self._profile.basis.num_modes)
+            idx = self._idx
+        elif self.modes is True:  # all modes in profile
+            modes = self.profile.basis.modes
+            self._idx = np.arange(self.profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            self._modes = np.atleast_2d(self._modes)
+            modes = np.atleast_2d(self.modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [self._modes.dtype],
+                "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self._profile.basis.modes.astype(self._modes.dtype).view(dtype),
-                self._modes.view(dtype),
+                self.profile.basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
                 return_indices=True,
             )
-            if self._idx.size < self._modes.shape[0]:
+            if self._idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
                         "Some of the given modes are not in the iota profile, "
@@ -570,23 +569,14 @@ class FixedIota(_Objective):
 
         self._dim_f = self._idx.size
 
-        # set target values for iota coefficients
-        if self._target[0] is None:  # use profile coefficients
-            self._target = self._profile.params[self._idx]
-        elif self._target.size == 1:  # use scalar target for all modes
-            self._target = self._target * np.ones((self._dim_f,))
-        elif self._target.size == self._modes.shape[0]:  # use given array target
-            self._target = self._target[idx]
-        else:
-            raise ValueError("target must be the same size as modes")
-
-        # check weights
-        if self._weight.size == 1:  # use scalar weight for all modes
-            self._weight = self._weight * np.ones((self._dim_f,))
-        elif self._weight.size == self._modes.shape[0]:  # use given array weight
-            self._weight = self._weight[idx]
-        else:
-            raise ValueError("weight must be the same size as modes")
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._weight[idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[idx]
+        # use profile parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = self.profile.params[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -594,7 +584,7 @@ class FixedIota(_Objective):
         self._built = True
 
     def _compute(self, i_l):
-        return i_l[self._idx] - self._target
+        return i_l[self._idx] - self.target
 
     def compute(self, i_l, **kwargs):
         """Compute fixed-iota profile errors.
@@ -610,7 +600,7 @@ class FixedIota(_Objective):
             Rotational transform profile errors.
 
         """
-        return self._compute(i_l) * self._weight
+        return self._compute(i_l) * self.weight
 
     def callback(self, i_l, **kwargs):
         """Print fixed-iota profile errors.
@@ -676,11 +666,10 @@ class FixedPsi(_Objective):
             Level of output.
 
         """
-        # set target value for Psi
-        if self._target[0] is None:  # use Equilibrium value
-            self._target = np.atleast_1d(eq.Psi)
-
         self._dim_f = 1
+
+        if None in self.target:
+            self.target = eq.Psi
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -688,7 +677,7 @@ class FixedPsi(_Objective):
         self._built = True
 
     def _compute(self, Psi):
-        return Psi - self._target
+        return Psi - self.target
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.
@@ -704,7 +693,7 @@ class FixedPsi(_Objective):
             Total toroidal magnetic flux error, in Webers.
 
         """
-        return self._compute(Psi) * self._weight
+        return self._compute(Psi) * self.weight
 
     def callback(self, Psi, **kwargs):
         """Print fixed-Psi error.
@@ -716,7 +705,7 @@ class FixedPsi(_Objective):
 
         """
         f = self._compute(Psi)
-        print("Fixed-Psi error: {:10.3e} (Wb)".format(f))
+        print("Fixed-Psi error: {:10.3e} (Wb)".format(f[0]))
         return None
 
     def update_target(self, eq):
@@ -759,7 +748,7 @@ class LCFSBoundary(_Objective):
 
         """
         target = 0
-        self._surface = surface
+        self.surface = surface
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -775,18 +764,26 @@ class LCFSBoundary(_Objective):
             Level of output.
 
         """
-        if self._surface is None:
-            self._surface = eq.surface
+        if (
+            self.surface is None
+            or (
+                self.surface.L,
+                self.surface.M,
+                self.surface.N,
+            )
+            != (eq.surface.L, eq.surface.M, eq.surface.N)
+        ):
+            self.surface = eq.surface
 
         R_modes = eq.R_basis.modes
         Z_modes = eq.Z_basis.modes
-        Rb_modes = self._surface.R_basis.modes
-        Zb_modes = self._surface.Z_basis.modes
+        Rb_modes = self.surface.R_basis.modes
+        Zb_modes = self.surface.Z_basis.modes
 
         dim_R = eq.R_basis.num_modes
         dim_Z = eq.Z_basis.num_modes
-        dim_Rb = self._surface.R_basis.num_modes
-        dim_Zb = self._surface.Z_basis.num_modes
+        dim_Rb = self.surface.R_basis.num_modes
+        dim_Zb = self.surface.Z_basis.num_modes
         self._dim_f = dim_Rb + dim_Zb
 
         self._A_R = np.zeros((dim_Rb, dim_R))
@@ -831,7 +828,7 @@ class LCFSBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        return jnp.concatenate((Rb, Zb)) * self._weight
+        return jnp.concatenate((Rb, Zb)) * self.weight
 
     def callback(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
         """Print last closed flux surface boundary errors.
@@ -849,13 +846,8 @@ class LCFSBoundary(_Objective):
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        f = jnp.concatenate((Rb, Zb))
-        print(
-            "Total boundary error: {:10.3e}, ".format(jnp.linalg.norm(f))
-            + "R boundary error: {:10.3e}, ".format(jnp.linalg.norm(Rb))
-            + "Z boundary error: {:10.3e} ".format(jnp.linalg.norm(Zb))
-            + "(m)"
-        )
+        print("R boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Rb)))
+        print("Z boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
         return None
 
     @property
@@ -877,7 +869,7 @@ class LCFSBoundary(_Objective):
 class TargetIota(_Objective):
     """Targets a rotational transform profile."""
 
-    def __init__(self, eq=None, target=1, weight=1, profile=None, grid=None):
+    def __init__(self, eq=None, target=0, weight=1, profile=None, grid=None):
         """Initialize a TargetIota Objective.
 
         Parameters
@@ -886,7 +878,7 @@ class TargetIota(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         target : tuple, float, ndarray, optional
             Target value(s) of the objective.
-            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+            len(target) = len(weight) = len(modes).
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(target) = len(weight) = len(modes)
@@ -896,8 +888,8 @@ class TargetIota(_Objective):
             Collocation grid containing the nodes to evaluate at.
 
         """
-        self._profile = profile
-        self._grid = grid
+        self.profile = profile
+        self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -913,20 +905,19 @@ class TargetIota(_Objective):
             Level of output.
 
         """
-        if self._profile is None:
-            self._profile = eq.iota
-        if self._grid is None:
-            self._grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
+        if self.profile is None or self.profile.params.size != eq.L + 1:
+            self.profile = eq.iota.copy()
+        if self.grid is None:
+            self.grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self.profile.grid = self.grid
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -938,8 +929,8 @@ class TargetIota(_Objective):
         self._built = True
 
     def _compute(self, i_l):
-        data = compute_rotational_transform(i_l, self._iota)
-        return data["iota"] - self._target
+        data = compute_rotational_transform(i_l, self.profile)
+        return data["iota"] - self.target
 
     def compute(self, i_l, **kwargs):
         """Compute rotational transform profile errors.
@@ -955,7 +946,7 @@ class TargetIota(_Objective):
             Rotational transform profile errors.
 
         """
-        return self._compute(i_l) * self._weight
+        return self._compute(i_l) * self.weight
 
     def callback(self, i_l, **kwargs):
         """Print rotational transform profile errors.

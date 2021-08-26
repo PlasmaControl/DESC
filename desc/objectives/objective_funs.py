@@ -166,10 +166,9 @@ class ObjectiveFunction(IOAble):
         for constraint in self._constraints:
             if not constraint.linear:
                 raise NotImplementedError("Constraints must be linear.")
-            if not constraint.built:
-                if verbose > 0:
-                    print("Building constraint: " + constraint.name)
-                constraint.build(eq, use_jit=self._use_jit, verbose=verbose)
+            if verbose > 0:
+                print("Building constraint: " + constraint.name)
+            constraint.build(eq, use_jit=self._use_jit, verbose=verbose)
             self._dim_c += constraint.dim_f
 
         # build objectives
@@ -178,10 +177,9 @@ class ObjectiveFunction(IOAble):
         for objective in self._objectives:
             if not objective.scalar:
                 self._scalar = False
-            if not objective.built:
-                if verbose > 0:
-                    print("Building objective: " + objective.name)
-                objective.build(eq, use_jit=self._use_jit, verbose=verbose)
+            if verbose > 0:
+                print("Building objective: " + objective.name)
+            objective.build(eq, use_jit=self._use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
 
         self._set_state_vector()
@@ -264,11 +262,7 @@ class ObjectiveFunction(IOAble):
             Optimization variables (x) or full state vector (y).
 
         """
-        if x.size != self._dim_x:
-            raise ValueError("Optimization vector is not the proper size.")
-        y = self.recover(x)
-        kwargs = self.unpack_state(y)
-
+        kwargs = self.unpack_state(x)
         for obj in self._objectives:
             obj.callback(**kwargs)
         return None
@@ -289,6 +283,8 @@ class ObjectiveFunction(IOAble):
         """
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
+
+        x = jnp.atleast_1d(x)
         if x.size == self._dim_x:
             y = self.recover(x)
         elif x.size == self._dim_y:
@@ -653,15 +649,15 @@ class _Objective(IOAble, ABC):
             self.compute_scalar = jit(self.compute_scalar)
 
     def _check_dimensions(self):
-        """Check that self.target = self.weight = self.dim_f."""
-        if self._target.size == 1:
-            self._target = self._target * np.ones((self._dim_f,))
-        if self._weight.size == 1:
-            self._weight = self._weight * np.ones((self._dim_f,))
+        """Check that len(target) = len(weight) = dim_f."""
+        if np.unique(self.target).size == 1:
+            self._target = np.repeat(self.target[0], self.dim_f)
+        if np.unique(self.weight).size == 1:
+            self._weight = np.repeat(self.weight[0], self.dim_f)
 
-        if self._target.size != self._dim_f:
+        if self.target.size != self.dim_f:
             raise ValueError("len(target) != dim_f")
-        if self._weight.size != self._dim_f:
+        if self.weight.size != self.dim_f:
             raise ValueError("len(weight) != dim_f")
 
         return None
@@ -700,7 +696,7 @@ class _Objective(IOAble, ABC):
 
     @target.setter
     def target(self, target):
-        self._target = target
+        self._target = np.atleast_1d(target)
         self._check_dimensions()
 
     @property
@@ -710,7 +706,7 @@ class _Objective(IOAble, ABC):
 
     @weight.setter
     def weight(self, weight):
-        self._weight = weight
+        self._weight = np.atleast_1d(weight)
         self._check_dimensions()
 
     @property

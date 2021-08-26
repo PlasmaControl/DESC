@@ -40,7 +40,7 @@ class Volume(_Objective):
             Collocation grid containing the nodes to evaluate at.
 
         """
-        self._grid = grid
+        self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -56,8 +56,8 @@ class Volume(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        if self.grid is None:
+            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
 
         self._dim_f = 1
 
@@ -67,10 +67,10 @@ class Volume(_Objective):
         timer.start("Precomputing transforms")
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -103,7 +103,7 @@ class Volume(_Objective):
 
         """
         V = self._compute(R_lmn, Z_lmn)
-        return (jnp.atleast_1d(V) - self._target) * self._weight
+        return (jnp.atleast_1d(V) - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, **kwargs):
         """Print plamsa volume.
@@ -164,8 +164,8 @@ class Energy(_Objective):
             Adiabatic (compressional) index. Default = 0.
 
         """
-        self._grid = grid
-        self._gamma = gamma
+        self.grid = grid
+        self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -181,8 +181,8 @@ class Energy(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        if self.grid is None:
+            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
 
         self._dim_f = 1
 
@@ -193,17 +193,17 @@ class Energy(_Objective):
 
         self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self._grid
-        self._pressure.grid = self._grid
+        self._iota.grid = self.grid
+        self._pressure.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["W"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["W"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["W"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["W"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -257,7 +257,7 @@ class Energy(_Objective):
 
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (jnp.atleast_1d(W) - self._target) * self._weight
+        return (jnp.atleast_1d(W) - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print MHD energy.
@@ -339,8 +339,8 @@ class RadialForceBalance(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -356,8 +356,8 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = ConcentricGrid(
+        if self.grid is None:
+            self.grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -368,7 +368,7 @@ class RadialForceBalance(_Objective):
                 node_pattern=eq.node_pattern,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -377,17 +377,17 @@ class RadialForceBalance(_Objective):
 
         self._pressure = eq.pressure.copy()
         self._iota = eq.iota.copy()
-        self._pressure.grid = self._grid
-        self._iota.grid = self._grid
+        self._pressure.grid = self.grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -414,9 +414,9 @@ class RadialForceBalance(_Objective):
             self._iota,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        if self._norm:
+        if self.norm:
             f = f / data["|grad(p)|"]
-        f = f * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self.grid.weights
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -444,7 +444,7 @@ class RadialForceBalance(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print radial MHD force balance error.
@@ -466,7 +466,7 @@ class RadialForceBalance(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(N)"
@@ -526,8 +526,8 @@ class HelicalForceBalance(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -543,8 +543,8 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = ConcentricGrid(
+        if self.grid is None:
+            self.grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -555,7 +555,7 @@ class HelicalForceBalance(_Objective):
                 node_pattern=eq.node_pattern,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -564,17 +564,17 @@ class HelicalForceBalance(_Objective):
 
         self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self._grid
-        self._pressure.grid = self._grid
+        self._iota.grid = self.grid
+        self._pressure.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["F_beta"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["F_beta"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -601,9 +601,9 @@ class HelicalForceBalance(_Objective):
             self._iota,
         )
         f = data["F_beta"] * data["|beta|"]
-        if self._norm:
+        if self.norm:
             f = f / data["|grad(p)|"]
-        f = f * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self.grid.weights
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -631,7 +631,7 @@ class HelicalForceBalance(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Print helical MHD force balance error.
@@ -653,7 +653,7 @@ class HelicalForceBalance(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(N)"
@@ -707,8 +707,8 @@ class RadialCurrent(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -724,8 +724,8 @@ class RadialCurrent(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = ConcentricGrid(
+        if self.grid is None:
+            self.grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -736,7 +736,7 @@ class RadialCurrent(_Objective):
                 node_pattern=eq.node_pattern,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -744,16 +744,16 @@ class RadialCurrent(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["J^rho"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["J^rho"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -781,7 +781,7 @@ class RadialCurrent(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
         )
         f = data["J^rho"] * jnp.sqrt(data["g_rr"])
-        if self._norm:
+        if self.norm:
             data = compute_magnetic_field_magnitude(
                 R_lmn,
                 Z_lmn,
@@ -796,7 +796,7 @@ class RadialCurrent(_Objective):
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
-        f = f * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self.grid.weights
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
@@ -822,7 +822,7 @@ class RadialCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print radial current.
@@ -842,7 +842,7 @@ class RadialCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(A*m)"
@@ -896,8 +896,8 @@ class PoloidalCurrent(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -913,8 +913,8 @@ class PoloidalCurrent(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = ConcentricGrid(
+        if self.grid is None:
+            self.grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -925,7 +925,7 @@ class PoloidalCurrent(_Objective):
                 node_pattern=eq.node_pattern,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -933,16 +933,16 @@ class PoloidalCurrent(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["J^theta"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["J^theta"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -970,7 +970,7 @@ class PoloidalCurrent(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
         )
         f = data["J^theta"] * jnp.sqrt(data["g_tt"])
-        if self._norm:
+        if self.norm:
             data = compute_magnetic_field_magnitude(
                 R_lmn,
                 Z_lmn,
@@ -985,7 +985,7 @@ class PoloidalCurrent(_Objective):
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
-        f = f * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self.grid.weights
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
@@ -1011,7 +1011,7 @@ class PoloidalCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print poloidal current.
@@ -1031,7 +1031,7 @@ class PoloidalCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(A*m)"
@@ -1085,8 +1085,8 @@ class ToroidalCurrent(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -1102,8 +1102,8 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = ConcentricGrid(
+        if self.grid is None:
+            self.grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -1114,7 +1114,7 @@ class ToroidalCurrent(_Objective):
                 node_pattern=eq.node_pattern,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -1122,16 +1122,16 @@ class ToroidalCurrent(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["J^zeta"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["J^zeta"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -1159,7 +1159,7 @@ class ToroidalCurrent(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
         )
         f = data["J^zeta"] * jnp.sqrt(data["g_zz"])
-        if self._norm:
+        if self.norm:
             data = compute_magnetic_field_magnitude(
                 R_lmn,
                 Z_lmn,
@@ -1174,7 +1174,7 @@ class ToroidalCurrent(_Objective):
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
-        f = f * data["sqrt(g)"] * self._grid.weights
+        f = f * data["sqrt(g)"] * self.grid.weights
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
@@ -1200,7 +1200,7 @@ class ToroidalCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print toroidal current.
@@ -1220,7 +1220,7 @@ class ToroidalCurrent(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(A*m)"
@@ -1278,9 +1278,9 @@ class QuasisymmetryBoozer(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._helicity = helicity
-        self._norm = norm
+        self.grid = grid
+        self.helicity = helicity
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -1296,8 +1296,8 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = LinearGrid(
+        if self.grid is None:
+            self.grid = LinearGrid(
                 L=1,
                 M=2 * eq.M_grid + 1,
                 N=2 * eq.N_grid + 1,
@@ -1312,26 +1312,26 @@ class QuasisymmetryBoozer(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
         )
         self._B_transform = Transform(
-            self._grid,
+            self.grid,
             DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.R_basis.sym),
             derivs=data_index["|B|_mn"]["R_derivs"],
             build=True,
             build_pinv=True,
         )
         self._nu_transform = Transform(
-            self._grid,
+            self.grid,
             DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.L_basis.sym),
             derivs=data_index["|B|_mn"]["L_derivs"],
             build=True,
@@ -1342,8 +1342,8 @@ class QuasisymmetryBoozer(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        M = self._helicity[0]
-        N = self._helicity[1]
+        M = self.helicity[0]
+        N = self.helicity[1]
         self._idx_00 = np.where(
             (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
         )[0]
@@ -1375,7 +1375,7 @@ class QuasisymmetryBoozer(_Objective):
             self._iota,
         )
         b_mn = data["|B|_mn"]
-        if self._norm:
+        if self.norm:
             b_mn = b_mn / b_mn[self._idx_00]
         return b_mn[self._idx]
 
@@ -1402,7 +1402,7 @@ class QuasisymmetryBoozer(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print quasi-symmetry flux function error.
@@ -1422,13 +1422,13 @@ class QuasisymmetryBoozer(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(T)"
         print(
             "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
-                self._helicity[0], self._helicity[1], jnp.linalg.norm(f)
+                self.helicity[0], self.helicity[1], jnp.linalg.norm(f)
             )
             + units
         )
@@ -1494,9 +1494,9 @@ class QuasisymmetryFluxFunction(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._helicity = helicity
-        self._norm = norm
+        self.grid = grid
+        self.helicity = helicity
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -1512,8 +1512,8 @@ class QuasisymmetryFluxFunction(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = LinearGrid(
+        if self.grid is None:
+            self.grid = LinearGrid(
                 L=1,
                 M=2 * eq.M_grid + 1,
                 N=2 * eq.N_grid + 1,
@@ -1522,7 +1522,7 @@ class QuasisymmetryFluxFunction(_Objective):
                 rho=1,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -1530,16 +1530,16 @@ class QuasisymmetryFluxFunction(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["QS_FF"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["QS_FF"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -1564,8 +1564,8 @@ class QuasisymmetryFluxFunction(_Objective):
             self._iota,
             self._helicity,
         )
-        f = data["QS_FF"] * self._grid.weights
-        if self._norm:
+        f = data["QS_FF"] * self.grid.weights
+        if self.norm:
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f / B ** 3
         return f
@@ -1593,7 +1593,7 @@ class QuasisymmetryFluxFunction(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print quasi-symmetry flux function error.
@@ -1613,13 +1613,13 @@ class QuasisymmetryFluxFunction(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(T^3)"
         print(
             "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
-                self._helicity[0], self._helicity[1], jnp.linalg.norm(f)
+                self.helicity[0], self.helicity[1], jnp.linalg.norm(f)
             )
             + units
         )
@@ -1681,8 +1681,8 @@ class QuasisymmetryTripleProduct(_Objective):
             Whether to normalize the objective values (make dimensionless).
 
         """
-        self._grid = grid
-        self._norm = norm
+        self.grid = grid
+        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -1698,8 +1698,8 @@ class QuasisymmetryTripleProduct(_Objective):
             Level of output.
 
         """
-        if self._grid is None:
-            self._grid = LinearGrid(
+        if self.grid is None:
+            self.grid = LinearGrid(
                 L=1,
                 M=2 * eq.M_grid + 1,
                 N=2 * eq.N_grid + 1,
@@ -1708,7 +1708,7 @@ class QuasisymmetryTripleProduct(_Objective):
                 rho=1,
             )
 
-        self._dim_f = self._grid.num_nodes
+        self._dim_f = self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -1716,16 +1716,16 @@ class QuasisymmetryTripleProduct(_Objective):
         timer.start("Precomputing transforms")
 
         self._iota = eq.iota.copy()
-        self._iota.grid = self._grid
+        self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self._grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self._grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self._grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -1749,8 +1749,8 @@ class QuasisymmetryTripleProduct(_Objective):
             self._L_transform,
             self._iota,
         )
-        f = data["QS_TP"] * self._grid.weights
-        if self._norm:
+        f = data["QS_TP"] * self.grid.weights
+        if self.norm:
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * R ** 2 / B ** 4
@@ -1779,7 +1779,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self._target) * self._weight
+        return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Print quasi-symmetry triple product error.
@@ -1799,7 +1799,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self._norm:
+        if self.norm:
             units = "(normalized)"
         else:
             units = "(T^4/m^2)"

@@ -48,8 +48,8 @@ class FixedBoundaryR(_Objective):
             If True/False uses all/none of the surface modes.
 
         """
-        self.surface = surface
-        self.modes = modes
+        self._surface = surface
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -66,33 +66,33 @@ class FixedBoundaryR(_Objective):
 
         """
         if (
-            self.surface is None
+            self._surface is None
             or (
-                self.surface.L,
-                self.surface.M,
-                self.surface.N,
+                self._surface.L,
+                self._surface.M,
+                self._surface.N,
             )
             != (eq.surface.L, eq.surface.M, eq.surface.N)
         ):
-            self.surface = eq.surface
+            self._surface = eq.surface
 
         # find indicies of R boundary modes to fix
-        if self.modes is False or self.modes is None:  # no modes
+        if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self.modes is True:  # all modes in surface
-            modes = self.surface.R_basis.modes
-            self._idx = np.arange(self.surface.R_basis.num_modes)
+        elif self._modes is True:  # all modes in surface
+            modes = self._surface.R_basis.modes
+            self._idx = np.arange(self._surface.R_basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            modes = np.atleast_2d(self.modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self.surface.R_basis.modes.astype(modes.dtype).view(dtype),
+                self._surface.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
@@ -109,12 +109,12 @@ class FixedBoundaryR(_Objective):
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
-            self.target = self._weight[idx]
+            self.target = self._target[idx]
         if self.weight.size == modes.shape[0]:
             self.weight = self._weight[idx]
         # use surface coefficients as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = self.surface.R_lmn[self._idx]
+            self.target = self._surface.R_lmn[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -206,8 +206,8 @@ class FixedBoundaryZ(_Objective):
             If True/False uses all/none of the surface modes.
 
         """
-        self.surface = surface
-        self.modes = modes
+        self._surface = surface
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -224,33 +224,33 @@ class FixedBoundaryZ(_Objective):
 
         """
         if (
-            self.surface is None
+            self._surface is None
             or (
-                self.surface.L,
-                self.surface.M,
-                self.surface.N,
+                self._surface.L,
+                self._surface.M,
+                self._surface.N,
             )
             != (eq.surface.L, eq.surface.M, eq.surface.N)
         ):
-            self.surface = eq.surface
+            self._surface = eq.surface
 
         # find indicies of Z boundary modes to fix
-        if self.modes is False or self.modes is None:  # no modes
+        if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self.modes is True:  # all modes in surface
-            modes = self.surface.Z_basis.modes
-            self._idx = np.arange(self.surface.Z_basis.num_modes)
+        elif self._modes is True:  # all modes in surface
+            modes = self._surface.Z_basis.modes
+            self._idx = np.arange(self._surface.Z_basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            modes = np.atleast_2d(self.modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self.surface.Z_basis.modes.astype(modes.dtype).view(dtype),
+                self._surface.Z_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
@@ -267,12 +267,12 @@ class FixedBoundaryZ(_Objective):
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
-            self.target = self._weight[idx]
+            self.target = self._target[idx]
         if self.weight.size == modes.shape[0]:
             self.weight = self._weight[idx]
         # use surface coefficients as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = self.surface.R_lmn[self._idx]
+            self.target = self._surface.Z_lmn[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -364,8 +364,8 @@ class FixedPressure(_Objective):
             If True/False uses all/none of the profile modes.
 
         """
-        self.profile = profile
-        self.modes = modes
+        self._profile = profile
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -381,29 +381,29 @@ class FixedPressure(_Objective):
             Level of output.
 
         """
-        if self.profile is None or self.profile.params.size != eq.L + 1:
-            self.profile = eq.pressure
-        if not isinstance(self.profile, PowerSeriesProfile):
+        if self._profile is None or self._profile.params.size != eq.L + 1:
+            self._profile = eq.pressure
+        if not isinstance(self._profile, PowerSeriesProfile):
             raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
             # TODO: add implementation for SplineProfile & MTanhProfile
 
         # find inidies of pressure modes to fix
-        if self.modes is False or self.modes is None:  # no modes
+        if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self.modes is True:  # all modes in profile
-            modes = self.profile.basis.modes
-            self._idx = np.arange(self.profile.basis.num_modes)
+        elif self._modes is True:  # all modes in profile
+            modes = self._profile.basis.modes
+            self._idx = np.arange(self._profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            modes = np.atleast_2d(self.modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self.profile.basis.modes.astype(modes.dtype).view(dtype),
+                self._profile.basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
@@ -420,12 +420,12 @@ class FixedPressure(_Objective):
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
-            self.target = self._weight[idx]
+            self.target = self._target[idx]
         if self.weight.size == modes.shape[0]:
             self.weight = self._weight[idx]
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = self.profile.params[self._idx]
+            self.target = self._profile.params[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -515,8 +515,8 @@ class FixedIota(_Objective):
             If True/False uses all/none of the profile modes.
 
         """
-        self.profile = profile
-        self.modes = modes
+        self._profile = profile
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -532,29 +532,29 @@ class FixedIota(_Objective):
             Level of output.
 
         """
-        if self.profile is None or self.profile.params.size != eq.L + 1:
-            self.profile = eq.iota
-        if not isinstance(self.profile, PowerSeriesProfile):
+        if self._profile is None or self._profile.params.size != eq.L + 1:
+            self._profile = eq.iota
+        if not isinstance(self._profile, PowerSeriesProfile):
             raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
             # TODO: add implementation for SplineProfile & MTanhProfile
 
         # find inidies of iota modes to fix
-        if self.modes is False or self.modes is None:  # no modes
+        if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
             idx = self._idx
-        elif self.modes is True:  # all modes in profile
-            modes = self.profile.basis.modes
-            self._idx = np.arange(self.profile.basis.num_modes)
+        elif self._modes is True:  # all modes in profile
+            modes = self._profile.basis.modes
+            self._idx = np.arange(self._profile.basis.num_modes)
             idx = self._idx
         else:  # specified modes
-            modes = np.atleast_2d(self.modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
             _, self._idx, idx = np.intersect1d(
-                self.profile.basis.modes.astype(modes.dtype).view(dtype),
+                self._profile.basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
@@ -571,12 +571,12 @@ class FixedIota(_Objective):
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
-            self.target = self._weight[idx]
+            self.target = self._target[idx]
         if self.weight.size == modes.shape[0]:
             self.weight = self._weight[idx]
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = self.profile.params[self._idx]
+            self.target = self._profile.params[self._idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -748,7 +748,7 @@ class LCFSBoundary(_Objective):
 
         """
         target = 0
-        self.surface = surface
+        self._surface = surface
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -765,25 +765,25 @@ class LCFSBoundary(_Objective):
 
         """
         if (
-            self.surface is None
+            self._surface is None
             or (
-                self.surface.L,
-                self.surface.M,
-                self.surface.N,
+                self._surface.L,
+                self._surface.M,
+                self._surface.N,
             )
             != (eq.surface.L, eq.surface.M, eq.surface.N)
         ):
-            self.surface = eq.surface
+            self._surface = eq.surface
 
         R_modes = eq.R_basis.modes
         Z_modes = eq.Z_basis.modes
-        Rb_modes = self.surface.R_basis.modes
-        Zb_modes = self.surface.Z_basis.modes
+        Rb_modes = self._surface.R_basis.modes
+        Zb_modes = self._surface.Z_basis.modes
 
         dim_R = eq.R_basis.num_modes
         dim_Z = eq.Z_basis.num_modes
-        dim_Rb = self.surface.R_basis.num_modes
-        dim_Zb = self.surface.Z_basis.num_modes
+        dim_Rb = self._surface.R_basis.num_modes
+        dim_Zb = self._surface.Z_basis.num_modes
         self._dim_f = dim_Rb + dim_Zb
 
         self._A_R = np.zeros((dim_Rb, dim_R))
@@ -888,8 +888,8 @@ class TargetIota(_Objective):
             Collocation grid containing the nodes to evaluate at.
 
         """
-        self.profile = profile
-        self.grid = grid
+        self._profile = profile
+        self._grid = grid
         super().__init__(eq=eq, target=target, weight=weight)
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -905,19 +905,19 @@ class TargetIota(_Objective):
             Level of output.
 
         """
-        if self.profile is None or self.profile.params.size != eq.L + 1:
-            self.profile = eq.iota.copy()
-        if self.grid is None:
-            self.grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
+        if self._profile is None or self._profile.params.size != eq.L + 1:
+            self._profile = eq.iota.copy()
+        if self._grid is None:
+            self._grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = self._grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self.profile.grid = self.grid
+        self._profile.grid = self._grid
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -929,7 +929,7 @@ class TargetIota(_Objective):
         self._built = True
 
     def _compute(self, i_l):
-        data = compute_rotational_transform(i_l, self.profile)
+        data = compute_rotational_transform(i_l, self._profile)
         return data["iota"] - self.target
 
     def compute(self, i_l, **kwargs):

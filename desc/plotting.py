@@ -973,6 +973,61 @@ def plot_comparison(
     return fig, ax
 
 
+def plot_boozer_modes(eq, B0=True, log=False, num_modes=-1, L=10, rho=None, ax=None):
+    """Plot Fourier harmonics of |B| in Boozer coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    if rho is None:
+        rho = np.linspace(1, 0, num=L, endpoint=False)
+
+    B_mn = np.array([[]])
+    for i, r in enumerate(rho):
+        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        data = eq.compute("|B|_mn", grid)
+        b_mn = np.atleast_2d(data["|B|_mn"])
+        B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
+
+    idx = np.argsort(np.abs(B_mn[-1, :]))
+    if num_modes == -1:
+        idx = idx[-1::-1]
+    else:
+        idx = idx[-1 : -num_modes - 1 : -1]
+    B_mn = B_mn[:, idx]
+    modes = data["Boozer modes"][idx, :]
+
+    fig, ax = _format_ax(ax)
+    for i in range(modes.shape[0]):
+        M = modes[i, 1]
+        N = modes[i, 2]
+        if (M, N) == (0, 0) and B0 is False:
+            continue
+        if log is True:
+            ax.semilogy(rho, np.abs(B_mn[:, i]), "-", label="M={}, N={}".format(M, N))
+        else:
+            ax.plot(rho, B_mn[:, i], "-", label="M={}, N={}".format(M, N))
+
+    ax.set_xlabel(_axis_labels_rtz[0])
+    ax.set_ylabel(r"Fourier harmonics of $|B|$ in Boozer coordinates $(T)$")
+    fig.legend(loc="lower right")
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
 def plot_grid(grid, **kwargs):
     """Plot the location of collocation nodes on the zeta=0 plane
 

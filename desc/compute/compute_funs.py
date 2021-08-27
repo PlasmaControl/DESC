@@ -1908,6 +1908,7 @@ def compute_boozer_coords(
                 data["G"] + data["iota"][0] * data["I"]
             )
     data["nu"] = nu_transform.transform(nu_mn)
+    data["Boozer modes"] = B_transform.basis.modes
 
     if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
         b_nodes = nu_transform.grid.nodes

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.compute import data_index
 from desc.grid import Grid
 
@@ -1894,18 +1894,28 @@ def compute_boozer_coords(
         data["G"] = B_zeta_mn[idx0]
 
     # QS Boozer harmonics
-    lambda_mn = nu_transform.fit(data["lambda"])
+    lambda_mn = nu_transform.fit(data["lambda"])  # FIXME: evaluate this exactly!
     nu_mn = jnp.zeros_like(lambda_mn)
     for k, (l, m, n) in enumerate(nu_transform.basis.modes):
         if m != 0:
             idx = jnp.where((B_transform.basis.modes == [0, -m, n]).all(axis=1))[0]
-            nu_mn[k] = (B_theta_mn[idx] / m - data["I"] * lambda_mn[k]) / (
-                data["G"] + data["iota"][0] * data["I"]
+            nu_mn = put(
+                nu_mn,
+                k,
+                (
+                    (B_theta_mn[idx] / m - data["I"] * lambda_mn[k])
+                    / (data["G"] + data["iota"][0] * data["I"])
+                )[0],
             )
         elif n != 0:
             idx = jnp.where((B_transform.basis.modes == [0, m, -n]).all(axis=1))[0]
-            nu_mn[k] = (B_zeta_mn[idx] / n - data["I"] * lambda_mn[k]) / (
-                data["G"] + data["iota"][0] * data["I"]
+            nu_mn = put(
+                nu_mn,
+                k,
+                (
+                    (B_zeta_mn[idx] / n - data["I"] * lambda_mn[k])
+                    / (data["G"] + data["iota"][0] * data["I"])
+                )[0],
             )
     data["nu"] = nu_transform.transform(nu_mn)
     data["Boozer modes"] = B_transform.basis.modes

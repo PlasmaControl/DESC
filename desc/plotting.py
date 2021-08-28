@@ -973,13 +973,23 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_boozer_modes(eq, B0=True, log=False, num_modes=-1, L=10, rho=None, ax=None):
+def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None):
     """Plot Fourier harmonics of |B| in Boozer coordinates.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
+    log : bool, optional
+        Whether to use a log scale. Default is True.
+    B0 : bool, optional
+        Whether to include the m=n=0 mode. Default is True.
+    num_modes : int, optional
+        How many modes to include. Default (-1) is all.
+    L : int, optional
+        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
+    rho : ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at.
     ax : matplotlib AxesSubplot, optional
         axis to plot on
 
@@ -1001,7 +1011,7 @@ def plot_boozer_modes(eq, B0=True, log=False, num_modes=-1, L=10, rho=None, ax=N
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
-    idx = np.argsort(np.abs(B_mn[-1, :]))
+    idx = np.argsort(np.abs(B_mn[0, :]))
     if num_modes == -1:
         idx = idx[-1::-1]
     else:
@@ -1022,7 +1032,7 @@ def plot_boozer_modes(eq, B0=True, log=False, num_modes=-1, L=10, rho=None, ax=N
 
     ax.set_xlabel(_axis_labels_rtz[0])
     ax.set_ylabel(r"Fourier harmonics of $|B|$ in Boozer coordinates $(T)$")
-    fig.legend(loc="lower right")
+    fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
     return fig, ax

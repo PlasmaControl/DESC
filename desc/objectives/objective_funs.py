@@ -454,7 +454,7 @@ class ObjectiveFunction(IOAble):
         timer.stop("Total compilation time")
         if verbose > 1:
             timer.disp("Total compilation time")
-        self.compiled = True
+        self._compiled = True
 
     @property
     def objectives(self):

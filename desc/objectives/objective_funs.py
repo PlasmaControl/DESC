@@ -456,6 +456,16 @@ class ObjectiveFunction(IOAble):
         self.compiled = True
 
     @property
+    def objectives(self):
+        """list: List of objectives."""
+        return self._objectives
+
+    @property
+    def constraints(self):
+        """list: List of constraints."""
+        return self._constraints
+
+    @property
     def use_jit(self):
         """bool: Whether to just-in-time compile the objective and derivatives."""
         return self._use_jit

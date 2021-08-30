@@ -81,9 +81,9 @@ class ObjectiveFunction(IOAble):
                     a = np.atleast_2d(obj.derivatives[arg])
                     A = np.hstack((A, a)) if A.size else a
             if obj.target_arg in self.args:
-                B = np.eye(self.dim_y)[self.indicies[obj.target_arg], :]
+                B = np.eye(self._dim_y)[self.indicies[obj.target_arg], :]
             else:
-                B = np.zeros((obj.dim_f, self.dim_y))
+                B = np.zeros((obj._dim_f, self._dim_y))
             b = obj.target
             self._A = np.vstack((self.A, A)) if self.A.size else A
             self._B = np.vstack((self.B, B)) if self.B.size else B
@@ -110,15 +110,15 @@ class ObjectiveFunction(IOAble):
             self._y0 = np.dot(self.Ainv, self.b)
             self._Z = vh[num:, :].T.conj()
             self._dydx = np.dot(
-                np.linalg.pinv(np.eye(self.dim_y) - np.dot(self.Ainv, self.B)), self.Z
+                np.linalg.pinv(np.eye(self._dim_y) - np.dot(self.Ainv, self.B)), self.Z
             )
             self._dim_x = self.Z.shape[1]
         else:
             self._Ainv = np.array([[]])
-            self._y0 = np.zeros((self.dim_y,))
-            self._Z = np.eye(self.dim_y)
+            self._y0 = np.zeros((self._dim_y,))
+            self._Z = np.eye(self._dim_y)
             self._dydx = self.Z
-            self._dim_x = self.dim_y
+            self._dim_x = self._dim_y
 
     def _set_derivatives(self, use_jit=True, block_size="auto"):
         """Set up derivatives of the objective functions.

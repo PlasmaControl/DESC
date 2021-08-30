@@ -155,9 +155,10 @@ class FixedBoundaryR(_Objective):
         print("R fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Rb)))
         return None
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium."""
-        self.target = eq.surface.R_lmn[self._idx]
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Rb_lmn"
 
     @property
     def scalar(self):
@@ -313,9 +314,10 @@ class FixedBoundaryZ(_Objective):
         print("Z fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
         return None
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium."""
-        self.target = eq.surface.Z_lmn[self._idx]
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Zb_lmn"
 
     @property
     def scalar(self):
@@ -464,9 +466,10 @@ class FixedPressure(_Objective):
         print("Fixed-pressure profile error: {:10.3e} (Pa)".format(jnp.linalg.norm(f)))
         return None
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium."""
-        self.target = eq.pressure.params[self._idx]
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "p_l"
 
     @property
     def scalar(self):
@@ -615,9 +618,10 @@ class FixedIota(_Objective):
         print("Fixed-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
         return None
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium."""
-        self.target = eq.iota.params[self._idx]
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "i_l"
 
     @property
     def scalar(self):
@@ -708,9 +712,10 @@ class FixedPsi(_Objective):
         print("Fixed-Psi error: {:10.3e} (Wb)".format(f[0]))
         return None
 
-    def update_target(self, eq):
-        """Update target values using an Equilibrium."""
-        self.target = np.atleast_1d(eq.Psi)
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Psi"
 
     @property
     def scalar(self):

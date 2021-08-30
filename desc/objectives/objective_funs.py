@@ -113,12 +113,14 @@ class ObjectiveFunction(IOAble):
                 np.linalg.pinv(np.eye(self._dim_y) - np.dot(self._Ainv, self._B)),
                 self._Z,
             )
+            self._dydc = np.dot(self._Ainv, self._B) + np.dot(self._Z, self._Z.T)
             self._dim_x = self._Z.shape[1]
         else:
             self._Ainv = np.array([[]])
             self._y0 = np.zeros((self._dim_y,))
             self._Z = np.eye(self._dim_y)
             self._dydx = self._Z
+            self._dydc = self._Z
             self._dim_x = self._dim_y
 
     def _set_derivatives(self, use_jit=True, block_size="auto"):
@@ -579,6 +581,13 @@ class ObjectiveFunction(IOAble):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dydx
+
+    @property
+    def dydc(self):
+        """ndarray: dy/dc = Ainv*B + Z*Z.T."""
+        if not self.built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+        return self._dydc
 
 
 class _Objective(IOAble, ABC):

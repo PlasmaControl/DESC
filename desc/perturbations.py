@@ -132,7 +132,7 @@ def perturb(
     dx3 = 0
     dy1 = 0
     dy2 = 0
-    dy3 = 0
+    # dy3 = 0
 
     # 1st order
     if order > 0:
@@ -144,8 +144,9 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jy = objective.jac(y)
-        Jx = np.dot(Jy, objective.Z)
-        RHS1 += np.dot(Jy, dc)
+        Jx = np.dot(Jy, objective.dydx)
+        Jc = np.dot(Jy, objective.dydc)
+        RHS1 += np.dot(Jc, dc)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")

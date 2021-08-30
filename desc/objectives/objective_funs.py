@@ -136,14 +136,14 @@ class ObjectiveFunction(IOAble):
             mode="hess",
             use_jit=use_jit,
             block_size=block_size,
-            shape=(self.dim_x, self.dim_x),
+            shape=(self._dim_x, self._dim_x),
         )
         self._jac = Derivative(
             self.compute,
             mode="fwd",
             use_jit=use_jit,
             block_size=block_size,
-            shape=(self.dim_f, self.dim_x),
+            shape=(self._dim_f, self._dim_x),
         )
 
         if use_jit:

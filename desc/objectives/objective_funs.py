@@ -80,9 +80,8 @@ class ObjectiveFunction(IOAble):
 
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
-        # A*y = b = B*y
+        # A*y = b
         self._A = np.array([[]])
-        self._B = np.array([[]])
         self._b = np.array([])
         for obj in self.constraints:
             A = np.array([[]])
@@ -90,13 +89,8 @@ class ObjectiveFunction(IOAble):
                 if arg in self.args:
                     a = np.atleast_2d(obj.derivatives[arg])
                     A = np.hstack((A, a)) if A.size else a
-            if obj.target_arg in self.args:
-                B = np.eye(self._dim_y)[self.y_indicies[obj.target_arg], :]
-            else:
-                B = np.zeros((obj._dim_f, self._dim_y))
             b = obj.target
             self._A = np.vstack((self._A, A)) if self._A.size else A
-            self._B = np.vstack((self._B, B)) if self._B.size else B
             self._b = np.hstack((self._b, b)) if self._b.size else b
 
         # TODO: handle duplicate constraints
@@ -119,18 +113,11 @@ class ObjectiveFunction(IOAble):
             self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
             self._y0 = np.dot(self._Ainv, self._b)
             self._Z = vh[num:, :].T.conj()
-            self._dydx = np.dot(
-                np.linalg.pinv(np.eye(self._dim_y) - np.dot(self._Ainv, self._B)),
-                self._Z,
-            )
-            self._dydc = np.dot(self._Ainv, self._B) + np.dot(self._Z, self._Z.T)
             self._dim_x = self._Z.shape[1]
         else:
             self._Ainv = np.array([[]])
             self._y0 = np.zeros((self._dim_y,))
             self._Z = np.eye(self._dim_y)
-            self._dydx = self._Z
-            self._dydc = self._Z
             self._dim_x = self._dim_y
 
     def _set_derivatives(self, use_jit=True, block_size="auto"):
@@ -563,13 +550,6 @@ class ObjectiveFunction(IOAble):
         return self._Ainv
 
     @property
-    def B(self):
-        """ndarray: Linear constraint vector masking matrix: b = B*y."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._B
-
-    @property
     def b(self):
         """ndarray: Linear constraint vector: A*y = b."""
         if not self.built:
@@ -589,20 +569,6 @@ class ObjectiveFunction(IOAble):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._Z
-
-    @property
-    def dydx(self):
-        """ndarray: dy/dx = (I - Ainv*B)^{-1}*Z."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dydx
-
-    @property
-    def dydc(self):
-        """ndarray: dy/dc = Ainv*B + Z*Z.T."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dydc
 
 
 class _Objective(IOAble, ABC):

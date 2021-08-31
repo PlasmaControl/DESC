@@ -148,8 +148,7 @@ def perturb(
         timer.start("df computation")
         Jy = objective.jac(y)
         Jx = np.dot(Jy, objective.Z)
-        Jc = np.dot(Jy, dydc + np.dot(objective.Ainv, dbdc))
-        RHS1 += np.dot(Jy, dydc)
+        RHS1 += np.dot(Jy, np.dot(objective.Ainv, dbdc))
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -183,7 +182,7 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangent = dy1 + dc
+        tangent = dy1 + dydc
         RHS2 = 0.5 * objective.jvp(y, (tangent, tangent))
         timer.stop("d^2f computation")
         if verbose > 1:

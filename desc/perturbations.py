@@ -117,10 +117,13 @@ def perturb(
     timer.start("Total perturbation")
 
     # perturbation deltas, as a vector of length dim_y
-    indicies = np.concatenate([objective.indicies[arg] for arg in deltas.keys()])
-    indicies.sort(kind="mergesort")
+    b_indicies = np.concatenate([objective.b_indicies[arg] for arg in deltas.keys()])
+    y_indicies = np.concatenate([objective.y_indicies[arg] for arg in deltas.keys()])
+    b_indicies.sort(kind="mergesort")
+    y_indicies.sort(kind="mergesort")
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-    dc = np.dot(np.eye(objective.dim_y)[:, indicies], dc)
+    dbdc = np.dot(np.eye(objective.dim_c)[:, b_indicies], dc)
+    dydc = np.dot(np.eye(objective.dim_y)[:, y_indicies], dc)
 
     # state vectors
     x = objective.x(eq)
@@ -144,9 +147,9 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jy = objective.jac(y)
-        Jx = np.dot(Jy, objective.dydx)
-        Jc = np.dot(Jy, objective.dydc)
-        RHS1 += np.dot(Jc, dc)
+        Jx = np.dot(Jy, objective.Z)
+        Jc = np.dot(Jy, dydc + np.dot(objective.Ainv, dbdc))
+        RHS1 += np.dot(Jy, dydc)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")

@@ -527,7 +527,7 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute("|B|", half_grid)
-
+        data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
         # Jacobian
         timer.start("Jacobian")
         if verbose > 0:
@@ -748,7 +748,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            data_full_grid["B_theta"]
+            data_half_grid["B_theta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))
@@ -788,7 +788,7 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
-            data_full_grid["B_zeta"]
+            data_half_grid["B_zeta"]
             .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
             .transpose((1, 0, 2))
             .reshape((half_grid.L, -1))

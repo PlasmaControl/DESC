@@ -116,26 +116,29 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    # perturbation deltas, as a vector of length dim_y
-    b_indicies = np.concatenate([objective.b_indicies[arg] for arg in deltas.keys()])
-    y_indicies = np.concatenate([objective.y_indicies[arg] for arg in deltas.keys()])
-    b_indicies.sort(kind="mergesort")
-    y_indicies.sort(kind="mergesort")
+    # indicies of perturbation deltas in y and b vectors
+    b_idx = np.concatenate([objective.b_idx[arg] for arg in deltas.keys()])
+    y_idx = np.concatenate([objective.y_idx[arg] for arg in deltas.keys()])
+    b_idx.sort(kind="mergesort")
+    y_idx.sort(kind="mergesort")
+
+    # perturbation deltas
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-    dbdc = np.dot(np.eye(objective.dim_c)[:, b_indicies], dc)
-    dydc = np.dot(np.eye(objective.dim_y)[:, y_indicies], dc)
+
+    # dy/dc*dc
+    tangents = np.dot(np.eye(objective.dim_y)[:, y_idx], dc)
+    if objective.dim_c:
+        tangents[tangents == 0] = np.dot(
+            objective.Ainv, np.dot(np.eye(objective.dim_c)[:, b_idx], dc)
+        )[tangents == 0]
 
     # state vectors
     x = objective.x(eq)
     y = objective.y(eq)
 
-    # perturbation vectors
     dx1 = 0
     dx2 = 0
     dx3 = 0
-    dy1 = 0
-    dy2 = 0
-    # dy3 = 0
 
     # 1st order
     if order > 0:
@@ -148,7 +151,7 @@ def perturb(
         timer.start("df computation")
         Jy = objective.jac(y)
         Jx = np.dot(Jy, objective.Z)
-        RHS1 += np.dot(Jy, np.dot(objective.Ainv, dbdc))
+        RHS1 += np.dot(Jy, tangents)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -173,7 +176,6 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy1 = np.dot(objective.Z, dx1)
 
     # 2nd order
     if order > 1:
@@ -182,8 +184,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangent = dy1 + dydc
-        RHS2 = 0.5 * objective.jvp(y, (tangent, tangent))
+        tangents += np.dot(objective.Z, dx1)
+        RHS2 = 0.5 * objective.jvp(y, (tangents, tangents))
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -199,7 +201,6 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy2 = np.dot(objective.Z, dx2)
 
     # 3rd order
     if order > 2:
@@ -208,8 +209,9 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp(y, (tangent, tangent, tangent))
-        RHS3 += objective.jvp(y, (dy2, tangent))
+        RHS3 = (1 / 6) * objective.jvp(y, (tangents, tangents, tangents))
+        tangents += np.dot(objective.Z, dx2)
+        RHS3 += objective.jvp(y, (tangents, tangents))
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -225,7 +227,6 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        # dy3 = np.dot(objective.Z, dx3)
 
     if copy:
         eq_new = eq.copy()

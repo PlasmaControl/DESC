@@ -57,24 +57,29 @@ class ObjectiveFunction(IOAble):
 
         self._dimensions = self.objectives[0].dimensions
 
-        idx = 0
-        self._b_indicies = {}
-        for obj in self.constraints:
-            arg = obj.target_arg
-            if arg in arg_order:
-                self._b_indicies[arg] = np.arange(idx, idx + obj.dim_f)
-            else:
-                self._b_indicies[arg] = np.array([])
-            idx += obj.dim_f
+        self._b_idx = {}
+        for arg in arg_order:
+            if arg not in self._b_idx:
+                self._b_idx[arg] = np.array([], dtype=int)
+            idx = 0
+            for obj in self.constraints:
+                if arg == obj.target_arg:
+                    indicies = np.arange(idx, idx + obj.dim_f)
+                    self._b_idx[arg] = (
+                        np.hstack((self._b_idx[arg], indicies))
+                        if self._b_idx.size
+                        else indicies
+                    )
+                idx += obj.dim_f
 
         idx = 0
-        self._y_indicies = {}
+        self._y_idx = {}
         for arg in arg_order:
             if arg in self.args:
-                self._y_indicies[arg] = np.arange(idx, idx + self.dimensions[arg])
+                self._y_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
                 idx += self.dimensions[arg]
             else:
-                self._y_indicies[arg] = np.array([])
+                self._y_idx[arg] = np.array([], dtype=int)
 
         self._dim_y = idx
 
@@ -299,7 +304,7 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self.args:
-            kwargs[arg] = y[self.y_indicies[arg]]
+            kwargs[arg] = y[self.y_idx[arg]]
         return kwargs
 
     def project(self, y):
@@ -326,7 +331,7 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector y from the Equilibrium eq."""
         y = np.zeros((self.dim_y,))
         for arg in self.args:
-            y[self.y_indicies[arg]] = getattr(eq, arg)
+            y[self.y_idx[arg]] = getattr(eq, arg)
         return y
 
     def x(self, eq):
@@ -498,14 +503,14 @@ class ObjectiveFunction(IOAble):
         return self._dimensions
 
     @property
-    def b_indicies(self):
+    def b_idx(self):
         """dict: Indicies of the components of the constraint vector b."""
-        return self._b_indicies
+        return self._b_idx
 
     @property
-    def y_indicies(self):
+    def y_idx(self):
         """dict: Indicies of the components of the full state vector y."""
-        return self._y_indicies
+        return self._y_idx
 
     @property
     def dim_y(self):

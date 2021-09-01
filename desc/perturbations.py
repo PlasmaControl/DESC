@@ -126,11 +126,11 @@ def perturb(
     dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
 
     # dy/dc*dc
-    tangents = np.dot(np.eye(objective.dim_y)[:, y_idx], dc)
     if objective.dim_c:
-        tangents[tangents == 0] = np.dot(
-            objective.Ainv, np.dot(np.eye(objective.dim_c)[:, b_idx], dc)
-        )[tangents == 0]
+        tangents = np.dot(objective.Ainv, np.dot(np.eye(objective.dim_c)[:, b_idx], dc))
+        # FIXME: this can only perturb arguments that are used in the constraints
+    else:
+        tangents = np.dot(np.eye(objective.dim_y)[:, y_idx], dc)
 
     # state vectors
     x = objective.x(eq)

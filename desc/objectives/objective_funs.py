@@ -67,7 +67,7 @@ class ObjectiveFunction(IOAble):
                     indicies = np.arange(idx, idx + obj.dim_f)
                     self._b_idx[arg] = (
                         np.hstack((self._b_idx[arg], indicies))
-                        if self._b_idx.size
+                        if self._b_idx[arg].size
                         else indicies
                     )
                 idx += obj.dim_f

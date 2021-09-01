@@ -1,14 +1,17 @@
 import unittest
 import numpy as np
 
-from desc.equilibrium import Equilibrium
+from desc.equilibrium import EquilibriaFamily
 from desc.objectives import (
     ObjectiveFunction,
     FixedBoundaryR,
     FixedBoundaryZ,
     FixedPressure,
+    FixedIota,
+    FixedPsi,
     LCFSBoundary,
-    TargetIota,
+    RadialForceBalance,
+    HelicalForceBalance,
 )
 from desc.perturbations import perturb
 
@@ -16,45 +19,46 @@ from desc.perturbations import perturb
 class TestPerturbations(unittest.TestCase):
     """Test pertubations."""
 
-    def test_perturb_1D(self):
-        """Linear test function where perturb order=1 is exact."""
+    def test_perturbation_orders(self, SOLOVEV):
+        """Test that higher-order perturbations are more accurate."""
 
-        # circular tokamak
-        inputs = {
-            "sym": True,
-            "NFP": 1,
-            "Psi": 1.0,
-            "L": 2,
-            "M": 1,
-            "N": 0,
-            "pressure": np.array([[0, 0], [2, 0]]),
-            "iota": np.array([[0, 0]]),
-            "surface": np.array([[0, -1, 0, 0, 1], [0, 0, 0, 3, 0], [0, 1, 0, 1, 0]]),
-        }
-        eq_orig = Equilibrium(**inputs)
-        eq_orig.change_resolution(N=1)
+        eq0 = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
-        # perturbations
-        dp = 1e3 * np.array([1, 0, -1])
-        dRb = np.array([-0.2, 0, 0, 0.1, 0.2])
-        dZb = np.array([0.1, -0.2, 0, -0.2])
-
-        obj_pres = ObjectiveFunction(FixedPressure(), eq=eq_orig)
-        obj_bdry = ObjectiveFunction(
-            TargetIota(),
-            (FixedBoundaryR(), FixedBoundaryZ(), LCFSBoundary()),
-            eq=eq_orig,
+        objectives = (RadialForceBalance(), HelicalForceBalance())
+        constraints = (
+            FixedBoundaryR(),
+            FixedBoundaryZ(),
+            FixedPressure(),
+            FixedIota(),
+            FixedPsi(),
+            LCFSBoundary(),
         )
+        objective = ObjectiveFunction(objectives, constraints)
 
-        eq_pres = perturb(eq_orig, obj_pres, dp=dp, order=1, verbose=2, copy=True)
-        eq_bdry = perturb(
-            eq_orig, obj_bdry, dRb=dRb, dZb=dZb, order=1, verbose=2, copy=True
-        )
+        # perturb pressure
+        dp = np.zeros_like(eq0.p_l)
+        dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
 
-        np.testing.assert_allclose(eq_pres.p_l, eq_orig.p_l + dp)
-        np.testing.assert_allclose(eq_bdry.Rb_lmn, eq_orig.Rb_lmn + dRb)
-        np.testing.assert_allclose(eq_bdry.Zb_lmn, eq_orig.Zb_lmn + dZb)
+        eq1 = perturb(eq0, objective, dp=dp, order=1, verbose=2, copy=True)
+        eq2 = perturb(eq0, objective, dp=dp, order=2, verbose=2, copy=True)
+        eq3 = perturb(eq0, objective, dp=dp, order=3, verbose=2, copy=True)
 
-    def test_perturb_2D(self):
-        """Nonlinear test function to check perturb convergence rates."""
-        pass
+        # solve for "true" high-beta solution
+        eq = eq3.copy()
+        eq.solve(objective=objective, ftol=1e-2, verbose=3)
+
+        R0 = eq0.R_lmn[np.where((eq0.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+        R1 = eq1.R_lmn[np.where((eq1.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+        R2 = eq2.R_lmn[np.where((eq2.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+        R3 = eq3.R_lmn[np.where((eq3.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+        R = eq.R_lmn[np.where((eq.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+
+        # error in Shafranov shift for each perturbation order
+        err0 = np.abs(R0 - R)
+        err1 = np.abs(R1 - R)
+        err2 = np.abs(R2 - R)
+        err3 = np.abs(R3 - R)
+
+        assert err1 < err0
+        assert err2 < err1
+        assert err3 < err2

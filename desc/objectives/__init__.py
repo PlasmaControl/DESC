@@ -42,3 +42,26 @@ __all__ = [
     "QuasisymmetryFluxFunction",
     "QuasisymmetryTripleProduct",
 ]
+
+ForceBalanceObjective = ObjectiveFunction(
+    (RadialForceBalance(), HelicalForceBalance()),
+    (
+        FixedBoundaryR(),
+        FixedBoundaryZ(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+        LCFSBoundary(),
+    ),
+)
+EnergyObjective = ObjectiveFunction(
+    (RadialForceBalance(), HelicalForceBalance()),
+    (
+        FixedBoundaryR(),
+        FixedBoundaryZ(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+        LCFSBoundary(),
+    ),
+)

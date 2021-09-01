@@ -10,7 +10,18 @@ from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.optimize import Optimizer
-from desc.objectives import ForceBalanceObjective, EnergyObjective
+from desc.objectives import (
+    ObjectiveFunction,
+    FixedBoundaryR,
+    FixedBoundaryZ,
+    FixedPressure,
+    FixedIota,
+    FixedPsi,
+    LCFSBoundary,
+    RadialForceBalance,
+    HelicalForceBalance,
+    Energy,
+)
 from desc.perturbations import perturb
 
 
@@ -247,7 +258,16 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if objective is None:
-            objective = ForceBalanceObjective
+            objectives = (RadialForceBalance(), HelicalForceBalance())
+            constraints = (
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            objective = ObjectiveFunction(objectives, constraints)
         if not objective.built:
             objective.build(self, verbose=verbose)
 
@@ -504,9 +524,18 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             if self.inputs[ii]["objective"] == "force":
-                objective = ForceBalanceObjective
+                objectives = (RadialForceBalance(), HelicalForceBalance())
             elif self.inputs[ii]["objective"] == "energy":
-                objective = EnergyObjective
+                objectives = Energy()
+            constraints = (
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            objective = ObjectiveFunction(objectives, constraints)
 
             if ii == start_from:
                 equil = self[ii]

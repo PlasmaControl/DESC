@@ -202,7 +202,7 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def _compute(eq, name, grid):
+def _compute(eq, name, grid, component=None):
     """Compute quantity specified by name on grid for Equilibrium eq.
 
     Parameters
@@ -213,6 +213,8 @@ def _compute(eq, name, grid):
         Name of variable to plot.
     grid : Grid
         Grid of coordinates to evaluate at.
+    component : str, optional
+        for vector variables, which element to plot. Default is the norm of the vector
 
     Returns
     -------
@@ -222,11 +224,36 @@ def _compute(eq, name, grid):
     """
     if name not in data_index:
         raise ValueError("Unrecognized value '{}'.".format(name))
-    if data_index[name]["dim"] != 1:
-        raise ValueError("Plot quantities must be locally scalar values.")
+    assert component in [
+        None,
+        "R",
+        "phi",
+        "Z",
+    ], f"component must be one of [None, 'R', 'phi', 'Z'], got {component}"
 
-    data = eq.compute(name, grid)
-    return data[name].reshape((grid.M, grid.L, grid.N), order="F")
+    components = {
+        "R": 0,
+        "phi": 1,
+        "Z": 2,
+    }
+
+    label = data_index[name]["label"]
+
+    data = eq.compute(name, grid)[name]
+    if data_index[name]["dim"] != 1:
+        if component is None:
+            data = np.linalg.norm(data, axis=-1)
+            label = "|" + label + "|"
+        else:
+            data = data[:, components[component]]
+            label = "(" + label + ")_"
+            if component in ["R", "Z"]:
+                label += component
+            else:
+                label += "\phi"
+    label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
+
+    return data.reshape((grid.M, grid.L, grid.N), order="F"), label
 
 
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
@@ -324,7 +351,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data = _compute(eq, name, grid)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None))
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
     # reshape data to 1D
@@ -337,9 +364,7 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
         ax.plot(grid.nodes[:, plot_axes[0]], data)
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_ylabel(
-        r"$" + data_index[name]["label"] + "~(" + data_index[name]["units"] + ")$"
-    )
+    ax.set_ylabel(label)
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -379,7 +404,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    data = _compute(eq, name, grid)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None))
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
     divider = make_axes_locatable(ax)
 
@@ -393,7 +418,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
                 norm_name = "|grad(|B|^2)|"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
-            norm_data = _compute(eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -445,9 +470,7 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
     ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_title(
-        "$" + data_index[name]["label"] + "$ ($" + data_index[name]["units"] + "$)"
-    )
+    ax.set_title(label)
     if norm_F:
         ax.set_title(
             "%s / %s"
@@ -494,7 +517,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    data = _compute(eq, name, grid)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None))
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -548,9 +571,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     ax.set_xlabel(_axis_labels_XYZ[0])
     ax.set_ylabel(_axis_labels_XYZ[1])
     ax.set_zlabel(_axis_labels_XYZ[2])
-    ax.set_title(
-        "$" + data_index[name]["label"] + "$ ($" + data_index[name]["units"] + "$)"
-    )
+    ax.set_title(label)
     fig.set_tight_layout(True)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
@@ -626,7 +647,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
-    data = _compute(eq, name, grid)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None))
     if norm_F:
         if name != "|F|":
             return ValueError(colored("Can only normalize |F|.", "red"))
@@ -637,7 +658,7 @@ def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs
                 norm_name = "|grad(|B|^2)|"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
-            norm_data = _compute(eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols

@@ -141,7 +141,7 @@ def compute_toroidal_flux(
 
     data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
     data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
-    data["psi_rr"] = 2 * Psi * np.ones_like(data["rho"]) / (2 * jnp.pi)
+    data["psi_rr"] = 2 * Psi * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
 
     return data
 
@@ -389,7 +389,7 @@ def compute_covariant_basis(
 
     """
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
-    data["0"] = jnp.zeros_like(data["R"])
+    data["0"] = jnp.zeros(R_transform.num_nodes)
 
     # 0th order derivatives
     if check_derivs("e_rho", R_transform, Z_transform):

@@ -189,7 +189,7 @@ def test_plot_comparison(DSHAPE):
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_con_basis(plot_eq):
-    fig, ax = plot_2d(plot_eq, "e^rho")
+    fig, ax = plot_2d(plot_eq, "e^rho", component="R")
     return fig
 
 

@@ -1,6 +1,7 @@
 import numpy as np
 
 from desc.equilibrium import EquilibriaFamily
+from desc.grid import ConcentricGrid
 from desc.objectives import (
     ObjectiveFunction,
     FixedBoundaryR,
@@ -18,7 +19,7 @@ from desc.perturbations import perturb
 def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
 
-    eq0 = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
     objectives = (RadialForceBalance(), HelicalForceBalance())
     constraints = (
@@ -32,28 +33,30 @@ def test_perturbation_orders(SOLOVEV):
     objective = ObjectiveFunction(objectives, constraints)
 
     # perturb pressure
-    dp = np.zeros_like(eq0.p_l)
+    dp = np.zeros_like(eq.p_l)
     dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-
-    eq1 = perturb(eq0, objective, dp=dp, order=1, verbose=2, copy=True)
-    eq2 = perturb(eq0, objective, dp=dp, order=2, verbose=2, copy=True)
-    eq3 = perturb(eq0, objective, dp=dp, order=3, verbose=2, copy=True)
+    eq0 = perturb(eq, objective, dp=dp, order=0, verbose=2, copy=True)
+    eq1 = perturb(eq, objective, dp=dp, order=1, verbose=2, copy=True)
+    eq2 = perturb(eq, objective, dp=dp, order=2, verbose=2, copy=True)
+    eq3 = perturb(eq, objective, dp=dp, order=3, verbose=2, copy=True)
 
     # solve for "true" high-beta solution
-    eq = eq3.copy()
-    eq.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS = eq3.copy()
+    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
 
-    R0 = eq0.R_lmn[np.where((eq0.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
-    R1 = eq1.R_lmn[np.where((eq1.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
-    R2 = eq2.R_lmn[np.where((eq2.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
-    R3 = eq3.R_lmn[np.where((eq3.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
-    R = eq.R_lmn[np.where((eq.R_basis.modes == [0, 0, 0]).all(axis=1))[0]][0]
+    # evaluate mean equilibrium force balance errors
+    grid = ConcentricGrid(eq.L, eq.M, eq.N, eq.NFP, rotation="cos", node_pattern=None)
+    f0 = np.mean(eq0.compute("|F|", grid)["|F|"])
+    f1 = np.mean(eq1.compute("|F|", grid)["|F|"])
+    f2 = np.mean(eq2.compute("|F|", grid)["|F|"])
+    f3 = np.mean(eq3.compute("|F|", grid)["|F|"])
+    fS = np.mean(eqS.compute("|F|", grid)["|F|"])
 
-    # error in Shafranov shift for each perturbation order
-    err0 = np.abs(R0 - R)
-    err1 = np.abs(R1 - R)
-    err2 = np.abs(R2 - R)
-    err3 = np.abs(R3 - R)
+    # error for each perturbation order
+    err0 = np.abs(f0 - fS)
+    err1 = np.abs(f1 - fS)
+    err2 = np.abs(f2 - fS)
+    err3 = np.abs(f3 - fS)
 
     assert err1 < err0
     assert err2 < err1

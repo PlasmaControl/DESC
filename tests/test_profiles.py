@@ -11,7 +11,7 @@ class TestProfiles(unittest.TestCase):
         input_path = "examples/DESC/SOLOVEV"
         ir = InputReader(input_path)
 
-        eq1 = Equilibrium(ir.inputs[-1])
+        eq1 = Equilibrium(**ir.inputs[-1])
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()

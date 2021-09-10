@@ -88,7 +88,9 @@ def set_device(kind="cpu"):
             if mem > maxmem:
                 maxmem = mem
                 selected_gpu = dev
-        config["device"] = selected_gpu["type"] + " (id={})".format(dev["index"])
+        config["device"] = selected_gpu["type"] + " (id={})".format(
+            selected_gpu["index"]
+        )
         config["avail_mem"] = (
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB

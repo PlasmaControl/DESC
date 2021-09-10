@@ -2,11 +2,10 @@ import os
 import numpy as np
 
 from netCDF4 import Dataset, stringtochar
-from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 from scipy import optimize, interpolate, integrate
 
-from desc.utils import Timer, sign
+from desc.utils import Timer, sign, area_difference
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
@@ -25,7 +24,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
         """Load a VMEC netCDF file as a Equilibrium.
 
         Parameters
@@ -39,7 +38,7 @@ class VMECIO:
         N : int, optional
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
-            Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
+            Type of Zernike indexing scheme to use. (Default = ``'fringe'``)
 
         Returns
         -------
@@ -59,8 +58,6 @@ class VMECIO:
         default_L = {
             "ansi": inputs["M"],
             "fringe": 2 * inputs["M"],
-            "chevron": inputs["M"],
-            "house": 2 * inputs["M"],
         }
         inputs["L"] = L if L >= 0 else default_L[inputs["spectral_indexing"]]
 
@@ -84,20 +81,22 @@ class VMECIO:
         # profiles
         preset = file.dimensions["preset"].size
         p0 = file.variables["presf"][0] / file.variables["am"][0]
-        inputs["profiles"] = np.zeros((preset, 3))
-        inputs["profiles"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["profiles"][:, 1] = file.variables["am"][:] * p0
-        inputs["profiles"][:, 2] = file.variables["ai"][:]
+        inputs["pressure"] = np.zeros((preset, 2))
+        inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["pressure"][:, 1] = file.variables["am"][:] * p0
+        inputs["iota"] = np.zeros((preset, 2))
+        inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
+        inputs["iota"][:, 1] = file.variables["ai"][:]
 
         file.close
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
         m, n, Zb_lmn = ptolemy_identity_fwd(xm, xn, s=zmns[-1, :], c=zmnc[-1, :])
-        inputs["boundary"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
+        inputs["surface"] = np.vstack((np.zeros_like(m), m, n, Rb_lmn, Zb_lmn)).T
 
         # initialize Equilibrium
-        eq = Equilibrium(inputs=inputs)
+        eq = Equilibrium(**inputs)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)
@@ -1076,11 +1075,13 @@ class VMECIO:
 
         Returns
         -------
-        area : float
-            the average normalized area difference between flux surfaces area between
-            flux surfaces is defined as the symmetric difference between the two shapes,
-            and each is normalized to the nominal area of the flux surface, and finally
-            averaged over the total number of flux surfaces being compared
+        area_rho : ndarray, shape(Nr, Nz)
+            normalized area difference of rho contours, computed as the symmetric
+            difference divided by the intersection
+        area_theta : ndarray, shape(Nt, Nz)
+            normalized area difference between vartheta contours, computed as the area
+            of the polygon created by closing the two vartheta contours divided by the
+            perimeter squared
 
         """
         # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
@@ -1094,33 +1095,16 @@ class VMECIO:
 
         coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
-        desc_poly = [
-            [
-                Polygon(np.array([R, Z]).T)
-                for R, Z in zip(
-                    coords["Rr_desc"][:, :, i].T, coords["Zr_desc"][:, :, i].T
-                )
-            ]
-            for i in range(Nz)
-        ]
-        vmec_poly = [
-            [
-                Polygon(np.array([R, Z]).T)
-                for R, Z in zip(
-                    coords["Rr_vmec"][:, :, i].T, coords["Zr_vmec"][:, :, i].T
-                )
-            ]
-            for i in range(Nz)
-        ]
-
-        return np.sum(
-            [
-                desc_poly[iz][ir].symmetric_difference(vmec_poly[iz][ir]).area
-                / vmec_poly[iz][ir].area
-                for ir in range(1, Nr)
-                for iz in range(Nz)
-            ]
-        ) / ((Nr - 1) * Nz)
+        Rr1 = coords["Rr_desc"]
+        Zr1 = coords["Zr_desc"]
+        Rv1 = coords["Rv_desc"]
+        Zv1 = coords["Zv_desc"]
+        Rr2 = coords["Rr_vmec"]
+        Zr2 = coords["Zr_vmec"]
+        Rv2 = coords["Rv_vmec"]
+        Zv2 = coords["Zv_vmec"]
+        area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+        return area_rho, area_theta
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
@@ -1237,6 +1221,7 @@ class VMECIO:
             "Rv_vmec": Rv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
             "Zv_vmec": Zv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
         }
+        coords = {key: np.swapaxes(val, 0, 1) for key, val in coords.items()}
         return coords
 
     @classmethod
@@ -1275,16 +1260,14 @@ class VMECIO:
         for k in range(len(ax)):
             ax[k].plot(coords["Rr_vmec"][0, 0, k], coords["Zr_vmec"][0, 0, k], "bo")
             s_vmec = ax[k].plot(
-                coords["Rr_vmec"][:, :, k], coords["Zr_vmec"][:, :, k], "b-"
+                coords["Rr_vmec"][:, :, k].T, coords["Zr_vmec"][:, :, k].T, "b-"
             )
-            ax[k].plot(coords["Rv_vmec"][:, :, k].T, coords["Zv_vmec"][:, :, k].T, "b-")
+            ax[k].plot(coords["Rv_vmec"][:, :, k], coords["Zv_vmec"][:, :, k], "b-")
 
-            ax[k].plot(coords["Rr_desc"][0, 0, k], coords["Zr_desc"][0, 0, k], "ro")
-            ax[k].plot(
-                coords["Rv_desc"][:, :, k].T, coords["Zv_desc"][:, :, k].T, "r--"
-            )
+            ax[k].plot(coords["Rr_desc"][0, 0, k].T, coords["Zr_desc"][0, 0, k].T, "ro")
+            ax[k].plot(coords["Rv_desc"][:, :, k], coords["Zv_desc"][:, :, k], "r--")
             s_desc = ax[k].plot(
-                coords["Rr_desc"][:, :, k], coords["Zr_desc"][:, :, k], "r--"
+                coords["Rr_desc"][:, :, k].T, coords["Zr_desc"][:, :, k].T, "r--"
             )
 
             ax[k].axis("equal")

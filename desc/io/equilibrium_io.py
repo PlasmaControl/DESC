@@ -56,7 +56,8 @@ def load(load_from, file_format=None):
             raise ValueError(
                 "Could not load from {}, no __class__ attribute found".format(load_from)
             )
-
+    else:
+        raise ValueError("Unknown file format: {}".format(file_format))
     # to set other secondary stuff that wasnt saved possibly:
     if hasattr(obj, "_set_up"):
         obj._set_up()

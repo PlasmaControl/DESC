@@ -2,7 +2,8 @@ import numpy as np
 from netCDF4 import Dataset
 
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
+from desc.utils import area_difference
 
 
 def test_compute_volume(DSHAPE):
@@ -129,16 +130,57 @@ def test_compute_flux_coords(SOLOVEV):
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
 
 
-# can't test booz_xform because it can't be installed by Travis
-"""
-def test_booz_xform(DSHAPE):
-    "Tests booz_xform run."
+def _compute_coords(equil):
 
-    import booz_xform as bx
+    if equil.N == 0:
+        Nz = 1
+    else:
+        Nz = 6
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    b1 = eq.run_booz_xform(filename=str(DSHAPE["booz_nc_path"]), verbose=False)
-    b2 = bx.read_boozmn(str(DSHAPE["booz_nc_path"]))
+    Nr = 10
+    Nt = 8
+    num_theta = 1000
+    num_rho = 1000
 
-    np.testing.assert_allclose(b1.bmnc_b, b2.bmnc_b, rtol=1e-6, atol=1e-6)
-"""
+    # flux surfaces to plot
+    rr = np.linspace(0, 1, Nr)
+    rt = np.linspace(0, 2 * np.pi, num_theta)
+    rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+
+    # straight field-line angles to plot
+    tr = np.linspace(0, 1, num_rho)
+    tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
+    tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
+    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
+
+    # Note: theta* (also known as vartheta) is the poloidal straight field-line
+    # angle in PEST-like flux coordinates
+
+    # find theta angles corresponding to desired theta* angles
+    v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
+    r_coords = equil.compute_toroidal_coords(r_grid)
+    v_coords = equil.compute_toroidal_coords(v_grid)
+
+    # rho contours
+    Rr1 = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Rr1 = np.swapaxes(Rr1, 0, 1)
+    Zr1 = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Zr1 = np.swapaxes(Zr1, 0, 1)
+
+    # vartheta contours
+    Rv1 = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Rv1 = np.swapaxes(Rv1, 0, 1)
+    Zv1 = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Zv1 = np.swapaxes(Zv1, 0, 1)
+    return Rr1, Zr1, Rv1, Zv1
+
+
+def test_to_sfl(plot_eq):
+
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(plot_eq)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(plot_eq.to_sfl())
+    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+
+    np.testing.assert_allclose(rho_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=5e-10)

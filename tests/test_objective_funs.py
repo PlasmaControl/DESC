@@ -79,15 +79,23 @@ class TestIsNested(unittest.TestCase):
             "N": 0,
             "NFP": 1,
             "Psi": 1.0,
-            "profiles": np.array([[0, 0, 0.23]]),
-            "boundary": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
-            "index": "fringe",
+            "pressure": np.array(
+                [
+                    [
+                        0,
+                        0,
+                    ]
+                ]
+            ),
+            "iota": np.array([[0, 0.23]]),
+            "surface": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
+            "spectral_indexing": "fringe",
         }
 
-        eq1 = Equilibrium(inputs)
+        eq1 = Equilibrium(**inputs)
         eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
         eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
-        eq2 = Equilibrium(inputs)
+        eq2 = Equilibrium(**inputs)
         eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
         eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
         self.assertTrue(eq1.is_nested())

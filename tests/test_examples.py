@@ -12,15 +12,17 @@ def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    err = VMECIO.area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+    rho_err, theta_err = VMECIO.area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
-    assert err < 1e-3
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
 
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    err = VMECIO.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
+    rho_err, theta_err = VMECIO.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
 
-    assert err < 1e-3
+    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-5)

@@ -214,14 +214,15 @@ class TestGrid(unittest.TestCase):
             "N": 0,
             "NFP": 1,
             "Psi": 1.0,
-            "profiles": np.array([[0, 0, 0]]),
-            "boundary": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
+            "pressure": np.array([[0, 0]]),
+            "iota": np.array([[0, 0]]),
+            "surface": np.array([[0, 0, 0, R, 0], [0, 1, 0, r, 0], [0, -1, 0, 0, r]]),
             "spectral_indexing": "ansi",
             "bdry_mode": "lcfs",
             "node_pattern": "quad",
         }
 
-        eq = Equilibrium(inputs)
+        eq = Equilibrium(**inputs)
         g = eq.compute_jacobian(eq.grid)
         vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
 

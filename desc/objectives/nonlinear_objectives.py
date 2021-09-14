@@ -136,6 +136,122 @@ class Volume(_Objective):
         return "volume"
 
 
+class AspectRatio(_Objective):
+    """Aspect ratio = major radius / minor radius."""
+
+    def __init__(self, eq=None, target=2, weight=1, grid=None):
+        """Initialize an AspectRatio Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn):
+        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        return data["R0/a"]
+
+    def compute(self, R_lmn, Z_lmn, **kwargs):
+        """Compute aspect ratio.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+
+        Returns
+        -------
+        AR : float
+            Aspect ratio, dimensionless.
+
+        """
+        AR = self._compute(R_lmn, Z_lmn)
+        return (jnp.atleast_1d(AR) - self.target) * self.weight
+
+    def callback(self, R_lmn, Z_lmn, **kwargs):
+        """Print aspect ratio.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+
+        """
+        AR = self._compute(R_lmn, Z_lmn)
+        print("Aspect ratio: {:10.3e} (dimensionless)".format(AR))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return True
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "aspect ratio"
+
+
 class Energy(_Objective):
     """MHD energy.
 

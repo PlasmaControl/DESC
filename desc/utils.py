@@ -415,7 +415,6 @@ def sign(x):
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-
     modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))

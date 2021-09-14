@@ -10,6 +10,7 @@ from .linear_objectives import (
 )
 from .nonlinear_objectives import (
     Volume,
+    AspectRatio,
     Energy,
     RadialForceBalance,
     HelicalForceBalance,
@@ -32,6 +33,7 @@ __all__ = [
     "LCFSBoundary",
     "TargetIota",
     "Volume",
+    "AspectRatio",
     "Energy",
     "RadialForceBalance",
     "HelicalForceBalance",

@@ -1413,6 +1413,7 @@ class _Configuration(IOAble, ABC):
                 M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP, rho=rho[k]
             )
             data = self.compute("|B|", grid)
+            data = self.compute("B_theta", grid, data)  # TODO: compute |B| w/ B_theta
             B_mn[k, :] = transform.fit(data["|B|"])
             Bt_mn[k, :] = transform.fit(data["B_theta"])
             Bz_mn[k, :] = transform.fit(data["B_zeta"])

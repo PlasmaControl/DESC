@@ -2139,7 +2139,8 @@ def compute_geometry(
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     # FIXME: this is not differentiable with JAX -- reference grid.N instead?
-    N = jnp.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
+    # N = jnp.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
+    N = 2 * R_transform.grid.N + 1  # hack that works for QuadratureGrid
     weights = R_transform.grid.weights / (2 * jnp.pi / N)  # remove toroidal weights
 
     data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)

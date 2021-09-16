@@ -210,8 +210,7 @@ def perturb(
             print("Computing d^3f")
         timer.start("d^3f computation")
         RHS3 = (1 / 6) * objective.jvp(y, (tangents, tangents, tangents))
-        tangents += np.dot(objective.Z, dx2)
-        RHS3 += objective.jvp(y, (tangents, tangents))
+        RHS3 += objective.jvp(y, (np.dot(objective.Z, dx2), tangents))
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")

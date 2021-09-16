@@ -9,7 +9,7 @@ from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
-from desc.utils import copy_coeffs, opsindex
+from desc.utils import copy_coeffs, Index
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.profiles import Profile, PowerSeriesProfile
@@ -991,7 +991,7 @@ class _Configuration(IOAble, ABC):
             lmbda_t = jnp.dot(A1, L_lmn)
             f = theta_star - nodes[:, 1] - lmbda
             df = -1 - lmbda_t
-            nodes = put(nodes, opsindex[:, 1], nodes[:, 1] - f / df)
+            nodes = put(nodes, Index[:, 1], nodes[:, 1] - f / df)
             A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
             lmbda = jnp.dot(A0, L_lmn)
             k += 1

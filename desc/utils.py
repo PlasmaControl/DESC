@@ -171,7 +171,7 @@ class _Indexable:
 
     This is a singleton object that overrides the ``__getitem__`` method
     to return the index it is passed.
-    >>> opsindex[1:2, 3, None, ..., ::2]
+    >>> Index[1:2, 3, None, ..., ::2]
     (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
     copied from jax.ops.index to work with either backend
     """
@@ -186,11 +186,11 @@ class _Indexable:
 Helper object for building indexes for indexed update functions.
 This is a singleton object that overrides the ``__getitem__`` method
 to return the index it is passed.
->>> opsindex[1:2, 3, None, ..., ::2]
+>>> Index[1:2, 3, None, ..., ::2]
 (slice(1, 2, None), 3, None, Ellipsis, slice(None, None, 2))
 copied from jax.ops.index to work with either backend
 """
-opsindex = _Indexable()
+Index = _Indexable()
 
 
 # Helper Functions -----------------------------------------------------------

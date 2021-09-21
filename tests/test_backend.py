@@ -1,10 +1,12 @@
 import unittest
+import pytest
 import numpy as np
 
 from desc.backend import put
 from desc.utils import sign
 
 
+@pytest.mark.fast
 class TestBackend(unittest.TestCase):
     """tests for backend functions"""
 

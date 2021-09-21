@@ -1,6 +1,6 @@
 import numpy as np
 from netCDF4 import Dataset
-
+import pytest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
@@ -176,6 +176,7 @@ def _compute_coords(equil):
     return Rr1, Zr1, Rv1, Zv1
 
 
+@pytest.mark.slow
 def test_to_sfl(plot_eq):
 
     Rr1, Zr1, Rv1, Zv1 = _compute_coords(plot_eq)

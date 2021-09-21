@@ -1,6 +1,8 @@
 import unittest
+import pytest
 import numpy as np
 import mpmath
+import time
 from desc.grid import LinearGrid
 from desc.basis import (
     polyder_vec,
@@ -18,6 +20,16 @@ from desc.basis import (
     ZernikePolynomial,
     FourierZernikeBasis,
 )
+
+
+# @pytest.mark.benchmark(
+#     min_rounds=1, max_time=100, timer=time.time, disable_gc=True, warmup=False
+# )
+# def test_bench_polyder(benchmark):
+#     p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
+#     p1 = benchmark(polyder_vec, *(p0, 1))
+#     correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
+#     np.testing.assert_allclose(p1, correct_p1, atol=1e-8)
 
 
 class TestBasis(unittest.TestCase):

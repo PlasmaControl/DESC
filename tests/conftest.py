@@ -3,6 +3,7 @@ import subprocess
 import os
 import h5py
 import numpy as np
+import time
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.__main__ import main
@@ -21,8 +22,11 @@ def TmpDir(tmpdir_factory):
     return dir_path
 
 
+# @pytest.mark.benchmark(
+#     min_rounds=1, max_time=5, timer=time.time, disable_gc=True, warmup=False
+# )
 @pytest.fixture(scope="session")
-def SOLOVEV(tmpdir_factory):
+def SOLOVEV(tmpdir_factory, benchmark):
     """Run SOLOVEV example."""
     input_path = "examples//DESC//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
@@ -40,6 +44,7 @@ def SOLOVEV(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
+    # benchmark.pedantic(main, args=args, iterations=1, rounds=1)
     main(args)
 
     SOLOVEV_out = {

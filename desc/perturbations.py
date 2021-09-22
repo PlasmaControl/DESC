@@ -126,6 +126,21 @@ def perturb(
             print("Factoring df")
         timer.start("df/dx factorization")
         m, n = Jx.shape
+        w = (
+            np.concatenate(
+                [
+                    abs(eq.R_basis.modes[:, :2] ** 2).sum(axis=1),
+                    abs(eq.Z_basis.modes[:, :2] ** 2).sum(axis=1),
+                    abs(eq.L_basis.modes[:, :2] ** 2).sum(axis=1),
+                ]
+            )
+            + 1
+        )
+        Z = eq.objective.BC_constraint.Z
+        W = Z.T @ np.diag(w) @ Z
+        scale_inv = np.linalg.cholesky(W)
+        scale = np.linalg.inv(scale_inv)
+        Jx = Jx @ scale
         u, s, vt = jnp.linalg.svd(Jx, full_matrices=False)
         timer.stop("df/dx factorization")
         if verbose > 1:
@@ -142,17 +157,18 @@ def perturb(
         if verbose > 1:
             timer.disp("df/dc computation ({})".format(keys))
 
-        dx1, hit, alpha = trust_region_step_exact_svd(
+        dx1_h, hit, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
             vt.T,
-            tr_ratio[0] * np.linalg.norm(y),
+            tr_ratio[0] * np.linalg.norm(scale_inv @ y),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
+        dx1 = scale @ dx1_h
 
     # 2nd order
     if order > 1:
@@ -171,17 +187,18 @@ def perturb(
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2, hit, alpha = trust_region_step_exact_svd(
+        dx2_h, hit, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
             vt.T,
-            tr_ratio[1] * np.linalg.norm(dx1),
+            tr_ratio[1] * np.linalg.norm(dx1_h),
             initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
+        dx2 = scale @ dx2_h
 
     # 3rd order
     if order > 2:
@@ -200,17 +217,18 @@ def perturb(
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3, hit, alpha = trust_region_step_exact_svd(
+        dx3_h, hit, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
             vt.T,
-            tr_ratio[2] * np.linalg.norm(dx2),
+            tr_ratio[2] * np.linalg.norm(dx2_h),
             initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
+        dx3 = scale @ dx3_h
 
     if copy:
         eq_new = eq.copy()

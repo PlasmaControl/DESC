@@ -362,10 +362,6 @@ def optimal_perturb(
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
-    # check that objectives have the same constraints
-    if objective_f.constraints != objective_g.constraints:
-        raise ValueError("Objectives must have the same constraints.")
-
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
 

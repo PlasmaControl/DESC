@@ -311,8 +311,6 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
-        cutoff=1e-6,
-        Jx=None,
         verbose=1,
         copy=True,
     ):
@@ -321,23 +319,22 @@ class Equilibrium(_Configuration, IOAble):
         Parameters
         ----------
         objective : ObjectiveFunction
-            objective to optimize during the perturbation (optional)
-        dRb, dZb, dp, di, dPsi : ndarray or float
-            If objective not given: deltas for perturbations of
-            R_boundary, Z_boundary, pressure, iota, and toroidal flux.
+            Objective function to satisfy.
+        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
+            rotational transform, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
-            If objective is given: indicies of modes to include in the perturbations of
-            R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
-            Setting to True (False/None) includes (excludes) all modes.
-        order : int, optional
-            order of perturbation (0=none, 1=linear, 2=quadratic)
-        Jx : ndarray, optional
-            jacobian matrix df/dx
+        order : {0,1,2,3}
+            Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
+        tr_ratio : float or array of float
+            Radius of the trust region, as a fraction of ||x||.
+            Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+            If a scalar, uses the same ratio for all steps. If an array, uses the first
+            element for the first step and so on.
         verbose : int
-            level of output to display
+            Level of output.
         copy : bool
-            True to return a modified copy of the current equilibrium, False to perturb
-            the current equilibrium in place
+            Whether to perturb the input equilibrium or make a copy (Default).
 
         Returns
         -------
@@ -358,7 +355,6 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
-            cutoff=cutoff,
             verbose=verbose,
             copy=copy,
         )

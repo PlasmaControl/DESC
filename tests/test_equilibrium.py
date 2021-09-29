@@ -85,6 +85,7 @@ def test_magnetic_axis_guess(DummyStellarator):
     np.testing.assert_allclose(Z0_eq, Z0, rtol=0, atol=1e-6)
 
 
+@pytest.mark.slow
 def test_compute_theta_coords(SOLOVEV):
     """Test root finding for theta(theta*, lambda(theta))"""
 
@@ -99,7 +100,8 @@ def test_compute_theta_coords(SOLOVEV):
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = np.array(eq.compute_theta_coords(flux_coords))
+    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
     if geom_coords[0, 1] > np.pi:  # theta[0] = 0
@@ -108,6 +110,7 @@ def test_compute_theta_coords(SOLOVEV):
     np.testing.assert_allclose(nodes, geom_coords, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.slow
 def test_compute_flux_coords(SOLOVEV):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)"""
 
@@ -121,7 +124,8 @@ def test_compute_flux_coords(SOLOVEV):
     coords = eq.compute_toroidal_coords(Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
-    flux_coords = np.array(eq.compute_flux_coords(real_coords))
+    flux_coords = eq.compute_flux_coords(real_coords)
+    flux_coords = np.array(flux_coords)
 
     # catch difference between 0 and 2*pi
     if flux_coords[0, 1] > np.pi:  # theta[0] = 0

@@ -22,16 +22,6 @@ from desc.basis import (
 )
 
 
-# @pytest.mark.benchmark(
-#     min_rounds=1, max_time=100, timer=time.time, disable_gc=True, warmup=False
-# )
-# def test_bench_polyder(benchmark):
-#     p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
-#     p1 = benchmark(polyder_vec, *(p0, 1))
-#     correct_p1 = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0], [0, 2, 1]])
-#     np.testing.assert_allclose(p1, correct_p1, atol=1e-8)
-
-
 class TestBasis(unittest.TestCase):
     """Tests Basis classes"""
 
@@ -67,6 +57,7 @@ class TestBasis(unittest.TestCase):
         coeffs = zernike_radial_coeffs(l, m, exact=False)
         assert coeffs.dtype == np.float64
 
+    @pytest.mark.slow
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]

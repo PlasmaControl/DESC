@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.signal import convolve2d
-
+import pytest
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
@@ -13,6 +13,7 @@ FD_COEF_2_2 = np.array([1, -2, 1])[::-1]
 FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
 
 
+@pytest.mark.slow
 def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the partial derivatives of B and |B| match with numerical derivatives
     for a dummy stellarator example."""
@@ -373,6 +374,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
 
+@pytest.mark.slow
 def test_magnetic_pressure_gradient(DummyStellarator):
     """Test that the components of grad(|B|^2)) match with numerical gradients
     for a dummy stellarator example."""
@@ -433,6 +435,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
+@pytest.mark.slow
 def test_quasisymmetry(DummyStellarator):
     """Test that the components of grad(B*grad(|B|)) match with numerical gradients
     for a dummy stellarator example."""

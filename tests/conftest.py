@@ -22,11 +22,38 @@ def TmpDir(tmpdir_factory):
     return dir_path
 
 
-# @pytest.mark.benchmark(
-#     min_rounds=1, max_time=5, timer=time.time, disable_gc=True, warmup=False
-# )
 @pytest.fixture(scope="session")
-def SOLOVEV(tmpdir_factory, benchmark):
+def SOLOVEV_dirs(tmpdir_factory):
+    """Get folders to run SOLOVEV in (for benchmark.py)."""
+    input_path = "examples//DESC//SOLOVEV"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
+    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
+    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running SOLOVEV test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+
+    SOLOVEV_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return SOLOVEV_out
+
+
+@pytest.fixture(scope="session")
+def SOLOVEV(tmpdir_factory):
     """Run SOLOVEV example."""
     input_path = "examples//DESC//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
@@ -43,8 +70,7 @@ def SOLOVEV(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    # benchmark.pedantic(main, args=args, iterations=1, rounds=1)
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     SOLOVEV_out = {
@@ -55,6 +81,36 @@ def SOLOVEV(tmpdir_factory, benchmark):
         "booz_nc_path": booz_nc_path,
     }
     return SOLOVEV_out
+
+
+@pytest.fixture(scope="session")
+def DSHAPE_dirs(tmpdir_factory):
+    """Get DSHAPE dirs (for benchamrk.py)."""
+    input_path = "examples//DESC//DSHAPE"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_out.h5")
+    desc_nc_path = output_dir.join("DSHAPE_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+
+    DSHAPE_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return DSHAPE_out
 
 
 @pytest.fixture(scope="session")
@@ -149,11 +205,3 @@ def reader_test_file(tmpdir_factory):
         g.create_dataset(key, data=thedict[key])
     f.close()
     return filename
-
-
-"""
-def pytest_collection_modifyitems(items):
-    for item in items:
-        if "DSHAPE" in getattr(item, "fixturenames", ()):
-            item.add_marker("slow")
-"""

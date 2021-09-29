@@ -140,6 +140,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
 
+@pytest.mark.slow
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
 
@@ -167,6 +168,7 @@ def test_load_then_save(TmpDir):
     file2.close
 
 
+@pytest.mark.slow
 def test_vmec_save(DSHAPE, TmpDir):
     """Tests that saving in NetCDF format agrees with VMEC."""
 

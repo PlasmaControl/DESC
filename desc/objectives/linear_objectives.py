@@ -980,3 +980,136 @@ class TargetIota(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "target-iota"
+
+
+# XXX: this is a hack
+class VMECBoundaryConstraint(_Objective):
+    """Constraint to fix a boundary mode in the VMEC double-Fourier basis."""
+
+    def __init__(self, eq=None, target=0, weight=1, mode=(0, 0)):
+        """Initialize a VMECBoundaryConstraint Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            target = [RBC, ZBS], RBC*cos(m*t - n*NFP*z), ZBS*sin(m*t - n*NFP*z)
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        mode : tuple of int
+            mode = (m, n)
+
+        """
+        self._m = mode[0]
+        self._n = mode[1]
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        Rb_modes = eq.surface.R_basis.modes
+        Zb_modes = eq.surface.Z_basis.modes
+
+        dim_Rb = eq.surface.R_basis.num_modes
+        dim_Zb = eq.surface.Z_basis.num_modes
+
+        self._dim_f = 2
+
+        self._A_R = np.zeros((1, dim_Rb))
+        j = np.argwhere(
+            np.logical_and(
+                Rb_modes[:, 1] == np.abs(self._m), Rb_modes[:, 2] == np.abs(self._n)
+            )
+        )
+        self._A_R[0, j] = 0.5
+        j = np.argwhere(
+            np.logical_and(
+                Rb_modes[:, 1] == -np.abs(self._m), Rb_modes[:, 2] == -np.abs(self._n)
+            )
+        )
+        self._A_R[0, j] = -0.5
+
+        self._A_Z = np.zeros((1, dim_Zb))
+        j = np.argwhere(
+            np.logical_and(
+                Zb_modes[:, 1] == -np.abs(self._m), Zb_modes[:, 2] == np.abs(self._n)
+            )
+        )
+        self._A_Z[0, j] = 0.5
+        j = np.argwhere(
+            np.logical_and(
+                Zb_modes[:, 1] == np.abs(self._m), Zb_modes[:, 2] == -np.abs(self._n)
+            )
+        )
+        self._A_Z[0, j] = 0.5
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, Rb_lmn, Zb_lmn):
+        Rb = jnp.dot(self._A_R, Rb_lmn)
+        Zb = jnp.dot(self._A_Z, Zb_lmn)
+        return jnp.concatenate((Rb, Zb)) - self.target
+
+    def compute(self, Rb_lmn, Zb_lmn, **kwargs):
+        """Compute VMEC boundary constraint errors.
+
+        Parameters
+        ----------
+        Rb_lmn : ndarray
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary surface errors, in meters.
+
+        """
+        return self._compute(Rb_lmn, Zb_lmn) * self.weight
+
+    def callback(self, Rb_lmn, Zb_lmn, **kwargs):
+        """Print last closed flux surface boundary errors.
+
+        Parameters
+        ----------
+        Rb_lmn : ndarray
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+        Zb_lmn : ndarray
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+
+        """
+        f = self._compute(Rb_lmn, Zb_lmn)
+        print("R constraint error: {:10.3e} (m)".format(f[0]))
+        print("Z constraint error: {:10.3e} (m)".format(f[1]))
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return False
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return True
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "VMEC"

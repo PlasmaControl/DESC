@@ -7,6 +7,7 @@ from .linear_objectives import (
     FixedPsi,
     LCFSBoundary,
     TargetIota,
+    VMECBoundaryConstraint,
 )
 from .nonlinear_objectives import (
     Volume,
@@ -32,6 +33,7 @@ __all__ = [
     "FixedPsi",
     "LCFSBoundary",
     "TargetIota",
+    "VMECBoundaryConstraint",
     "Volume",
     "AspectRatio",
     "Energy",

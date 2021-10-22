@@ -593,7 +593,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         print("Perturbing equilibrium")
                     # TODO: pass Jx if available
                     equil.perturb(
-                        objective=objective,
+                        objective_f=objective,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,

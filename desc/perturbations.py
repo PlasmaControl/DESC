@@ -146,7 +146,6 @@ def perturb(
         if verbose > 0:
             print("Factoring df")
         timer.start("df/dx factorization")
-        m, n = Jx.shape
         u, s, vt = np.linalg.svd(Jx, full_matrices=False)
         timer.stop("df/dx factorization")
         if verbose > 1:
@@ -376,15 +375,14 @@ def optimal_perturb(
     c = np.array([])
     c_idx = np.array([], dtype=bool)
     for key, value in deltas.items():
+        c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
-        c_idx = np.concatenate((c_idx, value))
-    c_opt = c[c_idx]
 
     # perturbation vectors
-    dc1 = 0
-    dc2 = 0
-    dx1 = 0
-    dx2 = 0
+    dc1 = np.zeros_like(c)
+    dc2 = np.zeros_like(c)
+    dx1 = np.zeros_like(x)
+    dx2 = np.zeros_like(x)
 
     # dy/dc for f objective
     if objective_f.dim_c:
@@ -439,14 +437,13 @@ def optimal_perturb(
 
         GxFx = np.dot(Gx, Fx_inv)
         LHS = np.dot(GxFx, Fc) - Gc
-        RHS_1g = g - np.dot(GxFx, f)
+        RHS_1g = -g + np.dot(GxFx, f)
 
         LHS = LHS[:, c_idx]  # restrict optimization space
 
         if verbose > 0:
             print("Factoring LHS")
         timer.start("LHS factorization")
-        m, n = LHS.shape
         ug, sg, vtg = np.linalg.svd(LHS, full_matrices=False)
         timer.stop("LHS factorization")
         if verbose > 1:
@@ -457,15 +454,12 @@ def optimal_perturb(
             ug,
             sg,
             vtg.T,
-            tr_ratio[0] * np.linalg.norm(c_opt),
+            tr_ratio[0] * np.linalg.norm(c),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
-
-        dc1 = np.zeros_like(c)
-        dc1[c_idx] = dc1_opt
 
         RHS_1f = f + np.dot(Fc, dc1)
         uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
@@ -500,7 +494,7 @@ def optimal_perturb(
             print("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = np.dot(objective_g.Z, dx1) + np.dot(dydc_g, dc1)
-        RHS_2g = 0.5 * objective_g.jvp(y, (tangents_g, tangents_g)) - np.dot(
+        RHS_2g = -0.5 * objective_g.jvp(y, (tangents_g, tangents_g)) - np.dot(
             GxFx, RHS_2f
         )
         timer.stop("d^2g computation")
@@ -512,15 +506,12 @@ def optimal_perturb(
             ug,
             sg,
             vtg.T,
-            tr_ratio[0] * np.linalg.norm(dc1_opt),
+            tr_ratio[1] * np.linalg.norm(dc1_opt),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
-
-        dc2 = np.zeros_like(c)
-        dc2[c_idx] = dc2_opt
 
         RHS_2f += np.dot(Fc, dc2)
 
@@ -529,7 +520,7 @@ def optimal_perturb(
             uf,
             sf,
             vtf.T,
-            tr_ratio[0] * np.linalg.norm(dx1),
+            tr_ratio[1] * np.linalg.norm(dx1),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -568,6 +559,7 @@ def optimal_perturb(
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
+        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
         print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
 
     return eq_new

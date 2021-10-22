@@ -22,7 +22,7 @@ from desc.objectives import (
     HelicalForceBalance,
     Energy,
 )
-from desc.perturbations import perturb
+from desc.perturbations import perturb, optimal_perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -300,7 +300,8 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
-        objective,
+        objective_f,
+        objective_g=None,
         dR=None,
         dZ=None,
         dL=None,
@@ -311,6 +312,7 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
+        cutoff=1e-6,
         verbose=1,
         copy=True,
     ):
@@ -318,12 +320,18 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective : ObjectiveFunction
+        objective_f : ObjectiveFunction
             Objective function to satisfy.
+        objective_g : ObjectiveFunction
+            Objective function to optimize.
         dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
             rotational transform, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
+            OR, if objective_g is supplied:
+            Array of indicies of modes to include in the perturbations of R, Z, lambda,
+            R_boundary, Z_boundary, pressure, rotational transform, and total flux.
+            Setting to True (False) includes (excludes) all modes.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
@@ -331,6 +339,8 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
             element for the first step and so on.
+        cutoff : float
+            Relative cutoff for small singular values in pseudo-inverse.
         verbose : int
             Level of output.
         copy : bool
@@ -342,22 +352,43 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        equil = perturb(
-            self,
-            objective,
-            dR=dR,
-            dZ=dZ,
-            dL=dL,
-            dRb=dRb,
-            dZb=dZb,
-            dp=dp,
-            di=di,
-            dPsi=dPsi,
-            order=order,
-            tr_ratio=tr_ratio,
-            verbose=verbose,
-            copy=copy,
-        )
+        if objective_g is None:
+            equil = perturb(
+                self,
+                objective_f,
+                dR=dR,
+                dZ=dZ,
+                dL=dL,
+                dRb=dRb,
+                dZb=dZb,
+                dp=dp,
+                di=di,
+                dPsi=dPsi,
+                order=order,
+                tr_ratio=tr_ratio,
+                verbose=verbose,
+                copy=copy,
+            )
+        else:
+            equil = optimal_perturb(
+                self,
+                objective_f,
+                objective_g,
+                dR=dR,
+                dZ=dZ,
+                dL=dL,
+                dRb=dRb,
+                dZb=dZb,
+                dp=dp,
+                di=di,
+                dPsi=dPsi,
+                order=order,
+                tr_ratio=tr_ratio,
+                cutoff=cutoff,
+                verbose=verbose,
+                copy=copy,
+            )
+
         equil.solved = False
 
         if copy:

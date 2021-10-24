@@ -37,6 +37,8 @@ jobs:
           cd tests/benchmarks
           python -m pytest benchmark.py --benchmark-autosave
       - name: Save Benchmark Results
+        run: |
+          pwd
           python read_bench_result.py
       - name: Commit the results and the figure to the repo
         uses: EndBug/add-and-commit@v7

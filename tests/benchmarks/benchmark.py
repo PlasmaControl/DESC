@@ -66,3 +66,56 @@ def test_build_transform_fft_highres(benchmark):
         transf.build()
 
     benchmark.pedantic(build, iterations=1, warmup_rounds=1, rounds=25)
+
+
+@pytest.fixture(scope="session")
+def TmpDir(tmpdir_factory):
+    """Create a temporary directory to store testing files."""
+    dir_path = tmpdir_factory.mktemp("test_results")
+    return dir_path
+
+
+@pytest.mark.benchmark(min_rounds=1, max_time=200, disable_gc=True, warmup=False)
+def test_SOLOVEV_run(tmpdir_factory, benchmark):
+    """Benchmark the SOLOVEV example"""
+    input_path = "examples//DESC//SOLOVEV"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
+    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
+    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running SOLOVEV test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
+    benchmark(main, args)
+    return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
+def test_DSHAPE_run(tmpdir_factory, benchmark):
+    """Benchmark the DSHAPE example."""
+    input_path = "examples//DESC//DSHAPE"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_out.h5")
+    desc_nc_path = output_dir.join("DSHAPE_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    benchmark(main, args)
+
+    return None

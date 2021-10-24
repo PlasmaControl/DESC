@@ -1,0 +1,45 @@
+name: benchmarks 
+
+on: 
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9]
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tests/requirements.txt
+      - name: Benchmark with pytest-benchmark
+        run: |
+          pwd
+          lscpu
+          cd tests/benchmarks
+          python -m pytest benchmark.py --benchmark-autosave
+      - name: Save Benchmark Results
+          python read_bench_result.py
+      - name: Commit the results and the figure to the repo
+        uses: EndBug/add-and-commit@v7
+        with:
+          add: '-f .benchmarks Figures'
+          push: false

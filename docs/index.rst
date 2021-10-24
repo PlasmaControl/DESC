@@ -32,6 +32,14 @@
 	     
    api
 
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Benchmarks
+	     
+   benchmarks
+
+
 Indices and tables
 ==================
 

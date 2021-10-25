@@ -40,7 +40,7 @@ jobs:
         run: |
           pwd
           cd tests/benchmarks
-          python read_bench_result.py
+          python read_bench_results.py
       - name: Commit the results and the figure to the repo
         uses: EndBug/add-and-commit@v7
         with:

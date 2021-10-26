@@ -45,4 +45,4 @@ jobs:
         uses: EndBug/add-and-commit@v7
         with:
           add: '-f tests/benchmarks/.benchmarks tests/benchmarks/Figures'
-          push: false
+          push: true 

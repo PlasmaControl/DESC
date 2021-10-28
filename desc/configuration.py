@@ -925,7 +925,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(M=self.M, N=self.N, sym=self.L_basis.sym),
-                    derivs=0,
+                    derivs=1,
                     build_pinv=True,
                 )
             elif arg == "pressure":

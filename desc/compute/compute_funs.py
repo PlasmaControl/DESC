@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.constants import mu_0
-
+from desc.vmec_utils import zernike_to_fourier
 from desc.backend import jnp, put
 from desc.compute import data_index
 from desc.grid import Grid
@@ -1895,6 +1895,9 @@ def compute_boozer_coords(
 
     # QS Boozer harmonics
     lambda_mn = nu_transform.fit(data["lambda"])  # FIXME: evaluate this exactly!
+    rho = jnp.unique(R_transform.grid.nodes[:,0])
+    # exact eval is the same...
+    #m,n, lambda_mn2 = zernike_to_fourier(L_lmn,basis=L_transform.basis,rho=rho)
     nu_mn = jnp.zeros_like(lambda_mn)
     for k, (l, m, n) in enumerate(nu_transform.basis.modes):
         if m != 0:
@@ -1918,16 +1921,40 @@ def compute_boozer_coords(
                 )[0],
             )
     data["nu"] = nu_transform.transform(nu_mn)
+    data["nu_t"] = nu_transform.transform(nu_mn,dr=0,dt=1,dz=0)
+    data["nu_z"] = nu_transform.transform(nu_mn,dr=0,dt=0,dz=1)
+    # TODO: Add endpoints to all periodic quantities (since they do not go to 2*pi)
+    jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
     data["Boozer modes"] = B_transform.basis.modes
-
+    theta = np.unique(R_transform.grid.nodes[:,1])
+    zeta = np.unique(R_transform.grid.nodes[:,2])
+    M,N,L = R_transform.grid.M,R_transform.grid.N,R_transform.grid.L
     if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
         b_nodes = nu_transform.grid.nodes
+        b_grid = Grid(b_nodes)
+        B_transform.grid = b_grid
+        data["|B|_mn0"] = B_transform.fit(data["|B|"])
         b_nodes[:, 2] = b_nodes[:, 2] - data["nu"]
         b_nodes[:, 1] = b_nodes[:, 1] - data["lambda"] - data["iota"] * data["nu"]
         b_grid = Grid(b_nodes)
         B_transform.grid = b_grid
-        data["|B|_mn"] = B_transform.fit(data["|B|"])
-
+        data['T_B']=b_nodes[:, 1]
+        data['Z_B'] = b_nodes[:, 2]
+        B_mn = np.zeros_like(data["|B|_mn0"])
+        jac_B = jac_B.reshape(M,L,N,order="F")
+        
+        for k, (l, m, n) in enumerate(B_transform.basis.modes):
+            cos_term = jnp.cos(m * (theta + data['lambda']+ data['iota']*data['nu']) - n * (zeta + data['nu']))
+            cos_term = cos_term.reshape(M,L,N,order="F")
+            integrand = data['|B|_mn0'][k]*cos_term*jac_B
+            if len(zeta)==1: # axisymmetric
+                B_mn[k] = (1/2/jnp.pi)*jnp.trapz(x=theta,y=integrand[:,0,0])
+            else:
+                B_mn[k] = (1/4/jnp.pi**2)*jnp.trapz(x=theta,y=jnp.trapz(x=zeta,y=integrand[:,1,:]))
+                # TODO: check that indexing is correct (is middle index radial) and test on HELIOTRON
+            # B_mn[k] = np.trapz(x=)
+        # data["|B|_mn"] = B_transform.fit(data["|B|"])# this part can be different
+        data["|B|_mn"] = B_mn
     return data
 
 

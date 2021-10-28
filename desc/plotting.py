@@ -1027,12 +1027,11 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
 
     B_mn = np.array([[]])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=8*eq.M_grid+1 , N=8*eq.N_grid +1, NFP=eq.NFP, rho=r)
         data = eq.compute("|B|_mn", grid)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
-
-    idx = np.argsort(np.abs(B_mn[0, :]))
+    idx = np.argsort(np.abs(B_mn[0, :])) # what does num_modes do...
     if num_modes == -1:
         idx = idx[-1::-1]
     else:

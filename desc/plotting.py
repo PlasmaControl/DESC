@@ -1024,11 +1024,12 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
     """
     if rho is None:
         rho = np.linspace(1, 0, num=L, endpoint=False)
-
+    datas = [] # list of data dicts
     B_mn = np.array([[]])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=8*eq.M_grid+1 , N=8*eq.N_grid +1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=20*eq.M_grid+1 , N=20*eq.N_grid +1, NFP=eq.NFP, rho=r)
         data = eq.compute("|B|_mn", grid)
+        datas.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
     idx = np.argsort(np.abs(B_mn[0, :])) # what does num_modes do...
@@ -1055,7 +1056,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax
+    return fig, ax, datas
 
 
 def plot_grid(grid, **kwargs):

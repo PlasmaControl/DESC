@@ -1894,7 +1894,7 @@ def compute_boozer_coords(
         data["G"] = B_zeta_mn[idx0]
 
     # QS Boozer harmonics
-    lambda_mn = nu_transform.fit(data["lambda"])  # FIXME: evaluate this exactly!
+    lambda_mn = nu_transform.fit(data["lambda"])  
     rho = jnp.unique(R_transform.grid.nodes[:,0])
     # exact eval is the same...
     #m,n, lambda_mn2 = zernike_to_fourier(L_lmn,basis=L_transform.basis,rho=rho)
@@ -1924,11 +1924,50 @@ def compute_boozer_coords(
     data["nu_t"] = nu_transform.transform(nu_mn,dr=0,dt=1,dz=0)
     data["nu_z"] = nu_transform.transform(nu_mn,dr=0,dt=0,dz=1)
     # TODO: Add endpoints to all periodic quantities (since they do not go to 2*pi)
-    jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
     data["Boozer modes"] = B_transform.basis.modes
-    theta = np.unique(R_transform.grid.nodes[:,1])
-    zeta = np.unique(R_transform.grid.nodes[:,2])
     M,N,L = R_transform.grid.M,R_transform.grid.N,R_transform.grid.L
+    lam = data['lambda'].reshape(M,L,N,order="F")
+    lam_t = data['lambda_t'].reshape(M,L,N,order="F")
+    lam_z = data['lambda_z'].reshape(M,L,N,order="F")
+    
+    iota = data['iota'].reshape(M,L,N,order="F")
+    nu = data['nu'].reshape(M,L,N,order="F")
+    nu_z = data['nu_z'].reshape(M,L,N,order="F")
+    nu_t = data['nu_t'].reshape(M,L,N,order="F")
+    
+    theta = np.unique(R_transform.grid.nodes[:,1])
+    # theta = np.append(np.unique(R_transform.grid.nodes[:,1]),2*np.pi)
+    
+    zeta = np.unique(R_transform.grid.nodes[:,2])
+    if len(zeta)>1:
+        zeta = np.append(zeta,2*np.pi) # TODO: check if this is ok or if need to acct for NFP
+        lam = np.append(lam[:,0,:],lam[0,0,0])
+        lam_t = np.append(lam_t[:,0,:],lam_t[0,0,0])
+        lam_z = np.append(lam_z[:,0,:],lam_z[0,0,0])
+        nu = np.append(nu[:,0,:],nu[0,0,0])
+        nu_t = np.append(nu[:,0,:],nu_t[0,0,0])
+        nu = np.append(nu_z[:,0,:],nu_z[0,0,0])
+        iota = np.append(iota[:,0,:],iota[0,0,0])
+        theta = theta.reshape(M,L,N,order="F")
+        theta = np.append(theta[:,0,:],2*np.pi)
+        # jac_B = np.append(jac_B[:,0,:],jac_B[0,0,0],)
+    else:
+    #     #jac_B = np.append(jac_B[:,0,0],jac_B[0,0,0])
+        lam = np.append(lam[:,0,0],lam[0,0,0])
+        lam_t = np.append(lam_t[:,0,0],lam_t[0,0,0])
+        lam_z = np.append(lam_z[:,0,0],lam_z[0,0,0])
+        nu = np.append(nu[:,0,0],nu[0,0,0])
+        nu_t = np.append(nu_t[:,0,0],nu_t[0,0,0])
+        nu_z = np.append(nu_z[:,0,0],nu_z[0,0,0])
+        iota = np.append(iota[:,0,0],iota[0,0,0])
+        theta = theta.reshape(M,L,N,order="F")
+        theta = np.append(theta[:,0,0],2*jnp.pi)
+        
+        
+    # jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
+    jac_B = (1 + lam_t)*(1 + nu_z) + (iota - lam_z)*nu_t # jacobian boozer to normal coords
+
+    # jac_B = jac_B.reshape(M,L,N,order="F")
     if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
         b_nodes = nu_transform.grid.nodes
         b_grid = Grid(b_nodes)
@@ -1941,14 +1980,13 @@ def compute_boozer_coords(
         data['T_B']=b_nodes[:, 1]
         data['Z_B'] = b_nodes[:, 2]
         B_mn = np.zeros_like(data["|B|_mn0"])
-        jac_B = jac_B.reshape(M,L,N,order="F")
+        
         
         for k, (l, m, n) in enumerate(B_transform.basis.modes):
-            cos_term = jnp.cos(m * (theta + data['lambda']+ data['iota']*data['nu']) - n * (zeta + data['nu']))
-            cos_term = cos_term.reshape(M,L,N,order="F")
+            cos_term = jnp.cos(m * (theta + lam + iota*nu) - n * (zeta + nu))
             integrand = data['|B|_mn0'][k]*cos_term*jac_B
             if len(zeta)==1: # axisymmetric
-                B_mn[k] = (1/2/jnp.pi)*jnp.trapz(x=theta,y=integrand[:,0,0])
+                B_mn[k] = (1/2/jnp.pi)*jnp.trapz(x=theta,y=integrand)
             else:
                 B_mn[k] = (1/4/jnp.pi**2)*jnp.trapz(x=theta,y=jnp.trapz(x=zeta,y=integrand[:,1,:]))
                 # TODO: check that indexing is correct (is middle index radial) and test on HELIOTRON

@@ -1882,7 +1882,10 @@ def compute_boozer_coords(
         iota,
         data=data,
     )
-
+    if len(jnp.unique(R_transform.grid.nodes[:,2])) == 1:
+        is_axisymmetric= True
+    else:
+        is_axisymmetric = False
     idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
@@ -1934,25 +1937,60 @@ def compute_boozer_coords(
     nu = data['nu'].reshape(M,L,N,order="F")
     nu_z = data['nu_z'].reshape(M,L,N,order="F")
     nu_t = data['nu_t'].reshape(M,L,N,order="F")
+    B = data["|B|"].reshape(M,L,N,order="F")
     
-    theta = np.unique(R_transform.grid.nodes[:,1])
-    # theta = np.append(np.unique(R_transform.grid.nodes[:,1]),2*np.pi)
+    # theta = np.unique(R_transform.grid.nodes[:,1])
+    theta = R_transform.grid.nodes[:,1]
+    theta_unique= np.unique(R_transform.grid.nodes[:,1])
+    theta_unique=jnp.append(theta_unique,2*jnp.pi)
+    theta = theta.reshape(M,L,N,order="F")
     
-    zeta = np.unique(R_transform.grid.nodes[:,2])
-    if len(zeta)>1:
-        zeta = np.append(zeta,2*np.pi) # TODO: check if this is ok or if need to acct for NFP
-        lam = np.append(lam[:,0,:],lam[0,0,0])
-        lam_t = np.append(lam_t[:,0,:],lam_t[0,0,0])
-        lam_z = np.append(lam_z[:,0,:],lam_z[0,0,0])
-        nu = np.append(nu[:,0,:],nu[0,0,0])
-        nu_t = np.append(nu[:,0,:],nu_t[0,0,0])
-        nu = np.append(nu_z[:,0,:],nu_z[0,0,0])
-        iota = np.append(iota[:,0,:],iota[0,0,0])
-        theta = theta.reshape(M,L,N,order="F")
-        theta = np.append(theta[:,0,:],2*np.pi)
-        # jac_B = np.append(jac_B[:,0,:],jac_B[0,0,0],)
+    zeta = R_transform.grid.nodes[:,2]
+    zeta_unique=jnp.unique(R_transform.grid.nodes[:,2])
+    if not is_axisymmetric:
+        zeta_unique=jnp.append(zeta_unique,2*jnp.pi)
+        zeta = zeta.reshape(M,L,N,order="F")
+
+    def periodic_along_each_dim(array):
+        '''
+        Take an array and append the first value in the first dim onto the end,
+        and the first value of the second dim to the end
+        (i.e. the array is periodic in each of the two angular dimensions, so 
+         add the first val to the end to enforce the periodicity)
+
+        Parameters
+        ----------
+        array : array
+            3D array of dims [M,1,N] .
+
+        Returns
+        -------
+        array : TYPE
+            2D array of dim[M+1,N+1], where the last values of each dim are 
+            the same as the first.
+
+        '''
+        array = np.vstack((array[:,0,:],array[0,0,:]))
+        array = np.hstack((array,np.expand_dims(array[:,0],axis=-1)))
+        return array
+    if not is_axisymmetric:
+        
+        lam = periodic_along_each_dim(lam)  
+        lam_t = periodic_along_each_dim(lam_t)
+        lam_z = periodic_along_each_dim(lam_z)
+        nu = periodic_along_each_dim(nu)
+        nu_t = periodic_along_each_dim(nu_t)
+        nu_z = periodic_along_each_dim(nu_z)
+        iota = periodic_along_each_dim(iota)
+        B = periodic_along_each_dim(B)
+        
+        zeta = np.vstack((zeta[:,0,:],2*jnp.pi*np.ones_like(zeta[0,0,:])))
+        zeta = np.hstack((zeta,np.expand_dims(2*jnp.pi*np.ones_like(zeta[:,0]),axis=-1)))
+        
+        theta = np.vstack((theta[:,0,:],2*jnp.pi*np.ones_like(theta[0,0,:])))
+        theta = np.hstack((theta,np.expand_dims(2*jnp.pi*np.ones_like(theta[:,0]),axis=-1)))
+        
     else:
-    #     #jac_B = np.append(jac_B[:,0,0],jac_B[0,0,0])
         lam = np.append(lam[:,0,0],lam[0,0,0])
         lam_t = np.append(lam_t[:,0,0],lam_t[0,0,0])
         lam_z = np.append(lam_z[:,0,0],lam_z[0,0,0])
@@ -1960,8 +1998,11 @@ def compute_boozer_coords(
         nu_t = np.append(nu_t[:,0,0],nu_t[0,0,0])
         nu_z = np.append(nu_z[:,0,0],nu_z[0,0,0])
         iota = np.append(iota[:,0,0],iota[0,0,0])
+        B = np.append(B[:,0,0],B[0,0,0])
+        
         theta = theta.reshape(M,L,N,order="F")
         theta = np.append(theta[:,0,0],2*jnp.pi)
+        zeta = zeta_unique
         
         
     # jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
@@ -1983,12 +2024,12 @@ def compute_boozer_coords(
         
         
         for k, (l, m, n) in enumerate(B_transform.basis.modes):
-            cos_term = jnp.cos(m * (theta + lam + iota*nu) - n * (zeta + nu))
-            integrand = data['|B|_mn0'][k]*cos_term*jac_B
-            if len(zeta)==1: # axisymmetric
-                B_mn[k] = (1/2/jnp.pi)*jnp.trapz(x=theta,y=integrand)
+            cos_term = jnp.cos(m * (theta_unique + lam + iota*nu) - n * (zeta + nu))
+            integrand = B*cos_term*jac_B
+            if is_axisymmetric: # axisymmetric
+                B_mn[k] = (1/2/jnp.pi)*jnp.trapz(x=theta_unique,y=integrand)
             else:
-                B_mn[k] = (1/4/jnp.pi**2)*jnp.trapz(x=theta,y=jnp.trapz(x=zeta,y=integrand[:,1,:]))
+                B_mn[k] = (1/4/jnp.pi**2)*jnp.trapz(x=theta_unique,y=jnp.trapz(x=zeta_unique,y=integrand))
                 # TODO: check that indexing is correct (is middle index radial) and test on HELIOTRON
             # B_mn[k] = np.trapz(x=)
         # data["|B|_mn"] = B_transform.fit(data["|B|"])# this part can be different

@@ -5,9 +5,15 @@ on:
     branches:
       - master
       - dev
+    paths-ignore:
+      - 'tests/benchmarks/.benchmarks/**'
+      - 'tests/benchmarks/Figures/**'
   pull_request:
     branches:
       - master
+    paths-ignore:
+      - 'tests/benchmarks/.benchmarks/**'
+      - 'tests/benchmarks/Figures/**'
   workflow_dispatch:
 
 

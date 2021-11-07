@@ -818,9 +818,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            r"$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+            "$\\zeta \\cdot NFP/2\\pi = %1.3f$" % (nfp * zeta[i] / (2 * np.pi))
         )
-
     fig.set_tight_layout(True)
     return fig, ax
 

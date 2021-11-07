@@ -18,6 +18,7 @@ def perturb(
     order=2,
     tr_ratio=0.1,
     cutoff=1e-6,
+    weight="auto",
     Jx=None,
     verbose=1,
     copy=True,
@@ -41,6 +42,9 @@ def perturb(
         for the first step and so on
     cutoff : float
         relative cutoff for small singular values in pseudoinverse
+    weight : ndarray, "auto", or None, optional
+        1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+        matrices. Default is to weight by (mode number)**2. None applies no weighting.
     Jx : ndarray, optional
         jacobian matrix df/dx
     verbose : int
@@ -126,18 +130,28 @@ def perturb(
             print("Factoring df")
         timer.start("df/dx factorization")
         m, n = Jx.shape
-        w = (
-            np.concatenate(
-                [
-                    abs(eq.R_basis.modes[:, :2] ** 2).sum(axis=1),
-                    abs(eq.Z_basis.modes[:, :2] ** 2).sum(axis=1),
-                    abs(eq.L_basis.modes[:, :2] ** 2).sum(axis=1),
-                ]
+        if weight == "auto":
+            weight = (
+                np.concatenate(
+                    [
+                        abs(eq.R_basis.modes[:, :2] ** 2).sum(axis=1),
+                        abs(eq.Z_basis.modes[:, :2] ** 2).sum(axis=1),
+                        abs(eq.L_basis.modes[:, :2] ** 2).sum(axis=1),
+                    ]
+                )
+                + 1
             )
-            + 1
-        )
+        elif weight is None:
+            weight = np.ones(
+                eq.R_basis.num_modes + eq.Z_basis.num_modes + eq.L_basis.num_modes
+            )
+
+        weight = np.atleast_1d(weight)
+        if weight.ndim == 1:
+            weight = np.diag(weight)
+
         Z = eq.objective.BC_constraint.Z
-        W = Z.T @ np.diag(w) @ Z
+        W = Z.T @ weight @ Z
         scale_inv = np.linalg.cholesky(W)
         scale = np.linalg.inv(scale_inv)
         Jx = Jx @ scale
@@ -242,9 +256,7 @@ def perturb(
     # update boundary constraint
     if "Rb_lmn" in deltas or "Zb_lmn" in deltas:
         eq_new.objective.BC_constraint = eq_new.surface.get_constraint(
-            eq_new.R_basis,
-            eq_new.Z_basis,
-            eq_new.L_basis,
+            eq_new.R_basis, eq_new.Z_basis, eq_new.L_basis
         )
 
     # update state vector
@@ -556,9 +568,7 @@ def optimal_perturb(
     # update boundary constraint
     if "Rb_lmn" in inputs or "Zb_lmn" in inputs:
         eq_new.objective.BC_constraint = eq.surface.get_constraint(
-            eq_new.R_basis,
-            eq_new.Z_basis,
-            eq_new.L_basis,
+            eq_new.R_basis, eq_new.Z_basis, eq_new.L_basis
         )
 
     # update state vector

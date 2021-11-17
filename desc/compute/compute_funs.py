@@ -1945,8 +1945,8 @@ def compute_boozer_coords(
     data['transform']=B_transform
     Bt = data['B_theta'].reshape(M,L,N,order='F')
     Bz = data['B_zeta'].reshape(M,L,N,order='F')
-    Bt = periodic_along_each_dim(Bt)
-    Bz = periodic_along_each_dim(Bz)
+    # Bt = periodic_along_each_dim(Bt)
+    # Bz = periodic_along_each_dim(Bz)
     # if not is_axisymmetric:
     #     data["G"] = NFP/(4*jnp.pi**2)*jnp.trapz(x=theta_unique,y=jnp.trapz(x=zeta_unique,y=Bz))
     #     data["I"] = NFP/(4*jnp.pi**2)*jnp.trapz(x=theta_unique,y=jnp.trapz(x=zeta_unique,y=Bt))
@@ -2036,8 +2036,8 @@ def compute_boozer_coords(
         iota = jnp.append(iota[:,0,0],iota[0,0,0])
         B = jnp.append(B[:,0,0],B[0,0,0])
         
-        # theta = theta.reshape(M,L,N,order="F")
-        # theta = np.append(theta[:,0,0],2*jnp.pi)
+        theta = theta.reshape(M,L,N,order="F")
+        theta = np.append(theta[:,0,0],2*jnp.pi)
         zeta = zeta_unique
         
         

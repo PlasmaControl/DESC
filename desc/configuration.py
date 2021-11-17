@@ -917,14 +917,14 @@ class _Configuration(IOAble, ABC):
             elif arg == "B_transform":
                 inputs[arg] = Transform(
                     grid,
-                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.R_basis.sym),
+                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.R_basis.sym, NFP=self.NFP),
                     derivs=0,
                     build_pinv=True,
                 )
             elif arg == "nu_transform":
                 inputs[arg] = Transform(
                     grid,
-                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.L_basis.sym),
+                    DoubleFourierSeries(M=self.M, N=self.N, sym=self.L_basis.sym, NFP=self.NFP),
                     derivs=1,
                     build_pinv=True,
                 )
@@ -1343,7 +1343,7 @@ class _Configuration(IOAble, ABC):
             N_boz = 2 * self.N if self.N > 0 else 0
         if rho is None:
             rho = np.linspace(0.01, 1, num=100)
-
+        d = {} #debug data dict
         # Booz_xform object
         b = bx.Booz_xform()
         b.verbose = verbose
@@ -1403,26 +1403,40 @@ class _Configuration(IOAble, ABC):
         transform = Transform(grid, basis, build=False, build_pinv=True)
         m = basis.modes[:, 1]
         n = basis.modes[:, 2]
-
+        d["four_basis"] = basis
+        d['transform']=transform
+        
         # |B|, B_theta, B_zeta
         B_mn = np.zeros((b.ns_in, b.mnmax_nyq))
         Bt_mn = np.zeros((b.ns_in, b.mnmax_nyq))
         Bz_mn = np.zeros((b.ns_in, b.mnmax_nyq))
+        datas = []
         for k in range(b.ns_in):
             grid = LinearGrid(
                 M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP, rho=rho[k]
             )
             data = self.compute("|B|", grid)
-            data = self.compute("B_theta", grid, data)  # TODO: compute |B| w/ B_theta
+            data = self.compute("B_theta", grid, data)
+            data['rho']=rho[k]
+            datas.append(data)# TODO: compute |B| w/ B_theta
             B_mn[k, :] = transform.fit(data["|B|"])
             Bt_mn[k, :] = transform.fit(data["B_theta"])
             Bz_mn[k, :] = transform.fit(data["B_zeta"])
+        d["B_mn"] = B_mn
+        d["Bt_mn"] = Bt_mn
+        d["Bz_mn"] = Bz_mn
+        
+        
         xm, xn, B_s, B_c = ptolemy_identity_rev(m, n, B_mn)
         xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(m, n, Bt_mn)
         xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(m, n, Bz_mn)
         b.bmnc = B_c.T
         b.bsubumnc = Bt_c.T
         b.bsubvmnc = Bz_c.T
+        d["B_c"] = B_c
+        d["Bt_c"] = Bt_c
+        d["Bz_c"] = Bz_c
+        
         if not self.sym:
             b.bmns = B_s.T
             b.bsubumns = Bt_s.T
@@ -1435,4 +1449,4 @@ class _Configuration(IOAble, ABC):
         b.run()
         if filename is not None:
             b.write_boozmn(filename)
-        return b
+        return b,d,datas

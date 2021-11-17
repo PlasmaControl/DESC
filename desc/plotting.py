@@ -994,7 +994,7 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None):
+def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None,**kwargs):
     """Plot Fourier harmonics of |B| in Boozer coordinates.
 
     Parameters
@@ -1024,15 +1024,16 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
     """
     if rho is None:
         rho = np.linspace(1, 0, num=L, endpoint=False)
-    
+    ds=[]
     B_mn = np.array([[]])
+    linestyle = kwargs.get('linestyle','--')
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=3*eq.M_grid+1 , N=3*eq.N_grid +1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=2*eq.M_grid+1 , N=2*eq.N_grid +1, NFP=1, rho=r)
         data = eq.compute("|B|_mn", grid)
-        
+        ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
-        # print(f'rho={r}')
+        print(f'rho={r}')
     idx = np.argsort(np.abs(B_mn[0, :])) # what does num_modes do...
     if num_modes == -1:
         idx = idx[-1::-1]
@@ -1048,16 +1049,16 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
         if (M, N) == (0, 0) and B0 is False:
             continue
         if log is True:
-            ax.semilogy(rho, np.abs(B_mn[:, i]), "-", label="M={}, N={}".format(M, N))
+            ax.semilogy(rho, np.abs(B_mn[:, i]), "o--", label="M={}, N={}".format(M, N))#,linestyle=linestyle)
         else:
-            ax.plot(rho, B_mn[:, i], "-", label="M={}, N={}".format(M, N))
+            ax.plot(rho, B_mn[:, i], "-", label="M={}, N={}".format(M, N),linestyle=linestyle)
 
     ax.set_xlabel(_axis_labels_rtz[0])
     ax.set_ylabel(r"Fourier harmonics of $|B|$ in Boozer coordinates $(T)$")
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax
+    return fig, ax,ds
 
 
 def plot_grid(grid, **kwargs):

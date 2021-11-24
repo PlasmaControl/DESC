@@ -358,10 +358,10 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     data = data.flatten()
 
     if log:
-        ax.semilogy(grid.nodes[:, plot_axes[0]], data)
+        ax.semilogy(grid.nodes[:, plot_axes[0]], data,label=kwargs.get('label',None))
         data = np.abs(data)  # ensure its positive for log plot
     else:
-        ax.plot(grid.nodes[:, plot_axes[0]], data)
+        ax.plot(grid.nodes[:, plot_axes[0]], data,label=kwargs.get('label',None))
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_ylabel(label)

@@ -13,7 +13,18 @@ from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier
 from desc.compute import data_index
 
-__all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
+__all__ = [
+    "plot_1d",
+    "plot_2d",
+    "plot_3d",
+    "plot_surfaces",
+    "plot_section",
+    "plot_comparison",
+    "plot_current",
+    "plot_boozer_modes",
+    "plot_grid",
+    "plot_basis",
+]
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue
@@ -899,7 +910,7 @@ def plot_comparison(
     labels=None,
     **kwargs,
 ):
-    """Plot comparison between flux surfaces of multiple equilibria
+    """Plot comparison between flux surfaces of multiple equilibria.
 
     Parameters
     ----------
@@ -994,13 +1005,15 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_current(eq, L=10, M=None, N=None, rho=None, ax=None, log=False, **kwargs):
+def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwargs):
     """Plot current density profiles.
 
     Parameters
     ----------
     eq : Equilibrium
         object from which to plot
+    log : bool, optional
+        Whether to use a log scale. Default is False.
     L : int, optional
         Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
     M : int, optional
@@ -1011,8 +1024,6 @@ def plot_current(eq, L=10, M=None, N=None, rho=None, ax=None, log=False, **kwarg
         Radial coordinates of the flux surfaces to evaluate at.
     ax : matplotlib AxesSubplot, optional
         axis to plot on
-    log : bool, optional
-        whether to use a log scale
 
     Returns
     -------
@@ -1087,7 +1098,7 @@ def plot_boozer_modes(
         rho = np.linspace(1, 0, num=L, endpoint=False)
     ds = []
     B_mn = np.array([[]])
-    linestyle = kwargs.get("linestyle", "--")
+    linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=1, rho=r)
         data = eq.compute("|B|_mn", grid)
@@ -1095,7 +1106,7 @@ def plot_boozer_modes(
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
         print(f"rho={r}")
-    idx = np.argsort(np.abs(B_mn[0, :]))  # what does num_modes do...
+    idx = np.argsort(np.abs(B_mn[0, :]))
     if num_modes == -1:
         idx = idx[-1::-1]
     else:
@@ -1111,8 +1122,11 @@ def plot_boozer_modes(
             continue
         if log is True:
             ax.semilogy(
-                rho, np.abs(B_mn[:, i]), "o--", label="M={}, N={}".format(M, N)
-            )  # ,linestyle=linestyle)
+                rho,
+                np.abs(B_mn[:, i]),
+                label="M={}, N={}".format(M, N),
+                linestyle=linestyle,
+            )
         else:
             ax.plot(
                 rho,

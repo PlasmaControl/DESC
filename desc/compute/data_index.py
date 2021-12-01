@@ -2884,7 +2884,7 @@ data_index = {
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
         "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
-    "QS_FF": {
+    "f_C": {
         "label": "(\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B - "
         + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",
         "units": "T^{3}",
@@ -2905,7 +2905,7 @@ data_index = {
         ],
         "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 2, 0], [0, 0, 2], [0, 1, 1]],
     },
-    "QS_TP": {
+    "f_T": {
         "label": "\\nabla \\psi \\times \\nabla B \\cdot \\nabla "
         + "(\\mathbf{B} \\cdot \\nabla B)",
         "units": "T^{4} \\cdot m^{-2}",

@@ -153,6 +153,8 @@ class ObjectiveFunction(IOAble):
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
+            # TODO: add jit for jac, hess, jvp, etc.
+            # then can remove jit from Derivatives class
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build the constraints and objectives.

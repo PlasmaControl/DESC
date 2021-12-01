@@ -131,12 +131,12 @@ class FixedBoundaryR(_Objective):
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordiante.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
 
         Returns
         -------
         f : ndarray
-            Boundary surface errors, in meters.
+            Boundary surface errors (m).
 
         """
         Rb = self._compute(Rb_lmn)
@@ -148,7 +148,7 @@ class FixedBoundaryR(_Objective):
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordiante.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
 
         """
         Rb = self._compute(Rb_lmn)
@@ -290,12 +290,12 @@ class FixedBoundaryZ(_Objective):
         Parameters
         ----------
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         Returns
         -------
         f : ndarray
-            Boundary surface errors, in meters.
+            Boundary surface errors (m).
 
         """
         Zb = self._compute(Zb_lmn)
@@ -307,7 +307,7 @@ class FixedBoundaryZ(_Objective):
         Parameters
         ----------
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         """
         Zb = self._compute(Zb_lmn)
@@ -448,7 +448,7 @@ class FixedPressure(_Objective):
         Returns
         -------
         f : ndarray
-            Pressure profile errors, in Pascals.
+            Pressure profile errors (Pa).
 
         """
         return self._compute(p_l) * self.weight
@@ -689,12 +689,12 @@ class FixedPsi(_Objective):
         Parameters
         ----------
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
         f : ndarray
-            Total toroidal magnetic flux error, in Webers.
+            Total toroidal magnetic flux error (Wb).
 
         """
         return self._compute(Psi) * self.weight
@@ -705,7 +705,7 @@ class FixedPsi(_Objective):
         Parameters
         ----------
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(Psi)
@@ -818,18 +818,18 @@ class LCFSBoundary(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         Returns
         -------
         f : ndarray
-            Boundary surface errors, in meters.
+            Boundary surface errors (m).
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
@@ -841,13 +841,13 @@ class LCFSBoundary(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         """
         Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
@@ -1071,14 +1071,14 @@ class VMECBoundaryConstraint(_Objective):
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         Returns
         -------
         f : ndarray
-            Boundary surface errors, in meters.
+            Boundary surface errors (m).
 
         """
         return self._compute(Rb_lmn, Zb_lmn) * self.weight
@@ -1089,9 +1089,9 @@ class VMECBoundaryConstraint(_Objective):
         Parameters
         ----------
         Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate.
+            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
         Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordiante.
+            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
 
         """
         f = self._compute(Rb_lmn, Zb_lmn)

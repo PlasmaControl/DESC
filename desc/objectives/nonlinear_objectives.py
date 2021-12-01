@@ -20,6 +20,9 @@ from desc.compute import (
 from .objective_funs import _Objective
 
 
+# scalar nonlinear objectives
+
+
 class Volume(_Objective):
     """Plasma volume."""
 
@@ -92,14 +95,14 @@ class Volume(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
 
         Returns
         -------
         V : float
-            Plasma volume, in cubic meters.
+            Plasma volume (m^3).
 
         """
         V = self._compute(R_lmn, Z_lmn)
@@ -111,9 +114,9 @@ class Volume(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
 
         """
         V = self._compute(R_lmn, Z_lmn)
@@ -208,9 +211,9 @@ class AspectRatio(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
 
         Returns
         -------
@@ -227,9 +230,9 @@ class AspectRatio(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
 
         """
         AR = self._compute(R_lmn, Z_lmn)
@@ -354,9 +357,9 @@ class Energy(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -364,12 +367,12 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
         W : float
-            Total MHD energy in the plasma volume, in Joules.
+            Total MHD energy in the plasma volume (J).
 
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -381,9 +384,9 @@ class Energy(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -391,7 +394,7 @@ class Energy(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -426,6 +429,160 @@ class Energy(_Objective):
     def name(self):
         """Name of objective function (str)."""
         return "energy"
+
+
+class ToroidalCurrent(_Objective):
+    """Toroidal current encolsed by a surface."""
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None):
+        """Initialize a ToroidalCurrent Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight)
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                L=1,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=1,
+            )
+
+        self._dim_f = self.grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self.grid
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        return 2 * np.pi / mu_0 * data["I"]
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute toroidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        I : float
+            Toroidal current (A).
+
+        """
+        I = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        return (I - self.target) * self.weight
+
+    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Print toroidal current.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        """
+        I = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        print("Toroidal current: {:10.3e} ".format(I) + "(A)")
+        return None
+
+    @property
+    def scalar(self):
+        """bool: Whether default "compute" method is a scalar (or vector)."""
+        return True
+
+    @property
+    def linear(self):
+        """bool: Whether the objective is a linear function (or nonlinear)."""
+        return False
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return "toroidal current"
+
+
+# non-scalar nonlinear objectives
 
 
 class RadialForceBalance(_Objective):
@@ -533,6 +690,7 @@ class RadialForceBalance(_Objective):
         if self.norm:
             f = f / data["|grad(p)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -541,9 +699,9 @@ class RadialForceBalance(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -551,7 +709,7 @@ class RadialForceBalance(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -568,9 +726,9 @@ class RadialForceBalance(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -578,7 +736,7 @@ class RadialForceBalance(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -728,9 +886,9 @@ class HelicalForceBalance(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -738,7 +896,7 @@ class HelicalForceBalance(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -755,9 +913,9 @@ class HelicalForceBalance(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
@@ -765,7 +923,7 @@ class HelicalForceBalance(_Objective):
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
@@ -801,11 +959,11 @@ class HelicalForceBalance(_Objective):
         return "helical force"
 
 
-class RadialCurrent(_Objective):
-    """Radial current."""
+class RadialCurrentDensity(_Objective):
+    """Radial current density."""
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
-        """Initialize a RadialCurrent Objective.
+        """Initialize a RadialCurrentDensity Objective.
 
         Parameters
         ----------
@@ -916,20 +1074,20 @@ class RadialCurrent(_Objective):
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute radial current.
+        """Compute radial current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -941,20 +1099,20 @@ class RadialCurrent(_Objective):
         return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print radial current.
+        """Print radial current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
@@ -987,14 +1145,14 @@ class RadialCurrent(_Objective):
     @property
     def name(self):
         """Name of objective function (str)."""
-        return "radial current"
+        return "radial current density"
 
 
-class PoloidalCurrent(_Objective):
-    """Poloidal current."""
+class PoloidalCurrentDensity(_Objective):
+    """Poloidal current density."""
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
-        """Initialize a PoloidalCurrent Objective.
+        """Initialize a PoloidalCurrentDensity Objective.
 
         Parameters
         ----------
@@ -1105,20 +1263,20 @@ class PoloidalCurrent(_Objective):
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute poloidal current.
+        """Compute poloidal current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -1130,20 +1288,20 @@ class PoloidalCurrent(_Objective):
         return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print poloidal current.
+        """Print poloidal current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
@@ -1179,11 +1337,11 @@ class PoloidalCurrent(_Objective):
         return "poloidal current"
 
 
-class ToroidalCurrent(_Objective):
-    """Toroidal current."""
+class ToroidalCurrentDensity(_Objective):
+    """Toroidal current density."""
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
-        """Initialize a ToroidalCurrent Objective.
+        """Initialize a ToroidalCurrentDensity Objective.
 
         Parameters
         ----------
@@ -1294,20 +1452,20 @@ class ToroidalCurrent(_Objective):
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute toroidal current.
+        """Compute toroidal current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -1319,20 +1477,20 @@ class ToroidalCurrent(_Objective):
         return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print toroidal current.
+        """Print toroidal current density.
 
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
@@ -1501,15 +1659,15 @@ class QuasisymmetryBoozer(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -1526,15 +1684,15 @@ class QuasisymmetryBoozer(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
@@ -1692,15 +1850,15 @@ class QuasisymmetryFluxFunction(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -1717,15 +1875,15 @@ class QuasisymmetryFluxFunction(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
@@ -1878,15 +2036,15 @@ class QuasisymmetryTripleProduct(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -1903,15 +2061,15 @@ class QuasisymmetryTripleProduct(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
         Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         Psi : float
-            Total toroidal magnetic flux within the last closed flux surface, in Webers.
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         """
         f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)

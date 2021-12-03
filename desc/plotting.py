@@ -1105,7 +1105,6 @@ def plot_boozer_modes(
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
-        print(f"rho={r}")
     idx = np.argsort(np.abs(B_mn[0, :]))
     if num_modes == -1:
         idx = idx[-1::-1]

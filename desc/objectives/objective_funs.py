@@ -185,14 +185,15 @@ class ObjectiveFunction(IOAble):
 
         # build objectives
         self._dim_f = 0
-        self._scalar = True
         for objective in self.objectives:
-            if not objective.scalar:
-                self._scalar = False
             if verbose > 0:
                 print("Building objective: " + objective.name)
             objective.build(eq, use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
+        if self._dim_f == 1:
+            self._scalar = True
+        else:
+            self._scalar = False
 
         self._set_state_vector()
 

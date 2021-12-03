@@ -461,6 +461,7 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
+        dc1[c_idx] = dc1_opt
         RHS_1f = f + np.dot(Fc, dc1)
         uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
 
@@ -513,6 +514,7 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
+        dc2[c_idx] = dc2_opt
         RHS_2f += np.dot(Fc, dc2)
 
         dx2, hit, alpha = trust_region_step_exact_svd(

@@ -275,6 +275,8 @@ class ObjectiveFunction(IOAble):
             Optimization variables (x) or full state vector (y).
 
         """
+        f = self.compute_scalar(x)
+        print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
             obj.callback(**kwargs)

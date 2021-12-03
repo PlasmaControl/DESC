@@ -1719,6 +1719,7 @@ def compute_contravariant_current_density(
             + data["J^zeta"] * data["B^theta"] * data["g_tz"]
             + data["J^zeta"] * data["B^zeta"] * data["g_zz"]
         ) / data["|B|"]
+
     return data
 
 
@@ -1813,6 +1814,7 @@ def compute_force_error(
             + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
             + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
         )
+        data["div_J_perp"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
     if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
         data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]

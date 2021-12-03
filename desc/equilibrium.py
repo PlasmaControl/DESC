@@ -370,7 +370,7 @@ class Equilibrium(_Configuration, IOAble):
                 copy=copy,
             )
         else:
-            equil = optimal_perturb(
+            equil, red_ratio = optimal_perturb(
                 self,
                 objective_f,
                 objective_g,
@@ -392,9 +392,9 @@ class Equilibrium(_Configuration, IOAble):
         equil.solved = False
 
         if copy:
-            return equil
+            return equil, red_ratio
         else:
-            return None
+            return red_ratio
 
     def optimize(self):
         """Optimize an equilibrium for a physics or engineering objective."""

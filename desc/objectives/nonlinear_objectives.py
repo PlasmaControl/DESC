@@ -488,13 +488,13 @@ class ToroidalCurrent(_Objective):
         self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["I"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["I"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["I"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -1807,13 +1807,13 @@ class QuasisymmetryFluxFunction(_Objective):
         self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["f_C"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["QS_FF"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["f_C"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["QS_FF"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["f_C"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -1993,13 +1993,13 @@ class QuasisymmetryTripleProduct(_Objective):
         self._iota.grid = self.grid
 
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["f_T"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["QS_TP"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["f_T"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["QS_TP"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["f_T"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")

@@ -263,7 +263,7 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        return jnp.sum(self.compute(x) ** 2)
+        return jnp.sum(self.compute(x) ** 2) / 2
 
     def callback(self, x):
         """Print the value(s) of the objective.

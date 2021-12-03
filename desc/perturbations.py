@@ -556,10 +556,15 @@ def optimal_perturb(
             )
             setattr(eq_new, key, value)
 
+    act_red = objective_g.compute_scalar(x) - objective_g.compute_scalar(x + dx)
+    pre_red = -np.dot(g.T + 0.5 * np.dot(dc.T, Gc.T), np.dot(Gc, dc))
+    red_ratio = act_red / pre_red  # actual / predicted reduction ratio
+
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
         print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
         print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
+        print("reduction ratio = {}".format(red_ratio))
 
-    return eq_new
+    return eq_new, red_ratio

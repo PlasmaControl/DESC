@@ -13,7 +13,18 @@ from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier
 from desc.compute import data_index
 
-__all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
+__all__ = [
+    "plot_1d",
+    "plot_2d",
+    "plot_3d",
+    "plot_surfaces",
+    "plot_section",
+    "plot_comparison",
+    "plot_current",
+    "plot_boozer_modes",
+    "plot_grid",
+    "plot_basis",
+]
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue
@@ -358,10 +369,10 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     data = data.flatten()
 
     if log:
-        ax.semilogy(grid.nodes[:, plot_axes[0]], data,label=kwargs.get('label',None))
+        ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
         data = np.abs(data)  # ensure its positive for log plot
     else:
-        ax.plot(grid.nodes[:, plot_axes[0]], data,label=kwargs.get('label',None))
+        ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_ylabel(label)
@@ -899,7 +910,7 @@ def plot_comparison(
     labels=None,
     **kwargs,
 ):
-    """Plot comparison between flux surfaces of multiple equilibria
+    """Plot comparison between flux surfaces of multiple equilibria.
 
     Parameters
     ----------
@@ -994,7 +1005,68 @@ def plot_comparison(
     return fig, ax
 
 
-def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None,**kwargs):
+def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwargs):
+    """Plot current density profiles.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    log : bool, optional
+        Whether to use a log scale. Default is False.
+    L : int, optional
+        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
+    M : int, optional
+        Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
+    N : int, optional
+        Number of toroidal nodes used in flux surface average. Default is 2*eq.N_grid+1.
+    rho : ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at.
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    if rho is None:
+        rho = np.linspace(1, 0, num=L, endpoint=False)
+    if M is None:
+        M = 2 * eq.M_grid + 1
+    if N is None:
+        N = 2 * eq.N_grid + 1
+
+    I = np.array([])
+    G = np.array([])
+    for i, r in enumerate(rho):
+        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
+        data = eq.compute("I", grid)
+        I = np.append(I, data["I"])
+        G = np.append(G, data["G"])
+
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+
+    if log:
+        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(I), label="toroidal")
+        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(G), label="poloidal")
+    else:
+        ax.plot(rho, 2 * np.pi / mu_0 * I, label="toroidal")
+        ax.plot(rho, 2 * np.pi / mu_0 * G, label="poloidal")
+
+    ax.set_xlabel(_axis_labels_rtz[0])
+    ax.set_ylabel(r"current $(A)$")
+    fig.legend(loc="center right")
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_boozer_modes(
+    eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None, **kwargs
+):
     """Plot Fourier harmonics of |B| in Boozer coordinates.
 
     Parameters
@@ -1024,17 +1096,16 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
     """
     if rho is None:
         rho = np.linspace(1, 0, num=L, endpoint=False)
-    ds=[]
+    ds = []
     B_mn = np.array([[]])
-    linestyle = kwargs.get('linestyle','--')
+    linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2*eq.M_grid+1 , N=2*eq.N_grid +1, NFP=1, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=1, rho=r)
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
-        print(f'rho={r}')
-    idx = np.argsort(np.abs(B_mn[0, :])) # what does num_modes do...
+    idx = np.argsort(np.abs(B_mn[0, :]))
     if num_modes == -1:
         idx = idx[-1::-1]
     else:
@@ -1049,16 +1120,27 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=No
         if (M, N) == (0, 0) and B0 is False:
             continue
         if log is True:
-            ax.semilogy(rho, np.abs(B_mn[:, i]), "o--", label="M={}, N={}".format(M, N))#,linestyle=linestyle)
+            ax.semilogy(
+                rho,
+                np.abs(B_mn[:, i]),
+                label="M={}, N={}".format(M, N),
+                linestyle=linestyle,
+            )
         else:
-            ax.plot(rho, B_mn[:, i], "-", label="M={}, N={}".format(M, N),linestyle=linestyle)
+            ax.plot(
+                rho,
+                B_mn[:, i],
+                "-",
+                label="M={}, N={}".format(M, N),
+                linestyle=linestyle,
+            )
 
     ax.set_xlabel(_axis_labels_rtz[0])
     ax.set_ylabel(r"Fourier harmonics of $|B|$ in Boozer coordinates $(T)$")
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax,ds
+    return fig, ax, ds
 
 
 def plot_grid(grid, **kwargs):

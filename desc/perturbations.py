@@ -377,6 +377,9 @@ def optimal_perturb(
     for key, value in deltas.items():
         c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
+    c_norm = np.linalg.norm(c[c_idx])
+    if c_norm == 0:
+        c_norm = 1
 
     # perturbation vectors
     dc1 = np.zeros_like(c)
@@ -454,7 +457,7 @@ def optimal_perturb(
             ug,
             sg,
             vtg.T,
-            tr_ratio[0] * np.linalg.norm(c),
+            tr_ratio[0] * c_norm,
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,

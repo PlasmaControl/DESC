@@ -1838,7 +1838,7 @@ class QuasisymmetryFluxFunction(_Objective):
             self._iota,
             self._helicity,
         )
-        f = data["QS_FF"] * self.grid.weights
+        f = data["f_C"] * self.grid.weights
         if self.norm:
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f / B ** 3
@@ -2023,7 +2023,7 @@ class QuasisymmetryTripleProduct(_Objective):
             self._L_transform,
             self._iota,
         )
-        f = data["QS_TP"] * self.grid.weights
+        f = data["f_T"] * self.grid.weights
         if self.norm:
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])

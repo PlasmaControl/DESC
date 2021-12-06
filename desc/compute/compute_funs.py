@@ -2198,14 +2198,12 @@ def compute_quasisymmetry_error(
 
     # QS flux function (T^3)
     if check_derivs("f_C", R_transform, Z_transform, L_transform):
-        data["QS_FF"] = (data["psi_r"] / data["sqrt(g)"]) * (
+        data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
             data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
-        ) - (M * data["G"] + N * data["I"]) / (M * data["iota"] - N) * data[
-            "B*grad(|B|)"
-        ]
+        ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     # QS triple product (T^4/m^2)
     if check_derivs("f_T", R_transform, Z_transform, L_transform):
-        data["QS_TP"] = (data["psi_r"] / data["sqrt(g)"]) * (
+        data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
             data["|B|_t"] * data["(B*grad(|B|))_z"]
             - data["|B|_z"] * data["(B*grad(|B|))_t"]
         )

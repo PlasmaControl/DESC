@@ -369,6 +369,7 @@ class Equilibrium(_Configuration, IOAble):
                 verbose=verbose,
                 copy=copy,
             )
+            red_ratio = tr_ratio
         else:
             equil, red_ratio = optimal_perturb(
                 self,

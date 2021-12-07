@@ -477,7 +477,7 @@ class ToroidalCurrent(_Objective):
                 rho=1,
             )
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = 1
 
         timer = Timer()
         if verbose > 0:

@@ -561,7 +561,7 @@ def optimal_perturb(
             )
             setattr(eq_new, key, value)
 
-    act_red = objective_g.compute_scalar(x) - objective_g.compute_scalar(x + dx)
+    act_red = np.sum(g ** 2) / 2 - objective_g.compute_scalar(objective_g.y(eq_new))
     pre_red = -np.dot(g.T + 0.5 * np.dot(dc.T, Gc.T), np.dot(Gc, dc))
     red_ratio = act_red / pre_red  # actual / predicted reduction ratio
 

@@ -505,6 +505,9 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
                                            jnp.arange(ntheta),
                                            jnp.arange(nzeta), indexing="ij")
     ip = (kt_ip*nzeta+kz_ip) # linear index over primed grid
+    i = (kt_i*nzeta+kz_i) # linear index over primed grid
+    izoff0 = ntheta*nzeta - ip
+    itoff  = nzeta*(ntheta - kt_ip)
 
     # field-period invariant vectors
     r_squared = (coords["R"]**2 + coords["Z"]**2).reshape((-1,nzeta))
@@ -538,18 +541,28 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
     mask = ~((zeta_fp == 0) | (nzeta == 1)).reshape((1,1,1,1,-1,))                
     kernel = jnp.where(mask, kernel + kernel_update, kernel)
     source  = jnp.where(mask, source + source_update, source)
-           
 
+    kp = jnp.arange(NFP_eff)
+    izoff = izoff0 + 2*ntheta*kp
+    i_itoff = i + itoff
+    i_izoff = i + izoff
     if nzeta == 1:
-        # Tokamak: NFP_eff toroidal "modules"
-        delta_kz = (kz_i - kz_ip)%NFP_eff
+        delta_kt = i_itoff%(2*ntheta)
+        delta_kz = i_izoff//(2*ntheta)
     else:
-        # Stellarator: nv toroidal grid points
-        delta_kz = (kz_i - kz_ip)%nzeta
+        delta_kt = i_itoff//nzeta
+        delta_kz = i_izoff%nzeta
+
+    # if nzeta == 1:
+    #     # Tokamak: NFP_eff toroidal "modules"
+    #     delta_kz = (kz_i - kz_ip)%NFP_eff
+    # else:
+    #     # Stellarator: nv toroidal grid points
+    #     delta_kz = (kz_i - kz_ip)%nzeta
 
     # subtract out singular part of the kernels
     # TODO: why is there an additional offset of ntheta?
-    delta_kt = kt_i - kt_ip + ntheta
+    # delta_kt = kt_i - kt_ip + ntheta
     tant = tan_theta[(delta_kt,)]
     tanz = tan_zeta[(delta_kz,)]
     ga1 = tant*(jacobian["g_tt"][(ip,)]*tant + 2*jacobian["g_tz"][(ip,)]*tanz) + jacobian["g_zz"][(ip,)]*tanz**2

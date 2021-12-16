@@ -275,6 +275,7 @@ class Equilibrium(_Configuration, IOAble):
         result = optimizer.optimize(
             objective,
             x_init=x0,
+            args=(objective.y0,),
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -353,7 +354,7 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if objective_g is None:
-            equil = perturb(
+            equil, red_ratio = perturb(
                 self,
                 objective_f,
                 dR=dR,
@@ -369,7 +370,6 @@ class Equilibrium(_Configuration, IOAble):
                 verbose=verbose,
                 copy=copy,
             )
-            red_ratio = tr_ratio
         else:
             equil, red_ratio = optimal_perturb(
                 self,

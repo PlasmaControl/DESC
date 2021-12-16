@@ -130,7 +130,7 @@ def perturb(
     # 1st order
     if order > 0:
 
-        RHS1 = objective.compute(y)
+        f = objective.compute(y)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
@@ -138,7 +138,7 @@ def perturb(
         timer.start("df computation")
         Jy = objective.jac(y)
         Jx = np.dot(Jy, objective.Z)
-        RHS1 += np.dot(Jy, tangents)
+        RHS1 = f + np.dot(Jy, tangents)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -171,7 +171,7 @@ def perturb(
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents += np.dot(objective.Z, dx1)
-        RHS2 = 0.5 * objective.jvp(y, (tangents, tangents))
+        RHS2 = 0.5 * objective.jvp((tangents, tangents), y)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -195,8 +195,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp(y, (tangents, tangents, tangents))
-        RHS3 += objective.jvp(y, (np.dot(objective.Z, dx2), tangents))
+        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), y)
+        RHS3 += objective.jvp((np.dot(objective.Z, dx2), tangents), y)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -238,12 +238,17 @@ def perturb(
             )
             setattr(eq_new, key, value)
 
+    act_red = np.sum(f ** 2) / 2 - objective.compute_scalar(objective.y(eq_new))
+    pre_red = -np.dot(f.T + 0.5 * np.dot(dx.T, Jx.T), np.dot(Jx, dx))
+    red_ratio = act_red / pre_red  # reduction ratio = actual / predicted reductions
+
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
         print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
+        print("reduction ratio = {}".format(red_ratio))
 
-    return eq_new
+    return eq_new, red_ratio
 
 
 def optimal_perturb(
@@ -488,7 +493,7 @@ def optimal_perturb(
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = np.dot(objective_f.Z, dx1) + np.dot(dydc_f, dc1)
-        RHS_2f = 0.5 * objective_f.jvp(y, (tangents_f, tangents_f))
+        RHS_2f = 0.5 * objective_f.jvp((tangents_f, tangents_f), y)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -498,7 +503,7 @@ def optimal_perturb(
             print("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = np.dot(objective_g.Z, dx1) + np.dot(dydc_g, dc1)
-        RHS_2g = -0.5 * objective_g.jvp(y, (tangents_g, tangents_g)) - np.dot(
+        RHS_2g = -0.5 * objective_g.jvp((tangents_g, tangents_g), y) - np.dot(
             GxFx, RHS_2f
         )
         timer.stop("d^2g computation")
@@ -563,7 +568,7 @@ def optimal_perturb(
 
     act_red = np.sum(g ** 2) / 2 - objective_g.compute_scalar(objective_g.y(eq_new))
     pre_red = -np.dot(g.T + 0.5 * np.dot(dc.T, Gc.T), np.dot(Gc, dc))
-    red_ratio = act_red / pre_red  # actual / predicted reduction ratio
+    red_ratio = act_red / pre_red  # reduction ratio = actual / predicted reductions
 
     timer.stop("Total perturbation")
     if verbose > 1:

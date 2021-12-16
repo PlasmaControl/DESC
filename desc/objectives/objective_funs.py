@@ -225,7 +225,7 @@ class ObjectiveFunction(IOAble):
         for constraint in self.constraints:
             constraint.update_target(eq)
 
-        # c = A*y - b
+        # A*y = b
         self._b = np.array([])
         for obj in self.constraints:
             b = obj.target
@@ -233,13 +233,16 @@ class ObjectiveFunction(IOAble):
 
         self._y0 = np.dot(self.Ainv, self.b)
 
-    def compute(self, x):
+    def compute(self, x, y0=None):
         """Compute the objective function.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
+        y0 : ndarray, optional
+            Full state vector that satisfies the linear constraints.
+            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -247,16 +250,19 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x)
+        kwargs = self.unpack_state(x, y0)
         return jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
 
-    def compute_scalar(self, x):
+    def compute_scalar(self, x, y0=None):
         """Compute the scalar form of the objective.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
+        y0 : ndarray, optional
+            Full state vector that satisfies the linear constraints.
+            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -264,15 +270,18 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        return jnp.sum(self.compute(x) ** 2) / 2
+        return jnp.sum(self.compute(x, y0) ** 2) / 2
 
-    def callback(self, x):
+    def callback(self, x, y0=None):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
+        y0 : ndarray, optional
+            Full state vector that satisfies the linear constraints.
+            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         """
         f = self.compute_scalar(x)
@@ -282,13 +291,16 @@ class ObjectiveFunction(IOAble):
             obj.callback(**kwargs)
         return None
 
-    def unpack_state(self, x):
+    def unpack_state(self, x, y0=None):
         """Unpack the state vector x (or y) into its components.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
+        y0 : ndarray, optional
+            Full state vector that satisfies the linear constraints.
+            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -301,7 +313,7 @@ class ObjectiveFunction(IOAble):
 
         x = jnp.atleast_1d(x)
         if x.size == self.dim_x:
-            y = self.recover(x)
+            y = self.recover(x, y0)
         elif x.size == self.dim_y:
             y = x
         else:
@@ -312,25 +324,31 @@ class ObjectiveFunction(IOAble):
             kwargs[arg] = y[self.y_idx[arg]]
         return kwargs
 
-    def project(self, y):
+    def project(self, y, y0=None):
         """Project a full state vector y into the optimization vector x."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        dy = y - self.y0
+        if y0 is None:
+            y0 = self.y0
+        dy = y - y0
         x = jnp.dot(self.Z.T, dy)
         return jnp.squeeze(x)
 
-    def recover(self, x):
+    def recover(self, x, y0=None):
         """Recover the full state vector y from the optimization vector x."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        y = self.y0 + jnp.dot(self.Z, x)
+        if y0 is None:
+            y0 = self.y0
+        y = y0 + jnp.dot(self.Z, x)
         return jnp.squeeze(y)
 
-    def make_feasible(self, y):
+    def make_feasible(self, y, y0=None):
         """Return a full state vector y that satisfies the linear constraints."""
-        x = self.project(y)
-        return self.y0 + np.dot(self.Z, x)
+        if y0 is None:
+            y0 = self.y0
+        x = self.project(y, y0)
+        return y0 + np.dot(self.Z, x)
 
     def y(self, eq):
         """Return the full state vector y from the Equilibrium eq."""
@@ -339,64 +357,49 @@ class ObjectiveFunction(IOAble):
             y[self.y_idx[arg]] = getattr(eq, arg)
         return y
 
-    def x(self, eq):
+    def x(self, eq, y0=None):
         """Return the optimization variable x from the Equilibrium eq."""
-        return self.project(self.y(eq))
+        return self.project(self.y(eq), y0)
 
-    def grad(self, x):
+    def grad(self, x, y0=None):
         """Compute gradient vector of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._grad.compute(x)
+        return self._grad.compute(x, y0)
 
-    def hess(self, x):
+    def hess(self, x, y0=None):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._hess.compute(x)
+        return self._hess.compute(x, y0)
 
-    def jac(self, x):
+    def jac(self, x, y0=None):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        if config.get("device") == "gpu":
-            y = self.recover(x)
-            kwargs = self.unpack_state(y)
+        return self._jac.compute(x, y0)
 
-            jac = np.array([[]])
-            for obj in self.objectives:
-                A = np.array([[]])  # A = df/dy
-                for arg in arg_order:
-                    if arg in self.args:
-                        a = obj.derivatives[arg]
-                        if isinstance(a, Derivative):
-                            args = [kwargs[arg] for arg in obj.args]
-                            a = a.compute(*args)
-                        a = np.atleast_2d(a)
-                        A = np.hstack((A, a)) if A.size else a
-                jac = np.vstack((jac, A)) if jac.size else A
-
-            return np.dot(jac, self.Z)  # Z = dy/dx
-
-        else:
-            return self._jac.compute(x)
-
-    def jvp(self, x, v):
+    def jvp(self, v, x, y0=None):
         """Compute Jacobian-vector product of the objective function.
 
         Parameters
         ----------
-        x : ndarray
-            Optimization variables.
         v : tuple of ndarray
             Vectors to right-multiply the Jacobian by.
             The number of vectors given determines the order of derivative taken.
+        x : ndarray
+            Optimization variables.
+        y0 : ndarray, optional
+            Full state vector that satisfies the linear constraints.
+            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         """
         if not isinstance(v, tuple):
             v = (v,)
         if len(v) == 1:
-            return Derivative.compute_jvp(self.compute, 0, v[0], x)
+            return Derivative.compute_jvp(self.compute, 0, v[0], x, y0)
         elif len(v) == 2:
-            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x)
+            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x, y0)
         elif len(v) == 3:
-            return Derivative.compute_jvp3(self.compute, 0, 0, 0, v[0], v[1], v[2], x)
+            return Derivative.compute_jvp3(
+                self.compute, 0, 0, 0, v[0], v[1], v[2], x, y0
+            )
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
@@ -426,7 +429,8 @@ class ObjectiveFunction(IOAble):
             mode = "lsq"
 
         # variable values are irrelevant for compilation
-        x = np.zeros((self._dim_x,))
+        x = np.zeros((self.dim_x,))
+        y0 = self.y0
 
         if verbose > 0:
             print("Compiling objective function and derivatives")
@@ -434,28 +438,28 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute_scalar(x).block_until_ready()
+            f0 = self.compute_scalar(x, y0).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
-            g0 = self.grad(x).block_until_ready()
+            g0 = self.grad(x, y0).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
             timer.start("Hessian compilation time")
-            H0 = self.hess(x).block_until_ready()
+            H0 = self.hess(x, y0).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute(x).block_until_ready()
+            f0 = self.compute(x, y0).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x)
+            J0 = self.jac(x, y0)
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")

@@ -357,9 +357,9 @@ class ObjectiveFunction(IOAble):
             y[self.y_idx[arg]] = getattr(eq, arg)
         return y
 
-    def x(self, eq, y0=None):
+    def x(self, eq):
         """Return the optimization variable x from the Equilibrium eq."""
-        return self.project(self.y(eq), y0)
+        return self.project(self.y(eq))
 
     def grad(self, x, y0=None):
         """Compute gradient vector of scalar form of the objective wrt x."""

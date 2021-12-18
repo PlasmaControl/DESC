@@ -261,7 +261,7 @@ def _compute(eq, name, grid, component=None):
             if component in ["R", "Z"]:
                 label += component
             else:
-                label += "\phi"
+                label += r"\phi"
     label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
 
     return data.reshape((grid.M, grid.L, grid.N), order="F"), label
@@ -510,7 +510,7 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     log : bool, optional
         whether to use a log scale
     all_field_periods : bool, optional
-        whether to plot full torus or just one field period. Ignored if grid is specified
+        Whether to plot full torus or one field period. Ignored if grid is specified.
 
     Returns
     -------
@@ -1136,15 +1136,121 @@ def plot_boozer_modes(
             )
 
     ax.set_xlabel(_axis_labels_rtz[0])
-    ax.set_ylabel(r"Fourier harmonics of $|B|$ in Boozer coordinates $(T)$")
+    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$")
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
     return fig, ax, ds
 
 
+def plot_qs_error(
+    eq,
+    log=True,
+    fB=True,
+    fC=True,
+    fT=True,
+    helicity=(1, 0),
+    L=10,
+    rho=None,
+    ax=None,
+    **kwargs,
+):
+    """Plot quasi-symmetry errors f_B, f_C, and f_T as scalar flux surface averages.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        object from which to plot
+    log : bool, optional
+        Whether to use a log scale. Default is True.
+    fB : bool, optional
+        Whether to include the Boozer coordinates QS error. Default is True.
+    fC : bool, optional
+        Whether to include the flux function QS error. Default is True.
+    fT : bool, optional
+        Whether to include the triple product QS error. Default is True.
+    helicity : tuple, int
+        Type of quasi-symmetry (M, N).
+    L : int, optional
+        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
+    rho : ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at.
+    ax : matplotlib AxesSubplot, optional
+        axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        axes being plotted to
+
+    """
+    if rho is None:
+        rho = np.linspace(1, 0, num=L, endpoint=False)
+    fig, ax = _format_ax(ax)
+
+    data = eq.compute("R0")
+    data = eq.compute("|B|", data=data)
+    R0 = data["R0"]
+    B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
+
+    data = None
+    f_B = np.array([])
+    f_C = np.array([])
+    f_T = np.array([])
+    for i, r in enumerate(rho):
+        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=1, rho=r)
+        if fB:
+            data = eq.compute("|B|_mn", grid, data)
+            modes = data["Boozer modes"]
+            idx = np.where((modes[1, :] * helicity[1] != modes[2, :] * helicity[0]))[0]
+            f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
+                np.sum(data["|B|_mn"] ** 2)
+            )
+            f_B = np.append(f_B, f_b)
+        if fC:
+            data = eq.compute("f_C", grid, data)
+            f_c = (
+                np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
+                / np.mean(data["sqrt(g)"])
+                / B0 ** 3
+            )
+            f_C = np.append(f_C, f_c)
+        if fT:
+            data = eq.compute("f_T", grid, data)
+            f_t = (
+                np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
+                / np.mean(data["sqrt(g)"])
+                * R0 ** 2
+                / B0 ** 4
+            )
+            f_T = np.append(f_T, f_t)
+
+    if log is True:
+        if fB:
+            ax.semilogy(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+        if fC:
+            ax.semilogy(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+        if fT:
+            ax.semilogy(rho, f_T, "go-", label=r"$\hat{f}_T$")
+    else:
+        if fB:
+            ax.plot(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+        if fC:
+            ax.plot(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+        if fT:
+            ax.plot(rho, f_T, "go-", label=r"$\hat{f}_T$")
+
+    ax.set_xlabel(_axis_labels_rtz[0])
+    fig.legend(loc="center right")
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
 def plot_grid(grid, **kwargs):
-    """Plot the location of collocation nodes on the zeta=0 plane
+    """Plot the location of collocation nodes on the zeta=0 plane.
 
     Parameters
     ----------
@@ -1153,12 +1259,11 @@ def plot_grid(grid, **kwargs):
 
     Returns
     -------
-    Returns
-    -------
     fig : matplotlib.figure.Figure
         handle to the figure used for plotting
     ax : matplotlib.axes.Axes
         handle to the axis used for plotting
+
     """
     fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
@@ -1194,15 +1299,17 @@ def plot_grid(grid, **kwargs):
     ax.set_yticklabels([])
     if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
         ax.set_title(
-            "{}, $L={}$, $M={}$".format(
+            "{}, $L={}$, $M={}, pattern: {}$".format(
                 grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
             ),
             pad=20,
         )
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
-            "{}, $M={}$, \n node pattern: {}".format(
-                grid.__class__.__name__, grid.M, grid.node_pattern, grid.node_pattern
+            "{}, $M={}$, pattern: {}".format(
+                grid.__class__.__name__,
+                grid.M,
+                grid.node_pattern,
             ),
             pad=20,
         )
@@ -1211,7 +1318,7 @@ def plot_grid(grid, **kwargs):
 
 
 def plot_basis(basis, **kwargs):
-    """Plot basis functions
+    """Plot basis functions.
 
     Parameters
     ----------
@@ -1225,8 +1332,8 @@ def plot_basis(basis, **kwargs):
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
         axes used for plotting. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes
-    """
 
+    """
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
         grid = LinearGrid(100, 1, 1, endpoint=True)

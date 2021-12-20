@@ -1200,7 +1200,7 @@ def plot_qs_error(
     f_C = np.array([])
     f_T = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=1, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["Boozer modes"]

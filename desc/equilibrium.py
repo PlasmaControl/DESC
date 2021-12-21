@@ -301,7 +301,7 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
-        objective_f,
+        objective_f=None,
         objective_g=None,
         dR=None,
         dZ=None,
@@ -353,6 +353,17 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
+        if objective_f is None:
+            objectives = (RadialForceBalance(), HelicalForceBalance())
+            constraints = (
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            objective_f = ObjectiveFunction(objectives, constraints)
         if objective_g is None:
             equil, red_ratio = perturb(
                 self,

@@ -1934,38 +1934,21 @@ def compute_boozer_coords(
     theta_unique = np.unique(R_transform.grid.nodes[:, 1])
     theta_unique = jnp.append(theta_unique, 2 * jnp.pi)
     zeta_unique = jnp.unique(R_transform.grid.nodes[:, 2])
-    if False:  # not is_axisymmetric:
-        # zeta_unique=jnp.append(zeta_unique,2*jnp.pi/NFP)
-        Bt = data["B_theta"].reshape(M, L, N, order="F")
-        Bz = data["B_zeta"].reshape(M, L, N, order="F")
-        Bt = periodic_along_each_dim(Bt)
-        Bz = periodic_along_each_dim(Bz)
-        data["G"] = (
-            NFP
-            / (4 * jnp.pi ** 2)
-            * jnp.trapz(x=theta_unique, y=jnp.trapz(x=zeta_unique, y=Bz))
+    ## get I and G by fitting B_Theta and B_zeta and using the (m,n)=(0,0) modes
+    # TODO: make this use a nyquist spectrum
+    # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
+    if check_derivs("I", R_transform, Z_transform, L_transform):
+        B_theta_mn = B_transform.fit(data["B_theta"])
+        xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(
+            B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_theta_mn
         )
-        data["I"] = (
-            NFP
-            / (4 * jnp.pi ** 2)
-            * jnp.trapz(x=theta_unique, y=jnp.trapz(x=zeta_unique, y=Bt))
+        data["I"] = Bt_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
+    if check_derivs("G", R_transform, Z_transform, L_transform):
+        B_zeta_mn = B_transform.fit(data["B_zeta"])
+        xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(
+            B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_zeta_mn
         )
-    else:  # TODO: make this use a nyquist spectrum
-        # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-        if check_derivs("I", R_transform, Z_transform, L_transform):
-            B_theta_mn = B_transform.fit(data["B_theta"])
-            xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(
-                B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_theta_mn
-            )
-            data["I"] = Bt_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
-        if check_derivs("G", R_transform, Z_transform, L_transform):
-            # B_zeta_mn = B_transform.fit(data["B_zeta"])
-            # data["G"] = B_zeta_mn[idx0]
-            B_zeta_mn = B_transform.fit(data["B_zeta"])
-            xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(
-                B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_zeta_mn
-            )
-            data["G"] = Bz_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
+        data["G"] = Bz_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
     if not is_axisymmetric:
         zeta_unique = jnp.append(zeta_unique, 2 * jnp.pi / NFP)
     data["Bt_mn"] = B_theta_mn
@@ -1974,22 +1957,16 @@ def compute_boozer_coords(
     data["Bz_c"] = Bz_c
     data["four_basis"] = B_transform.basis
     data["transform"] = B_transform
+    
     Bt = data["B_theta"].reshape(M, L, N, order="F")
     Bz = data["B_zeta"].reshape(M, L, N, order="F")
-    # Bt = periodic_along_each_dim(Bt)
-    # Bz = periodic_along_each_dim(Bz)
-    # if not is_axisymmetric:
-    #     data["G"] = NFP/(4*jnp.pi**2)*jnp.trapz(x=theta_unique,y=jnp.trapz(x=zeta_unique,y=Bz))
-    #     data["I"] = NFP/(4*jnp.pi**2)*jnp.trapz(x=theta_unique,y=jnp.trapz(x=zeta_unique,y=Bt))
-    # else:
-    #     data["G"] = 1/(2*jnp.pi)*jnp.trapz(x=theta_unique,y=Bz)
-    #     data["I"] = 1/(2*jnp.pi)*jnp.trapz(x=theta_unique,y=Bt)
+
 
     # QS Boozer harmonics
     lambda_mn = nu_transform.fit(data["lambda"])
     rho = jnp.unique(R_transform.grid.nodes[:, 0])
 
-    # exact eval is the same...
+    # exact eval is the same as just refitting for lambda_mn
     # m,n, lambda_mn2 = zernike_to_fourier(L_lmn,basis=L_transform.basis,rho=rho)
     nu_mn = jnp.zeros_like(lambda_mn)
     for k, (l, m, n) in enumerate(nu_transform.basis.modes):
@@ -2016,7 +1993,7 @@ def compute_boozer_coords(
     data["nu"] = nu_transform.transform(nu_mn)
     data["nu_t"] = nu_transform.transform(nu_mn, dr=0, dt=1, dz=0)
     data["nu_z"] = nu_transform.transform(nu_mn, dr=0, dt=0, dz=1)
-    # TODO: Add endpoints to all periodic quantities (since they do not go to 2*pi)
+
     data["Boozer modes"] = B_transform.basis.modes
     lam = data["lambda"].reshape(M, L, N, order="F")
     lam_t = data["lambda_t"].reshape(M, L, N, order="F")
@@ -2028,7 +2005,6 @@ def compute_boozer_coords(
     nu_t = data["nu_t"].reshape(M, L, N, order="F")
     B = data["|B|"].reshape(M, L, N, order="F")
 
-    # theta = np.unique(R_transform.grid.nodes[:,1])
     theta = R_transform.grid.nodes[:, 1]
 
     theta = theta.reshape(M, L, N, order="F")
@@ -2037,9 +2013,9 @@ def compute_boozer_coords(
 
     if not is_axisymmetric:
         zeta = zeta.reshape(M, L, N, order="F")
-        # zeta_unique=jnp.append(zeta_unique,2*jnp.pi/NFP)
 
-    if not is_axisymmetric:
+
+    if not is_axisymmetric: # make quantities periodic by adding the endpoint values
 
         lam = periodic_along_each_dim(lam)
         lam_t = periodic_along_each_dim(lam_t)
@@ -2078,9 +2054,9 @@ def compute_boozer_coords(
     # jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
     jac_B = (1 + lam_t) * (1 + nu_z) + (
         iota - lam_z
-    ) * nu_t  # jacobian boozer to normal coords
+    ) * nu_t  # jacobian boozer to normal coords, with the endpoints included
 
-    # jac_B = jac_B.reshape(M,L,N,order="F")
+    
     if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
         b_nodes = nu_transform.grid.nodes
         b_grid = Grid(b_nodes)
@@ -2106,7 +2082,7 @@ def compute_boozer_coords(
                     * jnp.trapz(x=theta_unique, y=jnp.trapz(x=zeta_unique, y=integrand))
                 )
                 # TODO: check that indexing is correct (is middle index radial) and test on HELIOTRON
-            # B_mn[k] = np.trapz(x=)
+            
         # data["|B|_mn"] = B_transform.fit(data["|B|"])# this part can be different
         data["|B|_mn"] = B_mn
     return data

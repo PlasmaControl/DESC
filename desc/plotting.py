@@ -1100,7 +1100,7 @@ def plot_boozer_modes(
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=1, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])

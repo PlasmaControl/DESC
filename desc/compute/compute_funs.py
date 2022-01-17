@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.constants import mu_0
-from desc.vmec_utils import zernike_to_fourier, ptolemy_identity_rev
+
 from desc.backend import jnp, put
+from desc.utils import sign
 from desc.compute import data_index
-from desc.grid import Grid
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -1828,30 +1828,6 @@ def compute_force_error(
     return data
 
 
-def periodic_along_each_dim(array):
-    """
-    Take an array and append the first value in the first dim onto the end,
-    and the first value of the second dim to the end
-    (i.e. the array is periodic in each of the two angular dimensions, so
-     add the first val to the end to enforce the periodicity)
-
-    Parameters
-    ----------
-    array : array
-        3D array of dims [M,1,N] .
-
-    Returnss
-    -------
-    array : TYPE
-        2D array of dim[M+1,N+1], where the last values of each dim are
-        the same as the first.
-
-    """
-    array = jnp.vstack((array[:, 0, :], array[0, 0, :]))
-    array = jnp.hstack((array, jnp.expand_dims(array[:, 0], axis=-1)))
-    return array
-
-
 def compute_boozer_coords(
     R_lmn,
     Z_lmn,
@@ -1862,11 +1838,11 @@ def compute_boozer_coords(
     Z_transform,
     L_transform,
     B_transform,
-    nu_transform,
+    w_transform,
     iota,
     data=None,
 ):
-    """Compute Boozer coordinates.
+    """Compute Boozer coordinates. Assumes grid is single flux surface without symmetry.
 
     Parameters
     ----------
@@ -1888,8 +1864,10 @@ def compute_boozer_coords(
         Transforms L_lmn coefficients to real space.
     B_transform : Transform
         Transforms spectral coefficients of B(rho,theta,zeta) to real space.
-    nu_transform : Transform
-        Transforms spectral coefficients of nu(rho,theta,zeta) to real space.
+        B_transform.basis should be of type DoubleFourierSeries.
+    w_transform : Transform
+        Transforms spectral coefficients of w(rho,theta,zeta) to real space.
+        w_transform.basis should be of type DoubleFourierSeries.
     iota : Profile
         Transforms i_l coefficients to real space.
 
@@ -1924,167 +1902,60 @@ def compute_boozer_coords(
         iota,
         data=data,
     )
-    if len(jnp.unique(R_transform.grid.nodes[:, 2])) == 1:
-        is_axisymmetric = True
-    else:
-        is_axisymmetric = False
-    idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
-    M, N, L = R_transform.grid.M, R_transform.grid.N, R_transform.grid.L
-    NFP = R_transform.grid.NFP
-    theta_unique = np.unique(R_transform.grid.nodes[:, 1])
-    theta_unique = jnp.append(theta_unique, 2 * jnp.pi)
-    zeta_unique = jnp.unique(R_transform.grid.nodes[:, 2])
-    ## get I and G by fitting B_Theta and B_zeta and using the (m,n)=(0,0) modes
-    # TODO: make this use a nyquist spectrum
+
+    NFP = w_transform.basis.NFP
+    if not check_derivs("nu", R_transform, Z_transform, L_transform):
+        return data
+
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-    if check_derivs("I", R_transform, Z_transform, L_transform):
-        B_theta_mn = B_transform.fit(data["B_theta"])
-        xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(
-            B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_theta_mn
-        )
-        data["I"] = Bt_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
-    if check_derivs("G", R_transform, Z_transform, L_transform):
-        B_zeta_mn = B_transform.fit(data["B_zeta"])
-        xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(
-            B_transform.basis.modes[:, 1], B_transform.basis.modes[:, 2], B_zeta_mn
-        )
-        data["G"] = Bz_c[0][jnp.where(jnp.logical_and(xm == 0, xn == 0) == True)]
-    if not is_axisymmetric:
-        zeta_unique = jnp.append(zeta_unique, 2 * jnp.pi / NFP)
-    data["Bt_mn"] = B_theta_mn
-    data["Bz_mn"] = B_zeta_mn
-    data["Bt_c"] = Bt_c
-    data["Bz_c"] = Bz_c
-    data["four_basis"] = B_transform.basis
-    data["transform"] = B_transform
-    
-    Bt = data["B_theta"].reshape(M, L, N, order="F")
-    Bz = data["B_zeta"].reshape(M, L, N, order="F")
+    idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
+    B_theta_mn = B_transform.fit(data["B_theta"])
+    B_zeta_mn = B_transform.fit(data["B_zeta"])
+    data["I"] = data["B_theta_mn"][idx0]
+    data["G"] = data["B_zeta_mn"][idx0]
 
-
-    # QS Boozer harmonics
-    lambda_mn = nu_transform.fit(data["lambda"])
-    rho = jnp.unique(R_transform.grid.nodes[:, 0])
-
-    # exact eval is the same as just refitting for lambda_mn
-    # m,n, lambda_mn2 = zernike_to_fourier(L_lmn,basis=L_transform.basis,rho=rho)
-    nu_mn = jnp.zeros_like(lambda_mn)
-    for k, (l, m, n) in enumerate(nu_transform.basis.modes):
+    # w (RHS of eq 10 in Hirshman 1995 "Transformation from VMEC to Boozer Coordinates")
+    w_mn = jnp.zeros((w_transform.basis.num_modes,))
+    for k, (l, m, n) in enumerate(w_transform.basis.modes):
         if m != 0:
             idx = jnp.where((B_transform.basis.modes == [0, -m, n]).all(axis=1))[0]
-            nu_mn = put(
-                nu_mn,
-                k,
-                (
-                    (B_theta_mn[idx] / m - data["I"] * lambda_mn[k])
-                    / (data["G"] + data["iota"][0] * data["I"])
-                )[0],
-            )
+            w_mn = put(w_mn, k, (sign(n) * B_theta_mn[idx] / jnp.abs(m))[0])
         elif n != 0:
             idx = jnp.where((B_transform.basis.modes == [0, m, -n]).all(axis=1))[0]
-            nu_mn = put(
-                nu_mn,
-                k,
-                (
-                    (B_zeta_mn[idx] / (NFP * n) - data["I"] * lambda_mn[k])
-                    / (data["G"] + data["iota"][0] * data["I"])
-                )[0],
-            )
-    data["nu"] = nu_transform.transform(nu_mn)
-    data["nu_t"] = nu_transform.transform(nu_mn, dr=0, dt=1, dz=0)
-    data["nu_z"] = nu_transform.transform(nu_mn, dr=0, dt=0, dz=1)
+            w_mn = put(w_mn, k, (sign(m) * B_zeta_mn[idx] / np.abs(NFP * n))[0])
 
-    data["Boozer modes"] = B_transform.basis.modes
-    lam = data["lambda"].reshape(M, L, N, order="F")
-    lam_t = data["lambda_t"].reshape(M, L, N, order="F")
-    lam_z = data["lambda_z"].reshape(M, L, N, order="F")
+    # transform to real space
+    w = w_transform.transform(w_mn)
+    w_t = w_transform.transform(w_mn, dr=0, dt=1, dz=0)
+    w_z = w_transform.transform(w_mn, dr=0, dt=0, dz=1)
 
-    iota = data["iota"].reshape(M, L, N, order="F")
-    nu = data["nu"].reshape(M, L, N, order="F")
-    nu_z = data["nu_z"].reshape(M, L, N, order="F")
-    nu_t = data["nu_t"].reshape(M, L, N, order="F")
-    B = data["|B|"].reshape(M, L, N, order="F")
+    # nu = zeta_Boozer - zeta
+    GI = data["G"] + data["iota"] * data["I"]
+    data["nu"] = (w - data["I"] * data["lambda"]) / GI
+    data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI
+    data["nu_z"] = (w_z - data["I"] * data["lambda_z"]) / GI
 
-    theta = R_transform.grid.nodes[:, 1]
+    # Boozer angles
+    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    data["zeta_B"] = data["zeta"] + data["nu"]
 
-    theta = theta.reshape(M, L, N, order="F")
+    # Jacobian of Boozer coordinates wrt (theta,zeta) coordinates
+    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
+        data["iota"] - data["lambda_z"]
+    ) * data["nu_t"]
 
-    zeta = R_transform.grid.nodes[:, 2]
-
-    if not is_axisymmetric:
-        zeta = zeta.reshape(M, L, N, order="F")
-
-
-    if not is_axisymmetric: # make quantities periodic by adding the endpoint values
-
-        lam = periodic_along_each_dim(lam)
-        lam_t = periodic_along_each_dim(lam_t)
-        lam_z = periodic_along_each_dim(lam_z)
-        nu = periodic_along_each_dim(nu)
-        nu_t = periodic_along_each_dim(nu_t)
-        nu_z = periodic_along_each_dim(nu_z)
-        iota = periodic_along_each_dim(iota)
-        B = periodic_along_each_dim(B)
-
-        zeta = np.vstack((zeta[:, 0, :], zeta[0, 0, :]))
-        zeta = np.hstack(
-            (
-                zeta,
-                jnp.expand_dims(2 * jnp.pi / NFP * jnp.ones_like(zeta[:, 0]), axis=-1),
-            )
+    # Riemann sum integration
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - np.sum((B_transform.basis.modes == 0), axis=1))
+    data["|B|_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * jnp.matmul(
+            B_transform.basis.evaluate(nodes).T, data["sqrt(g)_B"] * data["|B|"]
         )
+        / B_transform.grid.num_nodes
+    )
+    data["B modes"] = B_transform.basis.modes
 
-        theta = np.vstack((theta[:, 0, :], 2 * jnp.pi * jnp.ones_like(theta[0, 0, :])))
-        theta = np.hstack((theta, jnp.expand_dims(theta[:, 0], axis=-1)))
-
-    else:
-        lam = jnp.append(lam[:, 0, 0], lam[0, 0, 0])
-        lam_t = jnp.append(lam_t[:, 0, 0], lam_t[0, 0, 0])
-        lam_z = jnp.append(lam_z[:, 0, 0], lam_z[0, 0, 0])
-        nu = jnp.append(nu[:, 0, 0], nu[0, 0, 0])
-        nu_t = jnp.append(nu_t[:, 0, 0], nu_t[0, 0, 0])
-        nu_z = jnp.append(nu_z[:, 0, 0], nu_z[0, 0, 0])
-        iota = jnp.append(iota[:, 0, 0], iota[0, 0, 0])
-        B = jnp.append(B[:, 0, 0], B[0, 0, 0])
-
-        theta = theta.reshape(M, L, N, order="F")
-        theta = np.append(theta[:, 0, 0], 2 * jnp.pi)
-        zeta = zeta_unique
-
-    # jac_B = (1 + data["lambda_t"])*(1 + data["nu_z"]) + (data['iota'] - data['lambda_z'])*data['nu_t'] # jacobian boozer to normal coords
-    jac_B = (1 + lam_t) * (1 + nu_z) + (
-        iota - lam_z
-    ) * nu_t  # jacobian boozer to normal coords, with the endpoints included
-
-    
-    if check_derivs("|B|_mn", R_transform, Z_transform, L_transform):
-        b_nodes = nu_transform.grid.nodes
-        b_grid = Grid(b_nodes)
-        # B_transform.grid = b_grid
-        data["|B|_mn0"] = B_transform.fit(data["|B|"])
-        # b_nodes[:, 2] = b_nodes[:, 2] - data["nu"]
-        # b_nodes[:, 1] = b_nodes[:, 1] - data["lambda"] - data["iota"] * data["nu"]
-        # b_grid = Grid(b_nodes)
-        # B_transform.grid = b_grid
-        # data['T_B']=b_nodes[:, 1]
-        # data['Z_B'] = b_nodes[:, 2]
-        B_mn = np.zeros_like(data["|B|_mn0"])
-
-        for k, (l, m, n) in enumerate(B_transform.basis.modes):
-            cos_term = jnp.cos(m * (theta + lam + iota * nu) - n * (zeta + nu))
-            integrand = B * cos_term * jac_B
-            if is_axisymmetric:  # axisymmetric
-                B_mn[k] = (1 / 2 / jnp.pi) * jnp.trapz(x=theta_unique, y=integrand)
-            else:
-                B_mn[k] = (
-                    NFP
-                    * (1 / 4 / jnp.pi ** 2)
-                    * jnp.trapz(x=theta_unique, y=jnp.trapz(x=zeta_unique, y=integrand))
-                )
-                # TODO: check that indexing is correct (is middle index radial) and test on HELIOTRON
-            
-        # data["|B|_mn"] = B_transform.fit(data["|B|"])# this part can be different
-        data["|B|_mn"] = B_mn
     return data
 
 

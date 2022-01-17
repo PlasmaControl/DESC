@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 from termcolor import colored
 from shapely.geometry import Polygon
+from desc.backend import jnp
 
 
 # Helper Classes -----------------------------------------------------------------------
@@ -408,8 +409,8 @@ def sign(x):
         1 where x>=0, -1 where x<0
 
     """
-    x = np.atleast_1d(x)
-    y = np.where(x == 0, 1, np.sign(x))
+    x = jnp.atleast_1d(x)
+    y = jnp.where(x == 0, 1, jnp.sign(x))
     return y
 
 

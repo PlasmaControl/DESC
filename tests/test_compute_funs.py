@@ -2,13 +2,15 @@ import numpy as np
 from scipy.signal import convolve2d
 
 from desc.grid import LinearGrid
-from desc.equilibrium import Equilibrium
+from desc.basis import DoubleFourierSeries
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.transform import Transform
 from desc.compute import (
     compute_covariant_magnetic_field,
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,
     compute_B_dot_gradB,
+    compute_boozer_coords,
 )
 
 # convolve kernel is reverse of FD coeffs
@@ -555,4 +557,70 @@ def test_quasisymmetry(DummyStellarator):
         Btilde_z[2:-2],
         rtol=2e-2,
         atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
+    )
+
+
+# TODO: add test with stellarator example
+def test_boozer_transform(DSHAPE):
+    """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
+
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=1.0)
+
+    R_transform = Transform(grid, eq.R_basis, derivs=3)
+    Z_transform = Transform(grid, eq.Z_basis, derivs=3)
+    L_transform = Transform(grid, eq.L_basis, derivs=3)
+    B_transform = Transform(
+        grid,
+        DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
+        derivs=0,
+        build_pinv=True,
+    )
+    w_transform = Transform(
+        grid,
+        DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP),
+        derivs=0,
+        build_pinv=True,
+    )
+    iota = eq.iota.copy()
+    iota.grid = grid
+
+    data = compute_boozer_coords(
+        eq.R_lmn,
+        eq.Z_lmn,
+        eq.L_lmn,
+        eq.i_l,
+        eq.Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        B_transform,
+        w_transform,
+        iota,
+    )
+
+    booz_xform = np.array(
+        [
+            2.49792355e-01,
+            5.16668333e-02,
+            1.11374584e-02,
+            7.31614588e-03,
+            3.36187451e-03,
+            2.08897051e-03,
+            1.20694516e-03,
+            7.84513291e-04,
+            5.19293744e-04,
+            3.61983430e-04,
+            2.57745929e-04,
+            1.86013067e-04,
+            1.34610049e-04,
+            9.68119345e-05,
+        ]
+    )
+
+    np.testing.assert_allclose(
+        np.flipud(np.sort(np.abs(data["|B|_mn"])))[0:14],
+        booz_xform,
+        rtol=1e-2,
+        atol=1e-6,
     )

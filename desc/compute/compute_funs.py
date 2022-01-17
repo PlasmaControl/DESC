@@ -1842,7 +1842,9 @@ def compute_boozer_coords(
     iota,
     data=None,
 ):
-    """Compute Boozer coordinates. Assumes grid is single flux surface without symmetry.
+    """Compute Boozer coordinates.
+
+    Assumes transform grids are a single flux surface without symmetry.
 
     Parameters
     ----------
@@ -1911,8 +1913,8 @@ def compute_boozer_coords(
     idx0 = jnp.where((B_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
     B_theta_mn = B_transform.fit(data["B_theta"])
     B_zeta_mn = B_transform.fit(data["B_zeta"])
-    data["I"] = data["B_theta_mn"][idx0]
-    data["G"] = data["B_zeta_mn"][idx0]
+    data["I"] = B_theta_mn[idx0]
+    data["G"] = B_zeta_mn[idx0]
 
     # w (RHS of eq 10 in Hirshman 1995 "Transformation from VMEC to Boozer Coordinates")
     w_mn = jnp.zeros((w_transform.basis.num_modes,))
@@ -1973,6 +1975,8 @@ def compute_quasisymmetry_error(
     data=None,
 ):
     """Compute quasi-symmetry errors.
+
+    f_C computation assumes transform grids are a single flux surface.
 
     Parameters
     ----------
@@ -2038,7 +2042,6 @@ def compute_quasisymmetry_error(
         data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(
             data["sqrt(g)"]
         )
-    if check_derivs("G", R_transform, Z_transform, L_transform):
         data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(
             data["sqrt(g)"]
         )

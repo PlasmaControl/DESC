@@ -1005,6 +1005,7 @@ def plot_comparison(
     return fig, ax
 
 
+# TODO: replace this with a capability of plot_1d
 def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwargs):
     """Plot current density profiles.
 
@@ -1111,7 +1112,7 @@ def plot_boozer_modes(
     else:
         idx = idx[-1 : -num_modes - 1 : -1]
     B_mn = B_mn[:, idx]
-    modes = data["Boozer modes"][idx, :]
+    modes = data["B modes"][idx, :]
 
     fig, ax = _format_ax(ax)
     for i in range(modes.shape[0]):

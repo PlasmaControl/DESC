@@ -923,11 +923,11 @@ class _Configuration(IOAble, ABC):
                     derivs=0,
                     build_pinv=True,
                 )
-            elif arg == "nu_transform":
+            elif arg == "w_transform":
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=self.M, N=self.N, sym=self.L_basis.sym, NFP=self.NFP
+                        M=self.M, N=self.N, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
                     build_pinv=True,

@@ -1616,7 +1616,7 @@ class QuasisymmetryBoozer(_Objective):
             timer.disp("Precomputing transforms")
 
         M = self.helicity[0]
-        N = self.helicity[1]
+        N = self.helicity[1] / eq.NFP
         self._idx_00 = np.where(
             (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
         )[0]

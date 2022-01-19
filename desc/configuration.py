@@ -930,7 +930,6 @@ class _Configuration(IOAble, ABC):
                         M=self.M, N=self.N, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
-                    build_pinv=True,
                 )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()

@@ -1576,7 +1576,7 @@ class QuasisymmetryBoozer(_Objective):
                 M=2 * eq.M_grid + 1,
                 N=2 * eq.N_grid + 1,
                 NFP=eq.NFP,
-                sym=eq.sym,
+                sym=False,
                 rho=1,
             )
 
@@ -1604,12 +1604,11 @@ class QuasisymmetryBoozer(_Objective):
             build=True,
             build_pinv=True,
         )
-        self._nu_transform = Transform(
+        self._w_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.L_basis.sym),
+            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.Z_basis.sym),
             derivs=data_index["|B|_mn"]["L_derivs"],
             build=True,
-            build_pinv=True,
         )
 
         timer.stop("Precomputing transforms")
@@ -1621,11 +1620,17 @@ class QuasisymmetryBoozer(_Objective):
         self._idx_00 = np.where(
             (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
         )[0]
-        self._idx_MN = np.where(
-            (self._B_transform.basis.modes == [0, M, N]).all(axis=1)
-        )[0]
+        if N == 0:
+            self._idx_MN = np.where(self._B_transform.basis.modes[:, 2] == 0)[0]
+        else:
+            self._idx_MN = np.where(
+                self._B_transform.basis.modes[:, 1]
+                / self._B_transform.basis.modes[:, 2]
+                == M / N
+            )[0]
         self._idx = np.ones((self._B_transform.basis.num_modes,), bool)
-        self._idx[np.concatenate((self._idx_00, self._idx_MN))] = False
+        self._idx[self._idx_00] = False
+        self._idx[self._idx_MN] = False
 
         self._dim_f = np.sum(self._idx)
 
@@ -1645,7 +1650,7 @@ class QuasisymmetryBoozer(_Objective):
             self._Z_transform,
             self._L_transform,
             self._B_transform,
-            self._nu_transform,
+            self._w_transform,
             self._iota,
         )
         b_mn = data["|B|_mn"]
@@ -1654,7 +1659,7 @@ class QuasisymmetryBoozer(_Objective):
         return b_mn[self._idx]
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute quasi-symmetry flux function errors.
+        """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
         ----------
@@ -1679,7 +1684,7 @@ class QuasisymmetryBoozer(_Objective):
         return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print quasi-symmetry flux function error.
+        """Print quasi-symmetry Boozer harmonics error.
 
         Parameters
         ----------
@@ -1701,7 +1706,7 @@ class QuasisymmetryBoozer(_Objective):
         else:
             units = "(T)"
         print(
-            "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
+            "Quasi-symmetry ({},{}) Boozer error: {:10.3e} ".format(
                 self.helicity[0], self.helicity[1], jnp.linalg.norm(f)
             )
             + units

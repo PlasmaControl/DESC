@@ -1530,7 +1530,15 @@ class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error."""
 
     def __init__(
-        self, eq=None, target=0, weight=1, grid=None, helicity=(1, 0), norm=False
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        helicity=(1, 0),
+        M_booz=None,
+        N_booz=None,
+        norm=False,
     ):
         """Initialize a QuasisymmetryBoozer Objective.
 
@@ -1547,13 +1555,19 @@ class QuasisymmetryBoozer(_Objective):
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
         helicity : tuple, optional
-            Type of quasi-symmetry (M, N).
+            Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
+        M_booz : int, optional
+            Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+        N_booz : int, optional
+            Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
 
         """
         self.grid = grid
         self.helicity = helicity
+        self.M_booz = M_booz
+        self.N_booz = N_booz
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight)
 
@@ -1573,12 +1587,16 @@ class QuasisymmetryBoozer(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(
                 L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
+                M=4 * eq.M_grid + 1,
+                N=4 * eq.N_grid + 1,
                 NFP=eq.NFP,
                 sym=False,
                 rho=1,
             )
+        if self.M_booz is None:
+            self.M_booz = 2 * eq.M
+        if self.N_booz is None:
+            self.N_booz = 2 * eq.N
 
         timer = Timer()
         if verbose > 0:
@@ -1599,14 +1617,14 @@ class QuasisymmetryBoozer(_Objective):
         )
         self._B_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.R_basis.sym),
+            DoubleFourierSeries(M=self.M_booz, N=self.N_booz, sym=eq.R_basis.sym),
             derivs=data_index["|B|_mn"]["R_derivs"],
             build=True,
             build_pinv=True,
         )
         self._w_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.Z_basis.sym),
+            DoubleFourierSeries(M=self.M_booz, N=self.N_booz, sym=eq.Z_basis.sym),
             derivs=data_index["|B|_mn"]["L_derivs"],
             build=True,
         )

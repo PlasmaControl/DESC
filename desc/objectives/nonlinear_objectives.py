@@ -1617,14 +1617,18 @@ class QuasisymmetryBoozer(_Objective):
         )
         self._B_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=self.M_booz, N=self.N_booz, sym=eq.R_basis.sym),
+            DoubleFourierSeries(
+                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.R_basis.sym
+            ),
             derivs=data_index["|B|_mn"]["R_derivs"],
             build=True,
             build_pinv=True,
         )
         self._w_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=self.M_booz, N=self.N_booz, sym=eq.Z_basis.sym),
+            DoubleFourierSeries(
+                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.Z_basis.sym
+            ),
             derivs=data_index["|B|_mn"]["L_derivs"],
             build=True,
         )

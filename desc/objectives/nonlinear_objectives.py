@@ -1677,7 +1677,7 @@ class QuasisymmetryBoozer(_Objective):
         )
         b_mn = data["|B|_mn"]
         if self.norm:
-            b_mn = b_mn / b_mn[self._idx_00]
+            b_mn = b_mn / np.sqrt(np.sum(b_mn ** 2))
         return b_mn[self._idx]
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):

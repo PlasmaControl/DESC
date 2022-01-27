@@ -878,6 +878,7 @@ class HelicalForceBalance(_Objective):
         if self.norm:
             f = f / data["|grad(p)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -1071,6 +1072,7 @@ class RadialCurrentDensity(_Objective):
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
@@ -1260,6 +1262,7 @@ class PoloidalCurrentDensity(_Objective):
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
@@ -1449,6 +1452,7 @@ class ToroidalCurrentDensity(_Objective):
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):

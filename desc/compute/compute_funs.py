@@ -1956,7 +1956,6 @@ def compute_boozer_coords(
         )
         / B_transform.grid.num_nodes
     )
-    data["B modes"] = B_transform.basis.modes
 
     return data
 

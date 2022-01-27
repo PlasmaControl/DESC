@@ -2960,7 +2960,7 @@ data_index = {
         "units_long": "Tesla",
         "description": "Boozer harmonics of magnetic field",
         "fun": "compute_boozer_coords",
-        "dim": 0,
+        "dim": 1,
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
         "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },

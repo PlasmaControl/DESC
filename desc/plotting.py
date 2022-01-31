@@ -10,7 +10,8 @@ from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
-from desc.basis import zernike_radial_poly, fourier
+from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
+from desc.transform import Transform
 from desc.compute import data_index
 
 __all__ = [
@@ -93,24 +94,24 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     Parameters
     ----------
     ax : None or matplotlib AxesSubplot instance
-        axis to plot to
+        Axis to plot to.
     is3d: bool
-        default is False
+        Whether the plot is three-dimensional.
     rows : int, optional
-        number of rows of subplots to create
+        Number of rows of subplots to create.
     cols : int, optional
-        number of columns of subplots to create
+        Number of columns of subplots to create.
     figsize : tuple of 2 floats
-        figure size (width, height) in inches
+        Figure size (width, height) in inches. Default is (6, 6).
     equal : bool
-        whether axes should have equal scales for x and y
+        Whether axes should have equal scales for x and y.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if figsize is None:
@@ -163,11 +164,12 @@ def _get_grid(**kwargs):
     Parameters
     ----------
     kwargs
-        any arguments taken by LinearGrid (Default L=1, M=1, N=1)
+        Any arguments taken by LinearGrid.
 
     Returns
     -------
     LinearGrid
+        Grid of coordinates to evaluate at.
 
     """
     grid_args = {
@@ -196,7 +198,7 @@ def _get_plot_axes(grid):
     Parameters
     ----------
     grid : Grid
-
+        Grid of coordinates to evaluate at.
     Returns
     -------
     tuple
@@ -225,7 +227,7 @@ def _compute(eq, name, grid, component=None):
     grid : Grid
         Grid of coordinates to evaluate at.
     component : str, optional
-        for vector variables, which element to plot. Default is the norm of the vector
+        For vector variables, which element to plot. Default is the norm of the vector.
 
     Returns
     -------
@@ -273,15 +275,15 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     L : bool
-        wheter to include radial mode numbers in the x-axis or not (Default = True)
+        Wheter to include radial mode numbers in the x-axis or not.
     M : bool
-        wheter to include poloidal mode numbers in the x-axis or not (Default = True)
+        Wheter to include poloidal mode numbers in the x-axis or not.
     N : bool
-        wheter to include toroidal mode numbers in the x-axis or not (Default = True)
+        Wheter to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
@@ -337,22 +339,22 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
+        Whether to use a log scale.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
@@ -380,36 +382,36 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     return fig, ax
 
 
-def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     """Plot 2D cross-sections.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
-    norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum
-        equilibrium force error is normalized by the gradient of magnetic pressure,
-        while an equilibrium solved with pressure is normalized by pressure gradient.
+        Whether to use a log scale.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the pressure gradient.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
-        grid_kwargs = {"L": 25, "M": 25, "NFP": eq.NFP, "axis": False}
+        grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -494,35 +496,35 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     return fig, ax
 
 
-def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
+def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **kwargs):
     """Plot 3D surfaces.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
+        Whether to use a log scale.
     all_field_periods : bool, optional
         Whether to plot full torus or one field period. Ignored if grid is specified.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 32, "N": int(32 * eq.NFP), "NFP": nfp}
+        grid_kwargs = {"M": 33, "N": int(33 * eq.NFP), "NFP": nfp}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -608,32 +610,32 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     return fig, ax
 
 
-def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     """Plot Poincare sections.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
-    norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum
-        equilibrium force error is normalized by the gradient of magnetic pressure,
-        while an equilibrium solved with pressure is normalized by pressure gradient.
+        Whether to use a log scale.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the pressure gradient.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
@@ -751,26 +753,26 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     rho : int or array-like
-        values of rho to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,1)
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     theta : int or array-like
-        values of theta to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,2pi)
+        Values of theta to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
-        values of zeta to plot contours at. If an integer, plot that many contours
-        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
-        equilibria or 6 for non-axisymmetric cases.
+        Values of zeta to plot contours at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     NR = kwargs.pop("NR", 50)
@@ -915,35 +917,35 @@ def plot_comparison(
     Parameters
     ----------
     eqs : array-like of Equilibrium or EquilibriaFamily
-        equilibria to compare
+        Equilibria to compare.
     rho : int or array-like
-        values of rho to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,1)
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     theta : int or array-like
-        values of theta to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,2pi)
+        Values of theta to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
-        values of zeta to plot contours at. If an integer, plot that many contours
-        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
-        equilibria or 6 for non-axisymmetric cases.
+        Values of zeta to plot contours at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
     cmap : str or matplotlib ColorMap
-        colormap to use for plotting, discretized into len(eqs) colors.
+        Colormap to use for plotting, discretized into len(eqs) colors.
     colors : array-like
-        array the same length as eqs of colors to use for each equilibrium.
-        Overrides `cmap`
+        Array the same length as eqs of colors to use for each equilibrium.
+        Overrides `cmap`.
     linestyles : array-like
-        array the same length as eqs of linestyles to use for each equilibrium
+        Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
-        array the same length as eqs of labels to apply to each equilibrium
+        Array the same length as eqs of labels to apply to each equilibrium.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     figsize = kwargs.pop("figsize", None)
@@ -1006,17 +1008,17 @@ def plot_comparison(
 
 
 # TODO: replace this with a capability of plot_1d
-def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwargs):
+def plot_current(eq, log=False, L=20, M=None, N=None, rho=None, ax=None, **kwargs):
     """Plot current density profiles.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     log : bool, optional
-        Whether to use a log scale. Default is False.
+        Whether to use a log scale.
     L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
+        Number of flux surfaces to evaluate at. Only used if rho=None.
     M : int, optional
         Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
     N : int, optional
@@ -1024,14 +1026,14 @@ def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwarg
     rho : ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if rho is None:
@@ -1066,33 +1068,33 @@ def plot_current(eq, log=False, L=10, M=None, N=None, rho=None, ax=None, **kwarg
 
 
 def plot_boozer_modes(
-    eq, log=True, B0=True, num_modes=-1, L=10, rho=None, ax=None, **kwargs
+    eq, log=True, B0=True, num_modes=-1, L=20, rho=None, ax=None, **kwargs
 ):
-    """Plot Fourier harmonics of |B| in Boozer coordinates.
+    """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     log : bool, optional
-        Whether to use a log scale. Default is True.
+        Whether to use a log scale.
     B0 : bool, optional
-        Whether to include the m=n=0 mode. Default is True.
+        Whether to include the m=n=0 mode.
     num_modes : int, optional
         How many modes to include. Default (-1) is all.
     L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
+        Number of flux surfaces to evaluate at. Only used if rho=None.
     rho : ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if rho is None:
@@ -1144,40 +1146,25 @@ def plot_boozer_modes(
     return fig, ax, ds
 
 
-def plot_qs_error(
-    eq,
-    log=True,
-    fB=True,
-    fC=True,
-    fT=True,
-    helicity=(1, 0),
-    L=10,
-    rho=None,
-    ax=None,
-    **kwargs,
+def plot_boozer_surface(
+    eq, grid_compute=None, grid_plot=None, fill=True, ncontours=100, ax=None, **kwargs
 ):
-    """Plot quasi-symmetry errors f_B, f_C, and f_T as scalar flux surface averages.
+    """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
-    log : bool, optional
-        Whether to use a log scale. Default is True.
-    fB : bool, optional
-        Whether to include the Boozer coordinates QS error. Default is True.
-    fC : bool, optional
-        Whether to include the flux function QS error. Default is True.
-    fT : bool, optional
-        Whether to include the triple product QS error. Default is True.
-    helicity : tuple, int
-        Type of quasi-symmetry (M, N).
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None. Default is 10.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
+        Object from which to plot.
+    fill : bool, optional
+        Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
+    grid_compute :
+
+    grid_plot :
+
+    ncontours : int, optional
+        Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
@@ -1185,6 +1172,95 @@ def plot_qs_error(
         figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
+
+    """
+    if grid_compute is None:
+        grid_kwargs = {"M": 6 * eq.M + 1, "N": 6 * eq.N + 1, "NFP": eq.NFP}
+        grid_compute = _get_grid(**grid_kwargs)
+    if grid_plot is None:
+        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
+        grid_plot = _get_grid(**grid_kwargs)
+
+    data = eq.compute("|B|_mn", grid_compute)
+    B_transform = Transform(
+        grid_plot,
+        DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
+    )
+    data = B_transform.transform(data["|B|_mn"])
+    data = data.reshape((grid_plot.M, grid_plot.N), order="F")
+
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    divider = make_axes_locatable(ax)
+
+    contourf_kwargs = {}
+    contourf_kwargs["norm"] = matplotlib.colors.Normalize()
+    # contourf_kwargs["levels"] = kwargs.get(
+    #     "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+    # )
+    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["extend"] = "both"
+
+    cax_kwargs = {"size": "5%", "pad": 0.05}
+
+    xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
+    yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
+
+    levels = np.linspace(0.9, 3.9, 21)
+    im = ax.contourf(xx, yy, data, levels=levels, **contourf_kwargs)
+
+    cax = divider.append_axes("right", **cax_kwargs)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.update_ticks()
+
+    ax.set_xlabel(r"$\zeta_{Boozer}$")
+    ax.set_ylabel(r"$\theta_{Boozer}$")
+    ax.set_title(r"$|\mathbf{B}|~(T)$")
+
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_qs_error(
+    eq,
+    log=True,
+    fB=True,
+    fC=True,
+    fT=True,
+    helicity=(1, 0),
+    L=20,
+    rho=None,
+    ax=None,
+    **kwargs,
+):
+    """Plot quasi-symmetry errors f_B, f_C, and f_T as normalized flux functions.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    log : bool, optional
+        Whether to use a log scale.
+    fB : bool, optional
+        Whether to include the Boozer coordinates QS error.
+    fC : bool, optional
+        Whether to include the flux function QS error.
+    fT : bool, optional
+        Whether to include the triple product QS error.
+    helicity : tuple, int
+        Type of quasi-symmetry (M, N).
+    L : int, optional
+        Number of flux surfaces to evaluate at. Only used if rho=None.
+    rho : ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
 
     """
     if rho is None:

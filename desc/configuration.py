@@ -918,7 +918,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=self.M, N=self.N, sym=self.R_basis.sym, NFP=self.NFP
+                        M=2 * self.M, N=2 * self.N, sym=self.R_basis.sym, NFP=self.NFP
                     ),
                     derivs=0,
                     build_pinv=True,
@@ -927,7 +927,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=self.M, N=self.N, sym=self.Z_basis.sym, NFP=self.NFP
+                        M=2 * self.M, N=2 * self.N, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
                 )

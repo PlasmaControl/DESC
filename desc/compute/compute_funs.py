@@ -1844,7 +1844,7 @@ def compute_boozer_coords(
 ):
     """Compute Boozer coordinates.
 
-    Assumes transform grids are a single flux surface without symmetry.
+    Assumes transform grids are uniform spacing on single flux surface without symmetry.
 
     Parameters
     ----------

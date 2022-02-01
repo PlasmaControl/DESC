@@ -1103,7 +1103,7 @@ def plot_boozer_modes(
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, rho=r)
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
@@ -1175,7 +1175,12 @@ def plot_boozer_surface(
 
     """
     if grid_compute is None:
-        grid_kwargs = {"M": 6 * eq.M + 1, "N": 6 * eq.N + 1, "NFP": eq.NFP}
+        grid_kwargs = {
+            "M": 6 * eq.M + 1,
+            "N": 6 * eq.N + 1,
+            "NFP": eq.NFP,
+            "endpoint": False,
+        }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
@@ -1194,9 +1199,9 @@ def plot_boozer_surface(
 
     contourf_kwargs = {}
     contourf_kwargs["norm"] = matplotlib.colors.Normalize()
-    # contourf_kwargs["levels"] = kwargs.get(
-    #     "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
-    # )
+    contourf_kwargs["levels"] = kwargs.get(
+        "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+    )
     contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
     contourf_kwargs["extend"] = "both"
 
@@ -1205,8 +1210,7 @@ def plot_boozer_surface(
     xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
     yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
 
-    levels = np.linspace(0.9, 3.9, 21)
-    im = ax.contourf(xx, yy, data, levels=levels, **contourf_kwargs)
+    im = ax.contourf(xx, yy, data, **contourf_kwargs)
 
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)

@@ -672,6 +672,7 @@ class RadialForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
+    # FIXME: pre-compute normalization based on initial condition, use averaged (not local) values
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
         data = compute_force_error(
             R_lmn,

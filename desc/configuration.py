@@ -874,6 +874,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
+    # TODO: add kwargs for M_booz, N_booz, etc.
     def compute(self, name, grid=None, data=None):
         """Compute the quantity given by name on grid.
 

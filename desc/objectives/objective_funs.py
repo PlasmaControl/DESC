@@ -17,7 +17,7 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["objectives", "constraints"]
 
-    def __init__(self, objectives, constraints=(), eq=None, use_jit=True):
+    def __init__(self, objectives, constraints=(), eq=None, use_jit=True, verbose=1):
         """Initialize an Objective Function.
 
         Parameters
@@ -30,6 +30,8 @@ class ObjectiveFunction(IOAble):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
 
         """
         if not isinstance(objectives, tuple):
@@ -44,7 +46,7 @@ class ObjectiveFunction(IOAble):
         self._compiled = False
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit)
+            self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indicies."""

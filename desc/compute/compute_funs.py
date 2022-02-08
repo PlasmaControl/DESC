@@ -1910,7 +1910,7 @@ def compute_boozer_coords(
         return data
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-    idx0 = B_transform.basis.get_idx(M=0, N=0)[0]
+    idx0 = B_transform.basis.get_idx(M=0, N=0)
     B_theta_mn = B_transform.fit(data["B_theta"])
     B_zeta_mn = B_transform.fit(data["B_zeta"])
     data["I"] = B_theta_mn[idx0]
@@ -1920,10 +1920,10 @@ def compute_boozer_coords(
     w_mn = jnp.zeros((w_transform.basis.num_modes,))
     for k, (l, m, n) in enumerate(w_transform.basis.modes):
         if m != 0:
-            idx = B_transform.basis.get_idx(M=-m, N=n)[0]
+            idx = B_transform.basis.get_idx(M=-m, N=n)
             w_mn = put(w_mn, k, (sign(n) * B_theta_mn[idx] / jnp.abs(m))[0])
         elif n != 0:
-            idx = B_transform.basis.get_idx(M=m, N=-n)[0]
+            idx = B_transform.basis.get_idx(M=m, N=-n)
             w_mn = put(w_mn, k, (sign(m) * B_zeta_mn[idx] / np.abs(NFP * n))[0])
 
     # transform to real space

@@ -52,34 +52,24 @@ class Basis(IOAble, ABC):
             self._idx[L][M][N] = idx
 
     def get_idx(self, L=0, M=0, N=0):
-        """Get the index of the ``'modes'`` array corresponding to a given mode numbers.
+        """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
         ----------
-        L : int or ndarray of int
+        L : int
             Radial mode number.
-        M : int or ndarray of int
+        M : int
             Poliodal mode number.
-        N : int or ndarray of int
+        N : int
             Toroidal mode number.
 
         Returns
         -------
         idx : ndarray of int
-            Indices of given mode numbers.
+            Index of given mode numbers.
 
         """
-        L = jnp.atleast_1d(L)
-        M = jnp.atleast_1d(M)
-        N = jnp.atleast_1d(N)
-
-        num = max(len(L), len(M), len(N))
-        L = jnp.broadcast_to(L, num)
-        M = jnp.broadcast_to(M, num)
-        N = jnp.broadcast_to(N, num)
-
-        idx = [self._idx[L[i]][M[i]][N[i]] for i in range(num)]
-        return idx
+        return self._idx[L][M][N]
 
     @abstractmethod
     def _get_modes(self):

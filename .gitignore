@@ -1,5 +1,4 @@
 *.mat
-*.png
 *.pdf
 *.gif
 __pycache__/

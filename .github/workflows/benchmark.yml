@@ -8,12 +8,14 @@ on:
     paths-ignore:
       - 'tests/benchmarks/.benchmarks/**'
       - 'tests/benchmarks/Figures/**'
+      - 'docs/**'
   pull_request:
     branches:
       - master
     paths-ignore:
       - 'tests/benchmarks/.benchmarks/**'
       - 'tests/benchmarks/Figures/**'
+      - 'docs/**'
   workflow_dispatch:
 
 

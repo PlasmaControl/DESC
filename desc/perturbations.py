@@ -5,6 +5,7 @@ from termcolor import colored
 from desc.backend import use_jax, put
 from desc.utils import Timer
 from desc.compute import arg_order
+from desc.optimize.utils import evaluate_quadratic
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -75,7 +76,7 @@ def perturb(
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    if objective.scalar:
+    if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
             "Cannot perturb with a scalar objective: {}.".format(objective)
         )
@@ -238,17 +239,12 @@ def perturb(
             )
             setattr(eq_new, key, value)
 
-    act_red = np.sum(f ** 2) / 2 - objective.compute_scalar(objective.y(eq_new))
-    pre_red = -np.dot(f.T + 0.5 * np.dot(dx.T, Jx.T), np.dot(Jx, dx))
-    red_ratio = act_red / pre_red  # reduction ratio = actual / predicted reductions
-
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
         print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
-        print("reduction ratio = {}".format(red_ratio))
 
-    return eq_new, red_ratio
+    return eq_new
 
 
 def optimal_perturb(
@@ -263,8 +259,9 @@ def optimal_perturb(
     dp=False,
     di=False,
     dPsi=False,
+    opt_subspace=None,
     order=2,
-    tr_ratio=0.1,
+    tr_ratio=[0.1, 0.25],
     cutoff=1e-6,
     verbose=1,
     copy=True,
@@ -283,6 +280,8 @@ def optimal_perturb(
         Array of indicies of modes to include in the perturbations of R, Z, lambda,
         R_boundary, Z_boundary, pressure, rotational transform, and total magnetic flux.
         Setting to True (False) includes (excludes) all modes.
+    opt_subspace : ndarray
+        # TODO: explain!
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
@@ -325,9 +324,6 @@ def optimal_perturb(
     if not objective_g.built:
         objective_g.build(eq, verbose=verbose)
 
-    if objective_f.scalar or objective_g.scalar:
-        raise AttributeError("Cannot perturb with a scalar objective.")
-
     deltas = {}
     if type(dR) is bool or dR is None:
         if dR is True:
@@ -363,6 +359,9 @@ def optimal_perturb(
         if dPsi is True:
             deltas["Psi"] = np.ones((objective_f.dimensions["Psi"],), dtype=bool)
 
+    # FIXME: use constraint matrix instead of c_idx & augemented constraint equations
+    # user can pass existing inputs or this matrix, bool arrays get turned into matrix
+
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
@@ -382,11 +381,25 @@ def optimal_perturb(
     for key, value in deltas.items():
         c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
-    c_norm = np.linalg.norm(c[c_idx])
-    if c_norm == 0:
-        c_norm = 1
+
+    c_norm = np.linalg.norm(c)
+    x_norm = np.linalg.norm(x)
+
+    # optimization subspace matrix
+    if opt_subspace is None:
+        opt_subspace = np.eye(c.size)[:, c_idx]
+
+    dim_opt = opt_subspace.shape[-1]
+    if objective_g.dim_f < dim_opt:
+        raise ValueError(
+            "Cannot perturb {} parameters with {} objectives.".format(
+                dim_opt, objective_g.dim_f
+            )
+        )
 
     # perturbation vectors
+    dc1_opt = np.zeros((dim_opt,))
+    dc2_opt = np.zeros((dim_opt,))
     dc1 = np.zeros_like(c)
     dc2 = np.zeros_like(c)
     dx1 = np.zeros_like(x)
@@ -447,7 +460,8 @@ def optimal_perturb(
         LHS = np.dot(GxFx, Fc) - Gc
         RHS_1g = -g + np.dot(GxFx, f)
 
-        LHS = LHS[:, c_idx]  # restrict optimization space
+        # restrict to optimization subspace
+        LHS = np.dot(LHS, opt_subspace)
 
         if verbose > 0:
             print("Factoring LHS")
@@ -457,7 +471,7 @@ def optimal_perturb(
         if verbose > 1:
             timer.disp("LHS factorization")
 
-        dc1_opt, hit, alpha = trust_region_step_exact_svd(
+        dc1_opt, bound_hit, alpha = trust_region_step_exact_svd(
             RHS_1g,
             ug,
             sg,
@@ -469,11 +483,11 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc1[c_idx] = dc1_opt
+        dc1 = np.dot(dc1_opt, opt_subspace.T)
         RHS_1f = f + np.dot(Fc, dc1)
         uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
 
-        dx1, hit, alpha = trust_region_step_exact_svd(
+        dx1, _, _ = trust_region_step_exact_svd(
             RHS_1f,
             uf,
             sf,
@@ -510,7 +524,7 @@ def optimal_perturb(
         if verbose > 1:
             timer.disp("d^2g computation")
 
-        dc2_opt, hit, alpha = trust_region_step_exact_svd(
+        dc2_opt, _, _ = trust_region_step_exact_svd(
             RHS_2g,
             ug,
             sg,
@@ -522,10 +536,10 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc2[c_idx] = dc2_opt
+        dc2 = np.dot(dc2_opt, opt_subspace.T)
         RHS_2f += np.dot(Fc, dc2)
 
-        dx2, hit, alpha = trust_region_step_exact_svd(
+        dx2, _, _ = trust_region_step_exact_svd(
             RHS_2f,
             uf,
             sf,
@@ -547,6 +561,9 @@ def optimal_perturb(
     else:
         eq_new = eq
 
+    dc_opt = dc1_opt + dc2_opt
+    step_norm = np.linalg.norm(dc_opt)
+
     # update perturbation attributes
     dc = dc1 + dc2
     idx0 = 0
@@ -566,15 +583,12 @@ def optimal_perturb(
             )
             setattr(eq_new, key, value)
 
-    act_red = np.sum(g ** 2) / 2 - objective_g.compute_scalar(objective_g.y(eq_new))
-    pre_red = -np.dot(g.T + 0.5 * np.dot(dc.T, Gc.T), np.dot(Gc, dc))
-    red_ratio = act_red / pre_red  # reduction ratio = actual / predicted reductions
+    predicted_reduction = -evaluate_quadratic(Gc, np.dot(g.T, Gc), dc)
 
     timer.stop("Total perturbation")
     if verbose > 1:
         timer.disp("Total perturbation")
-        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
-        print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
-        print("reduction ratio = {}".format(red_ratio))
+        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / c_norm))
+        print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / x_norm))
 
-    return eq_new, red_ratio
+    return eq_new, predicted_reduction, tr_ratio, c_norm, step_norm, bound_hit

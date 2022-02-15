@@ -9,6 +9,8 @@ from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.optimize.utils import check_termination
+from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
 from desc.objectives import (
     ObjectiveFunction,
@@ -301,8 +303,8 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
-        objective_f=None,
-        objective_g=None,
+        objective=None,
+        constraint=None,
         dR=None,
         dZ=None,
         dL=None,
@@ -321,10 +323,10 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective_f : ObjectiveFunction
-            Objective function to satisfy.
-        objective_g : ObjectiveFunction
+        objective : ObjectiveFunction
             Objective function to optimize.
+        constraint : ObjectiveFunction
+            Objective function to satisfy.
         dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
             rotational transform, and total toroidal magnetic flux.
@@ -353,7 +355,7 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        if objective_f is None:
+        if constraint is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
             constraints = (
                 FixedBoundaryR(),
@@ -363,11 +365,11 @@ class Equilibrium(_Configuration, IOAble):
                 FixedPsi(),
                 LCFSBoundary(),
             )
-            objective_f = ObjectiveFunction(objectives, constraints)
-        if objective_g is None:
-            equil, red_ratio = perturb(
+            constraint = ObjectiveFunction(objectives, constraints)
+        if objective is None:
+            eq = perturb(
                 self,
-                objective_f,
+                constraint,
                 dR=dR,
                 dZ=dZ,
                 dL=dL,
@@ -382,10 +384,10 @@ class Equilibrium(_Configuration, IOAble):
                 copy=copy,
             )
         else:
-            equil, red_ratio = optimal_perturb(
+            eq = optimal_perturb(
                 self,
-                objective_f,
-                objective_g,
+                constraint,
+                objective,
                 dR=dR,
                 dZ=dZ,
                 dL=dL,
@@ -401,16 +403,144 @@ class Equilibrium(_Configuration, IOAble):
                 copy=copy,
             )
 
-        equil.solved = False
+        eq.solved = False
 
         if copy:
-            return equil, red_ratio
+            return eq
         else:
-            return red_ratio
+            return None
 
-    def optimize(self):
-        """Optimize an equilibrium for a physics or engineering objective."""
-        raise NotImplementedError("Optimizing equilibria has not yet been implemented.")
+    def optimize(
+        self,
+        objective,
+        constraint=None,
+        ftol=1e-6,
+        xtol=1e-6,
+        maxiter=50,
+        verbose=1,
+        copy=True,  # TODO: allow copy=False
+        solve_options={},
+        perturb_options={},
+    ):
+        """Optimize an equilibrium for an objective.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to optimize.
+        constraint : ObjectiveFunction
+            Objective function to satisfy.
+
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on optimization step size.
+        maxiter : int
+            Maximum number of optimization steps.
+
+        verbose : int
+            Level of output.
+        copy : bool
+            Whether to perturb the input equilibrium or make a copy (Default).
+
+        solve_options : dict
+            Dictionary of additional options used in Equilibrium.solve().
+        perturb_options : dict
+            Dictionary of additional options used in Equilibrium.perturb().
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            perturbed equilibrum, only returned if copy=True
+
+        """
+        # TODO: reuse most of `lsqtr` from optimize.least_squares
+
+        if constraint is None:
+            objectives = (RadialForceBalance(), HelicalForceBalance())
+            constraints = (
+                FixedBoundaryR(),
+                FixedBoundaryZ(),
+                FixedPressure(),
+                FixedIota(),
+                FixedPsi(),
+                LCFSBoundary(),
+            )
+            constraint = ObjectiveFunction(objectives, constraints)
+
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
+        if not objective.built:
+            objective.build(self)
+        cost = objective.compute_scalar(objective.y(eq))
+
+        for iteration in range(maxiter):
+            if verbose > 0:
+                print("Iteration: {}".format(iteration))
+            (
+                eq_new,
+                predicted_reduction,
+                tr_ratio,
+                c_norm,
+                step_norm,
+                bound_hit,
+            ) = optimal_perturb(
+                eq,
+                constraint,
+                objective,
+                copy=True,
+                **perturb_options,
+            )
+            eq_new.solve(objective=constraint, **solve_options)
+
+            # update trust region radius
+            cost_new = objective.compute_scalar(objective.y(eq_new))
+            actual_reduction = cost - cost_new
+            trust_radius, ratio = update_tr_radius(
+                tr_ratio[0] * c_norm,
+                actual_reduction,
+                predicted_reduction,
+                step_norm,
+                bound_hit,
+            )
+            tr_ratio[0] = trust_radius / c_norm
+            perturb_options["tr_ratio"] = tr_ratio
+
+            success, message = check_termination(
+                actual_reduction,
+                cost,
+                step_norm,
+                c_norm,
+                np.inf,  # TODO: add g_norm
+                ratio,
+                ftol,
+                xtol,
+                0,  # TODO: add gtol
+                iteration,
+                maxiter,
+                0,
+                np.inf,
+                0,
+                np.inf,
+                0,
+                np.inf,
+            )
+            if actual_reduction < 0:
+                eq = eq_new
+                cost = cost_new
+            if success is not None:
+                break
+
+        if verbose > 0:
+            print(message)
+
+        if copy:
+            return eq
+        else:
+            return None
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

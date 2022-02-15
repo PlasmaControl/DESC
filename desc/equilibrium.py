@@ -449,6 +449,9 @@ class Equilibrium(_Configuration, IOAble):
         else:
             eq = self
 
+        timer = Timer()
+        timer.start("Total time")
+
         if not objective.built:
             objective.build(self)
         cost = objective.compute_scalar(objective.y(eq))
@@ -462,12 +465,14 @@ class Equilibrium(_Configuration, IOAble):
             objective.callback(objective.y(eq))
 
         for iteration in range(maxiter):
+            timer.start("Step {} time".format(iteration + 1))
             if verbose > 0:
                 print("====================")
                 print("Optimization Step {}".format(iteration + 1))
                 print("====================")
                 print("Trust-Region ratio = {}".format(tr_ratio[0]))
 
+            # perturb + solve
             (
                 eq_new,
                 predicted_reduction,
@@ -497,10 +502,14 @@ class Equilibrium(_Configuration, IOAble):
             tr_ratio[0] = trust_radius / c_norm
             perturb_options["tr_ratio"] = tr_ratio
 
+            timer.stop("Step {} time".format(iteration + 1))
             if verbose > 0:
                 objective.callback(objective.y(eq_new))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
+            if verbose > 1:
+                timer.disp("Step {} time".format(iteration + 1))
 
+            # stopping criteria
             success, message = check_termination(
                 actual_reduction,
                 cost,
@@ -526,8 +535,13 @@ class Equilibrium(_Configuration, IOAble):
             if success is not None:
                 break
 
+        timer.stop("Total time")
+        print("====================")
+        print("Done")
         if verbose > 0:
             print(message)
+        if verbose > 1:
+            timer.disp("Total time")
 
         if copy:
             return eq

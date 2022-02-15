@@ -23,6 +23,7 @@ __all__ = [
     "plot_comparison",
     "plot_current",
     "plot_boozer_modes",
+    "plot_boozer_surface",
     "plot_grid",
     "plot_basis",
 ]

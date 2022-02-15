@@ -47,5 +47,6 @@ jobs:
           BRANCH: benchmark_results
           FOLDER: tests/benchmarks
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEAR_GLOBS_FILE: ".clear-target-files"
           MESSAGE: "Commit Benchmark results for commit {sha} with the following commit message:\n {msg}	 " # The commit message
           

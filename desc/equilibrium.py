@@ -1,7 +1,8 @@
 import numpy as np
-from termcolor import colored
 import warnings
 import numbers
+import inspect
+from termcolor import colored
 from collections.abc import MutableSequence
 
 from desc.backend import use_jax, put
@@ -304,7 +305,6 @@ class Equilibrium(_Configuration, IOAble):
     def perturb(
         self,
         objective=None,
-        constraint=None,
         dR=None,
         dZ=None,
         dL=None,
@@ -319,13 +319,11 @@ class Equilibrium(_Configuration, IOAble):
         verbose=1,
         copy=True,
     ):
-        """Perturb the configuration while mainting equilibrium.
+        """Perturb an equilibrium.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            Objective function to optimize.
-        constraint : ObjectiveFunction
             Objective function to satisfy.
         dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
@@ -355,7 +353,7 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        if constraint is None:
+        if objective is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
             constraints = (
                 FixedBoundaryR(),
@@ -365,44 +363,24 @@ class Equilibrium(_Configuration, IOAble):
                 FixedPsi(),
                 LCFSBoundary(),
             )
-            constraint = ObjectiveFunction(objectives, constraints)
-        if objective is None:
-            eq = perturb(
-                self,
-                constraint,
-                dR=dR,
-                dZ=dZ,
-                dL=dL,
-                dRb=dRb,
-                dZb=dZb,
-                dp=dp,
-                di=di,
-                dPsi=dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                verbose=verbose,
-                copy=copy,
-            )
-        else:
-            eq = optimal_perturb(
-                self,
-                constraint,
-                objective,
-                dR=dR,
-                dZ=dZ,
-                dL=dL,
-                dRb=dRb,
-                dZb=dZb,
-                dp=dp,
-                di=di,
-                dPsi=dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                cutoff=cutoff,
-                verbose=verbose,
-                copy=copy,
-            )
+            objective = ObjectiveFunction(objectives, constraints)
 
+        eq = perturb(
+            self,
+            objective,
+            dR=dR,
+            dZ=dZ,
+            dL=dL,
+            dRb=dRb,
+            dZb=dZb,
+            dp=dp,
+            di=di,
+            dPsi=dPsi,
+            order=order,
+            tr_ratio=tr_ratio,
+            verbose=verbose,
+            copy=copy,
+        )
         eq.solved = False
 
         if copy:
@@ -418,7 +396,7 @@ class Equilibrium(_Configuration, IOAble):
         xtol=1e-6,
         maxiter=50,
         verbose=1,
-        copy=True,  # TODO: allow copy=False
+        copy=True,
         solve_options={},
         perturb_options={},
     ):
@@ -454,8 +432,6 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        # TODO: reuse most of `lsqtr` from optimize.least_squares
-
         if constraint is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
             constraints = (
@@ -477,15 +453,27 @@ class Equilibrium(_Configuration, IOAble):
             objective.build(self)
         cost = objective.compute_scalar(objective.y(eq))
 
+        tr_ratio = perturb_options.get(
+            "tr_ratio",
+            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
+        )
+
+        if verbose > 0:
+            objective.callback(objective.y(eq))
+
         for iteration in range(maxiter):
             if verbose > 0:
-                print("Iteration: {}".format(iteration))
+                print("====================")
+                print("Optimization Step {}".format(iteration + 1))
+                print("====================")
+                print("Trust-Region ratio = {}".format(tr_ratio[0]))
+
             (
                 eq_new,
                 predicted_reduction,
-                tr_ratio,
+                dc_opt_norm,
+                c_opt_norm,
                 c_norm,
-                step_norm,
                 bound_hit,
             ) = optimal_perturb(
                 eq,
@@ -503,17 +491,21 @@ class Equilibrium(_Configuration, IOAble):
                 tr_ratio[0] * c_norm,
                 actual_reduction,
                 predicted_reduction,
-                step_norm,
+                dc_opt_norm,
                 bound_hit,
             )
             tr_ratio[0] = trust_radius / c_norm
             perturb_options["tr_ratio"] = tr_ratio
 
+            if verbose > 0:
+                objective.callback(objective.y(eq_new))
+                print("Reduction Ratio = {:+.3f}".format(ratio))
+
             success, message = check_termination(
                 actual_reduction,
                 cost,
-                step_norm,
-                c_norm,
+                dc_opt_norm,
+                c_opt_norm,
                 np.inf,  # TODO: add g_norm
                 ratio,
                 ftol,
@@ -528,7 +520,7 @@ class Equilibrium(_Configuration, IOAble):
                 0,
                 np.inf,
             )
-            if actual_reduction < 0:
+            if actual_reduction > 0:
                 eq = eq_new
                 cost = cost_new
             if success is not None:
@@ -735,7 +727,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         print("Perturbing equilibrium")
                     # TODO: pass Jx if available
                     equil.perturb(
-                        objective_f=objective,
+                        objective=objective,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,

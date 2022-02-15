@@ -23,7 +23,7 @@ def perturb(
     di=None,
     dPsi=None,
     order=2,
-    tr_ratio=0.1,
+    tr_ratio=[0.1, 0.25, 0.25],
     verbose=1,
     copy=True,
 ):
@@ -240,9 +240,10 @@ def perturb(
             setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
+    if verbose > 0:
+        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
     if verbose > 1:
         timer.disp("Total perturbation")
-        print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
 
     return eq_new
 
@@ -276,11 +277,11 @@ def optimal_perturb(
         Objective function to satisfy.
     objective_g : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+    dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or bool, optional
         Array of indicies of modes to include in the perturbations of R, Z, lambda,
         R_boundary, Z_boundary, pressure, rotational transform, and total magnetic flux.
         Setting to True (False) includes (excludes) all modes.
-    opt_subspace : ndarray
+    opt_subspace : ndarray, optional
         # TODO: explain!
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -359,9 +360,6 @@ def optimal_perturb(
         if dPsi is True:
             deltas["Psi"] = np.ones((objective_f.dimensions["Psi"],), dtype=bool)
 
-    # FIXME: use constraint matrix instead of c_idx & augemented constraint equations
-    # user can pass existing inputs or this matrix, bool arrays get turned into matrix
-
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
@@ -382,14 +380,15 @@ def optimal_perturb(
         c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
 
-    c_norm = np.linalg.norm(c)
-    x_norm = np.linalg.norm(x)
-
     # optimization subspace matrix
     if opt_subspace is None:
         opt_subspace = np.eye(c.size)[:, c_idx]
+    dim_c, dim_opt = opt_subspace.shape
 
-    dim_opt = opt_subspace.shape[-1]
+    if dim_c != c.size:
+        raise ValueError(
+            "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
+        )
     if objective_g.dim_f < dim_opt:
         raise ValueError(
             "Cannot perturb {} parameters with {} objectives.".format(
@@ -397,9 +396,13 @@ def optimal_perturb(
             )
         )
 
+    # vector norms
+    x_norm = np.linalg.norm(x)
+    c_norm = np.linalg.norm(c)
+    c_opt = np.dot(c, opt_subspace)
+    c_opt_norm = np.linalg.norm(c_opt)
+
     # perturbation vectors
-    dc1_opt = np.zeros((dim_opt,))
-    dc2_opt = np.zeros((dim_opt,))
     dc1 = np.zeros_like(c)
     dc2 = np.zeros_like(c)
     dx1 = np.zeros_like(x)
@@ -492,7 +495,7 @@ def optimal_perturb(
             uf,
             sf,
             vtf.T,
-            tr_ratio[0] * np.linalg.norm(x),
+            tr_ratio[0] * x_norm,
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -561,11 +564,11 @@ def optimal_perturb(
     else:
         eq_new = eq
 
-    dc_opt = dc1_opt + dc2_opt
-    step_norm = np.linalg.norm(dc_opt)
+    dc = dc1 + dc2
+    dc_opt = np.dot(dc, opt_subspace)
+    dc_opt_norm = np.linalg.norm(dc_opt)
 
     # update perturbation attributes
-    dc = dc1 + dc2
     idx0 = 0
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + len(value)])
@@ -586,9 +589,10 @@ def optimal_perturb(
     predicted_reduction = -evaluate_quadratic(Gc, np.dot(g.T, Gc), dc)
 
     timer.stop("Total perturbation")
+    if verbose > 0:
+        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
+        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx) / x_norm))
     if verbose > 1:
         timer.disp("Total perturbation")
-        print("||dc||/||c|| = {}".format(np.linalg.norm(dc) / c_norm))
-        print("||dx||/||x|| = {}".format(np.linalg.norm(dx) / x_norm))
 
-    return eq_new, predicted_reduction, tr_ratio, c_norm, step_norm, bound_hit
+    return eq_new, predicted_reduction, dc_opt_norm, c_opt_norm, c_norm, bound_hit

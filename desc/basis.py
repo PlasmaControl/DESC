@@ -18,7 +18,16 @@ __all__ = [
 class Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
-    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes", "_sym", "_spectral_indexing"]
+    _io_attrs_ = [
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_modes",
+        "_idx",
+        "_sym",
+        "_spectral_indexing",
+    ]
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""

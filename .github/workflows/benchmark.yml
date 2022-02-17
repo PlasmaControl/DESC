@@ -57,9 +57,13 @@ jobs:
         run: |
           python read_bench_results.py
       - name: Save Benchmark Results
-        uses: EndBug/add-and-commit@v7
-        with:
-          add: '-f Figures'
-          push: true 
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: benchmark_results
+          FOLDER: .
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLEAR_GLOBS_FILE: ".clear-target-files"
+          MESSAGE: "Commit Benchmark results for commit {sha} with the following commit message:\n {msg}	 " # The commit message
           
           

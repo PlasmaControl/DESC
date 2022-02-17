@@ -461,21 +461,21 @@ def optimal_perturb(
 
         GxFx = np.dot(Gx, Fx_inv)
         LHS = np.dot(GxFx, Fc) - Gc
-        RHS_1g = -g + np.dot(GxFx, f)
+        RHS_1g = g - np.dot(GxFx, f)
 
         # restrict to optimization subspace
-        LHS = np.dot(LHS, opt_subspace)
+        LHS_opt = np.dot(LHS, opt_subspace)
 
         if verbose > 0:
             print("Factoring LHS")
         timer.start("LHS factorization")
-        ug, sg, vtg = np.linalg.svd(LHS, full_matrices=False)
+        ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")
         if verbose > 1:
             timer.disp("LHS factorization")
 
         dc1_opt, bound_hit, alpha = trust_region_step_exact_svd(
-            RHS_1g,
+            -RHS_1g,
             ug,
             sg,
             vtg.T,
@@ -487,11 +487,11 @@ def optimal_perturb(
         )
 
         dc1 = np.dot(dc1_opt, opt_subspace.T)
-        RHS_1f = f + np.dot(Fc, dc1)
+        RHS_1f = -f - np.dot(Fc, dc1)
         uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
 
         dx1, _, _ = trust_region_step_exact_svd(
-            RHS_1f,
+            -RHS_1f,
             uf,
             sf,
             vtf.T,
@@ -510,7 +510,7 @@ def optimal_perturb(
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = np.dot(objective_f.Z, dx1) + np.dot(dydc_f, dc1)
-        RHS_2f = 0.5 * objective_f.jvp((tangents_f, tangents_f), y)
+        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), y)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -520,7 +520,7 @@ def optimal_perturb(
             print("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = np.dot(objective_g.Z, dx1) + np.dot(dydc_g, dc1)
-        RHS_2g = -0.5 * objective_g.jvp((tangents_g, tangents_g), y) - np.dot(
+        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), y) + np.dot(
             GxFx, RHS_2f
         )
         timer.stop("d^2g computation")
@@ -528,7 +528,7 @@ def optimal_perturb(
             timer.disp("d^2g computation")
 
         dc2_opt, _, _ = trust_region_step_exact_svd(
-            RHS_2g,
+            -RHS_2g,
             ug,
             sg,
             vtg.T,
@@ -540,10 +540,10 @@ def optimal_perturb(
         )
 
         dc2 = np.dot(dc2_opt, opt_subspace.T)
-        RHS_2f += np.dot(Fc, dc2)
+        RHS_2f += -np.dot(Fc, dc2)
 
         dx2, _, _ = trust_region_step_exact_svd(
-            RHS_2f,
+            -RHS_2f,
             uf,
             sf,
             vtf.T,
@@ -586,7 +586,7 @@ def optimal_perturb(
             )
             setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(Gc, np.dot(g.T, Gc), dc)
+    predicted_reduction = -evaluate_quadratic(LHS, -np.dot(RHS_1g.T, LHS), dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

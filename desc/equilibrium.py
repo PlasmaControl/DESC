@@ -63,8 +63,8 @@ def recordPath(eq):
         zbs_desc_fC_or2 = np.load(
             "/projects/EKOLEMEN/QS/STELLOPT_QS/data/zbs_fC_or2.npy"
         )
-        rbc_desc_fC_or2 = np.append(rbc_desc_fC_or1, RBC)
-        zbs_desc_fC_or2 = np.append(zbs_desc_fC_or1, ZBS)
+        rbc_desc_fC_or2 = np.append(rbc_desc_fC_or2, RBC)
+        zbs_desc_fC_or2 = np.append(zbs_desc_fC_or2, ZBS)
     except:
         rbc_desc_fC_or2 = np.array(RBC)
         zbs_desc_fC_or2 = np.array(ZBS)

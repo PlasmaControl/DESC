@@ -23,7 +23,7 @@ def perturb(
     di=None,
     dPsi=None,
     order=2,
-    tr_ratio=[0.1, 0.25, 0.25],
+    tr_ratio=[0.1, 0.25, 0.5],
     verbose=1,
     copy=True,
 ):

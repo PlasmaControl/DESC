@@ -28,6 +28,50 @@ from desc.objectives import (
 from desc.perturbations import perturb, optimal_perturb
 
 
+def printBoundary(eq):
+    """Print boundary coefficients."""
+    idxRcc = eq.surface.R_basis.get_idx(M=1, N=2)
+    idxRss = eq.surface.R_basis.get_idx(M=-1, N=-2)
+    idxZsc = eq.surface.Z_basis.get_idx(M=-1, N=2)
+    idxZcs = eq.surface.Z_basis.get_idx(M=1, N=-2)
+    print(
+        "RBC(-2,1) = {:16.8E}    ZBS(-2,1) = {:16.8E}".format(
+            (eq.Rb_lmn[idxRcc] - eq.Rb_lmn[idxRss]) / 2,
+            (eq.Zb_lmn[idxZsc] + eq.Zb_lmn[idxZcs]) / 2,
+        )
+    )
+    print(
+        "RBC(+2,1) = {:16.8E}    ZBS(+2,1) = {:16.8E}".format(
+            (eq.Rb_lmn[idxRcc] + eq.Rb_lmn[idxRss]) / 2,
+            (eq.Zb_lmn[idxZsc] - eq.Zb_lmn[idxZcs]) / 2,
+        )
+    )
+
+
+def recordPath(eq):
+    """Record optimization path step."""
+    idxRcc = eq.surface.R_basis.get_idx(M=1, N=2)
+    idxRss = eq.surface.R_basis.get_idx(M=-1, N=-2)
+    idxZsc = eq.surface.Z_basis.get_idx(M=-1, N=2)
+    idxZcs = eq.surface.Z_basis.get_idx(M=1, N=-2)
+    RBC = (eq.Rb_lmn[idxRcc] + eq.Rb_lmn[idxRss]) / 2
+    ZBS = (eq.Zb_lmn[idxZsc] - eq.Zb_lmn[idxZcs]) / 2
+    try:
+        rbc_desc_fC_or2 = np.load(
+            "/projects/EKOLEMEN/QS/STELLOPT_QS/data/rbc_fC_or2.npy"
+        )
+        zbs_desc_fC_or2 = np.load(
+            "/projects/EKOLEMEN/QS/STELLOPT_QS/data/zbs_fC_or2.npy"
+        )
+        rbc_desc_fC_or2 = np.append(rbc_desc_fC_or1, RBC)
+        zbs_desc_fC_or2 = np.append(zbs_desc_fC_or1, ZBS)
+    except:
+        rbc_desc_fC_or2 = np.array(RBC)
+        zbs_desc_fC_or2 = np.array(ZBS)
+    np.save("/projects/EKOLEMEN/QS/STELLOPT_QS/data/rbc_fC_or2.npy", rbc_desc_fC_or2)
+    np.save("/projects/EKOLEMEN/QS/STELLOPT_QS/data/zbs_fC_or2.npy", zbs_desc_fC_or2)
+
+
 class Equilibrium(_Configuration, IOAble):
     """Equilibrium is an object that represents a plasma equilibrium.
 
@@ -228,9 +272,9 @@ class Equilibrium(_Configuration, IOAble):
         self,
         optimizer=None,
         objective=None,
-        ftol=1e-3,
-        xtol=1e-3,
-        gtol=1e-3,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
         verbose=1,
         x_scale="auto",
         maxiter=None,
@@ -314,7 +358,7 @@ class Equilibrium(_Configuration, IOAble):
         di=None,
         dPsi=None,
         order=2,
-        tr_ratio=[0.1, 0.25, 0.25],
+        tr_ratio=[0.1, 0.25, 0.5],
         cutoff=1e-6,
         verbose=1,
         copy=True,
@@ -470,7 +514,10 @@ class Equilibrium(_Configuration, IOAble):
                 print("====================")
                 print("Optimization Step {}".format(iteration + 1))
                 print("====================")
-                print("Trust-Region ratio = {}".format(tr_ratio[0]))
+                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+
+            recordPath(eq)
+            printBoundary(eq)
 
             # perturb + solve
             (
@@ -505,6 +552,7 @@ class Equilibrium(_Configuration, IOAble):
             timer.stop("Step {} time".format(iteration + 1))
             if verbose > 0:
                 objective.callback(objective.y(eq_new))
+                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
                 timer.disp("Step {} time".format(iteration + 1))
@@ -534,6 +582,9 @@ class Equilibrium(_Configuration, IOAble):
                 cost = cost_new
             if success is not None:
                 break
+
+        recordPath(eq)
+        printBoundary(eq)
 
         timer.stop("Total time")
         print("====================")

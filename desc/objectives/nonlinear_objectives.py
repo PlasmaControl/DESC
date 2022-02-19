@@ -1589,19 +1589,19 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=4 * eq.M_grid + 1,
-                N=4 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=False,
-                rho=1,
-            )
         if self.M_booz is None:
             self.M_booz = 2 * eq.M
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
+        if self.grid is None:
+            self.grid = LinearGrid(
+                L=1,
+                M=3 * self.M_booz + 1,
+                N=3 * self.N_booz + 1,
+                NFP=eq.NFP,
+                sym=False,
+                rho=1,
+            )
 
         timer = Timer()
         if verbose > 0:

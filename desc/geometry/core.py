@@ -4,8 +4,59 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
 
 
-def cart2polvec(vec, x=None, y=None, phi=None):
-    """transform vectors from cartesian to polar form"""
+def xyz2rpz(pts):
+    """Transform points from cartesian to polar form
+
+    Parameters
+    ----------
+    pts : ndarray, shape(n,3)
+        points in xyz coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(n,3)
+        points in rpz coordinates
+    """
+    x, y, z = pts.T
+    r = jnp.sqrt(x ** 2 + y ** 2)
+    p = jnp.arctan2(y, x)
+    return jnp.array([r, p, z]).T
+
+
+def rpz2xyz(pts):
+    """Transform points from polar to cartesian form
+
+    Parameters
+    ----------
+    pts : ndarray, shape(n,3)
+        points in rpz coordinates
+
+    Returns
+    -------
+    pts : ndarray, shape(n,3)
+        points in xyz coordinates
+    """
+    r, p, z = pts.T
+    x = r * jnp.cos(p)
+    y = r * jnp.sin(p)
+    return jnp.array([x, y, z]).T
+
+
+def xyz2rpz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from cartesian to polar form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(n,3)
+        vectors, in cartesian (xyz) form
+    x, y, phi : ndarray, shape(n,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(n,3)
+        vectors, in polar (rpz) form
+    """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
@@ -20,8 +71,21 @@ def cart2polvec(vec, x=None, y=None, phi=None):
     return polar.reshape((-1, 3))
 
 
-def pol2cartvec(vec, x=None, y=None, phi=None):
-    """transform vectors from polar to cartesian form"""
+def rpz2xyz_vec(vec, x=None, y=None, phi=None):
+    """Transform vectors from polar to cartesian form.
+
+    Parameters
+    ----------
+    vec : ndarray, shape(n,3)
+        vectors, in polar (rpz) form
+    x, y, phi : ndarray, shape(n,)
+        anchor points for vectors. Either x and y, or phi must be supplied
+
+    Returns
+    -------
+    vec : ndarray, shape(n,3)
+        vectors, in cartesian (xyz) form
+    """
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
@@ -43,7 +107,7 @@ class Curve(IOAble, ABC):
 
     @property
     def name(self):
-        """Name of the profile"""
+        """Name of the curve."""
         return self._name
 
     @name.setter

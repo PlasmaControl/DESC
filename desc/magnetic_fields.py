@@ -10,6 +10,44 @@ from desc.interpolate import interp3d, _approx_df
 from desc.derivatives import Derivative
 
 
+# TODO: vectorize this over multiple coils
+def biot_savart(eval_pts, coil_pts, current):
+    """Biot-Savart law following [1]
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        points in cartesian space defining coil
+    current : float
+        current through the coil
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart fields of a filamentary segment" (2002)
+    """
+    dvec = jnp.diff(coil_pts, axis=0)
+    L = jnp.linalg.norm(dvec, axis=-1)
+
+    Ri_vec = eval_pts[:, jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
+    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
+    Rf = jnp.linalg.norm(
+        eval_pts[:, jnp.newaxis, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
+    )
+    Ri_p_Rf = Ri + Rf
+
+    # 1.0e-7 == mu_0/(4 pi)
+    Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+
+    # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
+    vec = jnp.cross(dvec, Ri_vec, axis=-1)
+    return jnp.sum(Bmag * vec, axis=1)
+
+
 class MagneticField(IOAble, ABC):
     """Base class for all magnetic fields
 

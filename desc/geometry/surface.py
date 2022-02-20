@@ -6,7 +6,7 @@ from desc.utils import sign, copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
-from .core import Surface, cart2polvec, pol2cartvec
+from .core import Surface, xyz2rpz_vec, rpz2xyz_vec
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -352,7 +352,7 @@ class FourierRZToroidalSurface(Surface):
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
         if coords.lower() == "xyz":
             phi = R_transform.grid.nodes[:, 2]
-            N = pol2cartvec(N, phi=phi)
+            N = rpz2xyz_vec(N, phi=phi)
         return N
 
     def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
@@ -718,7 +718,7 @@ class ZernikeRZToroidalSection(Surface):
         N = jnp.array([jnp.zeros_like(phi), jnp.ones_like(phi), jnp.zeros_like(phi)]).T
 
         if coords.lower() == "xyz":
-            N = pol2cartvec(N, phi=phi)
+            N = rpz2xyz_vec(N, phi=phi)
 
         return N
 

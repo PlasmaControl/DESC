@@ -105,6 +105,11 @@ class Curve(IOAble, ABC):
 
     _io_attrs_ = ["_name", "_grid"]
 
+    def __init__(self, name):
+        self.shift = jnp.array([0, 0, 0])
+        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.name = name
+
     @property
     def name(self):
         """Name of the curve."""
@@ -144,6 +149,34 @@ class Curve(IOAble, ABC):
     @abstractmethod
     def compute_length(self, params=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature"""
+
+    def translate(self, x=0, y=0, z=0):
+        """Translate the curve by a rigid displacement in x, y, z"""
+        self.shift += jnp.array([x, y, z])
+
+    def rotate(self, x=0, y=0, z=0):
+        """Rotate the curve by a fixed angle about x, y, or z axis"""
+        assert (
+            (x == 0 and y == 0) or (x == 0 and z == 0) or (y == 0 and z == 0)
+        ), "Rotations do not commute, rotations about multiple axes should be done sequentially"
+        if x != 0:
+            s = jnp.sin(x)
+            c = jnp.cos(x)
+            R = jnp.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+        if y != 0:
+            s = jnp.sin(y)
+            c = jnp.cos(y)
+            R = jnp.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+        if z != 0:
+            s = jnp.sin(z)
+            c = jnp.cos(z)
+            R = jnp.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+        self.rotmat = R @ self.rotmat
+
+    def flip(self, x=False, y=False, z=False):
+        """Flip the curve about the plane normal to x, y or z axes"""
+        F = jnp.array([[1 - 2 * x, 0, 0], [0, 1 - 2 * y, 0], [0, 0, 1 - 2 * z]])
+        self.rotmat = F @ self.rotmat
 
 
 class Surface(IOAble, ABC):

@@ -566,7 +566,6 @@ def optimal_perturb(
 
     dc = dc1 + dc2
     dc_opt = np.dot(dc, opt_subspace)
-    dc_opt_norm = np.linalg.norm(dc_opt)
 
     # update perturbation attributes
     idx0 = 0
@@ -595,4 +594,4 @@ def optimal_perturb(
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    return eq_new, predicted_reduction, dc_opt_norm, c_opt_norm, c_norm, bound_hit
+    return eq_new, predicted_reduction, dc_opt, dc, c_norm, bound_hit

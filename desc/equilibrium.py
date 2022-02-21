@@ -547,6 +547,7 @@ class Equilibrium(_Configuration, IOAble):
         if copy:
             return eq
         else:
+            self = eq
             return None
 
 

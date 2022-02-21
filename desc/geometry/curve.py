@@ -1,5 +1,4 @@
 import numpy as np
-
 from desc.backend import jnp
 from desc.basis import FourierSeries
 from .core import Curve, xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
@@ -57,7 +56,7 @@ class FourierRZCurve(Curve):
         grid=None,
         name="",
     ):
-
+        super(FourierRZCurve, self).__init__(name)
         R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
         if modes_R is None:
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
@@ -95,7 +94,6 @@ class FourierRZCurve(Curve):
             grid = LinearGrid(N=2 * N + 1, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
-        self.name = name
 
     @property
     def sym(self):
@@ -288,8 +286,11 @@ class FourierRZCurve(Curve):
             raise NotImplementedError(
                 "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
             )
-        if basis.lower() == "xyz":
-            coords = rpz2xyz(coords)
+        coords = rpz2xyz_vec(
+            coords, phi=R_transform.grid.nodes[:, 2]
+        ) @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
+        if basis.lower() == "rpz":
+            coords = xyz2rpz_vec(coords, phi=R_transform.grid.nodes[:, 2])
         return coords
 
     def compute_frenet_frame(self, R_n=None, Z_n=None, grid=None, basis="rpz"):
@@ -309,24 +310,12 @@ class FourierRZCurve(Curve):
         T, N, B : ndarrays, shape(k,3)
             tangent, normal, and binormal vectors of the curve at specified grid locations in phi
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if R_n is None:
-            R_n = self.R_n
-        if Z_n is None:
-            Z_n = self.Z_n
-        R_transform, Z_transform = self._get_transforms(grid)
-        T = self.compute_coordinates(R_n, Z_n, grid, dt=1)
-        N = self.compute_coordinates(R_n, Z_n, grid, dt=2)
+        T = self.compute_coordinates(R_n, Z_n, grid, dt=1, basis=basis)
+        N = self.compute_coordinates(R_n, Z_n, grid, dt=2, basis=basis)
 
         T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1)
-
-        if basis.lower() == "xyz":
-            phi = R_transform.grid.nodes[:, 2]
-            T = rpz2xyz_vec(T, phi=phi)
-            N = rpz2xyz_vec(N, phi=phi)
-            B = rpz2xyz_vec(B, phi=phi)
+        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
 
         return T, N, B
 
@@ -429,7 +418,7 @@ class FourierXYZCurve(Curve):
         grid=None,
         name="",
     ):
-
+        super(FourierXYZCurve, self).__init__(name)
         X_n, Y_n, Z_n = np.atleast_1d(X_n), np.atleast_1d(Y_n), np.atleast_1d(Z_n)
         if modes is None:
             modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
@@ -448,7 +437,6 @@ class FourierXYZCurve(Curve):
             grid = LinearGrid(N=2 * N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
-        self.name = name
 
     @property
     def basis(self):
@@ -616,12 +604,15 @@ class FourierXYZCurve(Curve):
         Z = transform.transform(Z_n, dz=dt)
 
         coords = jnp.stack([X, Y, Z], axis=1)
+        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
         if basis.lower == "rpz":
-            coords = xyz2rpz(coords)
+            coords = xyz2rpz_vec(
+                coords, x=coords[:, 1] + self.shift[0], y=coords[:, 1] + self.shift[1]
+            )
         return coords
 
     def compute_frenet_frame(
-        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="rpz"
+        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="xyz"
     ):
         """Compute Frenet frame vectors using specified coefficients.
 
@@ -641,37 +632,12 @@ class FourierXYZCurve(Curve):
         T, N, B : ndarrays, shape(k,3)
             tangent, normal, and binormal vectors of the curve at specified grid locations
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if X_n is None:
-            X_n = self.X_n
-        if Y_n is None:
-            Y_n = self.Y_n
-        if Z_n is None:
-            Z_n = self.Z_n
-
-        transform = self._get_transforms(grid)
-        X = transform.transform(X_n, dz=0)
-        Y = transform.transform(Y_n, dz=0)
-
-        dX = transform.transform(X_n, dz=1)
-        dY = transform.transform(Y_n, dz=1)
-        dZ = transform.transform(Z_n, dz=1)
-
-        d2X = transform.transform(X_n, dz=2)
-        d2Y = transform.transform(Y_n, dz=2)
-        d2Z = transform.transform(Z_n, dz=2)
-
-        T = jnp.stack([dX, dY, dZ], axis=1)
-        N = jnp.stack([d2X, d2Y, d2Z], axis=1)
+        T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1, basis=basis)
+        N = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2, basis=basis)
 
         T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1)
-
-        if basis.lower() == "rpz":
-            T = xyz2rpz_vec(T, x=X, y=Y)
-            N = xyz2rpz_vec(N, x=X, y=Y)
-            B = xyz2rpz_vec(B, x=X, y=Y)
+        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
 
         return T, N, B
 
@@ -792,6 +758,7 @@ class FourierPlanarCurve(Curve):
         grid=None,
         name="",
     ):
+        super(FourierPlanarCurve, self).__init__(name)
         r_n = np.atleast_1d(r_n)
         if modes is None:
             modes = np.arange(-(r_n.size // 2), r_n.size // 2 + 1)
@@ -809,7 +776,6 @@ class FourierPlanarCurve(Curve):
             grid = LinearGrid(N=2 * self.N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
-        self.name = name
 
     @property
     def basis(self):
@@ -906,7 +872,7 @@ class FourierPlanarCurve(Curve):
             if rr is not None:
                 self.r_n[idx] = rr
 
-    def _rotmat(self, normal=None):
+    def _normal_rotmat(self, normal=None):
         """Rotation matrix to rotate z axis into plane normal."""
         if normal is None:
             normal = self.normal
@@ -921,7 +887,7 @@ class FourierPlanarCurve(Curve):
                 [nx, ny, nz],
             ]
         ).T
-        return R
+        return jnp.where(nxny == 0, jnp.eye(3), R)
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -976,34 +942,26 @@ class FourierPlanarCurve(Curve):
         if r_n is None:
             r_n = self.r_n
         transform = self._get_transforms(grid)
+        r = transform.transform(r_n, dz=0)
+        t = transform.grid.nodes[:, -1]
+        Z = np.zeros_like(r)
+
         if dt == 0:
-            r = transform.transform(r_n, dz=dt)
-            t = transform.grid.nodes[:, -1]
             X = r * jnp.cos(t)
             Y = r * jnp.sin(t)
-            Z = np.zeros_like(r)
-            coords = jnp.array([X, Y, Z])
+            coords = jnp.array([X, Y, Z]).T
         elif dt == 1:
-            t = transform.grid.nodes[:, -1]
-            r = transform.transform(r_n, dz=0)
             dr = transform.transform(r_n, dz=1)
-
             dX = dr * jnp.cos(t) - r * jnp.sin(t)
             dY = dr * jnp.sin(t) + r * jnp.cos(t)
-            Z = np.zeros_like(r)
-            coords = jnp.array([dX, dY, Z])
+            coords = jnp.array([dX, dY, Z]).T
         elif dt == 2:
-            t = transform.grid.nodes[:, -1]
-            r = transform.transform(r_n, dz=0)
             dr = transform.transform(r_n, dz=1)
             d2r = transform.transform(r_n, dz=2)
             d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
             d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-            Z = np.zeros_like(r)
-            coords = jnp.array([d2X, d2Y, Z])
+            coords = jnp.array([d2X, d2Y, Z]).T
         elif dt == 3:
-            t = transform.grid.nodes[:, -1]
-            r = transform.transform(r_n, dz=0)
             dr = transform.transform(r_n, dz=1)
             d2r = transform.transform(r_n, dz=2)
             d3r = transform.transform(r_n, dz=3)
@@ -1019,21 +977,28 @@ class FourierPlanarCurve(Curve):
                 - 3 * dr * jnp.sin(t)
                 - r * jnp.cos(t)
             )
-            Z = np.zeros_like(r)
-            coords = jnp.array([d3X, d3Y, Z])
+            coords = jnp.array([d3X, d3Y, Z]).T
         else:
             raise NotImplementedError(
                 "derivatives higher than 3 have not been implemented for planar curves"
             )
-        R = self._rotmat(normal)
-        coords = (jnp.matmul(R, coords) + (center[:, jnp.newaxis] * (dt == 0))).T
+        R = self._normal_rotmat(normal)
+        coords = jnp.matmul(coords, R.T) + (center * (dt == 0))
+        coords = jnp.matmul(coords, self.rotmat.T) + (self.shift * (dt == 0))
+
         if basis.lower() == "rpz":
-            coords = xyz2rpz(coords)
+            X = r * jnp.cos(t)
+            Y = r * jnp.sin(t)
+            xyzcoords = jnp.array([X, Y, Z]).T
+            xyzcoords = jnp.matmul(xyzcoords, R.T) + center
+            xyzcoords = jnp.matmul(xyzcoords, self.rotmat.T) + self.shift
+            x, y, z = xyzcoords.T
+            coords = xyz2rpz_vec(coords, x=x, y=y)
 
         return coords
 
     def compute_frenet_frame(
-        self, center=None, normal=None, r_n=None, grid=None, basis="rpz"
+        self, center=None, normal=None, r_n=None, grid=None, basis="xyz"
     ):
         """Compute Frenet frame vectors using specified coefficients.
 
@@ -1058,31 +1023,12 @@ class FourierPlanarCurve(Curve):
         T, N, B : ndarrays, shape(k,3)
             tangent, normal, and binormal vectors of the curve at specified grid locations in theta
         """
-        assert basis.lower() in ["rpz", "xyz"]
-        if center is None:
-            center = self.center
-        if normal is None:
-            normal = self.normal
-        if r_n is None:
-            r_n = self.r_n
-        transform = self._get_transforms(grid)
-
-        T = self.compute_coordinates(center, normal, r_n, grid, dt=1)
-        N = self.compute_coordinates(center, normal, r_n, grid, dt=2)
+        T = self.compute_coordinates(center, normal, r_n, grid, dt=1, basis=basis)
+        N = self.compute_coordinates(center, normal, r_n, grid, dt=2, basis=basis)
 
         T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1)
-
-        if basis.lower() == "rpz":
-            r = transform.transform(r_n)
-            t = transform.grid.nodes[:, 2]
-            R = self._rotmat(normal)
-            xyz = jnp.array([r * jnp.cos(t), r * jnp.sin(t), jnp.zeros_like(r)])
-            x, y, z = jnp.matmul(R, xyz) + center[:, jnp.newaxis]
-            T = xyz2rpz_vec(T, x=x, y=y)
-            N = xyz2rpz_vec(N, x=x, y=y)
-            B = xyz2rpz_vec(B, x=x, y=y)
+        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
 
         return T, N, B
 

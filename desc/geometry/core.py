@@ -172,11 +172,13 @@ class Curve(IOAble, ABC):
             c = jnp.cos(z)
             R = jnp.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
         self.rotmat = R @ self.rotmat
+        self.shift = self.shift @ R.T
 
     def flip(self, x=False, y=False, z=False):
         """Flip the curve about the plane normal to x, y or z axes"""
         F = jnp.array([[1 - 2 * x, 0, 0], [0, 1 - 2 * y, 0], [0, 0, 1 - 2 * z]])
         self.rotmat = F @ self.rotmat
+        self.shift = self.shift @ F.T
 
 
 class Surface(IOAble, ABC):

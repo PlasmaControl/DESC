@@ -461,7 +461,7 @@ class ObjectiveFunction(IOAble):
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x, y0)
+            J0 = self.jac(x, y0).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")

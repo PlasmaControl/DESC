@@ -190,7 +190,7 @@ to return the index it is passed.
 copied from jax.ops.index to work with either backend
 """
 Index = _Indexable()
-
+opsindex = Index
 
 # Helper Functions -----------------------------------------------------------
 

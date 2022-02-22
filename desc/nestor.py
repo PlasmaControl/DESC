@@ -505,9 +505,10 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
                                            jnp.arange(ntheta),
                                            jnp.arange(nzeta), indexing="ij")
     ip = (kt_ip*nzeta+kz_ip) # linear index over primed grid
+    ip5 = (kt_ip*nzeta+kz_ip)[...,jnp.newaxis] # linear index over primed grid
     i = (kt_i*nzeta+kz_i) # linear index over primed grid
-    izoff0 = ntheta*nzeta - ip
-    itoff  = nzeta*(ntheta - kt_ip)
+    izoff0 = ntheta*nzeta - ip5
+    itoff  = nzeta*(ntheta - kt_ip)[...,jnp.newaxis]
 
     # field-period invariant vectors
     r_squared = (coords["R"]**2 + coords["Z"]**2).reshape((-1,nzeta))
@@ -520,8 +521,8 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
                                                    coords["Y"].reshape((-1,nzeta))[kt_ip, kz_ip]]),
                                          zeta_fp)
     # cartesian components of surface normal on full domain
-    X_n = (normal["R_n"][ip][:,:,:,:,jnp.newaxis]*X_full - normal["phi_n"][ip][:,:,:,:,jnp.newaxis]*Y_full)/coords["R_sym"][ip][:,:,:,:,jnp.newaxis]
-    Y_n = (normal["R_n"][ip][:,:,:,:,jnp.newaxis]*Y_full + normal["phi_n"][ip][:,:,:,:,jnp.newaxis]*X_full)/coords["R_sym"][ip][:,:,:,:,jnp.newaxis]
+    X_n = (normal["R_n"][ip5]*X_full - normal["phi_n"][ip5]*Y_full)/coords["R_sym"][ip5]
+    Y_n = (normal["R_n"][ip5]*Y_full + normal["phi_n"][ip5]*X_full)/coords["R_sym"][ip5]
 
     # greens functions for kernel and source        
     # theta', zeta', theta, zeta, period
@@ -543,9 +544,9 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
     source  = jnp.where(mask, source + source_update, source)
 
     kp = jnp.arange(NFP_eff)
-    izoff = izoff0 + 2*ntheta*kp
-    i_itoff = i + itoff
-    i_izoff = i + izoff
+    izoff = izoff0 + 2*ntheta*kp.reshape((1,1,1,1,-1))
+    i_itoff = i[...,jnp.newaxis] + itoff
+    i_izoff = i[...,jnp.newaxis] + izoff
     if nzeta == 1:
         delta_kt = i_itoff%(2*ntheta)
         delta_kz = i_izoff//(2*ntheta)
@@ -565,11 +566,11 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
     # delta_kt = kt_i - kt_ip + ntheta
     tant = tan_theta[(delta_kt,)]
     tanz = tan_zeta[(delta_kz,)]
-    ga1 = tant*(jacobian["g_tt"][(ip,)]*tant + 2*jacobian["g_tz"][(ip,)]*tanz) + jacobian["g_zz"][(ip,)]*tanz**2
-    ga2 = tant*(jacobian["a_tt"][(ip,)]*tant +   jacobian["a_tz"][(ip,)]*tanz) + jacobian["a_zz"][(ip,)]*tanz**2
+    ga1 = tant*(jacobian["g_tt"][(ip5,)]*tant + 2*jacobian["g_tz"][(ip5,)]*tanz) + jacobian["g_zz"][(ip5,)]*tanz**2
+    ga2 = tant*(jacobian["a_tt"][(ip5,)]*tant +   jacobian["a_tz"][(ip5,)]*tanz) + jacobian["a_zz"][(ip5,)]*tanz**2
 
-    kernel_sing = - (ga2/ga1*1/jnp.sqrt(ga1))[:,:,:,:,jnp.newaxis]
-    source_sing = - 1/jnp.sqrt(ga1)[:,:,:,:,jnp.newaxis]
+    kernel_sing = - (ga2/ga1*1/jnp.sqrt(ga1))
+    source_sing = - 1/jnp.sqrt(ga1)
     mask = ((kt_ip != kt_i) | (kz_ip != kz_i) | (nzeta == 1 and kp > 0))[:,:,:,:,jnp.newaxis] & ((zeta_fp == 0) |  (nzeta == 1))
     kernel = jnp.where(mask, kernel + kernel_update + kernel_sing, kernel)
     source = jnp.where(mask, source + source_update + source_sing, source)                               

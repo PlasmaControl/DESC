@@ -107,6 +107,7 @@ def nestor_to_eq(vacin):
     a_basis = FourierSeries(N=N, NFP=NFP, sym=False)
     axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=NFP)
     a_transform = Transform(axis_grid, a_basis)
+    a_transform.build_pinv()
     Ra_n = a_transform.fit(raxis)
     Za_n = a_transform.fit(zaxis)
 
@@ -127,7 +128,7 @@ def nestor_to_eq(vacin):
           "axis": axis,
           "sym": sym,
     }
-    eq = Equilibrium(eq)
+    eq = Equilibrium(**eq)
     return eq
     
 def main(vacin_filename, vacout_filename=None, mgrid=None):

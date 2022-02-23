@@ -68,9 +68,9 @@ if use_jax:
     from jax.experimental.ode import odeint
 
     def put(arr, inds, vals):
-        """Functional interface for array "fancy indexing"
+        """Functional interface for array "fancy indexing".
 
-        basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff.
+        Provides a way to do arr[inds] = vals in a way that works with JAX.
 
         Parameters
         ----------
@@ -87,8 +87,25 @@ if use_jax:
             Input array with vals inserted at inds.
 
         """
-
         return jax.ops.index_update(arr, inds, vals)
+
+    def sign(x):
+        """Sign function, but returns 1 for x==0.
+
+        Parameters
+        ----------
+        x : array-like
+            array of input values
+
+        Returns
+        -------
+        y : array-like
+            1 where x>=0, -1 where x<0
+
+        """
+        x = jnp.atleast_1d(x)
+        y = jnp.where(x == 0, 1, jnp.sign(x))
+        return y
 
 
 else:
@@ -98,9 +115,9 @@ else:
     from scipy.integrate import odeint
 
     def put(arr, inds, vals):
-        """Functional interface for array "fancy indexing"
+        """Functional interface for array "fancy indexing".
 
-        basically a way to do arr[inds] = vals in a way that plays nice with jit/autodiff.
+        Provides a way to do arr[inds] = vals in a way that works with JAX.
 
         Parameters
         ----------
@@ -117,9 +134,26 @@ else:
             Input array with vals inserted at inds.
 
         """
-
         arr[inds] = vals
         return arr
+
+    def sign(x):
+        """Sign function, but returns 1 for x==0.
+
+        Parameters
+        ----------
+        x : array-like
+            array of input values
+
+        Returns
+        -------
+        y : array-like
+            1 where x>=0, -1 where x<0
+
+        """
+        x = np.atleast_1d(x)
+        y = np.where(x == 0, 1, np.sign(x))
+        return y
 
     def fori_loop(lower, upper, body_fun, init_val):
         """Loop from lower to upper, applying body_fun to init_val

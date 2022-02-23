@@ -1,7 +1,7 @@
 import numpy as np
 
-from desc.backend import jnp
-from desc.utils import sign, copy_coeffs
+from desc.backend import jnp, sign
+from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform

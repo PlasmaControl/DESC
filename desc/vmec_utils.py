@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.utils import sign
+from desc.backend import sign
 from desc.basis import zernike_radial_poly
 
 

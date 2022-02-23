@@ -2,9 +2,9 @@ import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import sign, flatten_list
+from desc.utils import flatten_list
 from desc.io import IOAble
-from desc.backend import jnp, jit, fori_loop, gammaln
+from desc.backend import jnp, jit, sign, fori_loop, gammaln
 
 __all__ = [
     "PowerSeries",

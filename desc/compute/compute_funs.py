@@ -1,8 +1,7 @@
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp, put
-from desc.utils import sign
+from desc.backend import jnp, put, sign
 from desc.compute import data_index
 
 

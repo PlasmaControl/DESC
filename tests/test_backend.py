@@ -1,8 +1,7 @@
 import unittest
 import numpy as np
 
-from desc.backend import put
-from desc.utils import sign
+from desc.backend import put, sign
 
 
 class TestBackend(unittest.TestCase):

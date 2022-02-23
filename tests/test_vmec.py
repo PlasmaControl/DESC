@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.utils import sign
+from desc.backend import sign
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily

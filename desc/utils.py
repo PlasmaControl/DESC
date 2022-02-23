@@ -2,7 +2,6 @@ import numpy as np
 import warnings
 from termcolor import colored
 from shapely.geometry import Polygon
-from desc.backend import jnp
 
 
 # Helper Classes -----------------------------------------------------------------------
@@ -393,25 +392,6 @@ def islinspaced(x, axis=-1, tol=1e-12):
         x = x.flatten()
         axis = 0
     return np.all(np.diff(x, axis=axis).std() < tol)
-
-
-def sign(x):
-    """Sign function, but returns 1 for x==0.
-
-    Parameters
-    ----------
-    x : array-like
-        array of input values
-
-    Returns
-    -------
-    y : array-like
-        1 where x>=0, -1 where x<0
-
-    """
-    x = jnp.atleast_1d(x)
-    y = jnp.where(x == 0, 1, jnp.sign(x))
-    return y
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):

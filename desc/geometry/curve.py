@@ -286,11 +286,17 @@ class FourierRZCurve(Curve):
             raise NotImplementedError(
                 "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
             )
-        coords = rpz2xyz_vec(
-            coords, phi=R_transform.grid.nodes[:, 2]
-        ) @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
+        # convert to xyz for displacement and rotation
+        if dt > 0:
+            coords = rpz2xyz_vec(coords, phi=R_transform.grid.nodes[:, 2])
+        else:
+            coords = rpz2xyz(coords)
+        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
         if basis.lower() == "rpz":
-            coords = xyz2rpz_vec(coords, phi=R_transform.grid.nodes[:, 2])
+            if dt > 0:
+                coords = xyz2rpz_vec(coords, phi=R_transform.grid.nodes[:, 2])
+            else:
+                coords = xyz2rpz(coords)
         return coords
 
     def compute_frenet_frame(self, R_n=None, Z_n=None, grid=None, basis="rpz"):

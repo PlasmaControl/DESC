@@ -1,5 +1,5 @@
 import numpy as np
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from .core import Curve, xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
 from desc.transform import Transform
@@ -171,9 +171,9 @@ class FourierRZCurve(Curve):
             idxR = self.R_basis.get_idx(0, 0, nn)
             idxZ = self.Z_basis.get_idx(0, 0, nn)
             if RR is not None:
-                self.R_n[idxR] = RR
+                self.R_n = put(self.R_n, idxR, RR)
             if ZZ is not None:
-                self.Z_n[idxZ] = ZZ
+                self.Z_n = put(self.Z_n, idxZ, ZZ)
 
     @property
     def R_n(self):
@@ -508,11 +508,11 @@ class FourierXYZCurve(Curve):
         for nn, XX, YY, ZZ in zip(n, X, Y, Z):
             idx = self.basis.get_idx(0, 0, nn)
             if XX is not None:
-                self.X_n[idx] = XX
+                self.X_n = put(self.X_n, idx, XX)
             if YY is not None:
-                self.Y_n[idx] = YY
+                self.Y_n = put(self.Y_n, idx, YY)
             if ZZ is not None:
-                self.Z_n[idx] = ZZ
+                self.Z_n = put(self.Z_n, idx, ZZ)
 
     @property
     def X_n(self):
@@ -876,7 +876,7 @@ class FourierPlanarCurve(Curve):
         for nn, rr in zip(n, r):
             idx = self.basis.get_idx(0, 0, nn)
             if rr is not None:
-                self.r_n[idx] = rr
+                self.r_n = put(self.r_n, idx, rr)
 
     def _normal_rotmat(self, normal=None):
         """Rotation matrix to rotate z axis into plane normal."""

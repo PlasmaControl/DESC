@@ -1,7 +1,8 @@
 import numpy as np
 from collections.abc import MutableSequence
 from desc.backend import jnp
-from desc.geometry.core import Curve, xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+from desc.geometry.core import Curve
+from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
 from desc.magnetic_fields import MagneticField, biot_savart
 from desc.grid import Grid
 

@@ -6,7 +6,8 @@ from desc.utils import sign, copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
-from .core import Surface, xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
+from .core import Surface
+from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 

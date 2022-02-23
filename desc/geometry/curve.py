@@ -1,7 +1,8 @@
 import numpy as np
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from .core import Curve, xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
+from .core import Curve
+from .utils import xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
 from desc.transform import Transform
 from desc.grid import Grid, LinearGrid
 from desc.utils import copy_coeffs

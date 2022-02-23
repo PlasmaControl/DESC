@@ -48,7 +48,10 @@ rcParams["mathtext.fontset"] = "cm"
 rcParams["font.size"] = 10
 rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
-rcParams["figure.dpi"] = 141
+import tkinter
+
+dpi = tkinter.Tk().winfo_fpixels("1i")
+rcParams["figure.dpi"] = dpi
 rcParams["figure.autolayout"] = True
 rcParams["axes.spines.top"] = False
 rcParams["axes.spines.right"] = False
@@ -104,7 +107,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         figsize = (6, 6)
     if ax is None:
         if is3d:
-            fig = plt.figure(figsize=figsize)
+            fig = plt.figure(figsize=figsize, dpi=dpi)
             ax = np.array(
                 [
                     fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
@@ -704,10 +707,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figsize = kwargs.pop("figsize", None)
     theta_color = kwargs.pop("theta_color", colorblind_colors[2])
     theta_ls = kwargs.pop("theta_ls", ":")
+    theta_lw = kwargs.pop("theta_lw", 1)
     rho_color = kwargs.pop("rho_color", colorblind_colors[0])
     rho_ls = kwargs.pop("rho_ls", "-")
+    rho_lw = kwargs.pop("rho_lw", 1)
     lcfs_color = kwargs.pop("lcfs_color", colorblind_colors[1])
     lcfs_ls = kwargs.pop("lcfs_ls", "-")
+    lcfs_lw = kwargs.pop("lcfs_lw", 1)
     axis_color = kwargs.pop("axis_color", colorblind_colors[3])
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
@@ -790,18 +796,21 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             Zv[:, :, i].T,
             color=theta_color,
             linestyle=theta_ls,
+            lw=theta_lw,
         )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
             color=rho_color,
             linestyle=rho_ls,
+            lw=rho_lw,
         )
         ax[i].plot(
             Rr[:, -1, i],
             Zr[:, -1, i],
             color=lcfs_color,
             linestyle=lcfs_ls,
+            lw=lcfs_lw,
             label=(label if i == 0 else ""),
         )
         if rho[0] == 0:
@@ -833,6 +842,7 @@ def plot_comparison(
     ax=None,
     cmap="rainbow",
     colors=None,
+    lws=None,
     linestyles=None,
     labels=None,
     **kwargs,
@@ -860,6 +870,8 @@ def plot_comparison(
     colors : array-like
         array the same length as eqs of colors to use for each equilibrium.
         Overrides `cmap`
+    lws : array-like
+        array the same length as eqs of line widths to use for each equilibrium
     linestyles : array-like
         array the same length as eqs of linestyles to use for each equilibrium
     labels : array-like
@@ -877,6 +889,8 @@ def plot_comparison(
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lws is None:
+        lws = [1 for i in range(neq)]
     if linestyles is None:
         linestyles = ["-" for i in range(neq)]
     if labels is None:
@@ -917,18 +931,21 @@ def plot_comparison(
             ax,
             theta_color=colors[i % len(colors)],
             theta_ls=linestyles[i % len(linestyles)],
+            theta_lw=lws[i % len(lws)],
             rho_color=colors[i % len(colors)],
             rho_ls=linestyles[i % len(linestyles)],
+            rho_lw=lws[i % len(lws)],
             lcfs_color=colors[i % len(colors)],
             lcfs_ls=linestyles[i % len(linestyles)],
+            lcfs_lw=lws[i % len(lws)],
             axis_color=colors[i % len(colors)],
             axis_alpha=0,
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
         )
-    if any(labels):
-        fig.legend()
+    if any(labels) and kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kw", {}))
     return fig, ax
 
 

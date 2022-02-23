@@ -4,6 +4,24 @@ from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
 
 
+def reflection_matrix(normal):
+    """Matrix to reflect points across plane through origin with specified normal"""
+    normal = jnp.asarray(normal)
+    R = jnp.eye(3) - 2 * jnp.outer(normal, normal) / jnp.inner(normal, normal)
+    return R
+
+
+def rotation_matrix(axis, angle=None):
+    """Matrix to rotate points about axis by given angle"""
+    if angle is None:
+        angle = jnp.linalg.norm(axis)
+    axis = jnp.asarray(axis) / jnp.linalg.norm(axis)
+    R1 = jnp.cos(angle) * jnp.eye(3)
+    R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
+    R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
+    return R1 + R2 + R3
+
+
 def xyz2rpz(pts):
     """Transform points from cartesian to polar form
 
@@ -103,7 +121,7 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space"""
 
-    _io_attrs_ = ["_name", "_grid"]
+    _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
 
     def __init__(self, name):
         self.shift = jnp.array([0, 0, 0])
@@ -118,12 +136,6 @@ class Curve(IOAble, ABC):
     @name.setter
     def name(self, new):
         self._name = new
-
-    @property
-    @abstractmethod
-    def N(self):
-        """Maximum toroidal mode number"""
-        pass
 
     @property
     @abstractmethod
@@ -150,33 +162,19 @@ class Curve(IOAble, ABC):
     def compute_length(self, params=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature"""
 
-    def translate(self, x=0, y=0, z=0):
+    def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in x, y, z"""
-        self.shift += jnp.array([x, y, z])
+        self.shift += jnp.asarray(displacement)
 
-    def rotate(self, x=0, y=0, z=0):
-        """Rotate the curve by a fixed angle about x, y, or z axis"""
-        assert (
-            (x == 0 and y == 0) or (x == 0 and z == 0) or (y == 0 and z == 0)
-        ), "Rotations do not commute, rotations about multiple axes should be done sequentially"
-        if x != 0:
-            s = jnp.sin(x)
-            c = jnp.cos(x)
-            R = jnp.array([[1, 0, 0], [0, c, -s], [0, s, c]])
-        if y != 0:
-            s = jnp.sin(y)
-            c = jnp.cos(y)
-            R = jnp.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
-        if z != 0:
-            s = jnp.sin(z)
-            c = jnp.cos(z)
-            R = jnp.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+    def rotate(self, axis=[0, 0, 1], angle=0):
+        """Rotate the curve by a fixed angle about axis in xyz coordinates"""
+        R = rotation_matrix(axis, angle)
         self.rotmat = R @ self.rotmat
         self.shift = self.shift @ R.T
 
-    def flip(self, x=False, y=False, z=False):
-        """Flip the curve about the plane normal to x, y or z axes"""
-        F = jnp.array([[1 - 2 * x, 0, 0], [0, 1 - 2 * y, 0], [0, 0, 1 - 2 * z]])
+    def flip(self, normal):
+        """Flip the curve about the plane with specified normal"""
+        F = reflection_matrix(normal)
         self.rotmat = F @ self.rotmat
         self.shift = self.shift @ F.T
 

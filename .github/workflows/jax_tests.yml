@@ -12,11 +12,11 @@ jobs:
     strategy:
       matrix:
         python-version: [3.7, 3.8, 3.9]
-	jaxlib-version: [0.1.60, 0.1.62, 0.1.64, 0.1.66, 0.1.68, 0.1.70, 0.1.72, 0.1.76]
-	jax-version: [0.2.0, 0.2.5, 0.2.10, 0.2.15, 0.2.20, 0.2.25, 0.2.28]
-	include:
-	  - jaxlib-version: 0.3.0
-	    jax-version: 0.3.0	  
+        jaxlib-version: [0.1.60, 0.1.62, 0.1.64, 0.1.66, 0.1.68, 0.1.70, 0.1.72, 0.1.76]
+        jax-version: [0.2.0, 0.2.5, 0.2.10, 0.2.15, 0.2.20, 0.2.25, 0.2.28]
+        include:
+          - jaxlib-version: 0.3.0
+            jax-version: 0.3.0	  
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}

@@ -64,6 +64,15 @@ class Curve(IOAble, ABC):
         self.rotmat = F @ self.rotmat
         self.shift = self.shift @ F.T
 
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )
+
 
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space,
@@ -121,3 +130,12 @@ class Surface(IOAble, ABC):
     @abstractmethod
     def compute_curvature(self, params=None, grid=None):
         """Compute gaussian and mean curvature"""
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )

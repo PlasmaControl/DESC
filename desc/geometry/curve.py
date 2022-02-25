@@ -422,7 +422,7 @@ class FourierXYZCurve(Curve):
         self,
         X_n=[0, 10, 2],
         Y_n=[0, 0, 0],
-        Z_n=[2, 0, 0],
+        Z_n=[-2, 0, 0],
         modes=None,
         grid=None,
         name="",

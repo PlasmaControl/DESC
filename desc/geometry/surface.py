@@ -109,8 +109,8 @@ class FourierRZToroidalSurface(Surface):
         if grid is None:
             grid = LinearGrid(
                 rho=self.rho,
-                M=2 * self.M + 1,
-                N=2 * self.N + 1,
+                M=4 * self.M + 1,
+                N=4 * self.N + 1,
                 endpoint=True,
             )
         self._grid = grid
@@ -525,7 +525,9 @@ class ZernikeRZToroidalSection(Surface):
 
         self.zeta = zeta
         if grid is None:
-            grid = LinearGrid(L=self.L, M=2 * self.M + 1, zeta=self.zeta, endpoint=True)
+            grid = LinearGrid(
+                L=2 * self.L, M=4 * self.M + 1, zeta=self.zeta, endpoint=True
+            )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name

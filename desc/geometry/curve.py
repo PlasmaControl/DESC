@@ -92,7 +92,7 @@ class FourierRZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, endpoint=True)
+            grid = LinearGrid(N=4 * N + 1, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
 
@@ -443,7 +443,7 @@ class FourierXYZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes, self.basis.modes[:, 2])
 
         if grid is None:
-            grid = LinearGrid(N=2 * N + 1, endpoint=True)
+            grid = LinearGrid(N=4 * N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
 
@@ -784,7 +784,7 @@ class FourierPlanarCurve(Curve):
         self.normal = normal
         self.center = center
         if grid is None:
-            grid = LinearGrid(N=2 * self.N + 1, endpoint=True)
+            grid = LinearGrid(N=4 * self.N + 1, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
 

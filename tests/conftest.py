@@ -69,7 +69,7 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
     main(args)
 
     SOLOVEV_out = {

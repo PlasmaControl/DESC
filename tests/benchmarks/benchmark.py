@@ -92,7 +92,7 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 

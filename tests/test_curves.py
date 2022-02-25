@@ -115,16 +115,16 @@ class TestXYZCurve(unittest.TestCase):
     def test_frenet(self):
         c = FourierXYZCurve()
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz")
-        np.testing.assert_allclose(T, np.array([[0, 0, 1]]), atol=1e-12)
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
-        np.testing.assert_allclose(T, np.array([[0, 0, 1]]), atol=1e-12)
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
 
     def test_coords(self):
         c = FourierXYZCurve()
@@ -153,7 +153,7 @@ class TestXYZCurve(unittest.TestCase):
         c.set_coeffs(0, 5, 2, 3)
         np.testing.assert_allclose(c.X_n, [0, 5, 2])
         np.testing.assert_allclose(c.Y_n, [0, 2, 0])
-        np.testing.assert_allclose(c.Z_n, [2, 3, 0])
+        np.testing.assert_allclose(c.Z_n, [-2, 3, 0])
 
         s = c.copy()
         assert s.eq(c)

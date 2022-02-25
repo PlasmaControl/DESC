@@ -36,7 +36,6 @@ def SOLOVEV_dirs(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running SOLOVEV test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 

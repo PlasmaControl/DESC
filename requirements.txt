@@ -12,3 +12,4 @@ netcdf4 >= 1.5.4
 colorama
 termcolor
 shapely
+flatbuffers == 1.12

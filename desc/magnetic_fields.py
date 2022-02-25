@@ -7,7 +7,7 @@ from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d, _approx_df
 from desc.derivatives import Derivative
-from desc.geometry.core import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
 
 
 # TODO: vectorize this over multiple coils
@@ -19,7 +19,7 @@ def biot_savart(eval_pts, coil_pts, current):
     eval_pts : array-like shape(n,3)
         evaluation points in cartesian coordinates
     coil_pts : array-like shape(m,3)
-        points in cartesian space defining coil
+        points in cartesian space defining coil, should be closed curve
     current : float
         current through the coil
 
@@ -42,11 +42,18 @@ def biot_savart(eval_pts, coil_pts, current):
     Ri_p_Rf = Ri + Rf
 
     # 1.0e-7 == mu_0/(4 pi)
-    Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+    Bmag = (
+        1.0e-7
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
+    )
 
     # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
-    vec = jnp.cross(dvec, Ri_vec, axis=-1)
-    return jnp.sum(Bmag * vec, axis=1)
+    vec = jnp.cross(dvec[:, jnp.newaxis, :], Ri_vec, axis=-1)
+    B = jnp.sum(Bmag[:, :, jnp.newaxis] * vec, axis=0)
+    return B
 
 
 class MagneticField(IOAble, ABC):

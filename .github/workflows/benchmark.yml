@@ -86,19 +86,7 @@ jobs:
         run: |
           python compare_bench_results.py
           cat commit_msg.txt
-      # makes a txt file or something that can be the commit message? IDK
-# see syntax for benchmark_compare, then just pipe output of benchmark_compare to a txt file
-# then use that txt file as a comment basically
-# need to be able to grab the two most recent chronologically json files
-# and compare those
-# might be as simple as ls -lthr -1 or smth
-# find /dir/path -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 >> temp1
-# use this, pipe into a txt file to get latest file
-# find /dir/path -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 2 | head -n 1 >> temp2
-# to get second latest file
-# this shooould allow me to easily grab the two files for the benchmark I think
-# cp to new dir, pass glob to compare
-# t1=$(cat temp1)
+
 
       - name: comment PR with the results
         uses: machine-learning-apps/pr-comment@master

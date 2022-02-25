@@ -12,5 +12,3 @@ netcdf4 >= 1.5.4
 colorama
 termcolor
 shapely
-jinja2 == 2.11.3 
-flatbuffers == 1.12

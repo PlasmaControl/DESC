@@ -73,11 +73,11 @@ commit_msg_lines = []
 commit_msg_lines.append("```diff\n")
 
 commit_msg_lines.append(
-    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(ms)":>15}\t{"t_new(ms)":>15}\t{"t_old(ms)":>15}\n'
+    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(ms)":>15}\t{"t_new(ms)":>16}\t{"t_old(ms)":>9}\n'
 )
 for i, (dt, dpct) in enumerate(zip(delta_times_ms, delta_times_pct)):
 
-    line = f"{colors[i]:>2}{test_names[i]:<36}\t{dpct:8.8}\t{dt:8.8}\t{times[i, latest_commit_index]:8.4}\t{times[i, master_commit_index]:8.4}\n"
+    line = f"{colors[i]:>2}{test_names[i]:<36}\t{dpct:8.3f}\t{dt:8.5f}\t{times[i, latest_commit_index]:8.4f}\t{times[i, master_commit_index]:8.4f}\n"
 
     commit_msg_lines.append(line)
 

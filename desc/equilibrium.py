@@ -251,10 +251,7 @@ class Equilibrium(_Configuration, IOAble):
             )
         elif self.node_pattern in ["quad"]:
             self._grid = QuadratureGrid(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
+                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
             )
         else:
             raise ValueError(
@@ -622,6 +619,7 @@ class Equilibrium(_Configuration, IOAble):
         order=2,
         tr_ratio=0.1,
         cutoff=1e-6,
+        weight="auto",
         Jx=None,
         verbose=1,
         copy=True,
@@ -641,6 +639,16 @@ class Equilibrium(_Configuration, IOAble):
             Setting to True (False/None) includes (excludes) all modes.
         order : int, optional
             order of perturbation (0=none, 1=linear, 2=quadratic)
+        tr_ratio : float or array of float
+            radius of the trust region, as a fraction of ||x||.
+            enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||
+            if a scalar uses same ratio for all steps, if an array uses the first element
+            for the first step and so on
+        cutoff : float
+            relative cutoff for small singular values in pseudoinverse
+        weight : ndarray, "auto", or None, optional
+            1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+            matrices. Default is to weight by (mode number)**2. None applies no weighting.
         Jx : ndarray, optional
             jacobian matrix df/dx
         verbose : int
@@ -667,6 +675,7 @@ class Equilibrium(_Configuration, IOAble):
                 order=order,
                 tr_ratio=tr_ratio,
                 cutoff=cutoff,
+                weight=weight,
                 Jx=Jx,
                 verbose=verbose,
                 copy=copy,
@@ -911,9 +920,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 p_profile=equil.pressure,
                 i_profile=equil.iota,
                 BC_constraint=equil.surface.get_constraint(
-                    R_basis=equil.R_basis,
-                    Z_basis=equil.Z_basis,
-                    L_basis=equil.L_basis,
+                    R_basis=equil.R_basis, Z_basis=equil.Z_basis, L_basis=equil.L_basis
                 ),
                 use_jit=True,
             )

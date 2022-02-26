@@ -10,6 +10,9 @@ from desc.io import InputReader, load
 from desc.io import hdf5Writer, hdf5Reader
 from desc.io.ascii_io import write_ascii, read_ascii
 from desc.utils import equals
+from desc.transform import Transform
+from desc.basis import FourierZernikeBasis
+from desc.grid import LinearGrid
 
 
 def test_vmec_input(tmpdir_factory):
@@ -243,3 +246,28 @@ def test_ascii_io(plot_eq, tmpdir_factory):
     write_ascii(tmp_path, eq1)
     eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.x, eq2.x)
+
+
+def test_copy():
+    basis = FourierZernikeBasis(2, 2, 2)
+    grid = LinearGrid(2, 2, 2)
+    transform1 = Transform(grid, basis, method="direct1")
+    transform2 = transform1.copy(deepcopy=False)
+
+    assert transform1.basis is transform2.basis
+    np.testing.assert_allclose(
+        transform1.matrices["direct1"][0][0][0],
+        transform2.matrices["direct1"][0][0][0],
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+    transform3 = transform1.copy(deepcopy=True)
+    assert transform1.basis is not transform3.basis
+    assert transform1.basis.eq(transform3.basis)
+    np.testing.assert_allclose(
+        transform1.matrices["direct1"][0][0][0],
+        transform3.matrices["direct1"][0][0][0],
+        rtol=1e-10,
+        atol=1e-10,
+    )

@@ -34,4 +34,4 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest -k derivatives --maxfail=1
+          python -m pytest -k autodiff --maxfail=1

@@ -80,6 +80,7 @@ class TestMagneticFields(unittest.TestCase):
         with pytest.raises(NotImplementedError):
             field([1, 0, 0], dZ=1)
 
+    @pytest.mark.slow
     def test_spline_field(self):
 
         field1 = ScalarPotentialField(phi_lm, args)

@@ -14,7 +14,7 @@ Flux coordinates
 
 DESC solves the "inverse" equilibrium problem. 
 The computational domain is the curvilinear coordinate system :math:`(\rho, \theta, \zeta)`, where :math:`\zeta` is chosen to be the toroidal angle of the cylindrical coordinate system :math:`(R, \phi, Z)`. 
-These curvilinear coordinates are related to the straight field-line coordinates :math:`(\rho, \vartheta, \zeta)` through the stream function :math:`\lambda(\rho,\zeta)`. 
+These curvilinear coordinates are related to the straight field-line coordinates :math:`(\rho, \vartheta, \zeta)` through the stream function :math:`\lambda(\rho,\theta,\zeta)`. 
 [Note: the original publication used :math:`\zeta=-\phi` and used :math:`\vartheta` in the computational domain instead of introducing :math:`\lambda` on all flux surfaces.] 
 This particular choice of flux coordinates is also used by the PEST code, and should not be confused with other choices such as Boozer or Hamada coordinates. 
 The flux surface label :math:`\rho` is chosen to be the square root of the normalized toroidal flux, which is proportional to the minor radius. 

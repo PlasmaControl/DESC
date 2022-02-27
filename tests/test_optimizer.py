@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-
+import pytest
 from desc.backend import jnp
 from desc.optimize import fmintr, lsqtr
 from desc.optimize.utils import make_spd, chol_U_update
@@ -93,6 +93,7 @@ class TestFmin(unittest.TestCase):
 
         np.testing.assert_allclose(out["x"], true_x)
 
+    @pytest.mark.slow
     def test_rosenbrock_bfgs_dogleg(self):
         rando = default_rng(seed=3)
 
@@ -113,6 +114,7 @@ class TestFmin(unittest.TestCase):
         )
         np.testing.assert_allclose(out["x"], true_x)
 
+    @pytest.mark.slow
     def test_rosenbrock_bfgs_subspace(self):
         rando = default_rng(seed=4)
 

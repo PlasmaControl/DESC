@@ -15,24 +15,6 @@ jobs:
         jaxlib-version: [0.3.0]
         jax-version: [0.3.0, 0.3.1]
         include: 
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.10
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.11
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.12
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.13
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.14
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.15
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.16
-          - jaxlib-version: 0.1.65
-            jax-version: 0.2.17
-          - jaxlib-version: 0.1.66
-            jax-version: 0.2.10
           - jaxlib-version: 0.1.66
             jax-version: 0.2.11
           - jaxlib-version: 0.1.66
@@ -48,8 +30,6 @@ jobs:
           - jaxlib-version: 0.1.66
             jax-version: 0.2.17
           - jaxlib-version: 0.1.67
-            jax-version: 0.2.10
-          - jaxlib-version: 0.1.67
             jax-version: 0.2.11
           - jaxlib-version: 0.1.67
             jax-version: 0.2.12
@@ -64,8 +44,6 @@ jobs:
           - jaxlib-version: 0.1.67
             jax-version: 0.2.17
           - jaxlib-version: 0.1.68
-            jax-version: 0.2.10
-          - jaxlib-version: 0.1.68
             jax-version: 0.2.11
           - jaxlib-version: 0.1.68
             jax-version: 0.2.12
@@ -79,8 +57,6 @@ jobs:
             jax-version: 0.2.16
           - jaxlib-version: 0.1.68
             jax-version: 0.2.17
-          - jaxlib-version: 0.1.69
-            jax-version: 0.2.10
           - jaxlib-version: 0.1.69
             jax-version: 0.2.11
           - jaxlib-version: 0.1.69
@@ -112,8 +88,6 @@ jobs:
           - jaxlib-version: 0.1.69
             jax-version: 0.2.25
           - jaxlib-version: 0.1.70
-            jax-version: 0.2.10
-          - jaxlib-version: 0.1.70
             jax-version: 0.2.11
           - jaxlib-version: 0.1.70
             jax-version: 0.2.12
@@ -143,8 +117,6 @@ jobs:
             jax-version: 0.2.24
           - jaxlib-version: 0.1.70
             jax-version: 0.2.25
-          - jaxlib-version: 0.1.71
-            jax-version: 0.2.10
           - jaxlib-version: 0.1.71
             jax-version: 0.2.11
           - jaxlib-version: 0.1.71
@@ -176,8 +148,6 @@ jobs:
           - jaxlib-version: 0.1.71
             jax-version: 0.2.25
           - jaxlib-version: 0.1.72
-            jax-version: 0.2.10
-          - jaxlib-version: 0.1.72
             jax-version: 0.2.11
           - jaxlib-version: 0.1.72
             jax-version: 0.2.12
@@ -207,8 +177,6 @@ jobs:
             jax-version: 0.2.24
           - jaxlib-version: 0.1.72
             jax-version: 0.2.25
-          - jaxlib-version: 0.1.73
-            jax-version: 0.2.10
           - jaxlib-version: 0.1.73
             jax-version: 0.2.11
           - jaxlib-version: 0.1.73
@@ -353,7 +321,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r tests/requirements.txt
-          pip uninstall flatbuffers -y
           pip install "jaxlib==${{ matrix.jaxlib-version }}"
           pip install "jax==${{ matrix.jax-version }}"	  
       - name: Test with pytest

@@ -3,7 +3,6 @@ from termcolor import colored
 from desc.backend import jnp
 from .utils import (
     check_termination,
-    OptimizeResult,
     print_header_nonlinear,
     print_iteration_nonlinear,
     status_messages,
@@ -15,6 +14,7 @@ from .tr_subproblems import (
     trust_region_step_exact_cho,
     update_tr_radius,
 )
+from scipy.optimize import OptimizeResult
 
 
 def lsqtr(

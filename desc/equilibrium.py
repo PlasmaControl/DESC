@@ -233,7 +233,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=1e-6,
         verbose=1,
         x_scale="auto",
-        maxiter=None,
+        maxiter=50,
         options={},
     ):
         """Solve to find the equilibrium configuration.
@@ -315,7 +315,6 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=[0.1, 0.25, 0.5],
-        cutoff=1e-6,
         verbose=1,
         copy=True,
     ):
@@ -329,10 +328,6 @@ class Equilibrium(_Configuration, IOAble):
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
             rotational transform, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
-            OR, if objective_g is supplied:
-            Array of indicies of modes to include in the perturbations of R, Z, lambda,
-            R_boundary, Z_boundary, pressure, rotational transform, and total flux.
-            Setting to True (False) includes (excludes) all modes.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
@@ -340,8 +335,6 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
             element for the first step and so on.
-        cutoff : float
-            Relative cutoff for small singular values in pseudo-inverse.
         verbose : int
             Level of output.
         copy : bool

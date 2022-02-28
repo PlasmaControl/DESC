@@ -1,6 +1,8 @@
 import unittest
+import pytest
 import numpy as np
 import mpmath
+import time
 from desc.grid import LinearGrid
 from desc.basis import (
     polyder_vec,
@@ -55,6 +57,7 @@ class TestBasis(unittest.TestCase):
         coeffs = zernike_radial_coeffs(l, m, exact=False)
         assert coeffs.dtype == np.float64
 
+    @pytest.mark.slow
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]

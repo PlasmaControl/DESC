@@ -15,7 +15,7 @@ class IO(ABC):
 
     def close(self):
         """Close file if initialized with class instance"""
-        if self._close_base_:
+        if hasattr(self, "base") and hasattr(self.base, "close"):
             self.base.close()
             self._close_base_ = False
 

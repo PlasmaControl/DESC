@@ -1,7 +1,8 @@
 import numpy as np
 from netCDF4 import Dataset
+import pytest
 
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
 
@@ -31,6 +32,7 @@ def test_compute_geometry(DSHAPE):
     assert abs(ar_vmec - ar_desc) < 5e-3
 
 
+@pytest.mark.slow
 def test_compute_theta_coords(SOLOVEV):
     """Test root finding for theta(theta*,lambda(theta))."""
 
@@ -45,7 +47,8 @@ def test_compute_theta_coords(SOLOVEV):
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = np.array(eq.compute_theta_coords(flux_coords))
+    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
     if geom_coords[0, 1] > np.pi:  # theta[0] = 0
@@ -54,6 +57,7 @@ def test_compute_theta_coords(SOLOVEV):
     np.testing.assert_allclose(nodes, geom_coords, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.slow
 def test_compute_flux_coords(SOLOVEV):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
 
@@ -67,7 +71,8 @@ def test_compute_flux_coords(SOLOVEV):
     coords = eq.compute("R", Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
-    flux_coords = np.array(eq.compute_flux_coords(real_coords))
+    flux_coords = eq.compute_flux_coords(real_coords)
+    flux_coords = np.array(flux_coords)
 
     # catch difference between 0 and 2*pi
     if flux_coords[0, 1] > np.pi:  # theta[0] = 0
@@ -123,6 +128,7 @@ def _compute_coords(equil):
     return Rr1, Zr1, Rv1, Zv1
 
 
+@pytest.mark.slow
 def test_to_sfl(plot_eq):
 
     Rr1, Zr1, Rv1, Zv1 = _compute_coords(plot_eq)

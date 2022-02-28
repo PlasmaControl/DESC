@@ -65,6 +65,6 @@ def test_perturbation_orders(SOLOVEV):
     err2 = np.abs(f2 - fS)
     err3 = np.abs(f3 - fS)
 
-    # assert err1 < err0
+    assert err1 < err0
     assert err2 < err1
     assert err3 < err2

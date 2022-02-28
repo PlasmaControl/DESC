@@ -204,6 +204,14 @@ The profiles given in the example are:
    \end{aligned}
 
 If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\iota(\rho) = 0`. 
+Also, note that the rotational transform given is technically assumed to be
+
+.. math::
+   \begin{aligned}
+    \mbox{$\,\iota\!\!$- }= \iota / 2\pi
+    \end{aligned}
+
+i.e. rational surfaces would be where the input rotational transform profile is equal to a rational number. 
 
 Magnetic Axis Initial Guess
 ***************************

@@ -3,6 +3,7 @@ import subprocess
 import os
 import h5py
 import numpy as np
+import time
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.__main__ import main
@@ -19,6 +20,35 @@ def TmpDir(tmpdir_factory):
     """Create a temporary directory to store testing files."""
     dir_path = tmpdir_factory.mktemp("test_results")
     return dir_path
+
+
+@pytest.fixture(scope="session")
+def SOLOVEV_dirs(tmpdir_factory):
+    """Get folders to run SOLOVEV in (for benchmark.py)."""
+    input_path = "examples//DESC//SOLOVEV"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
+    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
+    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+
+    SOLOVEV_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return SOLOVEV_out
 
 
 @pytest.fixture(scope="session")
@@ -53,6 +83,36 @@ def SOLOVEV(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def DSHAPE_dirs(tmpdir_factory):
+    """Get DSHAPE dirs (for benchamrk.py)."""
+    input_path = "examples//DESC//DSHAPE"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_out.h5")
+    desc_nc_path = output_dir.join("DSHAPE_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+
+    DSHAPE_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return DSHAPE_out
+
+
+@pytest.fixture(scope="session")
 def DSHAPE(tmpdir_factory):
     """Run DSHAPE example."""
     input_path = "examples//DESC//DSHAPE"
@@ -81,6 +141,37 @@ def DSHAPE(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return DSHAPE_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON(tmpdir_factory):
+    """Run HELIOTRON example."""
+    input_path = "examples//DESC//HELIOTRON"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_out.nc")
+    vmec_nc_path = "examples//VMEC//wout_HELIOTRON.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_out
 
 
 @pytest.fixture(scope="session")
@@ -143,11 +234,3 @@ def reader_test_file(tmpdir_factory):
         g.create_dataset(key, data=thedict[key])
     f.close()
     return filename
-
-
-"""
-def pytest_collection_modifyitems(items):
-    for item in items:
-        if "DSHAPE" in getattr(item, "fixturenames", ()):
-            item.add_marker("slow")
-"""

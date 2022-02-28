@@ -5,7 +5,8 @@ from netCDF4 import Dataset, stringtochar
 import matplotlib.pyplot as plt
 from scipy import optimize, interpolate, integrate
 
-from desc.utils import Timer, sign, area_difference
+from desc.backend import sign
+from desc.utils import Timer, area_difference
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform

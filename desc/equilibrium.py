@@ -548,7 +548,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=1e-6,
         verbose=1,
         x_scale="auto",
-        maxiter=None,
+        maxiter=50,
         options={},
     ):
         """Solve to find the equilibrium configuration.

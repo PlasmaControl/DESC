@@ -606,11 +606,11 @@ class ZernikeRZToroidalSection(Surface):
         )
         l, m, R, Z = np.broadcast_arrays(l, m, R, Z)
         for ll, mm, RR, ZZ in zip(l, m, R, Z):
-            idxR = self.R_basis.get_idx(ll, mm, 0)
-            idxZ = self.Z_basis.get_idx(ll, mm, 0)
             if RR is not None:
+                idxR = self.R_basis.get_idx(ll, mm, 0)
                 self.R_lmn[idxR] = RR
             if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):

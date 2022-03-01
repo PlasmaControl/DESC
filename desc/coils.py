@@ -1,34 +1,35 @@
 import numpy as np
+from abc import ABC
 from collections.abc import MutableSequence
 from desc.backend import jnp
-from desc.geometry.core import Curve
-from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
+from desc.geometry.utils import xyz2rpz_vec, rpz2xyz
 from desc.magnetic_fields import MagneticField, biot_savart
 from desc.grid import Grid
 
 
-class Coil(MagneticField, Curve):
-    """Class representing a magnetic field coil, as a combination of a curve and current
+class Coil(MagneticField, ABC):
+    """Class representing a magnetic field coil, as a combination
+    of a curve and current
+
+    Subclasses for a particular parameterization of a coil should inherit
+    from Coil and the appropriate Curve type, eg MyCoil(Coil, MyCurve)
+    - note that Coil must be the first parent for correct inheritance.
+
+    Subclasses based on curves that follow the Curve API should only have
+    to implement a new __init__ method, all others will be handled by default
 
     Parameters
     ----------
-    curve : Curve
-        underlying geometric curve definining path of coil
     current : float
         current passing through the coil, in Amperes
     """
 
-    _io_attrs_ = MagneticField._io_attrs_ + ["_curve", "_current"]
+    _io_attrs_ = MagneticField._io_attrs_ + ["_current"]
 
-    def __init__(self, curve, current, name=""):
-        super(Coil, self).__init__(name)
-        assert isinstance(curve, Curve)
-        self._curve = curve
+    def __init__(self, current, *args, **kwargs):
         self._current = current
-
-    @property
-    def curve(self):
-        return self._curve
+        super().__init__(*args, **kwargs)
 
     @property
     def current(self):
@@ -38,47 +39,6 @@ class Coil(MagneticField, Curve):
     def current(self, new):
         assert jnp.isscalar(new) or new.size == 1
         self._current = new
-
-    @property
-    def grid(self):
-        """Default grid for computation."""
-        return self.curve.grid
-
-    @grid.setter
-    def grid(self, new):
-        self.curve.grid = new
-
-    def compute_coordinates(self, *args, **kwargs):
-        """Compute real space coordinates using underlying curve method."""
-        return self.curve.compute_coordinates(*args, **kwargs)
-
-    def compute_frenet_frame(self, *args, **kwargs):
-        """Compute Frenet frame using underlying curve method."""
-        return self.curve.compute_frenet_frame(*args, **kwargs)
-
-    def compute_curvature(self, *args, **kwargs):
-        """Compute curvature using underlying curve method."""
-        return self.curve.compute_curvature(*args, **kwargs)
-
-    def compute_torsion(self, *args, **kwargs):
-        """Compute torsion using underlying curve method."""
-        return self.curve.compute_torsion(*args, **kwargs)
-
-    def compute_length(self, *args, **kwargs):
-        """Compute the length of the curve using underlying curve method."""
-        return self.curve.compute_length(*args, **kwargs)
-
-    def translate(self, *args, **kwargs):
-        """translate the coil along an axis"""
-        self.curve.translate(*args, **kwargs)
-
-    def rotate(self, *args, **kwargs):
-        """rotate the coil about an axis"""
-        self.curve.rotate(*args, **kwargs)
-
-    def flip(self, *args, **kwargs):
-        """flip the coil across a plane"""
-        self.curve.flip(*args, **kwargs)
 
     def compute_magnetic_field(self, coords, params={}, basis="rpz"):
         """Compute magnetic field at a set of points
@@ -104,7 +64,7 @@ class Coil(MagneticField, Curve):
         if basis == "rpz":
             coords = rpz2xyz(coords)
         current = params.pop("current", self.current)
-        coil_coords = self.curve.compute_coordinates(**params, basis="xyz")
+        coil_coords = self.compute_coordinates(**params, basis="xyz")
         B = biot_savart(coords, coil_coords, current)
         if basis == "rpz":
             B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
@@ -116,10 +76,120 @@ class Coil(MagneticField, Curve):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, current={}, curve={})".format(
-                self.name, self.current, str(self.curve)
-            )
+            + " (name={}, current={})".format(self.name, self.current)
         )
+
+
+class FourierRZCoil(Coil, FourierRZCurve):
+    """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    R_n, Z_n: array-like
+        fourier coefficients for R, Z
+    modes_R : array-like
+        mode numbers associated with R_n. If not given defaults to [-n:n]
+    modes_Z : array-like
+        mode numbers associated with Z_n, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry
+    grid : Grid
+        default grid for computation
+    name : str
+        name for this coil
+    """
+
+    _io_attrs_ = Coil._io_attrs_ + FourierRZCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        R_n=10,
+        Z_n=0,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        sym="auto",
+        grid=None,
+        name="",
+    ):
+        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, grid, name)
+
+
+class FourierXYZCoil(Coil, FourierXYZCurve):
+    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle phi.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    X_n, Y_n, Z_n: array-like
+        fourier coefficients for X, Y, Z
+    modes : array-like
+        mode numbers associated with X_n etc.
+    grid : Grid
+        default grid or computation
+    name : str
+        name for this coil
+
+    """
+
+    _io_attrs_ = Coil._io_attrs_ + FourierXYZCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        X_n=[0, 10, 2],
+        Y_n=[0, 0, 0],
+        Z_n=[-2, 0, 0],
+        modes=None,
+        grid=None,
+        name="",
+    ):
+        super().__init__(current, X_n, Y_n, Z_n, modes, grid, name)
+
+
+class FourierPlanarCoil(Coil, FourierPlanarCurve):
+    """Coil that lines in a plane, parameterized by a point (the center of the coil),
+    a vector (normal to the plane), and a fourier series defining the radius from the
+    center as a function of a polar angle theta.
+
+    Parameters
+    ----------
+    current : float
+        current through the coil, in Amperes
+    center : array-like, shape(3,)
+        x,y,z coordinates of center of coil
+    normal : array-like, shape(3,)
+        x,y,z components of normal vector to planar surface
+    r_n : array-like
+        fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    grid : Grid
+        default grid for computation
+    name : str
+        name for this coil
+
+    """
+
+    _io_attrs_ = Coil._io_attrs_ + FourierPlanarCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        grid=None,
+        name="",
+    ):
+        super().__init__(current, center, normal, r_n, modes, grid, name)
 
 
 class CoilSet(Coil, MutableSequence):
@@ -127,8 +197,8 @@ class CoilSet(Coil, MutableSequence):
 
     Parameters
     ----------
-    curves : array-like of Curve
-        collection of curves
+    coils : Coil or array-like of Coils
+        collection of coils
     currents : float or array-like of float
         currents in each coil, or a single current shared by all coils in the set
     """
@@ -137,16 +207,21 @@ class CoilSet(Coil, MutableSequence):
 
     def __init__(self, *coils, name=""):
         assert all([isinstance(coil, (Coil)) for coil in coils])
-        self._coils = coils
-        self._name = name
+        self._coils = list(coils)
+        self._name = str(name)
+
+    @property
+    def name(self):
+        """Name of the curve."""
+        return self._name
+
+    @name.setter
+    def name(self, new):
+        self._name = str(new)
 
     @property
     def coils(self):
         return self._coils
-
-    @property
-    def curve(self):
-        return [coil.curve for coil in self.coils]
 
     @property
     def current(self):
@@ -154,13 +229,8 @@ class CoilSet(Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        assert jnp.isscalar(new) or (len(jnp.asarray(new)) == len(self.curve))
-        new = jnp.broadcast_to(
-            jnp.asarray(new),
-            len(
-                self.coils,
-            ),
-        )
+        if jnp.isscalar(new):
+            new = [new] * len(self)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
@@ -235,16 +305,16 @@ class CoilSet(Coil, MutableSequence):
 
     @classmethod
     def linspaced_angular(
-        cls, curve, current, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False
+        cls, coil, current=None, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False
     ):
-        """Create a coil set by repeating a curve n times rotationally.
+        """Create a coil set by repeating a coil n times rotationally.
 
         Parameters
         ----------
-        curve : Curve
-            base curve to repeat
+        coil : Coil
+            base coil to repeat
         current : float or array-like, shape(n,)
-            current in (each) coil
+            current in (each) coil, overrides coil.current
         axis : array-like, shape(3,)
             axis to rotate about
         angle : float
@@ -254,26 +324,29 @@ class CoilSet(Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final angle
         """
-        assert isinstance(curve, Curve) and not isinstance(curve, Coil)
+        assert isinstance(coil, Coil)
+        if current is None:
+            current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         coils = []
         phis = jnp.linspace(0, angle, n, endpoint=endpoint)
         for i in range(n):
-            coil = curve.copy()
-            coil.rotate(axis, angle=phis[i])
-            coils.append(Coil(coil, currents[i]))
+            coili = coil.copy()
+            coili.rotate(axis, angle=phis[i])
+            coili.current = currents[i]
+            coils.append(coili)
         return cls(*coils)
 
     @classmethod
     def linspaced_linear(
-        cls, curve, current, displacement=[2, 0, 0], n=4, endpoint=False
+        cls, coil, current=None, displacement=[2, 0, 0], n=4, endpoint=False
     ):
-        """Create a coil group by repeating a curve n times in a straight line.
+        """Create a coil group by repeating a coil n times in a straight line.
 
         Parameters
         ----------
-        curve : Curve
-            base curve to repeat
+        coil : Coil
+            base coil to repeat
         current : float or array-like, shape(n,)
             current in (each) coil
         displacement : array-like, shape(3,)
@@ -283,15 +356,18 @@ class CoilSet(Coil, MutableSequence):
         endpoint : bool
             whether to include a coil at final point
         """
-        assert isinstance(curve, Curve) and not isinstance(curve, Coil)
+        assert isinstance(coil, Coil)
+        if current is None:
+            current = coil.current
         currents = jnp.broadcast_to(current, (n,))
         displacement = jnp.asarray(displacement)
         coils = []
         a = jnp.linspace(0, 1, n, endpoint=endpoint)
         for i in range(n):
-            temp_curve = curve.copy()
-            temp_curve.translate(a[i] * displacement)
-            coils.append(Coil(temp_curve, currents[i]))
+            coili = coil.copy()
+            coili.translate(a[i] * displacement)
+            coili.current = currents[i]
+            coils.append(coili)
         return cls(*coils)
 
     @classmethod
@@ -306,14 +382,14 @@ class CoilSet(Coil, MutableSequence):
 
         Parameters
         ----------
-        coils : Coil, Coilset
+        coils : Coil, CoilGroup, Coilset
             base coil or collection of coils to repeat
         NFP : int
             number of field periods
         sym : bool
             whether coils should be stellarator symmetric
         """
-        if not isinstance(coils, (CoilSet)):
+        if not isinstance(coils, CoilSet):
             coils = CoilSet(coils)
         coilset = []
         if sym:
@@ -337,15 +413,6 @@ class CoilSet(Coil, MutableSequence):
 
         return cls(*coilset)
 
-    def __repr__(self):
-        """string form of the object"""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + " (name={}, with {} submembers)".format(self.name, len(self))
-        )
-
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
             return CoilSet(*self.coils, *other.coils)
@@ -358,7 +425,7 @@ class CoilSet(Coil, MutableSequence):
         return self.coils[i]
 
     def __setitem__(self, i, new_item):
-        if not (new_item.__class__ is Coil):
+        if not isinstance(new_item, Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils[i] = new_item
 
@@ -369,20 +436,15 @@ class CoilSet(Coil, MutableSequence):
         return len(self._coils)
 
     def insert(self, i, new_item):
-        if not (new_item.__class__ is Coil):
+        if not isinstance(new_item, Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
 
-    def __slice__(self, idx):
-        if idx is None:
-            theslice = slice(None, None)
-        elif isinstance(idx, int):
-            theslice = idx
-        elif isinstance(idx, list):
-            try:
-                theslice = slice(idx[0], idx[1], idx[2])
-            except IndexError:
-                theslice = slice(idx[0], idx[1])
-        else:
-            raise TypeError("index is not a valid type.")
-        return theslice
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, with {} submembers)".format(self.name, len(self))
+        )

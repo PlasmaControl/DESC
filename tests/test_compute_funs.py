@@ -582,7 +582,7 @@ def test_boozer_transform(DSHAPE):
     w_transform = Transform(
         grid,
         DoubleFourierSeries(M=eq.M, N=eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP),
-        derivs=0,
+        derivs=1,
         build_pinv=True,
     )
     iota = eq.iota.copy()

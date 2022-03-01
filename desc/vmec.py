@@ -1,8 +1,7 @@
 import os
 import numpy as np
-
-from netCDF4 import Dataset, stringtochar
 import matplotlib.pyplot as plt
+from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign

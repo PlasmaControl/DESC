@@ -218,11 +218,11 @@ class FourierRZToroidalSurface(Surface):
         )
         m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
         for mm, nn, RR, ZZ in zip(m, n, R, Z):
-            idxR = self.R_basis.get_idx(0, mm, nn)
-            idxZ = self.Z_basis.get_idx(0, mm, nn)
             if RR is not None:
+                idxR = self.R_basis.get_idx(0, mm, nn)
                 self.R_lmn[idxR] = RR
             if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, mm, nn)
                 self.Z_lmn[idxZ] = ZZ
 
     def _get_transforms(self, grid=None):

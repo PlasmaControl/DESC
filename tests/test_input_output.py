@@ -10,9 +10,9 @@ from desc.io import InputReader, load
 from desc.io import hdf5Writer, hdf5Reader
 from desc.io.ascii_io import write_ascii, read_ascii
 from desc.utils import equals
-from desc.transform import Transform
-from desc.basis import FourierZernikeBasis
 from desc.grid import LinearGrid
+from desc.basis import FourierZernikeBasis
+from desc.transform import Transform
 
 
 def test_vmec_input(tmpdir_factory):

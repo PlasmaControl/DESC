@@ -35,7 +35,7 @@ class TestRZCurve(unittest.TestCase):
         R, Z = c.get_coeffs(0)
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
-        c.set_coeffs(0, 5, 0)
+        c.set_coeffs(0, 5, None)
         np.testing.assert_allclose(
             c.R_n,
             [

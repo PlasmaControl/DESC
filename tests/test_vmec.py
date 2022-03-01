@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.utils import sign
+from desc.backend import sign
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily
@@ -374,7 +374,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         sym=False,
     )
     # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=5e-3)
+    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=2e-2)
 
     # B^zeta
     bsupv_vmec = VMECIO.vmec_interpolate(

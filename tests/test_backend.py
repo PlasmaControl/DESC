@@ -2,8 +2,7 @@ import unittest
 import pytest
 import numpy as np
 
-from desc.backend import put
-from desc.utils import sign
+from desc.backend import put, sign
 
 
 @pytest.mark.fast

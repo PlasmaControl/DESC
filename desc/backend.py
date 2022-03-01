@@ -88,7 +88,7 @@ if use_jax:
 
         """
 
-        return jax.ops.index_update(arr, inds, vals)
+        return jnp.asarray(arr).at[inds].set(vals)
 
 
 else:

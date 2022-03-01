@@ -209,7 +209,10 @@ class IOAble(ABC):
         result = cls.__new__(cls)
         memo[id(self)] = result
         for k, v in self.__dict__.items():
-            setattr(result, k, copy.deepcopy(v, memo))
+            try:
+                setattr(result, k, copy.deepcopy(v, memo))
+            except TypeError:
+                setattr(result, k, copy.copy(v))
         return result
 
     def copy(self, deepcopy=True):

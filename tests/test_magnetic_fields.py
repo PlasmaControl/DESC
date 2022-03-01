@@ -56,6 +56,7 @@ class TestMagneticFields(unittest.TestCase):
             field.compute_magnetic_field([1.0, np.pi / 4, 0]), [[0, 1, 0]]
         )
 
+    @pytest.mark.slow
     def test_spline_field(self):
 
         field1 = ScalarPotentialField(phi_lm, args)

@@ -75,7 +75,7 @@ class Profile(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, grid={})".format(self.name, self.grid)
+            + " (name={}, grid={})".format(self._name, self._grid)
         )
 
 
@@ -206,7 +206,7 @@ class PowerSeriesProfile(Profile):
         """set a new maximum mode number"""
         modes_old = self.basis.modes
         self.basis.change_resolution(L)
-        self._transform = self._get_transform(self.grid)
+        self._transform = self._get_transform(self._grid)
         self.params = copy_coeffs(self.params, modes_old, self.basis.modes)
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
@@ -300,7 +300,7 @@ class PowerSeriesProfile(Profile):
             params = np.pad(self.params, (0, order + 1 - len(self.params)))
         modes = np.arange(order + 1)
 
-        return PowerSeriesProfile(params, modes, self.grid, self.name)
+        return PowerSeriesProfile(params, modes, self._grid, self._name)
 
     def to_spline(self, knots=20, method="cubic2"):
         """Convert this profile to a SplineProfile
@@ -327,7 +327,7 @@ class PowerSeriesProfile(Profile):
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
         values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)
+        return SplineProfile(values, knots, self._grid, method, self._name)
 
     def to_mtanh(
         self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
@@ -368,8 +368,8 @@ class PowerSeriesProfile(Profile):
             p0=p0,
             pmax=pmax,
             pmin=pmin,
-            grid=self.grid,
-            name=self.name,
+            grid=self._grid,
+            name=self._name,
             **kwargs,
         )
 
@@ -418,7 +418,7 @@ class SplineProfile(Profile):
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
-        self.grid = grid
+        self._grid = grid
 
     def __repr__(self):
         s = super().__repr__()
@@ -472,7 +472,7 @@ class SplineProfile(Profile):
 
     def _get_xq(self, grid):
         if grid is None:
-            return self.grid.nodes[:, 0]
+            return self._grid.nodes[:, 0]
         if isinstance(grid, Grid):
             return grid.nodes[:, 0]
         if np.isscalar(grid):
@@ -541,8 +541,8 @@ class SplineProfile(Profile):
             xs = np.linspace(0, 1, xs)
         fs = self.compute(grid=xs)
         p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
-        p.grid = self.grid
-        p.name = self.name
+        p.grid = self._grid
+        p.name = self._name
         return p
 
     def to_spline(self, knots=20, method="cubic2"):
@@ -570,7 +570,7 @@ class SplineProfile(Profile):
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
         values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)
+        return SplineProfile(values, knots, self._grid, method, self._name)
 
     def to_mtanh(
         self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
@@ -611,8 +611,8 @@ class SplineProfile(Profile):
             p0=p0,
             pmax=pmax,
             pmin=pmin,
-            grid=self.grid,
-            name=self.name,
+            grid=self._grid,
+            name=self._name,
             **kwargs,
         )
 
@@ -648,7 +648,7 @@ class MTanhProfile(Profile):
 
         if grid is None:
             grid = Grid(np.empty((0, 3)))
-        self.grid = grid
+        self._grid = grid
 
     def __repr__(self):
         s = super().__repr__()
@@ -747,7 +747,7 @@ class MTanhProfile(Profile):
 
     def _get_xq(self, grid):
         if grid is None:
-            return self.grid.nodes[:, 0]
+            return self._grid.nodes[:, 0]
         if isinstance(grid, Grid):
             return grid.nodes[:, 0]
         if np.isscalar(grid):
@@ -913,8 +913,8 @@ class MTanhProfile(Profile):
             xs = np.linspace(0, 1, xs)
         fs = self.compute(grid=xs)
         p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
-        p.grid = self.grid
-        p.name = self.name
+        p.grid = self._grid
+        p.name = self._name
         return p
 
     def to_spline(self, knots=20, method="cubic2"):
@@ -942,4 +942,4 @@ class MTanhProfile(Profile):
         if np.isscalar(knots):
             knots = np.linspace(0, 1, knots)
         values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)
+        return SplineProfile(values, knots, self._grid, method, self._name)

@@ -87,8 +87,10 @@ if use_jax:
             Input array with vals inserted at inds.
 
         """
-        return jax.ops.index_update(arr, inds, vals)
 
+        return jnp.asarray(arr).at[inds].set(vals)
+      
+      
     def sign(x):
         """Sign function, but returns 1 for x==0.
 

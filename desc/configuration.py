@@ -219,7 +219,7 @@ class _Configuration(IOAble, ABC):
                 self._bdry_mode = "lcfs"
             if isinstance(surface, ZernikeRZToroidalSection):
                 self._bdry_mode = "poincare"
-        elif isinstance(surface, jnp.ndarray):
+        elif isinstance(surface, (np.ndarray, jnp.ndarray)):
             if np.all(surface[:, 0] == 0):
                 self._bdry_mode = "lcfs"
             elif np.all(surface[:, 2] == 0):
@@ -250,7 +250,7 @@ class _Configuration(IOAble, ABC):
 
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
-        elif isinstance(axis, jnp.ndarray):
+        elif isinstance(axis, (np.ndarray, jnp.ndarray)):
             self._axis = FourierRZCurve(
                 axis[:, 1],
                 axis[:, 2],
@@ -311,7 +311,7 @@ class _Configuration(IOAble, ABC):
         # profiles
         if isinstance(pressure, Profile):
             self._pressure = pressure
-        elif isinstance(pressure, jnp.ndarray):
+        elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
             self._pressure = PowerSeriesProfile(
                 modes=pressure[:, 0], params=pressure[:, 1], name="pressure"
             )
@@ -324,7 +324,7 @@ class _Configuration(IOAble, ABC):
 
         if isinstance(iota, Profile):
             self.iota = iota
-        elif isinstance(iota, jnp.ndarray):
+        elif isinstance(iota, (np.ndarray, jnp.ndarray)):
             self._iota = PowerSeriesProfile(
                 modes=iota[:, 0], params=iota[:, 1], name="iota"
             )

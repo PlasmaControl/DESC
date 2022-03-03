@@ -9,7 +9,7 @@ if use_jax:
 
 
 class _Derivative(ABC):
-    """_Derivative is an abstract base class for derivative matrix calculations
+    """_Derivative is an abstract base class for derivative matrix calculations.
 
     Parameters
     ----------
@@ -22,11 +22,11 @@ class _Derivative(ABC):
 
     @abstractmethod
     def __init__(self, fun, argnum=0, mode=None, **kwargs):
-        """Initializes a Derivative object"""
+        """Initialize a Derivative object."""
 
     @abstractmethod
     def compute(self, *args):
-        """Computes the derivative matrix
+        """Compute the derivative matrix.
 
         Parameters
         ----------
@@ -67,7 +67,7 @@ class _Derivative(ABC):
         return self._mode
 
     def __call__(self, *args):
-        """Computes the derivative matrix
+        """Compute the derivative matrix.
 
         Parameters
         ----------
@@ -86,7 +86,7 @@ class _Derivative(ABC):
         return self.compute(*args)
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -98,7 +98,7 @@ class _Derivative(ABC):
 
 
 class AutoDiffDerivative(_Derivative):
-    """Computes derivatives using automatic differentiation with JAX
+    """Computes derivatives using automatic differentiation with JAX.
 
     Parameters
     ----------
@@ -109,7 +109,8 @@ class AutoDiffDerivative(_Derivative):
     mode : str, optional
         Automatic differentiation mode.
         One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
-        ``'grad'`` (gradient of a scalar function), ``'hess'`` (hessian of a scalar function),
+        ``'grad'`` (gradient of a scalar function),
+        ``'hess'`` (hessian of a scalar function),
         or ``'jvp'`` (jacobian vector product)
         Default = ``'fwd'``
     use_jit : bool, optional
@@ -142,7 +143,8 @@ class AutoDiffDerivative(_Derivative):
             self.shape = kwargs["shape"]
         except KeyError as e:
             raise ValueError(
-                "Block derivative requires the shape of the derivative matrix to be specified with the 'shape' keyword argument"
+                "Block derivative requires the shape of the derivative matrix to be "
+                + "specified with the 'shape' keyword argument"
             ) from e
 
         N, M = self.shape
@@ -157,7 +159,7 @@ class AutoDiffDerivative(_Derivative):
             from desc import config
 
             mem = config.get("avail_mem", 4)
-            # 150 modes per gig of GPU memory is fairly conservative, could possibly go as high as 250-300
+            # 150 modes/gig of GPU memory is conservative, could go as high as 250-300
             block_size = int(150 * mem)
         if block_size is not None and M <= block_size:
             # if its a small matrix we don't need to break it up
@@ -205,7 +207,7 @@ class AutoDiffDerivative(_Derivative):
         self._compute = _jacfun
 
     def compute(self, *args):
-        """Computes the derivative matrix
+        """Compute the derivative matrix.
 
         Parameters
         ----------
@@ -225,7 +227,7 @@ class AutoDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args):
-        """Compute df/dx*v
+        """Compute df/dx*v.
 
         Parameters
         ----------
@@ -242,14 +244,14 @@ class AutoDiffDerivative(_Derivative):
         -------
         jvp : array-like
             jacobian times vectors v, summed over different argnums
+
         """
         tangents = list(nested_zeros_like(args))
         if jnp.isscalar(argnum):
             argnum = (argnum,)
-            v = (v,) if not isinstance(v, tuple) else v
         else:
             argnum = tuple(argnum)
-            v = (v,) if not isinstance(v, tuple) else v
+        v = (v,) if not isinstance(v, tuple) else v
 
         for i, vi in enumerate(v):
             tangents[argnum[i]] = vi
@@ -258,7 +260,7 @@ class AutoDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
-        """Compute d^2f/dx^2*v1*v2
+        """Compute d^2f/dx^2*v1*v2.
 
         Parameters
         ----------
@@ -276,6 +278,7 @@ class AutoDiffDerivative(_Derivative):
         -------
         jvp2 : array-like
             second derivative times vectors v1, v2, summed over different argnums
+
         """
         if np.isscalar(argnum1):
             v1 = (v1,) if not isinstance(v1, tuple) else v1
@@ -296,7 +299,7 @@ class AutoDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
-        """Compute d^3f/dx^3*v1*v2*v3
+        """Compute d^3f/dx^3*v1*v2*v3.
 
         Parameters
         ----------
@@ -314,6 +317,7 @@ class AutoDiffDerivative(_Derivative):
         -------
         jvp3 : array-like
             third derivative times vectors v2, v3, v3, summed over different argnums
+
         """
         if np.isscalar(argnum1):
             v1 = (v1,) if not isinstance(v1, tuple) else v1
@@ -377,7 +381,7 @@ class AutoDiffDerivative(_Derivative):
 
 
 class FiniteDiffDerivative(_Derivative):
-    """Computes derivatives using 2nd order centered finite differences
+    """Computes derivatives using 2nd order centered finite differences.
 
     Parameters
     ----------
@@ -388,7 +392,8 @@ class FiniteDiffDerivative(_Derivative):
     mode : str, optional
         Automatic differentiation mode.
         One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
-        ``'grad'`` (gradient of a scalar function), ``'hess'`` (hessian of a scalar function),
+        ``'grad'`` (gradient of a scalar function),
+        ``'hess'`` (hessian of a scalar function),
         or ``'jvp'`` (jacobian vector product)
         Default = ``'fwd'``
     rel_step : float, optional
@@ -405,7 +410,7 @@ class FiniteDiffDerivative(_Derivative):
         self._set_mode(mode)
 
     def _compute_hessian(self, *args):
-        """Computes the hessian matrix using 2nd order centered finite differences.
+        """Compute the hessian matrix using 2nd order centered finite differences.
 
         Parameters
         ----------
@@ -449,7 +454,7 @@ class FiniteDiffDerivative(_Derivative):
         return hess
 
     def _compute_grad_or_jac(self, *args):
-        """Computes the gradient or jacobian matrix (ie, first derivative)
+        """Compute the gradient or jacobian matrix (ie, first derivative).
 
         Parameters
         ----------
@@ -491,7 +496,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
-        """Compute df/dx*v
+        """Compute df/dx*v.
 
         Parameters
         ----------
@@ -508,16 +513,16 @@ class FiniteDiffDerivative(_Derivative):
         -------
         jvp : array-like
             jacobian times vectors v, summed over different argnums
+
         """
         rel_step = kwargs.get("rel_step", 1e-3)
 
         if np.isscalar(argnum):
             nargs = 1
             argnum = (argnum,)
-            v = (v,) if not isinstance(v, tuple) else v
         else:
             nargs = len(argnum)
-            v = (v,) if not isinstance(v, tuple) else v
+        v = (v,) if not isinstance(v, tuple) else v
 
         f = np.array(
             [
@@ -529,7 +534,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
-        """Compute d^2f/dx^2*v1*v2
+        """Compute d^2f/dx^2*v1*v2.
 
         Parameters
         ----------
@@ -547,6 +552,7 @@ class FiniteDiffDerivative(_Derivative):
         -------
         jvp2 : array-like
             second derivative times vectors v1, v2, summed over different argnums
+
         """
         if np.isscalar(argnum1):
             v1 = (v1,) if not isinstance(v1, tuple) else v1
@@ -567,7 +573,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
-        """Compute d^3f/dx^3*v1*v2*v3
+        """Compute d^3f/dx^3*v1*v2*v3.
 
         Parameters
         ----------
@@ -585,6 +591,7 @@ class FiniteDiffDerivative(_Derivative):
         -------
         jvp3 : array-like
             third derivative times vectors v2, v3, v3, summed over different argnums
+
         """
         if np.isscalar(argnum1):
             v1 = (v1,) if not isinstance(v1, tuple) else v1
@@ -620,7 +627,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
-        """compute a jvp wrt to a single argument"""
+        """Compute a jvp wrt to a single argument."""
         rel_step = kwargs.get("rel_step", 1e-3)
         normv = np.linalg.norm(v)
         if normv != 0:
@@ -658,7 +665,7 @@ class FiniteDiffDerivative(_Derivative):
             self._compute = self._compute_jvp
 
     def compute(self, *args):
-        """Computes the derivative matrix
+        """Compute the derivative matrix.
 
         Parameters
         ----------
@@ -679,6 +686,8 @@ class FiniteDiffDerivative(_Derivative):
 
 def nested_zeros_like(x):
 
+    if x is None:
+        return None
     if jnp.isscalar(x):
         return 0.0
     if isinstance(x, tuple):

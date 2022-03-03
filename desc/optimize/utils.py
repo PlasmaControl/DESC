@@ -257,7 +257,9 @@ def compute_jac_scale(A, prev_scale_inv=None):
 
 def evaluate_quadratic(J, g, s, diag=None):
     """Compute values of a quadratic function arising in least squares.
+
     The function is 0.5 * s.T * (J.T * J + diag) * s + g.T * s.
+
     Parameters
     ----------
     J : ndarray, sparse matrix or LinearOperator, shape (m, n)
@@ -269,6 +271,7 @@ def evaluate_quadratic(J, g, s, diag=None):
     diag : ndarray, shape (n,), optional
         Addition diagonal part, affects the quadratic term.
         If None, assumed to be 0.
+
     Returns
     -------
     values : ndarray with shape (k,) or float

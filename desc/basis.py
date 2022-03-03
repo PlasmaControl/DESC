@@ -24,10 +24,21 @@ class Basis(IOAble, ABC):
         "_N",
         "_NFP",
         "_modes",
-        "_idx",
         "_sym",
         "_spectral_indexing",
     ]
+
+    def __init__(self):
+
+        self._enforce_symmetry()
+        self._sort_modes()
+        self._create_idx()
+
+    def _set_up(self):
+        """Called after loading or changing resolution."""
+        self._enforce_symmetry()
+        self._sort_modes()
+        self._create_idx()
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""
@@ -192,9 +203,7 @@ class PowerSeries(Basis):
 
         self._modes = self._get_modes(L=self.L)
 
-        self._enforce_symmetry()
-        self._sort_modes()
-        self._create_idx()
+        super().__init__()
 
     def _get_modes(self, L=0):
         """Get mode numbers for power series.
@@ -273,7 +282,7 @@ class PowerSeries(Basis):
         if L != self.L:
             self._L = L
             self._modes = self._get_modes(self.L)
-            self._sort_modes()
+            self._set_up()
 
 
 class FourierSeries(Basis):
@@ -305,9 +314,7 @@ class FourierSeries(Basis):
 
         self._modes = self._get_modes(N=self.N)
 
-        self._enforce_symmetry()
-        self._sort_modes()
-        self._create_idx()
+        super().__init__()
 
     def _get_modes(self, N=0):
         """Get mode numbers for Fourier series.
@@ -386,8 +393,7 @@ class FourierSeries(Basis):
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class DoubleFourierSeries(Basis):
@@ -421,9 +427,7 @@ class DoubleFourierSeries(Basis):
 
         self._modes = self._get_modes(M=self.M, N=self.N)
 
-        self._enforce_symmetry()
-        self._sort_modes()
-        self._create_idx()
+        super().__init__()
 
     def _get_modes(self, M=0, N=0):
         """Get mode numbers for double Fourier series.
@@ -528,8 +532,7 @@ class DoubleFourierSeries(Basis):
             self._M = M
             self._N = N
             self._modes = self._get_modes(self.M, self.N)
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class ZernikePolynomial(Basis):
@@ -580,9 +583,7 @@ class ZernikePolynomial(Basis):
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
         )
 
-        self._enforce_symmetry()
-        self._sort_modes()
-        self._create_idx()
+        super().__init__()
 
     def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
         """Get mode numbers for Fourier-Zernike basis functions.
@@ -741,8 +742,7 @@ class ZernikePolynomial(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class FourierZernikeBasis(Basis):
@@ -800,9 +800,7 @@ class FourierZernikeBasis(Basis):
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
         )
 
-        self._enforce_symmetry()
-        self._sort_modes()
-        self._create_idx()
+        super().__init__()
 
     def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
         """Get mode numbers for Fourier-Zernike basis functions.
@@ -979,8 +977,7 @@ class FourierZernikeBasis(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 def polyder_vec(p, m):

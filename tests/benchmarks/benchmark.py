@@ -78,12 +78,9 @@ def TmpDir(tmpdir_factory):
 @pytest.mark.benchmark(min_rounds=1, max_time=200, disable_gc=True, warmup=False)
 def test_SOLOVEV_run(tmpdir_factory, benchmark):
     """Benchmark the SOLOVEV example"""
-    input_path = "examples//DESC//SOLOVEV"
+    input_path = ".//tests//benchmark//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("SOLOVEV_out.h5")
-    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
-    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "../..")
     input_filename = os.path.join(exec_dir, input_path)
@@ -101,12 +98,9 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
 @pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
 def test_DSHAPE_run(tmpdir_factory, benchmark):
     """Benchmark the DSHAPE example."""
-    input_path = "examples//DESC//DSHAPE"
+    input_path = ".//tests//benchmark//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
-    desc_nc_path = output_dir.join("DSHAPE_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
-    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "../..")
     input_filename = os.path.join(exec_dir, input_path)
@@ -125,12 +119,9 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
 @pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
 def test_HELIOTRON_run(tmpdir_factory, benchmark):
     """Benchmark the HELIOTRON example."""
-    input_path = "examples//DESC//HELIOTRON"
+    input_path = ".//tests//benchmark//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
-    desc_nc_path = output_dir.join("HELIOTRON_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_HELIOTRON.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "../..")
     input_filename = os.path.join(exec_dir, input_path)

@@ -144,7 +144,7 @@ class TestVMECIO(unittest.TestCase):
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
 
-    input_path = "examples//VMEC//wout_SOLOVEV.nc"
+    input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
     eq = VMECIO.load(input_path)

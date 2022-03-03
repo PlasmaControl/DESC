@@ -4,7 +4,6 @@ from desc.backend import jnp
 from .derivative import CholeskyHessian
 from .utils import (
     check_termination,
-    OptimizeResult,
     evaluate_quadratic_form,
     print_header_nonlinear,
     print_iteration_nonlinear,
@@ -15,6 +14,7 @@ from .tr_subproblems import (
     solve_trust_region_2d_subspace,
     update_tr_radius,
 )
+from scipy.optimize import OptimizeResult
 
 
 def fmintr(

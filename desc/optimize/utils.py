@@ -1,8 +1,6 @@
 import numpy as np
 from desc.backend import jnp
 import scipy.sparse
-from scipy.optimize import OptimizeResult
-import numba
 
 
 def min_eig_est(A, tol=1e-2):
@@ -60,7 +58,6 @@ def make_spd(A, delta=1e-2, tol=1e-2):
     return 0.5 * (A + A.T)
 
 
-@numba.njit()
 def chol_U_update(U, x, alpha):
     """Rank 1 update to a cholesky decomposition
 

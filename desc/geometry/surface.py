@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.backend import jnp, sign
+from desc.backend import jnp, sign, put
 from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
@@ -220,12 +220,12 @@ class FourierRZToroidalSurface(Surface):
         )
         m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
         for mm, nn, RR, ZZ in zip(m, n, R, Z):
-            idxR = self.R_basis.get_idx(0, mm, nn)
-            idxZ = self.Z_basis.get_idx(0, mm, nn)
             if RR is not None:
-                self.R_lmn[idxR] = RR
+                idxR = self.R_basis.get_idx(0, mm, nn)
+                self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
-                self.Z_lmn[idxZ] = ZZ
+                idxZ = self.Z_basis.get_idx(0, mm, nn)
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -622,10 +622,10 @@ class ZernikeRZToroidalSection(Surface):
         for ll, mm, RR, ZZ in zip(l, m, R, Z):
             if RR is not None:
                 idxR = self.R_basis.get_idx(ll, mm, 0)
-                self.R_lmn[idxR] = RR
+                self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
-                self.Z_lmn[idxZ] = ZZ
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     def _get_transforms(self, grid=None):
         if grid is None:

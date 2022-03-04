@@ -40,6 +40,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: master
+          clean: false
       - name: Benchmark with pytest-benchmark
         run: |
           pwd
@@ -48,6 +49,7 @@ jobs:
           python -m pytest benchmark.py --benchmark-save='master'
       - name: put benchmark results in same folder
         run: |
+          pwd
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 2 | head -n 1 > temp2
           t1=$(cat temp1)

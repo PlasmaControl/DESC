@@ -50,6 +50,7 @@ jobs:
       - name: put benchmark results in same folder
         run: |
           pwd
+          cd tests/benchmarks
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 2 | head -n 1 > temp2
           t1=$(cat temp1)
@@ -59,6 +60,8 @@ jobs:
           cp $t2 compare_results
       - name: Compare latest commit results to the master branch results
         run: |
+          pwd
+          cd tests/benchmarks
           python compare_bench_results.py
           cat commit_msg.txt
       - name: comment PR with the results
@@ -66,6 +69,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          path: ./commit_msg.txt
+          path: tests/benchmarks/commit_msg.txt
 
           

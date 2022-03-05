@@ -48,6 +48,13 @@ class TestRZCurve(unittest.TestCase):
         assert s.eq(c)
 
         c.change_resolution(5)
+        c.set_coeffs(-1, None, 2)
+        np.testing.assert_allclose(
+            c.R_n,
+            [5, 0, 0, 0, 0, 0],
+        )
+        np.testing.assert_allclose(c.Z_n, [0, 0, 0, 0, 2])
+
         with pytest.raises(ValueError):
             c.R_n = s.R_n
         with pytest.raises(ValueError):

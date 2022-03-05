@@ -1,4 +1,5 @@
 import unittest
+import pytest
 import numpy as np
 from scipy import special
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
@@ -257,3 +258,59 @@ class TestGrid(unittest.TestCase):
         assert cg.L == 3
         assert cg.M == 4
         assert cg.N == 5
+
+    def test_rotation(self):
+        M = 2
+        N = 0
+        NFP = 1
+        cos_grid = ConcentricGrid(
+            M, M, N, NFP, sym=False, axis=True, rotation="cos", node_pattern="linear"
+        )
+        sin_grid = ConcentricGrid(
+            M, M, N, NFP, sym=False, axis=True, rotation="sin", node_pattern="linear"
+        )
+        cos_nodes = np.stack(
+            [
+                np.array([0, 1, 1, 1, 1, 1]),
+                np.array(
+                    [
+                        0,
+                        0,
+                        2 * np.pi / 5,
+                        4 * np.pi / 5,
+                        6 * np.pi / 5,
+                        8 * np.pi / 5,
+                    ]
+                ),
+                np.zeros((int((M + 1) * (M + 2) / 2),)),
+            ]
+        ).T
+        sin_nodes = np.stack(
+            [
+                np.array([0, 1, 1, 1, 1, 1]),
+                np.array(
+                    [
+                        0 + np.pi / 2,
+                        0 + np.pi / 10,
+                        2 * np.pi / 5 + np.pi / 10,
+                        4 * np.pi / 5 + np.pi / 10,
+                        6 * np.pi / 5 + np.pi / 10,
+                        8 * np.pi / 5 + np.pi / 10,
+                    ]
+                ),
+                np.zeros((int((M + 1) * (M + 2) / 2),)),
+            ]
+        ).T
+        np.testing.assert_allclose(cos_grid.nodes, cos_nodes, atol=1e-8)
+        np.testing.assert_allclose(sin_grid.nodes, sin_nodes, atol=1e-8)
+        with pytest.raises(ValueError):
+            tan_grid = ConcentricGrid(
+                M,
+                M,
+                N,
+                NFP,
+                sym=False,
+                axis=True,
+                rotation="tan",
+                node_pattern="linear",
+            )

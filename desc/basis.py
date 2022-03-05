@@ -89,7 +89,12 @@ class Basis(IOAble, ABC):
             Index of given mode numbers.
 
         """
-        return self._idx[L][M][N]
+        try:
+            return self._idx[L][M][N]
+        except KeyError as e:
+            raise ValueError(
+                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+            ) from e
 
     @abstractmethod
     def _get_modes(self):

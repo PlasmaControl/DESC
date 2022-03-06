@@ -363,7 +363,12 @@ class VMECIO:
         chi = file.createVariable("chi", np.float64, ("radius",))
         chi.long_name = "poloidal flux"
         chi.units = "Wb"
-        chi[:] = 2 * Psi * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
+        chi[:] = (
+            2
+            * Psi
+            * signgs[:]
+            * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
+        )
 
         chipf = file.createVariable("chipf", np.float64, ("radius",))
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
@@ -627,10 +632,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
-        bsupumnc[1:, :] = c
+        bsupumnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsupumns[0, :] = 0
-            bsupumns[1:, :] = s
+            bsupumns[1:, :] = s * signgs[:]
         timer.stop("B^theta")
         if verbose > 1:
             timer.disp("B^theta")
@@ -667,10 +672,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupvmnc[0, :] = 0
-        bsupvmnc[1:, :] = c
+        bsupvmnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsupvmns[0, :] = 0
-            bsupvmns[1:, :] = s
+            bsupvmns[1:, :] = s * signgs[:]
         timer.stop("B^zeta")
         if verbose > 1:
             timer.disp("B^zeta")
@@ -753,10 +758,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
-        bsubumnc[1:, :] = c
+        bsubumnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsubumns[0, :] = 0
-            bsubumns[1:, :] = s
+            bsubumns[1:, :] = s * signgs[:]
         timer.stop("B_theta")
         if verbose > 1:
             timer.disp("B_theta")
@@ -793,10 +798,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
-        bsubvmnc[1:, :] = c
+        bsubvmnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsubvmns[0, :] = 0
-            bsubvmns[1:, :] = s
+            bsubvmns[1:, :] = s * signgs[:]
         timer.stop("B_zeta")
         if verbose > 1:
             timer.disp("B_zeta")

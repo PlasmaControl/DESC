@@ -665,7 +665,9 @@ class ConcentricGrid(Grid):
             theta = np.arange(0, 2 * np.pi, dtheta)
             if rotation is False:
                 if self.sym:
-                    offset = dtheta / 3  # avoid symmetry at theta=0, pi
+                    # this is emperically chosen, could be something different, just
+                    # need to avoid symmetry at theta=0, pi
+                    offset = dtheta / 3
                 else:
                     offset = 0
             elif rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry

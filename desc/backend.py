@@ -88,8 +88,7 @@ if use_jax:
 
         """
         return jnp.asarray(arr).at[inds].set(vals)
-      
-      
+
     def sign(x):
         """Sign function, but returns 1 for x==0.
 

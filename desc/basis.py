@@ -79,7 +79,7 @@ class Basis(IOAble, ABC):
         L : int
             Radial mode number.
         M : int
-            Poliodal mode number.
+            Poloidal mode number.
         N : int
             Toroidal mode number.
 

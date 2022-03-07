@@ -20,7 +20,7 @@ from .nonlinear_objectives import (
     PoloidalCurrentDensity,
     ToroidalCurrentDensity,
     QuasisymmetryBoozer,
-    QuasisymmetryFluxFunction,
+    QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
 
@@ -45,6 +45,6 @@ __all__ = [
     "PoloidalCurrentDensity",
     "ToroidalCurrentDensity",
     "QuasisymmetryBoozer",
-    "QuasisymmetryFluxFunction",
+    "QuasisymmetryTwoTerm",
     "QuasisymmetryTripleProduct",
 ]

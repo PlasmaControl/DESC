@@ -2969,7 +2969,7 @@ data_index = {
         + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",
         "units": "T^{3}",
         "units_long": "Tesla cubed",
-        "description": "Flux function quasisymmetry metric",
+        "description": "Two-term quasisymmetry metric",
         "fun": "compute_quasisymmetry_error",
         "dim": 1,
         "R_derivs": [

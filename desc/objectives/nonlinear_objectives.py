@@ -1774,13 +1774,13 @@ class QuasisymmetryBoozer(_Objective):
         return "QS Boozer"
 
 
-class QuasisymmetryFluxFunction(_Objective):
-    """Quasi-symmetry flux function error."""
+class QuasisymmetryTwoTerm(_Objective):
+    """Quasi-symmetry two-term error."""
 
     def __init__(
         self, eq=None, target=0, weight=1, grid=None, helicity=(1, 0), norm=False
     ):
-        """Initialize a QuasisymmetryFluxFunction Objective.
+        """Initialize a QuasisymmetryTwoTerm Objective.
 
         Parameters
         ----------
@@ -1877,7 +1877,7 @@ class QuasisymmetryFluxFunction(_Objective):
         return f
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute quasi-symmetry flux function errors.
+        """Compute quasi-symmetry two-term errors.
 
         Parameters
         ----------
@@ -1902,7 +1902,7 @@ class QuasisymmetryFluxFunction(_Objective):
         return (f - self.target) * self.weight
 
     def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print quasi-symmetry flux function error.
+        """Print quasi-symmetry two-term error.
 
         Parameters
         ----------
@@ -1962,7 +1962,7 @@ class QuasisymmetryFluxFunction(_Objective):
     @property
     def name(self):
         """Name of objective function (str)."""
-        return "QS flux function"
+        return "QS two-term"
 
 
 class QuasisymmetryTripleProduct(_Objective):

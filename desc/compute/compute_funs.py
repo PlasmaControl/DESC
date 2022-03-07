@@ -1972,7 +1972,7 @@ def compute_quasisymmetry_error(
     helicity=(1, 0),
     data=None,
 ):
-    """Compute quasi-symmetry errors.
+    """Compute quasi-symmetry triple product and two-term errors.
 
     f_C computation assumes transform grids are a single flux surface.
 
@@ -2044,7 +2044,7 @@ def compute_quasisymmetry_error(
             data["sqrt(g)"]
         )
 
-    # QS flux function (T^3)
+    # QS two-term (T^3)
     if check_derivs("f_C", R_transform, Z_transform, L_transform):
         data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
             data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]

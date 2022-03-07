@@ -238,15 +238,14 @@ class Optimizer(IOAble):
                         )
 
             print_header_nonlinear()
-            # print_iteration_nonlinear(1, None, allf[0], None, None, None)
             try:
                 result = scipy.optimize.minimize(
                     objective.compute_scalar,
                     x0=x_init,
                     args=args,
                     method=self.method[len("scipy-") :],
-                    jac=objective.grad_x,
-                    hess=objective.hess_x,
+                    jac=objective.grad,
+                    hess=objective.hess,
                     tol=gtol,
                     callback=callback,
                     options={"maxiter": maxiter, "disp": disp, **options},

@@ -9,7 +9,7 @@ from desc.equilibrium import Equilibrium
 class TestProfiles(unittest.TestCase):
     @pytest.mark.slow
     def test_same_result(self):
-        input_path = "examples/DESC/SOLOVEV"
+        input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
         eq1 = Equilibrium(**ir.inputs[-1])

@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.backend import jnp, sign
+from desc.backend import jnp, sign, put
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
@@ -220,10 +220,10 @@ class FourierRZToroidalSurface(Surface):
         for mm, nn, RR, ZZ in zip(m, n, R, Z):
             if RR is not None:
                 idxR = self.R_basis.get_idx(0, mm, nn)
-                self.R_lmn[idxR] = RR
+                self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(0, mm, nn)
-                self.Z_lmn[idxZ] = ZZ
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     def _get_transforms(self, grid=None):
         if grid is None:
@@ -608,10 +608,10 @@ class ZernikeRZToroidalSection(Surface):
         for ll, mm, RR, ZZ in zip(l, m, R, Z):
             if RR is not None:
                 idxR = self.R_basis.get_idx(ll, mm, 0)
-                self.R_lmn[idxR] = RR
+                self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
-                self.Z_lmn[idxZ] = ZZ
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     def _get_transforms(self, grid=None):
         if grid is None:

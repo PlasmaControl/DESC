@@ -663,14 +663,20 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            if self._rotation is False:
-                offset = dtheta / 8
-            elif self._rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
+            if rotation is False:
+                if self.sym:
+                    # this is emperically chosen, could be something different, just
+                    # need to avoid symmetry at theta=0, pi
+                    offset = dtheta / 3
+                else:
+                    offset = 0
+            elif rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
                 offset = 0
-            elif self._rotation in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
+            elif rotation in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
                 offset = dtheta / 4
             else:
-                raise ValueError(f"Unknown rotation type {self.rotation}")
+                raise ValueError(f"Unknown rotation type {rotation}")
+
             theta = (theta + offset) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])

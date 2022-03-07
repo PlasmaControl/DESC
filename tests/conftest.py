@@ -23,42 +23,13 @@ def TmpDir(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def SOLOVEV_dirs(tmpdir_factory):
-    """Get folders to run SOLOVEV in (for benchmark.py)."""
-    input_path = "examples//DESC//SOLOVEV"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
-    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
-    booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-
-    SOLOVEV_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return SOLOVEV_out
-
-
-@pytest.fixture(scope="session")
 def SOLOVEV(tmpdir_factory):
     """Run SOLOVEV example."""
-    input_path = "examples//DESC//SOLOVEV"
+    input_path = ".//tests//inputs//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("SOLOVEV_out.h5")
     desc_nc_path = output_dir.join("SOLOVEV_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_SOLOVEV.nc"
+    vmec_nc_path = ".//tests//inputs//wout_SOLOVEV.nc"
     booz_nc_path = output_dir.join("SOLOVEV_bx.nc")
 
     cwd = os.path.dirname(__file__)
@@ -83,43 +54,13 @@ def SOLOVEV(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def DSHAPE_dirs(tmpdir_factory):
-    """Get DSHAPE dirs (for benchmark.py)."""
-    input_path = "examples//DESC//DSHAPE"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("DSHAPE_out.h5")
-    desc_nc_path = output_dir.join("DSHAPE_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
-    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running DSHAPE test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-
-    DSHAPE_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return DSHAPE_out
-
-
-@pytest.fixture(scope="session")
 def DSHAPE(tmpdir_factory):
     """Run DSHAPE example."""
-    input_path = "examples//DESC//DSHAPE"
+    input_path = ".//tests//inputs//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
     desc_nc_path = output_dir.join("DSHAPE_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_DSHAPE.nc"
+    vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
     booz_nc_path = output_dir.join("DSHAPE_bx.nc")
 
     cwd = os.path.dirname(__file__)
@@ -144,43 +85,13 @@ def DSHAPE(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def HELIOTRON_dirs(tmpdir_factory):
-    """Get HELIOTRON dirs (for benchmark.py)."""
-    input_path = "examples//DESC//HELIOTRON"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("HELIOTRON_out.h5")
-    desc_nc_path = output_dir.join("HELIOTRON_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_HELIOTRON.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running HELIOTRON test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-
-    HELIOTRON_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return HELIOTRON_out
-
-
-@pytest.fixture(scope="session")
 def HELIOTRON(tmpdir_factory):
     """Run HELIOTRON example."""
-    input_path = "examples//DESC//HELIOTRON"
+    input_path = ".//tests//inputs//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
     desc_nc_path = output_dir.join("HELIOTRON_out.nc")
-    vmec_nc_path = "examples//VMEC//wout_HELIOTRON.nc"
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
     booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
 
     cwd = os.path.dirname(__file__)

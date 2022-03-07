@@ -171,11 +171,11 @@ class FourierRZCurve(Curve):
         R = np.broadcast_to(R, n.shape)
         Z = np.broadcast_to(Z, n.shape)
         for nn, RR, ZZ in zip(n, R, Z):
-            idxR = self.R_basis.get_idx(0, 0, nn)
-            idxZ = self.Z_basis.get_idx(0, 0, nn)
             if RR is not None:
+                idxR = self.R_basis.get_idx(0, 0, nn)
                 self.R_n = put(self.R_n, idxR, RR)
             if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
 
     @property

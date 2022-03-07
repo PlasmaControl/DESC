@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.utils import sign
+from desc.backend import sign
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily
@@ -144,7 +144,7 @@ class TestVMECIO(unittest.TestCase):
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
 
-    input_path = "examples//VMEC//wout_SOLOVEV.nc"
+    input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
     eq = VMECIO.load(input_path)
@@ -172,10 +172,14 @@ def test_load_then_save(TmpDir):
 def test_vmec_save(DSHAPE, TmpDir):
     """Tests that saving in NetCDF format agrees with VMEC."""
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    VMECIO.save(eq, str(DSHAPE["desc_nc_path"]), surfs=256, verbose=0)
-    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
     vmec = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
+    eq._solved = True
+    VMECIO.save(
+        eq, str(DSHAPE["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+    )
+    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
 
     # parameters
     assert vmec.variables["version_"][:] == desc.variables["version_"][:]
@@ -247,22 +251,15 @@ def test_vmec_save(DSHAPE, TmpDir):
     )
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
-    sgn = sign(vmec.variables["iotaf"][0]) * sign(desc.variables["iotaf"][0])
-    np.testing.assert_allclose(
-        vmec.variables["iotaf"][:], desc.variables["iotaf"][:] * sgn
-    )
-    np.testing.assert_allclose(
-        vmec.variables["iotas"][:], desc.variables["iotas"][:] * sgn
-    )
+    np.testing.assert_allclose(vmec.variables["iotaf"][:], desc.variables["iotaf"][:])
+    np.testing.assert_allclose(vmec.variables["iotas"][:], desc.variables["iotas"][:])
     np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
     np.testing.assert_allclose(vmec.variables["phips"][:], desc.variables["phips"][:])
     np.testing.assert_allclose(
         vmec.variables["chi"][:], desc.variables["chi"][:], rtol=1e-3, atol=1e-5
     )
-    np.testing.assert_allclose(
-        vmec.variables["chipf"][:], desc.variables["chipf"][:] * sgn
-    )
+    np.testing.assert_allclose(vmec.variables["chipf"][:], desc.variables["chipf"][:])
     np.testing.assert_allclose(
         vmec.variables["Rmajor_p"][:], desc.variables["Rmajor_p"][:]
     )
@@ -374,7 +371,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         sym=False,
     )
     # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=5e-3)
+    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=2e-2)
 
     # B^zeta
     bsupv_vmec = VMECIO.vmec_interpolate(
@@ -397,7 +394,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsupv_vmec, bsupv_desc * sgn, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(bsupv_vmec, bsupv_desc, rtol=1e-3, atol=1e-3)
 
     # TODO: not testing B_psi because VMEC radial derivatives are inaccurate
 
@@ -446,7 +443,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubv_vmec, bsubv_desc * sgn, rtol=1e-3)
+    np.testing.assert_allclose(bsubv_vmec, bsubv_desc, rtol=1e-3)
 
     # TODO: not testing J^theta & J^zeta because VMEC radial derivatives are inaccurate
 

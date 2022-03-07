@@ -21,8 +21,8 @@ Table Of Contents
 
 * `Styleguides <#styleguides>`__
   
-  - `Git Commit Messages <#git-commit-messages>`__
   - `Python <#python-styleguide>`__
+  - `Git Commit Messages <#git-commit-messages>`__
   - `Documentation Styleguide <#documentation-styleguide>`__
 
 
@@ -48,7 +48,7 @@ Reporting Bugs
 How Do I Submit A (Good) Bug Report?
 ------------------------------------
 
-Bugs are tracked as `GitHub issues <https://github.com/DESC/issues/>`__.
+Bugs are tracked as `GitHub issues <https://github.com/PlasmaControl/DESC/issues/>`__.
 
 Explain the problem and include additional details to help maintainers
 reproduce the problem:
@@ -151,9 +151,9 @@ Styleguides
 Python Styleguide
 *****************
 
--  `Follow the PEP8 format <https://www.python.org/dev/peps/pep-0008/>`__
--  Consider an automated linter such as
-   `autopep8 <https://pypi.org/project/autopep8/>`__
+-  `Follow the PEP8 format <https://www.python.org/dev/peps/pep-0008/>`__ where possible
+-  Format code using `black <https://github.com/psf/black>`__ before committing - with formatting, consistency is better than "correctness." We use version ``21.7b0`` (there are small differences between versions). Install with ``pip install "black==21.7b0"``.
+-  -  Use `Numpy Style Docstrings <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html#example-numpy>`__ - see the code for plenty of examples. At a minimum, the docstring should include a description of inputs and outputs, and a short description of what the function or method does. Code snippets showing example usage strongly encouraged.
 -  **Readability** and **usability** are more important than speed 99%
    of the time.
 -  If it takes more than 30 seconds to understand what a line or block
@@ -197,6 +197,12 @@ almost identical to ``numpy``.
 -  If in doubt, ``jnp`` is usually a safe bet.
 -  ``jax.numpy`` is *almost* a drop in replacement for ``numpy``, but
    there are some `subtle and important differences <https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html>`__.
+
+``pytest``
+----------
+
+The testing suite in DESC is based on `pytest <https://docs.pytest.org/>`__, and makes use of several plugins for specialized testing. You can install all the necessary tools with ``pip install -r tests/requirements.txt``. You can run the tests from the root of the repository with ``pytest --mpl --cov`` (It should take 10-15 mins on a standard laptop). The ``--mpl`` flag tells it to also compare the output of plotting functions with saved baseline images in ``tests/baseline/`` using `pytest-mpl <https://pypi.org/project/pytest-mpl/>`__. These baseline images can be regenerated with ``pytest -k plotting --mpl-generate-path=tests/baseline/``. The ``--cov`` flag will tell it to also report how much of the code is covered by tests using `pytest-cov <https://pytest-cov.readthedocs.io/en/latest/>`__. A summary of the coverage is printed to the terminal at the end of the tests, and detailed information is saved to a ``.coverage`` file, which can then be turned into a simple HTML page with ``coverage html``. This will create a ``htmlcov/`` directory in the root of the repository that can be viewed in a browser to see line by line coverage.
+
 
 `Git Commit Messages <https://chris.beams.io/posts/git-commit/>`__
 *******************************************************************

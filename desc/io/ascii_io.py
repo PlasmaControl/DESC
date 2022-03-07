@@ -110,8 +110,9 @@ def read_ascii(filename):
         dictionary of equilibrium parameters.
 
     """
+    from desc.backend import sign
+    from desc.utils import copy_coeffs
     from desc.equilibrium import Equilibrium
-    from desc.utils import copy_coeffs, sign
 
     eq = {}
     f = open(filename, "r")

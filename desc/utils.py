@@ -3,7 +3,8 @@ import warnings
 from termcolor import colored
 from shapely.geometry import Polygon
 
-# Helper Classes -------------------------------------------------------------
+
+# Helper Classes -----------------------------------------------------------------------
 
 
 class Timer:
@@ -195,6 +196,31 @@ Index = _Indexable()
 # Helper Functions -----------------------------------------------------------
 
 
+def unpack_state(x, nR, nZ):
+    """Unpack the state vector x into R_lmn, Z_lmn, L_lmn components.
+    Parameters
+    ----------
+    x : ndarray
+        vector to unpack: x = [cR, cZ, cL]
+    nR : int
+        number of R_lmn coefficients
+    nZ : int
+        number of Z_lmn coefficients
+    Returns
+    -------
+    R_lmn : ndarray
+        spectral coefficients of R
+    Z_lmn : ndarray
+        spectral coefficients of Z
+    L_lmn : ndarray
+        spectral coefficients of lambda
+    """
+    R_lmn = x[:nR]
+    Z_lmn = x[nR : nR + nZ]
+    L_lmn = x[nR + nZ :]
+    return R_lmn, Z_lmn, L_lmn
+
+
 def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
     """Compute area difference between coordinate curves
 
@@ -261,36 +287,8 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
     return area_rho, area_theta
 
 
-def unpack_state(x, nR, nZ):
-    """Unpack the state vector x into R_lmn, Z_lmn, L_lmn components.
-
-    Parameters
-    ----------
-    x : ndarray
-        vector to unpack: x = [cR, cZ, cL]
-    nR : int
-        number of R_lmn coefficients
-    nZ : int
-        number of Z_lmn coefficients
-
-    Returns
-    -------
-    R_lmn : ndarray
-        spectral coefficients of R
-    Z_lmn : ndarray
-        spectral coefficients of Z
-    L_lmn : ndarray
-        spectral coefficients of lambda
-
-    """
-    R_lmn = x[:nR]
-    Z_lmn = x[nR : nR + nZ]
-    L_lmn = x[nR + nZ :]
-    return R_lmn, Z_lmn, L_lmn
-
-
 def equals(a, b):
-    """Compare (possibly nested) objects, such as dicts and lists
+    """Compare (possibly nested) objects, such as dicts and lists.
 
     Parameters
     ----------
@@ -421,28 +419,8 @@ def islinspaced(x, axis=-1, tol=1e-12):
     return np.all(np.diff(x, axis=axis).std() < tol)
 
 
-def sign(x):
-    """Sign function, but returns 1 for x==0.
-
-    Parameters
-    ----------
-    x : array-like
-        array of input values
-
-    Returns
-    -------
-    y : array-like
-        1 where x>=0, -1 where x<0
-
-    """
-    x = np.atleast_1d(x)
-    y = np.where(x == 0, 1, np.sign(x))
-    return y
-
-
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-
     modes_old, modes_new = np.atleast_1d(modes_old), np.atleast_1d(modes_new)
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))

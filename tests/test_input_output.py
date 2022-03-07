@@ -10,9 +10,9 @@ from desc.io import InputReader, load
 from desc.io import hdf5Writer, hdf5Reader
 from desc.io.ascii_io import write_ascii, read_ascii
 from desc.utils import equals
-from desc.transform import Transform
-from desc.basis import FourierZernikeBasis
 from desc.grid import LinearGrid
+from desc.basis import FourierZernikeBasis
+from desc.transform import Transform
 
 
 def test_vmec_input(tmpdir_factory):
@@ -245,7 +245,9 @@ def test_ascii_io(plot_eq, tmpdir_factory):
     eq1 = plot_eq
     write_ascii(tmp_path, eq1)
     eq2 = read_ascii(tmp_path)
-    assert np.allclose(eq1.x, eq2.x)
+    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq1.L_lmn, eq2.L_lmn)
 
 
 def test_copy():

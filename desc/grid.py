@@ -1,5 +1,4 @@
 import numpy as np
-from termcolor import colored
 
 from desc.io import IOAble
 from scipy import special
@@ -8,7 +7,7 @@ __all__ = ["Grid", "LinearGrid", "QuadratureGrid", "ConcentricGrid"]
 
 
 class Grid(IOAble):
-    """Base class for collocation grids
+    """Base class for collocation grids.
 
     Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
     to pass in a custom set of collocation nodes.
@@ -54,29 +53,28 @@ class Grid(IOAble):
         self._scale_weights()
 
     def _enforce_symmetry(self):
-        """Enforces stellarator symmetry"""
+        """Enforces stellarator symmetry."""
         if self.sym:  # remove nodes with theta > pi
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
             self._weights = np.delete(self.weights, non_sym_idx, axis=0)
 
     def _sort_nodes(self):
-        """Sorts nodes for use with FFT"""
-
+        """Sort nodes for use with FFT."""
         sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
         self._nodes = self.nodes[sort_idx]
         self._weights = self.weights[sort_idx]
 
     def _find_axis(self):
-        """Finds indices of axis nodes"""
+        """Find indices of axis nodes."""
         self._axis = np.where(self.nodes[:, 0] == 0)[0]
 
     def _scale_weights(self):
-        """Scales weights to sum to full volume and reduces weights for duplicated nodes"""
-
+        """Scale weights to sum to full volume."""
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
         nodes[:, 2] %= 2 * np.pi / self.NFP
+        # reduce weights for duplicated nodes
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
         )
@@ -84,7 +82,7 @@ class Grid(IOAble):
         self._weights *= 4 * np.pi ** 2 / self._weights.sum()
 
     def _create_nodes(self, nodes):
-        """Allows for custom node creation
+        """Allow for custom node creation.
 
         Parameters
         ----------
@@ -107,32 +105,32 @@ class Grid(IOAble):
 
     @property
     def L(self):
-        """int: radial grid resolution"""
+        """int: Radial grid resolution."""
         return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
-        """int: poloidal grid resolution"""
+        """int: Poloidal grid resolution."""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """int: toroidal grid resolution"""
+        """int: Toroidal grid resolution."""
         return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
-        """int: number of field periods"""
+        """int: Number of (toroidal) field periods."""
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
-        """bool: True for stellarator symmetry, False otherwise"""
+        """bool: True for stellarator symmetry, False otherwise."""
         return self.__dict__.setdefault("_sym", False)
 
     @property
     def nodes(self):
-        """ndarray: node coordinates, in (rho,theta,zeta)"""
+        """ndarray: Node coordinates, in (rho,theta,zeta)."""
         return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
     @nodes.setter
@@ -141,7 +139,7 @@ class Grid(IOAble):
 
     @property
     def weights(self):
-        """ndarray: weight for each node, either exact quadrature or volume based"""
+        """ndarray: Weight for each node, either exact quadrature or volume based."""
         return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
 
     @weights.setter
@@ -150,21 +148,21 @@ class Grid(IOAble):
 
     @property
     def num_nodes(self):
-        """int: total number of nodes"""
+        """int: total number of nodes."""
         return self.nodes.shape[0]
 
     @property
     def axis(self):
-        """ndarray: indices of nodes at magnetic axis"""
+        """ndarray: Indices of nodes at magnetic axis."""
         return self.__dict__.setdefault("_axis", np.array([]))
 
     @property
     def node_pattern(self):
-        """str: pattern for placement of nodes in rho,theta,zeta"""
+        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
         return self.__dict__.setdefault("_node_pattern", "custom")
 
     def __repr__(self):
-        """string form of the object"""
+        """str: string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -259,7 +257,7 @@ class LinearGrid(Grid):
         theta=None,
         zeta=None,
     ):
-        """
+        """Create grid nodes and weights.
 
         Parameters
         ----------
@@ -354,7 +352,7 @@ class LinearGrid(Grid):
         return nodes, weights
 
     def change_resolution(self, L, M, N):
-        """Change the resolution of the grid
+        """Change the resolution of the grid.
 
         Parameters
         ----------
@@ -384,7 +382,7 @@ class LinearGrid(Grid):
 
     @property
     def endpoint(self):
-        """bool: whether the grid is made of open or closed intervals"""
+        """bool: Whether the grid is made of open or closed intervals."""
         return self.__dict__.setdefault("_endpoint", False)
 
 
@@ -426,7 +424,7 @@ class QuadratureGrid(Grid):
         # quad grid should already be exact, so we don't scale weights
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
-        """
+        """Create grid nodes and weights.
 
         Parameters
         ----------
@@ -484,7 +482,7 @@ class QuadratureGrid(Grid):
         return nodes, weights
 
     def change_resolution(self, L, M, N):
-        """Change the resolution of the grid
+        """Change the resolution of the grid.
 
         Parameters
         ----------
@@ -507,7 +505,7 @@ class QuadratureGrid(Grid):
 
 
 class ConcentricGrid(Grid):
-    """Grid in which the nodes are arranged in concentric circles
+    """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more
     nodes per flux surface at larger radius. Typically used as the solution grid,
@@ -527,21 +525,34 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
+    rotation : {``'cos'``, ``'sin'``, False}
+        * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
+        * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
+        * ``False`` for no symmetry (Default), rotates halfway between other options
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
         pattern for radial coordinates
 
             * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
             * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-            * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
-              M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+            * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
+              degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
             * ``'ocs'``: optimal concentric sampling to minimize the condition number
               of the resulting transform matrix, for doing inverse transform.
             * ``None`` : linear spacing in r=[0,1]
 
-
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
+    def __init__(
+        self,
+        L,
+        M,
+        N,
+        NFP=1,
+        sym=False,
+        axis=False,
+        rotation=False,
+        node_pattern="jacobi",
+    ):
 
         self._L = L
         self._M = M
@@ -549,6 +560,7 @@ class ConcentricGrid(Grid):
         self._NFP = NFP
         self._sym = sym
         self._axis = axis
+        self._rotation = rotation
         self._node_pattern = node_pattern
 
         self._nodes, self._weights = self._create_nodes(
@@ -557,6 +569,7 @@ class ConcentricGrid(Grid):
             N=self.N,
             NFP=self.NFP,
             axis=self.axis,
+            rotation=self._rotation,
             node_pattern=self.node_pattern,
         )
 
@@ -565,8 +578,10 @@ class ConcentricGrid(Grid):
         self._find_axis()
         self._scale_weights()
 
-    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
-        """
+    def _create_nodes(
+        self, L, M, N, NFP=1, axis=False, rotation=False, node_pattern="jacobi"
+    ):
+        """Create grid nodes and weights.
 
         Parameters
         ----------
@@ -580,15 +595,20 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
+        rotation : {``'cos'``, ``'sin'``, False}
+            * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
+            * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
+            * ``False`` for no symmetry (Default), rotates halfway between other options
         node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
 
                 * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
-                * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of degree
-                M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
-                * ``'ocs'``: optimal concentric sampling to minimize the condition number
-                  of the resulting transform matrix, for doing inverse transform.
+                * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
+                  degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per
+                  surface.
+                * ``'ocs'``: optimal concentric sampling to minimize the condition
+                  number of the resulting transform matrix, for doing inverse transform.
                 * ``None`` : linear spacing in r=[0,1]
 
         Returns
@@ -601,7 +621,7 @@ class ConcentricGrid(Grid):
         """
 
         def ocs(L):
-            # from Ramos-Lopez, et al “Optimal Sampling Patterns for Zernike Polynomials.”
+            # Ramos-Lopez, et al “Optimal Sampling Patterns for Zernike Polynomials.”
             # Applied Mathematics and Computation 274 (February 2016): 247–57.
             # https://doi.org/10.1016/j.amc.2015.11.006.
             j = np.arange(1, L // 2 + 2)
@@ -643,8 +663,20 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            if self.sym:
-                theta = (theta + dtheta / 3) % (2 * np.pi)
+            if rotation is False:
+                if self.sym:
+                    # this is emperically chosen, could be something different, just
+                    # need to avoid symmetry at theta=0, pi
+                    offset = dtheta / 3
+                else:
+                    offset = 0
+            elif rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
+                offset = 0
+            elif rotation in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
+                offset = dtheta / 4
+            else:
+                raise ValueError(f"Unknown rotation type {rotation}")
+            theta = (theta + offset) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)
@@ -672,7 +704,7 @@ class ConcentricGrid(Grid):
         return nodes, weights
 
     def change_resolution(self, L, M, N):
-        """Change the resolution of the grid
+        """Change the resolution of the grid.
 
         Parameters
         ----------
@@ -714,7 +746,8 @@ def dec_to_cf(x, dmax=6):  # pragma: no cover
     x : float
         floating point form of number
     dmax : int
-        maximum iterations (ie, number of coefficients of continued fraction). (Default value = 6)
+        maximum iterations (ie, number of coefficients of continued fraction).
+        (Default value = 6)
 
     Returns
     -------
@@ -756,7 +789,7 @@ def cf_to_dec(cf):  # pragma: no cover
 
 
 def most_rational(a, b):  # pragma: no cover
-    """Compute the most rational number in the range [a,b]
+    """Compute the most rational number in the range [a,b].
 
     Parameters
     ----------

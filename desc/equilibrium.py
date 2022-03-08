@@ -574,8 +574,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         Parameters
         ----------
-        inputs, inputs_prev : dict
-            Dictionary of continuation parameters for next step.
+        inputs : dict
+             Dictionary of continuation parameters for next step.
         equil : Equilibrium
             Equilibrium being perturbed.
 
@@ -839,17 +839,3 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria.insert(i, new_item)
-
-    def __slice__(self, idx):
-        if idx is None:
-            theslice = slice(None, None)
-        elif isinstance(idx, int):
-            theslice = idx
-        elif isinstance(idx, list):
-            try:
-                theslice = slice(idx[0], idx[1], idx[2])
-            except IndexError:
-                theslice = slice(idx[0], idx[1])
-        else:
-            raise TypeError("index is not a valid type.")
-        return theslice

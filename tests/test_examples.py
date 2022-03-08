@@ -1,5 +1,4 @@
 import numpy as np
-
 from desc.equilibrium import EquilibriaFamily
 from desc.vmec import VMECIO
 

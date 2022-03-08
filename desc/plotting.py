@@ -165,12 +165,12 @@ def _get_grid(**kwargs):
     Parameters
     ----------
     kwargs
-        Any arguments taken by LinearGrid.
+         Any arguments taken by LinearGrid.
 
     Returns
     -------
-    LinearGrid
-        Grid of coordinates to evaluate at.
+    grid : LinearGrid
+         Grid of coordinates to evaluate at.
 
     """
     grid_args = {
@@ -200,9 +200,11 @@ def _get_plot_axes(grid):
     ----------
     grid : Grid
         Grid of coordinates to evaluate at.
+
     Returns
     -------
-    tuple
+    axes : tuple of int
+        Which axes of the grid are being plotted.
 
     """
     plot_axes = [0, 1, 2]
@@ -289,9 +291,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     lmn = np.array([], dtype=int)
@@ -334,7 +336,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
+def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     """Plot 1D profiles.
 
     Parameters
@@ -1336,14 +1338,14 @@ def plot_grid(grid, **kwargs):
     Parameters
     ----------
     grid : Grid
-        grid to plot
+        Grid to plot.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        handle to the figure used for plotting
-    ax : matplotlib.axes.Axes
-        handle to the axis used for plotting
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
 
     """
     fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
@@ -1408,11 +1410,11 @@ def plot_basis(basis, **kwargs):
 
     Returns
     -------
-    fig : matplotlib.figure
-        handle to figure
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
-        axes used for plotting. A single axis is used for 1d basis functions,
-        2d or 3d bases return an ndarray or dict of axes
+        Axes used for plotting. A single axis is used for 1d basis functions,
+        2d or 3d bases return an ndarray or dict of axes.
 
     """
     if basis.__class__.__name__ == "PowerSeries":
@@ -1790,38 +1792,46 @@ def plot_logo(savepath=None, **kwargs):
 
 
 def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **kwargs):
-    """Traces field lines on specified flux surface at specified initial vartheta (:math:`\\vartheta`) seed locations, then plots them.
-    Field lines traced by first finding the corresponding straight-field-line (SFL) coordinates :math:`(\\rho,\\vartheta,\phi)` for each field line, then converting those to the computational
-    :math:`(\\rho,\\theta,\phi)` coordiantes, then finally computing from those the toroidal :math:`(R,\phi,Z)` coordinates of each field line.
+    """Plots field lines on specified flux surface.
+
+    Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
+    locations, then plots them.
+    Field lines traced by first finding the corresponding straight-field-line (SFL)
+    coordinates :math:`(\\rho,\\vartheta,\\phi)` for each field line, then
+    converting those to the computational :math:`(\\rho,\\theta,\\phi)` coordinates,
+    then finally computing from those the toroidal :math:`(R,\\phi,Z)` coordinates of
+    each field line.
+
     The SFL angle coordinates are found with the SFL relation:
 
-        :math:`\\vartheta = \iota \phi + \\vartheta_0`
+        :math:`\\vartheta = \\iota \\phi + \\vartheta_0`
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     rho : float
-        flux surface to trace field lines at
+        Flux surface to trace field lines at.
     seed_thetas : float or array-like of floats
-        theta positions at which to seed magnetic field lines, if array-like, will plot multiple field lines
+        Poloidal positions at which to seed magnetic field lines.
+        If array-like, will plot multiple field lines.
     phi_end: float
-        phi to integrate field line until, in radians. Default is 2*pi
+        Toroidal angle to integrate field line until, in radians. Default is 2*pi.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
     field_line_coords : dict
-        dict containing the R,phi,Z coordinates of each field line traced. Dictionary entries are lists
-        corresponding to the field lines for each seed_theta given. Also contains the scipy IVP solutions for info
-        on how each line was integarted
-
+        Dict containing the R,phi,Z coordinates of each field line traced.
+        Dictionary entries are lists corresponding to the field lines for
+        each seed_theta given. Also contains the scipy IVP solutions for info
+        on how each line was integrated
 
     """
     if rho == 0:
@@ -1940,13 +1950,13 @@ def plot_field_lines_real_space(
     Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then integrating the field line
     from phi=0 up to the specified phi angle, by solving:
 
-    :math:`\\frac{dR}{d\phi} = \\frac{RB_R}{B_{\phi}} , \\frac{dZ}{d\phi} = \\frac{RB_Z}{B_{\phi}}`
+    :math:`\\frac{dR}{d\\phi} = \\frac{RB_R}{B_{\\phi}} , \\frac{dZ}{d\\phi} = \\frac{RB_Z}{B_{\\phi}}`
 
-    :math:`B_R = \mathbf{B} \cdot \hat{\mathbf{R}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{R}} = B^{\\theta} \\frac{\partial R}{\partial \\theta} + B^{\zeta} \\frac{\partial R}{\partial \zeta}`
+    :math:`B_R = \\mathbf{B} \\cdot \\hat{\\mathbf{R}} = (B^{\\theta} \\mathbf{e}_{\\theta} + B^{\\zeta} \\mathbf{e}_{\\zeta}) \\cdot \\hat{\\mathbf{R}} = B^{\\theta} \\frac{\\partial R}{\\partial \\theta} + B^{\\zeta} \\frac{\\partial R}{\\partial \\zeta}`
 
-    :math:`B_Z = \mathbf{B} \cdot \hat{\mathbf{Z}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{Z}} = B^{\\theta} \\frac{\partial Z}{\partial \\theta} + B^{\zeta} \\frac{\partial Z}{\partial \zeta}`
+    :math:`B_Z = \\mathbf{B} \\cdot \\hat{\\mathbf{Z}} = (B^{\\theta} \\mathbf{e}_{\\theta} + B^{\\zeta} \\mathbf{e}_{\\zeta}) \\cdot \\hat{\\mathbf{Z}} = B^{\\theta} \\frac{\\partial Z}{\\partial \\theta} + B^{\\zeta} \\frac{\\partial Z}{\\partial \\zeta}`
 
-    :math:`B_{\phi} = \mathbf{B} \cdot \hat{\mathbf{\phi}} = R B^{\zeta}`
+    :math:`B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\mathbf{\\phi}} = R B^{\\zeta}`
 
     Parameters
     ----------

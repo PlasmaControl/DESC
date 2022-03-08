@@ -701,7 +701,7 @@ class InputReader:
                 warnings.warn(
                     colored("Using poloidal flux instead of toroidal flux!", "yellow")
                 )
-            match = re.search("LASYM\s*=\s*[TF]", command, re.IGNORECASE)
+            match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
                 if re.search(r"T", match.group(0), re.IGNORECASE):
                     desc_file.write("sym = 0\n")
@@ -869,9 +869,9 @@ class InputReader:
             match = re.search(
                 r"RBS\(\s*"
                 + num_form
-                + "\s*,\s*"
+                + r"\s*,\s*"
                 + num_form
-                + "\s*\)\s*=\s*"
+                + r"\s*\)\s*=\s*"
                 + num_form,
                 command,
                 re.IGNORECASE,
@@ -913,9 +913,9 @@ class InputReader:
             match = re.search(
                 r"RBC\(\s*"
                 + num_form
-                + "\s*,\s*"
+                + r"\s*,\s*"
                 + num_form
-                + "\s*\)\s*=\s*"
+                + r"\s*\)\s*=\s*"
                 + num_form,
                 command,
                 re.IGNORECASE,
@@ -957,9 +957,9 @@ class InputReader:
             match = re.search(
                 r"ZBS\(\s*"
                 + num_form
-                + "\s*,\s*"
+                + r"\s*,\s*"
                 + num_form
-                + "\s*\)\s*=\s*"
+                + r"\s*\)\s*=\s*"
                 + num_form,
                 command,
                 re.IGNORECASE,
@@ -1001,9 +1001,9 @@ class InputReader:
             match = re.search(
                 r"ZBC\(\s*"
                 + num_form
-                + "\s*,\s*"
+                + r"\s*,\s*"
                 + num_form
-                + "\s*\)\s*=\s*"
+                + r"\s*\)\s*=\s*"
                 + num_form,
                 command,
                 re.IGNORECASE,

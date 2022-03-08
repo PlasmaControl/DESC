@@ -150,7 +150,7 @@ class Equilibrium(_Configuration, IOAble):
         self.optimizer_results = {}
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -556,17 +556,17 @@ class Equilibrium(_Configuration, IOAble):
         Parameters
         ----------
         ftol : float
-            relative stopping tolerance on objective function value
+            Relative stopping tolerance on objective function value.
         xtol : float
-            stopping tolerance on step size
+            Stopping tolerance on step size.
         gtol : float
-            stopping tolerance on norm of gradient
+            Stopping tolerance on norm of gradient.
         verbose : int
-            level of output
+            Level of output.
         maxiter : int
-            maximum number of solver steps
+            Maximum number of solver steps.
         options : dict
-            dictionary of additional options to pass to optimizer
+            Dictionary of additional options to pass to optimizer.
 
         """
         if self.optimizer is None or self.objective is None:
@@ -736,20 +736,20 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self.inputs = inputs
 
     @staticmethod
-    def _format_deltas(inputs, inputs_prev, equil):
+    def _format_deltas(inputs, equil):
         """Format the changes in continuation parameters.
 
         Parameters
         ----------
-        inputs, inputs_prev : dict
-            dictionaries of continuation parameters for current and  previous step
+        inputs : dict
+             Dictionary of continuation parameters for next step.
         equil : Equilibrium
-            equilibrium being perturbed
+            Equilibrium being perturbed.
 
         Returns
         -------
         deltas : dict
-            dictionary of delta values to be passed to equil.perturb
+             Dictionary of changes in parameter values.
 
         """
         deltas = {}
@@ -793,8 +793,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dp"] = p_l - equil.p_l
         if not np.allclose(i_l, equil.i_l):
             deltas["di"] = i_l - equil.i_l
-        if not np.allclose(inputs["Psi"], inputs_prev["Psi"]):
-            deltas["dPsi"] = inputs["Psi"] - inputs_prev["Psi"]
+        if not np.allclose(inputs["Psi"], equil.Psi):
+            deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
 
     def _print_iteration(self, ii, equil):
@@ -880,9 +880,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self._print_iteration(ii, equil)
 
                 # figure out if we we need perturbations
-                deltas = self._format_deltas(
-                    self.inputs[ii], self.inputs[ii - 1], equil
-                )
+                deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
                     equil.build(verbose)
@@ -990,6 +988,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         self._equilibria = list(equil)
 
     # dunder methods required by MutableSequence
+
     def __getitem__(self, i):
         return self._equilibria[i]
 
@@ -1012,17 +1011,3 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )
         self._equilibria.insert(i, new_item)
-
-    def __slice__(self, idx):
-        if idx is None:
-            theslice = slice(None, None)
-        elif isinstance(idx, int):
-            theslice = idx
-        elif isinstance(idx, list):
-            try:
-                theslice = slice(idx[0], idx[1], idx[2])
-            except IndexError:
-                theslice = slice(idx[0], idx[1])
-        else:
-            raise TypeError("index is not a valid type.")
-        return theslice

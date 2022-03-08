@@ -1,6 +1,4 @@
 import numpy as np
-from netCDF4 import Dataset
-import pytest
 from desc.equilibrium import EquilibriaFamily
 from desc.vmec import VMECIO
 

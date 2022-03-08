@@ -127,7 +127,7 @@ class ObjectiveFunction(IOAble):
             self._Z = np.eye(self._dim_y)
             self._dim_x = self._dim_y
 
-    def _set_derivatives(self, use_jit=True, block_size="auto"):
+    def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
 
         Parameters
@@ -141,15 +141,11 @@ class ObjectiveFunction(IOAble):
             self.compute_scalar,
             mode="hess",
             use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_x, self._dim_x),
         )
         self._jac = Derivative(
             self.compute,
             mode="fwd",
             use_jit=use_jit,
-            block_size=block_size,
-            shape=(self._dim_f, self._dim_x),
         )
 
         if use_jit:
@@ -626,7 +622,7 @@ class _Objective(IOAble, ABC):
         self._dimensions["i_l"] = eq.iota.params.size
         self._dimensions["Psi"] = 1
 
-    def _set_derivatives(self, use_jit=True, block_size="auto"):
+    def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {}
         self._scalar_derivatives = {}
@@ -653,16 +649,12 @@ class _Objective(IOAble, ABC):
                     argnum=self.args.index(arg),
                     mode="fwd",
                     use_jit=use_jit,
-                    block_size=block_size,
-                    shape=(self.dim_f, self.dimensions[arg]),
                 )
                 self._scalar_derivatives[arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
                     mode="fwd",
                     use_jit=use_jit,
-                    block_size=block_size,
-                    shape=(self.dim_f, self.dimensions[arg]),
                 )
                 if self.linear:  # linear objectives have constant derivatives
                     self._derivatives[arg] = self._derivatives[arg].compute(*args)

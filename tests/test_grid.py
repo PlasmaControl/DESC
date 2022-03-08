@@ -127,10 +127,10 @@ class TestGrid(unittest.TestCase):
         NFP = 1
 
         grid_ansi = ConcentricGrid(
-            M, M, N, NFP, sym=False, axis=True, rotation="cos", node_pattern="linear"
+            M, M, N, NFP, sym=False, axis=True, node_pattern="linear"
         )
         grid_fringe = ConcentricGrid(
-            2 * M, M, N, NFP, sym=True, axis=True, rotation="cos", node_pattern="linear"
+            2 * M, M, N, NFP, sym=True, axis=True, node_pattern="linear"
         )
 
         ansi_nodes = np.stack(
@@ -163,12 +163,12 @@ class TestGrid(unittest.TestCase):
                 ),
                 np.array(
                     [
-                        0,
-                        0,
-                        2 * np.pi / 3,
-                        0,
-                        2 * np.pi / 5,
-                        4 * np.pi / 5,
+                        2 / 3 * np.pi,
+                        2 / 3 * np.pi / 3,
+                        2 * np.pi / 3 + 2 / 3 * np.pi / 3,
+                        2 / 3 * np.pi / 5,
+                        2 * np.pi / 5 + 2 / 3 * np.pi / 5,
+                        4 * np.pi / 5 + 2 / 3 * np.pi / 5,
                     ]
                 ),
                 np.zeros((6,)),
@@ -179,10 +179,6 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
 
         self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
-
-    def test_concentric_grid_rotation(self):
-        # TODO: add test for rotation = {"cos", "sin", False}
-        pass
 
     def test_quadrature_grid(self):
 

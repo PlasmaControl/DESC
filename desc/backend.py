@@ -107,24 +107,6 @@ if use_jax:
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
-    def sign(x):
-        """Sign function, but returns 1 for x==0.
-
-        Parameters
-        ----------
-        x : array-like
-            array of input values
-
-        Returns
-        -------
-        y : array-like
-            1 where x>=0, -1 where x<0
-
-        """
-        x = jnp.atleast_1d(x)
-        y = jnp.where(x == 0, 1, jnp.sign(x))
-        return y
-
 
 else:
     jit = lambda func, *args, **kwargs: func

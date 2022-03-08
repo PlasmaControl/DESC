@@ -1,6 +1,45 @@
 Changelog
 =========
 
+v0.4.13
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.12...v0.4.13>`_
+
+Major Changes
+
+- Updates JAX dependencies to take advantage of new functionality and faster compile times:
+- Minimum ``jax`` version is now 0.2.11
+- Minimum ``jaxlib`` version is now 0.1.69
+- Pressure and Iota perturbations now weight mode numbers by ``L**2 + M**2`` to avoid high frequency noise.
+- Custom weighting also allowed by passing ``weights`` array to ``perturb`` functions
+- Refactor ``basis.get_idx`` to use a lookup table rather than ``np.where``. This means it works under JIT and AD, but only allows scalar inputs. To get multiple indices, call the method multiple times
+- ``ConcentricGrid`` now accepts a rotation argument to rotate the grid for either ``'sin'`` or ``'cos'`` symmetry, or ``False`` for no symmetry. This is independent of the ``sym`` argument, which eliminates nodes with theta > pi.
+- Derivative operators for spline based profile and magnetic field classes are now precomputed, giving roughly 30-40% speedup in evaluation.
+
+Bug Fixes
+
+- Fixed a bug where some properties were not copied correctly when doing ``obj.copy(deepcopy=True)``
+- Fixed sign convention on poloidal quantities when saving to VMEC format
+- Fixed bugs in ``Curve`` and ``Surface`` that would fail when setting coefficients in JAX arrays
+
+Testing
+
+- Add tests for Heliotron example
+- Adds timing benchmarks for standard equilibrium solves 
+
+Examples
+
+- Fix sign convention issue with Heliotron boundary modes to be consistent with VMEC
+- Add example for Simsopt QA stellarator from A. Bader et al. 2021
+
+Miscellaneous
+
+- renamed ``opsindex`` to ``Index`` for consistency with JAX
+- Move ``sign`` function from ``utils`` to ``backend``, as it now needs JAX
+- lots of minor formatting changes in docstrings
+
+
 v0.4.12
 #######
 

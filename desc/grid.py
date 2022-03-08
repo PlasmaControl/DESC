@@ -677,6 +677,7 @@ class ConcentricGrid(Grid):
                 offset = dtheta / 4
             else:
                 raise ValueError(f"Unknown rotation type {rotation}")
+
             theta = (theta + offset) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])

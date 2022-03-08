@@ -10,7 +10,7 @@ del get_versions
 
 colorama.init()
 
-_BANNER = """
+_BANNER = r"""
  ____  ____  _____   ___ 
 |  _ \| ___|/  ___|/ ___|
 | | \ | |_  | (__ | |

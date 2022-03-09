@@ -20,6 +20,9 @@ from .objective_funs import _Objective
 class FixedBoundaryR(_Objective):
     """Fixes boundary R coefficients."""
 
+    _scalar = False
+    _linear = True
+
     def __init__(
         self,
         eq=None,
@@ -27,6 +30,7 @@ class FixedBoundaryR(_Objective):
         weight=1,
         surface=None,
         modes=True,
+        name="fixed-boundary R",
     ):
         """Initialize a FixedBoundaryR Objective.
 
@@ -46,11 +50,13 @@ class FixedBoundaryR(_Objective):
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
             If True/False uses all/none of the surface modes.
+        name : str
+            Name of the objective function.
 
         """
         self._surface = surface
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -160,24 +166,12 @@ class FixedBoundaryR(_Objective):
         """str: Name of argument corresponding to the target."""
         return "Rb_lmn"
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "fixed-boundary R"
-
 
 class FixedBoundaryZ(_Objective):
     """Fixes boundary Z coefficients."""
+
+    _scalar = False
+    _linear = True
 
     def __init__(
         self,
@@ -186,6 +180,7 @@ class FixedBoundaryZ(_Objective):
         weight=1,
         surface=None,
         modes=True,
+        name="fixed-boundary Z",
     ):
         """Initialize a FixedBoundaryZ Objective.
 
@@ -205,11 +200,13 @@ class FixedBoundaryZ(_Objective):
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
             If True/False uses all/none of the surface modes.
+        name : str
+            Name of the objective function.
 
         """
         self._surface = surface
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -319,24 +316,12 @@ class FixedBoundaryZ(_Objective):
         """str: Name of argument corresponding to the target."""
         return "Zb_lmn"
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "fixed-boundary Z"
-
 
 class FixedPressure(_Objective):
     """Fixes pressure coefficients."""
+
+    _scalar = False
+    _linear = True
 
     def __init__(
         self,
@@ -345,6 +330,7 @@ class FixedPressure(_Objective):
         weight=1,
         profile=None,
         modes=True,
+        name="fixed-pressure",
     ):
         """Initialize a FixedPressure Objective.
 
@@ -364,11 +350,13 @@ class FixedPressure(_Objective):
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
             If True/False uses all/none of the profile modes.
+        name : str
+            Name of the objective function.
 
         """
         self._profile = profile
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -471,24 +459,12 @@ class FixedPressure(_Objective):
         """str: Name of argument corresponding to the target."""
         return "p_l"
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "fixed-pressure"
-
 
 class FixedIota(_Objective):
     """Fixes rotational transform coefficients."""
+
+    _scalar = False
+    _linear = True
 
     def __init__(
         self,
@@ -497,6 +473,7 @@ class FixedIota(_Objective):
         weight=1,
         profile=None,
         modes=True,
+        name="fixed-iota",
     ):
         """Initialize a FixedIota Objective.
 
@@ -516,11 +493,13 @@ class FixedIota(_Objective):
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
             If True/False uses all/none of the profile modes.
+        name : str
+            Name of the objective function.
 
         """
         self._profile = profile
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -623,26 +602,14 @@ class FixedIota(_Objective):
         """str: Name of argument corresponding to the target."""
         return "i_l"
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "fixed-iota"
-
 
 class FixedPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
 
-    def __init__(self, eq=None, target=None, weight=1):
+    _scalar = True
+    _linear = True
+
+    def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
         """Initialize a FixedIota Objective.
 
         Parameters
@@ -653,9 +620,11 @@ class FixedPsi(_Objective):
             Target value(s) of the objective. If None, uses Equilibrium value.
         weight : float, optional
             Weighting to apply to the Objective, relative to other Objectives.
+        name : str
+            Name of the objective function.
 
         """
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -717,26 +686,14 @@ class FixedPsi(_Objective):
         """str: Name of argument corresponding to the target."""
         return "Psi"
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return True
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "fixed-Psi"
-
 
 class LCFSBoundary(_Objective):
     """Boundary condition on the last closed flux surface."""
 
-    def __init__(self, eq=None, target=0, weight=1, surface=None):
+    _scalar = False
+    _linear = True
+
+    def __init__(self, eq=None, target=0, weight=1, surface=None, name="lcfs"):
         """Initialize a LCFSBoundary Objective.
 
         Parameters
@@ -750,11 +707,13 @@ class LCFSBoundary(_Objective):
             len(weight) must be equal to Objective.dim_f
         surface : FourierRZToroidalSurface, optional
             Toroidal surface containing the Fourier modes to evaluate at.
+        name : str
+            Name of the objective function.
 
         """
         target = 0
         self._surface = surface
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -855,26 +814,16 @@ class LCFSBoundary(_Objective):
         print("Z boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
         return None
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "lcfs"
-
 
 class TargetIota(_Objective):
     """Targets a rotational transform profile."""
 
-    def __init__(self, eq=None, target=0, weight=1, profile=None, grid=None):
+    _scalar = False
+    _linear = True
+
+    def __init__(
+        self, eq=None, target=0, weight=1, profile=None, grid=None, name="target-iota"
+    ):
         """Initialize a TargetIota Objective.
 
         Parameters
@@ -891,11 +840,13 @@ class TargetIota(_Objective):
             Profile containing the radial modes to evaluate at.
         grid : Grid, optional
             Collocation grid containing the nodes to evaluate at.
+        name : str
+            Name of the objective function.
 
         """
         self._profile = profile
         self._grid = grid
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -966,27 +917,15 @@ class TargetIota(_Objective):
         print("Target-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
         return None
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "target-iota"
-
 
 # XXX: this is a hack
 class VMECBoundaryConstraint(_Objective):
     """Constraint to fix a boundary mode in the VMEC double-Fourier basis."""
 
-    def __init__(self, eq=None, target=0, weight=1, mode=(0, 0)):
+    _scalar = False
+    _linear = True
+
+    def __init__(self, eq=None, target=0, weight=1, mode=(0, 0), name="VMEC"):
         """Initialize a VMECBoundaryConstraint Objective.
 
         Parameters
@@ -1000,11 +939,13 @@ class VMECBoundaryConstraint(_Objective):
             len(weight) must be equal to Objective.dim_f
         mode : tuple of int
             mode = (m, n)
+        name : str
+            Name of the objective function.
 
         """
         self._m = mode[0]
         self._n = mode[1]
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1098,18 +1039,3 @@ class VMECBoundaryConstraint(_Objective):
         print("R constraint error: {:10.3e} (m)".format(f[0]))
         print("Z constraint error: {:10.3e} (m)".format(f[1]))
         return None
-
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return True
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "VMEC"

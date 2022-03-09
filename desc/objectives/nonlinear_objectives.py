@@ -26,7 +26,10 @@ from .objective_funs import _Objective
 class Volume(_Objective):
     """Plasma volume."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None):
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="volume"):
         """Initialize a Volume Objective.
 
         Parameters
@@ -41,10 +44,12 @@ class Volume(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -123,26 +128,14 @@ class Volume(_Objective):
         print("Plasma volume: {:10.3e} (m^3)".format(V))
         return None
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return True
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "volume"
-
 
 class AspectRatio(_Objective):
     """Aspect ratio = major radius / minor radius."""
 
-    def __init__(self, eq=None, target=2, weight=1, grid=None):
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
         """Initialize an AspectRatio Objective.
 
         Parameters
@@ -157,10 +150,12 @@ class AspectRatio(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -239,21 +234,6 @@ class AspectRatio(_Objective):
         print("Aspect ratio: {:10.3e} (dimensionless)".format(AR))
         return None
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return True
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "aspect ratio"
-
 
 class Energy(_Objective):
     """MHD energy.
@@ -263,8 +243,10 @@ class Energy(_Objective):
     """
 
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
+    _scalar = True
+    _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0, name="energy"):
         """Initialize an Energy Objective.
 
         Parameters
@@ -281,11 +263,13 @@ class Energy(_Objective):
             Collocation grid containing the nodes to evaluate at.
         gamma : float, optional
             Adiabatic (compressional) index. Default = 0.
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.gamma = gamma
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -415,26 +399,14 @@ class Energy(_Objective):
     def gamma(self, gamma):
         self._gamma = gamma
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return True
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "energy"
-
 
 class ToroidalCurrent(_Objective):
     """Toroidal current encolsed by a surface."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None):
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
         """Initialize a ToroidalCurrent Objective.
 
         Parameters
@@ -449,10 +421,12 @@ class ToroidalCurrent(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : Grid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -566,21 +540,6 @@ class ToroidalCurrent(_Objective):
         print("Toroidal current: {:10.3e} ".format(I) + "(A)")
         return None
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return True
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "toroidal current"
-
 
 # non-scalar nonlinear objectives
 
@@ -593,7 +552,12 @@ class RadialForceBalance(_Objective):
 
     """
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self, eq=None, target=0, weight=1, grid=None, norm=False, name="radial force"
+    ):
         """Initialize a RadialForceBalance Objective.
 
         Parameters
@@ -610,11 +574,13 @@ class RadialForceBalance(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -757,21 +723,6 @@ class RadialForceBalance(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "radial force"
-
 
 class HelicalForceBalance(_Objective):
     """Helical MHD force balance.
@@ -782,7 +733,12 @@ class HelicalForceBalance(_Objective):
 
     """
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self, eq=None, target=0, weight=1, grid=None, norm=False, name="helical force"
+    ):
         """Initialize a HelicalForceBalance Objective.
 
         Parameters
@@ -799,11 +755,13 @@ class HelicalForceBalance(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -945,26 +903,22 @@ class HelicalForceBalance(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "helical force"
-
 
 class RadialCurrentDensity(_Objective):
     """Radial current density."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        norm=False,
+        name="radial current density",
+    ):
         """Initialize a RadialCurrentDensity Objective.
 
         Parameters
@@ -981,11 +935,13 @@ class RadialCurrentDensity(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1135,26 +1091,22 @@ class RadialCurrentDensity(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "radial current density"
-
 
 class PoloidalCurrentDensity(_Objective):
     """Poloidal current density."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        norm=False,
+        name="poloidal current",
+    ):
         """Initialize a PoloidalCurrentDensity Objective.
 
         Parameters
@@ -1171,11 +1123,13 @@ class PoloidalCurrentDensity(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1325,26 +1279,22 @@ class PoloidalCurrentDensity(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "poloidal current"
-
 
 class ToroidalCurrentDensity(_Objective):
     """Toroidal current density."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        norm=False,
+        name="toroidal current",
+    ):
         """Initialize a ToroidalCurrentDensity Objective.
 
         Parameters
@@ -1361,11 +1311,13 @@ class ToroidalCurrentDensity(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1515,24 +1467,12 @@ class ToroidalCurrentDensity(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "toroidal current"
-
 
 class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error."""
+
+    _scalar = False
+    _linear = False
 
     def __init__(
         self,
@@ -1544,6 +1484,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         norm=False,
+        name="QS Boozer",
     ):
         """Initialize a QuasisymmetryBoozer Objective.
 
@@ -1567,6 +1508,8 @@ class QuasisymmetryBoozer(_Objective):
             Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
@@ -1574,7 +1517,7 @@ class QuasisymmetryBoozer(_Objective):
         self.M_booz = M_booz
         self.N_booz = N_booz
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1758,27 +1701,22 @@ class QuasisymmetryBoozer(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "QS Boozer"
-
 
 class QuasisymmetryTwoTerm(_Objective):
     """Quasi-symmetry two-term error."""
 
+    _scalar = False
+    _linear = False
+
     def __init__(
-        self, eq=None, target=0, weight=1, grid=None, helicity=(1, 0), norm=False
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        helicity=(1, 0),
+        norm=False,
+        name="QS two-term",
     ):
         """Initialize a QuasisymmetryTwoTerm Objective.
 
@@ -1798,12 +1736,14 @@ class QuasisymmetryTwoTerm(_Objective):
             Type of quasi-symmetry (M, N).
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.helicity = helicity
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1949,26 +1889,22 @@ class QuasisymmetryTwoTerm(_Objective):
     def norm(self, norm):
         self._norm = norm
 
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "QS two-term"
-
 
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error."""
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, norm=False):
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        norm=False,
+        name="QS triple product",
+    ):
         """Initialize a QuasisymmetryTripleProduct Objective.
 
         Parameters
@@ -1985,11 +1921,13 @@ class QuasisymmetryTripleProduct(_Objective):
             Collocation grid containing the nodes to evaluate at.
         norm : bool, optional
             Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
 
         """
         self.grid = grid
         self.norm = norm
-        super().__init__(eq=eq, target=target, weight=weight)
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -2120,18 +2058,3 @@ class QuasisymmetryTripleProduct(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
-
-    @property
-    def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
-        return False
-
-    @property
-    def linear(self):
-        """bool: Whether the objective is a linear function (or nonlinear)."""
-        return False
-
-    @property
-    def name(self):
-        """Name of objective function (str)."""
-        return "QS triple product"

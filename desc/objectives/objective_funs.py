@@ -588,7 +588,7 @@ class _Objective(IOAble, ABC):
 
     _io_attrs_ = ["target", "weight"]
 
-    def __init__(self, eq=None, target=0, weight=1):
+    def __init__(self, eq=None, target=0, weight=1, name=None):
         """Initialize an Objective.
 
         Parameters
@@ -601,10 +601,13 @@ class _Objective(IOAble, ABC):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        name : str
+            Name of the objective function.
 
         """
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
+        self._name = name
         self._built = False
 
         if eq is not None:
@@ -761,16 +764,16 @@ class _Objective(IOAble, ABC):
         return self._dim_f
 
     @property
-    @abstractmethod
     def scalar(self):
         """bool: Whether default "compute" method is a scalar (or vector)."""
+        return self._scalar
 
     @property
-    @abstractmethod
     def linear(self):
         """bool: Whether the objective is a linear function (or nonlinear)."""
+        return self._linear
 
     @property
-    @abstractmethod
     def name(self):
         """Name of objective function (str)."""
+        return self._name

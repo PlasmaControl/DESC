@@ -386,6 +386,10 @@ class _Configuration(IOAble, ABC):
                 Optionally a Curve object may also be supplied for the magnetic axis.
               - Another Equilibrium, whose flux surfaces will be used.
               - File path to a VMEC or DESC equilibrium, which will be loaded and used.
+              - Grid and 2-3 ndarrays, specifying the flux surface locations (R, Z, and
+                optionally lambda) at fixed flux coordinates. All arrays should have the
+                same length. Optionally, an ndarray of shape(k,3) may be passed instead
+                of a grid.
 
         Examples
         --------
@@ -411,11 +415,14 @@ class _Configuration(IOAble, ABC):
 
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
+        Use flux surfaces specified by points:
+
+        >>> equil.set_initial_guess(nodes, R, Z, lambda)
         """
         nargs = len(args)
-        if nargs > 2:
+        if nargs > 4:
             raise ValueError(
-                "set_initial_guess should be called with 0, 1 or 2 arguments."
+                "set_initial_guess should be called with 4 or fewer arguments."
             )
         if nargs == 0:
             if hasattr(self, "_surface"):
@@ -506,6 +513,19 @@ class _Configuration(IOAble, ABC):
                 self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
                 self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
                 self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
+
+            elif nargs > 2:  # assume we got nodes and ndarray of points
+                grid = args[0]
+                R = args[1]
+                self.R_lmn = self._initial_guess_points(grid, R, self.R_basis)
+                Z = args[2]
+                self.Z_lmn = self._initial_guess_points(grid, Z, self.Z_basis)
+                if nargs > 3:
+                    lmbda = args[3]
+                    self.L_lmn = self._initial_guess_points(grid, lmbda, self.L_basis)
+                else:
+                    self.L_lmn = jnp.zeros(self.L_basis.num_modes)
+
             else:
                 raise ValueError(
                     "Can't initialize equilibrium from args {}.".format(args)
@@ -575,6 +595,30 @@ class _Configuration(IOAble, ABC):
         else:
             raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
+        return x_lmn
+
+    def _initial_guess_points(self, nodes, x, x_basis):
+        """Create an initial guess based on locations of flux surfaces in real space
+
+        Parameters
+        ----------
+        nodes : Grid or ndarray, shape(k,3)
+            Locations in flux coordinates where real space coordinates are given.
+        x : ndarray, shape(k,)
+            R, Z or lambda values at specified nodes.
+        x_basis : Basis
+            Spectral basis for x (R, Z or lambda)
+
+        Returns
+        -------
+        x_lmn : ndarray
+            Vector of flux surface coefficients associated with x_basis.
+
+        """
+        if not isinstance(nodes, Grid):
+            nodes = Grid(nodes, sort=False)
+        transform = Transform(nodes, x_basis, build=False, build_pinv=True)
+        x_lmn = transform.fit(x)
         return x_lmn
 
     @property

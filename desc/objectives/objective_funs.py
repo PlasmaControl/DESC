@@ -586,7 +586,7 @@ class ObjectiveFunction(IOAble):
 class _Objective(IOAble, ABC):
     """Objective (or constraint) used in the optimization of an Equilibrium."""
 
-    _io_attrs_ = ["target", "weight"]
+    _io_attrs_ = ["_target", "_weight", "_name"]
 
     def __init__(self, eq=None, target=0, weight=1, name=None):
         """Initialize an Objective.

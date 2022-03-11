@@ -50,6 +50,7 @@ class Volume(_Objective):
         """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Plasma volume: {:10.3e} (m^3)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -90,10 +91,6 @@ class Volume(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn):
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return data["V"]
-
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
 
@@ -110,23 +107,8 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        V = self._compute(R_lmn, Z_lmn)
-        return (jnp.atleast_1d(V) - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, **kwargs):
-        """Print plamsa volume.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-
-        """
-        V = self._compute(R_lmn, Z_lmn)
-        print("Plasma volume: {:10.3e} (m^3)".format(V))
-        return None
+        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        return self._shift_scale(jnp.atleast_1d(data["V"]))
 
 
 class AspectRatio(_Objective):
@@ -156,6 +138,7 @@ class AspectRatio(_Objective):
         """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -196,10 +179,6 @@ class AspectRatio(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn):
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return data["R0/a"]
-
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute aspect ratio.
 
@@ -216,23 +195,8 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        AR = self._compute(R_lmn, Z_lmn)
-        return (jnp.atleast_1d(AR) - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, **kwargs):
-        """Print aspect ratio.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-
-        """
-        AR = self._compute(R_lmn, Z_lmn)
-        print("Aspect ratio: {:10.3e} (dimensionless)".format(AR))
-        return None
+        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        return self._shift_scale(jnp.atleast_1d(data["R0/a"]))
 
 
 class Energy(_Objective):
@@ -270,6 +234,7 @@ class Energy(_Objective):
         self.grid = grid
         self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Total MHD energy: {:10.3e} (J)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -319,20 +284,7 @@ class Energy(_Objective):
         self._built = True
 
     def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_energy(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            p_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._pressure,
-            self._gamma,
-        )
+
         return data["W"], data["W_B"], data["W_p"]
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
@@ -359,36 +311,21 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (jnp.atleast_1d(W) - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Print MHD energy.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        W, W_B, W_p = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        print(
-            "Total MHD energy: {:10.3e}, ".format(W)
-            + "Magnetic Energy: {:10.3e}, ".format(W_B)
-            + "Pressure Energy: {:10.3e} ".format(W_p)
-            + "(J)"
+        data = compute_energy(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            p_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._pressure,
+            self._gamma,
         )
-        return None
+        return self._shift_scale(jnp.atleast_1d(data["W"]))
 
     @property
     def gamma(self):
@@ -427,6 +364,7 @@ class ToroidalCurrent(_Objective):
         """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Toroidal current: {:10.3e} (A)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -480,20 +418,6 @@ class ToroidalCurrent(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
-        data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-        )
-        return 2 * np.pi / mu_0 * data["I"]
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute toroidal current.
 
@@ -516,29 +440,19 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A).
 
         """
-        I = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (I - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print toroidal current.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        I = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        print("Toroidal current: {:10.3e} ".format(I) + "(A)")
-        return None
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        I = 2 * np.pi / mu_0 * data["I"]
+        return self._shift_scale(jnp.atleast_1d(I))
 
 
 # non-scalar nonlinear objectives
@@ -581,6 +495,8 @@ class RadialForceBalance(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(N)"
+        self._callback_fmt = "Radial force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -638,28 +554,6 @@ class RadialForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    # FIXME: pre-compute normalization based on initial condition, use averaged (not local) values
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_force_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-        )
-        f = data["F_rho"] * data["|grad(rho)|"]
-        if self.norm:
-            f = f / data["|grad(p)|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-        # XXX: when normalized this has units of m^3 ?
-        return f
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute radial MHD force balance errors.
 
@@ -684,35 +578,27 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Print radial MHD force balance error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        data = compute_force_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+        )
+        f = data["F_rho"] * data["|grad(rho)|"]
         if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(N)"
-        print("Radial force: {:10.3e}, ".format(jnp.linalg.norm(f)) + units)
-        return None
+            # FIXME: pre-compute normalization based on initial condition,
+            # use averaged (not local) values
+            f = f / data["|grad(p)|"]
+        f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -722,6 +608,8 @@ class RadialForceBalance(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(N)"
+        self._callback_fmt = "Radial force: {:10.3e} " + units
 
 
 class HelicalForceBalance(_Objective):
@@ -762,6 +650,8 @@ class HelicalForceBalance(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(N)"
+        self._callback_fmt = "Helical force: {:10.3e}, " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -819,27 +709,6 @@ class HelicalForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        data = compute_force_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-        )
-        f = data["F_beta"] * data["|beta|"]
-        if self.norm:
-            f = f / data["|grad(p)|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-        # XXX: when normalized this has units of m^3 ?
-        return f
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute helical MHD force balance errors.
 
@@ -864,35 +733,25 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
-        """Print helical MHD force balance error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        data = compute_force_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+        )
+        f = data["F_beta"] * data["|beta|"]
         if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(N)"
-        print("Helical force: {:10.3e}, ".format(jnp.linalg.norm(f)) + units)
-        return None
+            f = f / data["|grad(p)|"]
+        f = f * data["sqrt(g)"] * self.grid.weights
+        # XXX: when normalized this has units of m^3 ?
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -902,6 +761,8 @@ class HelicalForceBalance(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(N)"
+        self._callback_fmt = "Helical force: {:10.3e}, " + units
 
 
 class RadialCurrentDensity(_Objective):
@@ -942,6 +803,8 @@ class RadialCurrentDensity(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Radial current: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -997,7 +860,28 @@ class RadialCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute radial current density.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            Radial current at each node (A*m).
+
+        """
         data = compute_contravariant_current_density(
             R_lmn,
             Z_lmn,
@@ -1030,57 +914,7 @@ class RadialCurrentDensity(_Objective):
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
         # XXX: when normalized this has units of m^3 ?
-        return f
-
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute radial current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        f : ndarray
-            Radial current at each node (A*m).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print radial current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(A*m)"
-        print("Radial current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
-        return None
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -1090,6 +924,8 @@ class RadialCurrentDensity(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Radial current: {:10.3e} " + units
 
 
 class PoloidalCurrentDensity(_Objective):
@@ -1130,6 +966,8 @@ class PoloidalCurrentDensity(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Poloidal current: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1185,7 +1023,28 @@ class PoloidalCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute poloidal current density.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            Poloidal current at each node (A*m).
+
+        """
         data = compute_contravariant_current_density(
             R_lmn,
             Z_lmn,
@@ -1218,57 +1077,7 @@ class PoloidalCurrentDensity(_Objective):
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
         # XXX: when normalized this has units of m^3 ?
-        return f
-
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute poloidal current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        f : ndarray
-            Poloidal current at each node (A*m).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print poloidal current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(A*m)"
-        print("Poloidal current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
-        return None
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -1278,6 +1087,8 @@ class PoloidalCurrentDensity(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Poloidal current: {:10.3e} " + units
 
 
 class ToroidalCurrentDensity(_Objective):
@@ -1318,6 +1129,8 @@ class ToroidalCurrentDensity(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Toroidal current: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1373,7 +1186,28 @@ class ToroidalCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute toroidal current density.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            Toroidal current at each node (A*m).
+
+        """
         data = compute_contravariant_current_density(
             R_lmn,
             Z_lmn,
@@ -1406,57 +1240,7 @@ class ToroidalCurrentDensity(_Objective):
             f = f * mu_0 / (B * R ** 2)
         f = f * data["sqrt(g)"] * self.grid.weights
         # XXX: when normalized this has units of m^3 ?
-        return f
-
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Compute toroidal current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        f : ndarray
-            Toroidal current at each node (A*m).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print toroidal current density.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(A*m)"
-        print("Toroidal current: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
-        return None
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -1466,6 +1250,8 @@ class ToroidalCurrentDensity(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(A*m)"
+        self._callback_fmt = "Toroidal current: {:10.3e} " + units
 
 
 class QuasisymmetryBoozer(_Objective):
@@ -1518,6 +1304,14 @@ class QuasisymmetryBoozer(_Objective):
         self.N_booz = N_booz
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(T)"
+        self._callback_fmt = (
+            "Quasi-symmetry ({},{}) Boozer error: ".format(
+                self.helicity[0], self.helicity[1]
+            )
+            + "{:10.3e} "
+            + units
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1609,25 +1403,6 @@ class QuasisymmetryBoozer(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
-        data = compute_boozer_coords(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._B_transform,
-            self._w_transform,
-            self._iota,
-        )
-        b_mn = data["|B|_mn"]
-        if self.norm:
-            b_mn = b_mn / jnp.sqrt(jnp.sum(b_mn ** 2))
-        return b_mn[self._idx]
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
 
@@ -1650,38 +1425,25 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print quasi-symmetry Boozer harmonics error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(T)"
-        print(
-            "Quasi-symmetry ({},{}) Boozer error: {:10.3e} ".format(
-                self.helicity[0], self.helicity[1], jnp.linalg.norm(f)
-            )
-            + units
+        data = compute_boozer_coords(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._B_transform,
+            self._w_transform,
+            self._iota,
         )
-        return None
+        b_mn = data["|B|_mn"]
+        if self.norm:
+            b_mn = b_mn / jnp.sqrt(jnp.sum(b_mn ** 2))
+        b_mn = b_mn[self._idx]
+
+        return self._shift_scale(b_mn)
 
     @property
     def helicity(self):
@@ -1691,6 +1453,15 @@ class QuasisymmetryBoozer(_Objective):
     @helicity.setter
     def helicity(self, helicity):
         self._helicity = helicity
+        if hasattr(self, "_callback_fmt"):
+            units = "(normalized)" if self.norm else "(T)"
+            self._callback_fmt = (
+                "Quasi-symmetry ({},{}) Boozer error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )
 
     @property
     def norm(self):
@@ -1700,6 +1471,15 @@ class QuasisymmetryBoozer(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        if hasattr(self, "_callback_fmt"):
+            units = "(normalized)" if self.norm else "(T)"
+            self._callback_fmt = (
+                "Quasi-symmetry ({},{}) Boozer error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )
 
 
 class QuasisymmetryTwoTerm(_Objective):
@@ -1744,6 +1524,12 @@ class QuasisymmetryTwoTerm(_Objective):
         self.helicity = helicity
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(T^3)"
+        self._callback_fmt = (
+            "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
+            + "{:10.3e} "
+            + units
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1797,25 +1583,6 @@ class QuasisymmetryTwoTerm(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
-        data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._helicity,
-        )
-        f = data["f_C"] * self.grid.weights
-        if self.norm:
-            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            f = f / B ** 3
-        return f
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute quasi-symmetry two-term errors.
 
@@ -1838,38 +1605,23 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print quasi-symmetry two-term error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(T^3)"
-        print(
-            "Quasi-symmetry ({},{}) error: {:10.3e} ".format(
-                self.helicity[0], self.helicity[1], jnp.linalg.norm(f)
-            )
-            + units
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._helicity,
         )
-        return None
+        f = data["f_C"] * self.grid.weights
+        if self.norm:
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f / B ** 3
+        return self._shift_scale(f)
 
     @property
     def helicity(self):
@@ -1879,6 +1631,15 @@ class QuasisymmetryTwoTerm(_Objective):
     @helicity.setter
     def helicity(self, helicity):
         self._helicity = helicity
+        if hasattr(self, "_callback_fmt"):
+            units = "(normalized)" if self.norm else "(T^3)"
+            self._callback_fmt = (
+                "Quasi-symmetry ({},{}) error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )
 
     @property
     def norm(self):
@@ -1888,6 +1649,15 @@ class QuasisymmetryTwoTerm(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        if hasattr(self, "_callback_fmt"):
+            units = "(normalized)" if self.norm else "(T^3)"
+            self._callback_fmt = (
+                "Quasi-symmetry ({},{}) error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )
 
 
 class QuasisymmetryTripleProduct(_Objective):
@@ -1928,6 +1698,8 @@ class QuasisymmetryTripleProduct(_Objective):
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(T^4/m^2)"
+        self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1981,25 +1753,6 @@ class QuasisymmetryTripleProduct(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
-        data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-        )
-        f = data["f_T"] * self.grid.weights
-        if self.norm:
-            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            f = f * R ** 2 / B ** 4
-        return f
-
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
         """Compute quasi-symmetry triple product errors.
 
@@ -2022,33 +1775,23 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
-        return (f - self.target) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
-        """Print quasi-symmetry triple product error.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(R_lmn, Z_lmn, L_lmn, i_l, Psi)
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        f = data["f_T"] * self.grid.weights
         if self.norm:
-            units = "(normalized)"
-        else:
-            units = "(T^4/m^2)"
-        print("Quasi-symmetry error: {:10.3e} ".format(jnp.linalg.norm(f)) + units)
-        return None
+            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
+            f = f * R ** 2 / B ** 4
+        return self._shift_scale(f)
 
     @property
     def norm(self):
@@ -2058,3 +1801,5 @@ class QuasisymmetryTripleProduct(_Objective):
     @norm.setter
     def norm(self, norm):
         self._norm = norm
+        units = "(normalized)" if self.norm else "(T^4/m^2)"
+        self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units

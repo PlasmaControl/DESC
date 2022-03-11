@@ -57,6 +57,7 @@ class FixedBoundaryR(_Objective):
         self._surface = surface
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "R fixed-boundary error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -127,10 +128,6 @@ class FixedBoundaryR(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, Rb_lmn):
-        Rb = Rb_lmn[self._idx] - self.target
-        return Rb
-
     def compute(self, Rb_lmn, **kwargs):
         """Compute fixed-boundary R errors.
 
@@ -145,21 +142,8 @@ class FixedBoundaryR(_Objective):
             Boundary surface errors (m).
 
         """
-        Rb = self._compute(Rb_lmn)
-        return Rb * self.weight
-
-    def callback(self, Rb_lmn, **kwargs):
-        """Print fixed-boundary R errors.
-
-        Parameters
-        ----------
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
-
-        """
-        Rb = self._compute(Rb_lmn)
-        print("R fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Rb)))
-        return None
+        Rb = Rb_lmn[self._idx]
+        return self._shift_scale(Rb)
 
     @property
     def target_arg(self):
@@ -207,6 +191,7 @@ class FixedBoundaryZ(_Objective):
         self._surface = surface
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Z fixed-boundary error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -277,10 +262,6 @@ class FixedBoundaryZ(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, Zb_lmn):
-        Zb = Zb_lmn[self._idx] - self.target
-        return Zb
-
     def compute(self, Zb_lmn, **kwargs):
         """Compute fixed-boundary Z errors.
 
@@ -295,21 +276,8 @@ class FixedBoundaryZ(_Objective):
             Boundary surface errors (m).
 
         """
-        Zb = self._compute(Zb_lmn)
-        return Zb * self.weight
-
-    def callback(self, Zb_lmn, **kwargs):
-        """Print fixed-boundary Z errors.
-
-        Parameters
-        ----------
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
-
-        """
-        Zb = self._compute(Zb_lmn)
-        print("Z fixed-boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
-        return None
+        Zb = Zb_lmn[self._idx]
+        return self._shift_scale(Zb)
 
     @property
     def target_arg(self):
@@ -357,6 +325,7 @@ class FixedPressure(_Objective):
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -422,9 +391,6 @@ class FixedPressure(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, p_l):
-        return p_l[self._idx] - self.target
-
     def compute(self, p_l, **kwargs):
         """Compute fixed-pressure profile errors.
 
@@ -439,20 +405,8 @@ class FixedPressure(_Objective):
             Pressure profile errors (Pa).
 
         """
-        return self._compute(p_l) * self.weight
-
-    def callback(self, p_l, **kwargs):
-        """Print fixed-pressure profile errors.
-
-        Parameters
-        ----------
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
-
-        """
-        f = self._compute(p_l)
-        print("Fixed-pressure profile error: {:10.3e} (Pa)".format(jnp.linalg.norm(f)))
-        return None
+        p = p_l[self._idx]
+        return self._shift_scale(p)
 
     @property
     def target_arg(self):
@@ -500,6 +454,7 @@ class FixedIota(_Objective):
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Fixed-iota profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -565,9 +520,6 @@ class FixedIota(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, i_l):
-        return i_l[self._idx] - self.target
-
     def compute(self, i_l, **kwargs):
         """Compute fixed-iota profile errors.
 
@@ -582,20 +534,8 @@ class FixedIota(_Objective):
             Rotational transform profile errors.
 
         """
-        return self._compute(i_l) * self.weight
-
-    def callback(self, i_l, **kwargs):
-        """Print fixed-iota profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        """
-        f = self._compute(i_l)
-        print("Fixed-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
-        return None
+        i = i_l[self._idx]
+        return self._shift_scale(i)
 
     @property
     def target_arg(self):
@@ -625,6 +565,7 @@ class FixedPsi(_Objective):
 
         """
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -649,9 +590,6 @@ class FixedPsi(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, Psi):
-        return Psi - self.target
-
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.
 
@@ -666,20 +604,7 @@ class FixedPsi(_Objective):
             Total toroidal magnetic flux error (Wb).
 
         """
-        return self._compute(Psi) * self.weight
-
-    def callback(self, Psi, **kwargs):
-        """Print fixed-Psi error.
-
-        Parameters
-        ----------
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        """
-        f = self._compute(Psi)
-        print("Fixed-Psi error: {:10.3e} (Wb)".format(f[0]))
-        return None
+        return self._shift_scale(Psi)
 
     @property
     def target_arg(self):
@@ -714,6 +639,7 @@ class LCFSBoundary(_Objective):
         target = 0
         self._surface = surface
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "R,Z boundary error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -766,11 +692,6 @@ class LCFSBoundary(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn):
-        Rb = jnp.dot(self._A_R, R_lmn) - Rb_lmn
-        Zb = jnp.dot(self._A_Z, Z_lmn) - Zb_lmn
-        return Rb, Zb
-
     def compute(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
         """Compute last closed flux surface boundary errors.
 
@@ -791,28 +712,10 @@ class LCFSBoundary(_Objective):
             Boundary surface errors (m).
 
         """
-        Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        return jnp.concatenate((Rb, Zb)) * self.weight
-
-    def callback(self, R_lmn, Z_lmn, Rb_lmn, Zb_lmn, **kwargs):
-        """Print last closed flux surface boundary errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
-
-        """
-        Rb, Zb = self._compute(R_lmn, Z_lmn, Rb_lmn, Zb_lmn)
-        print("R boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Rb)))
-        print("Z boundary error: {:10.3e} (m)".format(jnp.linalg.norm(Zb)))
-        return None
+        Rb = jnp.dot(self._A_R, R_lmn) - Rb_lmn
+        Zb = jnp.dot(self._A_Z, Z_lmn) - Zb_lmn
+        x = jnp.concatenate((Rb, Zb))
+        return self._shift_scale(x)
 
 
 class TargetIota(_Objective):
@@ -847,6 +750,7 @@ class TargetIota(_Objective):
         self._profile = profile
         self._grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Target-iota profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -884,10 +788,6 @@ class TargetIota(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, i_l):
-        data = compute_rotational_transform(i_l, self._profile)
-        return data["iota"] - self.target
-
     def compute(self, i_l, **kwargs):
         """Compute rotational transform profile errors.
 
@@ -902,20 +802,8 @@ class TargetIota(_Objective):
             Rotational transform profile errors.
 
         """
-        return self._compute(i_l) * self.weight
-
-    def callback(self, i_l, **kwargs):
-        """Print rotational transform profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        """
-        f = self._compute(i_l)
-        print("Target-iota profile error: {:10.3e}".format(jnp.linalg.norm(f)))
-        return None
+        data = compute_rotational_transform(i_l, self._profile)
+        return self._shift_scale(data["iota"])
 
 
 # XXX: this is a hack
@@ -946,6 +834,7 @@ class VMECBoundaryConstraint(_Objective):
         self._m = mode[0]
         self._n = mode[1]
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "R, Z constraint error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1001,11 +890,6 @@ class VMECBoundaryConstraint(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def _compute(self, Rb_lmn, Zb_lmn):
-        Rb = jnp.dot(self._A_R, Rb_lmn)
-        Zb = jnp.dot(self._A_Z, Zb_lmn)
-        return jnp.concatenate((Rb, Zb)) - self.target
-
     def compute(self, Rb_lmn, Zb_lmn, **kwargs):
         """Compute VMEC boundary constraint errors.
 
@@ -1022,20 +906,7 @@ class VMECBoundaryConstraint(_Objective):
             Boundary surface errors (m).
 
         """
-        return self._compute(Rb_lmn, Zb_lmn) * self.weight
-
-    def callback(self, Rb_lmn, Zb_lmn, **kwargs):
-        """Print last closed flux surface boundary errors.
-
-        Parameters
-        ----------
-        Rb_lmn : ndarray
-            Spectral coefficients of Rb(rho,theta,zeta) -- boundary R coordinate (m).
-        Zb_lmn : ndarray
-            Spectral coefficients of Zb(rho,theta,zeta) -- boundary Z coordinate (m).
-
-        """
-        f = self._compute(Rb_lmn, Zb_lmn)
-        print("R constraint error: {:10.3e} (m)".format(f[0]))
-        print("Z constraint error: {:10.3e} (m)".format(f[1]))
-        return None
+        Rb = jnp.dot(self._A_R, Rb_lmn)
+        Zb = jnp.dot(self._A_Z, Zb_lmn)
+        x = jnp.concatenate((Rb, Zb))
+        return self._shift_scale(x)

@@ -3,4 +3,3 @@ sphinx-rtd-theme
 sphinx-argparse 
 nbsphinx >0.8.5
 sphinx_copybutton
-ipython_genutils

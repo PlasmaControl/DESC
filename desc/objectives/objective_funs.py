@@ -605,6 +605,7 @@ class _Objective(IOAble, ABC):
             Name of the objective function.
 
         """
+        assert np.all(np.asarray(weight) > 0)
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
         self._name = name
@@ -739,6 +740,7 @@ class _Objective(IOAble, ABC):
 
     @weight.setter
     def weight(self, weight):
+        assert np.all(np.asarray(weight) > 0)
         self._weight = np.atleast_1d(weight)
         self._check_dimensions()
 

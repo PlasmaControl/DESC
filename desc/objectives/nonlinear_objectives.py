@@ -607,6 +607,7 @@ class RadialForceBalance(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(N)"
         self._callback_fmt = "Radial force: {:10.3e} " + units
@@ -760,6 +761,7 @@ class HelicalForceBalance(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(N)"
         self._callback_fmt = "Helical force: {:10.3e}, " + units
@@ -923,6 +925,7 @@ class RadialCurrentDensity(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(A*m)"
         self._callback_fmt = "Radial current: {:10.3e} " + units
@@ -1086,6 +1089,7 @@ class PoloidalCurrentDensity(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(A*m)"
         self._callback_fmt = "Poloidal current: {:10.3e} " + units
@@ -1249,6 +1253,7 @@ class ToroidalCurrentDensity(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(A*m)"
         self._callback_fmt = "Toroidal current: {:10.3e} " + units
@@ -1452,6 +1457,11 @@ class QuasisymmetryBoozer(_Objective):
 
     @helicity.setter
     def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
         self._helicity = helicity
         if hasattr(self, "_callback_fmt"):
             units = "(normalized)" if self.norm else "(T)"
@@ -1470,6 +1480,7 @@ class QuasisymmetryBoozer(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         if hasattr(self, "_callback_fmt"):
             units = "(normalized)" if self.norm else "(T)"
@@ -1630,6 +1641,11 @@ class QuasisymmetryTwoTerm(_Objective):
 
     @helicity.setter
     def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
         self._helicity = helicity
         if hasattr(self, "_callback_fmt"):
             units = "(normalized)" if self.norm else "(T^3)"
@@ -1648,6 +1664,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         if hasattr(self, "_callback_fmt"):
             units = "(normalized)" if self.norm else "(T^3)"
@@ -1800,6 +1817,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     @norm.setter
     def norm(self, norm):
+        assert norm in [True, False]
         self._norm = norm
         units = "(normalized)" if self.norm else "(T^4/m^2)"
         self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units

@@ -709,9 +709,18 @@ class _Objective(IOAble, ABC):
         """Compute the scalar form of the objective."""
         return jnp.sum(self.compute(*args, **kwargs) ** 2)
 
-    @abstractmethod
-    def callback(self, *args):
-        """Print the value(s) of the objective."""
+    def callback(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(self.compute(*args, **kwargs))
+        print(self._callback_fmt.format(jnp.linalg.norm(x)))
+
+    def _shift_scale(self, x):
+        """Apply target and weighting."""
+        return (x - self.target) * self.weight
+
+    def _unshift_unscale(self, x):
+        """Undo target and weighting."""
+        return x / self.weight + self.target
 
     @property
     def target(self):

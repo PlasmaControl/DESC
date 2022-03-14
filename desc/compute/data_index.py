@@ -2964,6 +2964,14 @@ data_index = {
         "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
         "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
     },
+    "B modes": {
+        "label": "Boozer modes",
+        "units": "",
+        "units_long": "None",
+        "description": "Boozer harmonics",
+        "fun": "compute_boozer_coords",
+        "dim": 1,
+    },
     "f_C": {
         "label": "(\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B - "
         + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",

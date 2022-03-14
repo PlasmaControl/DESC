@@ -37,6 +37,7 @@ class Grid(IOAble):
 
     def __init__(self, nodes, sort=True):
 
+        nodes = np.asarray(nodes)
         self._L = np.unique(nodes[:, 0]).size
         self._M = np.unique(nodes[:, 1]).size
         self._N = np.unique(nodes[:, 2]).size

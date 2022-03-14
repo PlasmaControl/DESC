@@ -15,15 +15,10 @@ from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
 from desc.objectives import (
     ObjectiveFunction,
-    FixedBoundaryR,
-    FixedBoundaryZ,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
-    LCFSBoundary,
     RadialForceBalance,
     HelicalForceBalance,
     Energy,
+    get_fixed_boundary_constraints,
 )
 from desc.perturbations import perturb, optimal_perturb
 
@@ -262,14 +257,7 @@ class Equilibrium(_Configuration, IOAble):
             optimizer = Optimizer("lsq-exact")
         if objective is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = (
-                FixedBoundaryR(),
-                FixedBoundaryZ(),
-                FixedPressure(),
-                FixedIota(),
-                FixedPsi(),
-                LCFSBoundary(),
-            )
+            constraints = get_fixed_boundary_constraints()
             objective = ObjectiveFunction(objectives, constraints)
         if not objective.built:
             objective.build(self, verbose=verbose)
@@ -348,14 +336,7 @@ class Equilibrium(_Configuration, IOAble):
         """
         if objective is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = (
-                FixedBoundaryR(),
-                FixedBoundaryZ(),
-                FixedPressure(),
-                FixedIota(),
-                FixedPsi(),
-                LCFSBoundary(),
-            )
+            constraints = get_fixed_boundary_constraints()
             objective = ObjectiveFunction(objectives, constraints)
 
         eq = perturb(
@@ -427,14 +408,7 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraint is None:
             objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = (
-                FixedBoundaryR(),
-                FixedBoundaryZ(),
-                FixedPressure(),
-                FixedIota(),
-                FixedPsi(),
-                LCFSBoundary(),
-            )
+            constraints = get_fixed_boundary_constraints()
             constraint = ObjectiveFunction(objectives, constraints)
 
         if copy:
@@ -697,14 +671,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 objectives = (RadialForceBalance(), HelicalForceBalance())
             elif self.inputs[ii]["objective"] == "energy":
                 objectives = Energy()
-            constraints = (
-                FixedBoundaryR(),
-                FixedBoundaryZ(),
-                FixedPressure(),
-                FixedIota(),
-                FixedPsi(),
-                LCFSBoundary(),
-            )
+            constraints = get_fixed_boundary_constraints()
             objective = ObjectiveFunction(objectives, constraints)
 
             if ii == start_from:

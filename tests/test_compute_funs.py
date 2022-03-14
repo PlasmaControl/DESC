@@ -13,6 +13,8 @@ from desc.compute import (
     compute_boozer_coords,
 )
 
+# TODO: add tests for compute_geometry
+
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
 FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]

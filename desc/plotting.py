@@ -1069,9 +1069,7 @@ def plot_current(eq, log=False, L=20, M=None, N=None, rho=None, ax=None, **kwarg
     return fig, ax
 
 
-def plot_boozer_modes(
-    eq, log=True, B0=True, num_modes=-1, L=20, rho=None, ax=None, **kwargs
-):
+def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **kwargs):
     """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
     Parameters
@@ -1084,10 +1082,9 @@ def plot_boozer_modes(
         Whether to include the m=n=0 mode.
     num_modes : int, optional
         How many modes to include. Default (-1) is all.
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
+    rho : int or ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at,
+        or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -1100,7 +1097,9 @@ def plot_boozer_modes(
 
     """
     if rho is None:
-        rho = np.linspace(1, 0, num=L, endpoint=False)
+        rho = np.linspace(1, 0, num=20, endpoint=False)
+    elif np.isscalar(rho) and rho > 1:
+        rho = np.linspace(1, 0, num=rho, endpoint=False)
     ds = []
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
@@ -1145,7 +1144,7 @@ def plot_boozer_modes(
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax, ds
+    return fig, ax
 
 
 def plot_boozer_surface(
@@ -1157,12 +1156,12 @@ def plot_boozer_surface(
     ----------
     eq : Equilibrium
         Object from which to plot.
+    grid_compute : Grid, optional
+        grid to use for computing boozer spectrum
+    grid_plot : Grid, optional
+        grid to plot on
     fill : bool, optional
         Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
-    grid_compute :
-
-    grid_plot :
-
     ncontours : int, optional
         Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
@@ -1212,8 +1211,10 @@ def plot_boozer_surface(
     xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
     yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
 
-    im = ax.contourf(xx, yy, data, **contourf_kwargs)
-
+    if fill:
+        im = ax.contourf(xx, yy, data, **contourf_kwargs)
+    else:
+        im = ax.contour(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -1233,7 +1234,6 @@ def plot_qs_error(
     fC=True,
     fT=True,
     helicity=(1, 0),
-    L=20,
     rho=None,
     ax=None,
     **kwargs,
@@ -1254,10 +1254,9 @@ def plot_qs_error(
         Whether to include the triple product QS error.
     helicity : tuple, int
         Type of quasi-symmetry (M, N).
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
+    rho : int or ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at,
+        or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -1270,7 +1269,10 @@ def plot_qs_error(
 
     """
     if rho is None:
-        rho = np.linspace(1, 0, num=L, endpoint=False)
+        rho = np.linspace(1, 0, num=20, endpoint=False)
+    elif np.isscalar(rho) and rho > 1:
+        rho = np.linspace(1, 0, num=rho, endpoint=False)
+
     fig, ax = _format_ax(ax)
 
     data = eq.compute("R0")
@@ -1286,7 +1288,7 @@ def plot_qs_error(
         grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
         if fB:
             data = eq.compute("|B|_mn", grid, data)
-            modes = data["Boozer modes"]
+            modes = data["B modes"]
             idx = np.where((modes[1, :] * helicity[1] != modes[2, :] * helicity[0]))[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
                 np.sum(data["|B|_mn"] ** 2)

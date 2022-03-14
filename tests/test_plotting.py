@@ -14,6 +14,9 @@ from desc.plotting import (
     plot_coefficients,
     _find_idx,
     plot_field_lines_sfl,
+    plot_boozer_modes,
+    plot_boozer_surface,
+    plot_qs_error,
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -335,4 +338,22 @@ def test_plot_field_lines(plot_eq):
     fig, ax, _ = plot_field_lines_sfl(
         plot_eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
     )
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_boozer_modes(plot_eq):
+    fig, ax = plot_boozer_modes(plot_eq)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_boozer_surface(plot_eq):
+    fig, ax = plot_boozer_surface(plot_eq)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_qs_error(plot_eq):
+    fig, ax = plot_qs_error(plot_eq, helicity=(0, 0), log=False)
     return fig

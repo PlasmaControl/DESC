@@ -5,7 +5,8 @@ from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
-from .core import Surface, pol2cartvec
+from .core import Surface
+from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -106,8 +107,8 @@ class FourierRZToroidalSurface(Surface):
         if grid is None:
             grid = LinearGrid(
                 rho=self.rho,
-                M=2 * self.M + 1,
-                N=2 * self.N + 1,
+                M=4 * self.M + 1,
+                N=4 * self.N + 1,
                 endpoint=True,
             )
         self._grid = grid
@@ -258,7 +259,9 @@ class FourierRZToroidalSurface(Surface):
         """Compute gaussian and mean curvature."""
         raise NotImplementedError()
 
-    def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0):
+    def compute_coordinates(
+        self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
+    ):
         """Compute values using specified coefficients.
 
         Parameters
@@ -270,12 +273,15 @@ class FourierRZToroidalSurface(Surface):
             If an integer, assumes that many linearly spaced points in (0,2pi)
         dt, dz: int
             derivative order to compute in theta, zeta
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
 
         Returns
         -------
         values : ndarray, shape(k,3)
-            R, phi, Z coordinates of the surface at points specified in grid
+            R, phi, Z or x, y, z coordinates of the surface at points specified in grid
         """
+        assert basis.lower() in ["rpz", "xyz"]
         if R_lmn is None:
             R_lmn = self.R_lmn
         if Z_lmn is None:
@@ -286,14 +292,14 @@ class FourierRZToroidalSurface(Surface):
             R = R_transform.transform(R_lmn, dt=dt, dz=0)
             Z = Z_transform.transform(Z_lmn, dt=dt, dz=0)
             phi = R_transform.grid.nodes[:, 2] * (dt == 0)
-            return jnp.stack([R, phi, Z], axis=1)
-        if dz == 1:
+            coords = jnp.stack([R, phi, Z], axis=1)
+        elif dz == 1:
             R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
             dR = R_transform.transform(R_lmn, dt=dt, dz=1)
             dZ = Z_transform.transform(Z_lmn, dt=dt, dz=1)
             dphi = R0 * (dt == 0)
-            return jnp.stack([dR, dphi, dZ], axis=1)
-        if dz == 2:
+            coords = jnp.stack([dR, dphi, dZ], axis=1)
+        elif dz == 2:
             R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
             dR = R_transform.transform(R_lmn, dt=dt, dz=1)
             d2R = R_transform.transform(R_lmn, dt=dt, dz=2)
@@ -302,8 +308,8 @@ class FourierRZToroidalSurface(Surface):
             Z = d2Z
             # 2nd derivative wrt to phi = 0
             phi = 2 * dR * (dt == 0)
-            return jnp.stack([R, phi, Z], axis=1)
-        if dz == 3:
+            coords = jnp.stack([R, phi, Z], axis=1)
+        elif dz == 3:
             R0 = R_transform.transform(R_lmn, dt=dt, dz=0)
             dR = R_transform.transform(R_lmn, dt=dt, dz=1)
             d2R = R_transform.transform(R_lmn, dt=dt, dz=2)
@@ -312,12 +318,19 @@ class FourierRZToroidalSurface(Surface):
             R = d3R - 3 * dR
             Z = d3Z
             phi = (3 * d2R - R0) * (dt == 0)
-            return jnp.stack([R, phi, Z], axis=1)
-        raise NotImplementedError(
-            "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
-        )
+            coords = jnp.stack([R, phi, Z], axis=1)
+        else:
+            raise NotImplementedError(
+                "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+            )
+        if basis.lower() == "xyz":
+            if (dt > 0) or (dz > 0):
+                coords = rpz2xyz_vec(coords, phi=R_transform.grid.nodes[:, 2])
+            else:
+                coords = rpz2xyz(coords)
+        return coords
 
-    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
+    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, basis="rpz"):
         """Compute normal vector to surface on default grid.
 
         Parameters
@@ -327,7 +340,7 @@ class FourierRZToroidalSurface(Surface):
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
-        coords : {"rpz", "xyz"}
+        basis : {"rpz", "xyz"}
             basis vectors to use for normal vector representation
 
         Returns
@@ -335,7 +348,7 @@ class FourierRZToroidalSurface(Surface):
         N : ndarray, shape(k,3)
             normal vector to surface in specified coordinates
         """
-        assert coords.lower() in ["rpz", "xyz"]
+        assert basis.lower() in ["rpz", "xyz"]
 
         if R_lmn is None:
             R_lmn = self.R_lmn
@@ -348,9 +361,9 @@ class FourierRZToroidalSurface(Surface):
 
         N = jnp.cross(r_t, r_z, axis=1)
         N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        if coords.lower() == "xyz":
+        if basis.lower() == "xyz":
             phi = R_transform.grid.nodes[:, 2]
-            N = pol2cartvec(N, phi=phi)
+            N = rpz2xyz_vec(N, phi=phi)
         return N
 
     def compute_surface_area(self, R_lmn=None, Z_lmn=None, grid=None):
@@ -498,7 +511,9 @@ class ZernikeRZToroidalSection(Surface):
 
         self.zeta = zeta
         if grid is None:
-            grid = LinearGrid(L=self.L, M=2 * self.M + 1, zeta=self.zeta, endpoint=True)
+            grid = LinearGrid(
+                L=2 * self.L, M=4 * self.M + 1, zeta=self.zeta, endpoint=True
+            )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -646,7 +661,9 @@ class ZernikeRZToroidalSection(Surface):
         """Compute gaussian and mean curvature."""
         raise NotImplementedError()
 
-    def compute_coordinates(self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0):
+    def compute_coordinates(
+        self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0, basis="rpz"
+    ):
         """Compute values using specified coefficients.
 
         Parameters
@@ -658,12 +675,15 @@ class ZernikeRZToroidalSection(Surface):
             If an integer, assumes that many linearly spaced points in (0,1)x(0,2pi)
         dr, dt: int
             derivative order to compute in rho, theta
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
 
         Returns
         -------
         values : ndarray, shape(k,3)
-            R, phi, Z coordinates of the surface at points specified in grid
+            R, phi, Z or x, y, z coordinates of the surface at points specified in grid
         """
+        assert basis.lower() in ["rpz", "xyz"]
         if R_lmn is None:
             R_lmn = self.R_lmn
         if Z_lmn is None:
@@ -673,10 +693,15 @@ class ZernikeRZToroidalSection(Surface):
         R = R_transform.transform(R_lmn, dr=dr, dt=dt)
         Z = Z_transform.transform(Z_lmn, dr=dr, dt=dt)
         phi = R_transform.grid.nodes[:, 2] * (dr == 0) * (dt == 0)
+        coords = jnp.stack([R, phi, Z], axis=1)
+        if basis.lower() == "xyz":
+            if (dt > 0) or (dr > 0):
+                coords = rpz2xyz_vec(coords, phi=R_transform.grid.nodes[:, 2])
+            else:
+                coords = rpz2xyz(coords)
+        return coords
 
-        return jnp.stack([R, phi, Z], axis=1)
-
-    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, coords="rpz"):
+    def compute_normal(self, R_lmn=None, Z_lmn=None, grid=None, basis="rpz"):
         """Compute normal vector to surface on default grid.
 
         Parameters
@@ -686,7 +711,7 @@ class ZernikeRZToroidalSection(Surface):
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,1)x(0,2pi)
-        coords : {"rpz", "xyz"}
+        basis : {"rpz", "xyz"}
             basis vectors to use for normal vector representation
 
         Returns
@@ -694,7 +719,7 @@ class ZernikeRZToroidalSection(Surface):
         N : ndarray, shape(k,3)
             normal vector to surface in specified coordinates
         """
-        assert coords.lower() in ["rpz", "xyz"]
+        assert basis.lower() in ["rpz", "xyz"]
 
         R_transform, Z_transform = self._get_transforms(grid)
 
@@ -703,8 +728,8 @@ class ZernikeRZToroidalSection(Surface):
         # normal vector is a constant 1*phihat
         N = jnp.array([jnp.zeros_like(phi), jnp.ones_like(phi), jnp.zeros_like(phi)]).T
 
-        if coords.lower() == "xyz":
-            N = pol2cartvec(N, phi=phi)
+        if basis.lower() == "xyz":
+            N = rpz2xyz_vec(N, phi=phi)
 
         return N
 

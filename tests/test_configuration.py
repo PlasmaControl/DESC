@@ -172,3 +172,29 @@ class TestInitialGuess(unittest.TestCase):
         eq.set_initial_guess(surface, axis)
 
         np.testing.assert_allclose(eq.compute_volume(), 2 * 10 * np.pi * np.pi * 2 * 1)
+
+
+class TestSurfaces(unittest.TestCase):
+    def test_get_rho_surface(self):
+        eq = Equilibrium()
+        surf = eq.get_surface_at(rho=0.5)
+        assert surf.compute_surface_area() == 4 * np.pi ** 2 * 10 * 0.5
+        assert surf.rho == 0.5
+
+    def test_get_zeta_surface(self):
+        eq = Equilibrium()
+        surf = eq.get_surface_at(zeta=np.pi)
+        assert surf.compute_surface_area() == np.pi * (1.0) ** 2
+        assert surf.zeta == np.pi
+
+    def test_get_theta_surface(self):
+        eq = Equilibrium()
+        with pytest.raises(NotImplementedError):
+            surf = eq.get_surface_at(theta=np.pi)
+
+    def test_asserts(self):
+        eq = Equilibrium()
+        with pytest.raises(ValueError):
+            surf = eq.get_surface_at(rho=1, zeta=2)
+        with pytest.raises(AssertionError):
+            surf = eq.get_surface_at(rho=1.2)

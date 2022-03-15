@@ -26,6 +26,8 @@ from desc.basis import (
     DoubleFourierSeries,
     ZernikePolynomial,
     FourierZernikeBasis,
+    fourier,
+    zernike_radial,
 )
 from desc.compute_funs import (
     compute_profiles,
@@ -689,6 +691,107 @@ class _Configuration(IOAble, ABC):
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
         self._make_labels()
+
+    def get_surface_at(self, rho=None, theta=None, zeta=None):
+        """Return a representation for a given coordinate surface.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float or None
+            radial, poloidal, or toroidal coordinate for the surface. Only
+            one may be specified.
+
+        Returns
+        -------
+        surf : Surface
+            object representing the given surface, either a FourierRZToroidalSurface
+            for surfaces of constant rho, or a ZernikeRZToroidalSection for
+            surfaces of constant zeta.
+
+        """
+        if (rho is not None) and (theta is None) and (zeta is None):
+            assert (rho >= 0) and (rho <= 1)
+            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+            surface.change_resolution(self.M, self.N)
+
+            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+            for i, (l, m, n) in enumerate(self.R_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.R_basis.modes[:, 1] == m,
+                        surface.R_basis.modes[:, 2] == n,
+                    )
+                )
+                AR[j, i] = zernike_radial(rho, l, m)
+
+            for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.Z_basis.modes[:, 1] == m,
+                        surface.Z_basis.modes[:, 2] == n,
+                    )
+                )
+                AZ[j, i] = zernike_radial(rho, l, m)
+            Rb = AR @ self.R_lmn
+            Zb = AZ @ self.Z_lmn
+            surface.R_lmn = Rb
+            surface.Z_lmn = Zb
+            surface.grid = LinearGrid(
+                rho=rho,
+                M=4 * surface.M + 1,
+                N=4 * surface.N + 1,
+                endpoint=True,
+            )
+            return surface
+
+        if (rho is None) and (theta is None) and (zeta is not None):
+            assert (zeta >= 0) and (zeta <= 2 * np.pi)
+            surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
+            surface.change_resolution(self.L, self.M)
+
+            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+            for i, (l, m, n) in enumerate(self.R_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.R_basis.modes[:, 0] == l,
+                        surface.R_basis.modes[:, 1] == m,
+                    )
+                )
+                AR[j, i] = fourier(zeta, n, self.NFP)
+
+            for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.Z_basis.modes[:, 0] == l,
+                        surface.Z_basis.modes[:, 1] == m,
+                    )
+                )
+                AZ[j, i] = fourier(zeta, n, self.NFP)
+            Rb = AR @ self.R_lmn
+            Zb = AZ @ self.Z_lmn
+            surface.R_lmn = Rb
+            surface.Z_lmn = Zb
+            surface.grid = LinearGrid(
+                L=2 * surface.L + 1,
+                M=4 * surface.M + 1,
+                zeta=zeta,
+                endpoint=True,
+            )
+            return surface
+        if (rho is None) and (theta is not None) and (zeta is None):
+            raise NotImplementedError(
+                "Constant theta surfaces have not been implemented yet"
+            )
+        else:
+            raise ValueError(
+                "Only one coordinate can be specified, got {}, {}, {}".format(
+                    rho, theta, zeta
+                )
+            )
 
     @property
     def surface(self):

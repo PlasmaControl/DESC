@@ -616,10 +616,15 @@ class FourierXYZCurve(Curve):
 
         coords = jnp.stack([X, Y, Z], axis=1)
         coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
-        if basis.lower == "rpz":
-            coords = xyz2rpz_vec(
-                coords, x=coords[:, 1] + self.shift[0], y=coords[:, 1] + self.shift[1]
-            )
+        if basis.lower() == "rpz":
+            if dt > 0:
+                coords = xyz2rpz_vec(
+                    coords,
+                    x=coords[:, 1] + self.shift[0],
+                    y=coords[:, 1] + self.shift[1],
+                )
+            else:
+                coords = xyz2rpz(coords)
         return coords
 
     def compute_frenet_frame(
@@ -845,7 +850,7 @@ class FourierPlanarCurve(Curve):
 
     @normal.setter
     def normal(self, new):
-        if len(new) == 3:
+        if len(np.asarray(new)) == 3:
             self._normal = np.asarray(new) / np.linalg.norm(new)
         else:
             raise ValueError(
@@ -859,7 +864,7 @@ class FourierPlanarCurve(Curve):
 
     @r_n.setter
     def r_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(np.asarray(new)) == self._basis.num_modes:
             self._r_n = jnp.asarray(new)
         else:
             raise ValueError(
@@ -887,9 +892,6 @@ class FourierPlanarCurve(Curve):
 
     def _normal_rotmat(self, normal=None):
         """Rotation matrix to rotate z axis into plane normal."""
-        if normal is None:
-            normal = self.normal
-
         nx, ny, nz = normal
         nxny = jnp.sqrt(nx ** 2 + ny ** 2)
 

@@ -76,12 +76,12 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
         [
-            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+            [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+            [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
             [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
         ]
     )
-    rot = jnp.moveaxis(rot, -1, 0)
+    rot = rot.T  # jnp.moveaxis(rot, -1, 0)
     polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
     return polar.reshape((-1, 3))
 
@@ -105,8 +105,8 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
         phi = jnp.arctan2(y, x)
     rot = jnp.array(
         [
-            [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
-            [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
             [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
         ]
     )

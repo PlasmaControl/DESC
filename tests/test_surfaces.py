@@ -26,7 +26,7 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
         grid = LinearGrid(L=1, theta=0, zeta=0)
         s.grid = grid
-        N = s.compute_normal(coords="xyz")
+        N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
     def test_misc(self):
@@ -79,7 +79,7 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=20, M=20, N=1)
         s.grid = grid
-        N = s.compute_normal(coords="xyz")
+        N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
     def test_misc(self):

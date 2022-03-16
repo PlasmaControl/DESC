@@ -383,7 +383,7 @@ class LinearGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(
+            self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
@@ -394,6 +394,7 @@ class LinearGrid(Grid):
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._scale_weights()
 
     @property
     def endpoint(self):
@@ -513,10 +514,11 @@ class QuadratureGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
+            self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
 class ConcentricGrid(Grid):
@@ -736,7 +738,7 @@ class ConcentricGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(
+            self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
@@ -747,6 +749,7 @@ class ConcentricGrid(Grid):
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._scale_weights()
 
 
 # these functions are currently unused ---------------------------------------

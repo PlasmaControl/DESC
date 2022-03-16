@@ -2,9 +2,9 @@ import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import sign, flatten_list
+from desc.utils import flatten_list
 from desc.io import IOAble
-from desc.backend import jnp, jit, fori_loop, gammaln
+from desc.backend import jnp, jit, sign, fori_loop, gammaln
 
 __all__ = [
     "PowerSeries",
@@ -16,13 +16,32 @@ __all__ = [
 
 
 class Basis(IOAble, ABC):
-    """Basis is an abstract base class for spectral basis sets"""
+    """Basis is an abstract base class for spectral basis sets."""
 
-    _io_attrs_ = ["_L", "_M", "_N", "_NFP", "_modes", "_sym", "_spectral_indexing"]
+    _io_attrs_ = [
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_modes",
+        "_sym",
+        "_spectral_indexing",
+    ]
+
+    def __init__(self):
+
+        self._enforce_symmetry()
+        self._sort_modes()
+        self._create_idx()
+
+    def _set_up(self):
+        """Called after loading or changing resolution."""
+        self._enforce_symmetry()
+        self._sort_modes()
+        self._create_idx()
 
     def _enforce_symmetry(self):
-        """Enforces stellarator symmetry"""
-
+        """Enforce stellarator symmetry."""
         assert self.sym in [
             "sin",
             "sine",
@@ -38,59 +57,54 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
 
     def _sort_modes(self):
-        """Sorts modes for use with FFT"""
-
+        """Sorts modes for use with FFT."""
         sort_idx = np.lexsort((self.modes[:, 1], self.modes[:, 0], self.modes[:, 2]))
         self._modes = self.modes[sort_idx]
 
+    def _create_idx(self):
+        """Create index for use with self.get_idx()."""
+        self._idx = {}
+        for idx, (L, M, N) in enumerate(self.modes):
+            if L not in self._idx:
+                self._idx[L] = {}
+            if M not in self._idx[L]:
+                self._idx[L][M] = {}
+            self._idx[L][M][N] = idx
+
     def get_idx(self, L=0, M=0, N=0):
-        """Get the index into the ``'modes'`` array corresponding to a given mode number
+        """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
         ----------
-        L : int or ndarray of int
-            radial mode number
-        M : int or ndarray of int
-            poliodal mode number
-        N : int or ndarray of int
-            toroidal mode number
+        L : int
+            Radial mode number.
+        M : int
+            Poloidal mode number.
+        N : int
+            Toroidal mode number.
 
         Returns
         -------
         idx : ndarray of int
-            indices of given mode numbers
+            Index of given mode numbers.
+
         """
-        L = np.atleast_1d(L)
-        M = np.atleast_1d(M)
-        N = np.atleast_1d(N)
-
-        num = max(len(L), len(M), len(N))
-        L = np.broadcast_to(L, num)
-        M = np.broadcast_to(M, num)
-        N = np.broadcast_to(N, num)
-
-        idx = np.array(
-            [
-                np.where(
-                    np.logical_and(
-                        np.logical_and(l == self.modes[:, 0], m == self.modes[:, 1]),
-                        n == self.modes[:, 2],
-                    )
-                )[0]
-                for l, m, n in zip(L, M, N)
-            ]
-        )
-        return idx
+        try:
+            return self._idx[L][M][N]
+        except KeyError as e:
+            raise ValueError(
+                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+            ) from e
 
     @abstractmethod
     def _get_modes(self):
-        """ndarray: the modes numbers for the basis"""
+        """ndarray: Mode numbers for the basis."""
 
     @abstractmethod
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
@@ -113,36 +127,36 @@ class Basis(IOAble, ABC):
 
     @abstractmethod
     def change_resolution(self):
-        """Change resolution of the basis to the given resolutions"""
+        """Change resolution of the basis to the given resolutions."""
 
     @property
     def L(self):
-        """int: maximum radial resolution"""
+        """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
-        """int:  maximum poloidal resolution"""
+        """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """int: maximum toroidal resolution"""
+        """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
 
     @property
     def NFP(self):
-        """int: number of field periods"""
+        """int: Number of field periods."""
         return self.__dict__.setdefault("_NFP", 1)
 
     @property
     def sym(self):
-        """str: {``'cos'``, ``'sin'``, ``False``} type of symmetry"""
+        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
         return self.__dict__.setdefault("_sym", False)
 
     @property
     def modes(self):
-        """ndarray: mode numbers [l,m,n]"""
+        """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
 
     @modes.setter
@@ -151,16 +165,16 @@ class Basis(IOAble, ABC):
 
     @property
     def num_modes(self):
-        """int: number of modes in the spectral basis"""
+        """int: Total number of modes in the spectral basis."""
         return self.modes.shape[0]
 
     @property
     def spectral_indexing(self):
-        """str: type of indexing used for the spectral basis"""
+        """str: Type of indexing used for the spectral basis."""
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -176,11 +190,10 @@ class PowerSeries(Basis):
 
     Power series in the radial coordinate.
 
-
     Parameters
-    ---------
+    ----------
     L : int
-        maximum radial resolution
+        Maximum radial resolution.
 
     """
 
@@ -195,22 +208,21 @@ class PowerSeries(Basis):
 
         self._modes = self._get_modes(L=self.L)
 
-        self._enforce_symmetry()
-        self._sort_modes()
+        super().__init__()
 
     def _get_modes(self, L=0):
-        """Gets mode numbers for power series
+        """Get mode numbers for power series.
 
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
 
         Returns
         -------
         modes : ndarray of int, shape(num_modes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
 
         """
         l = np.arange(L + 1).reshape((-1, 1))
@@ -220,16 +232,16 @@ class PowerSeries(Basis):
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            order of derivatives to compute in (rho,theta,zeta)
+            Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
-            basis modes to evaluate (if None, full basis is used)
+            Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
             whether to workload by only calculating for unique values of nodes, modes
             can be faster, but doesn't work with jit or autodiff
@@ -269,23 +281,24 @@ class PowerSeries(Basis):
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
 
         """
         if L != self.L:
             self._L = L
             self._modes = self._get_modes(self.L)
-            self._sort_modes()
+            self._set_up()
 
 
 class FourierSeries(Basis):
     """1D basis set for use with the magnetic axis.
+
     Fourier series in the toroidal coordinate.
 
     Parameters
     ----------
     N : int
-        maximum toroidal resolution
+        Maximum toroidal resolution.
     NFP : int
         number of field periods
     sym : {``'cos'``, ``'sin'``, False}
@@ -306,22 +319,21 @@ class FourierSeries(Basis):
 
         self._modes = self._get_modes(N=self.N)
 
-        self._enforce_symmetry()
-        self._sort_modes()
+        super().__init__()
 
     def _get_modes(self, N=0):
-        """Gets mode numbers for fourier series
+        """Get mode numbers for Fourier series.
 
         Parameters
         ----------
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
 
         Returns
         -------
         modes : ndarray of int, shape(num_modes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
 
         """
         dim_tor = 2 * N + 1
@@ -332,24 +344,24 @@ class FourierSeries(Basis):
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            order of derivatives to compute in (rho,theta,zeta)
+            Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
-            basis modes to evaluate (if None, full basis is used)
+            Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
         y : ndarray, shape(num_nodes,num_modes)
-            basis functions evaluated at nodes
+            Basis functions evaluated at nodes.
 
         """
         if modes is None:
@@ -380,28 +392,28 @@ class FourierSeries(Basis):
         Parameters
         ----------
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
 
         """
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class DoubleFourierSeries(Basis):
     """2D basis set for use on a single flux surface.
+
     Fourier series in both the poloidal and toroidal coordinates.
 
     Parameters
     ----------
     M : int
-        maximum poloidal resolution
+        Maximum poloidal resolution.
     N : int
-        maximum toroidal resolution
+        Maximum toroidal resolution.
     NFP : int
-        number of field periods
+        Number of field periods.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
@@ -420,24 +432,23 @@ class DoubleFourierSeries(Basis):
 
         self._modes = self._get_modes(M=self.M, N=self.N)
 
-        self._enforce_symmetry()
-        self._sort_modes()
+        super().__init__()
 
     def _get_modes(self, M=0, N=0):
-        """Gets mode numbers for double fourier series
+        """Get mode numbers for double Fourier series.
 
         Parameters
         ----------
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
 
         Returns
         -------
         modes : ndarray of int, shape(num_modes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
 
         """
         dim_pol = 2 * M + 1
@@ -454,24 +465,24 @@ class DoubleFourierSeries(Basis):
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            order of derivatives to compute in (rho,theta,zeta)
+            Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of in, shape(num_modes,3), optional
-            basis modes to evaluate (if None, full basis is used)
+            Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
         y : ndarray, shape(num_nodes,num_modes)
-            basis functions evaluated at nodes
+            Basis functions evaluated at nodes.
 
         """
         if modes is None:
@@ -513,9 +524,9 @@ class DoubleFourierSeries(Basis):
         Parameters
         ----------
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
 
         Returns
         -------
@@ -526,8 +537,7 @@ class DoubleFourierSeries(Basis):
             self._M = M
             self._N = N
             self._modes = self._get_modes(self.M, self.N)
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class ZernikePolynomial(Basis):
@@ -538,9 +548,9 @@ class ZernikePolynomial(Basis):
     Parameters
     ----------
     L : int
-        maximum radial resolution. Use L=-1 for default based on M
+        Maximum radial resolution. Use L=-1 for default based on M.
     M : int
-        maximum poloidal resolution
+        Maximum poloidal resolution.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
@@ -556,12 +566,12 @@ class ZernikePolynomial(Basis):
         decreasing size, ending in a triagle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
-        giving a "house" shape
+        giving a "house" shape.
 
         ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
-        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
     """
 
@@ -578,18 +588,17 @@ class ZernikePolynomial(Basis):
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
         )
 
-        self._enforce_symmetry()
-        self._sort_modes()
+        super().__init__()
 
     def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
-        """Gets mode numbers for Fourier-Zernike basis functions
+        """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
             Indexing method, default value = ``'fringe'``
 
@@ -601,18 +610,18 @@ class ZernikePolynomial(Basis):
             decreasing size, ending in a triagle shape. For L == M,
             the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
             to the bottom of the pyramid, increasing L while keeping M constant,
-            giving a "house" shape
+            giving a "house" shape.
 
             ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
             decreasing size, ending in a diamond shape for L=2*M where
             the traditional fringe/U of Arizona indexing is recovered.
-            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
         Returns
         -------
         modes : ndarray of int, shape(num_modes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
 
         """
         assert spectral_indexing in [
@@ -660,24 +669,24 @@ class ZernikePolynomial(Basis):
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            order of derivatives to compute in (rho,theta,zeta)
+            Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
-            basis modes to evaluate (if None, full basis is used)
+            Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
         y : ndarray, shape(num_nodes,num_modes)
-            basis functions evaluated at nodes
+            Basis functions evaluated at nodes.
 
         """
         if modes is None:
@@ -727,9 +736,9 @@ class ZernikePolynomial(Basis):
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
 
         """
         if L != self.L or M != self.M:
@@ -738,12 +747,12 @@ class ZernikePolynomial(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 class FourierZernikeBasis(Basis):
     """3D basis set for analytic functions in a toroidal volume.
+
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
 
@@ -752,13 +761,13 @@ class FourierZernikeBasis(Basis):
     Parameters
     ----------
     L : int
-        maximum radial resolution. Use L=-1 for default based on M
+        Maximum radial resolution. Use L=-1 for default based on M.
     M : int
-        maximum poloidal resolution
+        Maximum poloidal resolution.
     N : int
-        maximum toroidal resolution
+        Maximum toroidal resolution.
     NFP : int
-        number of field periods
+        Number of field periods.
     sym : {``'cos'``, ``'sin'``, ``False``}
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
@@ -774,12 +783,12 @@ class FourierZernikeBasis(Basis):
         decreasing size, ending in a triagle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
-        giving a "house" shape
+        giving a "house" shape.
 
         ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
-        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+        For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
     """
 
@@ -796,20 +805,19 @@ class FourierZernikeBasis(Basis):
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
         )
 
-        self._enforce_symmetry()
-        self._sort_modes()
+        super().__init__()
 
     def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
-        """Gets mode numbers for Fourier-Zernike basis functions
+        """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
             Indexing method, default value = ``'fringe'``
 
@@ -821,18 +829,18 @@ class FourierZernikeBasis(Basis):
             decreasing size, ending in a triagle shape. For L == M,
             the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
             to the bottom of the pyramid, increasing L while keeping M constant,
-            giving a "house" shape
+            giving a "house" shape.
 
             ``'fringe'``: Fringe indexing fills in the pyramid with chevrons of
             decreasing size, ending in a diamond shape for L=2*M where
             the traditional fringe/U of Arizona indexing is recovered.
-            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
+            For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
         Returns
         -------
         modes : ndarray of int, shape(num_modes,3)
-            array of mode numbers [l,m,n]
-            each row is one basis function with modes (l,m,n)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
 
         """
         assert spectral_indexing in [
@@ -883,24 +891,24 @@ class FourierZernikeBasis(Basis):
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
-        """Evaluates basis functions at specified nodes
+        """Evaluate basis functions at specified nodes.
 
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            order of derivatives to compute in (rho,theta,zeta)
+            Order of derivatives to compute in (rho,theta,zeta).
         modes : ndarray of int, shape(num_modes,3), optional
-            basis modes to evaluate (if None, full basis is used)
+            Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            Whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff.
 
         Returns
         -------
         y : ndarray, shape(num_nodes,num_modes)
-            basis functions evaluated at nodes
+            Basis functions evaluated at nodes.
 
         """
         if modes is None:
@@ -960,11 +968,11 @@ class FourierZernikeBasis(Basis):
         Parameters
         ----------
         L : int
-            maximum radial resolution
+            Maximum radial resolution.
         M : int
-            maximum poloidal resolution
+            Maximum poloidal resolution.
         N : int
-            maximum toroidal resolution
+            Maximum toroidal resolution.
 
         """
         if L != self.L or M != self.M or N != self.N:
@@ -974,8 +982,7 @@ class FourierZernikeBasis(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
-            self._enforce_symmetry()
-            self._sort_modes()
+            self._set_up()
 
 
 def polyder_vec(p, m):

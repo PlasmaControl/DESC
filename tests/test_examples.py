@@ -1,6 +1,4 @@
 import numpy as np
-from netCDF4 import Dataset
-import pytest
 from desc.equilibrium import EquilibriaFamily
 from desc.vmec import VMECIO
 
@@ -34,5 +32,5 @@ def test_HELIOTRON_results(HELIOTRON):
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
     rho_err, theta_err = VMECIO.area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
 
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=0.01)
-    np.testing.assert_allclose(theta_err.mean(), 0, atol=0.02)
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)

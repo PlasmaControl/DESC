@@ -1,6 +1,6 @@
 import numpy as np
 
-from desc.utils import sign
+from desc.backend import sign
 from desc.basis import zernike_radial_poly
 
 
@@ -192,6 +192,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     return x_lmn
 
 
+# FIXME: this always returns the full double Fourier basis regardless of symmetry
 def zernike_to_fourier(x_lmn, basis, rho):
     """Convert from a Fourier-Zernike basis to a double Fourier series.
 
@@ -233,3 +234,28 @@ def zernike_to_fourier(x_lmn, basis, rho):
             x_mn[:, k] = np.matmul(A, x_lmn[idx])
 
     return m, n, x_mn
+
+
+"""
+# an alternative version of ptolemy_identity_fwd
+def ptolemy_identity_fwd(modes, xm, xn, mns, mnc):
+    f = np.zeros((modes.shape[0],))
+    for i in range(len(xm)):
+        m = xm[i]
+        n = xn[i]
+        if np.sum(mns.shape):
+            if m != 0:  # sin(m*t) * cos(n*p)
+                idx = np.where((modes == [0, -np.abs(m), np.abs(n)]).all(axis=1))[0]
+                f[idx] += np.sign(m) * mns[i]
+            if n != 0:  # cos(m*t) * sin(n*p)
+                idx = np.where((modes == [0, np.abs(m), -np.abs(n)]).all(axis=1))[0]
+                f[idx] += -np.sign(n) * mns[i]
+        if np.sum(mnc.shape):
+            # cos(m*t) * cos(n*p)
+            idx = np.where((modes == [0, np.abs(m), np.abs(n)]).all(axis=1))[0]
+            f[idx] += mnc[i]
+            if m != 0 and n != 0:  # sin(m*t) * sin(n*p)
+                idx = np.where((modes == [0, -np.abs(m), -np.abs(n)]).all(axis=1))[0]
+                f[idx] += np.sign(m) * np.sign(n) * mnc[i]
+    return f
+"""

@@ -1,60 +1,27 @@
 from abc import ABC, abstractmethod
 from desc.backend import jnp
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble
-
-
-def cart2polvec(vec, x=None, y=None, phi=None):
-    """transform vectors from cartesian to polar form"""
-    if x is not None and y is not None:
-        phi = jnp.arctan2(y, x)
-    rot = jnp.array(
-        [
-            [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-            [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-        ]
-    )
-    rot = jnp.moveaxis(rot, -1, 0)
-    polar = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return polar.reshape((-1, 3))
-
-
-def pol2cartvec(vec, x=None, y=None, phi=None):
-    """transform vectors from polar to cartesian form"""
-    if x is not None and y is not None:
-        phi = jnp.arctan2(y, x)
-    rot = jnp.array(
-        [
-            [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
-            [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-            [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-        ]
-    )
-    rot = jnp.moveaxis(rot, -1, 0)
-    cart = jnp.matmul(rot, vec.reshape((-1, 3, 1)))
-    return cart.reshape((-1, 3))
+from .utils import rotation_matrix, reflection_matrix
 
 
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space"""
 
-    _io_attrs_ = ["_name", "_grid"]
+    _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
+
+    def __init__(self, name):
+        self.shift = jnp.array([0, 0, 0])
+        self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        self.name = name
 
     @property
     def name(self):
-        """Name of the profile"""
+        """Name of the curve."""
         return self._name
 
     @name.setter
     def name(self, new):
         self._name = new
-
-    @property
-    @abstractmethod
-    def N(self):
-        """Maximum toroidal mode number"""
-        pass
 
     @property
     @abstractmethod
@@ -80,6 +47,31 @@ class Curve(IOAble, ABC):
     @abstractmethod
     def compute_length(self, params=None, grid=None):
         """Compute the length of the curve using specified nodes for quadrature"""
+
+    def translate(self, displacement=[0, 0, 0]):
+        """Translate the curve by a rigid displacement in x, y, z"""
+        self.shift += jnp.asarray(displacement)
+
+    def rotate(self, axis=[0, 0, 1], angle=0):
+        """Rotate the curve by a fixed angle about axis in xyz coordinates"""
+        R = rotation_matrix(axis, angle)
+        self.rotmat = R @ self.rotmat
+        self.shift = self.shift @ R.T
+
+    def flip(self, normal):
+        """Flip the curve about the plane with specified normal"""
+        F = reflection_matrix(normal)
+        self.rotmat = F @ self.rotmat
+        self.shift = self.shift @ F.T
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )
 
 
 class Surface(IOAble, ABC):
@@ -138,3 +130,12 @@ class Surface(IOAble, ABC):
     @abstractmethod
     def compute_curvature(self, params=None, grid=None):
         """Compute gaussian and mean curvature"""
+
+    def __repr__(self):
+        """string form of the object"""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, grid={})".format(self.name, self.grid)
+        )

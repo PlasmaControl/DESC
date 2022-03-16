@@ -1,13 +1,59 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from netCDF4 import Dataset
-import math
 
 from desc.backend import jnp, jit, odeint
 from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d, _approx_df
 from desc.derivatives import Derivative
+from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+
+
+# TODO: vectorize this over multiple coils
+def biot_savart(eval_pts, coil_pts, current):
+    """Biot-Savart law following [1]
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        points in cartesian space defining coil, should be closed curve
+    current : float
+        current through the coil
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+    fields of a filamentary segment" (2002)
+    """
+    dvec = jnp.diff(coil_pts, axis=0)
+    L = jnp.linalg.norm(dvec, axis=-1)
+
+    Ri_vec = eval_pts[:, jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
+    Ri = jnp.linalg.norm(Ri_vec, axis=-1)
+    Rf = jnp.linalg.norm(
+        eval_pts[:, jnp.newaxis, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
+    )
+    Ri_p_Rf = Ri + Rf
+
+    # 1.0e-7 == mu_0/(4 pi)
+    Bmag = (
+        1.0e-7
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
+    )
+
+    # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
+    vec = jnp.cross(dvec[:, jnp.newaxis, :], Ri_vec, axis=-1)
+    B = jnp.sum(Bmag[:, :, jnp.newaxis] * vec, axis=0)
+    return B
 
 
 class MagneticField(IOAble, ABC):
@@ -41,27 +87,27 @@ class MagneticField(IOAble, ABC):
         return self.__add__(-x)
 
     @abstractmethod
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
-        params : tuple, optional
+            cylindrical or cartesian coordinates
+        params : dict, optional
             parameters to pass to scalar potential function
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+            magnetic field at specified points
 
         """
 
-    def __call__(self, coords, params=None, dR=0, dp=0, dZ=0):
-        return self.compute_magnetic_field(coords, params, dR, dp, dZ)
+    def __call__(self, coords, params={}, basis="rpz"):
+        return self.compute_magnetic_field(coords, params, basis)
 
 
 class ScaledMagneticField(MagneticField):
@@ -90,28 +136,24 @@ class ScaledMagneticField(MagneticField):
         self._scalar = scalar
         self._field = field
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
+            cylindrical or cartesian coordinates
         params : tuple, optional
-            parameters to pass to scalar potential function
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+            parameters to pass to underlying field
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points, in cylindrical
-            form [BR, Bphi,BZ]
-
+            scaled magnetic field at specified points
         """
-        return self._scalar * self._field.compute_magnetic_field(
-            coords, params, dR, dp, dZ
-        )
+        return self._scalar * self._field.compute_magnetic_field(coords, params, basis)
 
 
 class SumMagneticField(MagneticField):
@@ -133,32 +175,32 @@ class SumMagneticField(MagneticField):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
-        params : tuple, optional
-            parameters to pass to scalar potential function. If None,
-            uses the default parameters for each field. If a tuple, should have
+            cylindrical or cartesian coordinates
+        params : list or tuple of dict, optional
+            parameters to pass to underlying fields. If None,
+            uses the default parameters for each field. If a list or tuple, should have
             one entry for each component field.
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            scaled magnetic field at specified points, in cylindrical
-            form [BR, Bphi,BZ]
-
+            scaled magnetic field at specified points
         """
-        if (params is None) or (len(params) == 0):
+        if params is None:
             params = [None] * len(self._fields)
+        if isinstance(params, dict):
+            params = [params]
         B = 0
         for i, field in enumerate(self._fields):
-            B += field.compute_magnetic_field(coords, params[i], dR=dR, dp=dp, dZ=dZ)
+            B += field.compute_magnetic_field(coords, params[i % len(params)], basis)
         return B
 
 
@@ -184,39 +226,37 @@ class ToroidalMagneticField(MagneticField):
         self._B0 = B0
         self._R0 = R0
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
+            cylindrical or cartesian coordinates
         params : tuple, optional
             unused by this method
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+            magnetic field at specified points
 
         """
+        assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
-
-        if (dp != 0) or (dZ != 0):
-            return jnp.zeros_like(coords)
-        bp = (
-            self._B0
-            * self._R0
-            * math.factorial(dR)
-            * (-1) ** dR
-            / coords[:, 0] ** (dR + 1)
-        )
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        bp = self._B0 * self._R0 / coords[:, 0]
         brz = jnp.zeros_like(bp)
-        return jnp.array([brz, bp, brz]).T
+        B = jnp.array([brz, bp, brz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+        return B
 
 
 class VerticalMagneticField(MagneticField):
@@ -235,33 +275,37 @@ class VerticalMagneticField(MagneticField):
         assert np.isscalar(B0), "B0 must be a scalar"
         self._B0 = B0
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
+            cylindrical or cartesian coordinates
         params : tuple, optional
             unused by this method
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+            magnetic field at specified points
 
         """
+        assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
-
-        if (dR != 0) or (dp != 0) or (dZ != 0):
-            return jnp.zeros_like(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
         bz = self._B0 * jnp.ones_like(coords[:, 2])
         brp = jnp.zeros_like(bz)
-        return jnp.array([brp, brp, bz]).T
+        B = jnp.array([brp, brp, bz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+        return B
 
 
 class PoloidalMagneticField(MagneticField):
@@ -298,17 +342,17 @@ class PoloidalMagneticField(MagneticField):
         self._R0 = R0
         self._iota = iota
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
+            cylindrical or cartesian coordinates
         params : tuple, optional
             unused by this method
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
@@ -316,13 +360,12 @@ class PoloidalMagneticField(MagneticField):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-        if (dR != 0) or (dp != 0) or (dZ != 0):
-            raise NotImplementedError(
-                "Derivatives of poloidal fields have not been implemented"
-            )
+        assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
         r = jnp.sqrt((R - self._R0) ** 2 + Z ** 2)
@@ -331,7 +374,11 @@ class PoloidalMagneticField(MagneticField):
         bp = jnp.zeros_like(br)
         bz = r * jnp.cos(theta)
         bmag = self._B0 * self._iota / self._R0
-        return bmag * jnp.array([br, bp, bz]).T
+        B = bmag * jnp.array([br, bp, bz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+
+        return B
 
 
 class SplineMagneticField(MagneticField):
@@ -409,17 +456,17 @@ class SplineMagneticField(MagneticField):
         tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
         return tempdict
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
+            cylindrical or cartesian coordinates
         params : tuple, optional
-            parameters to pass to scalar potential function
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+            unused by this method
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
@@ -428,9 +475,12 @@ class SplineMagneticField(MagneticField):
 
         """
 
+        assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
 
         BRq = interp3d(
@@ -442,7 +492,7 @@ class SplineMagneticField(MagneticField):
             self._Z,
             self._BR,
             self._method,
-            (dR, dp, dZ),
+            (0, 0, 0),
             self._extrap,
             (None, self._period, None),
             **self._derivs["BR"],
@@ -456,7 +506,7 @@ class SplineMagneticField(MagneticField):
             self._Z,
             self._Bphi,
             self._method,
-            (dR, dp, dZ),
+            (0, 0, 0),
             self._extrap,
             (None, self._period, None),
             **self._derivs["Bphi"],
@@ -470,13 +520,15 @@ class SplineMagneticField(MagneticField):
             self._Z,
             self._BZ,
             self._method,
-            (dR, dp, dZ),
+            (0, 0, 0),
             self._extrap,
             (None, self._period, None),
             **self._derivs["BZ"],
         )
-
-        return jnp.array([BRq, Bphiq, BZq]).T
+        B = jnp.array([BRq, Bphiq, BZq]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        return B
 
     @classmethod
     def from_mgrid(
@@ -541,7 +593,7 @@ class SplineMagneticField(MagneticField):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=(), method="cubic", extrap=False, period=None
+        cls, field, R, phi, Z, params={}, method="cubic", extrap=False, period=None
     ):
         """Create a splined magnetic field from another field for faster evaluation
 
@@ -552,7 +604,7 @@ class SplineMagneticField(MagneticField):
             cylindrical coordinates and return the field in cylindrical components
         R, phi, Z : ndarray
             1d arrays of interpolation nodes in cylindrical coordinates
-        params : tuple, optional
+        params : dict, optional
             parameters passed to field
         method : str
             spline method for SplineMagneticField
@@ -566,7 +618,7 @@ class SplineMagneticField(MagneticField):
         rr, pp, zz = np.meshgrid(R, phi, Z, indexing="ij")
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
-        BR, BP, BZ = field(coords, *params).T
+        BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
         return cls(
             R,
             phi,
@@ -589,55 +641,58 @@ class ScalarPotentialField(MagneticField):
         function to compute the scalar potential. Should have a signature of
         the form potential(R,phi,Z,*params) -> ndarray.
         R,phi,Z are arrays of cylindrical coordinates.
-    params : tuple, optional
+    params : dict, optional
         default parameters to pass to potential function
 
     """
 
-    def __init__(self, potential, params=()):
+    def __init__(self, potential, params={}):
         self._potential = potential
         self._params = params
 
-    def compute_magnetic_field(self, coords, params=None, dR=0, dp=0, dZ=0):
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
         """Compute magnetic field at a set of points
 
         Parameters
         ----------
         coords : array-like shape(N,3) or Grid
-            cylindrical coordinates to evaluate field at [R,phi,Z]
-        params : tuple, optional
+            cylindrical or cartesian coordinates
+        params : dict, optional
             parameters to pass to scalar potential function
-        dR, dp, dZ : int, optional
-            order of derivative to take in R,phi,Z directions
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
 
         Returns
         -------
         field : ndarray, shape(N,3)
-            magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
+            magnetic field at specified points
 
         """
-        if any([(dR != 0), (dp != 0), (dZ != 0)]):
-            raise NotImplementedError(
-                "Derivatives of scalar potential fields have not been implemented"
-            )
+        assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+        Rq, phiq, Zq = coords.T
 
         if (params is None) or (len(params) == 0):
             params = self._params
         r, p, z = coords.T
-        funR = lambda x: self._potential(x, p, z, *params)
-        funP = lambda x: self._potential(r, x, z, *params)
-        funZ = lambda x: self._potential(r, p, x, *params)
+        funR = lambda x: self._potential(x, p, z, **params)
+        funP = lambda x: self._potential(r, x, z, **params)
+        funZ = lambda x: self._potential(r, p, x, **params)
         br = Derivative.compute_jvp(funR, 0, (jnp.ones_like(r),), r)
         bp = Derivative.compute_jvp(funP, 0, (jnp.ones_like(p),), p)
         bz = Derivative.compute_jvp(funZ, 0, (jnp.ones_like(z),), z)
-        return jnp.array([br, bp / r, bz]).T
+        B = jnp.array([br, bp / r, bz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        return B
 
 
 def field_line_integrate(
-    r0, z0, phis, field, params=(), rtol=1e-8, atol=1e-8, maxstep=1000
+    r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
     """Trace field lines by integration
 
@@ -651,7 +706,7 @@ def field_line_integrate(
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate
-    params: tuple
+    params: dict
         parameters passed to field
     rtol, atol : float
         relative and absolute tolerances for ode integration
@@ -675,7 +730,7 @@ def field_line_integrate(
     def odefun(rpz, s):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(rpz, params).T
+        br, bp, bz = field.compute_magnetic_field(rpz, params, basis="rpz").T
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()

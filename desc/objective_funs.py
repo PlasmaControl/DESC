@@ -65,12 +65,12 @@ class ObjectiveFunction(IOAble, ABC):
         use_jit=True,
     ):
 
-        self.R_transform = R_transform
-        self.Z_transform = Z_transform
-        self.L_transform = L_transform
-        self.p_profile = p_profile
-        self.i_profile = i_profile
-        self.BC_constraint = BC_constraint
+        self.R_transform = R_transform.copy()
+        self.Z_transform = Z_transform.copy()
+        self.L_transform = L_transform.copy()
+        self.p_profile = p_profile.copy()
+        self.i_profile = i_profile.copy()
+        self.BC_constraint = BC_constraint.copy()
         self.use_jit = use_jit
         self._set_up()
 

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from netCDF4 import Dataset
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
+from desc.__main__ import main
 
 
 def test_compute_geometry(DSHAPE):
@@ -137,3 +139,17 @@ def test_to_sfl(plot_eq):
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-5)
     np.testing.assert_allclose(theta_err, 0, atol=5e-10)
+
+
+@pytest.mark.slow
+def test_continuation_resolution(tmpdir_factory):
+    input_path = ".//tests//inputs//res_test"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("res_test_out.h5")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)

@@ -164,15 +164,16 @@ class FourierRZToroidalSurface(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(M=M, N=N)
-        self.Z_basis.change_resolution(M=M, N=N)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-        self._M = M
-        self._N = N
+        if (N != self.N) or (M != self.M):
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(M=M, N=N)
+            self.Z_basis.change_resolution(M=M, N=N)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._M = M
+            self._N = N
 
     @property
     def R_lmn(self):
@@ -590,15 +591,16 @@ class ZernikeRZToroidalSection(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(L=L, M=M)
-        self.Z_basis.change_resolution(L=L, M=M)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-        self._L = L
-        self._M = M
+        if (L != self.L) or (M != self.M):
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(L=L, M=M)
+            self.Z_basis.change_resolution(L=L, M=M)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._L = L
+            self._M = M
 
     @property
     def R_lmn(self):

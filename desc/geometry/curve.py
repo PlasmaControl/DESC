@@ -143,14 +143,15 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum toroidal resolution."""
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(N=N)
-        self.Z_basis.change_resolution(N=N)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
-        self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
-        self._N = N
+        if N != self.N:
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(N=N)
+            self.Z_basis.change_resolution(N=N)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+            self._N = N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -478,12 +479,13 @@ class FourierXYZCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""
-        modes_old = self.basis.modes
-        self.basis.change_resolution(N=N)
-        self._transform = self._get_transforms(self.grid)
-        self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
-        self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
-        self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
+        if N != self.N:
+            modes_old = self.basis.modes
+            self.basis.change_resolution(N=N)
+            self._transform = self._get_transforms(self.grid)
+            self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
+            self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -824,10 +826,11 @@ class FourierPlanarCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""
-        modes_old = self.basis.modes
-        self.basis.change_resolution(N=N)
-        self._transform = self._get_transforms(self.grid)
-        self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
+        if N != self.N:
+            modes_old = self.basis.modes
+            self.basis.change_resolution(N=N)
+            self._transform = self._get_transforms(self.grid)
+            self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
 
     @property
     def center(self):

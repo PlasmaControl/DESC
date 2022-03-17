@@ -284,6 +284,10 @@ class TestSurfaces(unittest.TestCase):
     def test_get_rho_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)
+        print("eq", eq)
+
+        print("surf", surf)
+
         np.testing.assert_allclose(
             surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
         )

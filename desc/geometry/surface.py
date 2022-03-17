@@ -407,6 +407,7 @@ class FourierRZToroidalSurface(Surface):
         r_z = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
+        print("grid inside compute surface area", grid)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
     def get_constraint(self, R_basis, Z_basis, L_basis):

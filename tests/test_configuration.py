@@ -284,13 +284,15 @@ class TestSurfaces(unittest.TestCase):
     def test_get_rho_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)
-        assert surf.compute_surface_area() == 4 * np.pi ** 2 * 10 * 0.5
+        np.testing.assert_allclose(
+            surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
+        )
         assert surf.rho == 0.5
 
     def test_get_zeta_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
-        assert surf.compute_surface_area() == np.pi * (1.0) ** 2
+        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * (1.0) ** 2)
         assert surf.zeta == np.pi
 
     def test_get_theta_surface(self):

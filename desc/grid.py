@@ -30,6 +30,7 @@ class Grid(IOAble):
         "_NFP",
         "_sym",
         "_nodes",
+        "_spacing",
         "_weights",
         "_axis",
         "_node_pattern",
@@ -45,7 +46,7 @@ class Grid(IOAble):
         self._sym = False
         self._node_pattern = "custom"
 
-        self._nodes, self._weights = self._create_nodes(nodes)
+        self._nodes, self._spacing = self._create_nodes(nodes)
 
         self._enforce_symmetry()
         if sort:
@@ -54,24 +55,24 @@ class Grid(IOAble):
         self._scale_weights()
 
     def _enforce_symmetry(self):
-        """Enforces stellarator symmetry."""
+        """Enforce stellarator symmetry."""
         if self.sym:  # remove nodes with theta > pi
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
-            self._weights = np.delete(self.weights, non_sym_idx, axis=0)
+            self._spacing = np.delete(self.spacing, non_sym_idx, axis=0)
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
         sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
         self._nodes = self.nodes[sort_idx]
-        self._weights = self.weights[sort_idx]
+        self._spacing = self.spacing[sort_idx]
 
     def _find_axis(self):
         """Find indices of axis nodes."""
         self._axis = np.where(self.nodes[:, 0] == 0)[0]
 
     def _scale_weights(self):
-        """Scale weights to sum to full volume."""
+        """Scale weights sum to full volume and reduce weights for duplicated nodes."""
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
         nodes[:, 2] %= 2 * np.pi / self.NFP
@@ -79,8 +80,9 @@ class Grid(IOAble):
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
         )
-        self._weights /= counts[inverse]
-        self._weights *= 4 * np.pi ** 2 / self._weights.sum()
+        self._spacing /= np.tile(np.atleast_2d(counts[inverse]).T, 3)
+        self._spacing *= (4 * np.pi ** 2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
+        self._weights = self.spacing.prod(axis=1)
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -88,21 +90,24 @@ class Grid(IOAble):
         Parameters
         ----------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
 
         Returns
         -------
         nodes : ndarray of float, size(num_nodes,3)
-            node coordinates, in (rho,theta,zeta)
+            Node coordinates, in (rho,theta,zeta).
+        spacing : ndarray of float, size(num_nodes,3)
+            Node spacing, in (rho,theta,zeta).
 
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3))
-        # make weights sum to 4pi^2
-        weights = np.ones(nodes.shape[0]) / nodes.shape[0] * 4 * np.pi ** 2
+        spacing = (  # make weights sum to 4pi^2
+            np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
+        )
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
-        return nodes, weights
+        return nodes, spacing
 
     @property
     def L(self):
@@ -137,6 +142,15 @@ class Grid(IOAble):
     @nodes.setter
     def nodes(self, nodes):
         self._nodes = nodes
+
+    @property
+    def spacing(self):
+        """ndarray: node spacing, in (rho,theta,zeta)"""
+        return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
+
+    @spacing.setter
+    def spacing(self, spacing):
+        self._spacing = spacing
 
     @property
     def weights(self):
@@ -229,7 +243,7 @@ class LinearGrid(Grid):
         self._endpoint = endpoint
         self._node_pattern = "linear"
 
-        self._nodes, self._weights = self._create_nodes(
+        self._nodes, self._spacing = self._create_nodes(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -286,8 +300,8 @@ class LinearGrid(Grid):
         -------
         nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        weights : ndarray of float, size(num_nodes,)
-            weight for each node, based on local volume around the node
+        spacing : ndarray of float, size(num_nodes,3)
+            node spacing, based on local volume around the node
 
         """
         self._L = L
@@ -348,9 +362,9 @@ class LinearGrid(Grid):
         dz = dz * np.ones_like(z)
 
         nodes = np.stack([r, t, z]).T
-        weights = dr * dt * dz
+        spacing = np.stack([dr, dt, dz]).T
 
-        return nodes, weights
+        return nodes, spacing
 
     def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
@@ -369,7 +383,7 @@ class LinearGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(
+            self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
@@ -380,6 +394,7 @@ class LinearGrid(Grid):
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._scale_weights()
 
     @property
     def endpoint(self):
@@ -415,14 +430,14 @@ class QuadratureGrid(Grid):
         self._sym = False
         self._node_pattern = "quad"
 
-        self._nodes, self._weights = self._create_nodes(
+        self._nodes, self._spacing = self._create_nodes(
             L=self.L, M=self.M, N=self.N, NFP=self.NFP
         )
 
         self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
-        # quad grid should already be exact, so we don't scale weights
+        self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """Create grid nodes and weights.
@@ -442,8 +457,8 @@ class QuadratureGrid(Grid):
         -------
         nodes : ndarray of float, size(num_nodes,3)
             node coordinates, in (rho,theta,zeta)
-        weights : ndarray of float, size(num_nodes,)
-            weight for each node, based on local volume around the node
+        spacing : ndarray of float, size(num_nodes,3)
+            node spacing, based on local volume around the node
 
         """
         self._L = L
@@ -478,9 +493,9 @@ class QuadratureGrid(Grid):
         wr /= r  # remove r weight function associated with the shifted Jacobi weights
 
         nodes = np.stack([r, t, z]).T
-        weights = wr * wt * wz
+        spacing = np.stack([wr, wt, wz]).T
 
-        return nodes, weights
+        return nodes, spacing
 
     def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
@@ -499,10 +514,11 @@ class QuadratureGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
+            self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
 
 
 class ConcentricGrid(Grid):
@@ -564,7 +580,7 @@ class ConcentricGrid(Grid):
         self._rotation = rotation
         self._node_pattern = node_pattern
 
-        self._nodes, self._weights = self._create_nodes(
+        self._nodes, self._spacing = self._create_nodes(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -616,8 +632,8 @@ class ConcentricGrid(Grid):
         -------
         nodes : ndarray of float, size(num_nodes, 3)
             node coordinates, in (rho,theta,zeta)
-        weights : ndarray of float, size(num_nodes,)
-            weight for each node, either exact quadrature or volume based
+        spacing : ndarray of float, size(num_nodes,3)
+            node spacing, based on local volume around the node
 
         """
 
@@ -701,9 +717,9 @@ class ConcentricGrid(Grid):
         dt = np.tile(dt, 2 * N + 1)
         dz = np.ones_like(z) * dz
         nodes = np.stack([r, t, z]).T
-        weights = dr * dt * dz
+        spacing = np.stack([dr, dt, dz]).T
 
-        return nodes, weights
+        return nodes, spacing
 
     def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
@@ -722,7 +738,7 @@ class ConcentricGrid(Grid):
             self._L = L
             self._M = M
             self._N = N
-            self._nodes, self._weights = self._create_nodes(
+            self._nodes, self._spacing = self._create_nodes(
                 L=L,
                 M=M,
                 N=N,
@@ -733,6 +749,7 @@ class ConcentricGrid(Grid):
             self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
+            self._scale_weights()
 
 
 # these functions are currently unused ---------------------------------------

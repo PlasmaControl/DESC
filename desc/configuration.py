@@ -816,6 +816,16 @@ class _Configuration(IOAble, ABC):
         """Geometric surface defining boundary conditions"""
         return self._surface
 
+    @surface.setter
+    def surface(self, new):
+        if isinstance(new, Surface):
+            new.change_resolution(self.L, self.M, self.N)
+            self._surface = new
+        else:
+            raise TypeError(
+                f"surfaces should be of type Surface or a subclass, got {new}"
+            )
+
     @property
     def spectral_indexing(self):
         """Type of indexing used for the spectral basis (str)."""
@@ -933,6 +943,7 @@ class _Configuration(IOAble, ABC):
     @property
     def axis(self):
         """Curve object representing the magnetic axis."""
+        # TODO: return the current axis by evaluating at rho=0
         return self._axis
 
     @axis.setter

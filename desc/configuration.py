@@ -404,6 +404,11 @@ class _Configuration(IOAble, ABC):
 
         >>> equil.set_initial_guess(surface)
 
+        Optionally, an interior surface may be scaled by giving the surface a flux label:
+
+        >>> surf = FourierRZToroidalSurface(rho=0.7)
+        >>> equil.set_initial_guess(surf)
+
         Use supplied Surface and a supplied Curve for axis and scales between
         them for guess:
 
@@ -418,8 +423,12 @@ class _Configuration(IOAble, ABC):
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
         Use flux surfaces specified by points:
+        nodes should either be a Grid or an ndarray, shape(k,3) giving the locations
+        in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
+        array-like, shape(k,) giving the corresponding real space coordinates
 
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
+
         """
         nargs = len(args)
         if nargs > 4:
@@ -463,11 +472,20 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
+                coord = surface.rho if hasattr(surface, "rho") else None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, surface.R_lmn, surface.R_basis, axisR
+                    self.R_basis,
+                    surface.R_lmn,
+                    surface.R_basis,
+                    axisR,
+                    coord=coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, surface.Z_lmn, surface.Z_basis, axisZ
+                    self.Z_basis,
+                    surface.Z_lmn,
+                    surface.Z_basis,
+                    axisZ,
+                    coord=coord,
                 )
             elif isinstance(args[0], _Configuration):
                 eq = args[0]
@@ -533,7 +551,9 @@ class _Configuration(IOAble, ABC):
                     "Can't initialize equilibrium from args {}.".format(args)
                 )
 
-    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode=None):
+    def _initial_guess_surface(
+        self, x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None
+    ):
         """Create an initial guess from the boundary coefficients and magnetic axis guess.
 
         Parameters
@@ -568,10 +588,13 @@ class _Configuration(IOAble, ABC):
             else:
                 raise ValueError("Surface should have either l=0 or n=0")
         if mode == "lcfs":
+            if coord is None:
+                coord = 1.0
             if axis is None:
                 axidx = np.where(b_basis.modes[:, 1] == 0)[0]
                 axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
             for k, (l, m, n) in enumerate(b_basis.modes):
+                scale = zernike_radial(coord, abs(m), m)
                 # index of basis mode with lowest radial power (l = |m|)
                 idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
                 if m == 0:  # magnetic axis only affects m=0 modes
@@ -584,10 +607,10 @@ class _Configuration(IOAble, ABC):
                         a_n = axis[ax[0], 1]  # use provided axis guess
                     else:
                         a_n = b_lmn[k]  # use boundary centroid as axis
-                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2
-                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2
+                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
+                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
                 else:
-                    x_lmn[idx0] = b_lmn[k]
+                    x_lmn[idx0] = b_lmn[k] / scale
 
         elif mode == "poincare":
             for k, (l, m, n) in enumerate(b_basis.modes):
@@ -678,13 +701,8 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N)
         self.L_basis.change_resolution(self.L, self.M, self.N)
 
-        if N_change:
-            self.axis.change_resolution(self.N)
-        # this is kind of a kludge for now
-        if self.bdry_mode == "lcfs":
-            self.surface.change_resolution(self.M, self.N)
-        elif self.bdry_mode == "poincare":
-            self.surface.change_resolution(self.L, self.M)
+        self.axis.change_resolution(self.N)
+        self.surface.change_resolution(self.L, self.M, self.N)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)

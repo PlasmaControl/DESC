@@ -141,7 +141,7 @@ class TestInitialGuess(unittest.TestCase):
             eq.set_initial_guess(1, 2)
         with pytest.raises(ValueError):
             eq.set_initial_guess(eq, eq.surface)
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             eq.set_initial_guess(eq.surface, [1, 2, 3])
         del eq._surface
         with pytest.raises(ValueError):
@@ -152,6 +152,8 @@ class TestInitialGuess(unittest.TestCase):
         with pytest.raises(ValueError):
             eq.set_initial_guess("path", "hdf5")
         with pytest.raises(ValueError):
+            eq.surface = eq.get_surface_at(rho=1)
+            eq.change_resolution(2, 2, 2)
             eq._initial_guess_surface(eq.R_basis, eq.R_lmn, eq.R_basis)
         with pytest.raises(ValueError):
             eq._initial_guess_surface(

@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 from termcolor import colored
 import warnings
-
+import copy
 from desc.backend import jnp, jit, use_jax
 from desc.utils import unpack_state, Timer
 from desc.io import IOAble
@@ -65,12 +65,12 @@ class ObjectiveFunction(IOAble, ABC):
         use_jit=True,
     ):
 
-        self.R_transform = R_transform
-        self.Z_transform = Z_transform
-        self.L_transform = L_transform
-        self.p_profile = p_profile
-        self.i_profile = i_profile
-        self.BC_constraint = BC_constraint
+        self.R_transform = copy.deepcopy(R_transform)
+        self.Z_transform = copy.deepcopy(Z_transform)
+        self.L_transform = copy.deepcopy(L_transform)
+        self.p_profile = copy.deepcopy(p_profile)
+        self.i_profile = copy.deepcopy(i_profile)
+        self.BC_constraint = copy.deepcopy(BC_constraint)
         self.use_jit = use_jit
         self._set_up()
 

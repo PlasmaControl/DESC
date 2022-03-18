@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+title: DESC
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file. To cite a specific version of DESC,
+  please cite the correct version from Zenodo at
+  https://zenodo.org/search?page=1&size=20&q=conceptrecid:%224876504%22&sort=-version&all_versions=True
+type: software
+authors:
+  - given-names: Daniel
+    family-names: Dudt
+    email: ddudt@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0002-4557-3529'
+  - given-names: Rory
+    family-names: Conlin
+    email: wconlin@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0001-8366-2111'
+  - given-names: Dario
+    family-names: Panici
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0003-0736-4360'
+    email: dpanici@princeton.edu
+  - given-names: Egemen
+    family-names: Kolemen
+    email: ekolemen@princeton.edu
+    affiliation: Princeton University
+    orcid: 'https://orcid.org/0000-0003-4212-3247'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.4876504
+    description: 'Master DOI for DESC, points to latest release.'
+  - type: url
+    value: 'https://github.com/PlasmaControl/DESC'
+    description: `Github repository for DESC`
+repository-code: 'https://github.com/PlasmaControl/DESC'
+url: 'https://desc-docs.readthedocs.io'
+repository-artifact: 'https://pypi.org/project/desc-opt/'
+license: MIT

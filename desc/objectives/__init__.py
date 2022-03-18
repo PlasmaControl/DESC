@@ -23,7 +23,11 @@ from .nonlinear_objectives import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
-from .utils import get_fixed_boundary_constraints
+from .utils import (
+    get_fixed_boundary_constraints,
+    get_force_balance_objective,
+    get_energy_objective,
+)
 
 
 __all__ = [
@@ -49,4 +53,6 @@ __all__ = [
     "QuasisymmetryTwoTerm",
     "QuasisymmetryTripleProduct",
     "get_fixed_boundary_constraints",
+    "get_force_balance_objective",
+    "get_energy_objective",
 ]

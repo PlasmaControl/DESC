@@ -13,13 +13,7 @@ from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.optimize.utils import check_termination
 from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
-from desc.objectives import (
-    ObjectiveFunction,
-    RadialForceBalance,
-    HelicalForceBalance,
-    Energy,
-    get_fixed_boundary_constraints,
-)
+from desc.objectives import get_force_balance_objective, get_energy_objective
 from desc.perturbations import perturb, optimal_perturb
 
 
@@ -256,9 +250,7 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if objective is None:
-            objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = get_fixed_boundary_constraints()
-            objective = ObjectiveFunction(objectives, constraints)
+            objective = get_force_balance_objective()
         if not objective.built:
             objective.build(self, verbose=verbose)
 
@@ -335,9 +327,7 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if objective is None:
-            objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = get_fixed_boundary_constraints()
-            objective = ObjectiveFunction(objectives, constraints)
+            objective = get_force_balance_objective()
 
         eq = perturb(
             self,
@@ -407,9 +397,7 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if constraint is None:
-            objectives = (RadialForceBalance(), HelicalForceBalance())
-            constraints = get_fixed_boundary_constraints()
-            constraint = ObjectiveFunction(objectives, constraints)
+            constraint = get_force_balance_objective()
 
         if copy:
             eq = self.copy()
@@ -668,11 +656,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             if self.inputs[ii]["objective"] == "force":
-                objectives = (RadialForceBalance(), HelicalForceBalance())
+                objective = get_force_balance_objective()
             elif self.inputs[ii]["objective"] == "energy":
-                objectives = Energy()
-            constraints = get_fixed_boundary_constraints()
-            objective = ObjectiveFunction(objectives, constraints)
+                objective = get_energy_objective()
 
             if ii == start_from:
                 equil = self[ii]

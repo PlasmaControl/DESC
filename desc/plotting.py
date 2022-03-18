@@ -10,6 +10,7 @@ from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier
+from desc.utils import flatten_list
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -947,6 +948,94 @@ def plot_comparison(
         )
     if any(labels) and kwargs.get("legend", True):
         fig.legend(**kwargs.get("legend_kw", {}))
+    return fig, ax
+
+
+def plot_coils(coils, grid=None, ax=None, **kwargs):
+    """Create 3D plot of coil geometry
+
+    Parameters
+    ----------
+    coils : Coil, CoilSet
+        Coil or coils to plot
+    grid : Grid, optional
+        Grid to use for evaluating geometry
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to
+    """
+
+    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 2)
+    ls = kwargs.pop("ls", "-")
+    color = kwargs.pop("color", "current")
+    color = kwargs.pop("c", color)
+    cbar = False
+    if color == "current":
+        cbar = True
+        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        currents = flatten_list(coils.current)
+        norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        color = [cmap(norm(cur)) for cur in currents]
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+    fig, ax = _format_ax(ax, True, figsize=figsize)
+    if grid is None:
+        grid_kwargs = {
+            "zeta": np.linspace(0, 2 * np.pi, 50),
+        }
+        grid = _get_grid(**grid_kwargs)
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coils_list = flatten_coils(coils)
+
+    for i, coil in enumerate(coils_list):
+        x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        ax.plot(
+            x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
+        )
+
+    if cbar:
+        cbar = fig.colorbar(sm)
+        cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence we call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+    ax.set_xlabel(_axis_labels_XYZ[0])
+    ax.set_ylabel(_axis_labels_XYZ[1])
+    ax.set_zlabel(_axis_labels_XYZ[2])
+
     return fig, ax
 
 

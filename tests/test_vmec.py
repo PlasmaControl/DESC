@@ -3,7 +3,6 @@ import pytest
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import sign
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily
@@ -13,6 +12,7 @@ from desc.vmec_utils import (
     ptolemy_identity_rev,
     fourier_to_zernike,
     zernike_to_fourier,
+    vmec_boundary_subspace,
 )
 
 
@@ -71,7 +71,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
 
     def test_fourier_to_zernike(self):
-        """Tests conversion from radial-Fourier series to Fourier-Zernike polynomials."""
+        """Test conversion from radial-Fourier series to Fourier-Zernike polynomials."""
         M = 1
         N = 1
 
@@ -102,7 +102,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(x_lmn, x_lmn_correct, atol=1e-8)
 
     def test_zernike_to_fourier(self):
-        """Tests conversion from Fourier-Zernike polynomials to radial-Fourier series."""
+        """Test conversion from Fourier-Zernike polynomials to radial-Fourier series."""
         M = 1
         N = 1
 
@@ -457,3 +457,31 @@ def test_plot_vmec_comparison(plot_eq):
     vmec = "./tests/inputs/wout_SOLOVEV.nc"
     fig, ax = VMECIO.plot_vmec_comparison(plot_eq, vmec)
     return fig
+
+
+def test_vmec_boundary_subspace(DummyStellarator):
+    """Test VMEC boundary subspace is enforced properly."""
+
+    eq = EquilibriaFamily.load(load_from=str(DummyStellarator["desc_h5_path"]))[-1]
+
+    RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
+    ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])
+    opt_subspace = vmec_boundary_subspace(eq, RBC, ZBS)
+
+    y_opt = np.arange(8)
+    y = np.dot(y_opt, opt_subspace.T)
+
+    m_desc = np.concatenate(
+        (eq.surface.R_basis.modes[:, 1], eq.surface.Z_basis.modes[:, 1])
+    )
+    n_desc = np.concatenate(
+        (eq.surface.R_basis.modes[:, 2], eq.surface.Z_basis.modes[:, 2])
+    )
+
+    m_vmec, n_vmec, zbs, rbc = ptolemy_identity_rev(m_desc, n_desc, y)
+
+    tol = 1e-15
+    rbc_ref = np.atleast_2d(np.array([0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1]))
+    zbs_ref = np.atleast_2d(np.array([0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0]))
+    np.testing.assert_allclose(rbc_ref, np.abs(rbc) > tol)
+    np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)

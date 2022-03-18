@@ -12,6 +12,7 @@ __all__ = ["perturb", "optimal_perturb"]
 
 
 # TODO: add `weight` input option to scale Jacobian
+# TODO: add `opt_subspace` input option for custom perturbation space
 def perturb(
     eq,
     objective,
@@ -283,7 +284,8 @@ def optimal_perturb(
         R_boundary, Z_boundary, pressure, rotational transform, and total magnetic flux.
         Setting to True (False) includes (excludes) all modes.
     opt_subspace : ndarray, optional
-        # TODO: explain!
+        Transform matrix to give a subspace from the full optimization parameter space.
+        Can be used to enforce custom optimization constraints.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
@@ -400,8 +402,6 @@ def optimal_perturb(
     # vector norms
     x_norm = np.linalg.norm(x)
     c_norm = np.linalg.norm(c)
-    c_opt = np.dot(c, opt_subspace)
-    c_opt_norm = np.linalg.norm(c_opt)
 
     # perturbation vectors
     dc1 = np.zeros_like(c)
@@ -442,7 +442,7 @@ def optimal_perturb(
             print("Computing df")
         timer.start("df computation")
         Fy = objective_f.jac(y)
-        Fx = np.dot(Fy, objective_f.Z)
+        Fx = np.dot(Fy, objective_f.Z)  # FIXME: use jvp
         Fc = np.dot(Fy, dydc_f)
         Fx_inv = np.linalg.pinv(Fx, rcond=cutoff)
         timer.stop("df computation")

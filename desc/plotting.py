@@ -3,6 +3,7 @@ import matplotlib
 import numpy as np
 import re
 import numbers
+import tkinter
 from termcolor import colored
 import warnings
 from scipy.interpolate import Rbf
@@ -49,9 +50,11 @@ rcParams["mathtext.fontset"] = "cm"
 rcParams["font.size"] = 10
 rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
-import tkinter
 
-dpi = tkinter.Tk().winfo_fpixels("1i")
+try:
+    dpi = tkinter.Tk().winfo_fpixels("1i")
+except tkinter._tkinter.TclError:
+    dpi = 72
 rcParams["figure.dpi"] = dpi
 rcParams["figure.autolayout"] = True
 rcParams["axes.spines.top"] = False

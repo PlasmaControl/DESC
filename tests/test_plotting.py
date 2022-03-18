@@ -14,6 +14,7 @@ from desc.plotting import (
     plot_coefficients,
     _find_idx,
     plot_field_lines_sfl,
+    plot_coils,
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -24,6 +25,7 @@ from desc.basis import (
 )
 from desc.equilibrium import EquilibriaFamily
 from desc import plotting as dplt
+from desc.coils import FourierXYZCoil, CoilSet
 
 
 class TestPlot(unittest.TestCase):
@@ -432,4 +434,19 @@ def test_plot_field_lines(plot_eq):
     fig, ax, _ = plot_field_lines_sfl(
         plot_eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
     )
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_coils():
+    R = 10
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    coils.grid = 100
+    coils2 = CoilSet.from_symmetry(coils, NFP, True)
+    fig, ax = plot_coils(coils2)
     return fig

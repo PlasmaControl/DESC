@@ -569,7 +569,11 @@ def _make_periodic(xq, x, period, axis, *arrs):
         if arrs[k] is not None:
             arrs[k] = jnp.take(arrs[k], i, axis, mode="wrap")
             arrs[k] = jnp.concatenate(
-                [jnp.take(arrs[k], [-1], axis), arrs[k], jnp.take(arrs[k], [0], axis)],
+                [
+                    jnp.take(arrs[k], jnp.array([-1]), axis),
+                    arrs[k],
+                    jnp.take(arrs[k], jnp.array([0]), axis),
+                ],
                 axis=axis,
             )
     return (xq, x, *arrs)
@@ -636,14 +640,14 @@ def _approx_df(x, f, method, axis, **kwargs):
         df = dxi * df
         fx = jnp.concatenate(
             [
-                jnp.take(df, [0], axis, mode="wrap"),
+                jnp.take(df, jnp.array([0]), axis, mode="wrap"),
                 1
                 / 2
                 * (
                     jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
                     + jnp.take(df, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
                 ),
-                jnp.take(df, [-1], axis, mode="wrap"),
+                jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
             ],
             axis=axis,
         )
@@ -676,7 +680,7 @@ def _approx_df(x, f, method, axis, **kwargs):
         zero = jnp.zeros(tuple(df.shape[i] if i != axis else 1 for i in range(df.ndim)))
         b = jnp.concatenate(
             [
-                2 * jnp.take(df, [0], axis, mode="wrap"),
+                2 * jnp.take(df, jnp.array([0]), axis, mode="wrap"),
                 3
                 * (
                     jnp.take(dx, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
@@ -684,7 +688,7 @@ def _approx_df(x, f, method, axis, **kwargs):
                     + jnp.take(dx, jnp.arange(1, df.shape[axis]), axis, mode="wrap")
                     * jnp.take(df, jnp.arange(0, df.shape[axis] - 1), axis, mode="wrap")
                 ),
-                2 * jnp.take(df, [-1], axis, mode="wrap"),
+                2 * jnp.take(df, jnp.array([-1]), axis, mode="wrap"),
             ],
             axis=axis,
         )
@@ -703,19 +707,22 @@ def _approx_df(x, f, method, axis, **kwargs):
             dxi = jnp.moveaxis(dxi, 0, axis)
         df = dxi * df
         fx0 = (
-            (jnp.take(f, [1], axis, mode="wrap") - jnp.take(f, [0], axis, mode="wrap"))
+            (
+                jnp.take(f, jnp.array([1]), axis, mode="wrap")
+                - jnp.take(f, jnp.array([0]), axis, mode="wrap")
+            )
             / (x[(1,)] - x[(0,)])
             if x[0] != x[1]
-            else jnp.zeros_like(jnp.take(f, [0], axis, mode="wrap"))
+            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
         )
         fx1 = (
             (
-                jnp.take(f, [-1], axis, mode="wrap")
-                - jnp.take(f, [-2], axis, mode="wrap")
+                jnp.take(f, jnp.array([-1]), axis, mode="wrap")
+                - jnp.take(f, jnp.array([-2]), axis, mode="wrap")
             )
             / (x[(-1,)] - x[(-2,)])
             if x[-1] != x[-2]
-            else jnp.zeros_like(jnp.take(f, [0], axis, mode="wrap"))
+            else jnp.zeros_like(jnp.take(f, jnp.array([0]), axis, mode="wrap"))
         )
         if method == "cardinal":
             c = kwargs.get("c", 0)

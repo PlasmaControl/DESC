@@ -6,7 +6,7 @@ from desc.io import InputReader
 
 
 def main(cl_args=sys.argv[1:]):
-    """Run. the main DESC code from the command line.
+    """Run the main DESC code from the command line.
 
     Reads and parses user input from command line, runs the code,
     and prints and plots the resulting equilibrium.

@@ -7,8 +7,9 @@ from desc.profiles import PowerSeriesProfile
 
 
 class TestProfiles(unittest.TestCase):
+    @pytest.mark.slow
     def test_same_result(self):
-        input_path = "examples/DESC/SOLOVEV"
+        input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
         eq1 = Equilibrium(**ir.inputs[-1])
@@ -26,6 +27,7 @@ class TestProfiles(unittest.TestCase):
             atol=1e-08,
         )
 
+    @pytest.mark.slow
     def test_close_values(self):
 
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))

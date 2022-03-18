@@ -1,0 +1,74 @@
+name: benchmarks 
+
+on: 
+  push:
+  pull_request:
+    types: [labeled]
+    paths-ignore:
+      - 'tests/benchmarks/.benchmarks/**'
+      - 'tests/benchmarks/Figures/**'
+      - 'docs/**'
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    if: ${{ github.event.label.name == 'run_benchmarks' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r tests/requirements.txt
+          pip install markupsafe==2.0.1
+      - name: Benchmark with pytest-benchmark
+        run: |
+          pwd
+          lscpu
+          cd tests/benchmarks
+          python -m pytest benchmark.py --benchmark-save='Latest_Commit'
+      - name:  Checkout current master
+        uses: actions/checkout@v2
+        with:
+          ref: master
+          clean: false
+      - name: Benchmark with pytest-benchmark
+        run: |
+          pwd
+          lscpu
+          cd tests/benchmarks
+          python -m pytest benchmark.py --benchmark-save='master'
+      - name: put benchmark results in same folder
+        run: |
+          pwd
+          cd tests/benchmarks
+          find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
+          find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 2 | head -n 1 > temp2
+          t1=$(cat temp1)
+          t2=$(cat temp2)
+          mkdir compare_results
+          cp $t1 compare_results
+          cp $t2 compare_results
+      - name: Compare latest commit results to the master branch results
+        run: |
+          pwd
+          cd tests/benchmarks
+          python compare_bench_results.py
+          cat commit_msg.txt
+      - name: comment PR with the results
+        uses: machine-learning-apps/pr-comment@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path: tests/benchmarks/commit_msg.txt
+
+          

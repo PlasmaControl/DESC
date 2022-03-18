@@ -130,18 +130,18 @@ def perturb(
             print("Factoring df")
         timer.start("df/dx factorization")
         m, n = Jx.shape
-        if weight == "auto":
+        if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
             weight = (
                 np.concatenate(
                     [
-                        abs(eq.R_basis.modes[:, :2] ** 2).sum(axis=1),
-                        abs(eq.Z_basis.modes[:, :2] ** 2).sum(axis=1),
-                        abs(eq.L_basis.modes[:, :2] ** 2).sum(axis=1),
+                        abs(eq.R_basis.modes[:, :2]).sum(axis=1),
+                        abs(eq.Z_basis.modes[:, :2]).sum(axis=1),
+                        abs(eq.L_basis.modes[:, :2]).sum(axis=1),
                     ]
                 )
                 + 1
             )
-        elif weight is None:
+        elif (weight is None) or (weight == "auto"):
             weight = np.ones(
                 eq.R_basis.num_modes + eq.Z_basis.num_modes + eq.L_basis.num_modes
             )
@@ -152,7 +152,7 @@ def perturb(
 
         Z = eq.objective.BC_constraint.Z
         W = Z.T @ weight @ Z
-        scale_inv = np.linalg.cholesky(W)
+        scale_inv = W
         scale = np.linalg.inv(scale_inv)
         Jx = Jx @ scale
         u, s, vt = jnp.linalg.svd(Jx, full_matrices=False)

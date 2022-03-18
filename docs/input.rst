@@ -204,6 +204,14 @@ The profiles given in the example are:
    \end{aligned}
 
 If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\iota(\rho) = 0`. 
+Also, note that the rotational transform given is technically assumed to be
+
+.. math::
+   \begin{aligned}
+    \mbox{$\,\iota\!\!$- }= \iota / 2\pi
+    \end{aligned}
+
+i.e. rational surfaces would be where the input rotational transform profile is equal to a rational number. 
 
 Magnetic Axis Initial Guess
 ***************************
@@ -271,6 +279,7 @@ If ``bdry_mode = Poincare``, the shape of the Poincare surface is given by a Zer
 
 .. math::
    \begin{aligned}
+   \begin{cases}
    R_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
    Z_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
    \mathcal{R}^{|m|}_{l}(\rho) &= \sum_{s=0}^{(l-|m|)/2} \frac{(-1)^{s} (l-s)!}{s! [\frac{1}{2}(l+|m|)-s]! [\frac{1}{2}(l-|m|)-s]!} \rho^{l-2s}. 

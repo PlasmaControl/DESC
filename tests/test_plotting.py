@@ -271,12 +271,14 @@ def test_section_logF(plot_eq):
     return fig
 
 
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces(plot_eq):
     fig, ax = plot_surfaces(plot_eq)
     return fig
 
 
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison(DSHAPE):
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
@@ -389,12 +391,14 @@ class TestPlotBasis(unittest.TestCase):
         fig, ax = plot_basis(basis)
         return fig
 
+    @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_doublefourierseries(self):
         basis = DoubleFourierSeries(M=3, N=2)
         fig, ax = plot_basis(basis)
         return fig
 
+    @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_fourierzernike(self):
         basis = FourierZernikeBasis(L=8, M=3, N=2)
@@ -415,12 +419,14 @@ class TestPlotFieldLines(unittest.TestCase):
         pass
 
 
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_field_line(plot_eq):
     fig, ax, _ = plot_field_lines_sfl(plot_eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
     return fig
 
 
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_field_lines(plot_eq):
     fig, ax, _ = plot_field_lines_sfl(

@@ -12,7 +12,6 @@ class Grid(IOAble):
     Unlike subclasses LinearGrid and ConcentricGrid, the base Grid allows the user
     to pass in a custom set of collocation nodes.
 
-
     Parameters
     ----------
     nodes : ndarray of float, size(num_nodes,3)
@@ -80,7 +79,7 @@ class Grid(IOAble):
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
         )
-        self._spacing /= np.tile(np.atleast_2d(counts[inverse]).T, 3)
+        self._spacing /= np.tile(np.atleast_2d(counts[inverse]).T, 3) ** (1 / 3)
         self._spacing *= (4 * np.pi ** 2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = self.spacing.prod(axis=1)
 

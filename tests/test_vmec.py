@@ -5,7 +5,7 @@ from netCDF4 import Dataset
 
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
@@ -462,7 +462,9 @@ def test_plot_vmec_comparison(plot_eq):
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
 
-    eq = EquilibriaFamily.load(load_from=str(DummyStellarator["desc_h5_path"]))[-1]
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
 
     RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
     ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])

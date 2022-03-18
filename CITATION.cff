@@ -33,7 +33,7 @@ identifiers:
     description: 'Master DOI for DESC, points to latest release.'
   - type: url
     value: 'https://github.com/PlasmaControl/DESC'
-    description: `Github repository for DESC`
+    description: 'Github repository for DESC'
 repository-code: 'https://github.com/PlasmaControl/DESC'
 url: 'https://desc-docs.readthedocs.io'
 repository-artifact: 'https://pypi.org/project/desc-opt/'

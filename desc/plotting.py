@@ -1,8 +1,8 @@
 from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
-import re
 import numbers
+import tkinter
 from termcolor import colored
 import warnings
 from scipy.constants import mu_0
@@ -13,7 +13,7 @@ from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import data_index
-
+from desc.utils import flatten_list
 __all__ = [
     "plot_1d",
     "plot_2d",
@@ -27,6 +27,7 @@ __all__ = [
     "plot_grid",
     "plot_basis",
 ]
+
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue
@@ -63,7 +64,12 @@ rcParams["mathtext.fontset"] = "cm"
 rcParams["font.size"] = 10
 rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
-rcParams["figure.dpi"] = 141
+
+try:
+    dpi = tkinter.Tk().winfo_fpixels("1i")
+except tkinter._tkinter.TclError:
+    dpi = 72
+rcParams["figure.dpi"] = dpi
 rcParams["figure.autolayout"] = True
 rcParams["axes.spines.top"] = False
 rcParams["axes.spines.right"] = False
@@ -119,7 +125,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         figsize = (6, 6)
     if ax is None:
         if is3d:
-            fig = plt.figure(figsize=figsize)
+            fig = plt.figure(figsize=figsize, dpi=dpi)
             ax = np.array(
                 [
                     fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
@@ -783,10 +789,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figsize = kwargs.pop("figsize", None)
     theta_color = kwargs.pop("theta_color", colorblind_colors[2])
     theta_ls = kwargs.pop("theta_ls", ":")
+    theta_lw = kwargs.pop("theta_lw", 1)
     rho_color = kwargs.pop("rho_color", colorblind_colors[0])
     rho_ls = kwargs.pop("rho_ls", "-")
+    rho_lw = kwargs.pop("rho_lw", 1)
     lcfs_color = kwargs.pop("lcfs_color", colorblind_colors[1])
     lcfs_ls = kwargs.pop("lcfs_ls", "-")
+    lcfs_lw = kwargs.pop("lcfs_lw", 1)
     axis_color = kwargs.pop("axis_color", colorblind_colors[3])
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
@@ -868,18 +877,21 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             Zv[:, :, i].T,
             color=theta_color,
             linestyle=theta_ls,
+            lw=theta_lw,
         )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
             color=rho_color,
             linestyle=rho_ls,
+            lw=rho_lw,
         )
         ax[i].plot(
             Rr[:, -1, i],
             Zr[:, -1, i],
             color=lcfs_color,
             linestyle=lcfs_ls,
+            lw=lcfs_lw,
             label=(label if i == 0 else ""),
         )
         if rho[0] == 0:
@@ -910,6 +922,7 @@ def plot_comparison(
     ax=None,
     cmap="rainbow",
     colors=None,
+    lws=None,
     linestyles=None,
     labels=None,
     **kwargs,
@@ -937,6 +950,8 @@ def plot_comparison(
     colors : array-like
         Array the same length as eqs of colors to use for each equilibrium.
         Overrides `cmap`.
+    lws : array-like
+        Array the same length as eqs of line widths to use for each equilibrium
     linestyles : array-like
         Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
@@ -954,6 +969,8 @@ def plot_comparison(
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lws is None:
+        lws = [1 for i in range(neq)]
     if linestyles is None:
         linestyles = ["-" for i in range(neq)]
     if labels is None:
@@ -994,18 +1011,109 @@ def plot_comparison(
             ax,
             theta_color=colors[i % len(colors)],
             theta_ls=linestyles[i % len(linestyles)],
+            theta_lw=lws[i % len(lws)],
             rho_color=colors[i % len(colors)],
             rho_ls=linestyles[i % len(linestyles)],
+            rho_lw=lws[i % len(lws)],
             lcfs_color=colors[i % len(colors)],
             lcfs_ls=linestyles[i % len(linestyles)],
+            lcfs_lw=lws[i % len(lws)],
             axis_color=colors[i % len(colors)],
             axis_alpha=0,
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
         )
-    if any(labels):
-        fig.legend()
+    if any(labels) and kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kw", {}))
+    return fig, ax
+
+
+def plot_coils(coils, grid=None, ax=None, **kwargs):
+    """Create 3D plot of coil geometry
+
+    Parameters
+    ----------
+    coils : Coil, CoilSet
+        Coil or coils to plot
+    grid : Grid, optional
+        Grid to use for evaluating geometry
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to
+    """
+
+    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 2)
+    ls = kwargs.pop("ls", "-")
+    color = kwargs.pop("color", "current")
+    color = kwargs.pop("c", color)
+    cbar = False
+    if color == "current":
+        cbar = True
+        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        currents = flatten_list(coils.current)
+        norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        color = [cmap(norm(cur)) for cur in currents]
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+    fig, ax = _format_ax(ax, True, figsize=figsize)
+    if grid is None:
+        grid_kwargs = {
+            "zeta": np.linspace(0, 2 * np.pi, 50),
+        }
+        grid = _get_grid(**grid_kwargs)
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coils_list = flatten_coils(coils)
+
+    for i, coil in enumerate(coils_list):
+        x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        ax.plot(
+            x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
+        )
+
+    if cbar:
+        cbar = fig.colorbar(sm)
+        cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence we call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+    ax.set_xlabel(_axis_labels_XYZ[0])
+    ax.set_ylabel(_axis_labels_XYZ[1])
+    ax.set_zlabel(_axis_labels_XYZ[2])
+
     return fig, ax
 
 

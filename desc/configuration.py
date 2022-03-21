@@ -571,6 +571,8 @@ class _Configuration(IOAble, ABC):
             One of 'lcfs', 'poincare'.
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
+        coord : float or None
+            Surface label (ie, rho, zeta etc) for supplied surface.
 
         Returns
         -------

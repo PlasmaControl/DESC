@@ -198,6 +198,23 @@ class IOAble(ABC):
             dict2 = other.__dict__
         return equals(dict1, dict2)
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            try:
+                setattr(result, k, copy.deepcopy(v, memo))
+            except TypeError:
+                setattr(result, k, copy.copy(v))
+        return result
+
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this object."""
         if deepcopy:

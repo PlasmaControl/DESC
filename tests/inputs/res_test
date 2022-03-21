@@ -1,0 +1,48 @@
+# tests changing resolution in different ways during continuation method
+
+# global parameters
+sym =  1
+NFP =  5
+Psi = -2.13300000E+00
+
+# spectral resolution
+# first change just spectral, then just grid, then both
+L_rad  =  3, 4, 4, 4
+M_pol  =  2, 2, 2, 2,
+N_tor  =  0, 0, 0, 1
+M_grid =  3, 3, 5, 5
+N_grid =  0, 0, 0, 2
+
+# continuation parameters
+bdry_ratio = 0, 0, 0, 1
+pres_ratio = 0
+pert_order = 1
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-4
+nfev = 10
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = ansi
+node_pattern      = jacobi
+
+# pressure and rotational transform profiles
+l:   0	p =   1.85596929e+05	i =   8.56047021e-01
+l:   2	p =  -3.71193859e+05	i =   3.88095412e-02
+l:   4	p =   1.85596929e+05	i =   6.86795128e-02
+
+# magnetic axis initial guess
+n:   0  R0 =  1.0E+1  Z0 =  0.0E+0
+
+# fixed-boundary surface shape
+m:   0  n:   0  R1 =  1.0E+1
+m:   1  n:   0  R1 = -1.0E+0
+m:   1  n:   1  R1 = -3.0E-1
+m:  -1  n:  -1  R1 =  3.0E-1
+m:  -1  n:   0  Z1 =  1.0E+0
+m:  -1  n:   1  Z1 = -3.0E-1
+m:   1  n:  -1  Z1 = -3.0E-1

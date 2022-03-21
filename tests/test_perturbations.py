@@ -105,14 +105,7 @@ class TestPerturbations(unittest.TestCase):
         )
         eq_old.objective = obj_fun
         y = eq_old.objective.BC_constraint.project(eq_old.x)
-        args = (
-            y,
-            eq_old.Rb_lmn,
-            eq_old.Zb_lmn,
-            eq_old.p_l,
-            eq_old.i_l,
-            eq_old.Psi,
-        )
+        args = (y, eq_old.Rb_lmn, eq_old.Zb_lmn, eq_old.p_l, eq_old.i_l, eq_old.Psi)
 
         eq_old.objective.Rb_transform = eq_old.surface._R_transform
         eq_old.objective.compile(y, args[1:])
@@ -128,16 +121,9 @@ class TestPerturbations(unittest.TestCase):
         deltas["dRb"][idx_R] = 0.5
         deltas["dZb"][idx_Z] = -0.3
 
-        eq_new = eq_old.perturb(**deltas, order=1, tr_ratio=100)
+        eq_new = eq_old.perturb(**deltas, order=1, tr_ratio=100, weight=None)
         y = eq_new.objective.BC_constraint.project(eq_new.x)
-        args = (
-            y,
-            eq_new.Rb_lmn,
-            eq_new.Zb_lmn,
-            eq_new.p_l,
-            eq_new.i_l,
-            eq_new.Psi,
-        )
+        args = (y, eq_new.Rb_lmn, eq_new.Zb_lmn, eq_new.p_l, eq_new.i_l, eq_new.Psi)
         eq_new.objective.Rb_transform = eq_new.surface._R_transform
         eq_new.objective.compile(y, args[1:])
         res_new = eq_new.objective.compute(*args)

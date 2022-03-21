@@ -1,6 +1,8 @@
 import unittest
+import pytest
 import numpy as np
 import mpmath
+import time
 from desc.grid import LinearGrid
 from desc.basis import (
     polyder_vec,
@@ -21,10 +23,10 @@ from desc.basis import (
 
 
 class TestBasis(unittest.TestCase):
-    """Tests Basis classes"""
+    """Test Basis class."""
 
     def test_polyder(self):
-        """Tests polyder_vec function"""
+        """Test polyder_vec function."""
         p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         p1 = polyder_vec(p0, 1)
         p2 = polyder_vec(p0, 2)
@@ -36,7 +38,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(p2, correct_p2, atol=1e-8)
 
     def test_polyval(self):
-        """Tests polyval_vec function"""
+        """Test polyval_vec function."""
         p = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         x = np.linspace(0, 1, 11)
 
@@ -55,6 +57,7 @@ class TestBasis(unittest.TestCase):
         coeffs = zernike_radial_coeffs(l, m, exact=False)
         assert coeffs.dtype == np.float64
 
+    @pytest.mark.slow
     def test_polyval_exact(self):
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]
@@ -104,7 +107,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
 
     def test_powers(self):
-        """Tests powers function"""
+        """Test powers function."""
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
@@ -118,7 +121,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_zernike_radial(self):
-        """Tests zernike_radial function"""
+        """Test zernike_radial function."""
         l = np.array([3, 4, 6])
         m = np.array([1, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
@@ -157,7 +160,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
     def test_fourier(self):
-        """Tests fourier function"""
+        """Test Fourier evaluation."""
         m = np.array([-1, 0, 1])
         t = np.linspace(0, 2 * np.pi, 8, endpoint=False)  # theta coordinates
 
@@ -171,7 +174,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_power_series(self):
-        """Tests PowerSeries evaluation"""
+        """Test PowerSeries evaluation."""
         grid = LinearGrid(L=11, endpoint=True)
         r = grid.nodes[:, 0]  # rho coordinates
 
@@ -186,7 +189,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_double_fourier(self):
-        """Tests DoubleFourierSeries evaluation"""
+        """Test DoubleFourierSeries evaluation."""
         grid = LinearGrid(M=5, N=5)
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
@@ -211,7 +214,7 @@ class TestBasis(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_change_resolution(self):
-
+        """Test change_resolution function."""
         ps = PowerSeries(L=4)
         ps.change_resolution(L=6)
         assert len(ps.modes) == 7

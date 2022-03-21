@@ -205,6 +205,7 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(f0, correct_f0, atol=1e-8)
         np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
 
+    @pytest.mark.slow
     def test_direct_fft_equal(self):
         """Tests that the direct and fft method produce the same results."""
 

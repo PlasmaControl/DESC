@@ -3,6 +3,7 @@ import matplotlib
 import numpy as np
 import re
 import numbers
+import tkinter
 from termcolor import colored
 import warnings
 from scipy.interpolate import Rbf
@@ -10,6 +11,7 @@ from scipy.integrate import solve_ivp
 
 from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier
+from desc.utils import flatten_list
 
 __all__ = ["plot_1d", "plot_2d", "plot_3d", "plot_surfaces", "plot_section"]
 
@@ -40,15 +42,20 @@ dashes = [
     (6.4, 1.6, 1.0, 1.6, 0.0, 0.0),  # dot dash
     (3.0, 1.6, 1.0, 1.6, 1.0, 1.6),  # dot dot dash
     (6.0, 4.0, 0.0, 0.0, 0.0, 0.0),  # long dash
-    (1.0, 1.6, 3.0, 1.6, 3.0, 1.6),
-]  # dash dash dot
+    (1.0, 1.6, 3.0, 1.6, 3.0, 1.6),  # dash dash dot
+]
 matplotlib.rcdefaults()
 rcParams["font.family"] = "DejaVu Serif"
 rcParams["mathtext.fontset"] = "cm"
 rcParams["font.size"] = 10
 rcParams["figure.facecolor"] = (1, 1, 1, 1)
 rcParams["figure.figsize"] = (6, 4)
-rcParams["figure.dpi"] = 141
+
+try:
+    dpi = tkinter.Tk().winfo_fpixels("1i")
+except tkinter._tkinter.TclError:
+    dpi = 72
+rcParams["figure.dpi"] = dpi
 rcParams["figure.autolayout"] = True
 rcParams["axes.spines.top"] = False
 rcParams["axes.spines.right"] = False
@@ -80,31 +87,30 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     Parameters
     ----------
     ax : None or matplotlib AxesSubplot instance
-        axis to plot to
+        Axis to plot to.
     is3d: bool
-        default is False
+        Whether the plot is three-dimensional.
     rows : int, optional
-        number of rows of subplots to create
+        Number of rows of subplots to create.
     cols : int, optional
-        number of columns of subplots to create
+        Number of columns of subplots to create.
     figsize : tuple of 2 floats
-        figure size (width, height) in inches
+        Figure size (width, height) in inches. Default is (6, 6).
     equal : bool
-        whether axes should have equal scales for x and y
-
+        Whether axes should have equal scales for x and y.
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if figsize is None:
         figsize = (6, 6)
     if ax is None:
         if is3d:
-            fig = plt.figure(figsize=figsize)
+            fig = plt.figure(figsize=figsize, dpi=dpi)
             ax = np.array(
                 [
                     fig.add_subplot(rows, cols, int(r * cols + c + 1), projection="3d")
@@ -150,11 +156,12 @@ def _get_grid(**kwargs):
     Parameters
     ----------
     kwargs
-        any arguments taken by LinearGrid (Default L=1, M=1, N=1)
+         Any arguments taken by LinearGrid.
 
     Returns
     -------
-    LinearGrid
+    grid : LinearGrid
+         Grid of coordinates to evaluate at.
 
     """
     grid_args = {
@@ -183,10 +190,12 @@ def _get_plot_axes(grid):
     Parameters
     ----------
     grid : Grid
+         Grid of coordinates to evaluate at.
 
     Returns
     -------
-    tuple
+    axes : tuple of int
+        Which axes of the grid are being plotted.
 
     """
     plot_axes = [0, 1, 2]
@@ -206,22 +215,22 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     L : bool
-        wheter to include radial mode numbers in the x-axis or not (Default = True)
+        Wheter to include radial mode numbers in the x-axis or not.
     M : bool
-        wheter to include poloidal mode numbers in the x-axis or not (Default = True)
+        Wheter to include poloidal mode numbers in the x-axis or not.
     N : bool
-        wheter to include toroidal mode numbers in the x-axis or not (Default = True)
+        Wheter to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     lmn = np.array([], dtype=int)
@@ -264,28 +273,28 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
+def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     """Plot 1D profiles.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
+        Whether to use a log scale.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
@@ -303,10 +312,10 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     data = data.flatten()
 
     if log:
-        ax.semilogy(grid.nodes[:, plot_axes[0]], data)
+        ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
         data = np.abs(data)  # ensure its positive for log plot
     else:
-        ax.plot(grid.nodes[:, plot_axes[0]], data)
+        ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_ylabel(_name_label(name_dict))
@@ -314,32 +323,32 @@ def plot_1d(eq, name, grid=None, ax=None, log=False, **kwargs):
     return fig, ax
 
 
-def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     """Plot 2D cross-sections.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
-    norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum
-        equilibrium force error is normalized by the gradient of magnetic pressure,
-        while an equilibrium solved with pressure is normalized by pressure gradient.
+        Whether to use a log scale.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the pressure gradient.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
@@ -424,30 +433,30 @@ def plot_2d(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
     return fig, ax
 
 
-def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **kwargs):
+def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **kwargs):
     """Plot 3D surfaces.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
+        Whether to use a log scale.
     all_field_periods : bool, optional
-        whether to plot full torus or just one field period. Ignored if grid is specified
+        Whether to plot full torus or one field period. Ignored if grid is specified.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     nfp = 1 if all_field_periods else eq.NFP
@@ -539,32 +548,32 @@ def plot_3d(eq, name, grid=None, ax=None, log=False, all_field_periods=True, **k
     return fig, ax
 
 
-def plot_section(eq, name, grid=None, ax=None, log=False, norm_F=False, **kwargs):
+def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     """Plot Poincare sections.
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     name : str
-        name of variable to plot
+        Name of variable to plot.
     grid : Grid, optional
-        grid of coordinates to plot at
-    ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Grid of coordinates to plot at.
     log : bool, optional
-        whether to use a log scale
-    norm_F : bool,optional
-        whether to normalize a plot of force error to be unitless. A vacuum
-        equilibrium force error is normalized by the gradient of magnetic pressure,
-        while an equilibrium solved with pressure is normalized by pressure gradient.
+        Whether to use a log scale.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the pressure gradient.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     if grid is None:
@@ -677,26 +686,26 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     rho : int or array-like
-        values of rho to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,1)
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     theta : int or array-like
-        values of theta to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,2pi)
+        Values of theta to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
-        values of zeta to plot contours at. If an integer, plot that many contours
-        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
-        equilibria or 6 for non-axisymmetric cases.
+        Values of zeta to plot contours at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     NR = kwargs.pop("NR", 50)
@@ -704,10 +713,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figsize = kwargs.pop("figsize", None)
     theta_color = kwargs.pop("theta_color", colorblind_colors[2])
     theta_ls = kwargs.pop("theta_ls", ":")
+    theta_lw = kwargs.pop("theta_lw", 1)
     rho_color = kwargs.pop("rho_color", colorblind_colors[0])
     rho_ls = kwargs.pop("rho_ls", "-")
+    rho_lw = kwargs.pop("rho_lw", 1)
     lcfs_color = kwargs.pop("lcfs_color", colorblind_colors[1])
     lcfs_ls = kwargs.pop("lcfs_ls", "-")
+    lcfs_lw = kwargs.pop("lcfs_lw", 1)
     axis_color = kwargs.pop("axis_color", colorblind_colors[3])
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
@@ -790,18 +802,21 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             Zv[:, :, i].T,
             color=theta_color,
             linestyle=theta_ls,
+            lw=theta_lw,
         )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
             color=rho_color,
             linestyle=rho_ls,
+            lw=rho_lw,
         )
         ax[i].plot(
             Rr[:, -1, i],
             Zr[:, -1, i],
             color=lcfs_color,
             linestyle=lcfs_ls,
+            lw=lcfs_lw,
             label=(label if i == 0 else ""),
         )
         if rho[0] == 0:
@@ -820,7 +835,6 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         ax[i].set_title(
             "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
         )
-
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -833,50 +847,55 @@ def plot_comparison(
     ax=None,
     cmap="rainbow",
     colors=None,
+    lws=None,
     linestyles=None,
     labels=None,
     **kwargs,
 ):
-    """Plot comparison between flux surfaces of multiple equilibria
+    """Plot comparison between flux surfaces of multiple equilibria.
 
     Parameters
     ----------
     eqs : array-like of Equilibrium or EquilibriaFamily
-        equilibria to compare
+        Equilibria to compare.
     rho : int or array-like
-        values of rho to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,1)
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     theta : int or array-like
-        values of theta to plot contours of. If an integer, plot that many contours
-        linearly spaced in (0,2pi)
+        Values of theta to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
-        values of zeta to plot contours at. If an integer, plot that many contours
-        linearly spaced in (0,2pi). If None, defaults to 1 contour for axisymmetric
-        equilibria or 6 for non-axisymmetric cases.
+        Values of zeta to plot contours at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
     cmap : str or matplotlib ColorMap
-        colormap to use for plotting, discretized into len(eqs) colors.
+        Colormap to use for plotting, discretized into len(eqs) colors.
     colors : array-like
-        array the same length as eqs of colors to use for each equilibrium.
-        Overrides `cmap`
+        Array the same length as eqs of colors to use for each equilibrium.
+        Overrides `cmap`.
+    lws : array-like
+        Array the same length as eqs of line widths to use for each equilibrium
     linestyles : array-like
-        array the same length as eqs of linestyles to use for each equilibrium
+        Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
-        array the same length as eqs of labels to apply to each equilibrium
+        Array the same length as eqs of labels to apply to each equilibrium.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
 
     """
     figsize = kwargs.pop("figsize", None)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lws is None:
+        lws = [1 for i in range(neq)]
     if linestyles is None:
         linestyles = ["-" for i in range(neq)]
     if labels is None:
@@ -917,18 +936,109 @@ def plot_comparison(
             ax,
             theta_color=colors[i % len(colors)],
             theta_ls=linestyles[i % len(linestyles)],
+            theta_lw=lws[i % len(lws)],
             rho_color=colors[i % len(colors)],
             rho_ls=linestyles[i % len(linestyles)],
+            rho_lw=lws[i % len(lws)],
             lcfs_color=colors[i % len(colors)],
             lcfs_ls=linestyles[i % len(linestyles)],
+            lcfs_lw=lws[i % len(lws)],
             axis_color=colors[i % len(colors)],
             axis_alpha=0,
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
         )
-    if any(labels):
-        fig.legend()
+    if any(labels) and kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kw", {}))
+    return fig, ax
+
+
+def plot_coils(coils, grid=None, ax=None, **kwargs):
+    """Create 3D plot of coil geometry
+
+    Parameters
+    ----------
+    coils : Coil, CoilSet
+        Coil or coils to plot
+    grid : Grid, optional
+        Grid to use for evaluating geometry
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to
+    """
+
+    figsize = kwargs.pop("figsize", None)
+    lw = kwargs.pop("lw", 2)
+    ls = kwargs.pop("ls", "-")
+    color = kwargs.pop("color", "current")
+    color = kwargs.pop("c", color)
+    cbar = False
+    if color == "current":
+        cbar = True
+        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        currents = flatten_list(coils.current)
+        norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        color = [cmap(norm(cur)) for cur in currents]
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+    fig, ax = _format_ax(ax, True, figsize=figsize)
+    if grid is None:
+        grid_kwargs = {
+            "zeta": np.linspace(0, 2 * np.pi, 50),
+        }
+        grid = _get_grid(**grid_kwargs)
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coils_list = flatten_coils(coils)
+
+    for i, coil in enumerate(coils_list):
+        x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        ax.plot(
+            x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
+        )
+
+    if cbar:
+        cbar = fig.colorbar(sm)
+        cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence we call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+    ax.set_xlabel(_axis_labels_XYZ[0])
+    ax.set_ylabel(_axis_labels_XYZ[1])
+    ax.set_zlabel(_axis_labels_XYZ[2])
+
     return fig, ax
 
 
@@ -1211,21 +1321,20 @@ def _name_key(name_dict):
 
 
 def plot_grid(grid, **kwargs):
-    """Plot the location of collocation nodes on the zeta=0 plane
+    """Plot the location of collocation nodes on the zeta=0 plane.
 
     Parameters
     ----------
     grid : Grid
-        grid to plot
+        Grid to plot.
 
     Returns
     -------
-    Returns
-    -------
     fig : matplotlib.figure.Figure
-        handle to the figure used for plotting
-    ax : matplotlib.axes.Axes
-        handle to the axis used for plotting
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
     """
     fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
@@ -1261,15 +1370,17 @@ def plot_grid(grid, **kwargs):
     ax.set_yticklabels([])
     if grid.__class__.__name__ in ["LinearGrid", "Grid", "QuadratureGrid"]:
         ax.set_title(
-            "{}, $L={}$, $M={}$".format(
+            "{}, $L={}$, $M={}, pattern: {}$".format(
                 grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
             ),
             pad=20,
         )
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
-            "{}, $M={}$, \n node pattern: {}".format(
-                grid.__class__.__name__, grid.M, grid.node_pattern, grid.node_pattern
+            "{}, $M={}$, pattern: {}".format(
+                grid.__class__.__name__,
+                grid.M,
+                grid.node_pattern,
             ),
             pad=20,
         )
@@ -1287,11 +1398,12 @@ def plot_basis(basis, **kwargs):
 
     Returns
     -------
-    fig : matplotlib.figure
-        handle to figure
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
-        axes used for plotting. A single axis is used for 1d basis functions,
-        2d or 3d bases return an ndarray or dict of axes
+        Axes used for plotting. A single axis is used for 1d basis functions,
+        2d or 3d bases return an ndarray or dict of axes.
+
     """
 
     if basis.__class__.__name__ == "PowerSeries":
@@ -1669,39 +1781,47 @@ def plot_logo(savepath=None, **kwargs):
 
 
 def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **kwargs):
-    """Traces field lines on specified flux surface at specified initial vartheta (:math:`\\vartheta`) seed locations, then plots them.
-    Field lines traced by first finding the corresponding straight-field-line (SFL) coordinates :math:`(\\rho,\\vartheta,\phi)` for each field line, then converting those to the computational
-    :math:`(\\rho,\\theta,\phi)` coordiantes, then finally computing from those the toroidal :math:`(R,\phi,Z)` coordinates of each field line.
+    """Plots field lines on specified flux surface.
+
+    Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
+    locations, then plots them.
+    Field lines traced by first finding the corresponding straight-field-line (SFL)
+    coordinates :math:`(\\rho,\\vartheta,\\phi)` for each field line, then
+    converting those to the computational :math:`(\\rho,\\theta,\\phi)` coordinates,
+    then finally computing from those the toroidal :math:`(R,\\phi,Z)` coordinates of
+    each field line.
+
     The SFL angle coordinates are found with the SFL relation:
 
-        :math:`\\vartheta = \iota \phi + \\vartheta_0`
+        :math:`\\vartheta = \\iota \\phi + \\vartheta_0`
 
 
     Parameters
     ----------
     eq : Equilibrium
-        object from which to plot
+        Object from which to plot.
     rho : float
-        flux surface to trace field lines at
+        Flux surface to trace field lines at.
     seed_thetas : float or array-like of floats
-        theta positions at which to seed magnetic field lines, if array-like, will plot multiple field lines
+        Poloidal positions at which to seed magnetic field lines.
+        If array-like, will plot multiple field lines.
     phi_end: float
-        phi to integrate field line until, in radians. Default is 2*pi
+        Toroidal angle to integrate field line until, in radians. Default is 2*pi.
     ax : matplotlib AxesSubplot, optional
-        axis to plot on
+        Axis to plot on.
 
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to.
     field_line_coords : dict
-        dict containing the R,phi,Z coordinates of each field line traced. Dictionary entries are lists
-        corresponding to the field lines for each seed_theta given. Also contains the scipy IVP solutions for info
-        on how each line was integarted
-
+        Dict containing the R,phi,Z coordinates of each field line traced.
+        Dictionary entries are lists corresponding to the field lines for
+        each seed_theta given. Also contains the scipy IVP solutions for info
+        on how each line was integrated
 
     """
     if rho == 0:
@@ -1820,13 +1940,13 @@ def plot_field_lines_real_space(
     Field lines integrated by first fitting the magnetic field with radial basis functions (RBF) in R,Z,phi, then integrating the field line
     from phi=0 up to the specified phi angle, by solving:
 
-    :math:`\\frac{dR}{d\phi} = \\frac{RB_R}{B_{\phi}} , \\frac{dZ}{d\phi} = \\frac{RB_Z}{B_{\phi}}`
+    :math:`\\frac{dR}{d\\phi} = \\frac{RB_R}{B_{\\phi}} , \\frac{dZ}{d\\phi} = \\frac{RB_Z}{B_{\\phi}}`
 
-    :math:`B_R = \mathbf{B} \cdot \hat{\mathbf{R}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{R}} = B^{\\theta} \\frac{\partial R}{\partial \\theta} + B^{\zeta} \\frac{\partial R}{\partial \zeta}`
+    :math:`B_R = \\mathbf{B} \\cdot \\hat{\\mathbf{R}} = (B^{\\theta} \\mathbf{e}_{\\theta} + B^{\\zeta} \\mathbf{e}_{\\zeta}) \\cdot \\hat{\\mathbf{R}} = B^{\\theta} \\frac{\\partial R}{\\partial \\theta} + B^{\\zeta} \\frac{\\partial R}{\\partial \\zeta}`
 
-    :math:`B_Z = \mathbf{B} \cdot \hat{\mathbf{Z}} = (B^{\\theta} \mathbf{e}_{\\theta} + B^{\zeta} \mathbf{e}_{\zeta}) \cdot \hat{\mathbf{Z}} = B^{\\theta} \\frac{\partial Z}{\partial \\theta} + B^{\zeta} \\frac{\partial Z}{\partial \zeta}`
+    :math:`B_Z = \\mathbf{B} \\cdot \\hat{\\mathbf{Z}} = (B^{\\theta} \\mathbf{e}_{\\theta} + B^{\\zeta} \\mathbf{e}_{\\zeta}) \\cdot \\hat{\\mathbf{Z}} = B^{\\theta} \\frac{\\partial Z}{\\partial \\theta} + B^{\\zeta} \\frac{\\partial Z}{\\partial \\zeta}`
 
-    :math:`B_{\phi} = \mathbf{B} \cdot \hat{\mathbf{\phi}} = R B^{\zeta}`
+    :math:`B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\mathbf{\\phi}} = R B^{\\zeta}`
 
     Parameters
     ----------
@@ -2049,7 +2169,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, toroidal_coords, B_interp, phi0=
     y0 = [fR[0], fZ[0]]
 
     def rhs(phi, y):
-        """RHS of magnetic field line eqn"""
+        """RHS of magnetic field line equation."""
         dRdphi = (
             y[0]
             * B_interp["B_R"](y[0], y[1], np.mod(phi, 2 * np.pi))

@@ -30,7 +30,7 @@ def phi_lm(R, phi, Z, a, m):
 
 a = -1.489
 m = 5
-args = (a, m)
+args = {"a": a, "m": m}
 
 
 class TestMagneticFields(unittest.TestCase):
@@ -46,24 +46,6 @@ class TestMagneticFields(unittest.TestCase):
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
         )
 
-    def test_field_derivatives(self):
-
-        tfield = ToroidalMagneticField(2, 1)
-        vfield = VerticalMagneticField(1)
-        pfield = PoloidalMagneticField(2, 1, 2)
-        np.testing.assert_allclose(tfield([1, 0, 0], dR=1), [[0, -2, 0]])
-        np.testing.assert_allclose(tfield([1, 0, 0], dp=1), [[0, 0, 0]])
-        np.testing.assert_allclose(tfield([1, 0, 0], dZ=1), [[0, 0, 0]])
-        np.testing.assert_allclose(vfield([1, 0, 0], dR=1), [[0, 0, 0]])
-        np.testing.assert_allclose(vfield([1, 0, 0], dp=1), [[0, 0, 0]])
-        np.testing.assert_allclose(vfield([1, 0, 0], dZ=1), [[0, 0, 0]])
-        with pytest.raises(NotImplementedError):
-            pfield([1, 0, 0], dR=1)
-        with pytest.raises(NotImplementedError):
-            pfield([1, 0, 0], dp=1)
-        with pytest.raises(NotImplementedError):
-            pfield([1, 0, 0], dZ=1)
-
     def test_scalar_field(self):
 
         field = ScalarPotentialField(phi_lm, args)
@@ -73,13 +55,8 @@ class TestMagneticFields(unittest.TestCase):
         np.testing.assert_allclose(
             field.compute_magnetic_field([1.0, np.pi / 4, 0]), [[0, 1, 0]]
         )
-        with pytest.raises(NotImplementedError):
-            field([1, 0, 0], dR=1)
-        with pytest.raises(NotImplementedError):
-            field([1, 0, 0], dp=1)
-        with pytest.raises(NotImplementedError):
-            field([1, 0, 0], dZ=1)
 
+    @pytest.mark.slow
     def test_spline_field(self):
 
         field1 = ScalarPotentialField(phi_lm, args)

@@ -152,6 +152,9 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution"""
+        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+            len(args) == 0
+        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
         L = kwargs.get("L", None)
         M = kwargs.get("M", None)
         N = kwargs.get("N", None)
@@ -407,7 +410,6 @@ class FourierRZToroidalSurface(Surface):
         r_z = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
 
         N = jnp.cross(r_t, r_z, axis=1)
-        print("grid inside compute surface area", grid)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
     def get_constraint(self, R_basis, Z_basis, L_basis):
@@ -580,6 +582,9 @@ class ZernikeRZToroidalSection(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution"""
+        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+            len(args) == 0
+        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
         L = kwargs.get("L", None)
         M = kwargs.get("M", None)
         N = kwargs.get("N", None)

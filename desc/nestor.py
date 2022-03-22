@@ -96,10 +96,10 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
     Z_zz_2d = Zb_transform.transform(Z_lmn, dt=0, dz=2).reshape((nzeta, ntheta)).T
     
     coords = {}
-    coords["R"]     = R_2d.flatten()
-    coords["Z"]     = Z_2d.flatten()
-    coords["R_sym"] = R_2d[:ntheta_sym,:].flatten()
-    coords["Z_sym"] = Z_2d[:ntheta_sym,:].flatten()
+    coords["R_full"]     = R_2d.flatten()
+    coords["Z_full"]     = Z_2d.flatten()
+    coords["R"] = R_2d[:ntheta_sym,:].flatten()
+    coords["Z"] = Z_2d[:ntheta_sym,:].flatten()
     coords["R_t"]   = R_t_2d[:ntheta_sym,:].flatten()
     coords["R_z"]   = R_z_2d[:ntheta_sym,:].flatten()
     coords["R_tt"]  = R_tt_2d[:ntheta_sym,:].flatten()
@@ -111,7 +111,7 @@ def eval_surface_geometry(R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzet
     coords["Z_tz"]  = Z_tz_2d[:ntheta_sym,:].flatten()
     coords["Z_zz"]  = Z_zz_2d[:ntheta_sym,:].flatten()
 
-    coords["phi_sym"] = jnp.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
+    coords["phi"] = jnp.broadcast_to(phi, (ntheta_sym, nzeta)).flatten()
     coords["X"] = (R_2d * jnp.cos(phi)).flatten()
     coords["Y"] = (R_2d * jnp.sin(phi)).flatten()
 
@@ -178,10 +178,10 @@ def compute_normal(coords, signgs):
         R, phi, Z components of normal vector on regular grid in theta, zeta
     """
     normal = {}
-    normal["R_n"]   =  signgs * (coords["R_sym"] * coords["Z_t"])
+    normal["R_n"]   =  signgs * (coords["R"] * coords["Z_t"])
     normal["phi_n"] =  signgs * (coords["R_t"] * coords["Z_z"]
                                               - coords["R_z"] * coords["Z_t"])
-    normal["Z_n"]   = -signgs * (coords["R_sym"] * coords["R_t"])
+    normal["Z_n"]   = -signgs * (coords["R"] * coords["R_t"])
     return normal
 
 
@@ -210,7 +210,7 @@ def compute_jacobian(coords, normal, NFP):
                         + coords["Z_t"] * coords["Z_z"])/NFP
     jacobian["g_zz"] = (coords["R_z"]  * coords["R_z"]
                         + coords["Z_z"]  * coords["Z_z"]
-                        + coords["R_sym"] * coords["R_sym"])/NFP**2
+                        + coords["R"] * coords["R"])/NFP**2
     # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface
     jacobian["a_tt"]   = 0.5 * (normal["R_n"] * coords["R_tt"]
                                 + normal["Z_n"] * coords["Z_tt"])
@@ -218,7 +218,7 @@ def compute_jacobian(coords, normal, NFP):
                         + normal["phi_n"] * coords["R_t"]
                         + normal["Z_n"] * coords["Z_tz"])/NFP
     jacobian["a_zz"]   = (normal["phi_n"] * coords["R_z"] +
-                          0.5*(normal["R_n"] * (coords["R_zz"] - coords["R_sym"])
+                          0.5*(normal["R_n"] * (coords["R_zz"] - coords["R"])
                                + normal["Z_n"] * coords["Z_zz"]) )/NFP**2
     return jacobian
 
@@ -289,9 +289,9 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
     # first point == last point for periodicity
     axis = jnp.hstack([axis[:,-1:], axis])
 
-    eval_pts = jnp.array([coords["R_sym"]*jnp.cos(coords["phi_sym"]),
-                         coords["R_sym"]*jnp.sin(coords["phi_sym"]),
-                         coords["Z_sym"]])
+    eval_pts = jnp.array([coords["R"]*jnp.cos(coords["phi"]),
+                         coords["R"]*jnp.sin(coords["phi"]),
+                         coords["Z"]])
 
     B = biot_savart(eval_pts, axis, current)
 
@@ -300,13 +300,13 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
     B_j["BX"] = B[0]
     B_j["BY"] = B[1]
     B_j["BZ"] = B[2]    
-    B_j["BR"] =    B[0]*jnp.cos(coords["phi_sym"]) + B[1]*jnp.sin(coords["phi_sym"])
-    B_j["Bphi"] = -B[0]*jnp.sin(coords["phi_sym"]) + B[1]*jnp.cos(coords["phi_sym"])
+    B_j["BR"] =    B[0]*jnp.cos(coords["phi"]) + B[1]*jnp.sin(coords["phi"])
+    B_j["Bphi"] = -B[0]*jnp.sin(coords["phi"]) + B[1]*jnp.cos(coords["phi"])
     B_j["Bn"] = normal["R_n"] * B_j["BR"] + normal["phi_n"] * B_j["Bphi"] + normal["Z_n"] * B_j["BZ"]
 
     return B_j
 
-def compute_T_S(jacobian, mf, nf, ntheta, nzeta):
+def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
     """Compute T and S functions needed for analytic integrals by recurrence relation
 
     Parameters
@@ -323,6 +323,11 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta):
     TS : dict of ndarray
         T^plus, T^minus, S^plus, S^minus
     """
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
+    
     a = jacobian["g_tt"]
     b = jacobian["g_tz"]
     c = jacobian["g_zz"]
@@ -347,10 +352,10 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta):
     ra1m = azm1u/am
 
     # compute T^{\pm}_l, S^{\pm}_l
-    T_p_l = jnp.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # T^{+}_l
-    T_m_l = jnp.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # T^{-}_l
-    S_p_l = jnp.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # S^{+}_l
-    S_m_l = jnp.zeros([mf + nf + 1, (ntheta//2+1)*nzeta]) # S^{-}_l
+    T_p_l = jnp.zeros([mf + nf + 1, ntheta_sym*nzeta]) # T^{+}_l
+    T_m_l = jnp.zeros([mf + nf + 1, ntheta_sym*nzeta]) # T^{-}_l
+    S_p_l = jnp.zeros([mf + nf + 1, ntheta_sym*nzeta]) # S^{+}_l
+    S_m_l = jnp.zeros([mf + nf + 1, ntheta_sym*nzeta]) # S^{-}_l
 
     T_p_l = put(T_p_l, Index[0, :], 1.0/sqrt_ap*jnp.log((sqrt_ap*2*sqrt_c + ap + cma)/(sqrt_ap*2*sqrt_a - ap + cma)))
     T_m_l = put(T_m_l, Index[0, :], 1.0/sqrt_am*jnp.log((sqrt_am*2*sqrt_c + am + cma)/(sqrt_am*2*sqrt_a - am + cma)))
@@ -384,7 +389,7 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta):
     return arrs
 
 
-def compute_analytic_integrals(normal, jacobian, TS, B_field, mf, nf, ntheta, nzeta, cmns, weights):
+def compute_analytic_integrals(normal, jacobian, TS, B_field, mf, nf, ntheta, nzeta, cmns, weights, sym):
     """Compute analytic integral of singular part of greens function kernels
 
     Parameters
@@ -413,7 +418,10 @@ def compute_analytic_integrals(normal, jacobian, TS, B_field, mf, nf, ntheta, nz
     K_mntz : ndarray
         singular part of greens function kernel, indexed by m, n, theta, zeta
     """
-    ntheta_sym = ntheta//2 + 1
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
     # analysum, analysum2 using FFTs
     bexni = -weights * B_field["Bn"] * 4.0*jnp.pi*jnp.pi
     T_p = (TS["T_p_l"]*bexni).reshape(-1, ntheta_sym, nzeta)
@@ -461,7 +469,7 @@ def compute_analytic_integrals(normal, jacobian, TS, B_field, mf, nf, ntheta, nz
     return I_mn, K_mntz
 
 
-def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, tan_zeta, mf, nf, ntheta, nzeta, NFP, weights):
+def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, tan_zeta, mf, nf, ntheta, nzeta, NFP, weights, sym):
     """Computes regularized part of fourier transformed kernel and source term
     
     Parameters
@@ -492,7 +500,11 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
     h_mn : ndarray
         regularized part of source term, indexed by m, n
     """
-    ntheta_sym = ntheta//2+1
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
+
     if nzeta == 1:
         NFP_eff = 64
     else:
@@ -511,18 +523,18 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
     itoff  = nzeta*(ntheta - kt_ip)[...,jnp.newaxis]
 
     # field-period invariant vectors
-    r_squared = (coords["R"]**2 + coords["Z"]**2).reshape((-1,nzeta))
-    gsave = r_squared[kt_ip, kz_ip] + r_squared - 2.0 * coords["Z_sym"][ip].reshape(kt_ip.shape) * coords["Z"].reshape((-1, nzeta))
-    drv  = -(coords["R_sym"] * normal["R_n"] + coords["Z_sym"] * normal["Z_n"])      
-    dsave = drv[ip] + coords["Z"].reshape((-1, nzeta)) * normal["Z_n"].reshape((ntheta_sym, nzeta))[kt_ip, kz_ip]
+    r_squared = (coords["R_full"]**2 + coords["Z_full"]**2).reshape((-1,nzeta))
+    gsave = r_squared[kt_ip, kz_ip] + r_squared - 2.0 * coords["Z"][ip].reshape(kt_ip.shape) * coords["Z_full"].reshape((-1, nzeta))
+    drv  = -(coords["R"] * normal["R_n"] + coords["Z"] * normal["Z_n"])      
+    dsave = drv[ip] + coords["Z_full"].reshape((-1, nzeta)) * normal["Z_n"].reshape((ntheta_sym, nzeta))[kt_ip, kz_ip]
 
     # copy cartesial coordinates in first field period to full domain
     X_full, Y_full = copy_vector_periods(jnp.array([coords["X"].reshape((-1,nzeta))[kt_ip, kz_ip],
                                                    coords["Y"].reshape((-1,nzeta))[kt_ip, kz_ip]]),
                                          zeta_fp)
     # cartesian components of surface normal on full domain
-    X_n = (normal["R_n"][ip5]*X_full - normal["phi_n"][ip5]*Y_full)/coords["R_sym"][ip5]
-    Y_n = (normal["R_n"][ip5]*Y_full + normal["phi_n"][ip5]*X_full)/coords["R_sym"][ip5]
+    X_n = (normal["R_n"][ip5]*X_full - normal["phi_n"][ip5]*Y_full)/coords["R"][ip5]
+    Y_n = (normal["R_n"][ip5]*Y_full + normal["phi_n"][ip5]*X_full)/coords["R"][ip5]
 
     # greens functions for kernel and source        
     # theta', zeta', theta, zeta, period
@@ -621,7 +633,7 @@ def regularizedFourierTransforms(coords, normal, jacobian, B_field, tan_theta, t
 
     return g_mntz, h_mn
 
-def compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, nzeta, weights):
+def compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, nzeta, weights, sym):
     """Computes the magnetic scalar potential to cancel the normal field on the surface
 
     Parameters
@@ -646,7 +658,11 @@ def compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta
     phi_mn : ndarray
         scalar magnetic potential, indexed by m, n
     """
-    ntheta_sym = ntheta//2+1
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
+
     # add in analytic part to get full kernel
     g_mntz = g_mntz + K_mntz
     # compute Fourier transform of grpmn to arrive at amatrix
@@ -676,7 +692,7 @@ def compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta
 
 
 
-def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf, nf, ntheta, nzeta, NFP):
+def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf, nf, ntheta, nzeta, NFP, sym):
     """Computes vacum magnetic field on plasma boundary
 
     Parameters
@@ -703,7 +719,11 @@ def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf,
     Btot : dict of ndarray
         total field on plasma boundary from coils, plasma current, and scalar potential
     """
-    ntheta_sym = ntheta//2+1
+    if sym:
+        ntheta_sym = ntheta//2 + 1
+    else:
+        ntheta_sym = ntheta
+
     potvac = phi_mn
     m_potvac = jnp.zeros([ntheta, nzeta]) # m*potvac --> for poloidal derivative
     n_potvac = jnp.zeros([ntheta, nzeta]) # n*potvac --> for toroidal derivative
@@ -722,7 +742,7 @@ def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf,
 
     # compute covariant magnetic field components: B_u, B_v
     Bex_theta = coords["R_t"] * B_field["BR"] + coords["Z_t"] * B_field["BZ"]
-    Bex_zeta = coords["R_z"] * B_field["BR"] + coords["R_sym"] * B_field["Bphi"] + coords["Z_z"] * B_field["BZ"]
+    Bex_zeta = coords["R_z"] * B_field["BR"] + coords["R"] * B_field["Bphi"] + coords["Z_z"] * B_field["BZ"]
 
     Btot = {}
     Btot["B_theta"] = Bpot_theta + Bex_theta
@@ -739,10 +759,10 @@ def compute_vacuum_magnetic_field(coords, normal, jacobian, B_field, phi_mn, mf,
 
     # compute cylindrical components B^R, B^\phi, B^Z
     Btot["BR"]   = coords["R_t"] * Btot["B^theta"] + coords["R_z"] * Btot["B^zeta"]
-    Btot["Bphi"] = coords["R_sym"] * Btot["B^zeta"]
+    Btot["Bphi"] = coords["R"] * Btot["B^zeta"]
     Btot["BZ"]   = coords["Z_t"] * Btot["B^theta"] + coords["Z_z"] * Btot["B^zeta"]
-    Btot["BX"] = Btot["BR"]*jnp.cos(coords["phi_sym"]) - Btot["Bphi"]*jnp.sin(coords["phi_sym"])
-    Btot["BY"] = Btot["BR"]*jnp.sin(coords["phi_sym"]) + Btot["Bphi"]*jnp.cos(coords["phi_sym"]),
+    Btot["BX"] = Btot["BR"]*jnp.cos(coords["phi"]) - Btot["Bphi"]*jnp.sin(coords["phi"])
+    Btot["BY"] = Btot["BR"]*jnp.sin(coords["phi"]) + Btot["Bphi"]*jnp.cos(coords["phi"]),
     Btot["Bn"] = normal["R_n"] * Btot["BR"] + normal["phi_n"] * Btot["Bphi"] + normal["Z_n"] * Btot["BZ"]    
 
 
@@ -808,6 +828,10 @@ class Nestor:
         self.nzeta = nzeta
         self.NFP = equil.NFP
         self.sym = equil.sym
+        if self.sym:
+            ntheta_sym = self.ntheta//2 + 1
+        else:
+            ntheta_sym = self.ntheta
 
         bdry_grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=self.NFP)
         axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=self.NFP)    
@@ -818,7 +842,7 @@ class Nestor:
 
         
 
-        weights = 2*np.ones((self.ntheta//2+1, self.nzeta))/(self.ntheta*self.nzeta)
+        weights = 2*np.ones((ntheta_sym, self.nzeta))/(self.ntheta*self.nzeta)
         weights[0] /= 2.0
         weights[-1] /= 2.0
         self.weights = weights.flatten()
@@ -880,14 +904,14 @@ class Nestor:
         
 
     def eval_external_field(self, coords, normal):
-        grid = jnp.array([coords["R_sym"],coords["phi_sym"],coords["Z_sym"]]).T
+        grid = jnp.array([coords["R"],coords["phi"],coords["Z"]]).T
         B = self.ext_field.compute_magnetic_field(grid).T
         B_ex = {}
         B_ex["BR"] = B[0]
         B_ex["Bphi"] = B[1]
         B_ex["BZ"] = B[2]        
-        B_ex["BX"] = B[0]*jnp.cos(coords["phi_sym"]) - B[1]*jnp.sin(coords["phi_sym"])
-        B_ex["BY"] = B[0]*jnp.sin(coords["phi_sym"]) + B[1]*jnp.cos(coords["phi_sym"])
+        B_ex["BX"] = B[0]*jnp.cos(coords["phi"]) - B[1]*jnp.sin(coords["phi"])
+        B_ex["BY"] = B[0]*jnp.sin(coords["phi"]) + B[1]*jnp.cos(coords["phi"])
         B_ex["Bn"] = normal["R_n"] * B_ex["BR"] + normal["phi_n"] * B_ex["Bphi"] + normal["Z_n"] * B_ex["BZ"]
 
         return B_ex
@@ -907,22 +931,22 @@ class Nestor:
                                        normal,
                                        )
         B_field = {key: (B_extern[key] + B_plasma[key]) for key in B_extern.keys()}
-        TS = compute_T_S(jacobian, self.M, self.N, self.ntheta, self.nzeta)
-        I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.M, self.N, self.ntheta, self.nzeta, self.cmns, self.weights)
+        TS = compute_T_S(jacobian, self.M, self.N, self.ntheta, self.nzeta, self.sym)
+        I_mn, K_mntz = compute_analytic_integrals(normal, jacobian, TS, B_field, self.M, self.N, self.ntheta, self.nzeta, self.cmns, self.weights, self.sym)
         g_mntz, h_mn = regularizedFourierTransforms(surface_coords,
                                                        normal,
                                                        jacobian,
                                                        B_field,
                                                        self.tanu,
                                                        self.tanv,
-                                                       self.M, self.N, self.ntheta, self.nzeta, self.NFP, self.weights)    
-        phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.M, self.N, self.ntheta, self.nzeta, self.weights)
+                                                       self.M, self.N, self.ntheta, self.nzeta, self.NFP, self.weights, self.sym)    
+        phi_mn = compute_scalar_magnetic_potential(I_mn, K_mntz, g_mntz, h_mn, self.M, self.N, self.ntheta, self.nzeta, self.weights, self.sym)
         Btot = compute_vacuum_magnetic_field(surface_coords,
                                          normal,
                                          jacobian,
                                          B_field,
                                           phi_mn,
-                                          self.M, self.N, self.ntheta, self.nzeta, self.NFP)
+                                             self.M, self.N, self.ntheta, self.nzeta, self.NFP, self.sym)
         return phi_mn, Btot
 
 

@@ -143,14 +143,15 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum toroidal resolution."""
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(N=N)
-        self.Z_basis.change_resolution(N=N)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
-        self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
-        self._N = N
+        if N != self.N:
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(N=N)
+            self.Z_basis.change_resolution(N=N)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+            self._N = N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -478,12 +479,13 @@ class FourierXYZCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""
-        modes_old = self.basis.modes
-        self.basis.change_resolution(N=N)
-        self._transform = self._get_transforms(self.grid)
-        self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
-        self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
-        self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
+        if N != self.N:
+            modes_old = self.basis.modes
+            self.basis.change_resolution(N=N)
+            self._transform = self._get_transforms(self.grid)
+            self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
+            self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -616,10 +618,15 @@ class FourierXYZCurve(Curve):
 
         coords = jnp.stack([X, Y, Z], axis=1)
         coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
-        if basis.lower == "rpz":
-            coords = xyz2rpz_vec(
-                coords, x=coords[:, 1] + self.shift[0], y=coords[:, 1] + self.shift[1]
-            )
+        if basis.lower() == "rpz":
+            if dt > 0:
+                coords = xyz2rpz_vec(
+                    coords,
+                    x=coords[:, 1] + self.shift[0],
+                    y=coords[:, 1] + self.shift[1],
+                )
+            else:
+                coords = xyz2rpz(coords)
         return coords
 
     def compute_frenet_frame(
@@ -819,10 +826,11 @@ class FourierPlanarCurve(Curve):
 
     def change_resolution(self, N):
         """Change the maximum angular resolution."""
-        modes_old = self.basis.modes
-        self.basis.change_resolution(N=N)
-        self._transform = self._get_transforms(self.grid)
-        self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
+        if N != self.N:
+            modes_old = self.basis.modes
+            self.basis.change_resolution(N=N)
+            self._transform = self._get_transforms(self.grid)
+            self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
 
     @property
     def center(self):
@@ -845,7 +853,7 @@ class FourierPlanarCurve(Curve):
 
     @normal.setter
     def normal(self, new):
-        if len(new) == 3:
+        if len(np.asarray(new)) == 3:
             self._normal = np.asarray(new) / np.linalg.norm(new)
         else:
             raise ValueError(
@@ -859,7 +867,7 @@ class FourierPlanarCurve(Curve):
 
     @r_n.setter
     def r_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(np.asarray(new)) == self._basis.num_modes:
             self._r_n = jnp.asarray(new)
         else:
             raise ValueError(
@@ -887,9 +895,6 @@ class FourierPlanarCurve(Curve):
 
     def _normal_rotmat(self, normal=None):
         """Rotation matrix to rotate z axis into plane normal."""
-        if normal is None:
-            normal = self.normal
-
         nx, ny, nz = normal
         nxny = jnp.sqrt(nx ** 2 + ny ** 2)
 

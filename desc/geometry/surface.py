@@ -1,5 +1,5 @@
 import numpy as np
-
+import warnings
 from desc.backend import jnp, sign, put
 from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import copy_coeffs
@@ -150,17 +150,33 @@ class FourierRZToroidalSurface(Surface):
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
 
-    def change_resolution(self, M, N):
+    def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution"""
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(M=M, N=N)
-        self.Z_basis.change_resolution(M=M, N=N)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-        self._M = M
-        self._N = N
+        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+            len(args) == 0
+        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
+        L = kwargs.get("L", None)
+        M = kwargs.get("M", None)
+        N = kwargs.get("N", None)
+        if L is not None:
+            warnings.warn(
+                "FourierRZToroidalSurface does not have a radial resolution, ignoring L"
+            )
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            L, M, N = args
+
+        if (N != self.N) or (M != self.M):
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(M=M, N=N)
+            self.Z_basis.change_resolution(M=M, N=N)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._M = M
+            self._N = N
 
     @property
     def R_lmn(self):
@@ -564,17 +580,33 @@ class ZernikeRZToroidalSection(Surface):
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
 
-    def change_resolution(self, L, M):
+    def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution"""
-        R_modes_old = self.R_basis.modes
-        Z_modes_old = self.Z_basis.modes
-        self.R_basis.change_resolution(L=L, M=M)
-        self.Z_basis.change_resolution(L=L, M=M)
-        self._R_transform, self._Z_transform = self._get_transforms(self.grid)
-        self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
-        self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
-        self._L = L
-        self._M = M
+        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+            len(args) == 0
+        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
+        L = kwargs.get("L", None)
+        M = kwargs.get("M", None)
+        N = kwargs.get("N", None)
+        if N is not None:
+            warnings.warn(
+                "ZernikeRZToroidalSection does not have a toroidal resolution, ignoring N"
+            )
+        if len(args) == 2:
+            L, M = args
+        elif len(args) == 3:
+            L, M, N = args
+
+        if (L != self.L) or (M != self.M):
+            R_modes_old = self.R_basis.modes
+            Z_modes_old = self.Z_basis.modes
+            self.R_basis.change_resolution(L=L, M=M)
+            self.Z_basis.change_resolution(L=L, M=M)
+            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
+            self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self._L = L
+            self._M = M
 
     @property
     def R_lmn(self):

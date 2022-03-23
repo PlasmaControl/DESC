@@ -26,6 +26,8 @@ from desc.basis import (
     DoubleFourierSeries,
     ZernikePolynomial,
     FourierZernikeBasis,
+    fourier,
+    zernike_radial,
 )
 from desc.compute_funs import (
     compute_profiles,
@@ -386,6 +388,10 @@ class _Configuration(IOAble, ABC):
                 Optionally a Curve object may also be supplied for the magnetic axis.
               - Another Equilibrium, whose flux surfaces will be used.
               - File path to a VMEC or DESC equilibrium, which will be loaded and used.
+              - Grid and 2-3 ndarrays, specifying the flux surface locations (R, Z, and
+                optionally lambda) at fixed flux coordinates. All arrays should have the
+                same length. Optionally, an ndarray of shape(k,3) may be passed instead
+                of a grid.
 
         Examples
         --------
@@ -397,6 +403,11 @@ class _Configuration(IOAble, ABC):
         of user supplied surface:
 
         >>> equil.set_initial_guess(surface)
+
+        Optionally, an interior surface may be scaled by giving the surface a flux label:
+
+        >>> surf = FourierRZToroidalSurface(rho=0.7)
+        >>> equil.set_initial_guess(surf)
 
         Use supplied Surface and a supplied Curve for axis and scales between
         them for guess:
@@ -411,11 +422,18 @@ class _Configuration(IOAble, ABC):
 
         >>> equil.set_initial_guess(path_to_saved_DESC_or_VMEC_output)
 
+        Use flux surfaces specified by points:
+        nodes should either be a Grid or an ndarray, shape(k,3) giving the locations
+        in rho, theta, zeta coordinates. R, Z, and optionally lambda should be
+        array-like, shape(k,) giving the corresponding real space coordinates
+
+        >>> equil.set_initial_guess(nodes, R, Z, lambda)
+
         """
         nargs = len(args)
-        if nargs > 2:
+        if nargs > 4:
             raise ValueError(
-                "set_initial_guess should be called with 0, 1 or 2 arguments."
+                "set_initial_guess should be called with 4 or fewer arguments."
             )
         if nargs == 0:
             if hasattr(self, "_surface"):
@@ -454,11 +472,20 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
+                coord = surface.rho if hasattr(surface, "rho") else None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, surface.R_lmn, surface.R_basis, axisR
+                    self.R_basis,
+                    surface.R_lmn,
+                    surface.R_basis,
+                    axisR,
+                    coord=coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, surface.Z_lmn, surface.Z_basis, axisZ
+                    self.Z_basis,
+                    surface.Z_lmn,
+                    surface.Z_basis,
+                    axisZ,
+                    coord=coord,
                 )
             elif isinstance(args[0], _Configuration):
                 eq = args[0]
@@ -506,12 +533,27 @@ class _Configuration(IOAble, ABC):
                 self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
                 self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
                 self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
+
+            elif nargs > 2:  # assume we got nodes and ndarray of points
+                grid = args[0]
+                R = args[1]
+                self.R_lmn = self._initial_guess_points(grid, R, self.R_basis)
+                Z = args[2]
+                self.Z_lmn = self._initial_guess_points(grid, Z, self.Z_basis)
+                if nargs > 3:
+                    lmbda = args[3]
+                    self.L_lmn = self._initial_guess_points(grid, lmbda, self.L_basis)
+                else:
+                    self.L_lmn = jnp.zeros(self.L_basis.num_modes)
+
             else:
                 raise ValueError(
                     "Can't initialize equilibrium from args {}.".format(args)
                 )
 
-    def _initial_guess_surface(self, x_basis, b_lmn, b_basis, axis=None, mode=None):
+    def _initial_guess_surface(
+        self, x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None
+    ):
         """Create an initial guess from the boundary coefficients and magnetic axis guess.
 
         Parameters
@@ -529,6 +571,8 @@ class _Configuration(IOAble, ABC):
             One of 'lcfs', 'poincare'.
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
+        coord : float or None
+            Surface label (ie, rho, zeta etc) for supplied surface.
 
         Returns
         -------
@@ -546,10 +590,13 @@ class _Configuration(IOAble, ABC):
             else:
                 raise ValueError("Surface should have either l=0 or n=0")
         if mode == "lcfs":
+            if coord is None:
+                coord = 1.0
             if axis is None:
                 axidx = np.where(b_basis.modes[:, 1] == 0)[0]
                 axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
             for k, (l, m, n) in enumerate(b_basis.modes):
+                scale = zernike_radial(coord, abs(m), m)
                 # index of basis mode with lowest radial power (l = |m|)
                 idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
                 if m == 0:  # magnetic axis only affects m=0 modes
@@ -562,10 +609,10 @@ class _Configuration(IOAble, ABC):
                         a_n = axis[ax[0], 1]  # use provided axis guess
                     else:
                         a_n = b_lmn[k]  # use boundary centroid as axis
-                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2
-                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2
+                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
+                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
                 else:
-                    x_lmn[idx0] = b_lmn[k]
+                    x_lmn[idx0] = b_lmn[k] / scale
 
         elif mode == "poincare":
             for k, (l, m, n) in enumerate(b_basis.modes):
@@ -575,6 +622,30 @@ class _Configuration(IOAble, ABC):
         else:
             raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
+        return x_lmn
+
+    def _initial_guess_points(self, nodes, x, x_basis):
+        """Create an initial guess based on locations of flux surfaces in real space
+
+        Parameters
+        ----------
+        nodes : Grid or ndarray, shape(k,3)
+            Locations in flux coordinates where real space coordinates are given.
+        x : ndarray, shape(k,)
+            R, Z or lambda values at specified nodes.
+        x_basis : Basis
+            Spectral basis for x (R, Z or lambda)
+
+        Returns
+        -------
+        x_lmn : ndarray
+            Vector of flux surface coefficients associated with x_basis.
+
+        """
+        if not isinstance(nodes, Grid):
+            nodes = Grid(nodes, sort=False)
+        transform = Transform(nodes, x_basis, build=False, build_pinv=True)
+        x_lmn = transform.fit(x)
         return x_lmn
 
     @property
@@ -632,13 +703,8 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N)
         self.L_basis.change_resolution(self.L, self.M, self.N)
 
-        if N_change:
-            self.axis.change_resolution(self.N)
-        # this is kind of a kludge for now
-        if self.bdry_mode == "lcfs":
-            self.surface.change_resolution(self.M, self.N)
-        elif self.bdry_mode == "poincare":
-            self.surface.change_resolution(self.L, self.M)
+        self.axis.change_resolution(self.N)
+        self.surface.change_resolution(self.L, self.M, self.N)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -646,10 +712,121 @@ class _Configuration(IOAble, ABC):
 
         self._make_labels()
 
+    def get_surface_at(self, rho=None, theta=None, zeta=None):
+        """Return a representation for a given coordinate surface.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float or None
+            radial, poloidal, or toroidal coordinate for the surface. Only
+            one may be specified.
+
+        Returns
+        -------
+        surf : Surface
+            object representing the given surface, either a FourierRZToroidalSurface
+            for surfaces of constant rho, or a ZernikeRZToroidalSection for
+            surfaces of constant zeta.
+
+        """
+        if (rho is not None) and (theta is None) and (zeta is None):
+            assert (rho >= 0) and (rho <= 1)
+            surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
+            surface.change_resolution(self.M, self.N)
+
+            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+            for i, (l, m, n) in enumerate(self.R_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.R_basis.modes[:, 1] == m,
+                        surface.R_basis.modes[:, 2] == n,
+                    )
+                )
+                AR[j, i] = zernike_radial(rho, l, m)
+
+            for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.Z_basis.modes[:, 1] == m,
+                        surface.Z_basis.modes[:, 2] == n,
+                    )
+                )
+                AZ[j, i] = zernike_radial(rho, l, m)
+            Rb = AR @ self.R_lmn
+            Zb = AZ @ self.Z_lmn
+            surface.R_lmn = Rb
+            surface.Z_lmn = Zb
+            surface.grid = LinearGrid(
+                rho=rho,
+                M=4 * surface.M + 1,
+                N=4 * surface.N + 1,
+                endpoint=True,
+            )
+            return surface
+
+        if (rho is None) and (theta is None) and (zeta is not None):
+            assert (zeta >= 0) and (zeta <= 2 * np.pi)
+            surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
+            surface.change_resolution(self.L, self.M)
+
+            AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
+            AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+
+            for i, (l, m, n) in enumerate(self.R_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.R_basis.modes[:, 0] == l,
+                        surface.R_basis.modes[:, 1] == m,
+                    )
+                )
+                AR[j, i] = fourier(zeta, n, self.NFP)
+
+            for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.Z_basis.modes[:, 0] == l,
+                        surface.Z_basis.modes[:, 1] == m,
+                    )
+                )
+                AZ[j, i] = fourier(zeta, n, self.NFP)
+            Rb = AR @ self.R_lmn
+            Zb = AZ @ self.Z_lmn
+            surface.R_lmn = Rb
+            surface.Z_lmn = Zb
+            surface.grid = LinearGrid(
+                L=2 * surface.L + 1,
+                M=4 * surface.M + 1,
+                zeta=zeta,
+                endpoint=True,
+            )
+            return surface
+        if (rho is None) and (theta is not None) and (zeta is None):
+            raise NotImplementedError(
+                "Constant theta surfaces have not been implemented yet"
+            )
+        else:
+            raise ValueError(
+                "Only one coordinate can be specified, got {}, {}, {}".format(
+                    rho, theta, zeta
+                )
+            )
+
     @property
     def surface(self):
         """Geometric surface defining boundary conditions"""
         return self._surface
+
+    @surface.setter
+    def surface(self, new):
+        if isinstance(new, Surface):
+            new.change_resolution(self.L, self.M, self.N)
+            self._surface = new
+        else:
+            raise TypeError(
+                f"surfaces should be of type Surface or a subclass, got {new}"
+            )
 
     @property
     def spectral_indexing(self):
@@ -768,6 +945,7 @@ class _Configuration(IOAble, ABC):
     @property
     def axis(self):
         """Curve object representing the magnetic axis."""
+        # TODO: return the current axis by evaluating at rho=0
         return self._axis
 
     @axis.setter

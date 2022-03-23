@@ -3,7 +3,7 @@ import unittest
 import pytest
 
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 
 
 class TestFourierRZToroidalSurface(unittest.TestCase):
@@ -63,6 +63,11 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         with pytest.raises(ValueError):
             c.Z_lmn = s.Z_lmn
 
+        c.name = "my curve"
+        assert "my" in c.name
+        assert c.name in str(c)
+        assert "FourierRZToroidalSurface" in str(c)
+
 
 class TestZernikeRZToroidalSection(unittest.TestCase):
     def test_area(self):
@@ -116,3 +121,5 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
             c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
             c.Z_lmn = s.Z_lmn
+
+        assert c.sym

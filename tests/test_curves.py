@@ -33,14 +33,16 @@ class TestRZCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierRZCurve()
-        T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz")
+        c.grid = 1
+        T, N, B = c.compute_frenet_frame(basis="rpz")
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
+        c.grid = np.array([[0, 0, 0]])
+        T, N, B = c.compute_frenet_frame(basis="xyz")
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
@@ -54,9 +56,9 @@ class TestRZCurve(unittest.TestCase):
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        x, y, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz").T
-        np.testing.assert_allclose(x, 1)
-        np.testing.assert_allclose(y, -9)
+        r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
+        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 9 ** 2))
+        np.testing.assert_allclose(p, np.arctan2(-9, 1))
         np.testing.assert_allclose(z, 1)
 
     def test_misc(self):
@@ -81,6 +83,7 @@ class TestRZCurve(unittest.TestCase):
         assert s.eq(c)
 
         c.change_resolution(5)
+        assert c.N == 5
         c.set_coeffs(-1, None, 2)
         np.testing.assert_allclose(
             c.R_n,
@@ -92,6 +95,21 @@ class TestRZCurve(unittest.TestCase):
             c.R_n = s.R_n
         with pytest.raises(ValueError):
             c.Z_n = s.Z_n
+
+        c.name = "my curve"
+        assert "my" in c.name
+        assert c.name in str(c)
+        assert "FourierRZCurve" in str(c)
+        assert c.sym
+
+    def test_asserts(self):
+        with pytest.raises(ValueError):
+            c = FourierRZCurve(R_n=[])
+        c = FourierRZCurve()
+        with pytest.raises(NotImplementedError):
+            c.compute_coordinates(dt=4)
+        with pytest.raises(TypeError):
+            c.grid = [1, 2, 3]
 
 
 class TestXYZCurve(unittest.TestCase):
@@ -112,7 +130,7 @@ class TestXYZCurve(unittest.TestCase):
         np.testing.assert_allclose(c.compute_curvature(grid=20), 1 / 2)
 
     def test_torsion(self):
-        c = FourierXYZCurve()
+        c = FourierXYZCurve(modes=[-1, 0, 1])
         np.testing.assert_allclose(c.compute_torsion(grid=20), 0)
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
@@ -121,14 +139,16 @@ class TestXYZCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierXYZCurve()
-        T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz")
+        c.grid = 1
+        T, N, B = c.compute_frenet_frame(basis="rpz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
+        c.grid = np.array([0, 0, 0])
+        T, N, B = c.compute_frenet_frame(basis="xyz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
@@ -142,9 +162,9 @@ class TestXYZCurve(unittest.TestCase):
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
-        x, y, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz").T
-        np.testing.assert_allclose(x, 1)
-        np.testing.assert_allclose(y, -11)
+        r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
+        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 11 ** 2))
+        np.testing.assert_allclose(p, np.arctan2(-11, 1))
         np.testing.assert_allclose(z, 1)
 
     def test_misc(self):
@@ -166,6 +186,7 @@ class TestXYZCurve(unittest.TestCase):
         assert s.eq(c)
 
         c.change_resolution(5)
+        assert c.N == 5
         with pytest.raises(ValueError):
             c.X_n = s.X_n
         with pytest.raises(ValueError):
@@ -173,10 +194,17 @@ class TestXYZCurve(unittest.TestCase):
         with pytest.raises(ValueError):
             c.Z_n = s.Z_n
 
+    def test_asserts(self):
+        c = FourierXYZCurve()
+        with pytest.raises(KeyError):
+            c.compute_coordinates(dt=4)
+        with pytest.raises(TypeError):
+            c.grid = [1, 2, 3]
+
 
 class TestPlanarCurve(unittest.TestCase):
     def test_length(self):
-        c = FourierPlanarCurve()
+        c = FourierPlanarCurve(modes=[0])
         np.testing.assert_allclose(c.compute_length(grid=20), 2 * 2 * np.pi)
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
@@ -201,13 +229,15 @@ class TestPlanarCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierPlanarCurve()
-        T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]))
+        c.grid = 1
+        T, N, B = c.compute_frenet_frame(basis="xyz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
+        c.grid = np.array([0, 0, 0])
         T, N, B = c.compute_frenet_frame(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
@@ -215,10 +245,16 @@ class TestPlanarCurve(unittest.TestCase):
 
     def test_coords(self):
         c = FourierPlanarCurve()
-        x, y, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz").T
-        np.testing.assert_allclose(x, 12)
-        np.testing.assert_allclose(y, 0)
+        r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
+        np.testing.assert_allclose(r, 12)
+        np.testing.assert_allclose(p, 0)
         np.testing.assert_allclose(z, 0)
+        dr, dp, dz = c.compute_coordinates(
+            grid=np.array([[0.0, 0.0, 0.0]]), dt=3, basis="rpz"
+        ).T
+        np.testing.assert_allclose(dr, 0)
+        np.testing.assert_allclose(dp, 0)
+        np.testing.assert_allclose(dz, 2)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
@@ -254,3 +290,14 @@ class TestPlanarCurve(unittest.TestCase):
         c.change_resolution(5)
         with pytest.raises(ValueError):
             c.r_n = s.r_n
+
+    def test_asserts(self):
+        c = FourierPlanarCurve()
+        with pytest.raises(NotImplementedError):
+            c.compute_coordinates(dt=4)
+        with pytest.raises(TypeError):
+            c.grid = [1, 2, 3]
+        with pytest.raises(ValueError):
+            c.center = [4]
+        with pytest.raises(ValueError):
+            c.normal = [4]

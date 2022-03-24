@@ -678,9 +678,10 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N)
         self.L_basis.change_resolution(self.L, self.M, self.N)
 
-        if L_change:
-            self._pressure.change_resolution(L=L)
-            self._iota.change_resolution(L=L)
+        if L_change and hasattr(self.pressure, "change_resolution"):
+            self.pressure.change_resolution(L=L)
+        if L_change and hasattr(self.iota, "change_resolution"):
+            self.iota.change_resolution(L=L)
 
         if N_change:
             self.axis.change_resolution(self.N)

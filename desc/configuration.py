@@ -1079,8 +1079,8 @@ class _Configuration(IOAble, ABC):
 
         Returns
         -------
-        data : ndarray
-            Computed quantity.
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
 
         """
         if name not in data_index:

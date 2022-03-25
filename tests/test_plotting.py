@@ -374,4 +374,3 @@ def test_plot_coils():
     fig, ax = plot_coils(coils2)
 
     return fig
-

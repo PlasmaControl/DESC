@@ -369,4 +369,3 @@ class TestSurfaces(unittest.TestCase):
             surf = eq.get_surface_at(rho=1, zeta=2)
         with pytest.raises(AssertionError):
             surf = eq.get_surface_at(rho=1.2)
-

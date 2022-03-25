@@ -17,6 +17,7 @@ from desc.plotting import (
     plot_boozer_modes,
     plot_boozer_surface,
     plot_qs_error,
+    plot_coils,
 )
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.basis import (
@@ -26,7 +27,7 @@ from desc.basis import (
     FourierZernikeBasis,
 )
 from desc.equilibrium import EquilibriaFamily
-from desc.compute import data_index
+from desc.coils import FourierXYZCoil, CoilSet
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
@@ -357,3 +358,20 @@ def test_plot_boozer_surface(plot_eq):
 def test_plot_qs_error(plot_eq):
     fig, ax = plot_qs_error(plot_eq, helicity=(0, 0), log=False)
     return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_coils():
+    R = 10
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    coils.grid = 100
+    coils2 = CoilSet.from_symmetry(coils, NFP, True)
+    fig, ax = plot_coils(coils2)
+
+    return fig
+

@@ -627,5 +627,5 @@ def test_boozer_transform(DSHAPE):
         np.flipud(np.sort(np.abs(data["|B|_mn"])))[0:14],
         booz_xform,
         rtol=1e-2,
-        atol=1e-6,
+        atol=1e-4,
     )

@@ -119,6 +119,7 @@ class VMECIO:
         # apply boundary conditions
         objective = ObjectiveFunction(
             Volume(), (FixedBoundaryR(), FixedBoundaryZ(), LCFSBoundary()), eq
+
         )
         args = objective.unpack_state(objective.make_feasible(objective.y(eq)))
         for key, value in args.items():

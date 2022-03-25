@@ -365,7 +365,7 @@ class LinearGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
 
         Parameters
@@ -376,11 +376,8 @@ class LinearGrid(Grid):
             new poloidal grid resolution (M poloidal nodes)
         N : int
             new toroidal grid resolution (N toroidal nodes)
-        NFP : int
-            Number of field periods.
 
         """
-        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -499,7 +496,7 @@ class QuadratureGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
 
         Parameters
@@ -510,11 +507,8 @@ class QuadratureGrid(Grid):
             new poloidal grid resolution (M poloidal nodes)
         N : int
             new toroidal grid resolution (N toroidal nodes)
-        NFP : int
-            Number of field periods.
 
         """
-        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -726,7 +720,7 @@ class ConcentricGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N):
         """Change the resolution of the grid.
 
         Parameters
@@ -737,11 +731,8 @@ class ConcentricGrid(Grid):
             new poloidal grid resolution
         N : int
             new toroidal grid resolution
-        NFP : int
-            Number of field periods.
 
         """
-        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M

@@ -643,7 +643,7 @@ class _Configuration(IOAble, ABC):
         self.children.append(new)
         return new
 
-    def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
+    def change_resolution(self, L=None, M=None, N=None, *args, **kwargs):
         """Set the spectral resolution.
 
         Parameters
@@ -654,11 +654,9 @@ class _Configuration(IOAble, ABC):
             maximum poloidal fourier mode number
         N : int
             maximum toroidal fourier mode number
-        NFP : int
-            Number of field periods.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = False
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -668,20 +666,17 @@ class _Configuration(IOAble, ABC):
         if N is not None and N != self.N:
             N_change = True
             self._N = N
-        if NFP is not None and NFP != self.NFP:
-            NFP_change = True
-            self._NFP = NFP
 
-        if not np.any([L_change, M_change, N_change, NFP_change]):
+        if not np.any([L_change, M_change, N_change]):
             return
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
+        self.R_basis.change_resolution(self.L, self.M, self.N)
+        self.Z_basis.change_resolution(self.L, self.M, self.N)
+        self.L_basis.change_resolution(self.L, self.M, self.N)
 
         if L_change and hasattr(self.pressure, "change_resolution"):
             self.pressure.change_resolution(L=L)
@@ -689,9 +684,9 @@ class _Configuration(IOAble, ABC):
             self.iota.change_resolution(L=L)
 
         if N_change:
-            self.axis.change_resolution(self.N, NFP=self.NFP)
+            self.axis.change_resolution(self.N)
 
-        self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
+        self.surface.change_resolution(self.L, self.M, self.N)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -846,10 +841,8 @@ class _Configuration(IOAble, ABC):
 
     @NFP.setter
     def NFP(self, NFP):
-        assert isinstance(
-            NFP, numbers.Real
-        ), f"NFP should be a real integer or float, got {type(NFP)}"
-        self.change_resolution(NFp=NFP)
+        if self.NFP != NFP:
+            self._NFP = NFP
 
     @property
     def L(self):
@@ -858,10 +851,9 @@ class _Configuration(IOAble, ABC):
 
     @L.setter
     def L(self, L):
-        assert (
-            isinstance(L, numbers.Real) and (L == int(L)) and (L >= 0)
-        ), f"L should be a non-negative integer got {L}"
-        self.change_resolution(L=L)
+        if self.L != L:
+            self._L = L
+            self.change_resolution(L=L)
 
     @property
     def M(self):
@@ -870,10 +862,9 @@ class _Configuration(IOAble, ABC):
 
     @M.setter
     def M(self, M):
-        assert (
-            isinstance(M, numbers.Real) and (M == int(M)) and (M >= 0)
-        ), f"M should be a non-negative integer got {M}"
-        self.change_resolution(M=M)
+        if self.M != M:
+            self._M = M
+            self.change_resolution(M=M)
 
     @property
     def N(self):
@@ -882,10 +873,9 @@ class _Configuration(IOAble, ABC):
 
     @N.setter
     def N(self, N):
-        assert (
-            isinstance(N, numbers.Real) and (N == int(N)) and (N >= 0)
-        ), f"N should be a non-negative integer got {N}"
-        self.change_resolution(N=N)
+        if self.N != N:
+            self._N = N
+            self.change_resolution(N=N)
 
     @property
     def x(self):

@@ -1,53 +1,27 @@
 import numpy as np
 import copy
-import warnings
-import math
 import numbers
+
 from termcolor import colored
 from abc import ABC
 from shapely.geometry import LineString, MultiLineString
+from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
-from desc.utils import unpack_state, copy_coeffs, Index
+from desc.utils import copy_coeffs, Index, unpack_state
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.objective_funs import get_objective_function
-from desc.profiles import Profile, PowerSeriesProfile, SplineProfile, MTanhProfile
+from desc.profiles import Profile, PowerSeriesProfile
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
     Surface,
-    Curve,
 )
-from desc.basis import (
-    PowerSeries,
-    DoubleFourierSeries,
-    ZernikePolynomial,
-    FourierZernikeBasis,
-    fourier,
-    zernike_radial,
-)
-from desc.compute_funs import (
-    compute_profiles,
-    compute_toroidal_coords,
-    compute_cartesian_coords,
-    compute_covariant_basis,
-    compute_jacobian,
-    compute_contravariant_basis,
-    compute_magnetic_field_magnitude_axis,
-    compute_current_density,
-    compute_magnetic_pressure_gradient,
-    compute_magnetic_tension,
-    compute_force_error_magnitude,
-    compute_energy,
-    compute_quasisymmetry,
-)
-from desc.vmec_utils import (
-    ptolemy_identity_rev,
-    zernike_to_fourier,
-)
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+import desc.compute as compute_funs
+from desc.compute import arg_order, data_index
 
 
 class _Configuration(IOAble, ABC):
@@ -132,7 +106,7 @@ class _Configuration(IOAble, ABC):
 
         assert spectral_indexing in [None, "ansi", "fringe",], (
             f"spectral_indexing should be one of 'ansi', 'fringe', None, got "
-            + "spectral_indexing}"
+            + "{spectral_indexing}"
         )
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing
@@ -271,6 +245,7 @@ class _Configuration(IOAble, ABC):
                 )
         else:
             raise TypeError("Got unknown surface type {}".format(surface))
+        self._surface.change_resolution(self.L, self.M, self.N)
 
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
@@ -703,7 +678,14 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N)
         self.L_basis.change_resolution(self.L, self.M, self.N)
 
-        self.axis.change_resolution(self.N)
+        if L_change and hasattr(self.pressure, "change_resolution"):
+            self.pressure.change_resolution(L=L)
+        if L_change and hasattr(self.iota, "change_resolution"):
+            self.iota.change_resolution(L=L)
+
+        if N_change:
+            self.axis.change_resolution(self.N)
+
         self.surface.change_resolution(self.L, self.M, self.N)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
@@ -815,7 +797,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def surface(self):
-        """Geometric surface defining boundary conditions"""
+        """Geometric surface defining boundary conditions."""
         return self._surface
 
     @surface.setter
@@ -856,10 +838,6 @@ class _Configuration(IOAble, ABC):
     def NFP(self):
         """Number of (toroidal) field periods (int)."""
         return self._NFP
-
-    @NFP.setter
-    def NFP(self, NFP):
-        self._NFP = NFP
 
     @property
     def L(self):
@@ -1019,35 +997,12 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
 
-    @property
-    def major_radius(self):
-        """Major radius (m)."""
-        V = self.compute_volume()
-        A = self.compute_cross_section_area()
-        return V / (2 * np.pi * A)
-
-    @property
-    def minor_radius(self):
-        """Minor radius (m)."""
-        A = self.compute_cross_section_area()
-        return np.sqrt(A / np.pi)
-
-    @property
-    def aspect_ratio(self):
-        """Aspect ratio = major radius / minor radius."""
-        V = self.compute_volume()
-        A = self.compute_cross_section_area()
-        return V / (2 * np.sqrt(np.pi * A ** 3))
-
+    # FIXME: update this now that x is no longer a property of Configuration
     def _make_labels(self):
         R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
         Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
         L_label = ["L_{},{},{}".format(l, m, n) for l, m, n in self.L_basis.modes]
-
-        x_label = R_label + Z_label + L_label
-
-        self.xlabel = {i: val for i, val in enumerate(x_label)}
-        self.rev_xlabel = {val: i for i, val in self.xlabel.items()}
+        return None
 
     def get_xlabel_by_idx(self, idx):
         """Find which mode corresponds to a given entry in x.
@@ -1088,704 +1043,72 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def _get_transforms(self, grid=None, derivs=0):
-        """get transforms with a specific grid"""
+    # TODO: add kwargs for M_booz, N_booz, etc.
+    def compute(self, name, grid=None, data=None):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        name : str
+            Name of the quantity to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if name not in data_index:
+            raise ValueError("Unrecognized value '{}'.".format(name))
         if grid is None:
             grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
-        if not isinstance(grid, Grid):
-            if np.isscalar(grid):
-                grid = LinearGrid(L=grid, M=grid, N=grid, NFP=self.NFP)
-            grid = np.atleast_1d(grid)
-            if grid.ndim == 1:
-                grid = np.tile(grid, (3, 1))
-            grid = Grid(grid, sort=False)
-        R_transform = Transform(grid, self.R_basis, derivs=derivs, build=True)
-        Z_transform = Transform(grid, self.Z_basis, derivs=derivs, build=True)
-        L_transform = Transform(grid, self.L_basis, derivs=derivs, build=True)
-        return R_transform, Z_transform, L_transform
 
-    def compute_profiles(self, grid=None):
-        """Compute magnetic flux, pressure, and rotational transform profiles.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        profiles : dict
-            dictionary of ndarray, shape(num_nodes,) of profiles.
-            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        profiles = compute_profiles(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.Z_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return profiles
-
-    def compute_toroidal_coords(self, grid=None):
-        """Compute toroidal coordinates from polar coordinates.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        toroidal_coords : dict
-            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        toroidal_coords = compute_toroidal_coords(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return toroidal_coords
-
-    def compute_cartesian_coords(self, grid=None):
-        """Compute cartesian coordinates from toroidal coordinates.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        toroidal_coords : dict
-            dictionary of ndarray, shape(num_nodes,) of toroidal coordinates.
-            Keys are of the form ``'X_y'`` meaning the derivative of X wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=0)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (cartesian_coords, toroidal_coords) = compute_cartesian_coords(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return cartesian_coords
-
-    def compute_covariant_basis(self, grid=None):
-        """Compute covariant basis vectors.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        cov_basis : dict
-            dictionary of ndarray, shape(3,num_nodes), of covariant basis vectors.
-            Keys are of the form ``'e_x_y'``, meaning the covariant basis vector in
-            the x direction, differentiated wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (cov_basis, toroidal_coords) = compute_covariant_basis(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return cov_basis
-
-    def compute_jacobian(self, grid=None):
-        """Compute coordinate system jacobian.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        jacobian : dict
-            dictionary of ndarray, shape(num_nodes,), of coordinate system jacobian.
-            Keys are of the form ``'g_x'`` meaning the x derivative of the coordinate
-            system jacobian g.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return jacobian
-
-    def compute_contravariant_basis(self, grid=None):
-        """Compute contravariant basis vectors.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        con_basis : dict
-            dictionary of ndarray, shape(3,num_nodes), of contravariant basis vectors.
-            Keys are of the form ``'e^x_y'``, meaning the contravariant basis vector
-            in the x direction, differentiated wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (con_basis, jacobian, cov_basis, toroidal_coords) = compute_contravariant_basis(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return con_basis
-
-    def compute_magnetic_field(self, grid=None):
-        """Compute magnetic field components.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        magnetic_field: dict
-            dictionary of ndarray, shape(num_nodes,) of magnetic field components.
-            Keys are of the form ``'B_x_y'`` or ``'B^x_y'``, meaning the covariant (B_x)
-            or contravariant (B^x) component of the magnetic field, with the
-            derivative wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_magnetic_field_magnitude_axis(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return magnetic_field
-
-    def compute_current_density(self, grid=None):
-        """Compute current density field components.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        current_density : dict
-            dictionary of ndarray, shape(num_nodes,), of current density components.
-            Keys are of the form ``'J^x_y'`` meaning the contravariant (J^x)
-            component of the current, with the derivative wrt to y.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            current_density,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_current_density(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return current_density
-
-    def compute_magnetic_pressure_gradient(self, grid=None):
-        """Compute magnetic pressure gradient components and its magnitude.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        magnetic_pressure : dict
-            dictionary of ndarray, shape(num_nodes,), of magnetic pressure gradient components.
-            Keys are of the form ``'grad_B^x'`` meaning the contravariant (grad_B^x) component of the
-            magnetic pressure gradient.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            magnetic_pressure,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_magnetic_pressure_gradient(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return magnetic_pressure
-
-    def compute_magnetic_tension(self, grid=None):
-        """Compute magnetic tension vector and its magnitude.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        magnetic_tension : dict
-            dictionary of ndarray, shape(num_nodes,), of magnetic tension vector.
-            Keys are of the form `gradB` for the vector form and `|gradB|` for its
-            magnitude.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            magnetic_tension,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_magnetic_tension(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return magnetic_tension
-
-    def compute_force_error(self, grid=None):
-        """Compute force errors and magnitude.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Collocation grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at.
-
-        Returns
-        -------
-        force_error : dict
-            dictionary of ndarray, shape(num_nodes,), of force error components.
-            Keys are of the form ``'F_x'`` meaning the covariant (F_x) component of the
-            force error.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return force_error
-
-    def compute_energy(self, grid=None):
-        """Compute total MHD energy,
-        :math:`W=\int_V dV(\\frac{B^2}{2\mu_0} + \\frac{p}{\gamma - 1})`
-
-        where DESC assumes :math:`\gamma=0`.
-        Also computes the individual components (magnetic and pressure)
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Quadrature grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at
-
-        Returns
-        -------
-        energy : dict
-            Keys are ``'W_B'`` for magnetic energy (B**2 / 2mu0 integrated over volume),
-            ``'W_p'`` for pressure energy (-p integrated over volume), and ``'W'`` for total
-            MHD energy (W_B + W_p)
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=2)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            energy,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_energy(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return energy
-
-    def compute_quasisymmetry(self, grid=None):
-        """Compute quasisymmetry (triple product and flux function metrics).
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Quadrature grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at
-
-        Returns
-        -------
-        quasisymmetry: dict
-            dictionary of ndarray, shape(num_nodes,), of quasisymmetry components.
-            The triple product metric has the key 'QS_TP',
-        and the flux function metric has the key 'QS_FF'.
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=3)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return quasisymmetry
-
-    def compute_volume(self, grid=None):
-        """Compute total plasma volume.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Quadrature grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at
-
-        Returns
-        -------
-        volume : float
-            plasma volume in m^3
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        return np.sum(np.abs(jacobian["g"]) * R_transform.grid.weights)
-
-    def compute_cross_section_area(self, grid=None):
-        """Compute toroidally averaged cross-section area.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            Quadrature grid containing the (rho, theta, zeta) coordinates of
-            the nodes to evaluate at
-
-        Returns
-        -------
-        area : float
-            cross section area in m^2
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = R_transform.grid
-
-        (jacobian, cov_basis, toroidal_coords) = compute_jacobian(
-            self.Psi,
-            self.R_lmn,
-            self.Z_lmn,
-            self.L_lmn,
-            self.p_l,
-            self.i_l,
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-        )
-
-        N = np.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
-        weights = R_transform.grid.weights / (2 * np.pi / N)  # remove toroidal weights
-        return np.mean(
-            np.sum(
-                np.reshape(  # sqrt(g) / R * weight = dArea
-                    np.abs(jacobian["g"] / toroidal_coords["R"]) * weights, (N, -1)
-                ),
-                axis=1,
-            )
-        )
-
-    def compute_dW(self, grid=None):
-        """Compute the dW ideal MHD stability matrix, ie the Hessian of the energy.
-
-        Parameters
-        ----------
-        grid : Grid, ndarray, optional
-            grid to use for computation. If None, a QuadratureGrid is created
-
-        Returns
-        -------
-        dW : ndarray
-            symmetric matrix whose eigenvalues determine mhd stability and eigenvectors
-            describe the shape of unstable perturbations
-
-        """
-        R_transform, Z_transform, L_transform = self._get_transforms(grid, derivs=1)
-        pressure = self.pressure.copy()
-        pressure.grid = R_transform.grid
-        iota = self.iota.copy()
-        iota.grid = grid
-
-        obj = get_objective_function(
-            "energy",
-            R_transform,
-            Z_transform,
-            L_transform,
-            pressure,
-            iota,
-            BC_constraint=None,
-            use_jit=False,
-        )
-        x = self.x
-        dW = obj.hess_x(x, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
-        return dW
+        fun = getattr(compute_funs, data_index[name]["fun"])
+        sig = signature(fun)
+
+        inputs = {"data": data}
+        for arg in sig.parameters.keys():
+            if arg in arg_order:
+                inputs[arg] = getattr(self, arg)
+            elif arg == "R_transform":
+                inputs[arg] = Transform(
+                    grid, self.R_basis, derivs=data_index[name]["R_derivs"]
+                )
+            elif arg == "Z_transform":
+                inputs[arg] = Transform(
+                    grid, self.Z_basis, derivs=data_index[name]["R_derivs"]
+                )
+            elif arg == "L_transform":
+                inputs[arg] = Transform(
+                    grid, self.L_basis, derivs=data_index[name]["L_derivs"]
+                )
+            elif arg == "B_transform":
+                inputs[arg] = Transform(
+                    grid,
+                    DoubleFourierSeries(
+                        M=2 * self.M, N=2 * self.N, sym=self.R_basis.sym, NFP=self.NFP
+                    ),
+                    derivs=0,
+                    build_pinv=True,
+                )
+            elif arg == "w_transform":
+                inputs[arg] = Transform(
+                    grid,
+                    DoubleFourierSeries(
+                        M=2 * self.M, N=2 * self.N, sym=self.Z_basis.sym, NFP=self.NFP
+                    ),
+                    derivs=1,
+                )
+            elif arg == "pressure":
+                inputs[arg] = self.pressure.copy()
+                inputs[arg].grid = grid
+            elif arg == "iota":
+                inputs[arg] = self.iota.copy()
+                inputs[arg].grid = grid
+
+        return fun(**inputs)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of
@@ -1995,13 +1318,13 @@ class _Configuration(IOAble, ABC):
             r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
             t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
 
-            r_coords = self.compute_toroidal_coords(r_grid)
-            t_coords = self.compute_toroidal_coords(t_grid)
+            r_coords = self.compute("R", r_grid)
+            t_coords = self.compute("lambda", t_grid)
 
             v_nodes = t_grid.nodes
             v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
             v_grid = Grid(v_nodes)
-            v_coords = self.compute_toroidal_coords(v_grid)
+            v_coords = self.compute("R", v_grid)
 
             # rho contours
             Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
@@ -2037,6 +1360,7 @@ class _Configuration(IOAble, ABC):
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
+
         NOTE: Though the converted equilibrium will have the same flux surfaces,
         the force balance error will likely be higher than the original equilibrium.
 
@@ -2076,15 +1400,15 @@ class _Configuration(IOAble, ABC):
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
 
-        toroidal_coords = self.compute_toroidal_coords(grid)
+        toroidal_coords = self.compute("R", grid)
         theta = grid.nodes[:, 1]
-        vartheta = theta + toroidal_coords["lambda"]
+        vartheta = theta + self.compute("lambda", grid)["lambda"]
         sfl_grid = grid
         sfl_grid.nodes[:, 1] = vartheta
 
-        bdry_coords = self.compute_toroidal_coords(bdry_grid)
+        bdry_coords = self.compute("R", bdry_grid)
         bdry_theta = bdry_grid.nodes[:, 1]
-        bdry_vartheta = bdry_theta + bdry_coords["lambda"]
+        bdry_vartheta = bdry_theta + self.compute("lambda", bdry_grid)["lambda"]
         bdry_sfl_grid = bdry_grid
         bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
 
@@ -2135,152 +1459,3 @@ class _Configuration(IOAble, ABC):
 
         if not in_place:
             return eq_sfl
-
-    def run_booz_xform(
-        self,
-        M_nyq=None,
-        N_nyq=None,
-        M_boz=None,
-        N_boz=None,
-        rho=None,
-        filename=None,
-        verbose=True,
-    ):
-        """Convert to Boozer coordinates by running booz_xform.
-
-        Parameters
-        ----------
-        M_nyq : int
-            Poloidal resolution for derived quantities. Default is M.
-        N_nyq : int
-            Toroidal resolution for derived quantities. Default is N.
-        M_boz : int
-            Poloidal resolution of Boozer spectrum. Default is 2*M.
-        N_boz : int
-            Toroidal resolution of Boozer spectrum. Default is 2*N.
-        rho : ndarray
-            Radial coordinates of the flux surfaces to evaluate at.
-        filename : str, Optional
-            If given, saves the results to a NetCDF file.
-        verbose : bool
-            Set False to suppress output of Booz_xform calculations.
-
-        Returns
-        -------
-        b : Booz_xform
-            Booz_xform object that contains the transformed quantities.
-
-        """
-        try:
-            import booz_xform as bx
-        except ImportError as exc:
-            raise ImportError(
-                colored(
-                    "booz_xform not installed, details for installation can be found at "
-                    + "https://hiddensymmetries.github.io/booz_xform/getting_started.html",
-                    "red",
-                )
-            ) from exc
-
-        if M_nyq is None:
-            M_nyq = self.M
-        if N_nyq is None:
-            N_nyq = self.N
-        if M_boz is None:
-            M_boz = 2 * self.M
-        if N_boz is None:
-            N_boz = 2 * self.N if self.N > 0 else 0
-        if rho is None:
-            rho = np.linspace(0.01, 1, num=100)
-
-        # Booz_xform object
-        b = bx.Booz_xform()
-        b.verbose = verbose
-        b.asym = not self.sym
-        b.nfp = int(self.NFP)
-        b.ns_in = len(rho)
-        b.s_in = rho ** 2
-        b.compute_surfs = np.arange(0, b.ns_in)
-
-        # equilibrium resolution
-        b.mpol = self.M + 1
-        b.ntor = self.N
-        b.mnmax = (2 * self.N + 1) * self.M + self.N + 1
-        b.xm = np.tile(
-            np.linspace(0, self.M, self.M + 1), (2 * self.N + 1, 1)
-        ).T.flatten()[-b.mnmax :]
-        b.xn = np.tile(
-            np.linspace(-self.N, self.N, 2 * self.N + 1) * self.NFP, self.M + 1
-        )[-b.mnmax :]
-
-        # Nyquist resolution
-        b.mpol_nyq = int(M_nyq)
-        b.ntor_nyq = int(N_nyq)
-        b.mnmax_nyq = (2 * N_nyq + 1) * M_nyq + N_nyq + 1
-        b.xm_nyq = np.tile(
-            np.linspace(0, M_nyq, M_nyq + 1), (2 * N_nyq + 1, 1)
-        ).T.flatten()[-b.mnmax :]
-        b.xn_nyq = np.tile(
-            np.linspace(-N_nyq, N_nyq, 2 * N_nyq + 1) * self.NFP, M_nyq + 1
-        )[-b.mnmax :]
-
-        # Boozer resolution
-        b.mboz = int(M_boz)
-        b.nboz = int(N_boz)
-
-        # R, Z, lambda
-        m, n, R_mn = zernike_to_fourier(self.R_lmn, basis=self.R_basis, rho=rho)
-        m, n, Z_mn = zernike_to_fourier(self.Z_lmn, basis=self.Z_basis, rho=rho)
-        m, n, L_mn = zernike_to_fourier(self.L_lmn, basis=self.L_basis, rho=rho)
-        xm, xn, R_s, R_c = ptolemy_identity_rev(m, n, R_mn)
-        xm, xn, Z_s, Z_c = ptolemy_identity_rev(m, n, Z_mn)
-        xm, xn, L_s, L_c = ptolemy_identity_rev(m, n, L_mn)
-        b.rmnc = R_c.T
-        b.zmns = Z_s.T
-        b.lmns = L_s.T
-        if not self.sym:
-            b.rmns = R_s.T
-            b.zmnc = Z_c.T
-            b.lmnc = L_c.T
-
-        # Nyquist grid for computing derived quantities
-        grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP)
-        if self.sym:
-            basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym="cos")
-        else:
-            basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=self.NFP, sym=None)
-        transform = Transform(grid, basis, build=False, build_pinv=True)
-        m = basis.modes[:, 1]
-        n = basis.modes[:, 2]
-
-        # |B|, B_theta, B_zeta
-        B_mn = np.zeros((b.ns_in, b.mnmax_nyq))
-        Bt_mn = np.zeros((b.ns_in, b.mnmax_nyq))
-        Bz_mn = np.zeros((b.ns_in, b.mnmax_nyq))
-        for k in range(b.ns_in):
-            grid = LinearGrid(
-                M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=self.NFP, rho=rho[k]
-            )
-            data = self.compute_magnetic_field(grid)
-            B_mn[k, :] = transform.fit(data["|B|"])
-            Bt_mn[k, :] = transform.fit(data["B_theta"])
-            Bz_mn[k, :] = transform.fit(data["B_zeta"])
-        xm, xn, B_s, B_c = ptolemy_identity_rev(m, n, B_mn)
-        xm, xn, Bt_s, Bt_c = ptolemy_identity_rev(m, n, Bt_mn)
-        xm, xn, Bz_s, Bz_c = ptolemy_identity_rev(m, n, Bz_mn)
-        b.bmnc = B_c.T
-        b.bsubumnc = Bt_c.T
-        b.bsubvmnc = Bz_c.T
-        if not self.sym:
-            b.bmns = B_s.T
-            b.bsubumns = Bt_s.T
-            b.bsubvmns = Bz_s.T
-
-        # rotational transform
-        b.iota = self.iota(rho)
-
-        # run booz_xform
-        b.run()
-        if filename is not None:
-            b.write_boozmn(filename)
-        return b

@@ -1,8 +1,8 @@
-"""data_index containts all of the quantities calculated by the compute functions.
+"""data_index contains all of the quantities calculated by the compute functions.
 
 label = (str) Title of the quantity in LaTeX format.
 units = (str) Units of the quantity in LaTeX format.
-utits_long (str) Full units without abbreviations.
+units_long (str) Full units without abbreviations.
 description (str) Description of the quantity.
 fun = (str) Function name in compute_funs.py that computes the quantity.
 dim = (int) Dimension of the quantity: 0-D, 1-D, or 3-D.

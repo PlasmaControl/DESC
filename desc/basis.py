@@ -386,15 +386,18 @@ class FourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return toroidal
 
-    def change_resolution(self, N):
+    def change_resolution(self, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
@@ -518,7 +521,7 @@ class DoubleFourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
-    def change_resolution(self, M, N):
+    def change_resolution(self, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -527,12 +530,15 @@ class DoubleFourierSeries(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         Returns
         -------
         None
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N:
             self._M = M
             self._N = N
@@ -962,7 +968,7 @@ class FourierZernikeBasis(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -973,8 +979,11 @@ class FourierZernikeBasis(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M

@@ -249,7 +249,11 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x, y0)
-        return jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
+        f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
+        if f.size > 1:
+            return f
+        else:
+            return f[0]
 
     def compute_scalar(self, x, y0=None):
         """Compute the scalar form of the objective.
@@ -268,7 +272,11 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        return jnp.sum(self.compute(x, y0) ** 2) / 2
+        if self.scalar:
+            f = self.compute(x, y0)
+        else:
+            f = jnp.sum(self.compute(x, y0) ** 2) / 2
+        return f
 
     def callback(self, x, y0=None):
         """Print the value(s) of the objective.
@@ -708,7 +716,11 @@ class _Objective(IOAble, ABC):
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
-        return jnp.sum(self.compute(*args, **kwargs) ** 2)
+        if self.scalar:
+            f = self.compute(*args, **kwargs)
+        else:
+            f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
+        return f
 
     def callback(self, *args, **kwargs):
         """Print the value of the objective."""

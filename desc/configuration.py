@@ -844,33 +844,15 @@ class _Configuration(IOAble, ABC):
         """Maximum radial mode number (int)."""
         return self._L
 
-    @L.setter
-    def L(self, L):
-        if self.L != L:
-            self._L = L
-            self.change_resolution(L=L)
-
     @property
     def M(self):
         """Maximum poloidal fourier mode number (int)."""
         return self._M
 
-    @M.setter
-    def M(self, M):
-        if self.M != M:
-            self._M = M
-            self.change_resolution(M=M)
-
     @property
     def N(self):
         """Maximum toroidal fourier mode number (int)."""
         return self._N
-
-    @N.setter
-    def N(self, N):
-        if self.N != N:
-            self._N = N
-            self.change_resolution(N=N)
 
     @property
     def R_lmn(self):

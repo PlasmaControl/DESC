@@ -66,7 +66,9 @@ class Volume(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
 
         self._dim_f = 1
 
@@ -154,7 +156,9 @@ class AspectRatio(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
 
         self._dim_f = 1
 
@@ -250,7 +254,9 @@ class Energy(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
 
         self._dim_f = 1
 
@@ -282,10 +288,6 @@ class Energy(_Objective):
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
-
-    def _compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-
-        return data["W"], data["W_B"], data["W_p"]
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
         """Compute MHD energy.

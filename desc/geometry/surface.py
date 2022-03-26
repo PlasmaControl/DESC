@@ -623,7 +623,8 @@ class ZernikeRZToroidalSection(Surface):
             )
 
     def get_coeffs(self, l, m=0):
-        """Get Fourier coefficients for given mode number(s)."""
+        """Get Zernike coefficients for given mode number(s)."""
+
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -644,7 +645,8 @@ class ZernikeRZToroidalSection(Surface):
         return R, Z
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
-        """Set specific Fourier coefficients."""
+        """Set specific Zernike coefficients."""
+
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),

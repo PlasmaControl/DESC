@@ -115,7 +115,7 @@ class Surface(IOAble, ABC):
         """Grid for computation."""
 
     @abstractmethod
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, *args, **kwargs):
         """Change the maximum resolution."""
 
     @abstractmethod

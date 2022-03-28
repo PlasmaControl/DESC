@@ -139,9 +139,8 @@ def perturb(
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jy = objective.jac(y)
-        Jx = np.dot(Jy, objective.Z)
-        RHS1 = f + np.dot(Jy, tangents)
+        Jx = objective.jac(x)
+        RHS1 = f + objective.jvp(tangents, y)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")

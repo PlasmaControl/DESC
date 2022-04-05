@@ -5,7 +5,7 @@ from desc.backend import jnp
 from desc.utils import unpack_state
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.compute_funs import compute_toroidal_coords
+from desc.compute import compute_toroidal_coords
 from desc.equilibrium import Equilibrium
 from desc.objective_funs import ObjectiveFunction
 from desc.boundary_conditions import LCFSConstraint
@@ -37,17 +37,10 @@ class DummyFunLinear(ObjectiveFunction):
         )
 
         toroidal_coords = compute_toroidal_coords(
-            Psi,
             R_lmn,
             Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
             self.R_transform,
             self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
         )
 
         axis = self.R_transform.grid.axis

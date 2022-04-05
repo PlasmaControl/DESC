@@ -273,13 +273,13 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
             poly1.symmetric_difference(poly2).area
             for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
         ]
-    ).reshape((Rr1.shape[0], Rr1.shape[2]))
+    ).reshape((Rr1.shape[2], Rr1.shape[0]))
     intersect_rho = np.array(
         [
             poly1.intersection(poly2).area
             for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
         ]
-    ).reshape((Rr1.shape[0], Rr1.shape[2]))
+    ).reshape((Rr1.shape[2], Rr1.shape[0]))
     area_rho = np.where(diff_rho > 0, diff_rho / intersect_rho, 0)
     area_theta = np.array(
         [poly.area / (poly.length) ** 2 for poly in poly_v.flat]

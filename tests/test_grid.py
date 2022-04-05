@@ -2,12 +2,33 @@ import unittest
 import pytest
 import numpy as np
 from scipy import special
-from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
 
 
 class TestGrid(unittest.TestCase):
-    """Tests Grid classes"""
+    """Test Grid classes."""
+
+    def test_custom_grid(self):
+
+        nodes = np.array(
+            [
+                [0, 0, 0],
+                [0.25, 0, 0],
+                [0.5, np.pi / 2, np.pi / 3],
+                [0.5, np.pi / 2, np.pi / 3],
+                [0.75, np.pi, np.pi],
+                [1, 2 * np.pi, 3 * np.pi / 2],
+            ]
+        )
+        grid = Grid(nodes)
+        weights = grid.weights
+
+        w = 4 * np.pi ** 2 / (grid.num_nodes - 1)
+        weights_ref = np.array([w, w, w / 2, w / 2, w, w])
+
+        np.testing.assert_allclose(weights, weights_ref, atol=1e-12)
+        self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2)
 
     def test_linear_grid(self):
 
@@ -224,8 +245,9 @@ class TestGrid(unittest.TestCase):
         }
 
         eq = Equilibrium(**inputs)
-        g = eq.compute_jacobian(eq.grid)
-        vol_quad = np.sum(np.abs(g["g"]) * eq.grid.weights)
+        grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+        g = eq.compute("sqrt(g)", grid)
+        vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         self.assertAlmostEqual(vol, vol_quad)
 

@@ -258,7 +258,7 @@ class Equilibrium(_Configuration, IOAble):
         result = optimizer.optimize(
             objective,
             x_init=x0,
-            args=(objective.y0,),
+            args=(),
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,

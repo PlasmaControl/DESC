@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
 from desc import config
-from desc.backend import use_jax, jnp, jit
+from desc.backend import use_jax, jnp, jit, put
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
@@ -101,15 +101,33 @@ class ObjectiveFunction(IOAble):
             self._b = np.hstack((self._b, b)) if self._b.size else b
 
         # TODO: handle duplicate constraints
+        row_idx = []
+        col_idx = []
+        self._A_full = self._A
+        self._b_full = self._b
+        dimy = self._A.shape[1]
+        for i, row in enumerate(self._A):
+            if np.count_nonzero(row) == 1:
+                j = np.where(row)[0][0]
+                if np.count_nonzero(self._A[:, j]) == 1:
+                    row_idx.append(i)
+                    col_idx.append(j)
+        row_idx = np.array(row_idx)
+        col_idx = np.array(col_idx)
+        self._fixed_rows = row_idx
+        self._fixed_idx = col_idx
+        self._unfixed_rows = np.setdiff1d(np.arange(self._A.shape[0]), self._fixed_rows)
+        self._unfixed_idx = np.setdiff1d(np.arange(self._A.shape[1]), self._fixed_idx)
+        self._fixed_vals = self._b[self._fixed_rows]
+        self._A = self._A[self._unfixed_rows][:, self._unfixed_idx]
+        self._b = self._b[self._unfixed_rows]
 
-        # SVD of A
-        u, s, vh = np.linalg.svd(self._A, full_matrices=True)
-        M, N = u.shape[0], vh.shape[1]
-        K = min(M, N)
-        rcond = np.finfo(self._A.dtype).eps * max(M, N)
-
-        # Z = null space of A
         if self.constraints:
+            # SVD of A to get Ainv = pseudoinverse and Z= null space of A
+            u, s, vh = np.linalg.svd(self._A, full_matrices=True)
+            M, N = u.shape[0], vh.shape[1]
+            K = min(M, N)
+            rcond = np.finfo(self._A.dtype).eps * max(M, N)
             tol = np.amax(s) * rcond
             large = s > tol
             num = np.sum(large, dtype=int)
@@ -118,7 +136,10 @@ class ObjectiveFunction(IOAble):
             s = np.divide(1, s, where=large, out=s)
             s[(~large,)] = 0
             self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
-            self._y0 = np.dot(self._Ainv, self._b)
+            temp_y0 = np.dot(self._Ainv, self._b)
+            self._y0 = jnp.zeros(dimy)
+            self._y0 = put(self._y0, self._unfixed_idx, temp_y0)
+            self._y0 = put(self._y0, self._fixed_idx, self._fixed_vals)
             self._Z = vh[num:, :].T.conj()
             self._dim_x = self._Z.shape[1]
         else:
@@ -229,18 +250,19 @@ class ObjectiveFunction(IOAble):
             b = obj.target
             self._b = np.hstack((self.b, b)) if self.b.size else b
 
-        self._y0 = np.dot(self.Ainv, self.b)
+        self._b = self._b[self._unfixed_rows]
+        temp_y0 = np.dot(self._Ainv, self._b)
+        self._y0 = jnp.zeros(self.dim_y)
+        self._y0 = put(self._y0, self._unfixed_idx, temp_y0)
+        self._y0 = put(self._y0, self._fixed_idx, self._fixed_vals)
 
-    def compute(self, x, y0=None):
+    def compute(self, x):
         """Compute the objective function.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-        y0 : ndarray, optional
-            Full state vector that satisfies the linear constraints.
-            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -248,23 +270,20 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        kwargs = self.unpack_state(x, y0)
+        kwargs = self.unpack_state(x)
         f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
         if f.size > 1:
             return f
         else:
             return f[0]
 
-    def compute_scalar(self, x, y0=None):
+    def compute_scalar(self, x):
         """Compute the scalar form of the objective.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-        y0 : ndarray, optional
-            Full state vector that satisfies the linear constraints.
-            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -273,21 +292,18 @@ class ObjectiveFunction(IOAble):
 
         """
         if self.scalar:
-            f = self.compute(x, y0)
+            f = self.compute(x)
         else:
-            f = jnp.sum(self.compute(x, y0) ** 2) / 2
+            f = jnp.sum(self.compute(x) ** 2) / 2
         return f
 
-    def callback(self, x, y0=None):
+    def callback(self, x):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-        y0 : ndarray, optional
-            Full state vector that satisfies the linear constraints.
-            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         """
         f = self.compute_scalar(x)
@@ -297,16 +313,13 @@ class ObjectiveFunction(IOAble):
             obj.callback(**kwargs)
         return None
 
-    def unpack_state(self, x, y0=None):
+    def unpack_state(self, x):
         """Unpack the state vector x (or y) into its components.
 
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-        y0 : ndarray, optional
-            Full state vector that satisfies the linear constraints.
-            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         Returns
         -------
@@ -319,7 +332,7 @@ class ObjectiveFunction(IOAble):
 
         x = jnp.atleast_1d(x)
         if x.size == self.dim_x:
-            y = self.recover(x, y0)
+            y = self.recover(x)
         elif x.size == self.dim_y:
             y = x
         else:
@@ -330,31 +343,30 @@ class ObjectiveFunction(IOAble):
             kwargs[arg] = y[self.y_idx[arg]]
         return kwargs
 
-    def project(self, y, y0=None):
+    def project(self, y):
         """Project a full state vector y into the optimization vector x."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        if y0 is None:
-            y0 = self.y0
-        dy = y - y0
+        y0 = self.y0
+        dy = (y - y0)[self._unfixed_idx]
         x = jnp.dot(self.Z.T, dy)
         return jnp.squeeze(x)
 
-    def recover(self, x, y0=None):
+    def recover(self, x):
         """Recover the full state vector y from the optimization vector x."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        if y0 is None:
-            y0 = self.y0
-        y = y0 + jnp.dot(self.Z, x)
-        return jnp.squeeze(y)
+        y0 = self.y0
+        dy = jnp.zeros(self.dim_y)
+        temp_y = jnp.dot(self.Z, x)
+        dy = put(dy, self._unfixed_idx, temp_y)
+        # dy = put(dy, self._fixed_idx, self._fixed_vals)
+        return jnp.squeeze(y0 + dy)
 
-    def make_feasible(self, y, y0=None):
+    def make_feasible(self, y):
         """Return a full state vector y that satisfies the linear constraints."""
-        if y0 is None:
-            y0 = self.y0
-        x = self.project(y, y0)
-        return y0 + np.dot(self.Z, x)
+        x = self.project(y)
+        return self.recover(x)
 
     def y(self, eq):
         """Return the full state vector y from the Equilibrium eq."""
@@ -367,21 +379,21 @@ class ObjectiveFunction(IOAble):
         """Return the optimization variable x from the Equilibrium eq."""
         return self.project(self.y(eq))
 
-    def grad(self, x, y0=None):
+    def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._grad.compute(x, y0)
+        return self._grad.compute(x)
 
-    def hess(self, x, y0=None):
+    def hess(self, x):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._hess.compute(x, y0)
+        return self._hess.compute(x)
 
-    def jac(self, x, y0=None):
+    def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        return self._jac.compute(x, y0)
+        return self._jac.compute(x)
 
-    def jvp(self, v, x, y0=None):
+    def jvp(self, v, x):
         """Compute Jacobian-vector product of the objective function.
 
         Parameters
@@ -391,21 +403,16 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
-        y0 : ndarray, optional
-            Full state vector that satisfies the linear constraints.
-            Should always use self.y0, which is equivalent to self.Ainv*self.b.
 
         """
         if not isinstance(v, tuple):
             v = (v,)
         if len(v) == 1:
-            return Derivative.compute_jvp(self.compute, 0, v[0], x, y0)
+            return Derivative.compute_jvp(self.compute, 0, v[0], x)
         elif len(v) == 2:
-            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x, y0)
+            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x)
         elif len(v) == 3:
-            return Derivative.compute_jvp3(
-                self.compute, 0, 0, 0, v[0], v[1], v[2], x, y0
-            )
+            return Derivative.compute_jvp3(self.compute, 0, 0, 0, v[0], v[1], v[2], x)
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
@@ -444,28 +451,28 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute_scalar(x, y0).block_until_ready()
+            f0 = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
-            g0 = self.grad(x, y0).block_until_ready()
+            g0 = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
             timer.start("Hessian compilation time")
-            H0 = self.hess(x, y0).block_until_ready()
+            H0 = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute(x, y0).block_until_ready()
+            f0 = self.compute(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x, y0).block_until_ready()
+            J0 = self.jac(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")

@@ -7,10 +7,10 @@ from desc.backend import jnp, jit, use_jax
 from desc.utils import unpack_state, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.compute_funs import (
-    compute_force_error_magnitude,
+from desc.compute import (
+    compute_force_error,
     compute_energy,
-    compute_quasisymmetry,
+    compute_quasisymmetry_error,
 )
 
 __all__ = [
@@ -483,22 +483,13 @@ class ForceErrorNodes(ObjectiveFunction):
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
+        data = compute_force_error(
             R_lmn,
             Z_lmn,
             L_lmn,
             p_l,
             i_l,
+            Psi,
             self.R_transform,
             self.Z_transform,
             self.L_transform,
@@ -508,10 +499,8 @@ class ForceErrorNodes(ObjectiveFunction):
 
         weights = self.R_transform.grid.weights
 
-        f_rho = (
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        f_rho = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"] * weights
+        f_beta = data["F_beta"] * data["|beta|"] * data["sqrt(g)"] * weights
         residual = jnp.concatenate([f_rho.flatten(), f_beta.flatten()])
 
         return residual
@@ -572,22 +561,13 @@ class ForceErrorNodes(ObjectiveFunction):
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (
-            force_error,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_force_error_magnitude(
-            Psi,
+        data = compute_force_error(
             R_lmn,
             Z_lmn,
             L_lmn,
             p_l,
             i_l,
+            Psi,
             self.R_transform,
             self.Z_transform,
             self.L_transform,
@@ -597,10 +577,8 @@ class ForceErrorNodes(ObjectiveFunction):
 
         weights = self.R_transform.grid.weights
 
-        f_rho = (
-            force_error["F_rho"] * force_error["|grad(rho)|"] * jacobian["g"] * weights
-        )
-        f_beta = force_error["F_beta"] * force_error["|beta|"] * jacobian["g"] * weights
+        f_rho = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"] * weights
+        f_beta = data["F_beta"] * data["|beta|"] * data["sqrt(g)"] * weights
 
         f_rho_rms = jnp.sqrt(jnp.sum(f_rho ** 2))
         f_beta_rms = jnp.sqrt(jnp.sum(f_beta ** 2))
@@ -719,20 +697,13 @@ class EnergyVolIntegral(ObjectiveFunction):
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (
-            energy,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_energy(
-            Psi,
+        data = compute_energy(
             R_lmn,
             Z_lmn,
             L_lmn,
             p_l,
             i_l,
+            Psi,
             self.R_transform,
             self.Z_transform,
             self.L_transform,
@@ -740,7 +711,7 @@ class EnergyVolIntegral(ObjectiveFunction):
             self.i_profile,
         )
 
-        residual = energy["W"]
+        residual = data["W"]
 
         return residual
 
@@ -798,20 +769,13 @@ class EnergyVolIntegral(ObjectiveFunction):
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (
-            energy,
-            magnetic_field,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_energy(
-            Psi,
+        data = compute_energy(
             R_lmn,
             Z_lmn,
             L_lmn,
             p_l,
             i_l,
+            Psi,
             self.R_transform,
             self.Z_transform,
             self.L_transform,
@@ -820,9 +784,9 @@ class EnergyVolIntegral(ObjectiveFunction):
         )
 
         print(
-            "Total MHD energy: {:10.3e}, ".format(energy["W"])
+            "Total MHD energy: {:10.3e}, ".format(data["W"])
             + "Magnetic Energy: {:10.3e}, Pressure Energy: {:10.3e}".format(
-                energy["W_B"], energy["W_p"]
+                data["W_B"], data["W_p"]
             )
         )
         return None
@@ -918,44 +882,25 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
 
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
+        data = compute_quasisymmetry_error(
             R_lmn,
             Z_lmn,
             L_lmn,
-            p_l,
             i_l,
+            Psi,
             self.R_transform,
             self.Z_transform,
             self.L_transform,
-            self.p_profile,
             self.i_profile,
         )
 
         # QS triple product (T^4/m^2)
-        QS = (
-            profiles["psi_r"]
-            * (
-                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-            )
-            / jacobian["g"]
-        )
-
+        QS = data["f_T"]
         # normalization factor = <|B|>^4 / R^2
         R0 = Rb_lmn[
             jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
         ]
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        norm = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
         return QS * R0 ** 2 / norm ** 4  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
@@ -982,54 +927,9 @@ class QuasisymmetryTripleProduct(ObjectiveFunction):
             average quasi-symmetry error
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # QS triple product (T^4/m^2)
-        QS = (
-            profiles["psi_r"]
-            * (
-                magnetic_field["|B|_t"] * quasisymmetry["B*grad(|B|)_z"]
-                - magnetic_field["|B|_z"] * quasisymmetry["B*grad(|B|)_t"]
-            )
-            / jacobian["g"]
-        )
-
-        # normalization factor = <|B|>^4 / R^2
-        R0 = Rb_lmn[
-            jnp.where((self.Rb_transform.basis.modes == [0, 0, 0]).all(axis=1))[0]
-        ]
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        f = QS * R0 ** 2 / norm ** 4  # normalized QS error
-        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.
@@ -1177,57 +1077,27 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
         R_lmn, Z_lmn, L_lmn = unpack_state(
             x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
         )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
         # M/N (type of QS)
         helicity = 1.0 / 1.0
 
-        # covariant Boozer components
-        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # poloidal current
-        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # toroidal current
-
-        # flux function C=C(rho)
-        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
-
-        # QS flux function (T^3)
-        QS = (
-            profiles["psi_r"]
-            / jacobian["g"]
-            * (
-                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-            )
-            - C * quasisymmetry["B*grad(|B|)"]
+        data = compute_quasisymmetry_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self.R_transform,
+            self.Z_transform,
+            self.L_transform,
+            self.i_profile,
+            helicity,
         )
 
+        # QS triple product (T^4/m^2)
+        QS = data["f_C"]
+
         # normalization factor = <|B|>^3
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
+        norm = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
         return QS / norm ** 3  # normalized QS error
 
     def compute_scalar(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
@@ -1254,64 +1124,9 @@ class QuasisymmetryFluxFunction(ObjectiveFunction):
             average quasi-symmetry error
 
         """
-        if self.BC_constraint is not None and x.size == self.dimy:
-            # x is really 'y', need to recover full state vector
-            x = self.BC_constraint.recover_from_constraints(x, Rb_lmn, Zb_lmn)
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            x, self.R_transform.basis.num_modes, self.Z_transform.basis.num_modes
-        )
-
-        (
-            quasisymmetry,
-            current_density,
-            magnetic_field,
-            con_basis,
-            jacobian,
-            cov_basis,
-            toroidal_coords,
-            profiles,
-        ) = compute_quasisymmetry(
-            Psi,
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            self.R_transform,
-            self.Z_transform,
-            self.L_transform,
-            self.p_profile,
-            self.i_profile,
-        )
-
-        # covariant Boozer components
-        G = jnp.mean(magnetic_field["B_zeta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # poloidal current
-        I = jnp.mean(magnetic_field["B_theta"] * jacobian["g"]) / jnp.mean(
-            jacobian["g"]
-        )  # toroidal current
-
-        helicity = 1.0 / 1.0  # M/N (type of QS)
-        # flux function C=C(rho)
-        C = (helicity * G + I) / (helicity * profiles["iota"] - 1)
-
-        # QS flux function (T^3)
-        QS = (
-            profiles["psi_r"]
-            / jacobian["g"]
-            * (
-                magnetic_field["B_zeta"] * magnetic_field["|B|_t"]
-                - magnetic_field["B_theta"] * magnetic_field["|B|_z"]
-            )
-            - C * quasisymmetry["B*grad(|B|)"]
-        )
-
-        # normalization factor = <|B|>^3
-        norm = jnp.mean(magnetic_field["|B|"] * jacobian["g"]) / jnp.mean(jacobian["g"])
-        f = QS / norm ** 3  # normalized QS error
-        return jnp.mean(jnp.abs(f) * jacobian["g"]) / jnp.mean(jacobian["g"])
+        residual = self.compute(x, Rb_lmn, Zb_lmn, p_l, i_l, Psi)
+        residual = 1 / 2 * jnp.sum(residual ** 2)
+        return residual
 
     def callback(self, x, Rb_lmn, Zb_lmn, p_l, i_l, Psi):
         """Print the rms errors for quasisymmetry.

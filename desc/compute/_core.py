@@ -92,6 +92,7 @@ def cross(a, b, axis=-1):
 def compute_flux_coords(
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute flux coordinates (rho,theta,zeta).
 
@@ -120,6 +121,7 @@ def compute_toroidal_flux(
     Psi,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute toroidal magnetic flux profile.
 
@@ -152,6 +154,7 @@ def compute_toroidal_coords(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute toroidal coordinates (R,phi,Z).
 
@@ -215,6 +218,7 @@ def compute_cartesian_coords(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute Cartesian coordinates (X,Y,Z).
 
@@ -249,6 +253,7 @@ def compute_lambda(
     L_lmn,
     L_transform,
     data=None,
+    **kwargs,
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
 
@@ -303,6 +308,7 @@ def compute_pressure(
     p_l,
     pressure,
     data=None,
+    **kwargs,
 ):
     """Compute pressure profile.
 
@@ -333,6 +339,7 @@ def compute_rotational_transform(
     i_l,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute rotational transform profile.
 
@@ -366,6 +373,7 @@ def compute_covariant_basis(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute covariant basis vectors.
 
@@ -466,6 +474,7 @@ def compute_contravariant_basis(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant basis vectors.
 
@@ -513,6 +522,7 @@ def compute_jacobian(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute coordinate system Jacobian.
 
@@ -616,6 +626,7 @@ def compute_covariant_metric_coefficients(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute metric coefficients.
 
@@ -668,6 +679,7 @@ def compute_contravariant_metric_coefficients(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute reciprocal metric coefficients.
 
@@ -727,6 +739,7 @@ def compute_geometry(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute plasma volume.
 

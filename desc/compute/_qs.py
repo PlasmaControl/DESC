@@ -23,6 +23,7 @@ def compute_boozer_coords(
     w_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute Boozer coordinates.
 
@@ -155,6 +156,7 @@ def compute_quasisymmetry_error(
     iota,
     helicity=(1, 0),
     data=None,
+    **kwargs,
 ):
     """Compute quasi-symmetry triple product and two-term errors.
 

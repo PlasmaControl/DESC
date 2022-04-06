@@ -27,6 +27,7 @@ def compute_force_error(
     pressure,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute force error components.
 
@@ -133,6 +134,7 @@ def compute_energy(
     pressure,
     gamma=0,
     data=None,
+    **kwargs,
 ):
     """Compute MHD energy. W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J).
 

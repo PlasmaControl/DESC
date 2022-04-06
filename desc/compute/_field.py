@@ -26,6 +26,7 @@ def compute_contravariant_magnetic_field(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant magnetic field components.
 
@@ -204,6 +205,7 @@ def compute_covariant_magnetic_field(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute covariant magnetic field components.
 
@@ -309,6 +311,7 @@ def compute_magnetic_field_magnitude(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic field magnitude.
 
@@ -633,6 +636,7 @@ def compute_magnetic_pressure_gradient(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic pressure gradient.
 
@@ -737,6 +741,7 @@ def compute_magnetic_tension(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic tension.
 
@@ -844,6 +849,7 @@ def compute_B_dot_gradB(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute the quantity B*grad(|B|) and its partial derivatives.
 
@@ -933,6 +939,7 @@ def compute_contravariant_current_density(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant current density components.
 

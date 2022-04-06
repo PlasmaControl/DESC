@@ -10,6 +10,7 @@ from .linear_objectives import (
     VMECBoundaryConstraint,
 )
 from .nonlinear_objectives import (
+    GenericObjective,
     Volume,
     AspectRatio,
     Energy,
@@ -40,6 +41,7 @@ __all__ = [
     "LCFSBoundary",
     "TargetIota",
     "VMECBoundaryConstraint",
+    "GenericObjective",
     "Volume",
     "AspectRatio",
     "Energy",

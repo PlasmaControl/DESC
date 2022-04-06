@@ -1,12 +1,15 @@
 import numpy as np
 from scipy.constants import mu_0
+from inspect import signature
 
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
+import desc.compute as compute_funs
 from desc.compute import (
+    arg_order,
     data_index,
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
@@ -18,6 +21,134 @@ from desc.compute import (
     compute_geometry,
 )
 from .objective_funs import _Objective
+
+
+class GenericObjective(_Objective):
+    """A generic objective that can compute any quantity from the `data_index`."""
+
+    _scalar = False
+    _linear = False
+
+    def __init__(self, f, eq=None, target=0, weight=1, grid=None, name="generic"):
+        """Initialize a Generic Objective.
+
+        Parameters
+        ----------
+        f : str
+            Name of the quatity to compute.
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        name : str
+            Name of the objective function.
+
+        """
+        self.f = f
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+
+        args = []
+        self._dim_f = self.grid.num_nodes
+
+        self.fun = getattr(compute_funs, data_index[self.f]["fun"])
+        self.sig = signature(self.fun)
+        self.inputs = {"data": None}
+
+        for arg in self.sig.parameters.keys():
+            if arg in arg_order:
+                args.append(arg)
+            elif arg == "R_transform":
+                self.inputs[arg] = Transform(
+                    self.grid,
+                    eq.R_basis,
+                    derivs=data_index[self.f]["R_derivs"],
+                    build=True,
+                )
+            elif arg == "Z_transform":
+                self.inputs[arg] = Transform(
+                    self.grid,
+                    eq.Z_basis,
+                    derivs=data_index[self.f]["R_derivs"],
+                    build=True,
+                )
+            elif arg == "L_transform":
+                self.inputs[arg] = Transform(
+                    self.grid,
+                    eq.L_basis,
+                    derivs=data_index[self.f]["L_derivs"],
+                    build=True,
+                )
+            elif arg == "B_transform":
+                self.inputs[arg] = Transform(
+                    self.grid,
+                    DoubleFourierSeries(
+                        M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP
+                    ),
+                    derivs=0,
+                    build_pinv=True,
+                )
+            elif arg == "w_transform":
+                self.inputs[arg] = Transform(
+                    self.grid,
+                    DoubleFourierSeries(
+                        M=2 * eq.M, N=2 * eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP
+                    ),
+                    derivs=1,
+                )
+            elif arg == "pressure":
+                self.inputs[arg] = eq.pressure.copy()
+                self.inputs[arg].grid = self.grid
+            elif arg == "iota":
+                self.inputs[arg] = eq.iota.copy()
+                self.inputs[arg].grid = self.grid
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._args = args
+        self._built = True
+
+    def compute(self, **kwargs):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        args : list of ndarray
+            Any of the arguments given in `arg_order`.
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        data = self.fun(**kwargs, **self.inputs)
+        f = data[self.f]
+        return self._shift_scale(f)
 
 
 # scalar nonlinear objectives

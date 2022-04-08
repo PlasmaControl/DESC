@@ -2722,7 +2722,7 @@ data_index["J"] = {
     ],
 }
 data_index["J_parallel"] = {
-    "label": "\\mathbf{J}_{\parallel}",
+    "label": "\\mathbf{J} \\cdot \\mathbf{b}",
     "units": "A \\cdot m^{-2}",
     "units_long": "Amperes / square meter",
     "description": "Plasma current parallel to magnetic field",

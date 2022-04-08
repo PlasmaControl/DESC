@@ -62,13 +62,7 @@ def compute_contravariant_magnetic_field(
     data = compute_toroidal_flux(Psi, iota, data=data)
     data = compute_rotational_transform(i_l, iota, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
-    data = compute_jacobian(
-        R_lmn,
-        Z_lmn,
-        R_transform,
-        Z_transform,
-        data=data,
-    )
+    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data,)
 
     # 0th order terms
     if check_derivs("B0", R_transform, Z_transform, L_transform):
@@ -1009,16 +1003,23 @@ def compute_contravariant_current_density(
         data["J_R"] = data["J"][:, 0]
         data["J_phi"] = data["J"][:, 1]
         data["J_Z"] = data["J"][:, 2]
+        data["|J|"] = jnp.sqrt(
+            data["J^rho"] ** 2 * data["g_rr"]
+            + data["J^theta"] ** 2 * data["g_tt"]
+            + data["J^zeta"] ** 2 * data["g_zz"]
+            + 2 * data["J^rho"] * data["J^theta"] * data["g_rt"]
+            + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
+            + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
+        )
         data["|B|"] = jnp.sqrt(
             data["B^theta"] ** 2 * data["g_tt"]
             + data["B^zeta"] ** 2 * data["g_zz"]
             + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
         data["J_parallel"] = (
-            data["J^theta"] * data["B^theta"] * data["g_tt"]
-            + data["J^theta"] * data["B^zeta"] * data["g_tz"]
-            + data["J^zeta"] * data["B^theta"] * data["g_tz"]
-            + data["J^zeta"] * data["B^zeta"] * data["g_zz"]
+            data["J^rho"] * data["B_rho"]
+            + data["J^theta"] * data["B_theta"]
+            + data["J^zeta"] * data["B_zeta"]
         ) / data["|B|"]
 
     return data

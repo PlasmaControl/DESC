@@ -28,7 +28,7 @@ from ._equil import compute_force_error, compute_energy
 
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi")
+arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
 
 __all__ = [
     "arg_order",

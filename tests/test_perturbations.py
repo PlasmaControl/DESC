@@ -2,17 +2,7 @@ import numpy as np
 
 from desc.equilibrium import EquilibriaFamily
 from desc.grid import ConcentricGrid
-from desc.objectives import (
-    ObjectiveFunction,
-    FixedBoundaryR,
-    FixedBoundaryZ,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
-    LCFSBoundary,
-    RadialForceBalance,
-    HelicalForceBalance,
-)
+from desc.objectives import get_force_balance_objective
 from desc.perturbations import perturb
 
 
@@ -21,16 +11,7 @@ def test_perturbation_orders(SOLOVEV):
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
-    objectives = (RadialForceBalance(), HelicalForceBalance())
-    constraints = (
-        FixedBoundaryR(),
-        FixedBoundaryZ(),
-        FixedPressure(),
-        FixedIota(),
-        FixedPsi(),
-        LCFSBoundary(),
-    )
-    objective = ObjectiveFunction(objectives, constraints)
+    objective = get_force_balance_objective()
 
     # perturb pressure
     dp = np.zeros_like(eq.p_l)

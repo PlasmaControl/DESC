@@ -12,7 +12,7 @@ __all__ = ["perturb", "optimal_perturb"]
 
 
 # TODO: add `weight` input option to scale Jacobian
-# TODO: add `opt_subspace` input option for custom perturbation space
+# TODO: add `subspace` input option for custom perturbation space
 def perturb(
     eq,
     objective,
@@ -24,6 +24,7 @@ def perturb(
     dp=None,
     di=None,
     dPsi=None,
+    subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25, 0.5],
     verbose=1,
@@ -41,6 +42,9 @@ def perturb(
         Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
         rotational transform, and total toroidal magnetic flux.
         Setting to None or zero ignores that term in the expansion.
+    subspace : ndarray, optional
+        Transform vector dy/dc*Dc to give a subspace from the full parameter space.
+        Can be used to enforce custom perturbations.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
@@ -101,9 +105,6 @@ def perturb(
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
 
-    # perturbation deltas
-    dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
 
@@ -119,16 +120,32 @@ def perturb(
     dx2 = 0
     dx3 = 0
 
-    # dy/dc*dc
-    if objective.dim_c:
-        b_idx = np.concatenate([objective.b_idx[arg] for arg in deltas.keys()])
-        b_idx.sort(kind="mergesort")
-        tangents = np.dot(objective.Ainv, np.dot(np.eye(objective.dim_c)[:, b_idx], dc))
-        # FIXME: this can only perturb arguments that are used in the constraints
-    else:
-        y_idx = np.concatenate([objective.y_idx[arg] for arg in deltas.keys()])
-        y_idx.sort(kind="mergesort")
-        tangents = np.dot(np.eye(objective.dim_y)[:, y_idx], dc)
+    if subspace is None:
+        subspace = np.zeros((objective.dim_y,))
+        if "Rb_lmn" in deltas.keys():
+            dc = deltas["Rb_lmn"]
+            subspace += (
+                np.eye(objective.dim_y)[:, objective.y_idx["R_lmn"]]
+                @ objective.Ainv["R_lmn"]
+                @ dc
+            )
+        if "Zb_lmn" in deltas.keys():
+            dc = deltas["Zb_lmn"]
+            subspace += (
+                np.eye(objective.dim_y)[:, objective.y_idx["Z_lmn"]]
+                @ objective.Ainv["Z_lmn"]
+                @ dc
+            )
+        # all other perturbations besides the boundary
+        if len([arg for arg in arg_order if arg in deltas.keys()]):
+            dc = np.concatenate(
+                [deltas[arg] for arg in arg_order if arg in deltas.keys()]
+            )
+            y_idx = np.concatenate(
+                [objective.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
+            )
+            y_idx.sort(kind="mergesort")
+            subspace += np.eye(objective.dim_y)[:, y_idx] @ dc
 
     # 1st order
     if order > 0:
@@ -140,7 +157,7 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
-        RHS1 = f + objective.jvp(tangents, y)
+        RHS1 = f + objective.jvp(subspace, y)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -164,6 +181,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy1 = objective.recover(dx1) - objective.y0
 
     # 2nd order
     if order > 1:
@@ -172,8 +190,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangents += np.dot(objective.Z, dx1)
-        RHS2 = 0.5 * objective.jvp((tangents, tangents), y)
+        subspace += dy1
+        RHS2 = 0.5 * objective.jvp((subspace, subspace), y)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -189,6 +207,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy2 = objective.recover(dx2) - objective.y0
 
     # 3rd order
     if order > 2:
@@ -197,8 +216,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), y)
-        RHS3 += objective.jvp((np.dot(objective.Z, dx2), tangents), y)
+        RHS3 = (1 / 6) * objective.jvp((subspace, subspace, subspace), y)
+        RHS3 += objective.jvp((dy2, subspace), y)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -214,6 +233,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
+        dy3 = objective.recover(dx3) - objective.y0
 
     if order > 3:
         raise ValueError(
@@ -261,7 +281,7 @@ def optimal_perturb(
     dp=False,
     di=False,
     dPsi=False,
-    opt_subspace=None,
+    subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
     cutoff=1e-6,
@@ -282,8 +302,8 @@ def optimal_perturb(
         Array of indicies of modes to include in the perturbations of R, Z, lambda,
         R_boundary, Z_boundary, pressure, rotational transform, and total magnetic flux.
         Setting to True (False) includes (excludes) all modes.
-    opt_subspace : ndarray, optional
-        Transform matrix to give a subspace from the full optimization parameter space.
+    subspace : ndarray, optional
+        Transform matrix to give a subspace from the full parameter space.
         Can be used to enforce custom optimization constraints.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -383,9 +403,9 @@ def optimal_perturb(
         c = np.concatenate((c, getattr(eq, key)))
 
     # optimization subspace matrix
-    if opt_subspace is None:
-        opt_subspace = np.eye(c.size)[:, c_idx]
-    dim_c, dim_opt = opt_subspace.shape
+    if subspace is None:
+        subspace = np.eye(c.size)[:, c_idx]
+    dim_c, dim_opt = subspace.shape
 
     if dim_c != c.size:
         raise ValueError(
@@ -464,7 +484,7 @@ def optimal_perturb(
         RHS_1g = g - np.dot(GxFx, f)
 
         # restrict to optimization subspace
-        LHS_opt = np.dot(LHS, opt_subspace)
+        LHS_opt = np.dot(LHS, subspace)
 
         if verbose > 0:
             print("Factoring LHS")
@@ -486,7 +506,7 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc1 = np.dot(dc1_opt, opt_subspace.T)
+        dc1 = np.dot(dc1_opt, subspace.T)
         RHS_1f = -f - np.dot(Fc, dc1)
         uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
 
@@ -539,7 +559,7 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc2 = np.dot(dc2_opt, opt_subspace.T)
+        dc2 = np.dot(dc2_opt, subspace.T)
         RHS_2f += -np.dot(Fc, dc2)
 
         dx2, _, _ = trust_region_step_exact_svd(
@@ -565,7 +585,7 @@ def optimal_perturb(
         eq_new = eq
 
     dc = dc1 + dc2
-    dc_opt = np.dot(dc, opt_subspace)
+    dc_opt = np.dot(dc, subspace)
 
     # update perturbation attributes
     idx0 = 0

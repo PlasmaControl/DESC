@@ -11,13 +11,7 @@ from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
-from desc.objectives import (
-    ObjectiveFunction,
-    FixedBoundaryR,
-    FixedBoundaryZ,
-    LCFSBoundary,
-    Volume,
-)
+from desc.objectives import ObjectiveFunction, LCFSBoundaryR, LCFSBoundaryZ, Volume
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
@@ -117,9 +111,7 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        objective = ObjectiveFunction(
-            Volume(), (FixedBoundaryR(), FixedBoundaryZ(), LCFSBoundary()), eq
-        )
+        objective = ObjectiveFunction(Volume(), (LCFSBoundaryR(), LCFSBoundaryZ()), eq)
         args = objective.unpack_state(objective.make_feasible(objective.y(eq)))
         for key, value in args.items():
             setattr(eq, key, value)

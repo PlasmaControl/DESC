@@ -1,8 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
+from scipy.linalg import block_diag
 
-from desc import config
 from desc.backend import use_jax, jnp, jit, put
 from desc.utils import Timer
 from desc.io import IOAble
@@ -87,66 +87,48 @@ class ObjectiveFunction(IOAble):
 
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
-        # A*y = b
-        self._A = np.array([[]])
-        self._b = np.array([])
+        self._A = {}
+        self._Ainv = {}
+        self._b = {}
+        self._Z = {}
+        self._y0 = jnp.zeros(self._dim_y)
         for obj in self.constraints:
-            A = np.array([[]])
-            for arg in arg_order:
-                if arg in self.args:
-                    a = np.atleast_2d(obj.derivatives[arg])
-                    A = np.hstack((A, a)) if A.size else a
-            b = obj.target
-            self._A = np.vstack((self._A, A)) if self._A.size else A
-            self._b = np.hstack((self._b, b)) if self._b.size else b
+            if obj.fixed:
+                self._y0 = put(self._y0, self._y_idx[obj.target_arg], obj.target)
+            else:
+                if len(obj.args) > 1:
+                    raise ValueError("Non-fixed constraints must have only 1 argument.")
+                arg = obj.args[0]
+                A = obj.derivatives[arg]
+                if A.shape[0]:
+                    u, s, vh = np.linalg.svd(A, full_matrices=True)
+                    M, N = u.shape[0], vh.shape[1]
+                    K = min(M, N)
+                    rcond = np.finfo(A.dtype).eps * max(M, N)
+                    tol = np.amax(s) * rcond
+                    large = s > tol
+                    num = np.sum(large, dtype=int)
+                    uk = u[:, :K]
+                    vhk = vh[:K, :]
+                    s = np.divide(1, s, where=large, out=s)
+                    s[(~large,)] = 0
+                    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+                    Z = vh[num:, :].T.conj()
+                else:
+                    Ainv = A.T
+                    Z = A.T
+                b = obj.target
+                self._A[arg] = A
+                self._Ainv[arg] = Ainv
+                self._b[arg] = b
+                self._Z[arg] = Z
+                self._y0 = put(self._y0, self._y_idx[arg], jnp.dot(Ainv, b))
 
-        # TODO: handle duplicate constraints
-        row_idx = []
-        col_idx = []
-        self._A_full = self._A
-        self._b_full = self._b
-        dimy = self._A.shape[1]
-        for i, row in enumerate(self._A):
-            if np.count_nonzero(row) == 1:
-                j = np.where(row)[0][0]
-                if np.count_nonzero(self._A[:, j]) == 1:
-                    row_idx.append(i)
-                    col_idx.append(j)
-        row_idx = np.array(row_idx)
-        col_idx = np.array(col_idx)
-        self._fixed_rows = row_idx
-        self._fixed_idx = col_idx
-        self._unfixed_rows = np.setdiff1d(np.arange(self._A.shape[0]), self._fixed_rows)
-        self._unfixed_idx = np.setdiff1d(np.arange(self._A.shape[1]), self._fixed_idx)
-        self._fixed_vals = self._b[self._fixed_rows]
-        self._A = self._A[self._unfixed_rows][:, self._unfixed_idx]
-        self._b = self._b[self._unfixed_rows]
-
-        if self.constraints:
-            # SVD of A to get Ainv = pseudoinverse and Z= null space of A
-            u, s, vh = np.linalg.svd(self._A, full_matrices=True)
-            M, N = u.shape[0], vh.shape[1]
-            K = min(M, N)
-            rcond = np.finfo(self._A.dtype).eps * max(M, N)
-            tol = np.amax(s) * rcond
-            large = s > tol
-            num = np.sum(large, dtype=int)
-            uk = u[:, :K]
-            vhk = vh[:K, :]
-            s = np.divide(1, s, where=large, out=s)
-            s[(~large,)] = 0
-            self._Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
-            temp_y0 = np.dot(self._Ainv, self._b)
-            self._y0 = jnp.zeros(dimy)
-            self._y0 = put(self._y0, self._unfixed_idx, temp_y0)
-            self._y0 = put(self._y0, self._fixed_idx, self._fixed_vals)
-            self._Z = vh[num:, :].T.conj()
-            self._dim_x = self._Z.shape[1]
-        else:
-            self._Ainv = np.array([[]])
-            self._y0 = np.zeros((self._dim_y,))
-            self._Z = np.eye(self._dim_y)
-            self._dim_x = self._dim_y
+        self._unfixed_idx = jnp.concatenate(
+            [self._y_idx[arg] for arg in self._A.keys()]
+        )
+        self._Z_full = block_diag(*list(self._Z.values()))
+        self._dim_x = self._Z_full.shape[1]
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
@@ -158,16 +140,8 @@ class ObjectiveFunction(IOAble):
 
         """
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-        self._hess = Derivative(
-            self.compute_scalar,
-            mode="hess",
-            use_jit=use_jit,
-        )
-        self._jac = Derivative(
-            self.compute,
-            mode="fwd",
-            use_jit=use_jit,
-        )
+        self._hess = Derivative(self.compute_scalar, mode="hess", use_jit=use_jit,)
+        self._jac = Derivative(self.compute, mode="fwd", use_jit=use_jit,)
 
         if use_jit:
             self.compute = jit(self.compute)
@@ -244,17 +218,15 @@ class ObjectiveFunction(IOAble):
         for constraint in self.constraints:
             constraint.update_target(eq)
 
-        # A*y = b
-        self._b = np.array([])
-        for obj in self.constraints:
-            b = obj.target
-            self._b = np.hstack((self.b, b)) if self.b.size else b
-
-        self._b = self._b[self._unfixed_rows]
-        temp_y0 = np.dot(self._Ainv, self._b)
         self._y0 = jnp.zeros(self.dim_y)
-        self._y0 = put(self._y0, self._unfixed_idx, temp_y0)
-        self._y0 = put(self._y0, self._fixed_idx, self._fixed_vals)
+        for obj in self.constraints:
+            if obj.fixed:
+                self._y0 = put(self._y0, self._y_idx[obj.target_arg], obj.target)
+            else:
+                arg = obj.args[0]
+                b = obj.target
+                self._b[arg] = b
+                self._y0 = put(self._y0, self._y_idx[arg], jnp.dot(self.Ainv[arg], b))
 
     def compute(self, x):
         """Compute the objective function.
@@ -347,21 +319,20 @@ class ObjectiveFunction(IOAble):
         """Project a full state vector y into the optimization vector x."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        y0 = self.y0
-        dy = (y - y0)[self._unfixed_idx]
-        x = jnp.dot(self.Z.T, dy)
+        x = jnp.concatenate(
+            [
+                jnp.dot(self.Z[arg].T, (y - self.y0)[self.y_idx[arg]])
+                for arg in self.A.keys()
+            ]
+        )
         return jnp.squeeze(x)
 
     def recover(self, x):
         """Recover the full state vector y from the optimization vector x."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        y0 = self.y0
-        dy = jnp.zeros(self.dim_y)
-        temp_y = jnp.dot(self.Z, x)
-        dy = put(dy, self._unfixed_idx, temp_y)
-        # dy = put(dy, self._fixed_idx, self._fixed_vals)
-        return jnp.squeeze(y0 + dy)
+        dy = put(jnp.zeros(self.dim_y), self._unfixed_idx, jnp.dot(self._Z_full, x))
+        return jnp.squeeze(self.y0 + dy)
 
     def make_feasible(self, y):
         """Return a full state vector y that satisfies the linear constraints."""
@@ -711,6 +682,7 @@ class _Objective(IOAble, ABC):
             Equilibrium that will be optimized to satisfy the Objective.
 
         """
+        # FIXME: list comprehension for multiple args
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
 
     @abstractmethod
@@ -802,6 +774,14 @@ class _Objective(IOAble, ABC):
     def linear(self):
         """bool: Whether the objective is a linear function (or nonlinear)."""
         return self._linear
+
+    @property
+    def fixed(self):
+        """bool: Whether the objective fixes individual parameters (or linear combo)."""
+        if self.linear:
+            return self._fixed
+        else:
+            return False
 
     @property
     def name(self):

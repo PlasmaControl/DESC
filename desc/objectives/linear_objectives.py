@@ -389,7 +389,7 @@ class FixLambdaGauge(_Objective):
 
         L_basis = eq.L_basis
         if L_basis.sym:
-            self._A = np.zeros((0, L_basis.num_modes))
+            self._A = np.zeros((1, L_basis.num_modes))
         else:
             raise NotImplementedError("Lambda gauge symmetry not implemented yet.")
 

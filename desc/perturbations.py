@@ -12,7 +12,6 @@ __all__ = ["perturb", "optimal_perturb"]
 
 
 # TODO: add `weight` input option to scale Jacobian
-# TODO: add `subspace` input option for custom perturbation space
 def perturb(
     eq,
     objective,
@@ -24,7 +23,6 @@ def perturb(
     dp=None,
     di=None,
     dPsi=None,
-    subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25, 0.5],
     verbose=1,
@@ -42,9 +40,6 @@ def perturb(
         Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
         rotational transform, and total toroidal magnetic flux.
         Setting to None or zero ignores that term in the expansion.
-    subspace : ndarray, optional
-        Transform vector dy/dc*Dc to give a subspace from the full parameter space.
-        Can be used to enforce custom perturbations.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
@@ -120,32 +115,30 @@ def perturb(
     dx2 = 0
     dx3 = 0
 
-    if subspace is None:
-        subspace = np.zeros((objective.dim_y,))
-        if "Rb_lmn" in deltas.keys():
-            dc = deltas["Rb_lmn"]
-            subspace += (
-                np.eye(objective.dim_y)[:, objective.y_idx["R_lmn"]]
-                @ objective.Ainv["R_lmn"]
-                @ dc
-            )
-        if "Zb_lmn" in deltas.keys():
-            dc = deltas["Zb_lmn"]
-            subspace += (
-                np.eye(objective.dim_y)[:, objective.y_idx["Z_lmn"]]
-                @ objective.Ainv["Z_lmn"]
-                @ dc
-            )
-        # all other perturbations besides the boundary
-        if len([arg for arg in arg_order if arg in deltas.keys()]):
-            dc = np.concatenate(
-                [deltas[arg] for arg in arg_order if arg in deltas.keys()]
-            )
-            y_idx = np.concatenate(
-                [objective.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
-            )
-            y_idx.sort(kind="mergesort")
-            subspace += np.eye(objective.dim_y)[:, y_idx] @ dc
+    # tangent vectors
+    tangents = np.zeros((objective.dim_y,))
+    if "Rb_lmn" in deltas.keys():
+        dc = deltas["Rb_lmn"]
+        tangents += (
+            np.eye(objective.dim_y)[:, objective.y_idx["R_lmn"]]
+            @ objective.Ainv["R_lmn"]
+            @ dc
+        )
+    if "Zb_lmn" in deltas.keys():
+        dc = deltas["Zb_lmn"]
+        tangents += (
+            np.eye(objective.dim_y)[:, objective.y_idx["Z_lmn"]]
+            @ objective.Ainv["Z_lmn"]
+            @ dc
+        )
+    # all other perturbations besides the boundary
+    if len([arg for arg in arg_order if arg in deltas.keys()]):
+        dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
+        y_idx = np.concatenate(
+            [objective.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
+        )
+        y_idx.sort(kind="mergesort")
+        tangents += np.eye(objective.dim_y)[:, y_idx] @ dc
 
     # 1st order
     if order > 0:
@@ -157,7 +150,7 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
-        RHS1 = f + objective.jvp(subspace, y)
+        RHS1 = f + objective.jvp(tangents, y)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -190,8 +183,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        subspace += dy1
-        RHS2 = 0.5 * objective.jvp((subspace, subspace), y)
+        tangents += dy1
+        RHS2 = 0.5 * objective.jvp((tangents, tangents), y)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -216,8 +209,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp((subspace, subspace, subspace), y)
-        RHS3 += objective.jvp((dy2, subspace), y)
+        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), y)
+        RHS3 += objective.jvp((dy2, tangents), y)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -247,6 +240,7 @@ def perturb(
 
     # update perturbation attributes
     for key, value in deltas.items():
+        # FIXME: this won't work with a custom subspace instead of passing deltas
         setattr(eq_new, key, getattr(eq_new, key) + value)
     objective.rebuild_constraints(eq_new)
 

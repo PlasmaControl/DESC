@@ -1,11 +1,11 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
+    LCFSBoundaryR,
+    LCFSBoundaryZ,
+    FixLambdaGauge,
     FixedPressure,
     FixedIota,
     FixedPsi,
-    FixLambdaGauge,
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
 )
 from .nonlinear_objectives import RadialForceBalance, HelicalForceBalance, Energy
 
@@ -20,12 +20,12 @@ def get_fixed_boundary_constraints():
 
     """
     constraints = (
+        LCFSBoundaryR(),
+        LCFSBoundaryZ(),
+        FixLambdaGauge(),
         FixedPressure(),
         FixedIota(),
         FixedPsi(),
-        FixLambdaGauge(),
-        LCFSBoundaryR(),
-        LCFSBoundaryZ(),
     )
     return constraints
 

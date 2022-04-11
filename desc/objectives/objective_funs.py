@@ -4,7 +4,7 @@ from inspect import getfullargspec
 from scipy.linalg import block_diag
 
 from desc.backend import use_jax, jnp, jit, put
-from desc.utils import Timer
+from desc.utils import Timer, svd_inv_null
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
@@ -88,10 +88,11 @@ class ObjectiveFunction(IOAble):
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
         self._A = {}
-        self._Ainv = {}
         self._b = {}
-        self._Z = {}
+        self._Ainv = {}
         self._y0 = jnp.zeros(self._dim_y)
+
+        # A matrices for each unfixed constraint
         for obj in self.constraints:
             if obj.fixed:
                 self._y0 = put(self._y0, self._y_idx[obj.target_arg], obj.target)
@@ -100,35 +101,28 @@ class ObjectiveFunction(IOAble):
                     raise ValueError("Non-fixed constraints must have only 1 argument.")
                 arg = obj.args[0]
                 A = obj.derivatives[arg]
+                b = obj.target
                 if A.shape[0]:
-                    u, s, vh = np.linalg.svd(A, full_matrices=True)
-                    M, N = u.shape[0], vh.shape[1]
-                    K = min(M, N)
-                    rcond = np.finfo(A.dtype).eps * max(M, N)
-                    tol = np.amax(s) * rcond
-                    large = s > tol
-                    num = np.sum(large, dtype=int)
-                    uk = u[:, :K]
-                    vhk = vh[:K, :]
-                    s = np.divide(1, s, where=large, out=s)
-                    s[(~large,)] = 0
-                    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
-                    Z = vh[num:, :].T.conj()
+                    Ainv, Z = svd_inv_null(A)
                 else:
                     Ainv = A.T
-                    Z = A.T
-                b = obj.target
                 self._A[arg] = A
-                self._Ainv[arg] = Ainv
                 self._b[arg] = b
-                self._Z[arg] = Z
-                self._y0 = put(self._y0, self._y_idx[arg], jnp.dot(Ainv, b))
+                self._Ainv[arg] = Ainv
 
+        # full A matrix for all unfixed constraints
         self._unfixed_idx = jnp.concatenate(
-            [self._y_idx[arg] for arg in self._A.keys()]
+            [self._y_idx[arg] for arg in arg_order if arg in self._A.keys()]
         )
-        self._Z_full = block_diag(*list(self._Z.values()))
-        self._dim_x = self._Z_full.shape[1]
+        A_full = block_diag(
+            *[self._A[arg] for arg in arg_order if arg in self._A.keys()]
+        )
+        b_full = np.concatenate(
+            [self._b[arg] for arg in arg_order if arg in self._b.keys()]
+        )
+        Ainv_full, self._Z = svd_inv_null(A_full)
+        self._y0 = put(self._y0, self._unfixed_idx, jnp.dot(Ainv_full, b_full))
+        self._dim_x = self._Z.shape[1]
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
@@ -319,19 +313,14 @@ class ObjectiveFunction(IOAble):
         """Project a full state vector y into the optimization vector x."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        x = jnp.concatenate(
-            [
-                jnp.dot(self.Z[arg].T, (y - self.y0)[self.y_idx[arg]])
-                for arg in self.A.keys()
-            ]
-        )
+        x = jnp.dot(self.Z.T, (y - self.y0)[self._unfixed_idx])
         return jnp.squeeze(x)
 
     def recover(self, x):
         """Recover the full state vector y from the optimization vector x."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        dy = put(jnp.zeros(self.dim_y), self._unfixed_idx, jnp.dot(self._Z_full, x))
+        dy = put(jnp.zeros(self.dim_y), self._unfixed_idx, jnp.dot(self._Z, x))
         return jnp.squeeze(self.y0 + dy)
 
     def make_feasible(self, y):

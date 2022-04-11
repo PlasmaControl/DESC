@@ -1,11 +1,11 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
+    LCFSBoundaryR,
+    LCFSBoundaryZ,
+    FixLambdaGauge,
     FixedPressure,
     FixedIota,
     FixedPsi,
-    FixLambdaGauge,
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
     TargetIota,
 )
 from .nonlinear_objectives import (
@@ -32,12 +32,12 @@ from .utils import (
 
 __all__ = [
     "ObjectiveFunction",
+    "LCFSBoundaryR",
+    "LCFSBoundaryZ",
+    "FixLambdaGauge",
     "FixedPressure",
     "FixedIota",
     "FixedPsi",
-    "FixLambdaGauge",
-    "LCFSBoundaryR",
-    "LCFSBoundaryZ",
     "TargetIota",
     "GenericObjective",
     "Volume",

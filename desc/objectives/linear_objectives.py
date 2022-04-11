@@ -17,6 +17,251 @@ from .objective_funs import _Objective
 """
 
 
+class LCFSBoundaryR(_Objective):
+    """Boundary condition on the last closed flux surface."""
+
+    _scalar = False
+    _linear = True
+    _fixed = False  # TODO: can we dynamically detect this instead?
+
+    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs R"):
+        """Initialize a LCFSBoundary Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Boundary surface coefficients to fix. If None, uses surface coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        surface : FourierRZToroidalSurface, optional
+            Toroidal surface containing the Fourier modes to evaluate at.
+        name : str
+            Name of the objective function.
+
+        """
+        self._surface = surface
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "R boundary error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._surface is None:
+            self._surface = eq.surface
+
+        R_modes = eq.R_basis.modes
+        Rb_modes = self._surface.R_basis.modes
+
+        dim_R = eq.R_basis.num_modes
+        self._dim_f = self._surface.R_basis.num_modes
+
+        self._A = np.zeros((self._dim_f, dim_R))
+        for i, (l, m, n) in enumerate(R_modes):
+            j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
+            self._A[j, i] = 1
+
+        if None in self.target:
+            self.target = self._surface.R_lmn
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute last closed flux surface boundary errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+
+        Returns
+        -------
+        f : ndarray
+            Boundary surface errors (m).
+
+        """
+        Rb_lmn = jnp.dot(self._A, R_lmn)
+        return self._shift_scale(Rb_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Rb_lmn"
+
+
+class LCFSBoundaryZ(_Objective):
+    """Boundary condition on the last closed flux surface."""
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs Z"):
+        """Initialize a LCFSBoundary Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Boundary surface coefficients to fix. If None, uses surface coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        surface : FourierRZToroidalSurface, optional
+            Toroidal surface containing the Fourier modes to evaluate at.
+        name : str
+            Name of the objective function.
+
+        """
+        self._surface = surface
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Z boundary error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._surface is None:
+            self._surface = eq.surface
+
+        Z_modes = eq.Z_basis.modes
+        Zb_modes = self._surface.Z_basis.modes
+
+        dim_Z = eq.Z_basis.num_modes
+        self._dim_f = self._surface.Z_basis.num_modes
+
+        self._A = np.zeros((self._dim_f, dim_Z))
+        for i, (l, m, n) in enumerate(Z_modes):
+            j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
+            self._A[j, i] = 1
+
+        if None in self.target:
+            self.target = self._surface.Z_lmn
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute last closed flux surface boundary errors.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        f : ndarray
+            Boundary surface errors (m).
+
+        """
+        Zb_lmn = jnp.dot(self._A, Z_lmn)
+        return self._shift_scale(Zb_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Zb_lmn"
+
+
+class FixLambdaGauge(_Objective):
+    """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0."""
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
+        """Initialize a FixLambdaGauge Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        name : str
+            Name of the objective function.
+
+        """
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "lambda gauge error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+
+        L_basis = eq.L_basis
+        if L_basis.sym:
+            self._A = np.zeros((0, L_basis.num_modes))
+        else:
+            raise NotImplementedError("Lambda gauge symmetry not implemented yet.")
+
+        self._dim_f = self._A.shape[0]
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute lambda gauge symmetry errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Lambda gauge symmetry errors.
+
+        """
+        f = jnp.dot(self._A, L_lmn)
+        return self._shift_scale(f)
+
+
 class FixedPressure(_Objective):
     """Fixes pressure coefficients."""
 
@@ -345,254 +590,6 @@ class FixedPsi(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Psi"
-
-
-class FixLambdaGauge(_Objective):
-    """Fixes gauge symmetry for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=0, weight=1, name="gauge"):
-        """Initialize a FixLambdaGauge Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        name : str
-            Name of the objective function.
-
-        """
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "lambda gauge error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-
-        L_basis = eq.L_basis
-        if L_basis.sym:
-            self._A = np.zeros((1, L_basis.num_modes))
-        else:
-            raise NotImplementedError("Lambda gauge symmetry not implemented yet.")
-
-        self._dim_f = self._A.shape[0]
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, L_lmn, **kwargs):
-        """Compute lambda gauge symmetry errors.
-
-        Parameters
-        ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
-
-        Returns
-        -------
-        f : ndarray
-            Lambda gauge symmetry errors.
-
-        """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)
-
-
-class LCFSBoundaryR(_Objective):
-    """Boundary condition on the last closed flux surface."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs-R"):
-        """Initialize a LCFSBoundary Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
-        self._surface = surface
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "R boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._surface is None:
-            self._surface = eq.surface
-
-        R_modes = eq.R_basis.modes
-        Rb_modes = self._surface.R_basis.modes
-
-        dim_R = eq.R_basis.num_modes
-        self._dim_f = self._surface.R_basis.num_modes
-
-        self._A = np.zeros((self._dim_f, dim_R))
-        for i, (l, m, n) in enumerate(R_modes):
-            j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
-            self._A[j, i] = 1
-
-        if None in self.target:
-            self.target = self._surface.R_lmn
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, R_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Rb_lmn = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb_lmn)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Rb_lmn"
-
-
-class LCFSBoundaryZ(_Objective):
-    """Boundary condition on the last closed flux surface."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs-Z"):
-        """Initialize a LCFSBoundary Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
-        self._surface = surface
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Z boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._surface is None:
-            self._surface = eq.surface
-
-        Z_modes = eq.Z_basis.modes
-        Zb_modes = self._surface.Z_basis.modes
-
-        dim_Z = eq.Z_basis.num_modes
-        self._dim_f = self._surface.Z_basis.num_modes
-
-        self._A = np.zeros((self._dim_f, dim_Z))
-        for i, (l, m, n) in enumerate(Z_modes):
-            j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
-            self._A[j, i] = 1
-
-        if None in self.target:
-            self.target = self._surface.Z_lmn
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, Z_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
-
-        Parameters
-        ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Zb_lmn = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb_lmn)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Zb_lmn"
-
-
-# TODO: add lambda gauge symmetry
 
 
 class TargetIota(_Objective):

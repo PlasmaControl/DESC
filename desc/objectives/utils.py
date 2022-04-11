@@ -2,7 +2,7 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
-    FixLambdaGauge,
+    LambdaGauge,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -22,7 +22,7 @@ def get_fixed_boundary_constraints():
     constraints = (
         LCFSBoundaryR(),
         LCFSBoundaryZ(),
-        FixLambdaGauge(),
+        LambdaGauge(),
         FixedPressure(),
         FixedIota(),
         FixedPsi(),

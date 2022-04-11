@@ -191,7 +191,7 @@ class LCFSBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
-class FixLambdaGauge(_Objective):
+class LambdaGauge(_Objective):
     """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0."""
 
     _scalar = False
@@ -199,7 +199,7 @@ class FixLambdaGauge(_Objective):
     _fixed = False
 
     def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
-        """Initialize a FixLambdaGauge Objective.
+        """Initialize a LambdaGauge Objective.
 
         Parameters
         ----------
@@ -233,9 +233,20 @@ class FixLambdaGauge(_Objective):
 
         L_basis = eq.L_basis
         if L_basis.sym:
-            self._A = np.zeros((0, L_basis.num_modes))
+            # l(0,t,z) = 0
+            self._A = np.zeros((L_basis.N, L_basis.num_modes))
+            ns = np.arange(-L_basis.N, 1)
+            for i, (l, m, n) in enumerate(L_basis.modes):
+                if m != 0:
+                    continue
+                if (l // 2) % 2 == 0:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = 1
+                else:
+                    j = np.argwhere(n == ns)
+                    self._A[j, i] = -1
         else:
-            raise NotImplementedError("Lambda gauge symmetry not implemented yet.")
+            raise NotImplementedError("Lambda gauge freedom not implemented yet.")
 
         self._dim_f = self._A.shape[0]
 

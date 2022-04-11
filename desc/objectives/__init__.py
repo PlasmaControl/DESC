@@ -2,7 +2,7 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
-    FixLambdaGauge,
+    LambdaGauge,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -34,7 +34,7 @@ __all__ = [
     "ObjectiveFunction",
     "LCFSBoundaryR",
     "LCFSBoundaryZ",
-    "FixLambdaGauge",
+    "LambdaGauge",
     "FixedPressure",
     "FixedIota",
     "FixedPsi",

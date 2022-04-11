@@ -1,5 +1,0 @@
-[flake8]
-ignore = 
-max-line-length = 88
-exclude = docs/*, examples/*
-max-complexity = 10

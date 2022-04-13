@@ -18,11 +18,11 @@ def perturb(
     dR=None,
     dZ=None,
     dL=None,
-    dRb=None,
-    dZb=None,
     dp=None,
     di=None,
     dPsi=None,
+    dRb=None,
+    dZb=None,
     order=2,
     tr_ratio=0.1,
     verbose=1,
@@ -36,9 +36,9 @@ def perturb(
         Equilibrium to perturb.
     objective : ObjectiveFunction
         Objective function to satisfy.
-    dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
-        Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-        rotational transform, and total toroidal magnetic flux.
+    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or float
+        Deltas for perturbations of R, Z, lambda, pressure, rotational transform,
+        total toroidal magnetic flux, R_boundary, and Z_boundary.
         Setting to None or zero ignores that term in the expansion.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -89,16 +89,16 @@ def perturb(
         deltas["Z_lmn"] = dZ
     if dL is not None and np.any(dL):
         deltas["L_lmn"] = dL
-    if dRb is not None and np.any(dRb):
-        deltas["Rb_lmn"] = dRb
-    if dZb is not None and np.any(dZb):
-        deltas["Zb_lmn"] = dZb
     if dp is not None and np.any(dp):
         deltas["p_l"] = dp
     if di is not None and np.any(di):
         deltas["i_l"] = di
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
+    if dRb is not None and np.any(dRb):
+        deltas["Rb_lmn"] = dRb
+    if dZb is not None and np.any(dZb):
+        deltas["Zb_lmn"] = dZb
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -227,7 +227,7 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dy3 = objective.recover(dx3) - objective.y0
+        # dy3 = objective.recover(dx3) - objective.y0
 
     if order > 3:
         raise ValueError(
@@ -241,7 +241,6 @@ def perturb(
 
     # update perturbation attributes
     for key, value in deltas.items():
-        # FIXME: this won't work with a custom subspace instead of passing deltas
         setattr(eq_new, key, getattr(eq_new, key) + value)
     objective.rebuild_constraints(eq_new)
 
@@ -271,11 +270,11 @@ def optimal_perturb(
     dR=False,
     dZ=False,
     dL=False,
-    dRb=False,
-    dZb=False,
     dp=False,
     di=False,
     dPsi=False,
+    dRb=False,
+    dZb=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
@@ -293,9 +292,9 @@ def optimal_perturb(
         Objective function to satisfy.
     objective_g : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or bool, optional
+    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
         Array of indicies of modes to include in the perturbations of R, Z, lambda,
-        R_boundary, Z_boundary, pressure, rotational transform, and total magnetic flux.
+        pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
         Setting to True (False) includes (excludes) all modes.
     subspace : ndarray, optional
         Transform matrix to give a subspace from the full parameter space.
@@ -342,6 +341,9 @@ def optimal_perturb(
     if not objective_g.built:
         objective_g.build(eq, verbose=verbose)
 
+    if not np.atleast_1d(objective_f.y(eq) == objective_g.y(eq)).all():
+        raise ValueError("Objectives must have the same state vectors (y).")
+
     deltas = {}
     if type(dR) is bool or dR is None:
         if dR is True:
@@ -353,16 +355,11 @@ def optimal_perturb(
             deltas["Z_lmn"] = np.ones((objective_f.dimensions["Z_lmn"],), dtype=bool)
     elif np.any(dZ):
         deltas["Z_lmn"] = dZ
-    if type(dRb) is bool or dRb is None:
-        if dRb is True:
-            deltas["Rb_lmn"] = np.ones((objective_f.dimensions["Rb_lmn"],), dtype=bool)
-    elif np.any(dRb):
-        deltas["Rb_lmn"] = dRb
-    if type(dZb) is bool or dZb is None:
-        if dZb is True:
-            deltas["Zb_lmn"] = np.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
-    elif np.any(dZb):
-        deltas["Zb_lmn"] = dZb
+    if type(dL) is bool or dL is None:
+        if dL is True:
+            deltas["L_lmn"] = np.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
+    elif np.any(dL):
+        deltas["L_lmn"] = dL
     if type(dp) is bool or dp is None:
         if dp is True:
             deltas["p_l"] = np.ones((objective_f.dimensions["p_l"],), dtype=bool)
@@ -376,6 +373,16 @@ def optimal_perturb(
     if type(dPsi) is bool or dPsi is None:
         if dPsi is True:
             deltas["Psi"] = np.ones((objective_f.dimensions["Psi"],), dtype=bool)
+    if type(dRb) is bool or dRb is None:
+        if dRb is True:
+            deltas["Rb_lmn"] = np.ones((objective_f.dimensions["Rb_lmn"],), dtype=bool)
+    elif np.any(dRb):
+        deltas["Rb_lmn"] = dRb
+    if type(dZb) is bool or dZb is None:
+        if dZb is True:
+            deltas["Zb_lmn"] = np.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
+    elif np.any(dZb):
+        deltas["Zb_lmn"] = dZb
 
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
@@ -423,27 +430,29 @@ def optimal_perturb(
     dx1 = np.zeros_like(x)
     dx2 = np.zeros_like(x)
 
-    # dy/dc for f objective
-    if objective_f.dim_c:
-        b_idx_f = np.concatenate([objective_f.b_idx[arg] for arg in deltas.keys()])
-        b_idx_f.sort(kind="mergesort")
-        dydc_f = np.dot(objective_f.Ainv, np.eye(objective_f.dim_c)[:, b_idx_f])
-        # FIXME: this can only perturb arguments that are used in the constraints
-    else:
-        y_idx_f = np.concatenate([objective_f.y_idx[arg] for arg in deltas.keys()])
-        y_idx_f.sort(kind="mergesort")
-        dydc_f = np.eye(objective_f.dim_y)[:, y_idx_f]
+    # dy/dx
+    dydx = np.dot(np.eye(objective_f.dim_y)[:, objective_f._unfixed_idx], objective_f.Z)
 
-    # dy/dc for g objective
-    if objective_g.dim_c:
-        b_idx_g = np.concatenate([objective_g.b_idx[arg] for arg in deltas.keys()])
-        b_idx_g.sort(kind="mergesort")
-        dydc_g = np.dot(objective_g.Ainv, np.eye(objective_g.dim_c)[:, b_idx_g])
-        # FIXME: this can only perturb arguments that are used in the constraints
-    else:
-        y_idx_g = np.concatenate([objective_g.y_idx[arg] for arg in deltas.keys()])
-        y_idx_g.sort(kind="mergesort")
-        dydc_g = np.eye(objective_g.dim_y)[:, y_idx_g]
+    # dy/dc
+    dydc = np.zeros((objective_f.dim_y, 0))
+    if len([arg for arg in arg_order if arg in deltas.keys()]):
+        y_idx = np.concatenate(
+            [objective_f.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
+        )
+        y_idx.sort(kind="mergesort")
+        dydc = np.eye(objective_f.dim_y)[:, y_idx]
+    if "Rb_lmn" in deltas.keys():
+        dydRb = (
+            np.eye(objective_f.dim_y)[:, objective_f.y_idx["R_lmn"]]
+            @ objective_f.Ainv["R_lmn"]
+        )
+        dydc = np.hstack((dydc, dydRb))
+    if "Zb_lmn" in deltas.keys():
+        dydZb = (
+            np.eye(objective_f.dim_y)[:, objective_f.y_idx["Z_lmn"]]
+            @ objective_f.Ainv["Z_lmn"]
+        )
+        dydc = np.hstack((dydc, dydZb))
 
     # 1st order
     if order > 0:
@@ -457,7 +466,7 @@ def optimal_perturb(
         timer.start("df computation")
         Fy = objective_f.jac(y)
         Fx = np.dot(Fy[:, objective_f._unfixed_idx], objective_f.Z)
-        Fc = np.dot(Fy, dydc_f)
+        Fc = np.dot(Fy, dydc)
         Fx_inv = np.linalg.pinv(Fx, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:
@@ -468,8 +477,8 @@ def optimal_perturb(
             print("Computing dg")
         timer.start("dg computation")
         Gy = objective_g.jac(y)
-        Gx = np.dot(Gy, objective_g.Z)
-        Gc = np.dot(Gy, dydc_g)
+        Gx = np.dot(Gy[:, objective_g._unfixed_idx], objective_g.Z)
+        Gc = np.dot(Gy, dydc)
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")
@@ -524,7 +533,7 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangents_f = np.dot(objective_f.Z, dx1) + np.dot(dydc_f, dc1)
+        tangents_f = np.dot(dydx, dx1) + np.dot(dydc, dc1)
         RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), y)
         timer.stop("d^2f computation")
         if verbose > 1:
@@ -534,7 +543,7 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2g")
         timer.start("d^2g computation")
-        tangents_g = np.dot(objective_g.Z, dx1) + np.dot(dydc_g, dc1)
+        tangents_g = np.dot(dydx, dx1) + np.dot(dydc, dc1)
         RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), y) + np.dot(
             GxFx, RHS_2f
         )

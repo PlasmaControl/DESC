@@ -244,23 +244,20 @@ class ObjectiveFunction(IOAble):
             return f[0]
 
     def compute_scalar(self, x):
-        """Compute the scalar form of the objective.
-
+        """Compute the scalar form of the objective function.
+    
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-
+    
         Returns
         -------
         f : float
             Objective function scalar value.
-
+    
         """
-        if self.scalar:
-            f = self.compute(x)
-        else:
-            f = jnp.sum(self.compute(x) ** 2) / 2
+        f = jnp.sum(self.compute(x) ** 2) / 2
         return f
 
     def callback(self, x):
@@ -351,7 +348,11 @@ class ObjectiveFunction(IOAble):
 
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        return self._jac.compute(x)
+        J = self._jac.compute(x)
+        if self.scalar:
+            return np.atleast_2d(J)
+        else:
+            return J
 
     def jvp(self, v, x):
         """Compute Jacobian-vector product of the objective function.

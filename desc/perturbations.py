@@ -24,7 +24,7 @@ def perturb(
     di=None,
     dPsi=None,
     order=2,
-    tr_ratio=[0.1, 0.25, 0.5],
+    tr_ratio=0.1,
     verbose=1,
     copy=True,
 ):
@@ -149,7 +149,8 @@ def perturb(
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac(x)
+        Jy = objective.jac(y)
+        Jx = np.dot(Jy[:, objective._unfixed_idx], objective.Z)
         RHS1 = f + objective.jvp(tangents, y)
         timer.stop("df computation")
         if verbose > 1:
@@ -455,7 +456,7 @@ def optimal_perturb(
             print("Computing df")
         timer.start("df computation")
         Fy = objective_f.jac(y)
-        Fx = np.dot(Fy, objective_f.Z)  # FIXME: use jvp
+        Fx = np.dot(Fy[:, objective_f._unfixed_idx], objective_f.Z)
         Fc = np.dot(Fy, dydc_f)
         Fx_inv = np.linalg.pinv(Fx, rcond=cutoff)
         timer.stop("df computation")

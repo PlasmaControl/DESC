@@ -134,8 +134,16 @@ class ObjectiveFunction(IOAble):
 
         """
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-        self._hess = Derivative(self.compute_scalar, mode="hess", use_jit=use_jit,)
-        self._jac = Derivative(self.compute, mode="fwd", use_jit=use_jit,)
+        self._hess = Derivative(
+            self.compute_scalar,
+            mode="hess",
+            use_jit=use_jit,
+        )
+        self._jac = Derivative(
+            self.compute,
+            mode="fwd",
+            use_jit=use_jit,
+        )
 
         if use_jit:
             self.compute = jit(self.compute)
@@ -245,17 +253,17 @@ class ObjectiveFunction(IOAble):
 
     def compute_scalar(self, x):
         """Compute the scalar form of the objective function.
-    
+
         Parameters
         ----------
         x : ndarray
             Optimization variables (x) or full state vector (y).
-    
+
         Returns
         -------
         f : float
             Objective function scalar value.
-    
+
         """
         f = jnp.sum(self.compute(x) ** 2) / 2
         return f
@@ -606,7 +614,7 @@ class _Objective(IOAble, ABC):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {}
         self._scalar_derivatives = {}
-        self._args = getfullargspec(self.compute)[0][1:]
+        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         # only used for linear objectives so variable values are irrelevant
         kwargs = {

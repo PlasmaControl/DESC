@@ -137,8 +137,8 @@ def test_to_sfl(plot_eq):
     Rr2, Zr2, Rv2, Zv2 = _compute_coords(plot_eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-5)
-    np.testing.assert_allclose(theta_err, 0, atol=5e-10)
+    np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-7)
 
 
 @pytest.mark.slow

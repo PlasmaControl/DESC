@@ -62,7 +62,13 @@ def compute_contravariant_magnetic_field(
     data = compute_toroidal_flux(Psi, iota, data=data)
     data = compute_rotational_transform(i_l, iota, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
-    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data,)
+    data = compute_jacobian(
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        data=data,
+    )
 
     # 0th order terms
     if check_derivs("B0", R_transform, Z_transform, L_transform):

@@ -436,7 +436,11 @@ class Equilibrium(_Configuration, IOAble):
                 c_norm,
                 bound_hit,
             ) = optimal_perturb(
-                eq, constraint, objective, copy=True, **perturb_options,
+                eq,
+                constraint,
+                objective,
+                copy=True,
+                **perturb_options,
             )
             eq_new.solve(objective=constraint, **solve_options)
 

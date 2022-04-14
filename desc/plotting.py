@@ -863,13 +863,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(
-        ax,
-        rows=rows,
-        cols=cols,
-        figsize=figsize,
-        equal=True,
-    )
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
@@ -881,11 +875,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             lw=theta_lw,
         )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=rho_color,
-            linestyle=rho_ls,
-            lw=rho_lw,
+            Rr[:, :, i], Zr[:, :, i], color=rho_color, linestyle=rho_ls, lw=rho_lw,
         )
         ax[i].plot(
             Rr[:, -1, i],
@@ -995,13 +985,7 @@ def plot_comparison(
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(
-        ax,
-        rows=rows,
-        cols=cols,
-        figsize=figsize,
-        equal=True,
-    )
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
     ax = np.atleast_1d(ax).flatten()
     for i, eq in enumerate(eqs):
         fig, ax = plot_surfaces(
@@ -1119,13 +1103,28 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
 
 
 # TODO: replace this with a capability of plot_1d
-def plot_current(eq, log=False, L=20, M=None, N=None, rho=None, ax=None, **kwargs):
+def plot_current(
+    eq,
+    toroidal=True,
+    poloidal=True,
+    log=False,
+    L=20,
+    M=None,
+    N=None,
+    rho=None,
+    ax=None,
+    **kwargs,
+):
     """Plot current density profiles.
 
     Parameters
     ----------
     eq : Equilibrium
         Object from which to plot.
+    toroidal : bool, optional
+        Whether to plot the toroidal current.
+    poloidal : bool, optional
+        Whether to plot the poloidal current.
     log : bool, optional
         Whether to use a log scale.
     L : int, optional
@@ -1165,11 +1164,15 @@ def plot_current(eq, log=False, L=20, M=None, N=None, rho=None, ax=None, **kwarg
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
     if log:
-        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(I), label="toroidal")
-        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(G), label="poloidal")
+        if toroidal:
+            ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(I), label="toroidal")
+        if poloidal:
+            ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(G), label="poloidal")
     else:
-        ax.plot(rho, 2 * np.pi / mu_0 * I, label="toroidal")
-        ax.plot(rho, 2 * np.pi / mu_0 * G, label="poloidal")
+        if toroidal:
+            ax.plot(rho, 2 * np.pi / mu_0 * I, label="toroidal")
+        if poloidal:
+            ax.plot(rho, 2 * np.pi / mu_0 * G, label="poloidal")
 
     ax.set_xlabel(_axis_labels_rtz[0])
     ax.set_ylabel(r"current $(A)$")
@@ -1501,9 +1504,7 @@ def plot_grid(grid, **kwargs):
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
             "{}, $M={}$, pattern: {}".format(
-                grid.__class__.__name__,
-                grid.M,
-                grid.node_pattern,
+                grid.__class__.__name__, grid.M, grid.node_pattern,
             ),
             pad=20,
         )

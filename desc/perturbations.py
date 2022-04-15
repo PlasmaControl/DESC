@@ -25,6 +25,7 @@ def perturb(
     dZb=None,
     order=2,
     tr_ratio=0.1,
+    weight="auto",
     verbose=1,
     copy=True,
 ):
@@ -47,6 +48,9 @@ def perturb(
         Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
         If a scalar, uses the same ratio for all steps. If an array, uses the first
         element for the first step and so on.
+    weight : ndarray, "auto", or None, optional
+        1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+        matrices. Default is to weight by (mode number)**2. None applies no weighting.
     verbose : int
         Level of output.
     copy : bool
@@ -143,6 +147,31 @@ def perturb(
     # 1st order
     if order > 0:
 
+        if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
+            weight = (
+                np.concatenate(
+                    [
+                        abs(eq.R_basis.modes[:, :2]).sum(axis=1),
+                        abs(eq.Z_basis.modes[:, :2]).sum(axis=1),
+                        abs(eq.L_basis.modes[:, :2]).sum(axis=1),
+                    ]
+                )
+                + 1
+            )
+        elif (weight is None) or (weight == "auto"):
+            weight = np.ones(
+                eq.R_basis.num_modes + eq.Z_basis.num_modes + eq.L_basis.num_modes
+            )
+
+        weight = np.pad(weight, len(y), constant_values=1)
+        weight = np.atleast_1d(weight)
+        weight = weight[objective._unfixed_idx]
+        if weight.ndim == 1:
+            weight = np.diag(weight)
+        W = objective.Z.T @ weight @ objective.Z
+        scale_inv = W
+        scale = np.linalg.inv(scale_inv)
+
         f = objective.compute(y)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
@@ -150,7 +179,7 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jy = objective.jac(y)
-        Jx = np.dot(Jy[:, objective._unfixed_idx], objective.Z)
+        Jx = np.dot(Jy[:, objective._unfixed_idx], objective.Z) @ scale
         RHS1 = f + objective.jvp(tangents, y)
         timer.stop("df computation")
         if verbose > 1:
@@ -164,17 +193,18 @@ def perturb(
         if verbose > 1:
             timer.disp("df/dx factorization")
 
-        dx1, hit, alpha = trust_region_step_exact_svd(
+        dx1_h, hit, alpha = trust_region_step_exact_svd(
             RHS1,
             u,
             s,
             vt.T,
-            tr_ratio[0] * np.linalg.norm(x),
+            tr_ratio[0] * np.linalg.norm(scale_inv @ x),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
+        dx1 = scale @ dx1_h
         dy1 = objective.recover(dx1) - objective.y0
 
     # 2nd order
@@ -190,17 +220,18 @@ def perturb(
         if verbose > 1:
             timer.disp("d^2f computation")
 
-        dx2, hit, alpha = trust_region_step_exact_svd(
+        dx2_h, hit, alpha = trust_region_step_exact_svd(
             RHS2,
             u,
             s,
             vt.T,
-            tr_ratio[1] * np.linalg.norm(dx1),
+            tr_ratio[1] * np.linalg.norm(dx1_h),
             initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
+        dx2 = scale @ dx2_h
         dy2 = objective.recover(dx2) - objective.y0
 
     # 3rd order
@@ -216,18 +247,19 @@ def perturb(
         if verbose > 1:
             timer.disp("d^3f computation")
 
-        dx3, hit, alpha = trust_region_step_exact_svd(
+        dx3_h, hit, alpha = trust_region_step_exact_svd(
             RHS3,
             u,
             s,
             vt.T,
-            tr_ratio[2] * np.linalg.norm(dx2),
+            tr_ratio[2] * np.linalg.norm(dx2_h),
             initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
-        # dy3 = objective.recover(dx3) - objective.y0
+        dx3 = scale @ dx3_h
+        dy3 = objective.recover(dx3) - objective.y0
 
     if order > 3:
         raise ValueError(

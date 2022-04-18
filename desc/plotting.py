@@ -863,7 +863,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=figsize,
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
@@ -875,7 +881,11 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             lw=theta_lw,
         )
         ax[i].plot(
-            Rr[:, :, i], Zr[:, :, i], color=rho_color, linestyle=rho_ls, lw=rho_lw,
+            Rr[:, :, i],
+            Zr[:, :, i],
+            color=rho_color,
+            linestyle=rho_ls,
+            lw=rho_lw,
         )
         ax[i].plot(
             Rr[:, -1, i],
@@ -985,7 +995,13 @@ def plot_comparison(
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True,)
+    fig, ax = _format_ax(
+        ax,
+        rows=rows,
+        cols=cols,
+        figsize=figsize,
+        equal=True,
+    )
     ax = np.atleast_1d(ax).flatten()
     for i, eq in enumerate(eqs):
         fig, ax = plot_surfaces(
@@ -1504,7 +1520,9 @@ def plot_grid(grid, **kwargs):
     if grid.__class__.__name__ in ["ConcentricGrid"]:
         ax.set_title(
             "{}, $M={}$, pattern: {}".format(
-                grid.__class__.__name__, grid.M, grid.node_pattern,
+                grid.__class__.__name__,
+                grid.M,
+                grid.node_pattern,
             ),
             pad=20,
         )

@@ -1342,7 +1342,7 @@ class _Configuration(IOAble, ABC):
         M_grid=None,
         N_grid=None,
         rcond=None,
-        in_place=False,
+        copy=True,
     ):
         """Transform this equilibrium to use straight field line coordinates.
 
@@ -1369,8 +1369,8 @@ class _Configuration(IOAble, ABC):
             toroidal spatial resolution to use for fit to new basis. Default = 4*self.N+1
         rcond : float, optional
             cutoff for small singular values in least squares fit.
-        in_place : bool, optional
-            whether to return a new equilibriumor modify in place
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
 
         Returns
         -------
@@ -1401,10 +1401,10 @@ class _Configuration(IOAble, ABC):
         bdry_sfl_grid = bdry_grid
         bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
 
-        if in_place:
-            eq_sfl = self
-        else:
+        if copy:
             eq_sfl = self.copy()
+        else:
+            eq_sfl = self
         eq_sfl.change_resolution(L, M, N)
 
         R_sfl_transform = Transform(
@@ -1446,5 +1446,7 @@ class _Configuration(IOAble, ABC):
         eq_sfl.Z_lmn = Z_lmn_sfl
         eq_sfl.L_lmn = L_lmn_sfl
 
-        if not in_place:
+        if copy:
             return eq_sfl
+        else:
+            return None

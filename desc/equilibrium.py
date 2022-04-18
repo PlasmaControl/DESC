@@ -317,8 +317,8 @@ class Equilibrium(_Configuration, IOAble):
             element for the first step and so on.
         verbose : int
             Level of output.
-        copy : bool
-            Whether to perturb the input equilibrium or make a copy (Default).
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
 
         Returns
         -------
@@ -372,19 +372,16 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to optimize.
         constraint : ObjectiveFunction
             Objective function to satisfy.
-
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
             Stopping tolerance on optimization step size.
         maxiter : int
             Maximum number of optimization steps.
-
         verbose : int
             Level of output.
-        copy : bool
-            Whether to perturb the input equilibrium or make a copy (Default).
-
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
         solve_options : dict
             Dictionary of additional options used in Equilibrium.solve().
         perturb_options : dict

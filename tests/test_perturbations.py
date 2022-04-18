@@ -14,19 +14,30 @@ def test_perturbation_orders(SOLOVEV):
     objective = get_force_balance_objective()
 
     # perturb pressure
+    tr_ratio = [0.01, 0.25, 0.25]
     dp = np.zeros_like(eq.p_l)
     dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-    eq0 = perturb(eq, objective, dp=dp, order=0, verbose=2, copy=True)
-    eq1 = perturb(eq, objective, dp=dp, order=1, verbose=2, copy=True)
-    eq2 = perturb(eq, objective, dp=dp, order=2, verbose=2, copy=True)
-    eq3 = perturb(eq, objective, dp=dp, order=3, verbose=2, copy=True)
+    eq0 = perturb(
+        eq, objective, dp=dp, tr_ratio=tr_ratio, order=0, verbose=2, copy=True
+    )
+    eq1 = perturb(
+        eq, objective, dp=dp, tr_ratio=tr_ratio, order=1, verbose=2, copy=True
+    )
+    eq2 = perturb(
+        eq, objective, dp=dp, tr_ratio=tr_ratio, order=2, verbose=2, copy=True
+    )
+    eq3 = perturb(
+        eq, objective, dp=dp, tr_ratio=tr_ratio, order=3, verbose=2, copy=True
+    )
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
     eqS.solve(objective=objective, ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
-    grid = ConcentricGrid(eq.L, eq.M, eq.N, eq.NFP, rotation="cos", node_pattern=None)
+    grid = ConcentricGrid(
+        2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, rotation=False, node_pattern="jacobi"
+    )
     data0 = eq0.compute("|F|", grid)
     data1 = eq1.compute("|F|", grid)
     data2 = eq2.compute("|F|", grid)
@@ -34,18 +45,13 @@ def test_perturbation_orders(SOLOVEV):
     dataS = eqS.compute("|F|", grid)
 
     # total error in Newtons throughout plasma volume
-    f0 = np.sum(data0["|F|"] * np.abs(data0["sqrt(g)"]))
-    f1 = np.sum(data1["|F|"] * np.abs(data1["sqrt(g)"]))
-    f2 = np.sum(data2["|F|"] * np.abs(data2["sqrt(g)"]))
-    f3 = np.sum(data3["|F|"] * np.abs(data3["sqrt(g)"]))
-    fS = np.sum(dataS["|F|"] * np.abs(dataS["sqrt(g)"]))
+    f0 = np.sum(data0["|F|"] * np.abs(data0["sqrt(g)"]) * grid.weights)
+    f1 = np.sum(data1["|F|"] * np.abs(data1["sqrt(g)"]) * grid.weights)
+    f2 = np.sum(data2["|F|"] * np.abs(data2["sqrt(g)"]) * grid.weights)
+    f3 = np.sum(data3["|F|"] * np.abs(data3["sqrt(g)"]) * grid.weights)
+    fS = np.sum(dataS["|F|"] * np.abs(dataS["sqrt(g)"]) * grid.weights)
 
-    # error for each perturbation order
-    err0 = np.abs(f0 - fS)
-    err1 = np.abs(f1 - fS)
-    err2 = np.abs(f2 - fS)
-    err3 = np.abs(f3 - fS)
-
-    assert err1 < err0
-    assert err2 < err1
-    assert err3 < err2
+    assert f1 < f0
+    assert f2 < f1
+    assert f3 < f2
+    assert fS < f3

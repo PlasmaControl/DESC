@@ -101,7 +101,7 @@ class LCFSConstraint(BoundaryCondition):
         Rb_basis_full = Rb_basis.copy()
         Zb_basis_full = Zb_basis.copy()
         # make sure the boundary bases have same resolution as flux surface bases so that
-        # all modes are properly constrainted
+        # all modes are properly constrained
         Rb_basis_full.change_resolution(M=R_basis.M, N=R_basis.N)
         Zb_basis_full.change_resolution(M=Z_basis.M, N=Z_basis.N)
         Rb_lmn_full = copy_coeffs(Rb_lmn, Rb_basis.modes, Rb_basis_full.modes)
@@ -121,7 +121,7 @@ class LCFSConstraint(BoundaryCondition):
             )[0]
             + Rb_basis_full.num_modes
         )
-        # find which coeffs can acually be constrainted
+        # find which coeffs can acually be constrained
         self._rmask = np.where(
             (Rb_basis.modes[:, np.newaxis] == Rb_basis_full.modes[np.newaxis, :, :])
             .all(axis=-1)
@@ -553,7 +553,7 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
             np.logical_and(
                 (Rb_basis.modes[:, :2] == [l, m]).all(axis=1),
                 Rb_basis.modes[:, -1]
-                >= 0,  # >=0 bc otherwise sin(zeta=0), so we can set n modes...
+                >= 0,  # don't need to constrain sin(zeta) modes as they = 0 at zeta=0 anyways
             )
         )[0]
         AR[j, i] = 1

@@ -145,10 +145,6 @@ class LCFSConstraint(BoundaryCondition):
         A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
         A_gauge, b_gauge = _get_gauge_bc(R_basis, Z_basis, L_basis)
 
-        print("axis", np.shape(A_axis))
-        print("gauge", np.shape(A_gauge))
-        print("lcfs", np.shape(A_lcfs))
-
         A = np.vstack([A_lcfs, A_axis, A_gauge])
         b = np.concatenate([b_lcfs, b_axis, b_gauge])
 
@@ -254,21 +250,11 @@ class PoincareConstraint(BoundaryCondition):
             Rb_lmn_full,
             Zb_lmn_full,
         )
-        # poincare is not dimx dimensions... it is dimx-1?
-        A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
-        A_gauge, b_gauge = _get_gauge_bc(R_basis, Z_basis, L_basis)
-        print("axis", np.shape(A_axis))
-        print(A_axis)
-        print(b_axis)
-        print("gauge", np.shape(A_gauge))
-        print(A_gauge)
-        print(b_gauge)
-        print("poincare", np.shape(A_poincare))
-        print(A_poincare)
-        print(b_poincare)
 
-        A = np.vstack([A_poincare, A_axis, A_gauge])
-        b = np.concatenate([b_poincare, b_axis, b_gauge])
+        A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
+
+        A = np.vstack([A_poincare, A_axis])
+        b = np.concatenate([b_poincare, b_axis])
 
         super(BoundaryCondition, self).__init__(A, b, build)
 
@@ -562,14 +548,6 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
     bR = Rb_lmn
     bZ = Zb_lmn
 
-    # for i, (l, m, n) in enumerate(R_modes):
-    #     j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
-    #     AR[j, i] = 1
-
-    # for i, (l, m, n) in enumerate(Z_modes):
-    #     j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
-    #     AZ[j, dim_R + i] = 1
-
     for i, (l, m, n) in enumerate(R_basis.modes):
         j = np.where(
             np.logical_and(
@@ -589,8 +567,6 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
         )[0]
         AZ[j, dim_R + i] = 1
 
-    # A = np.block([[AR, np.zeros((dim_Rb, dim_Z))], [np.zeros((dim_Zb, dim_R)), AZ]])
-    # b = np.concatenate([Rb_lmn, Zb_lmn])
     A = np.vstack([AR, AZ])
     b = np.concatenate([bR, bZ])
 

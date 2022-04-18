@@ -321,8 +321,8 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=True,
     )
-    np.testing.assert_allclose(R_vmec, R_desc, rtol=1e-3)
-    np.testing.assert_allclose(Z_vmec, Z_desc, rtol=1e-3)
+    np.testing.assert_allclose(R_vmec, R_desc, rtol=2e-3)
+    np.testing.assert_allclose(Z_vmec, Z_desc, rtol=2e-3)
 
     # TODO: not testing Jacobian because VMEC & DESC coordinate systems are different
 

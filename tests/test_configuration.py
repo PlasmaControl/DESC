@@ -232,13 +232,13 @@ class TestInitialGuess(unittest.TestCase):
 
     def test_guess_from_file(self):
 
-        eq1 = Equilibrium(L=24, M=12, sym=True, spectral_indexing="fringe")
+        eq1 = Equilibrium(M=12, sym=True)
         path = "./tests/inputs/SOLOVEV_output.h5"
         eq1.set_initial_guess(path)
-        eq2 = EquilibriaFamily.load(path)
+        eq2 = EquilibriaFamily.load(path)[-1]
 
-        np.testing.assert_allclose(eq1.R_lmn, eq2[-1].R_lmn)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2[-1].Z_lmn)
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
     def test_guess_from_surface(self):
 

@@ -66,6 +66,20 @@ def get_force_balance_objective():
     return ObjectiveFunction(objectives, constraints)
 
 
+def get_force_balance_poincare_objective():
+    """Get the objective function for a typical force balance equilibrium problem.
+
+    Returns
+    -------
+    objective, ObjectiveFunction
+        An objective function with default force balance objectives.
+
+    """
+    objectives = (RadialForceBalance(), HelicalForceBalance())
+    constraints = get_poincare_boundary_constraints()
+    return ObjectiveFunction(objectives, constraints)
+
+
 def get_energy_objective():
     """Get the objective function for a typical energy equilibrium problem.
 

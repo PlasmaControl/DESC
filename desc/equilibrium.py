@@ -13,7 +13,11 @@ from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.optimize.utils import check_termination
 from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
-from desc.objectives import get_force_balance_objective, get_energy_objective
+from desc.objectives import (
+    get_force_balance_objective,
+    get_force_balance_poincare_objective,
+    get_energy_objective,
+)
 from desc.perturbations import perturb, optimal_perturb
 
 
@@ -250,7 +254,10 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if objective is None:
-            objective = get_force_balance_objective()
+            if self.bdry_mode == "lcfs":
+                objective = get_force_balance_objective()
+            elif self.bdry_mode == "poincare":
+                objective = get_force_balance_poincare_objective()
         if not objective.built:
             objective.build(self, verbose=verbose)
 
@@ -327,7 +334,10 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if objective is None:
-            objective = get_force_balance_objective()
+            if self.bdry_mode == "lcfs":
+                objective = get_force_balance_objective()
+            elif self.bdry_mode == "poincare":
+                objective = get_force_balance_poincare_objective()
 
         eq = perturb(
             self,
@@ -393,8 +403,11 @@ class Equilibrium(_Configuration, IOAble):
             perturbed equilibrum, only returned if copy=True
 
         """
-        if constraint is None:
-            constraint = get_force_balance_objective()
+        if objective is None:
+            if self.bdry_mode == "lcfs":
+                objective = get_force_balance_objective()
+            elif self.bdry_mode == "poincare":
+                objective = get_force_balance_poincare_objective()
 
         if copy:
             eq = self.copy()
@@ -653,7 +666,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             if self.inputs[ii]["objective"] == "force":
-                objective = get_force_balance_objective()
+                if self.inputs[ii]["bdry_mode"] == "lcfs":
+                    objective = get_force_balance_objective()
+                elif self.inputs[ii]["bdry_mode"] == "poincare":
+                    objective = get_force_balance_poincare_objective()
             elif self.inputs[ii]["objective"] == "energy":
                 objective = get_energy_objective()
 

@@ -26,6 +26,7 @@ from .nonlinear_objectives import (
 from .utils import (
     get_fixed_boundary_constraints,
     get_force_balance_objective,
+    get_force_balance_poincare_objective,
     get_energy_objective,
 )
 

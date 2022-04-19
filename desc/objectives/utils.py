@@ -6,6 +6,8 @@ from .linear_objectives import (
     FixedPressure,
     FixedIota,
     FixedPsi,
+    PoincareBoundaryR,
+    PoincareBoundaryZ,
 )
 from .nonlinear_objectives import RadialForceBalance, HelicalForceBalance, Energy
 
@@ -22,6 +24,26 @@ def get_fixed_boundary_constraints():
     constraints = (
         LCFSBoundaryR(),
         LCFSBoundaryZ(),
+        LambdaGauge(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+    )
+    return constraints
+
+
+def get_poincare_boundary_constraints():
+    """Get the constraints necessary for a Poincare-boundary equilibrium problem.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in Poincare-boundary problems.
+
+    """
+    constraints = (
+        PoincareBoundaryR(),
+        PoincareBoundaryZ(),
         LambdaGauge(),
         FixedPressure(),
         FixedIota(),

@@ -159,8 +159,8 @@ def test_continuation_resolution(tmpdir_factory):
 def test_poincare_bc(SOLOVEV, SOLOVEV_Poincare):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq_poin = EquilibriaFamily.load(load_from=str(SOLOVEV_Poincare["desc_h5_path"]))[-1]
-    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq)
-    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin)
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     np.testing.assert_allclose(rho_err, 0, atol=1e-8)
     np.testing.assert_allclose(theta_err, 0, atol=1e-10)

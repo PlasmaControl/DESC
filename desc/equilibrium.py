@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 import numbers
 import inspect
+from copy import deepcopy
 from termcolor import colored
 from collections.abc import MutableSequence
 
@@ -405,9 +406,12 @@ class Equilibrium(_Configuration, IOAble):
         timer.start("Total time")
 
         if not objective.built:
-            objective.build(self)
-        cost = objective.compute_scalar(objective.y(eq))
+            objective.build(eq)
+        if not constraint.built:
+            constraint.build(eq)
 
+        cost = objective.compute_scalar(objective.y(eq))
+        perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
             inspect.signature(optimal_perturb).parameters["tr_ratio"].default,

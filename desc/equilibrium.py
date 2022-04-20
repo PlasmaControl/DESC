@@ -351,7 +351,7 @@ class Equilibrium(_Configuration, IOAble):
         if copy:
             return eq
         else:
-            return None
+            return self
 
     def optimize(
         self,
@@ -420,11 +420,14 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             objective.callback(objective.y(eq))
 
-        for iteration in range(maxiter):
-            timer.start("Step {} time".format(iteration + 1))
+        iteration = 1
+        success = None
+        while success is None:
+
+            timer.start("Step {} time".format(iteration))
             if verbose > 0:
                 print("====================")
-                print("Optimization Step {}".format(iteration + 1))
+                print("Optimization Step {}".format(iteration))
                 print("====================")
                 print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
@@ -458,13 +461,13 @@ class Equilibrium(_Configuration, IOAble):
             tr_ratio[0] = trust_radius / c_norm
             perturb_options["tr_ratio"] = tr_ratio
 
-            timer.stop("Step {} time".format(iteration + 1))
+            timer.stop("Step {} time".format(iteration))
             if verbose > 0:
                 objective.callback(objective.y(eq_new))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
-                timer.disp("Step {} time".format(iteration + 1))
+                timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
             success, message = check_termination(
@@ -492,6 +495,8 @@ class Equilibrium(_Configuration, IOAble):
             if success is not None:
                 break
 
+            iteration += 1
+
         timer.stop("Total time")
         print("====================")
         print("Done")
@@ -503,8 +508,9 @@ class Equilibrium(_Configuration, IOAble):
         if copy:
             return eq
         else:
-            self = eq
-            return None
+            for attr in self._io_attrs_:
+                setattr(self, attr, getattr(eq, attr))
+            return self
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

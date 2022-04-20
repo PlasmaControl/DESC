@@ -236,6 +236,18 @@ def test_plot_normF_section(plot_eq):
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_vac_normF_section(plot_eq_vac):
+    fig, ax = plot_section(plot_eq_vac, "|F|", norm_F=True, log=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_vac_normF_2d(plot_eq_vac):
+    fig, ax = plot_2d(plot_eq_vac, "|F|", norm_F=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_coefficients(plot_eq):
     fig, ax = plot_coefficients(plot_eq)
     return fig

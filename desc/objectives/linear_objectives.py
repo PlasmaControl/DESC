@@ -919,42 +919,40 @@ class LambdaPoincare(_Objective):
         """
 
         L_basis = eq.L_basis
-        Lb_basis = ...
-        if L_basis.sym:
-            # l(0,t,z) = 0
-            self._A = np.zeros((L_basis.N, L_basis.num_modes))
-            ns = np.arange(-L_basis.N, 1)
-            for i, (l, m, n) in enumerate(L_basis.modes):
-                if m != 0:
-                    continue
-                if (l // 2) % 2 == 0:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = 1
-                else:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = -1
-        else:
-            raise NotImplementedError("Lambda gauge freedom not implemented yet.")
+        L_modes = eq.L_basis.modes
+        dim_L = eq.L_basis.num_modes
+        self._dim_f = dim_L
+        # num cols is ...
+        # num rows is ...
+        # should have wrote this down
+        # we are constraining using the original eq right?
 
-        # surface does not have lambda
-        # so maybe would just store the values inside of a basis?
-        # since we only need the coefficients, this seems reasonable
-        if self._surface is None:
-            self._surface = eq.surface
+        # we essentially need to constrain L so that L(rho,theta,0) is the same right?
+        # so exactly like how we do for Z... we should do for L
+        # but by the same, not same as the eq but
+        # instead the same as the current values?
 
-        Z_modes = eq.Z_basis.modes
-        Zb_modes = self._surface.Z_basis.modes
+        # am I even doing this right? does this ensure a lin comb is = to poincare sec,
+        # or does it ensure just that the coeffs are same as initial?
+        # this seems like it will just fix all the lambda coefficients, when we
+        # really only want them fixed at zeta=0...
+        # how do we make sure that only orig ones are fixed??
+        # ie when we add more modes to the basis
+        # and orig we had L_110 = 1
+        # how to make sure that when we add L_112, that ... idk even
 
-        dim_Z = eq.Z_basis.num_modes
-        self._dim_f = self._surface.Z_basis.num_modes
-
-        self._A = np.zeros((self._dim_f, dim_Z))
-        for i, (l, m, n) in enumerate(Z_modes):
-            j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
+        self._A = np.zeros((self._dim_f, dim_L))
+        for i, (l, m, n) in enumerate(L_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (L_modes[:, :2] == [l, m]).all(axis=1),
+                    L_modes[:, -1] >= 0,
+                )
+            )
             self._A[j, i] = 1
 
         if None in self.target:
-            self.target = self._surface.Z_lmn
+            self.target = eq.L_lmn
 
         self._dim_f = self._A.shape[0]
 
@@ -964,7 +962,7 @@ class LambdaPoincare(_Objective):
         self._built = True
 
     def compute(self, L_lmn, **kwargs):
-        """Compute lambda gauge symmetry errors.
+        """Compute lambda poincare section errors.
 
         Parameters
         ----------
@@ -974,7 +972,7 @@ class LambdaPoincare(_Objective):
         Returns
         -------
         f : ndarray
-            Lambda gauge symmetry errors.
+            Lambda poincare section errors.
 
         """
         f = jnp.dot(self._A, L_lmn)

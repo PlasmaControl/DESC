@@ -3,6 +3,7 @@ from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
     LambdaGauge,
+    LambdaPoincare,
     FixedPressure,
     FixedIota,
     FixedPsi,

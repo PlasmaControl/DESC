@@ -2,7 +2,10 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
+    PoincareBoundaryR,
+    PoincareBoundaryZ,
     LambdaGauge,
+    LambdaPoincare,
     FixedPressure,
     FixedIota,
     FixedPsi,

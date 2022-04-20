@@ -2215,7 +2215,7 @@ data_index["grad(|B|^2)"] = {
     "label": "\\nabla B^{2}",
     "units": "T^{2} \\cdot m^{-1}",
     "units_long": "Tesla squared / meters",
-    "description": "Magnetic pressure gradient",
+    "description": "Magnetic pressure gradient, without factor of mu0",
     "fun": "compute_magnetic_pressure_gradient",
     "dim": 3,
     "R_derivs": [

@@ -1017,6 +1017,36 @@ data_index["sqrt(g)"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
+data_index["|e_theta x e_zeta|"] = {
+    "label": "|e_{\\theta} \\times \e_{\\zeta}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant rho surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
+data_index["|e_zeta x e_rho|"] = {
+    "label": "|e_{\\zeta} \\times \e_{\\rho}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant theta surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
+data_index["|e_rho x e_theta|"] = {
+    "label": "|e_{\\rho} \\times \e_{\\theta}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant zeta surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
 data_index["sqrt(g)_r"] = {
     "label": "\\partial_{\\rho} \\sqrt{g}",
     "units": "m^{3}",

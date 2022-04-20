@@ -149,6 +149,8 @@ class TestTransform(unittest.TestCase):
         transf_3.grid = grid_1
         self.assertTrue(transf_3.eq(transf_1))
 
+        np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
+
     def test_set_basis(self):
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
@@ -166,6 +168,8 @@ class TestTransform(unittest.TestCase):
 
         transf_21.basis = basis_20
         self.assertTrue(transf_21.eq(transf_20))
+
+        np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 
     def test_fft(self):
         """Tests Fast Fourier Transform method."""

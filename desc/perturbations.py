@@ -11,7 +11,6 @@ from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 __all__ = ["perturb", "optimal_perturb"]
 
 
-# TODO: add `weight` input option to scale Jacobian
 def perturb(
     eq,
     objective,

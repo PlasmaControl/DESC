@@ -163,7 +163,7 @@ def perturb(
                 eq.R_basis.num_modes + eq.Z_basis.num_modes + eq.L_basis.num_modes
             )
 
-        weight = np.pad(weight, len(y), constant_values=1)
+        weight = np.pad(weight, len(x), constant_values=1)
         weight = np.atleast_1d(weight)
         weight = weight[objective._unfixed_idx]
         if weight.ndim == 1:
@@ -198,7 +198,7 @@ def perturb(
             u,
             s,
             vt.T,
-            tr_ratio[0] * np.linalg.norm(scale_inv @ x),
+            tr_ratio[0] * np.linalg.norm(scale_inv @ x_reduced),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,

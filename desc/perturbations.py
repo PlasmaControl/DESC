@@ -111,7 +111,7 @@ def perturb(
 
     # state vector
     x = objective.x(eq)
-    x_reduced = objective_f.project(x)
+    x_reduced = objective.project(x)
     x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors

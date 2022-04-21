@@ -1,6 +1,12 @@
 import numpy as np
 from desc.equilibrium import EquilibriaFamily
+from desc.objectives import (
+    ObjectiveFunction,
+    AspectRatio,
+    get_fixed_boundary_constraints,
+)
 from desc.vmec import VMECIO
+from desc.vmec_utils import vmec_boundary_subspace
 
 
 # compare results to VMEC solution
@@ -34,3 +40,19 @@ def test_HELIOTRON_results(HELIOTRON):
 
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+
+
+# run optimization
+
+
+def test_1d_optimization(SOLOVEV):
+    """Tests 1D optimization for target aspect ratio."""
+
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    objective = ObjectiveFunction(
+        AspectRatio(target=3), get_fixed_boundary_constraints()
+    )
+    perturb_options = {"dZb": True, "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1])}
+    eq = eq.optimize(objective, perturb_options=perturb_options)
+
+    np.testing.assert_allclose(eq.compute("V")["R0/a"], 3)

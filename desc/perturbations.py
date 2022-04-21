@@ -109,39 +109,40 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    # state vectors
+    # state vector
     x = objective.x(eq)
-    y = objective.y(eq)
+    x_reduced = objective_f.project(x)
+    x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors
-    dx1 = 0
-    dx2 = 0
-    dx3 = 0
+    dx1_reduced = 0
+    dx2_reduced = 0
+    dx3_reduced = 0
 
     # tangent vectors
-    tangents = np.zeros((objective.dim_y,))
+    tangents = np.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
         dc = deltas["Rb_lmn"]
         tangents += (
-            np.eye(objective.dim_y)[:, objective.y_idx["R_lmn"]]
+            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]]
             @ objective.Ainv["R_lmn"]
             @ dc
         )
     if "Zb_lmn" in deltas.keys():
         dc = deltas["Zb_lmn"]
         tangents += (
-            np.eye(objective.dim_y)[:, objective.y_idx["Z_lmn"]]
+            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]]
             @ objective.Ainv["Z_lmn"]
             @ dc
         )
     # all other perturbations besides the boundary
     if len([arg for arg in arg_order if arg in deltas.keys()]):
         dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
-        y_idx = np.concatenate(
-            [objective.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
+        x_idx = np.concatenate(
+            [objective.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
         )
-        y_idx.sort(kind="mergesort")
-        tangents += np.eye(objective.dim_y)[:, y_idx] @ dc
+        x_idx.sort(kind="mergesort")
+        tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
 
     # 1st order
     if order > 0:
@@ -171,15 +172,15 @@ def perturb(
         scale_inv = W
         scale = np.linalg.inv(scale_inv)
 
-        f = objective.compute(y)
+        f = objective.compute(x)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jy = objective.jac(y)
-        Jx = np.dot(Jy[:, objective._unfixed_idx], objective.Z) @ scale
-        RHS1 = f + objective.jvp(tangents, y)
+        Jx = objective.jac(x)
+        Jx_reduced = Jx[:, objective._unfixed_idx] @ objective.Z @ scale
+        RHS1 = f + objective.jvp(tangents, x)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -187,7 +188,7 @@ def perturb(
         if verbose > 0:
             print("Factoring df")
         timer.start("df/dx factorization")
-        u, s, vt = np.linalg.svd(Jx, full_matrices=False)
+        u, s, vt = np.linalg.svd(Jx_reduced, full_matrices=False)
         timer.stop("df/dx factorization")
         if verbose > 1:
             timer.disp("df/dx factorization")
@@ -203,8 +204,8 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dx1 = scale @ dx1_h
-        dy1 = objective.recover(dx1) - objective.y0
+        dx1_reduced = scale @ dx1_h
+        dx1 = objective.recover(dx1_reduced) - objective.x0
 
     # 2nd order
     if order > 1:
@@ -213,8 +214,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangents += dy1
-        RHS2 = 0.5 * objective.jvp((tangents, tangents), y)
+        tangents += dx1
+        RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -230,8 +231,8 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dx2 = scale @ dx2_h
-        dy2 = objective.recover(dx2) - objective.y0
+        dx2_reduced = scale @ dx2_h
+        dx2 = objective.recover(dx2_reduced) - objective.x0
 
     # 3rd order
     if order > 2:
@@ -240,8 +241,8 @@ def perturb(
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), y)
-        RHS3 += objective.jvp((dy2, tangents), y)
+        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
+        RHS3 += objective.jvp((dx2, tangents), x)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -257,8 +258,8 @@ def perturb(
             max_iter=10,
             threshold=1e-6,
         )
-        dx3 = scale @ dx3_h
-        dy3 = objective.recover(dx3) - objective.y0
+        dx3_reduced = scale @ dx3_h
+        dx3 = objective.recover(dx3_reduced) - objective.x0
 
     if order > 3:
         raise ValueError(
@@ -276,7 +277,8 @@ def perturb(
     objective.rebuild_constraints(eq_new)
 
     # update other attributes
-    dx = dx1 + dx2 + dx3
+    dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
+    dx = objective.recover(dx_reduced) - objective.x0
     args = objective.unpack_state(x + dx)
     for key, value in args.items():
         if key not in deltas:
@@ -287,7 +289,7 @@ def perturb(
 
     timer.stop("Total perturbation")
     if verbose > 0:
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx) / np.linalg.norm(x)))
+        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
     if verbose > 1:
         timer.disp("Total perturbation")
 
@@ -372,8 +374,8 @@ def optimal_perturb(
     if not objective_g.built:
         objective_g.build(eq, verbose=verbose)
 
-    if not np.atleast_1d(objective_f.y(eq) == objective_g.y(eq)).all():
-        raise ValueError("Objectives must have the same state vectors (y).")
+    if not np.atleast_1d(objective_f.x(eq) == objective_g.x(eq)).all():
+        raise ValueError("Objectives must have the same state vectors.")
 
     deltas = {}
     if type(dR) is bool or dR is None:
@@ -424,16 +426,13 @@ def optimal_perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
-    # state vectors
-    x = objective_f.x(eq)
-    y = objective_f.y(eq)
-
     # parameter vector
     c = np.array([])
     c_idx = np.array([], dtype=bool)
     for key, value in deltas.items():
         c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
+    c_norm = np.linalg.norm(c)
 
     # optimization subspace matrix
     if subspace is None:
@@ -451,54 +450,57 @@ def optimal_perturb(
             )
         )
 
-    # vector norms
-    x_norm = np.linalg.norm(x)
-    c_norm = np.linalg.norm(c)
+    # state vector
+    x = objective_f.x(eq)
+    x_reduced = objective_f.project(x)
+    x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors
     dc1 = np.zeros_like(c)
     dc2 = np.zeros_like(c)
-    dx1 = np.zeros_like(x)
-    dx2 = np.zeros_like(x)
+    dx1_reduced = np.zeros_like(x_reduced)
+    dx2_reduced = np.zeros_like(x_reduced)
 
-    # dy/dx
-    dydx = np.dot(np.eye(objective_f.dim_y)[:, objective_f._unfixed_idx], objective_f.Z)
+    # dx/dx_reduced
+    dxdx_reduced = (
+        np.eye(objective_f.dim_x)[:, objective_f._unfixed_idx] @ objective_f.Z
+    )
 
-    # dy/dc
-    dydc = np.zeros((objective_f.dim_y, 0))
+    # dx/dc
+    dxdc = np.zeros((objective_f.dim_x, 0))
     if len([arg for arg in arg_order if arg in deltas.keys()]):
-        y_idx = np.concatenate(
-            [objective_f.y_idx[arg] for arg in arg_order if arg in deltas.keys()]
+        x_idx = np.concatenate(
+            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
         )
-        y_idx.sort(kind="mergesort")
-        dydc = np.eye(objective_f.dim_y)[:, y_idx]
+        x_idx.sort(kind="mergesort")
+        dxdc = np.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
-        dydRb = (
-            np.eye(objective_f.dim_y)[:, objective_f.y_idx["R_lmn"]]
+        dxdRb = (
+            np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]]
             @ objective_f.Ainv["R_lmn"]
         )
-        dydc = np.hstack((dydc, dydRb))
+        dxdc = np.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
-        dydZb = (
-            np.eye(objective_f.dim_y)[:, objective_f.y_idx["Z_lmn"]]
+        dxdZb = (
+            np.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]]
             @ objective_f.Ainv["Z_lmn"]
         )
-        dydc = np.hstack((dydc, dydZb))
+        dxdc = np.hstack((dxdc, dxdZb))
 
     # 1st order
     if order > 0:
 
-        f = objective_f.compute(y)
-        g = objective_g.compute(y)
+        f = objective_f.compute(x)
+        g = objective_g.compute(x)
 
         # 1st partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fy = objective_f.jac(y)
-        Fx = np.dot(Fy[:, objective_f._unfixed_idx], objective_f.Z)
-        Fc = np.dot(Fy, dydc)
-        Fx_inv = np.linalg.pinv(Fx, rcond=cutoff)
+        Fx = objective_f.jac(x)
+        Fx_reduced = Fx[:, objective_f._unfixed_idx] @ objective_f.Z
+        Fc = Fx @ dxdc
+        Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -507,19 +509,19 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gy = objective_g.jac(y)
-        Gx = np.dot(Gy[:, objective_g._unfixed_idx], objective_g.Z)
-        Gc = np.dot(Gy, dydc)
+        Gx = objective_g.jac(x)
+        Gx_reduced = Gx[:, objective_g._unfixed_idx] @ objective_g.Z
+        Gc = Gx @ dxdc
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")
 
-        GxFx = np.dot(Gx, Fx_inv)
-        LHS = np.dot(GxFx, Fc) - Gc
-        RHS_1g = g - np.dot(GxFx, f)
+        GxFx = Gx_reduced @ Fx_reduced_inv
+        LHS = GxFx @ Fc - Gc
+        RHS_1g = g - GxFx @ f
 
         # restrict to optimization subspace
-        LHS_opt = np.dot(LHS, subspace)
+        LHS_opt = LHS @ subspace
 
         if verbose > 0:
             print("Factoring LHS")
@@ -541,11 +543,11 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc1 = np.dot(dc1_opt, subspace.T)
-        RHS_1f = -f - np.dot(Fc, dc1)
-        uf, sf, vtf = np.linalg.svd(Fx, full_matrices=False)
+        dc1 = dc1_opt @ subspace.T
+        RHS_1f = -f - Fc @ dc1
+        uf, sf, vtf = np.linalg.svd(Fx_reduced, full_matrices=False)
 
-        dx1, _, _ = trust_region_step_exact_svd(
+        dx1_reduced, _, _ = trust_region_step_exact_svd(
             -RHS_1f,
             uf,
             sf,
@@ -564,8 +566,8 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
-        tangents_f = np.dot(dydx, dx1) + np.dot(dydc, dc1)
-        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), y)
+        tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
+        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -574,10 +576,8 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2g")
         timer.start("d^2g computation")
-        tangents_g = np.dot(dydx, dx1) + np.dot(dydc, dc1)
-        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), y) + np.dot(
-            GxFx, RHS_2f
-        )
+        tangents_g = dxdx_reduced @ dx1_reduced + dxdc @ dc1
+        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), x) + GxFx @ RHS_2f
         timer.stop("d^2g computation")
         if verbose > 1:
             timer.disp("d^2g computation")
@@ -594,15 +594,15 @@ def optimal_perturb(
             threshold=1e-6,
         )
 
-        dc2 = np.dot(dc2_opt, subspace.T)
-        RHS_2f += -np.dot(Fc, dc2)
+        dc2 = dc2_opt @ subspace.T
+        RHS_2f += -Fc @ dc2
 
-        dx2, _, _ = trust_region_step_exact_svd(
+        dx2_reduced, _, _ = trust_region_step_exact_svd(
             -RHS_2f,
             uf,
             sf,
             vtf.T,
-            tr_ratio[1] * np.linalg.norm(dx1),
+            tr_ratio[1] * np.linalg.norm(dx1_reduced),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -620,7 +620,7 @@ def optimal_perturb(
         eq_new = eq
 
     dc = dc1 + dc2
-    dc_opt = np.dot(dc, subspace)
+    dc_opt = dc @ subspace
 
     # update perturbation attributes
     idx0 = 0
@@ -631,7 +631,8 @@ def optimal_perturb(
     objective_g.rebuild_constraints(eq_new)
 
     # update other attributes
-    dx = dx1 + dx2
+    dx_reduced = dx1_reduced + dx2_reduced
+    dx = objective_f.recover(dx_reduced) - objective_f.x0
     args = objective_f.unpack_state(x + dx)
     for key, value in args.items():
         if key not in deltas:
@@ -640,12 +641,12 @@ def optimal_perturb(
             )
             setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -np.dot(RHS_1g.T, LHS), dc)
+    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:
         print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx) / x_norm))
+        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
     if verbose > 1:
         timer.disp("Total perturbation")
 

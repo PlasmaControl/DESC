@@ -214,6 +214,7 @@ class Equilibrium(_Configuration, IOAble):
             )
         )
 
+    # TODO: add a copy argument?
     def solve(
         self,
         optimizer=None,
@@ -221,10 +222,10 @@ class Equilibrium(_Configuration, IOAble):
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
-        verbose=1,
-        x_scale="auto",
         maxiter=50,
+        x_scale="auto",
         options={},
+        verbose=1,
     ):
         """Solve to find the equilibrium configuration.
 
@@ -240,12 +241,21 @@ class Equilibrium(_Configuration, IOAble):
             Stopping tolerance on step size.
         gtol : float
             Stopping tolerance on norm of gradient.
-        verbose : int
-            Level of output.
         maxiter : int
             Maximum number of solver steps.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output.
 
         """
         if optimizer is None:
@@ -258,8 +268,7 @@ class Equilibrium(_Configuration, IOAble):
         x0 = objective.x(self)
         result = optimizer.optimize(
             objective,
-            x_init=x0,
-            args=(),
+            x0=x0,
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -397,20 +406,16 @@ class Equilibrium(_Configuration, IOAble):
         if constraint is None:
             constraint = get_force_balance_objective()
 
-        if copy:
-            eq = self.copy()
-        else:
-            eq = self
-
         timer = Timer()
         timer.start("Total time")
 
+        eq = self
         if not objective.built:
             objective.build(eq)
         if not constraint.built:
             constraint.build(eq)
 
-        cost = objective.compute_scalar(objective.y(eq))
+        cost = objective.compute_scalar(objective.x(eq))
         perturb_options = deepcopy(perturb_options)
         tr_ratio = perturb_options.get(
             "tr_ratio",
@@ -418,7 +423,7 @@ class Equilibrium(_Configuration, IOAble):
         )
 
         if verbose > 0:
-            objective.callback(objective.y(eq))
+            objective.callback(objective.x(eq))
 
         iteration = 1
         success = None
@@ -449,7 +454,7 @@ class Equilibrium(_Configuration, IOAble):
             eq_new.solve(objective=constraint, **solve_options)
 
             # update trust region radius
-            cost_new = objective.compute_scalar(objective.y(eq_new))
+            cost_new = objective.compute_scalar(objective.x(eq_new))
             actual_reduction = cost - cost_new
             trust_radius, ratio = update_tr_radius(
                 tr_ratio[0] * c_norm,
@@ -463,7 +468,7 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.callback(objective.y(eq_new))
+                objective.callback(objective.x(eq_new))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:

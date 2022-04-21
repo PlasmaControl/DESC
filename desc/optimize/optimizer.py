@@ -89,8 +89,7 @@ class Optimizer(IOAble):
     def optimize(
         self,
         objective,
-        x_init,
-        args=(),
+        x0,
         x_scale="auto",
         ftol=1e-6,
         xtol=1e-6,
@@ -104,11 +103,9 @@ class Optimizer(IOAble):
         Parameters
         ----------
         objective : ObjectiveFunction
-            objective function to optimize
-        x_init : ndarray
-            initial guess. Should satisfy any constraints on x
-        args : tuple, optional
-            additional arguments passed to objective fun and derivatives
+            Objective function to optimize.
+        x0 : ndarray
+            Initial guess for state vector. Should satisfy any constraints on x.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -138,9 +135,9 @@ class Optimizer(IOAble):
             * 1-2 : display a termination report.
             * 3 : display progress during iterations
         maxiter : int, optional
-            maximum number of iterations. Defaults to size(x)*100
+            Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
-            dictionary of optional keyword arguments to override default solver settings.
+            Dictionary of optional keyword arguments to override default solver settings.
             See the code for more details.
 
         Returns
@@ -182,22 +179,55 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
+        allx = []
+
+        def compute_wrapped(x_reduced):
+            x = objective.recover(x_reduced)
+            return objective.compute(x)
+
+        def compute_scalar_wrapped(x_reduced):
+            x = objective.recover(x_reduced)
+            return objective.compute_scalar(x)
+
+        def grad_wrapped(x_reduced):
+            x = objective.recover(x_reduced)
+            allx.append(x)
+            df = objective.grad(x)
+            return df[objective._unfixed_idx] @ objective.Z
+
+        def hess_wrapped(x_reduced):
+            x = objective.recover(x_reduced)
+            # hess always called in combo with either grad or jac
+            df = objective.hess(x)
+            return (
+                objective.Z.T
+                @ df[objective._unfixed_idx, objective._unfixed_idx]
+                @ objective.Z
+            )
+
+        def jac_wrapped(x_reduced):
+            x = objective.recover(x_reduced)
+            allx.append(x)
+            df = objective.jac(x)
+            return df[:, objective._unfixed_idx] @ objective.Z
+
+        x0_reduced = objective.project(x0)
+
         if self.method in Optimizer._scipy_scalar_methods:
 
-            allx = []
             allf = []
             msg = [""]
 
-            def callback(x):
+            def callback(x_reduced):
+                x = objective.recover(x_reduced)
                 if len(allx) > 0:
-                    dx = allx[-1] - x
+                    dx = objective.project(allx[-1]) - x_reduced
                     dx_norm = np.linalg.norm(dx)
                     if dx_norm > 0:
-                        fx = objective.compute_scalar(x, *args)
+                        fx = objective.compute_scalar(x)
                         df = allf[-1] - fx
-                        allx.append(x)
                         allf.append(fx)
-                        x_norm = np.linalg.norm(x)
+                        x_norm = np.linalg.norm(x_reduced)
                         if verbose > 2:
                             print_iteration_nonlinear(
                                 len(allx), None, fx, df, dx_norm, None
@@ -227,11 +257,10 @@ class Optimizer(IOAble):
                 else:
                     dx = None
                     df = None
-                    fx = objective.compute_scalar(x, *args)
-                    allx.append(x)
+                    fx = objective.compute_scalar(x)
                     allf.append(fx)
                     dx_norm = None
-                    x_norm = np.linalg.norm(x)
+                    x_norm = np.linalg.norm(x_reduced)
                     if verbose > 2:
                         print_iteration_nonlinear(
                             len(allx), None, fx, df, dx_norm, None
@@ -240,12 +269,12 @@ class Optimizer(IOAble):
             print_header_nonlinear()
             try:
                 result = scipy.optimize.minimize(
-                    objective.compute_scalar,
-                    x0=x_init,
-                    args=args,
+                    compute_scalar_wrapped,
+                    x0=x0_reduced,
+                    args=(),
                     method=self.method[len("scipy-") :],
-                    jac=objective.grad,
-                    hess=objective.hess,
+                    jac=jac_wrapped,
+                    hess=hess_wrapped,
                     tol=gtol,
                     callback=callback,
                     options={"maxiter": maxiter, "disp": disp, **options},
@@ -268,18 +297,11 @@ class Optimizer(IOAble):
                     print("         Iterations: {:d}".format(result["nit"]))
 
         elif self.method in Optimizer._scipy_least_squares_methods:
-
             x_scale = "jac" if x_scale == "auto" else x_scale
-            allx = []
-
-            def jac_wrapped(x, *args):
-                allx.append(x)
-                return objective.jac(x, *args)
-
             result = scipy.optimize.least_squares(
-                objective.compute,
-                x0=x_init,
-                args=args,
+                compute_wrapped,
+                x0=x0_reduced,
+                args=(),
                 jac=jac_wrapped,
                 method=self.method[len("scipy-") :],
                 x_scale=x_scale,
@@ -289,21 +311,19 @@ class Optimizer(IOAble):
                 max_nfev=maxiter,
                 verbose=disp,
             )
-            result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
-
             x_scale = "hess" if x_scale == "auto" else x_scale
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            hess = objective.hess if "bfgs" not in self.method else "bfgs"
+            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
             result = fmintr(
-                objective.compute_scalar,
-                x0=x_init,
-                grad=objective.grad,
+                compute_scalar_wrapped,
+                x0=x0_reduced,
+                grad=grad_wrapped,
                 hess=hess,
-                args=args,
+                args=(),
                 method=method,
                 x_scale=x_scale,
                 ftol=ftol,
@@ -316,12 +336,11 @@ class Optimizer(IOAble):
             )
 
         elif self.method in Optimizer._desc_least_squares_methods:
-
             result = lsqtr(
-                objective.compute,
-                x0=x_init,
-                jac=objective.jac,
-                args=args,
+                compute_wrapped,
+                x0=x0_reduced,
+                jac=jac_wrapped,
+                args=(),
                 x_scale=x_scale,
                 ftol=ftol,
                 xtol=xtol,
@@ -331,6 +350,9 @@ class Optimizer(IOAble):
                 callback=None,
                 options=options,
             )
+
+        result["x"] = objective.recover(result["x"])
+        result["allx"] = allx
 
         timer.stop("Solution time")
 

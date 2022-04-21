@@ -5,6 +5,7 @@ import warnings
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
+from desc.basis import FourierZernike_to_PoincareZernikePolynomial
 from desc.profiles import PowerSeriesProfile
 from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
@@ -827,6 +828,10 @@ class PoincareBoundaryZ(_Objective):
             Level of output.
 
         """
+        # FIXME: Assumes poincare section surface is given, what to do if not
+        # the case? should just use current eq's poincare seciton
+        # make a util function to do so
+        # and same for the LCFS boundaries?
         if self._surface is None:
             self._surface = eq.surface
 
@@ -922,43 +927,22 @@ class LambdaPoincare(_Objective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        # we essentially need to constrain L so that L(rho,theta,0) is the same right?
-        # so exactly like how we do for Z... we should do for L
-        # but by the same, not same as the eq but
-        # instead the same as the current values?
-
         if None in self.target:
-            # we only need lambda to be constrained at the zeta=0 surface
-            # this block here adds up all the L_lm(n>=0) modes
-            # so that lambda at the surface can be described with just lm modes
-            # and get rid of the toroidal modes
-            # (i.e. sort of like taking the XS of lambda at zeta=0 like we would
-            #  do with R and Z)
-            target_L_modes = []
-            target_L_lmn = []
-            lm_pairs = []
-            for i, mode in enumerate(eq.L_basis.modes):
-                if mode[-1] < 0:
-                    pass  # we do not want the sin(zeta) modes
-                else:
-                    if (mode[0], mode[1]) not in lm_pairs:
-                        lm_pairs.append((mode[0], mode[1]))
-                        l = mode[0]
-                        m = mode[1]
-
-                        inds = np.where(
-                            np.logical_and(L_modes[:, 0] == l, L_modes[:, 1] == m)
-                        )[0]
-                        SUM = np.sum(eq.L_lmn[inds])
-                        target_L_lmn.append(SUM)
-                        target_L_modes.append([l, m])
-            self._dim_f = len(target_L_modes)
-            target_L_modes = np.asarray(target_L_modes)
-            self.target = np.asarray(target_L_lmn)
+            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                eq.L_lmn, eq.L_basis
+            )
+            Lb_modes = Lb_basis.modes
+            self._dim_f = Lb_basis.num_modes
+            self.target = Lb_lmn
 
         self._A = np.zeros((self._dim_f, dim_L))
         for i, (l, m, n) in enumerate(L_modes):
-            j = np.argwhere((target_L_modes[:, :] == [l, m]).all(axis=1))
+            j = np.argwhere(
+                np.logical_and(
+                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
+                    Lb_modes[:, -1] >= 0,
+                )
+            )
             self._A[j, i] = 1
 
         if self.target is not None:

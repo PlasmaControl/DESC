@@ -148,21 +148,27 @@ def perturb(
     if order > 0:
 
         if (weight is None) or (weight == "auto"):
-            weight = np.ones((objective.dim_x,))
-        if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
-            weight[objective.x_idx["R_lmn"]] = (
-                abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1
-            )
-            weight[objective.x_idx["Z_lmn"]] = (
-                abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1
-            )
-            weight[objective.x_idx["L_lmn"]] = (
-                abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1
-            )
+            w = np.ones((objective.dim_x,))
+            if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
+                w[objective.x_idx["R_lmn"]] = (
+                    abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1
+                )
+                w[objective.x_idx["Z_lmn"]] = (
+                    abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1
+                )
+                w[objective.x_idx["L_lmn"]] = (
+                    abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1
+                )
+            weight = w
         weight = np.atleast_1d(weight)
-        weight = weight[objective._unfixed_idx]
+        assert (
+            len(weight) == objective.dim_x
+        ), "Size of weight supplied to perturbation does not match objective.dim_x."
         if weight.ndim == 1:
+            weight = weight[objective._unfixed_idx]
             weight = np.diag(weight)
+        else:
+            weight = weight[objective._unfixed_idx, objective._unfixed_idx]
         W = objective.Z.T @ weight @ objective.Z
         scale_inv = W
         scale = np.linalg.inv(scale_inv)

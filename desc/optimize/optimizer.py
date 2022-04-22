@@ -179,8 +179,6 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
-        allx = []
-
         def compute_wrapped(x_reduced):
             x = objective.recover(x_reduced)
             return objective.compute(x)
@@ -191,23 +189,20 @@ class Optimizer(IOAble):
 
         def grad_wrapped(x_reduced):
             x = objective.recover(x_reduced)
-            allx.append(x)
             df = objective.grad(x)
             return df[objective._unfixed_idx] @ objective.Z
 
         def hess_wrapped(x_reduced):
             x = objective.recover(x_reduced)
-            # hess always called in combo with either grad or jac
             df = objective.hess(x)
             return (
                 objective.Z.T
-                @ df[objective._unfixed_idx, objective._unfixed_idx]
+                @ df[objective._unfixed_idx, :][:, objective._unfixed_idx]
                 @ objective.Z
             )
 
         def jac_wrapped(x_reduced):
             x = objective.recover(x_reduced)
-            allx.append(x)
             df = objective.jac(x)
             return df[:, objective._unfixed_idx] @ objective.Z
 
@@ -215,17 +210,19 @@ class Optimizer(IOAble):
 
         if self.method in Optimizer._scipy_scalar_methods:
 
+            allx = []
             allf = []
             msg = [""]
 
             def callback(x_reduced):
                 x = objective.recover(x_reduced)
                 if len(allx) > 0:
-                    dx = objective.project(allx[-1]) - x_reduced
+                    dx = allx[-1] - x_reduced
                     dx_norm = np.linalg.norm(dx)
                     if dx_norm > 0:
                         fx = objective.compute_scalar(x)
                         df = allf[-1] - fx
+                        allx.append(x_reduced)
                         allf.append(fx)
                         x_norm = np.linalg.norm(x_reduced)
                         if verbose > 2:
@@ -258,6 +255,7 @@ class Optimizer(IOAble):
                     dx = None
                     df = None
                     fx = objective.compute_scalar(x)
+                    allx.append(x_reduced)
                     allf.append(fx)
                     dx_norm = None
                     x_norm = np.linalg.norm(x_reduced)
@@ -273,7 +271,7 @@ class Optimizer(IOAble):
                     x0=x0_reduced,
                     args=(),
                     method=self.method[len("scipy-") :],
-                    jac=jac_wrapped,
+                    jac=grad_wrapped,
                     hess=hess_wrapped,
                     tol=gtol,
                     callback=callback,
@@ -352,7 +350,8 @@ class Optimizer(IOAble):
             )
 
         result["x"] = objective.recover(result["x"])
-        result["allx"] = allx
+        for i, x_reduced in enumerate(result["allx"]):
+            result["allx"][i] = objective.recover(x_reduced)
 
         timer.stop("Solution time")
 

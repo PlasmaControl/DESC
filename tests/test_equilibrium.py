@@ -131,10 +131,12 @@ def _compute_coords(equil):
 
 
 @pytest.mark.slow
-def test_to_sfl(plot_eq):
+def test_to_sfl(SOLOVEV):
 
-    Rr1, Zr1, Rv1, Zv1 = _compute_coords(plot_eq)
-    Rr2, Zr2, Rv2, Zv2 = _compute_coords(plot_eq.to_sfl())
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
     np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)

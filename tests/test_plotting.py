@@ -213,7 +213,7 @@ def test_plot_magnetic_tension(plot_eq):
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|")
+    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|/2mu0")
     return fig
 
 
@@ -232,6 +232,18 @@ def test_plot_normF_2d(plot_eq):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_normF_section(plot_eq):
     fig, ax = plot_section(plot_eq, "|F|", norm_F=True, log=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_vac_normF_section(plot_eq_vac):
+    fig, ax = plot_section(plot_eq_vac, "|F|", norm_F=True, log=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_vac_normF_2d(plot_eq_vac):
+    fig, ax = plot_2d(plot_eq_vac, "|F|", norm_F=True)
     return fig
 
 

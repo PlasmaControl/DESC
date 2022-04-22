@@ -15,6 +15,12 @@ def plot_eq():
     return eq
 
 
+@pytest.fixture
+def plot_eq_vac():
+    eq = EquilibriaFamily.load(load_from="./tests/inputs/SOLOVEV_vac_output.h5")[-1]
+    return eq
+
+
 @pytest.fixture(scope="session")
 def TmpDir(tmpdir_factory):
     """Create a temporary directory to store testing files."""

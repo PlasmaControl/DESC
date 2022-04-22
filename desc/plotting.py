@@ -438,12 +438,10 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|"
-                norm_data, _ = _compute(eq, norm_name, grid)
-                norm_data = norm_data / mu_0  # to put in units of pressure
+                norm_name = "|grad(|B|^2)|/2mu0"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
-                norm_data, _ = _compute(eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -680,12 +678,10 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|"
-                norm_data, _ = _compute(eq, norm_name, grid)
-                norm_data = norm_data / mu_0  # to put in units of pressure
+                norm_name = "|grad(|B|^2)|/2mu0"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
-                norm_data, _ = _compute(eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols

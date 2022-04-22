@@ -213,7 +213,7 @@ def test_plot_magnetic_tension(plot_eq):
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|")
+    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|/2mu0")
     return fig
 
 

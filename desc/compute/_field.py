@@ -717,14 +717,21 @@ def compute_magnetic_pressure_gradient(
         ).T
 
     # magnitude
-    if check_derivs("|grad(|B|^2)|", R_transform, Z_transform, L_transform):
-        data["|grad(|B|^2)|"] = jnp.sqrt(
-            data["grad(|B|^2)_rho"] ** 2 * data["g^rr"]
-            + data["grad(|B|^2)_theta"] ** 2 * data["g^tt"]
-            + data["grad(|B|^2)_zeta"] ** 2 * data["g^zz"]
-            + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_theta"] * data["g^rt"]
-            + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_zeta"] * data["g^rz"]
-            + 2 * data["grad(|B|^2)_theta"] * data["grad(|B|^2)_zeta"] * data["g^tz"]
+    if check_derivs("|grad(|B|^2)|/2mu0", R_transform, Z_transform, L_transform):
+        data["|grad(|B|^2)|/2mu0"] = (
+            jnp.sqrt(
+                data["grad(|B|^2)_rho"] ** 2 * data["g^rr"]
+                + data["grad(|B|^2)_theta"] ** 2 * data["g^tt"]
+                + data["grad(|B|^2)_zeta"] ** 2 * data["g^zz"]
+                + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_theta"] * data["g^rt"]
+                + 2 * data["grad(|B|^2)_rho"] * data["grad(|B|^2)_zeta"] * data["g^rz"]
+                + 2
+                * data["grad(|B|^2)_theta"]
+                * data["grad(|B|^2)_zeta"]
+                * data["g^tz"]
+            )
+            / 2
+            / mu_0
         )
 
     return data

@@ -295,12 +295,19 @@ class Optimizer(IOAble):
                     print("         Iterations: {:d}".format(result["nit"]))
 
         elif self.method in Optimizer._scipy_least_squares_methods:
+
+            allx = []
             x_scale = "jac" if x_scale == "auto" else x_scale
+
+            def jac(x_reduced):
+                allx.append(x_reduced)
+                return jac_wrapped(x_reduced)
+
             result = scipy.optimize.least_squares(
                 compute_wrapped,
                 x0=x0_reduced,
                 args=(),
-                jac=jac_wrapped,
+                jac=jac,
                 method=self.method[len("scipy-") :],
                 x_scale=x_scale,
                 ftol=ftol,
@@ -309,13 +316,16 @@ class Optimizer(IOAble):
                 max_nfev=maxiter,
                 verbose=disp,
             )
+            result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
-            x_scale = "hess" if x_scale == "auto" else x_scale
+
+            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
+            x_scale = "hess" if x_scale == "auto" else x_scale
+
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -334,6 +344,7 @@ class Optimizer(IOAble):
             )
 
         elif self.method in Optimizer._desc_least_squares_methods:
+
             result = lsqtr(
                 compute_wrapped,
                 x0=x0_reduced,

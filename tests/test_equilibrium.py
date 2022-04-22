@@ -3,7 +3,7 @@ import numpy as np
 from netCDF4 import Dataset
 import pytest
 
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
 from desc.__main__ import main

@@ -115,9 +115,9 @@ def perturb(
     x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors
-    dx1_reduced = 0
-    dx2_reduced = 0
-    dx3_reduced = 0
+    dx1_reduced = np.zeros_like(x_reduced)
+    dx2_reduced = np.zeros_like(x_reduced)
+    dx3_reduced = np.zeros_like(x_reduced)
 
     # tangent vectors
     tangents = np.zeros((objective.dim_x,))
@@ -147,23 +147,18 @@ def perturb(
     # 1st order
     if order > 0:
 
+        if (weight is None) or (weight == "auto"):
+            weight = np.ones((objective.dim_x,))
         if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
-            weight = (
-                np.concatenate(
-                    [
-                        abs(eq.R_basis.modes[:, :2]).sum(axis=1),
-                        abs(eq.Z_basis.modes[:, :2]).sum(axis=1),
-                        abs(eq.L_basis.modes[:, :2]).sum(axis=1),
-                    ]
-                )
-                + 1
+            weight[objective.x_idx["R_lmn"]] = (
+                abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1
             )
-        elif (weight is None) or (weight == "auto"):
-            weight = np.ones(
-                eq.R_basis.num_modes + eq.Z_basis.num_modes + eq.L_basis.num_modes
+            weight[objective.x_idx["Z_lmn"]] = (
+                abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1
             )
-
-        weight = np.pad(weight, len(x), constant_values=1)
+            weight[objective.x_idx["L_lmn"]] = (
+                abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1
+            )
         weight = np.atleast_1d(weight)
         weight = weight[objective._unfixed_idx]
         if weight.ndim == 1:
@@ -278,8 +273,8 @@ def perturb(
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
-    dx = objective.recover(dx_reduced) - objective.x0
-    args = objective.unpack_state(x + dx)
+    x_new = objective.recover(x_reduced + dx_reduced)
+    args = objective.unpack_state(x_new)
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

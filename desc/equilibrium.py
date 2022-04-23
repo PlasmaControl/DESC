@@ -413,11 +413,11 @@ class Equilibrium(_Configuration, IOAble):
             Optimized equilibrum.
 
         """
-        if objective is None:
+        if constraint is None:
             if self.bdry_mode == "lcfs":
-                objective = get_force_balance_objective()
+                constraint = get_force_balance_objective()
             elif self.bdry_mode == "poincare":
-                objective = get_force_balance_poincare_objective()
+                constraint = get_force_balance_poincare_objective()
 
         timer = Timer()
         timer.start("Total time")
@@ -686,7 +686,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 elif self.inputs[ii]["bdry_mode"] == "poincare":
                     objective = get_force_balance_poincare_objective()
             elif self.inputs[ii]["objective"] == "energy":
-                objective = get_energy_objective()
+                if self.inputs[ii]["bdry_mode"] == "lcfs":
+                    objective = get_energy_objective()
+                elif self.inputs[ii]["bdry_mode"] == "poincare":
+                    objective = get_energy_poincare_objective()
 
             if ii == start_from:
                 equil = self[ii]

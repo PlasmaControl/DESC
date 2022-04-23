@@ -93,3 +93,17 @@ def get_energy_objective():
     objectives = Energy()
     constraints = get_fixed_boundary_constraints()
     return ObjectiveFunction(objectives, constraints)
+
+
+def get_energy_poincare_objective():
+    """Get the objective function for a typical energy equilibrium problem.
+
+    Returns
+    -------
+    objective, ObjectiveFunction
+        An objective function with default energy objectives.
+
+    """
+    objectives = Energy()
+    constraints = get_poincare_boundary_constraints()
+    return ObjectiveFunction(objectives, constraints)

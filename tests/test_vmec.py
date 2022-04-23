@@ -452,10 +452,11 @@ def test_vmec_save(DSHAPE, TmpDir):
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_vmec_comparison(plot_eq):
+def test_plot_vmec_comparison(SOLOVEV):
+    """Test that DESC and VMEC flux surface plots match."""
 
-    vmec = "./tests/inputs/wout_SOLOVEV.nc"
-    fig, ax = VMECIO.plot_vmec_comparison(plot_eq, vmec)
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
     return fig
 
 

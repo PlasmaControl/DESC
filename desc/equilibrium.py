@@ -340,7 +340,7 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            perturbed equilibrum, only returned if copy=True
+            Perturbed equilibrum.
 
         """
         if objective is None:
@@ -410,7 +410,7 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            perturbed equilibrum, only returned if copy=True
+            Optimized equilibrum.
 
         """
         if objective is None:

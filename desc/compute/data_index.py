@@ -1017,6 +1017,36 @@ data_index["sqrt(g)"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
+data_index["|e_theta x e_zeta|"] = {
+    "label": "|e_{\\theta} \\times \e_{\\zeta}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant rho surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
+data_index["|e_zeta x e_rho|"] = {
+    "label": "|e_{\\zeta} \\times \e_{\\rho}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant theta surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
+data_index["|e_rho x e_theta|"] = {
+    "label": "|e_{\\rho} \\times \e_{\\theta}|",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "2D jacobian determinant for constant zeta surface",
+    "fun": "compute_jacobian",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+
 data_index["sqrt(g)_r"] = {
     "label": "\\partial_{\\rho} \\sqrt{g}",
     "units": "m^{3}",
@@ -1312,7 +1342,7 @@ data_index["|grad(zeta)|"] = {
 # contravariant magnetic field
 data_index["B0"] = {
     "label": "\\psi' / \\sqrt{g}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "",
     "fun": "compute_contravariant_magnetic_field",
@@ -1323,7 +1353,7 @@ data_index["B0"] = {
 
 data_index["B^rho"] = {
     "label": "B^{\\rho}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant radial component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1334,7 +1364,7 @@ data_index["B^rho"] = {
 
 data_index["B^theta"] = {
     "label": "B^{\\theta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant poloidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1345,7 +1375,7 @@ data_index["B^theta"] = {
 
 data_index["B^zeta"] = {
     "label": "B^{\\zeta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant toroidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -2241,10 +2271,10 @@ data_index["grad(|B|^2)"] = {
         [0, 1, 1],
     ],
 }
-data_index["|grad(|B|^2)|"] = {
-    "label": "|\\nabla B^{2}|",
-    "units": "T^{2} \\cdot m^{-1}",
-    "units_long": "Tesla squared / meters",
+data_index["|grad(|B|^2)|/2mu0"] = {
+    "label": "|\\nabla B^{2}/(2\\mu_0)|",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newton / cubic meter",
     "description": "Magnitude of magnetic pressure gradient",
     "fun": "compute_magnetic_pressure_gradient",
     "dim": 1,

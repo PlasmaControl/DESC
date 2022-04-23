@@ -111,7 +111,7 @@ class ObjectiveFunction(IOAble):
                 self._Ainv[arg] = Ainv
 
         # full A matrix for all unfixed constraints
-        self._unfixed_idx = jnp.concatenate(
+        self._unfixed_idx = np.concatenate(
             [self._x_idx[arg] for arg in arg_order if arg in self._A.keys()]
         )
         A_full = block_diag(
@@ -121,7 +121,7 @@ class ObjectiveFunction(IOAble):
             [self._b[arg] for arg in arg_order if arg in self._b.keys()]
         )
         Ainv_full, self._Z = svd_inv_null(A_full)
-        self._x0 = put(self._x0, self._unfixed_idx, jnp.dot(Ainv_full, b_full))
+        self._x0 = put(self._x0, self._unfixed_idx, Ainv_full @ b_full)
         self._dim_x_reduced = self._Z.shape[1]
 
     def _set_derivatives(self, use_jit=True):
@@ -314,15 +314,15 @@ class ObjectiveFunction(IOAble):
         """Project a full state vector into the reduced optimization vector."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        x_reduced = jnp.dot(self.Z.T, (x - self.x0)[self._unfixed_idx])
-        return jnp.squeeze(x_reduced)
+        x_reduced = np.dot(self.Z.T, (x - self.x0)[self._unfixed_idx])
+        return np.squeeze(x_reduced)
 
     def recover(self, x_reduced):
         """Recover the full state vector from the reducted optimization vector."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        dx = put(jnp.zeros(self.dim_x), self._unfixed_idx, jnp.dot(self._Z, x_reduced))
-        return jnp.squeeze(self.x0 + dx)
+        dx = put(np.zeros(self.dim_x), self._unfixed_idx, self._Z @ x_reduced)
+        return np.squeeze(self.x0 + dx)
 
     def make_feasible(self, x):
         """Return a state vector that satisfies the linear constraints."""

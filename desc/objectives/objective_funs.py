@@ -75,27 +75,27 @@ class ObjectiveFunction(IOAble):
                 idx += obj.dim_f
 
         idx = 0
-        self._y_idx = {}
+        self._x_idx = {}
         for arg in arg_order:
             if arg in self.args:
-                self._y_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
+                self._x_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
                 idx += self.dimensions[arg]
             else:
-                self._y_idx[arg] = np.array([], dtype=int)
+                self._x_idx[arg] = np.array([], dtype=int)
 
-        self._dim_y = idx
+        self._dim_x = idx
 
     def _build_linear_constraints(self):
         """Compute and factorize A to get pseudoinverse and nullspace."""
         self._A = {}
         self._b = {}
         self._Ainv = {}
-        self._y0 = jnp.zeros(self._dim_y)
+        self._x0 = jnp.zeros(self._dim_x)
 
         # A matrices for each unfixed constraint
         for obj in self.constraints:
             if obj.fixed:
-                self._y0 = put(self._y0, self._y_idx[obj.target_arg], obj.target)
+                self._x0 = put(self._x0, self._x_idx[obj.target_arg], obj.target)
             else:
                 if len(obj.args) > 1:
                     raise ValueError("Non-fixed constraints must have only 1 argument.")
@@ -112,7 +112,7 @@ class ObjectiveFunction(IOAble):
 
         # full A matrix for all unfixed constraints
         self._unfixed_idx = jnp.concatenate(
-            [self._y_idx[arg] for arg in arg_order if arg in self._A.keys()]
+            [self._x_idx[arg] for arg in arg_order if arg in self._A.keys()]
         )
         A_full = block_diag(
             *[self._A[arg] for arg in arg_order if arg in self._A.keys()]
@@ -121,8 +121,8 @@ class ObjectiveFunction(IOAble):
             [self._b[arg] for arg in arg_order if arg in self._b.keys()]
         )
         Ainv_full, self._Z = svd_inv_null(A_full)
-        self._y0 = put(self._y0, self._unfixed_idx, jnp.dot(Ainv_full, b_full))
-        self._dim_x = self._Z.shape[1]
+        self._x0 = put(self._x0, self._unfixed_idx, jnp.dot(Ainv_full, b_full))
+        self._dim_x_reduced = self._Z.shape[1]
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
@@ -220,15 +220,15 @@ class ObjectiveFunction(IOAble):
         for constraint in self.constraints:
             constraint.update_target(eq)
 
-        self._y0 = jnp.zeros(self.dim_y)
+        self._x0 = jnp.zeros(self.dim_x)
         for obj in self.constraints:
             if obj.fixed:
-                self._y0 = put(self._y0, self._y_idx[obj.target_arg], obj.target)
+                self._x0 = put(self._x0, self._x_idx[obj.target_arg], obj.target)
             else:
                 arg = obj.args[0]
                 b = obj.target
                 self._b[arg] = b
-                self._y0 = put(self._y0, self._y_idx[arg], jnp.dot(self.Ainv[arg], b))
+                self._x0 = put(self._x0, self._x_idx[arg], jnp.dot(self.Ainv[arg], b))
 
     def compute(self, x):
         """Compute the objective function.
@@ -236,7 +236,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables (x) or full state vector (y).
+            State vector.
 
         Returns
         -------
@@ -257,7 +257,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables (x) or full state vector (y).
+            State vector.
 
         Returns
         -------
@@ -274,7 +274,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         x : ndarray
-            Optimization variables (x) or full state vector (y).
+            State vector.
 
         """
         f = self.compute_scalar(x)
@@ -285,12 +285,12 @@ class ObjectiveFunction(IOAble):
         return None
 
     def unpack_state(self, x):
-        """Unpack the state vector x (or y) into its components.
+        """Unpack the state vector into its components.
 
         Parameters
         ----------
         x : ndarray
-            Optimization variables (x) or full state vector (y).
+            State vector.
 
         Returns
         -------
@@ -302,47 +302,43 @@ class ObjectiveFunction(IOAble):
             raise RuntimeError("ObjectiveFunction must be built first.")
 
         x = jnp.atleast_1d(x)
-        if x.size == self.dim_x:
-            y = self.recover(x)
-        elif x.size == self.dim_y:
-            y = x
-        else:
+        if x.size != self.dim_x:
             raise ValueError("Input vector dimension is invalid.")
 
         kwargs = {}
         for arg in self.args:
-            kwargs[arg] = y[self.y_idx[arg]]
+            kwargs[arg] = x[self.x_idx[arg]]
         return kwargs
 
-    def project(self, y):
-        """Project a full state vector y into the optimization vector x."""
+    def project(self, x):
+        """Project a full state vector into the reduced optimization vector."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        x = jnp.dot(self.Z.T, (y - self.y0)[self._unfixed_idx])
-        return jnp.squeeze(x)
+        x_reduced = jnp.dot(self.Z.T, (x - self.x0)[self._unfixed_idx])
+        return jnp.squeeze(x_reduced)
 
-    def recover(self, x):
-        """Recover the full state vector y from the optimization vector x."""
+    def recover(self, x_reduced):
+        """Recover the full state vector from the reducted optimization vector."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        dy = put(jnp.zeros(self.dim_y), self._unfixed_idx, jnp.dot(self._Z, x))
-        return jnp.squeeze(self.y0 + dy)
+        dx = put(jnp.zeros(self.dim_x), self._unfixed_idx, jnp.dot(self._Z, x_reduced))
+        return jnp.squeeze(self.x0 + dx)
 
-    def make_feasible(self, y):
-        """Return a full state vector y that satisfies the linear constraints."""
-        x = self.project(y)
-        return self.recover(x)
-
-    def y(self, eq):
-        """Return the full state vector y from the Equilibrium eq."""
-        y = np.zeros((self.dim_y,))
-        for arg in self.args:
-            y[self.y_idx[arg]] = getattr(eq, arg)
-        return y
+    def make_feasible(self, x):
+        """Return a state vector that satisfies the linear constraints."""
+        x_reduced = self.project(x)
+        return self.recover(x_reduced)
 
     def x(self, eq):
-        """Return the optimization variable x from the Equilibrium eq."""
-        return self.project(self.y(eq))
+        """Return the full state vector from the Equilibrium eq."""
+        x = np.zeros((self.dim_x,))
+        for arg in self.args:
+            x[self.x_idx[arg]] = getattr(eq, arg)
+        return x
+
+    def x_reduced(self, eq):
+        """Return the reduced optimization vector from the Equilibrium eq."""
+        return self.project(self.x(eq))
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -412,7 +408,6 @@ class ObjectiveFunction(IOAble):
 
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
-        y0 = self.y0
 
         if verbose > 0:
             print("Compiling objective function and derivatives")
@@ -495,27 +490,27 @@ class ObjectiveFunction(IOAble):
 
     @property
     def b_idx(self):
-        """dict: Indicies of the components of the constraint vector b."""
+        """dict: Indicies of the components of the linear constraint vector."""
         return self._b_idx
 
     @property
-    def y_idx(self):
-        """dict: Indicies of the components of the full state vector y."""
-        return self._y_idx
-
-    @property
-    def dim_y(self):
-        """int: Dimensional of the full state vector y."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_y
+    def x_idx(self):
+        """dict: Indicies of the components of the state vector."""
+        return self._x_idx
 
     @property
     def dim_x(self):
-        """int: Dimension of the optimization vector x."""
+        """int: Dimensional of the state vector."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dim_x
+
+    @property
+    def dim_x_reduced(self):
+        """int: Dimension of the reduced optimization vector."""
+        if not self.built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+        return self._dim_x_reduced
 
     @property
     def dim_c(self):
@@ -533,35 +528,35 @@ class ObjectiveFunction(IOAble):
 
     @property
     def A(self):
-        """ndarray: Linear constraint matrix: A*y = b."""
+        """ndarray: Linear constraint matrix: A*x = b."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._A
 
     @property
     def Ainv(self):
-        """ndarray: Linear constraint matrix inverse: y0 = Ainv*b."""
+        """ndarray: Linear constraint matrix inverse: x0 = Ainv*b."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._Ainv
 
     @property
     def b(self):
-        """ndarray: Linear constraint vector: A*y = b."""
+        """ndarray: Linear constraint vector: A*x = b."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._b
 
     @property
-    def y0(self):
+    def x0(self):
         """ndarray: Feasible state vector."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._y0
+        return self._x0
 
     @property
     def Z(self):
-        """ndarray: Linear constraint nullspace: y = y0 + Z*x, dy/dx = Z."""
+        """ndarray: Linear constraint nullspace: x = x0 + Z*x_reduced."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._Z
@@ -680,7 +675,6 @@ class _Objective(IOAble, ABC):
             Equilibrium that will be optimized to satisfy the Objective.
 
         """
-        # FIXME: list comprehension for multiple args
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
 
     @abstractmethod

@@ -544,7 +544,7 @@ class ConcentricGrid(Grid):
     rotation : {``'cos'``, ``'sin'``, False}
         * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
         * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
-        * ``False`` for no symmetry (Default), rotates halfway between other options
+        * ``None`` for no symmetry (Default), rotates halfway between other options
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
         pattern for radial coordinates
 
@@ -566,7 +566,7 @@ class ConcentricGrid(Grid):
         NFP=1,
         sym=False,
         axis=False,
-        rotation=False,
+        rotation=None,
         node_pattern="jacobi",
     ):
 
@@ -595,7 +595,7 @@ class ConcentricGrid(Grid):
         self._scale_weights()
 
     def _create_nodes(
-        self, L, M, N, NFP=1, axis=False, rotation=False, node_pattern="jacobi"
+        self, L, M, N, NFP=1, axis=False, rotation=None, node_pattern="jacobi"
     ):
         """Create grid nodes and weights.
 
@@ -614,7 +614,7 @@ class ConcentricGrid(Grid):
         rotation : {``'cos'``, ``'sin'``, False}
             * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
             * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
-            * ``False`` for no symmetry (Default), rotates halfway between other options
+            * ``None`` for no symmetry (Default), rotates halfway between other options
         node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
 
@@ -679,7 +679,7 @@ class ConcentricGrid(Grid):
                 2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
             )
             theta = np.arange(0, 2 * np.pi, dtheta)
-            if rotation is False:
+            if rotation in {None, False}:
                 if self.sym:
                     # this is emperically chosen, could be something different, just
                     # need to avoid symmetry at theta=0, pi

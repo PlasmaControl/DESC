@@ -62,12 +62,12 @@ class TestObjectiveFunction(unittest.TestCase):
         eq = Equilibrium()
         obj = QuasisymmetryTwoTerm()
         obj.build(eq)
-        fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(fb, 0)
+        fc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(fc, 0)
 
     def test_qs_tp(self):
         eq = Equilibrium()
         obj = QuasisymmetryTripleProduct()
         obj.build(eq)
-        fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(fb, 0)
+        ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(ft, 0)

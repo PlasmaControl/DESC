@@ -8,17 +8,20 @@ from .linear_objectives import (
     FixedPsi,
     TargetIota,
 )
-from .nonlinear_objectives import (
+from ._generic import (
     GenericObjective,
-    Volume,
-    AspectRatio,
-    Energy,
     ToroidalCurrent,
-    RadialForceBalance,
-    HelicalForceBalance,
     RadialCurrentDensity,
     PoloidalCurrentDensity,
     ToroidalCurrentDensity,
+)
+from ._equilibrium import (
+    Energy,
+    RadialForceBalance,
+    HelicalForceBalance,
+)
+from ._geometry import Volume, AspectRatio
+from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,

@@ -17,6 +17,7 @@ from ._generic import (
 )
 from ._equilibrium import (
     Energy,
+    ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
 )

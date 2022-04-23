@@ -7,7 +7,7 @@ from .linear_objectives import (
     FixedIota,
     FixedPsi,
 )
-from ._equilibrium import RadialForceBalance, HelicalForceBalance, Energy
+from ._equilibrium import ForceBalance, Energy
 
 
 def get_fixed_boundary_constraints():
@@ -39,7 +39,7 @@ def get_force_balance_objective():
         An objective function with default force balance objectives.
 
     """
-    objectives = (RadialForceBalance(), HelicalForceBalance())
+    objectives = ForceBalance()
     constraints = get_fixed_boundary_constraints()
     return ObjectiveFunction(objectives, constraints)
 

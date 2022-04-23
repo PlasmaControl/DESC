@@ -17,8 +17,7 @@ from desc.objectives import (
     FixedPressure,
     FixedIota,
     FixedPsi,
-    RadialForceBalance,
-    HelicalForceBalance,
+    ForceBalance,
     ObjectiveFunction,
 )
 
@@ -233,7 +232,7 @@ def test_poincare_sfl_bc(
         FixedIota(),
         FixedPsi(),
     )
-    objectives = (RadialForceBalance(), HelicalForceBalance())
+    objectives = ForceBalance()
     obj = ObjectiveFunction(objectives, constraints)
     eq_poin.solve(verbose=1, ftol=1e-6, objective=obj, maxiter=100, xtol=1e-6)
 

@@ -28,7 +28,7 @@ def test_DSHAPE_results(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     rho_err, theta_err = VMECIO.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-3)
+    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
 

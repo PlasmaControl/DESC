@@ -10,7 +10,7 @@ from .linear_objectives import (
     PoincareBoundaryR,
     PoincareBoundaryZ,
 )
-from .nonlinear_objectives import RadialForceBalance, HelicalForceBalance, Energy
+from ._equilibrium import ForceBalance, Energy
 
 
 def get_fixed_boundary_constraints():
@@ -62,7 +62,7 @@ def get_force_balance_objective():
         An objective function with default force balance objectives.
 
     """
-    objectives = (RadialForceBalance(), HelicalForceBalance())
+    objectives = ForceBalance()
     constraints = get_fixed_boundary_constraints()
     return ObjectiveFunction(objectives, constraints)
 
@@ -76,7 +76,7 @@ def get_force_balance_poincare_objective():
         An objective function with default force balance objectives.
 
     """
-    objectives = (RadialForceBalance(), HelicalForceBalance())
+    objectives = ForceBalance()
     constraints = get_poincare_boundary_constraints()
     return ObjectiveFunction(objectives, constraints)
 

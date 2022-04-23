@@ -196,6 +196,7 @@ def test_poincare_sfl_bc(
         modes_R=Rb_basis.modes[:, :2].astype(int),
         Z_lmn=Zb_lmn,
         modes_Z=Zb_basis.modes[:, :2].astype(int),
+        spectral_indexing=eq._spectral_indexing,
     )
     eq_poin = Equilibrium(
         surface=surf,

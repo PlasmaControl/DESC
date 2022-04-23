@@ -3,7 +3,7 @@ from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
     LambdaGauge,
-    LambdaPoincare,
+    PoincareLambda,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -68,7 +68,7 @@ def get_force_balance_objective():
 
 
 def get_force_balance_poincare_objective():
-    """Get the objective function for a typical force balance equilibrium problem.
+    """Get the objective function for a poincare force balance equilibrium problem.
 
     Returns
     -------

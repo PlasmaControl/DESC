@@ -3,10 +3,24 @@ import numpy as np
 from netCDF4 import Dataset
 import pytest
 
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
 from desc.__main__ import main
+from desc.geometry import ZernikeRZToroidalSection
+from desc.basis import FourierZernike_to_PoincareZernikePolynomial
+from desc.objectives import (
+    PoincareBoundaryR,
+    PoincareBoundaryZ,
+    PoincareLambda,
+    LambdaGauge,
+    FixedPressure,
+    FixedIota,
+    FixedPsi,
+    RadialForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+)
 
 
 def test_compute_geometry(DSHAPE):
@@ -166,4 +180,64 @@ def test_poincare_bc(SOLOVEV, SOLOVEV_Poincare):
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     np.testing.assert_allclose(rho_err, 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-2)
-    # the LCFS BC solution was found with force, while the poincare was with energy, so relatively loose tolerance btwn the two solutions
+
+
+@pytest.mark.slow
+def test_poincare_sfl_bc(
+    SOLOVEV,
+):  # solve an equilibrium with R,Z and lambda specified on zeta=0 surface
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+
+    Rb_lmn, Rb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.R_lmn, eq.R_basis)
+    Zb_lmn, Zb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.Z_lmn, eq.Z_basis)
+
+    surf = ZernikeRZToroidalSection(
+        R_lmn=Rb_lmn,
+        modes_R=Rb_basis.modes[:, :2].astype(int),
+        Z_lmn=Zb_lmn,
+        modes_Z=Zb_basis.modes[:, :2].astype(int),
+    )
+    eq_poin = Equilibrium(
+        surface=surf,
+        pressure=eq.pressure,
+        iota=eq.iota,
+        Psi=eq.Psi,  # flux (in Webers) within the last closed flux surface
+        NFP=eq.NFP,  # number of field periods
+        L=eq.L,  # radial spectral resolution
+        M=eq.M,  # poloidal spectral resolution
+        N=eq.N,  # toroidal spectral resolution
+        L_grid=eq.L_grid,  # real space radial resolution, slightly oversampled
+        M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
+        N_grid=eq.N_grid,  # real space toroidal resolution
+        sym=True,  # explicitly enforce stellarator symmetry
+        bdry_mode="poincare",
+    )
+    eq_poin.L_lmn = (
+        eq.L_lmn
+    )  # initialize the poincare eq with the lambda of the original eq
+    eq_poin.change_resolution(
+        eq_poin.L, eq_poin.M, 1
+    )  # add toroidal modes to the equilibrium
+    eq_poin.N_grid = 2  # set resolution of toroidal grid
+    eq_poin.R_lmn[1:4] = (
+        eq_poin.R_lmn[1:4] + 0.02
+    )  # perturb slightly from the axisymmetric equilibrium
+
+    constraints = (
+        PoincareBoundaryR(),
+        PoincareBoundaryZ(),
+        PoincareLambda(),  # this constrains lambda at the zeta=0 surface, using the eq's current value of lambda
+        LambdaGauge(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+    )
+    objectives = (RadialForceBalance(), HelicalForceBalance())
+    obj = ObjectiveFunction(objectives, constraints)
+    eq_poin.solve(verbose=1, ftol=1e-6, objective=obj, maxiter=100, xtol=1e-6)
+
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)
+    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-2)

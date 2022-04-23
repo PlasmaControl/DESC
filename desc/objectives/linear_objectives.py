@@ -882,8 +882,7 @@ class PoincareBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
-# FIXME: Not implemented yet
-class LambdaPoincare(_Objective):
+class PoincareLambda(_Objective):
     """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta)."""
 
     _scalar = False
@@ -927,7 +926,9 @@ class LambdaPoincare(_Objective):
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
-        if None in self.target:
+        if (
+            None in self.target
+        ):  # uses current eq's value of lambda at zeta=0 as constraint
             Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
                 eq.L_lmn, eq.L_basis
             )

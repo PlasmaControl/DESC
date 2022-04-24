@@ -3,9 +3,12 @@ from .linear_objectives import (
     LCFSBoundaryR,
     LCFSBoundaryZ,
     LambdaGauge,
+    PoincareLambda,
     FixedPressure,
     FixedIota,
     FixedPsi,
+    PoincareBoundaryR,
+    PoincareBoundaryZ,
 )
 from ._equilibrium import ForceBalance, Energy
 
@@ -30,6 +33,26 @@ def get_fixed_boundary_constraints():
     return constraints
 
 
+def get_poincare_boundary_constraints():
+    """Get the constraints necessary for a Poincare-boundary equilibrium problem.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in Poincare-boundary problems.
+
+    """
+    constraints = (
+        PoincareBoundaryR(),
+        PoincareBoundaryZ(),
+        LambdaGauge(),
+        FixedPressure(),
+        FixedIota(),
+        FixedPsi(),
+    )
+    return constraints
+
+
 def get_force_balance_objective():
     """Get the objective function for a typical force balance equilibrium problem.
 
@@ -44,6 +67,20 @@ def get_force_balance_objective():
     return ObjectiveFunction(objectives, constraints)
 
 
+def get_force_balance_poincare_objective():
+    """Get the objective function for a poincare force balance equilibrium problem.
+
+    Returns
+    -------
+    objective, ObjectiveFunction
+        An objective function with default force balance objectives.
+
+    """
+    objectives = ForceBalance()
+    constraints = get_poincare_boundary_constraints()
+    return ObjectiveFunction(objectives, constraints)
+
+
 def get_energy_objective():
     """Get the objective function for a typical energy equilibrium problem.
 
@@ -55,4 +92,18 @@ def get_energy_objective():
     """
     objectives = Energy()
     constraints = get_fixed_boundary_constraints()
+    return ObjectiveFunction(objectives, constraints)
+
+
+def get_energy_poincare_objective():
+    """Get the objective function for a typical energy equilibrium problem.
+
+    Returns
+    -------
+    objective, ObjectiveFunction
+        An objective function with default energy objectives.
+
+    """
+    objectives = Energy()
+    constraints = get_poincare_boundary_constraints()
     return ObjectiveFunction(objectives, constraints)

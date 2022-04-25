@@ -1,7 +1,7 @@
 import numpy as np
 import warnings
 from termcolor import colored
-
+from desc.objectives.utils import factorize_linear_constraints
 from desc.backend import use_jax, put
 from desc.utils import Timer
 from desc.compute import arg_order
@@ -14,6 +14,7 @@ __all__ = ["perturb", "optimal_perturb"]
 def perturb(
     eq,
     objective,
+    constraints=(),
     dR=None,
     dZ=None,
     dL=None,
@@ -36,6 +37,8 @@ def perturb(
         Equilibrium to perturb.
     objective : ObjectiveFunction
         Objective function to satisfy.
+    constraints : tuple of Objective, optional
+        List of objectives to be used as constraints during perturbation.
     dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or float
         Deltas for perturbations of R, Z, lambda, pressure, rotational transform,
         total toroidal magnetic flux, R_boundary, and Z_boundary.
@@ -80,6 +83,10 @@ def perturb(
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
+    for constraint in constraints:
+        if not constraint.built:
+            constraint.build(eq, verbose=verbose)
+
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
             "Cannot perturb with a scalar objective: {}.".format(objective)
@@ -109,9 +116,19 @@ def perturb(
     timer = Timer()
     timer.start("Total perturbation")
 
+    if verbose > 0:
+        print("Factorizing linear constraints")
+    timer.start("linear constraint factorize")
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.dim_x, objective.x_idx
+    )
+    timer.stop("linear constraint factorize")
+    if verbose > 1:
+        timer.disp("linear constraint factorize")
+
     # state vector
     x = objective.x(eq)
-    x_reduced = objective.project(x)
+    x_reduced = project(x)
     x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors
@@ -124,16 +141,12 @@ def perturb(
     if "Rb_lmn" in deltas.keys():
         dc = deltas["Rb_lmn"]
         tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]]
-            @ objective.Ainv["R_lmn"]
-            @ dc
+            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv["R_lmn"] @ dc
         )
     if "Zb_lmn" in deltas.keys():
         dc = deltas["Zb_lmn"]
         tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]]
-            @ objective.Ainv["Z_lmn"]
-            @ dc
+            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
         )
     # all other perturbations besides the boundary
     if len([arg for arg in arg_order if arg in deltas.keys()]):
@@ -165,11 +178,11 @@ def perturb(
             len(weight) == objective.dim_x
         ), "Size of weight supplied to perturbation does not match objective.dim_x."
         if weight.ndim == 1:
-            weight = weight[objective._unfixed_idx]
+            weight = weight[unfixed_idx]
             weight = np.diag(weight)
         else:
-            weight = weight[objective._unfixed_idx, objective._unfixed_idx]
-        W = objective.Z.T @ weight @ objective.Z
+            weight = weight[unfixed_idx, unfixed_idx]
+        W = Z.T @ weight @ Z
         scale_inv = W
         scale = np.linalg.inv(scale_inv)
 
@@ -180,7 +193,7 @@ def perturb(
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
-        Jx_reduced = Jx[:, objective._unfixed_idx] @ objective.Z @ scale
+        Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = f + objective.jvp(tangents, x)
         timer.stop("df computation")
         if verbose > 1:
@@ -206,7 +219,7 @@ def perturb(
             threshold=1e-6,
         )
         dx1_reduced = scale @ dx1_h
-        dx1 = objective.recover(dx1_reduced) - objective.x0
+        dx1 = recover(dx1_reduced) - xp
 
     # 2nd order
     if order > 1:
@@ -233,7 +246,7 @@ def perturb(
             threshold=1e-6,
         )
         dx2_reduced = scale @ dx2_h
-        dx2 = objective.recover(dx2_reduced) - objective.x0
+        dx2 = recover(dx2_reduced) - xp
 
     # 3rd order
     if order > 2:
@@ -260,7 +273,7 @@ def perturb(
             threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
-        dx3 = objective.recover(dx3_reduced) - objective.x0
+        dx3 = recover(dx3_reduced) - xp
 
     if order > 3:
         raise ValueError(
@@ -275,11 +288,16 @@ def perturb(
     # update perturbation attributes
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
-    objective.rebuild_constraints(eq_new)
+    for constraint in constraints:
+        constraint.build(eq_new, verbose=verbose)
+
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.dim_x, objective.x_idx
+    )
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
-    x_new = objective.recover(x_reduced + dx_reduced)
+    x_new = recover(x_reduced + dx_reduced)
     args = objective.unpack_state(x_new)
     for key, value in args.items():
         if key not in deltas:

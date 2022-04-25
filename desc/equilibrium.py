@@ -18,6 +18,8 @@ from desc.objectives import (
     get_force_balance_objective,
     get_force_balance_poincare_objective,
     get_energy_objective,
+    get_fixed_boundary_constraints,
+    get_poincare_boundary_constraints,
 )
 from desc.perturbations import perturb, optimal_perturb
 
@@ -223,6 +225,7 @@ class Equilibrium(_Configuration, IOAble):
         self,
         optimizer=None,
         objective=None,
+        constraints=None,
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
@@ -266,15 +269,25 @@ class Equilibrium(_Configuration, IOAble):
             optimizer = Optimizer("lsq-exact")
         if objective is None:
             if self.bdry_mode == "lcfs":
-                objective = get_force_balance_objective()
+                objective, constraints = get_force_balance_objective()
             elif self.bdry_mode == "poincare":
-                objective = get_force_balance_poincare_objective()
+                objective, constraints = get_force_balance_poincare_objective()
+        if constraints is None:
+            if self.bdry_mode == "lcfs":
+                constraints = get_fixed_boundary_constraints()
+            elif self.bdry_mode == "poincare":
+                constraints = get_poincare_boundary_constraints()
+
         if not objective.built:
             objective.build(self, verbose=verbose)
+        for constraint in constraints:
+            if not constraint.built:
+                constraint.build(self, verbose=verbose)
 
         x0 = objective.x(self)
         result = optimizer.optimize(
             objective,
+            constraints,
             x0=x0,
             ftol=ftol,
             xtol=xtol,
@@ -302,6 +315,7 @@ class Equilibrium(_Configuration, IOAble):
     def perturb(
         self,
         objective=None,
+        constraints=None,
         dR=None,
         dZ=None,
         dL=None,
@@ -345,13 +359,25 @@ class Equilibrium(_Configuration, IOAble):
         """
         if objective is None:
             if self.bdry_mode == "lcfs":
-                objective = get_force_balance_objective()
+                objective, constraints = get_force_balance_objective()
             elif self.bdry_mode == "poincare":
-                objective = get_force_balance_poincare_objective()
+                objective, constraints = get_force_balance_poincare_objective()
+        if constraints is None:
+            if self.bdry_mode == "lcfs":
+                constraints = get_fixed_boundary_constraints()
+            elif self.bdry_mode == "poincare":
+                constraints = get_poincare_boundary_constraints()
+
+        if not objective.built:
+            objective.build(self, verbose=verbose)
+        for constraint in constraints:
+            if not constraint.built:
+                constraint.build(self, verbose=verbose)
 
         eq = perturb(
             self,
             objective,
+            constraints,
             dR=dR,
             dZ=dZ,
             dL=dL,
@@ -682,14 +708,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             if self.inputs[ii]["objective"] == "force":
                 if self.inputs[ii]["bdry_mode"] == "lcfs":
-                    objective = get_force_balance_objective()
+                    objective, constraints = get_force_balance_objective()
                 elif self.inputs[ii]["bdry_mode"] == "poincare":
-                    objective = get_force_balance_poincare_objective()
+                    objective, constraints = get_force_balance_poincare_objective()
             elif self.inputs[ii]["objective"] == "energy":
                 if self.inputs[ii]["bdry_mode"] == "lcfs":
-                    objective = get_energy_objective()
+                    objective, constraints = get_energy_objective()
                 elif self.inputs[ii]["bdry_mode"] == "poincare":
-                    objective = get_energy_poincare_objective()
+                    objective, constraints = get_energy_poincare_objective()
 
             if ii == start_from:
                 equil = self[ii]
@@ -745,6 +771,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil.solve(
                 optimizer=optimizer,
                 objective=objective,
+                constraints=constraints,
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],

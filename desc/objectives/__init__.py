@@ -32,6 +32,7 @@ from ._qs import (
 )
 from .utils import (
     get_fixed_boundary_constraints,
+    get_poincare_boundary_constraints,
     get_force_balance_objective,
     get_force_balance_poincare_objective,
     get_energy_poincare_objective,

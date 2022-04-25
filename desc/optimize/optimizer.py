@@ -1,10 +1,13 @@
 import numpy as np
 import scipy.optimize
 from termcolor import colored
+from desc.backend import put
 from desc.utils import Timer
+from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
+from desc.compute import arg_order
 
 
 class Optimizer(IOAble):
@@ -89,7 +92,8 @@ class Optimizer(IOAble):
     def optimize(
         self,
         objective,
-        x0,
+        constraints=(),
+        x0=None,
         x_scale="auto",
         ftol=1e-6,
         xtol=1e-6,
@@ -104,6 +108,8 @@ class Optimizer(IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to optimize.
+        constraints : tuple of Objective, optional
+            List of objectives to be used as constraints during optimization.
         x0 : ndarray
             Initial guess for state vector. Should satisfy any constraints on x.
         x_scale : array_like or ``'auto'``, optional
@@ -162,6 +168,9 @@ class Optimizer(IOAble):
                 )
             )
 
+        if not isinstance(constraints, tuple):
+            constraints = (constraints,)
+
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
             objective.compile(mode, verbose)
@@ -179,34 +188,40 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
+        if verbose > 0:
+            print("Factorizing linear constraints")
+        timer.start("linear constraint factorize")
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, objective.dim_x, objective.x_idx
+        )
+        timer.stop("linear constraint factorize")
+        if verbose > 1:
+            timer.disp("linear constraint factorize")
+
         def compute_wrapped(x_reduced):
-            x = objective.recover(x_reduced)
+            x = recover(x_reduced)
             return objective.compute(x)
 
         def compute_scalar_wrapped(x_reduced):
-            x = objective.recover(x_reduced)
+            x = recover(x_reduced)
             return objective.compute_scalar(x)
 
         def grad_wrapped(x_reduced):
-            x = objective.recover(x_reduced)
+            x = recover(x_reduced)
             df = objective.grad(x)
-            return df[objective._unfixed_idx] @ objective.Z
+            return df[unfixed_idx] @ Z
 
         def hess_wrapped(x_reduced):
-            x = objective.recover(x_reduced)
+            x = recover(x_reduced)
             df = objective.hess(x)
-            return (
-                objective.Z.T
-                @ df[objective._unfixed_idx, :][:, objective._unfixed_idx]
-                @ objective.Z
-            )
+            return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
 
         def jac_wrapped(x_reduced):
-            x = objective.recover(x_reduced)
+            x = recover(x_reduced)
             df = objective.jac(x)
-            return df[:, objective._unfixed_idx] @ objective.Z
+            return df[:, unfixed_idx] @ Z
 
-        x0_reduced = objective.project(x0)
+        x0_reduced = project(x0)
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -215,7 +230,7 @@ class Optimizer(IOAble):
             msg = [""]
 
             def callback(x_reduced):
-                x = objective.recover(x_reduced)
+                x = recover(x_reduced)
                 if len(allx) > 0:
                     dx = allx[-1] - x_reduced
                     dx_norm = np.linalg.norm(dx)
@@ -360,9 +375,9 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        result["x"] = objective.recover(result["x"])
+        result["x"] = recover(result["x"])
         for i, x_reduced in enumerate(result["allx"]):
-            result["allx"][i] = objective.recover(x_reduced)
+            result["allx"][i] = recover(x_reduced)
 
         timer.stop("Solution time")
 

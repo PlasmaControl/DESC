@@ -83,9 +83,9 @@ def test_compute_flux_coords(SOLOVEV):
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
 
 
-def _compute_coords(equil):
+def _compute_coords(equil, check_all_zeta=False):
 
-    if equil.N == 0:
+    if equil.N == 0 and not check_all_zeta:
         Nz = 1
     else:
         Nz = 6
@@ -153,3 +153,15 @@ def test_continuation_resolution(tmpdir_factory):
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
+
+
+@pytest.mark.slow
+def test_poincare_bc(SOLOVEV, SOLOVEV_Poincare):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq_poin = EquilibriaFamily.load(load_from=str(SOLOVEV_Poincare["desc_h5_path"]))[-1]
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)
+    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
+    # the LCFS BC solution was found with force, while the poincare was with energy, so relatively loose tolerance btwn the two solutions

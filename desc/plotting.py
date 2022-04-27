@@ -438,7 +438,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|"
+                norm_name = "|grad(|B|^2)|/2mu0"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
             norm_data, _ = _compute(eq, norm_name, grid)
@@ -678,7 +678,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
             if (
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|"
+                norm_name = "|grad(|B|^2)|/2mu0"
             else:  # normalize force balance with pressure by gradient of pressure
                 norm_name = "|grad(p)|"
             norm_data, _ = _compute(eq, norm_name, grid)

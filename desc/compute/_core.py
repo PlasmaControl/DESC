@@ -545,6 +545,15 @@ def compute_jacobian(
 
     if check_derivs("sqrt(g)", R_transform, Z_transform):
         data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"]))
+        data["|e_theta x e_zeta|"] = jnp.linalg.norm(
+            cross(data["e_theta"], data["e_zeta"]), axis=1
+        )
+        data["|e_zeta x e_rho|"] = jnp.linalg.norm(
+            cross(data["e_zeta"], data["e_rho"]), axis=1
+        )
+        data["|e_rho x e_theta|"] = jnp.linalg.norm(
+            cross(data["e_rho"], data["e_theta"]), axis=1
+        )
 
     # 1st order derivatives
     if check_derivs("sqrt(g)_r", R_transform, Z_transform):

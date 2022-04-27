@@ -101,7 +101,7 @@ class LCFSConstraint(BoundaryCondition):
         Rb_basis_full = Rb_basis.copy()
         Zb_basis_full = Zb_basis.copy()
         # make sure the boundary bases have same resolution as flux surface bases so that
-        # all modes are properly constrainted
+        # all modes are properly constrained
         Rb_basis_full.change_resolution(M=R_basis.M, N=R_basis.N)
         Zb_basis_full.change_resolution(M=Z_basis.M, N=Z_basis.N)
         Rb_lmn_full = copy_coeffs(Rb_lmn, Rb_basis.modes, Rb_basis_full.modes)
@@ -121,7 +121,7 @@ class LCFSConstraint(BoundaryCondition):
             )[0]
             + Rb_basis_full.num_modes
         )
-        # find which coeffs can acually be constrainted
+        # find which coeffs can acually be constrained
         self._rmask = np.where(
             (Rb_basis.modes[:, np.newaxis] == Rb_basis_full.modes[np.newaxis, :, :])
             .all(axis=-1)
@@ -250,10 +250,11 @@ class PoincareConstraint(BoundaryCondition):
             Rb_lmn_full,
             Zb_lmn_full,
         )
-        A_sfl, b_sfl = _get_sfl_bc(R_basis, Z_basis, L_basis)
 
-        A = np.vstack([A_poincare, A_sfl])
-        b = np.concatenate([b_poincare, b_sfl])
+        A_axis, b_axis = _get_axis_bc(R_basis, Z_basis, L_basis)
+
+        A = np.vstack([A_poincare, A_axis])
+        b = np.concatenate([b_poincare, b_axis])
 
         super(BoundaryCondition, self).__init__(A, b, build)
 
@@ -535,17 +536,24 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
 
     dim_R = R_basis.num_modes
     dim_Z = Z_basis.num_modes
+    dim_L = L_basis.num_modes
     dim_Rb = Rb_basis.modes.shape[0]
     dim_Zb = Zb_basis.modes.shape[0]
 
-    AR = np.zeros((dim_Rb, dim_R))
-    AZ = np.zeros((dim_Zb, dim_Z))
+    dimx = dim_R + dim_Z + dim_L
+
+    AR = np.zeros((dim_Rb, dimx))
+    AZ = np.zeros((dim_Zb, dimx))
+
+    bR = Rb_lmn
+    bZ = Zb_lmn
 
     for i, (l, m, n) in enumerate(R_basis.modes):
         j = np.where(
             np.logical_and(
                 (Rb_basis.modes[:, :2] == [l, m]).all(axis=1),
-                Rb_basis.modes[:, -1] >= 0,
+                Rb_basis.modes[:, -1]
+                >= 0,  # don't need to constrain sin(zeta) modes as they = 0 at zeta=0 anyways
             )
         )[0]
         AR[j, i] = 1
@@ -557,10 +565,10 @@ def _get_poincare_bc(R_basis, Z_basis, L_basis, Rb_basis, Zb_basis, Rb_lmn, Zb_l
                 Zb_basis.modes[:, -1] >= 0,
             )
         )[0]
-        AZ[j, i] = 1
+        AZ[j, dim_R + i] = 1
 
-    A = np.block([[AR, np.zeros((dim_Rb, dim_Z))], [np.zeros((dim_Zb, dim_R)), AZ]])
-    b = np.concatenate([Rb_lmn, Zb_lmn])
+    A = np.vstack([AR, AZ])
+    b = np.concatenate([bR, bZ])
 
     return A, b
 

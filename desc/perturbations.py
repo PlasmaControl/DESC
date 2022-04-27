@@ -289,8 +289,7 @@ def perturb(
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
-        constraint.build(eq_new, verbose=verbose)
-
+        constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.dim_x, objective.x_idx
     )

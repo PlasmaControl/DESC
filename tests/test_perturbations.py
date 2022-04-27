@@ -11,23 +11,51 @@ def test_perturbation_orders(SOLOVEV):
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
-    objective = get_force_balance_objective()
+    objective, constraints = get_force_balance_objective()
 
     # perturb pressure
     tr_ratio = [0.01, 0.25, 0.25]
     dp = np.zeros_like(eq.p_l)
     dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
     eq0 = perturb(
-        eq, objective, dp=dp, tr_ratio=tr_ratio, order=0, verbose=2, copy=True
+        eq,
+        objective,
+        constraints,
+        dp=dp,
+        tr_ratio=tr_ratio,
+        order=0,
+        verbose=2,
+        copy=True,
     )
     eq1 = perturb(
-        eq, objective, dp=dp, tr_ratio=tr_ratio, order=1, verbose=2, copy=True
+        eq,
+        objective,
+        constraints,
+        dp=dp,
+        tr_ratio=tr_ratio,
+        order=1,
+        verbose=2,
+        copy=True,
     )
     eq2 = perturb(
-        eq, objective, dp=dp, tr_ratio=tr_ratio, order=2, verbose=2, copy=True
+        eq,
+        objective,
+        constraints,
+        dp=dp,
+        tr_ratio=tr_ratio,
+        order=2,
+        verbose=2,
+        copy=True,
     )
     eq3 = perturb(
-        eq, objective, dp=dp, tr_ratio=tr_ratio, order=3, verbose=2, copy=True
+        eq,
+        objective,
+        constraints,
+        dp=dp,
+        tr_ratio=tr_ratio,
+        order=3,
+        verbose=2,
+        copy=True,
     )
 
     # solve for "true" high-beta solution

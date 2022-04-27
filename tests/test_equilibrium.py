@@ -233,8 +233,15 @@ def test_poincare_sfl_bc(
         FixedPsi(),
     )
     objectives = ForceBalance()
-    obj = ObjectiveFunction(objectives, constraints)
-    eq_poin.solve(verbose=1, ftol=1e-6, objective=obj, maxiter=100, xtol=1e-6)
+    obj = ObjectiveFunction(objectives)
+    eq_poin.solve(
+        verbose=1,
+        ftol=1e-6,
+        objective=obj,
+        constraints=constraints,
+        maxiter=100,
+        xtol=1e-6,
+    )
 
     Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
     Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)

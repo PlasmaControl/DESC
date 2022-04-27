@@ -442,17 +442,22 @@ class Equilibrium(_Configuration, IOAble):
         if constraint is None:
             if self.bdry_mode == "lcfs":
                 constraint = get_force_balance_objective()
+                constraint = (constraint[0], *constraint[1:])
             elif self.bdry_mode == "poincare":
                 constraint = get_force_balance_poincare_objective()
+                constraint = (constraint[0], *constraint[1:])
 
+        if not isinstance(constraint, tuple):
+            constraint = (constraint,)
         timer = Timer()
         timer.start("Total time")
 
         eq = self
         if not objective.built:
             objective.build(eq)
-        if not constraint.built:
-            constraint.build(eq)
+        for c in constraint:
+            if not c.built:
+                c.build(eq)
 
         cost = objective.compute_scalar(objective.x(eq))
         perturb_options = deepcopy(perturb_options)

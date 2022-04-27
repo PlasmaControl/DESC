@@ -111,10 +111,10 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        objective = ObjectiveFunction(Volume(), (LCFSBoundaryR(), LCFSBoundaryZ()), eq)
-        args = objective.unpack_state(objective.make_feasible(objective.x(eq)))
-        for key, value in args.items():
-            setattr(eq, key, value)
+        # objective = ObjectiveFunction(Volume(), (LCFSBoundaryR(), LCFSBoundaryZ()), eq)
+        # args = objective.unpack_state(objective.make_feasible(objective.x(eq)))
+        # for key, value in args.items():
+        #     setattr(eq, key, value)
 
         return eq
 

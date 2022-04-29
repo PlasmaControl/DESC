@@ -46,7 +46,7 @@ class ObjectiveFunction(IOAble):
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indicies."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
-        self._args = np.unique(self.args)
+        self._args = [arg for arg in arg_order if arg in self._args]
 
         self._dimensions = self.objectives[0].dimensions
 

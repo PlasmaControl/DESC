@@ -28,7 +28,7 @@ class WrappedForceObjective:
         objective,
         force_objective=None,
         eq=None,
-        verbose=1,
+        verbose=0,
         perturb_options={},
         solve_options={},
     ):
@@ -108,10 +108,15 @@ class WrappedForceObjective:
             self._eq.perturb(
                 self._force_objective,
                 self._constraints,
+                verbose=self._verbose,
                 **deltas,
                 **self._perturb_options
             )
-            self._eq.solve(objective=self._force_objective, **self._solve_options)
+            self._eq.solve(
+                objective=self._force_objective,
+                **self._solve_options,
+                verbose=self._verbose
+            )
             self._xopt_old = xopt
 
     def compute(self, xopt):

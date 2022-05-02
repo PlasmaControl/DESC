@@ -18,6 +18,7 @@ from desc.objectives import (
     get_force_balance_objective,
     get_force_balance_poincare_objective,
     get_energy_objective,
+    get_energy_poincare_objective,
 )
 from desc.perturbations import perturb, optimal_perturb
 

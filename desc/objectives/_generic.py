@@ -14,11 +14,7 @@ from desc.compute import (
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
-    compute_force_error,
-    compute_boozer_coords,
     compute_quasisymmetry_error,
-    compute_energy,
-    compute_geometry,
 )
 from .objective_funs import _Objective
 

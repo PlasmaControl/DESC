@@ -15,14 +15,14 @@ def perturb(
     eq,
     objective,
     constraints=(),
-    dR_lmn=None,
-    dZ_lmn=None,
-    dL_lmn=None,
-    dp_l=None,
-    di_l=None,
+    dR=None,
+    dZ=None,
+    dL=None,
+    dp=None,
+    di=None,
     dPsi=None,
-    dRb_lmn=None,
-    dZb_lmn=None,
+    dRb=None,
+    dZb=None,
     order=2,
     tr_ratio=0.1,
     weight="auto",
@@ -39,7 +39,7 @@ def perturb(
         Objective function to satisfy.
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
-    dR_lmn, dZ_lmn, dL_lmn, dp_l, di_l, dPsi, dRb_lmn, dZb_lmn : ndarray or float
+    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or float
         Deltas for perturbations of R, Z, lambda, pressure, rotational transform,
         total toroidal magnetic flux, R_boundary, and Z_boundary.
         Setting to None or zero ignores that term in the expansion.

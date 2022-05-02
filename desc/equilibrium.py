@@ -637,13 +637,13 @@ class EquilibriaFamily(IOAble, MutableSequence):
             i_l[idx_i] = i
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
-            deltas["dRb_lmn"] = Rb_lmn - equil.Rb_lmn
+            deltas["dRb"] = Rb_lmn - equil.Rb_lmn
         if not np.allclose(Zb_lmn, equil.Zb_lmn):
-            deltas["dZb_lmn"] = Zb_lmn - equil.Zb_lmn
+            deltas["dZb"] = Zb_lmn - equil.Zb_lmn
         if not np.allclose(p_l, equil.p_l):
-            deltas["dp_l"] = p_l - equil.p_l
+            deltas["dp"] = p_l - equil.p_l
         if not np.allclose(i_l, equil.i_l):
-            deltas["di_l"] = i_l - equil.i_l
+            deltas["di"] = i_l - equil.i_l
         if not np.allclose(inputs["Psi"], equil.Psi):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas

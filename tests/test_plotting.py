@@ -5,8 +5,9 @@ from desc.plotting import (
     plot_1d,
     plot_2d,
     plot_3d,
-    plot_surfaces,
+    plot_fsa,
     plot_section,
+    plot_surfaces,
     plot_comparison,
     plot_logo,
     plot_grid,
@@ -158,6 +159,20 @@ def test_3d_rt(SOLOVEV):
         rho=np.linspace(0, 1, 100), theta=np.linspace(0, 2 * np.pi, 100), zeta=0
     )
     fig, ax = plot_3d(eq, "psi", grid=grid)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_fsa_I(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "B_theta")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_fsa_G(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "B_zeta", log=True)
     return fig
 
 

@@ -20,6 +20,7 @@ from desc.objectives import (
     get_energy_objective,
     get_fixed_boundary_constraints,
     get_poincare_boundary_constraints,
+    get_energy_poincare_objective,
 )
 from desc.perturbations import perturb, optimal_perturb
 

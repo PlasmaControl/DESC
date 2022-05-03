@@ -889,7 +889,7 @@ class PoincareLambda(_Objective):
     _linear = True
     _fixed = False
 
-    def __init__(self, eq=None, target=None, weight=1, name="lambda poincare"):
+    def __init__(self, eq=None, target=None, weight=1, name="poincare lambda"):
         """Initialize a LambdaPoincare Objective.
 
         Parameters

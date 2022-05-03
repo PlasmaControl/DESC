@@ -91,15 +91,19 @@ class ObjectiveFunction(IOAble):
         self._b = {}
         self._Ainv = {}
         self._x0 = jnp.zeros(self._dim_x)
+        constraint_args = []  # all args used in constraints
+        unfixed_args = []  # subset of constraint args for unfixed objectives
 
         # A matrices for each unfixed constraint
         for obj in self.constraints:
+            if len(obj.args) > 1:
+                raise ValueError("Non-fixed constraints must have only 1 argument.")
+            arg = obj.args[0]
+            constraint_args.append(arg)
             if obj.fixed:
                 self._x0 = put(self._x0, self._x_idx[obj.target_arg], obj.target)
             else:
-                if len(obj.args) > 1:
-                    raise ValueError("Non-fixed constraints must have only 1 argument.")
-                arg = obj.args[0]
+                unfixed_args.append(arg)
                 A = obj.derivatives[arg]
                 b = obj.target
                 if A.shape[0]:
@@ -110,15 +114,20 @@ class ObjectiveFunction(IOAble):
                 self._b[arg] = b
                 self._Ainv[arg] = Ainv
 
+        # catch any arguments that are not constrained
+        for arg in self._args:
+            if arg not in constraint_args:
+                unfixed_args.append(arg)
+                self._A[arg] = np.zeros((1, self._dimensions[arg]))
+                self._b[arg] = np.zeros((1,))
+
         # full A matrix for all unfixed constraints
         self._unfixed_idx = np.concatenate(
-            [self._x_idx[arg] for arg in arg_order if arg in self._A.keys()]
+            [self._x_idx[arg] for arg in arg_order if arg in unfixed_args]
         )
-        A_full = block_diag(
-            *[self._A[arg] for arg in arg_order if arg in self._A.keys()]
-        )
+        A_full = block_diag(*[self._A[arg] for arg in arg_order if arg in unfixed_args])
         b_full = np.concatenate(
-            [self._b[arg] for arg in arg_order if arg in self._b.keys()]
+            [self._b[arg] for arg in arg_order if arg in unfixed_args]
         )
         Ainv_full, self._Z = svd_inv_null(A_full)
         self._x0 = put(self._x0, self._unfixed_idx, Ainv_full @ b_full)

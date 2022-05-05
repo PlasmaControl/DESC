@@ -8,6 +8,13 @@ from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 from desc.compute import arg_order
+from desc.optimize import (
+    ForceBalance,
+    RadialForceBalance,
+    HelicalForceBalance,
+    WrappedEquilibriumObjective,
+    ObjectiveFunction,
+)
 
 
 class Optimizer(IOAble):
@@ -37,6 +44,7 @@ class Optimizer(IOAble):
 
     _io_attrs_ = ["_method"]
 
+    # TODO: better way to organize these:
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
@@ -47,10 +55,40 @@ class Optimizer(IOAble):
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
     _desc_least_squares_methods = ["lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
-    _scalar_methods = _desc_scalar_methods + _scipy_scalar_methods
-    _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
-    _scipy_methods = _scipy_least_squares_methods + _scipy_scalar_methods
-    _desc_methods = _desc_least_squares_methods + _desc_scalar_methods
+    _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
+    _scipy_constrained_least_squares_methods = []
+    _desc_constrained_scalar_methods = []
+    _desc_constrained_least_squares_methods = []
+    _scalar_methods = (
+        _desc_scalar_methods
+        + _scipy_scalar_methods
+        + _scipy_constrained_scalar_methods
+        + _desc_constrained_scalar_methods
+    )
+    _least_squares_methods = (
+        _scipy_least_squares_methods
+        + _desc_least_squares_methods
+        + _scipy_constrained_least_squares_methods
+        + _desc_constrained_least_squares_methods
+    )
+    _scipy_methods = (
+        _scipy_least_squares_methods
+        + _scipy_scalar_methods
+        + _scipy_constrained_scalar_methods
+        + _scipy_constrained_least_squares_methods
+    )
+    _desc_methods = (
+        _desc_least_squares_methods
+        + _desc_scalar_methods
+        + _desc_constrained_scalar_methods
+        + _desc_constrained_least_squares_methods
+    )
+    _constrained_methods = (
+        _desc_constrained_scalar_methods
+        + _desc_constrained_least_squares_methods
+        + _scipy_constrained_scalar_methods
+        + _scipy_constrained_least_squares_methods
+    )
     _all_methods = (
         _scipy_least_squares_methods
         + _scipy_scalar_methods
@@ -110,8 +148,8 @@ class Optimizer(IOAble):
             Objective function to optimize.
         constraints : tuple of Objective, optional
             List of objectives to be used as constraints during optimization.
-        x0 : ndarray
-            Initial guess for state vector. Should satisfy any constraints on x.
+        eq : Equilibrium
+            Initial equilibrium.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -168,8 +206,38 @@ class Optimizer(IOAble):
                 )
             )
 
-        if not isinstance(constraints, tuple):
-            constraints = (constraints,)
+        # TODO: require user to pass eq to build this?
+        # TODO: or do we always assume constraints is a single thing not a list?
+        nonlinear_constraints = [
+            constraint for constraint in constraints if not constraint.linear
+        ]
+        if len(nonlinear_constraints) > 0 and (
+            self.method not in Optimizer._constrained_methods
+        ):
+            for constr in nonlinear_constraints:
+                for obj in constr.objectives:
+                    if isinstance(
+                        objective,
+                        (ForceBalance, RadialForceBalance, HelicalForceBalance),
+                    ):
+                        continue
+                    else:
+                        raise ValueError(
+                            "optimizer method {} cannot handle general nonlinear constraint {}".format(
+                                self.method, obj
+                            )
+                        )
+            if len(nonlinear_contraints) > 1:
+                raise ValueError(
+                    "optimizer method {} can only handle a single equilibrium constraint, got {}".format(
+                        self.method, nonlinear_constraints
+                    )
+                )
+            objective = WrappedEquilibriumObjective(objective, nonlinear_constraints[0])
+            objective.build(eq)
+        linear_constraints = (
+            constraint for constraint in constraints if constraint.linear
+        )
 
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
@@ -192,7 +260,7 @@ class Optimizer(IOAble):
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, objective.dim_x, objective.x_idx
+            linear_constraints, objective.dim_x, objective.x_idx
         )
         timer.stop("linear constraint factorize")
         if verbose > 1:

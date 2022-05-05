@@ -1,14 +1,14 @@
 import numpy as np
 from desc.backend import jnp
 from .utils import (
-    get_force_balance_objective,
+    get_equilibrium_objective,
     get_fixed_boundary_constraints,
     factorize_linear_constraints,
 )
 from desc.compute import arg_order
 
 
-class WrappedForceObjective:
+class WrappedEquilibriumObjective:
     """Evaluate an objective subject to equilibrium constraint
 
     Parameters
@@ -26,7 +26,7 @@ class WrappedForceObjective:
     def __init__(
         self,
         objective,
-        force_objective=None,
+        equilibrium_objective=None,
         eq=None,
         verbose=1,
         perturb_options={},
@@ -34,11 +34,6 @@ class WrappedForceObjective:
     ):
 
         self._objective = objective
-        if force_objective is None:
-            self._force_objective, self._constraints = get_force_balance_objective()
-        else:
-            self._force_objective = force_objective
-            self._constraints = get_fixed_boundary_constraints()
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._verbose = verbose
@@ -48,14 +43,20 @@ class WrappedForceObjective:
 
     def build(self, eq):
 
-        self._eq = eq
+        self._eq = eq.copy()
+        if self._equilibrium_objective is None:
+            self._equilibrium_objective = get_equilibrium_objective()
+        self._constraints = get_fixed_boundary_constraints(self._eq.bdry_mode)
+
         self._objective.build(self._eq)
-        self._force_objective.build(self._eq)
+        self._equilibrium_objective.build(self._eq)
         for constraint in self._constraints:
             constraint.build(self._eq)
 
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            self._constraints, self._force_objective.dim_x, self._force_objective.x_idx
+            self._constraints,
+            self._equilibrium_objective.dim_x,
+            self._equilibrium_objective.x_idx,
         )
         self._dimensions = {}
         self._dimensions["R_lmn"] = self._eq.R_basis.num_modes
@@ -75,13 +76,13 @@ class WrappedForceObjective:
 
         self._unfixed_idx = unfixed_idx
         self._fixed_idx = np.setdiff1d(
-            np.arange(self._force_objective.dim_x), unfixed_idx
+            np.arange(self._equilibrium_objective.dim_x), unfixed_idx
         )
         self._A = A
         self._Ainv = Ainv
         self._Z = Z
         # full x is everything FB takes, which should be everything?
-        self._xfull = self._force_objective.x(eq)
+        self._xfull = self._equilibrium_objective.x(eq)
         # optimization x is all the stuff thats fixed during a normal eq solve
         self._xopt_old = jnp.concatenate(
             [jnp.atleast_1d(getattr(self._eq, arg)) for arg in self._args]
@@ -106,12 +107,12 @@ class WrappedForceObjective:
             xoptd_old = self._unpack_xopt(self._xopt_old)
             deltas = {"d" + str(key): xoptd[key] - xoptd_old[key] for key in xoptd}
             self._eq.perturb(
-                self._force_objective,
+                self._equilibrium_objective,
                 self._constraints,
                 **deltas,
                 **self._perturb_options
             )
-            self._eq.solve(objective=self._force_objective, **self._solve_options)
+            self._eq.solve(objective=self._equilibrium_objective, **self._solve_options)
             self._xopt_old = xopt
 
     def compute(self, xopt):
@@ -130,48 +131,52 @@ class WrappedForceObjective:
 
         self._update(xopt)
 
-        dxdc = np.zeros((self._force_objective.dim_x, 0))
+        dxdc = np.zeros((self._equilibrium_objective.dim_x, 0))
         x_idx = np.concatenate(
-            [self._force_objective.x_idx[arg] for arg in self._args[2:]]
+            [self._equilibrium_objective.x_idx[arg] for arg in self._args[2:]]
         )
         x_idx.sort(kind="mergesort")
-        dxdc = np.eye(self._force_objective.dim_x)[:, x_idx]
+        dxdc = np.eye(self._equilibrium_objective.dim_x)[:, x_idx]
         dxdRb = (
-            np.eye(self._force_objective.dim_x)[:, self._force_objective.x_idx["R_lmn"]]
+            np.eye(self._equilibrium_objective.dim_x)[
+                :, self._equilibrium_objective.x_idx["R_lmn"]
+            ]
             @ self._Ainv["R_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdRb))
         dxdZb = (
-            np.eye(self._force_objective.dim_x)[:, self._force_objective.x_idx["Z_lmn"]]
+            np.eye(self._equilibrium_objective.dim_x)[
+                :, self._equilibrium_objective.x_idx["Z_lmn"]
+            ]
             @ self._Ainv["Z_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdZb))
 
-        xf = self._force_objective.x(self._eq)
-        Fx = self._force_objective.jac(xf)
+        xf = self._equilibrium_objective.x(self._eq)
+        Fx = self._equilibrium_objective.jac(xf)
 
         # 1st partial derivatives of g objective wrt both x and c
         xg = self._objective.x(self._eq)
         Gx = self._objective.jac(xg)
 
         Fx = {
-            arg: Fx[:, self._force_objective.x_idx[arg]]
-            for arg in self._force_objective.args
+            arg: Fx[:, self._equilibrium_objective.x_idx[arg]]
+            for arg in self._equilibrium_objective.args
         }
         Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
 
         for arg in arg_order:
             if (arg in self._objective.args) and not (
-                arg in self._force_objective.args
+                arg in self._equilibrium_objective.args
             ):
                 Fx[arg] = jnp.zeros(
-                    (self._force_objective.dim_f, self._objective.dimensions[arg])
+                    (self._equilibrium_objective.dim_f, self._objective.dimensions[arg])
                 )
-            if (arg in self._force_objective.args) and not (
+            if (arg in self._equilibrium_objective.args) and not (
                 arg in self._objective.args
             ):
                 Gx[arg] = jnp.zeros(
-                    (self._objective.dim_f, self._force_objective.dimensions[arg])
+                    (self._objective.dim_f, self._equilibrium_objective.dimensions[arg])
                 )
 
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])

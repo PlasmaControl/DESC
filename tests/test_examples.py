@@ -58,13 +58,11 @@ def test_force_balance_grids():
     eq2.M_grid = res
 
     # force balances on the same grids
-    obj1 = ObjectiveFunction(ForceBalance(), get_fixed_boundary_constraints())
+    obj1 = ObjectiveFunction(ForceBalance())
     eq1.solve(objective=obj1)
 
     # force balances on different grids
-    obj2 = ObjectiveFunction(
-        (RadialForceBalance(), HelicalForceBalance()), get_fixed_boundary_constraints()
-    )
+    obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
     eq2.solve(objective=obj2)
 
     np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)

@@ -14,10 +14,10 @@ from .linear_objectives import (
     PoincareBoundaryR,
     PoincareBoundaryZ,
 )
-from ._equilibrium import ForceBalance, Energy
+from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
 
 
-def get_fixed_boundary_constraints():
+def get_fixed_boundary_constraints(mode="lcfs"):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Returns
@@ -26,38 +26,23 @@ def get_fixed_boundary_constraints():
         A list of the linear constraints used in fixed-boundary problems.
 
     """
+
     constraints = (
-        LCFSBoundaryR(),
-        LCFSBoundaryZ(),
         LambdaGauge(),
         FixedPressure(),
         FixedIota(),
         FixedPsi(),
     )
+    if mode == "lcfs":
+        constraints += (LCFSBoundaryR(), LCFSBoundaryZ())
+    elif mode == "poincare":
+        constraints += (PoincareBoundaryR(), PoincareBoundaryZ())
+    else:
+        raise ValueError("got an unknown boundary condition type '{}'".format(mode))
     return constraints
 
 
-def get_poincare_boundary_constraints():
-    """Get the constraints necessary for a Poincare-boundary equilibrium problem.
-
-    Returns
-    -------
-    constraints, tuple of _Objectives
-        A list of the linear constraints used in Poincare-boundary problems.
-
-    """
-    constraints = (
-        PoincareBoundaryR(),
-        PoincareBoundaryZ(),
-        LambdaGauge(),
-        FixedPressure(),
-        FixedIota(),
-        FixedPsi(),
-    )
-    return constraints
-
-
-def get_force_balance_objective():
+def get_equilibrium_objective(mode="force"):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Returns
@@ -66,51 +51,15 @@ def get_force_balance_objective():
         An objective function with default force balance objectives.
 
     """
-    objectives = ForceBalance()
-    constraints = get_fixed_boundary_constraints()
-    return ObjectiveFunction(objectives), constraints
-
-
-def get_force_balance_poincare_objective():
-    """Get the objective function for a poincare force balance equilibrium problem.
-
-    Returns
-    -------
-    objective, ObjectiveFunction
-        An objective function with default force balance objectives.
-
-    """
-    objectives = ForceBalance()
-    constraints = get_poincare_boundary_constraints()
-    return ObjectiveFunction(objectives), constraints
-
-
-def get_energy_objective():
-    """Get the objective function for a typical energy equilibrium problem.
-
-    Returns
-    -------
-    objective, ObjectiveFunction
-        An objective function with default energy objectives.
-
-    """
-    objectives = Energy()
-    constraints = get_fixed_boundary_constraints()
-    return ObjectiveFunction(objectives), constraints
-
-
-def get_energy_poincare_objective():
-    """Get the objective function for a typical energy equilibrium problem.
-
-    Returns
-    -------
-    objective, ObjectiveFunction
-        An objective function with default energy objectives.
-
-    """
-    objectives = Energy()
-    constraints = get_poincare_boundary_constraints()
-    return ObjectiveFunction(objectives), constraints
+    if mode == "force":
+        objectives = ForceBalance()
+    elif mode == "force2":
+        objectives = (RadialForceBalance(), HelicalForceBalance())
+    elif mode == "energy":
+        objectives = Energy()
+    else:
+        raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
+    return ObjectiveFunction(objectives)
 
 
 def factorize_linear_constraints(constraints, dim_x, x_idx):

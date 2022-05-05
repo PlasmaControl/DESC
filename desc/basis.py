@@ -1416,13 +1416,10 @@ def zernike_norm(l, m):
 
 def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
     """Takes a 3D FourierZernike basis and its coefficients X_lmn and evaluates the coefficients at
-    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficeints X_lmn"""
-    # we only need lambda to be constrained at the zeta=0 surface
-    # this block here adds up all the L_lm(n>=0) modes
-    # so that lambda at the surface can be described with just lm modes
+    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficients X_lmn"""
+    # Add up all the X_lm(n>=0) modes
+    # so that the quantity at the zeta=0 surface is described with just lm modes
     # and get rid of the toroidal modes
-    # (i.e. sort of like taking the XS of lambda at zeta=0 like we would
-    #  do with R and Z)
     modes_2D = []
     X_lmn_2D = (
         []

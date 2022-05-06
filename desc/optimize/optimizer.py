@@ -1,20 +1,19 @@
 import numpy as np
 import scipy.optimize
 from termcolor import colored
-from desc.backend import put
+
 from desc.utils import Timer
-from desc.objectives.utils import factorize_linear_constraints
-from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
-from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
-from desc.compute import arg_order
-from desc.optimize import (
+from desc.objectives import (
+    ObjectiveFunction,
     ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
     WrappedEquilibriumObjective,
-    ObjectiveFunction,
 )
+from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize import fmintr, lsqtr
+from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 
 
 class Optimizer(IOAble):
@@ -127,29 +126,46 @@ class Optimizer(IOAble):
             )
         self._method = method
 
+    # TODO: add copy argument and return the equilibrium?
     def optimize(
         self,
+        eq,
         objective,
         constraints=(),
-        x0=None,
-        x_scale="auto",
         ftol=1e-6,
         xtol=1e-6,
         gtol=1e-6,
+        x_scale="auto",
         verbose=1,
         maxiter=None,
         options={},
     ):
-        """Optimize the objective function
+        """Optimize an objective function.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Initial equilibrium.
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : tuple of Objective, optional
             List of objectives to be used as constraints during optimization.
-        eq : Equilibrium
-            Initial equilibrium.
+        ftol : float or None, optional
+            Tolerance for termination by the change of the cost function.
+            Default is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+            and there was an adequate agreement between a local quadratic model and the
+            true model in the last step.
+            If None, the termination by this condition is disabled.
+        xtol : float or None, optional
+            Tolerance for termination by the change of the independent variables.
+            Default is 1e-8.
+            Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+            If None, the termination by this condition is disabled.
+        gtol : float or None, optional
+            Absolute tolerance for termination by the norm of the gradient.
+            Default is 1e-8. Optimizer teriminates when ``norm(g) < gtol``, where
+            # FIXME: missing documentation!
+            If None, the termination by this condition is disabled.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -159,21 +175,6 @@ class Optimizer(IOAble):
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the jacobian or hessian matrix.
-        ftol : float or None, optional
-            Tolerance for termination by the change of the cost function. Default
-            is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
-            and there was an adequate agreement between a local quadratic model and
-            the true model in the last step. If None, the termination by this
-            condition is disabled.
-        xtol : float or None, optional
-            Tolerance for termination by the change of the independent variables.
-            Default is 1e-8. Optimization is stopped when
-            ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-            this condition is disabled.
-        gtol : float or None, optional
-            Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-            Optimizer teriminates when ``norm(g) < gtol``, where
-            If None, the termination by this condition is disabled.
         verbose : integer, optional
             * 0  : work silently.
             * 1-2 : display a termination report.
@@ -196,6 +197,49 @@ class Optimizer(IOAble):
         """
         # TODO: document options
         timer = Timer()
+
+        if self.method in Optimizer._desc_methods:
+            if not isinstance(x_scale, str) and np.allclose(x_scale, 1):
+                options.setdefault("initial_trust_radius", 0.5)
+                options.setdefault("max_trust_radius", 1.0)
+
+        linear_constraints = tuple(
+            constraint for constraint in constraints if constraint.linear
+        )
+        nonlinear_constraints = tuple(
+            constraint for constraint in constraints if not constraint.linear
+        )
+
+        # wrap nonlinear constraints if necessary
+        if len(nonlinear_constraints) > 0 and (
+            self.method not in Optimizer._constrained_methods
+        ):
+            for constraint in nonlinear_constraints:
+                if not isinstance(
+                    constraint, (ForceBalance, RadialForceBalance, HelicalForceBalance)
+                ):
+                    raise ValueError(
+                        "optimizer method {} ".format(self.method)
+                        + "cannot handle general nonlinear constraint {}.".format(
+                            constraint
+                        )
+                    )
+            objective = WrappedEquilibriumObjective(
+                objective,
+                eq_objective=ObjectiveFunction(nonlinear_constraints),
+                perturb_options=options.pop("perturb_options", {}),
+                solve_options=options.pop("solve_options", {}),
+            )
+
+        if not objective.built:
+            objective.build(eq, verbose=verbose)
+        if not objective.compiled:
+            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+            objective.compile(mode, verbose)
+        for constraint in linear_constraints:
+            if not constraint.built:
+                constraint.build(eq, verbose=verbose)
+
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             raise ValueError(
                 colored(
@@ -206,56 +250,6 @@ class Optimizer(IOAble):
                 )
             )
 
-        # TODO: require user to pass eq to build this?
-        # TODO: or do we always assume constraints is a single thing not a list?
-        nonlinear_constraints = [
-            constraint for constraint in constraints if not constraint.linear
-        ]
-        if len(nonlinear_constraints) > 0 and (
-            self.method not in Optimizer._constrained_methods
-        ):
-            for constr in nonlinear_constraints:
-                for obj in constr.objectives:
-                    if isinstance(
-                        objective,
-                        (ForceBalance, RadialForceBalance, HelicalForceBalance),
-                    ):
-                        continue
-                    else:
-                        raise ValueError(
-                            "optimizer method {} cannot handle general nonlinear constraint {}".format(
-                                self.method, obj
-                            )
-                        )
-            if len(nonlinear_contraints) > 1:
-                raise ValueError(
-                    "optimizer method {} can only handle a single equilibrium constraint, got {}".format(
-                        self.method, nonlinear_constraints
-                    )
-                )
-            objective = WrappedEquilibriumObjective(objective, nonlinear_constraints[0])
-            objective.build(eq)
-        linear_constraints = (
-            constraint for constraint in constraints if constraint.linear
-        )
-
-        if not objective.compiled:
-            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(mode, verbose)
-
-        # need some weird logic because scipy optimizers expect disp={0,1,2}
-        # while we use verbose={0,1,2,3}
-        disp = verbose - 1 if verbose > 1 else verbose
-
-        if self.method in Optimizer._desc_methods:
-            if not isinstance(x_scale, str) and np.allclose(x_scale, 1):
-                options.setdefault("initial_trust_radius", 0.5)
-                options.setdefault("max_trust_radius", 1.0)
-
-        if verbose > 0:
-            print("Starting optimization")
-        timer.start("Solution time")
-
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
@@ -265,6 +259,10 @@ class Optimizer(IOAble):
         timer.stop("linear constraint factorize")
         if verbose > 1:
             timer.disp("linear constraint factorize")
+
+        if verbose > 0:
+            print("Starting optimization")
+        timer.start("Solution time")
 
         def compute_wrapped(x_reduced):
             x = recover(x_reduced)
@@ -289,7 +287,7 @@ class Optimizer(IOAble):
             df = objective.jac(x)
             return df[:, unfixed_idx] @ Z
 
-        x0_reduced = project(x0)
+        x0_reduced = project(objective.x(eq))
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -358,7 +356,7 @@ class Optimizer(IOAble):
                     hess=hess_wrapped,
                     tol=gtol,
                     callback=callback,
-                    options={"maxiter": maxiter, "disp": disp, **options},
+                    options={"maxiter": maxiter, "disp": verbose, **options},
                 )
                 result["allx"] = allx
             except StopIteration:
@@ -397,7 +395,7 @@ class Optimizer(IOAble):
                 xtol=xtol,
                 gtol=gtol,
                 max_nfev=maxiter,
-                verbose=disp,
+                verbose=verbose,
             )
             result["allx"] = allx
 
@@ -420,7 +418,7 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=disp,
+                verbose=verbose,
                 maxiter=maxiter,
                 callback=None,
                 options=options,
@@ -437,7 +435,7 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=disp,
+                verbose=verbose,
                 maxiter=maxiter,
                 callback=None,
                 options=options,

@@ -78,9 +78,7 @@ def factorize_linear_constraints(constraints, dim_x, x_idx):
         arg = obj.args[0]
         constraint_args.append(arg)
         if obj.fixed:
-            # if we're fixing something that's not in x, ignore it
-            if obj.target_arg in x_idx.keys():
-                xp = put(xp, x_idx[obj.target_arg], obj.target)
+            xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
             A_ = obj.derivatives[arg]

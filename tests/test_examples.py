@@ -74,9 +74,7 @@ def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    objective = ObjectiveFunction(
-        AspectRatio(target=3),
-    )
+    objective = ObjectiveFunction(AspectRatio(target=3))
     constraints = get_fixed_boundary_constraints()
     perturb_options = {"dZb": True, "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1])}
     eq = eq.optimize(objective, constraints, perturb_options=perturb_options)

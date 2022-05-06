@@ -1,5 +1,6 @@
-from desc.backend import jnp, put
 from scipy.linalg import block_diag
+
+from desc.backend import jnp, put
 from desc.utils import svd_inv_null
 from desc.compute import arg_order
 from .objective_funs import ObjectiveFunction
@@ -26,7 +27,6 @@ def get_fixed_boundary_constraints(mode="lcfs"):
         A list of the linear constraints used in fixed-boundary problems.
 
     """
-
     constraints = (
         LambdaGauge(),
         FixedPressure(),
@@ -68,17 +68,21 @@ def factorize_linear_constraints(constraints, dim_x, x_idx):
     b = {}
     Ainv = {}
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
+    constraint_args = []  # all args used in constraints
+    unfixed_args = []  # subset of constraint args for unfixed objectives
 
     # A matrices for each unfixed constraint
     for obj in constraints:
+        if len(obj.args) > 1:
+            raise ValueError("Non-fixed constraints must have only 1 argument.")
+        arg = obj.args[0]
+        constraint_args.append(arg)
         if obj.fixed:
             # if we're fixing something that's not in x, ignore it
             if obj.target_arg in x_idx.keys():
                 xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
-            if len(obj.args) > 1:
-                raise ValueError("Non-fixed constraints must have only 1 argument.")
-            arg = obj.args[0]
+            unfixed_args.append(arg)
             A_ = obj.derivatives[arg]
             b_ = obj.target
             if A_.shape[0]:
@@ -88,6 +92,13 @@ def factorize_linear_constraints(constraints, dim_x, x_idx):
             A[arg] = A_
             b[arg] = b_
             Ainv[arg] = Ainv_
+
+    # catch any arguments that are not constrained
+    for arg in x_idx.keys():
+        if arg not in constraint_args:
+            unfixed_args.append(arg)
+            A[arg] = jnp.zeros((1, constraints[0].dimensions[arg]))
+            b[arg] = jnp.zeros((1,))
 
     # full A matrix for all unfixed constraints
     unfixed_idx = jnp.concatenate([x_idx[arg] for arg in arg_order if arg in A.keys()])

@@ -1,8 +1,6 @@
 import numpy as np
 import warnings
 import numbers
-import inspect
-from copy import deepcopy
 from termcolor import colored
 from collections.abc import MutableSequence
 
@@ -11,14 +9,13 @@ from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.optimize.utils import check_termination
-from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
 from desc.objectives import (
+    ForceBalance,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
-from desc.perturbations import perturb, optimal_perturb
+from desc.perturbations import perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -220,9 +217,9 @@ class Equilibrium(_Configuration, IOAble):
     # TODO: add a copy argument?
     def solve(
         self,
-        optimizer=None,
         objective=None,
         constraints=None,
+        optimizer=None,
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
@@ -235,10 +232,10 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        optimizer : Optimizer
-            Optimization algorithm. Default = lsq-exact.
         objective : ObjectiveFunction
             Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -262,24 +259,17 @@ class Equilibrium(_Configuration, IOAble):
             Level of output.
 
         """
-        if optimizer is None:
-            optimizer = Optimizer("lsq-exact")
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(self.bdry_mode)
+            constraints = get_fixed_boundary_constraints()
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
 
-        if not objective.built:
-            objective.build(self, verbose=verbose)
-        for constraint in constraints:
-            if not constraint.built:
-                constraint.build(self, verbose=verbose)
-
-        x0 = objective.x(self)
         result = optimizer.optimize(
+            self,
             objective,
             constraints,
-            x0=x0,
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -291,7 +281,89 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(x0)
+            objective.callback(result["allx"][0])
+            print("End of solver")
+            objective.callback(result["x"])
+
+        for key, value in objective.unpack_state(result["x"]).items():
+            value = put(  # parameter values below threshold are set to 0
+                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+            )
+            setattr(self, key, value)
+        self.solved = result["success"]
+        return result
+
+    def optimize(
+        self,
+        objective=None,
+        constraints=None,
+        optimizer=None,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        maxiter=50,
+        x_scale="auto",
+        options={},
+        verbose=1,
+    ):
+        """Optimize an equilibrium for an objective.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on step size.
+        gtol : float
+            Stopping tolerance on norm of gradient.
+        maxiter : int
+            Maximum number of solver steps.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
+        options : dict
+            Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output.
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Optimized equilibrum.
+
+        """
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+            constraints = (ForceBalance(), *constraints)
+
+        result = optimizer.optimize(
+            self,
+            objective,
+            constraints,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            x_scale=x_scale,
+            verbose=verbose,
+            maxiter=maxiter,
+            options=options,
+        )
+
+        if verbose > 0:
+            print("Start of solver")
+            objective.callback(result["allx"][0])
             print("End of solver")
             objective.callback(result["x"])
 
@@ -351,7 +423,7 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(self.bdry_mode)
+            constraints = get_fixed_boundary_constraints()
 
         if not objective.built:
             objective.build(self, verbose=verbose)
@@ -381,166 +453,6 @@ class Equilibrium(_Configuration, IOAble):
         if copy:
             return eq
         else:
-            return self
-
-    def optimize(
-        self,
-        objective,
-        constraint=None,
-        optimizer=None,
-        ftol=1e-6,
-        xtol=1e-6,
-        maxiter=50,
-        x_scale="auto",
-        verbose=1,
-        copy=True,
-        solve_options={},
-        perturb_options={},
-    ):
-        """Optimize an equilibrium for an objective.
-
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        constraint : ObjectiveFunction
-            Objective function to satisfy.
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on optimization step size.
-        maxiter : int
-            Maximum number of optimization steps.
-        verbose : int
-            Level of output.
-        copy : bool, optional
-            Whether to update the existing equilibrium or make a copy (Default).
-        solve_options : dict
-            Dictionary of additional options used in Equilibrium.solve().
-        perturb_options : dict
-            Dictionary of additional options used in Equilibrium.perturb().
-
-        Returns
-        -------
-        eq_new : Equilibrium
-            Optimized equilibrum.
-
-        """
-        if constraint is None:
-            constraint = get_equilibrium_objective()
-
-        if not isinstance(constraint, tuple):
-            constraint = (constraint,)
-        timer = Timer()
-        timer.start("Total time")
-
-        eq = self
-        if not objective.built:
-            objective.build(eq)
-        for c in constraint:
-            if not c.built:
-                c.build(eq)
-
-        cost = objective.compute_scalar(objective.x(eq))
-        perturb_options = deepcopy(perturb_options)
-        tr_ratio = perturb_options.get(
-            "tr_ratio",
-            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
-        )
-
-        if verbose > 0:
-            objective.callback(objective.x(eq))
-
-        iteration = 1
-        success = None
-        while success is None:
-
-            timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
-
-            # perturb + solve
-            (
-                eq_new,
-                predicted_reduction,
-                dc_opt,
-                dc,
-                c_norm,
-                bound_hit,
-            ) = optimal_perturb(
-                eq,
-                constraint,
-                objective,
-                copy=True,
-                **perturb_options,
-            )
-            eq_new.solve(objective=constraint, **solve_options)
-
-            # update trust region radius
-            cost_new = objective.compute_scalar(objective.x(eq_new))
-            actual_reduction = cost - cost_new
-            trust_radius, ratio = update_tr_radius(
-                tr_ratio[0] * c_norm,
-                actual_reduction,
-                predicted_reduction,
-                np.linalg.norm(dc_opt),
-                bound_hit,
-            )
-            tr_ratio[0] = trust_radius / c_norm
-            perturb_options["tr_ratio"] = tr_ratio
-
-            timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.callback(objective.x(eq_new))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
-
-            # stopping criteria
-            success, message = check_termination(
-                actual_reduction,
-                cost,
-                np.linalg.norm(dc),
-                c_norm,
-                np.inf,  # TODO: add g_norm
-                ratio,
-                ftol,
-                xtol,
-                0,  # TODO: add gtol
-                iteration,
-                maxiter,
-                0,
-                np.inf,
-                0,
-                np.inf,
-                0,
-                np.inf,
-            )
-            if actual_reduction > 0:
-                eq = eq_new
-                cost = cost_new
-            if success is not None:
-                break
-
-            iteration += 1
-
-        timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
-
-        if copy:
-            return eq
-        else:
-            for attr in self._io_attrs_:
-                setattr(self, attr, getattr(eq, attr))
             return self
 
 
@@ -694,7 +606,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints(self.inputs[ii]["bdry_mode"])
+            constraints = get_fixed_boundary_constraints()
 
             if ii == start_from:
                 equil = self[ii]

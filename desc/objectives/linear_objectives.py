@@ -49,7 +49,7 @@ class FixedBoundaryR(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "R boundary error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1, opt=False):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -90,13 +90,10 @@ class FixedBoundaryR(_Objective):
 
         self._dim_f = idx.size
 
-        if opt:  # Rb_lmn -> Zb optimization space
-            self._A = np.eye(self._dim_f)[idx, :]
-        else:  # R_lmn -> Rb_lmn boundary condition
-            self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-            for i, (l, m, n) in enumerate(eq.R_basis.modes):
-                j = np.argwhere((modes == [l, m, n]).all(axis=1))
-                self._A[j, i] = 1
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        for i, (l, m, n) in enumerate(eq.R_basis.modes):
+            j = np.argwhere((modes == [l, m, n]).all(axis=1))
+            self._A[j, i] = 1
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
@@ -167,7 +164,7 @@ class FixedBoundaryZ(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Z boundary error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1, opt=False):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -208,13 +205,10 @@ class FixedBoundaryZ(_Objective):
 
         self._dim_f = idx.size
 
-        if opt:  # Zb_lmn -> Zb optimization space
-            self._A = np.eye(self._dim_f)[idx, :]
-        else:  # Z_lmn -> Zb_lmn boundary condition
-            self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
-            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-                j = np.argwhere((modes == [l, m, n]).all(axis=1))
-                self._A[j, i] = 1
+        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+            j = np.argwhere((modes == [l, m, n]).all(axis=1))
+            self._A[j, i] = 1
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:

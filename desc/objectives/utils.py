@@ -5,20 +5,17 @@ from desc.utils import svd_inv_null
 from desc.compute import arg_order
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
+    FixedBoundaryR,
+    FixedBoundaryZ,
     LambdaGauge,
-    PoincareLambda,
     FixedPressure,
     FixedIota,
     FixedPsi,
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
 )
 from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
 
 
-def get_fixed_boundary_constraints(mode="lcfs"):
+def get_fixed_boundary_constraints():
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Returns
@@ -28,17 +25,13 @@ def get_fixed_boundary_constraints(mode="lcfs"):
 
     """
     constraints = (
+        FixedBoundaryR(),
+        FixedBoundaryZ(),
         LambdaGauge(),
         FixedPressure(),
         FixedIota(),
         FixedPsi(),
     )
-    if mode == "lcfs":
-        constraints += (LCFSBoundaryR(), LCFSBoundaryZ())
-    elif mode == "poincare":
-        constraints += (PoincareBoundaryR(), PoincareBoundaryZ())
-    else:
-        raise ValueError("got an unknown boundary condition type '{}'".format(mode))
     return constraints
 
 

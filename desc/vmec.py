@@ -13,8 +13,8 @@ from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
     ObjectiveFunction,
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
+    FixedBoundaryR,
+    FixedBoundaryZ,
     factorize_linear_constraints,
 )
 from desc.vmec_utils import (
@@ -116,7 +116,7 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        constraints = (LCFSBoundaryR(), LCFSBoundaryZ())
+        constraints = (FixedBoundaryR(), FixedBoundaryZ())
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             constraints, objective.dim_x, objective.x_idx

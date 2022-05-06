@@ -1,11 +1,9 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
-    LambdaGauge,
+    FixedBoundaryR,
+    FixedBoundaryZ,
     PoincareLambda,
+    LambdaGauge,
     FixedPressure,
     FixedIota,
     FixedPsi,
@@ -40,10 +38,8 @@ from ._wrappers import WrappedEquilibriumObjective
 
 __all__ = [
     "ObjectiveFunction",
-    "LCFSBoundaryR",
-    "LCFSBoundaryZ",
-    "PoincareBoundaryR",
-    "PoincareBoundaryZ",
+    "FixedBoundaryR",
+    "FixedBoundaryZ",
     "PoincareLambda",
     "LambdaGauge",
     "FixedPressure",

@@ -55,7 +55,7 @@ class ObjectiveFunction(IOAble):
             self._args = np.concatenate(
                 (self.args, np.concatenate([obj.args for obj in self.constraints]))
             )
-        self._args = np.unique(self.args)
+        self._args = [arg for arg in arg_order if arg in self._args]
 
         self._dimensions = self.objectives[0].dimensions
 
@@ -100,7 +100,8 @@ class ObjectiveFunction(IOAble):
                 if len(obj.args) > 1:
                     raise ValueError("Non-fixed constraints must have only 1 argument.")
                 arg = obj.args[0]
-                A = obj.derivatives[arg]
+                args = [np.zeros((obj.dimensions[arg])) for arg in obj.args]
+                A = obj.derivatives["jac"][arg](*args)
                 b = obj.target
                 if A.shape[0]:
                     Ainv, Z = svd_inv_null(A)
@@ -133,6 +134,35 @@ class ObjectiveFunction(IOAble):
             Whether to just-in-time compile the objective and derivatives.
 
         """
+
+        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
+        for arg in self.args:
+            self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.hstack(
+                [
+                    obj.derivatives["jac"][arg](
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                    )
+                    for obj in self.objectives
+                ]
+            )
+            self._derivatives["grad"][arg] = lambda x, arg=arg: jnp.sum(jnp.concatenate(
+                [
+                    obj.derivatives["grad"][arg](
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                    )
+                    for obj in self.objectives
+                ],
+                axis=0,
+            ))
+            self._derivatives["hess"][arg] = lambda x, arg=arg: jnp.sum(jnp.concatenate(
+                [
+                    obj.derivatives["hess"][arg](
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                    )
+                    for obj in self.objectives
+                ],
+                axis=0,
+            ))
         self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
         self._hess = Derivative(
             self.compute_scalar,
@@ -230,6 +260,10 @@ class ObjectiveFunction(IOAble):
                 self._b[arg] = b
                 self._x0 = put(self._x0, self._x_idx[arg], jnp.dot(self.Ainv[arg], b))
 
+    def _kwargs_to_args(self, kwargs, args):
+        tuple_args = (kwargs[arg] for arg in args)
+        return tuple_args
+
     def compute(self, x):
         """Compute the objective function.
 
@@ -245,7 +279,12 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x)
-        f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
+        f = jnp.concatenate(
+            [
+                obj.compute(*self._kwargs_to_args(kwargs, obj.args))
+                for obj in self.objectives
+            ]
+        )
         if f.size > 1:
             return f
         else:
@@ -307,7 +346,7 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self.args:
-            kwargs[arg] = x[self.x_idx[arg]]
+            kwargs[arg] = jnp.atleast_1d(x[self.x_idx[arg]])
         return kwargs
 
     def project(self, x):
@@ -343,16 +382,16 @@ class ObjectiveFunction(IOAble):
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._grad.compute(x)
+        return jnp.concatenate([jnp.atleast_1d(self._derivatives["grad"][arg](x)) for arg in self.args])
 
     def hess(self, x):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
         # TODO: add block method
-        return self._hess.compute(x)
+        return self._hess(x)
 
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        J = self._jac.compute(x)
+        J = jnp.hstack([self._derivatives["jac"][arg](x) for arg in self.args])
         if self.scalar:
             return np.atleast_2d(J)
         else:
@@ -607,8 +646,7 @@ class _Objective(IOAble, ABC):
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""
-        self._derivatives = {}
-        self._scalar_derivatives = {}
+        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         # only used for linear objectives so variable values are irrelevant
@@ -627,26 +665,34 @@ class _Objective(IOAble, ABC):
         # constant derivatives are pre-computed, otherwise set up Derivative instance
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
-                self._derivatives[arg] = Derivative(
+                self._derivatives["jac"][arg] = Derivative(
                     self.compute,
                     argnum=self.args.index(arg),
                     mode="fwd",
                     use_jit=use_jit,
                 )
-                self._scalar_derivatives[arg] = Derivative(
+                self._derivatives["grad"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
-                    mode="fwd",
+                    mode="grad",
                     use_jit=use_jit,
                 )
-                if self.linear:  # linear objectives have constant derivatives
-                    self._derivatives[arg] = self._derivatives[arg].compute(*args)
-                    self._scalar_derivatives[arg] = self._scalar_derivatives[
-                        arg
-                    ].compute(*args)
+                self._derivatives["hess"][arg] = Derivative(
+                    self.compute_scalar,
+                    argnum=self.args.index(arg),
+                    mode="hess",
+                    use_jit=use_jit,
+                )
             else:  # these derivatives are always zero
-                self._derivatives[arg] = np.zeros((self.dim_f, self.dimensions[arg]))
-                self._scalar_derivatives[arg] = np.zeros((1, self.dimensions[arg]))
+                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (self.dim_f, self.dimensions[arg])
+                )
+                self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (1, self.dimensions[arg])
+                )
+                self._derivatives["hess"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (self.dimensions[arg], self.dimensions[arg])
+                )
 
         if use_jit:
             self.compute = jit(self.compute)
@@ -687,11 +733,8 @@ class _Objective(IOAble, ABC):
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
-        if self.scalar:
-            f = self.compute(*args, **kwargs)
-        else:
-            f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
-        return f
+        f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
+        return f.squeeze()
 
     def callback(self, *args, **kwargs):
         """Print the value of the objective."""

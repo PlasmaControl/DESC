@@ -418,8 +418,8 @@ class _Objective(IOAble, ABC):
         self._dimensions["p_l"] = eq.pressure.params.size
         self._dimensions["i_l"] = eq.iota.params.size
         self._dimensions["Psi"] = 1
-        self._dimensions["R_lmn"] = eq.surface.R_basis.num_modes
-        self._dimensions["Z_lmn"] = eq.surface.Z_basis.num_modes
+        self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
+        self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""

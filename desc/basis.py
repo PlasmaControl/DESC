@@ -1415,8 +1415,28 @@ def zernike_norm(l, m):
 
 
 def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
-    """Takes a 3D FourierZernike basis and its coefficients X_lmn and evaluates the coefficients at
-    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficients X_lmn"""
+    """Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the coefficients at
+    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficients X_lmn_2D
+
+    Parameters
+    ----------
+    X_lmn_3D : array, size [num_modes,3]
+        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find the 2D ZernikePolynomial basis
+        corresponding to the quantity's value at the zeta=0 cross-section
+    basis_3D : FourierZernikeBasis
+        The Fourier-Zernike basis corresponding to the coefficients passed.
+
+    Returns
+    -------
+    X_lmn_2D : array, size [num_modes,3]
+        The ZernikePolynomial basis coefficients of the quantity X, such that their evaluation is the same
+        as the input 3D basis when evaluated at zeta=0. The toroidal modenumbers X_lmn_2D[:,2] are all equal to zero
+
+    basis_2D : FourierZernikeBasis
+        The ZernikePolynomial basis corresponding to the coefficients output. The radial resolution L and poloidal resolution M are
+        equal to the max radial and poloidal resolutions of the 3D basis passed as an input.
+
+    """
     # Add up all the X_lm(n>=0) modes
     # so that the quantity at the zeta=0 surface is described with just lm modes
     # and get rid of the toroidal modes

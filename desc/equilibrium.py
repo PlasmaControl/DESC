@@ -262,6 +262,16 @@ class Equilibrium(_Configuration, IOAble):
         verbose : int
             Level of output.
 
+        Returns
+        -------
+        result : OptimizeResult
+            The optimization result represented as a ``OptimizeResult`` object.
+            Important attributes are: ``x`` the solution array, ``success`` a
+            Boolean flag indicating if the optimizer exited successfully and
+            ``message`` which describes the cause of the termination. See
+            `OptimizeResult` for a description of other attributes.
+
+
         """
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
@@ -272,6 +282,18 @@ class Equilibrium(_Configuration, IOAble):
                 objective = get_force_balance_poincare_objective()
         if not objective.built:
             objective.build(self, verbose=verbose)
+
+        if self.N > 0 and self.N_grid == 0:
+            warnings.warn(
+                colored(
+                    "Equilibrium has nonzero toroidal spectral resolution "
+                    + "But has no toroidal collocation grid resolution! "
+                    + "This would result in a failed equilibrium solve."
+                    + "Setting toroidal grid resolution to toroidal spectral resolution, eq.N_grid=eq.N",
+                    "yellow",
+                )
+            )
+            self.N_grid = self.N
 
         x0 = objective.x(self)
         result = optimizer.optimize(

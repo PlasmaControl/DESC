@@ -241,3 +241,10 @@ def test_poincare_sfl_bc(
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     np.testing.assert_allclose(rho_err, 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-2)
+
+
+def test_no_toroidal_grid_warning(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.change_resolution(N=1)
+    with pytest.warns(Warning):
+        eq.solve(ftol=1e-2, maxiter=2)

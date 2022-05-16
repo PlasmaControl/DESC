@@ -243,8 +243,25 @@ def test_poincare_sfl_bc(
     np.testing.assert_allclose(theta_err, 0, atol=1e-2)
 
 
-def test_no_toroidal_grid_warning(SOLOVEV):
+def test_grid_resolution_warning(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    eq.change_resolution(N=1)
+    eqN = eq.copy()
+    eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):
-        eq.solve(ftol=1e-2, maxiter=2)
+        eqN.solve(ftol=1e-2, maxiter=2)
+    eqM = eq.copy()
+    eqM.change_resolution(M=eq.M, M_grid=eq.M - 1)
+    with pytest.warns(Warning):
+        eqM.solve(ftol=1e-2, maxiter=2)
+    eqL = eq.copy()
+    eqL.change_resolution(L=eq.L, L_grid=eq.L - 1)
+    with pytest.warns(Warning):
+        eqL.solve(ftol=1e-2, maxiter=2)
+
+
+def test_eq_change_grid_resolution(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
+    assert eq.L_grid == 10
+    assert eq.M_grid == 10
+    assert eq.N_grid == 10

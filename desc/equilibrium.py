@@ -219,6 +219,43 @@ class Equilibrium(_Configuration, IOAble):
             )
         )
 
+    def change_resolution(
+        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None
+    ):
+        """Set the spectral resolution and real space grid resolution.
+        Parameters
+        ----------
+        L : int
+            maximum radial zernike mode number
+        M : int
+            maximum poloidal fourier mode number
+        N : int
+            maximum toroidal fourier mode number
+        L_grid : int
+            radial real space grid resolution
+        M_grid : int
+            poloidal real space grid resolution
+        N_grid : int
+            toroidal real space grid resolution
+        """
+        L_change = M_change = N_change = False
+        if L is not None and L != self.L:
+            L_change = True
+        if M is not None and M != self.M:
+            M_change = True
+        if N is not None and N != self.N:
+            N_change = True
+
+        if any([L_change, M_change, N_change]):
+            super().change_resolution(L, M, N)
+
+        if L_grid is not None and L_grid != self.L_grid:
+            self._L_grid = L_grid
+        if M_grid is not None and M_grid != self.M_grid:
+            self._M_grid = M_grid
+        if N_grid is not None and N_grid != self.N_grid:
+            self._N_grid = N_grid
+
     # TODO: add a copy argument?
     def solve(
         self,
@@ -283,18 +320,18 @@ class Equilibrium(_Configuration, IOAble):
         if not objective.built:
             objective.build(self, verbose=verbose)
 
-        if self.N > 0 and self.N_grid == 0:
+        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
+
             warnings.warn(
                 colored(
-                    "Equilibrium has nonzero toroidal spectral resolution "
-                    + "But has no toroidal collocation grid resolution! "
-                    + "This would result in a failed equilibrium solve."
-                    + "Setting toroidal grid resolution to toroidal spectral resolution, eq.N_grid=eq.N",
+                    "Equilibrium has one or more spectral resolutions "
+                    + "less than the corresponding collocation grid resolution! "
+                    + "This is not recommended and may result in poor convergence. "
+                    + "Set grid resolutions to be higher,( i.e. like eq.N_grid=2*eq.N ) "
+                    + "To avoid this warning. "
                     "yellow",
                 )
             )
-            self.N_grid = self.N
-
         x0 = objective.x(self)
         result = optimizer.optimize(
             objective,

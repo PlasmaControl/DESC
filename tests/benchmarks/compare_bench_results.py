@@ -65,7 +65,7 @@ for i, pct in enumerate(delta_times_pct):
         pass
 
 # now make the commit message, save as a txt file
-# benchmark_name dt(%) dt(ms) t_new(ms) t_old(ms)
+# benchmark_name dt(%) dt(s) t_new(s) t_old(s)
 print(latest_commit_index)
 print(master_commit_index)
 commit_msg_lines = []
@@ -73,7 +73,7 @@ commit_msg_lines = []
 commit_msg_lines.append("```diff\n")
 
 commit_msg_lines.append(
-    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(ms)":>15}\t{"t_new(ms)":>16}\t{"t_old(ms)":>9}\n'
+    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(s)":>15}\t{"t_new(s)":>16}\t{"t_old(s)":>9}\n'
 )
 for i, (dt, dpct) in enumerate(zip(delta_times_ms, delta_times_pct)):
 

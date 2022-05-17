@@ -9,7 +9,12 @@ To use, run either the run_pylint_linting.sh or run_flake8_linting.sh scripts
 
 These will generate a pylint.output file, or flake8_errors.ouput and flake8_summary.output files.
 
-Currently, black is still ran through github actions
+Currently, black is still ran through github actions.
+
+Most formatting-level errors are being supressed; errors that touch the code logic are primarily the ones being raised.
+
+Currently, black is still ran through github actions.
+
 
 
 Outputs
@@ -34,13 +39,14 @@ Configuration
 =============
 Flake8
 ------
-Currently, no error messages are disabled, but error signatures of the format "E302" can be added to flake.ini after "ignore=" seperated by commas
+
+Currently, error messages about whitespace and indenting that black does not care about have been supressed.  
+These will be fixed in a future cleanup branch.
+More errors can be added to the [flake8] section of settings.cfg after "ignore=", seperated by commas.
 
 Pylint:
 -------
-To disable certain classes of error message, go to the [MESSAGES] section of pylinrc, and add the error to "disable=" separated by commas
+Currently several classes of error are being supressed, mostly to do with preferring encapsulating behavior into simpler classes and modules.
+To disable certain classes of error message, go to the [MESSAGES] section of pylinrc, and add the error to "disable=" separated by commas.
+Additionally, several very minor errors are being supressed to be fixed in a future cleanup branch.
 
-Currently the only suppressed errors are 
-	1.  'invalid-name', which can be used to specify with regex how functions, objects, attributes, and variable names should look
-		This can be defined under the [BASIC] section of pylinrc; currently common defaults that disagree with DESC are there
-	2.  Various errors that have strong opinions on how objects should inhereit, and what objects should really be functions

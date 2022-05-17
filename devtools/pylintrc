@@ -60,12 +60,42 @@ confidence=
 # Kubeflow disables string-interpolation because we are starting to use f
 # style strings
 disable=
+	#Settings that prefer simpler code practices and logic
 	too-many-locals,
+	too-many-arguments,
 	too-many-instance-attributes,
+	too-many-statements,
+	too-many-branches,
+	too-many-lines,
+	too-many-public-methods,
+	too-many-nested-blocks,
+	too-many-function-args,
+	consider-using-with,
+	consider-using-dict-items,
+	consider-using-enumerate,
+	consider-using-generator,
+	consider-using-f-string,
+	consider-using-set-comprehension,
+	consider-iterating-dictionary,
+
+	#Settings about imports- will clean up in a future branch
+	wrong-import-position,
+	ungrouped-imports,
+	import-outside-toplevel,
+	unused-import,
+	wrong-import-order,
+
+	#Settings that dislike how we handle args and variable names- some might be valid
 	invalid-name,
-	no-self-use,
 	arguments-differ,
-	arguments-renamed
+	arguments-renamed,
+
+	#Settings with minor fixes that will be cleaned up in future branch
+	singleton-comparison,
+	simplifiable-if-statement,
+	pointless-string-statement,
+	trailing-whitespace,
+	consider-swap-variables,
 
 enable=
 

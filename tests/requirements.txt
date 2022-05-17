@@ -3,3 +3,4 @@ pytest-cov >= 2.6.0
 codecov
 pytest-mpl
 pytest-benchmark
+nbmake

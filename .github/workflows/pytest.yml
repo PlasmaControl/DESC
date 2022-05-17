@@ -37,6 +37,11 @@ jobs:
           pwd
           lscpu
           python -m pytest --durations=0 --cov-report xml:cov.xml --cov=desc/ --mpl
+      - name: Test notebooks with pytest and nbmake
+        run: |
+          pwd
+          lscpu
+          pytest --nbmake "./docs/notebooks" --nbmake-timeout=120
       - name: save coverage file
         uses: actions/upload-artifact@v2
         with:

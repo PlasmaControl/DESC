@@ -4,6 +4,7 @@ import pytest
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
+from tests.test_equilibrium import _compute_coords, area_difference
 
 
 class TestProfiles(unittest.TestCase):
@@ -18,9 +19,15 @@ class TestProfiles(unittest.TestCase):
         eq2.iota = eq1.iota.to_spline()
 
         eq1.solve()
-        # eq2.solve()  # FIXME: spline profiles not supported yet
+        eq2.solve()
 
-        assert True  # TODO: add test to check that spline profiles give same result
+        Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq1, check_all_zeta=True)
+        Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq2, check_all_zeta=True)
+        rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+        np.testing.assert_allclose(rho_err, 0, atol=1e-13)
+        np.testing.assert_allclose(theta_err, 0, atol=1e-16)
+
+        assert True
 
     @pytest.mark.slow
     def test_close_values(self):

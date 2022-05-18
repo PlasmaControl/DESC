@@ -4,7 +4,7 @@ import pytest
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
-from test_equilibrium import _compute_coords, area_difference
+from tests.test_equilibrium import _compute_coords, area_difference
 
 
 class TestProfiles(unittest.TestCase):

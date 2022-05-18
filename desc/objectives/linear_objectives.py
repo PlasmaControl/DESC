@@ -332,12 +332,9 @@ class FixedPressure(_Objective):
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = eq.pressure
-        # if not isinstance(self._profile, PowerSeriesProfile):
-        #     raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
-        #     # TODO: add implementation for SplineProfile & MTanhProfile
 
         if isinstance(self._profile, PowerSeriesProfile):
-            # find inidies of pressure modes to fix
+            # find indices of pressure modes to fix
             if self._modes is False or self._modes is None:  # no modes
                 modes = np.array([[]], dtype=int)
                 self._idx = np.array([], dtype=int)
@@ -377,30 +374,43 @@ class FixedPressure(_Objective):
                 self.target = self._profile.params[self._idx]
 
         elif isinstance(self._profile, SplineProfile):
+            # for spline profile, params = values of the profile at the knot locations
+            # and the passed-in modes are actually the desired values at the knot locations
+
             # find indices of pressure values to fix
+            print(self._modes)
             if self._modes is False or self._modes is None:  # no values
                 values = np.array([[]], dtype=int)
                 self._idx = np.array([], dtype=int)
                 idx = self._idx
-            elif self._modes is True:  # all values in profile
+            elif self._modes is True:  # all values/knot locations in profile
                 values = self._profile.params
                 self._idx = np.arange(len(self._profile.params))
                 idx = self._idx
             else:  # specified values
-                values = np.atleast_2d(self._params)
+                # FIXME: not tested and also not sure of what we want to do here
+                # we want to be able to I assume fix profile values at certain knot
+                # locations but not others (like keep core fixed vary edge etc)
+                # in this setup, _modes would be the knot locations we want fixed?
+                # I think it would just be that but I am not completely sure
+                # might only make sense if target is also supplied?
+                raise NotImplementedError(
+                    f"Specifying specific values for SplineProfile is not implemented yet."
+                )
+                knots = np.atleast_2d(self._modes)
                 dtype = {
                     "names": ["f{}".format(i) for i in range(3)],
                     "formats": 3 * [values.dtype],
                 }
                 _, self._idx, idx = np.intersect1d(
-                    self._profile.params.astype(values.dtype).view(dtype),
+                    self._profile._knots.astype(knots.dtype).view(dtype),
                     values.view(dtype),
                     return_indices=True,
                 )
-                if self._idx.size < values.shape[0]:
+                if self._idx.size < knots.shape[0]:
                     warnings.warn(
                         colored(
-                            "Some of the given modes are not in the pressure profile, "
+                            "Some of the given knots are not in the pressure profile, "
                             + "these modes will not be fixed.",
                             "yellow",
                         )
@@ -505,9 +515,6 @@ class FixedIota(_Objective):
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = eq.iota
-        # if not isinstance(self._profile, PowerSeriesProfile):
-        #     raise NotImplementedError("profile must be of type `PowerSeriesProfile`")
-        #     # TODO: add implementation for SplineProfile & MTanhProfile
 
         if isinstance(self._profile, PowerSeriesProfile):
             # find inidies of iota modes to fix
@@ -520,6 +527,7 @@ class FixedIota(_Objective):
                 self._idx = np.arange(self._profile.basis.num_modes)
                 idx = self._idx
             else:  # specified modes
+                raise
                 modes = np.atleast_2d(self._modes)
                 dtype = {
                     "names": ["f{}".format(i) for i in range(3)],
@@ -551,6 +559,8 @@ class FixedIota(_Objective):
                 self.target = self._profile.params[self._idx]
 
         elif isinstance(self._profile, SplineProfile):
+            # FIXME: same things as in FixedPressure
+
             # find indices of pressure values to fix
             if self._modes is False or self._modes is None:  # no values
                 values = np.array([[]], dtype=int)
@@ -561,20 +571,29 @@ class FixedIota(_Objective):
                 self._idx = np.arange(len(self._profile.params))
                 idx = self._idx
             else:  # specified values
-                values = np.atleast_2d(self._params)
+                # FIXME: not tested and also not sure of what we want to do here
+                # we want to be able to I assume fix profile values at certain knot
+                # locations but not others (like keep core fixed vary edge etc)
+                # in this setup, _modes would be the knot locations we want fixed?
+                # I think it would just be that but I am not completely sure
+                # might only make sense if target is also supplied?
+                raise NotImplementedError(
+                    f"Specifying specific values for SplineProfile is not implemented yet."
+                )
+                knots = np.atleast_2d(self._modes)
                 dtype = {
                     "names": ["f{}".format(i) for i in range(3)],
                     "formats": 3 * [values.dtype],
                 }
                 _, self._idx, idx = np.intersect1d(
-                    self._profile.params.astype(values.dtype).view(dtype),
+                    self._profile._knots.astype(knots.dtype).view(dtype),
                     values.view(dtype),
                     return_indices=True,
                 )
-                if self._idx.size < values.shape[0]:
+                if self._idx.size < knots.shape[0]:
                     warnings.warn(
                         colored(
-                            "Some of the given modes are not in the pressure profile, "
+                            "Some of the given knots are not in the pressure profile, "
                             + "these modes will not be fixed.",
                             "yellow",
                         )

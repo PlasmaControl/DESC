@@ -42,7 +42,7 @@ jobs:
           pwd
           lscpu
           export PYTHONPATH=$(pwd)
-          pytest --nbmake "./docs/notebooks" --nbmake-timeout=120
+          pytest --nbmake "./docs/notebooks" --nbmake-timeout=240
       - name: save coverage file
         uses: actions/upload-artifact@v2
         with:

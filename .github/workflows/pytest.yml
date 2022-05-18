@@ -39,11 +39,11 @@ jobs:
           python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl
       - name: Test notebooks with pytest and nbmake
         if: ${{ matrix.python-version == '3.9' }}
-          run: |
-            pwd
-            lscpu
-            export PYTHONPATH=$(pwd)
-            pytest --nbmake "./docs/notebooks" --nbmake-timeout=240
+        run: |
+          pwd
+          lscpu
+          export PYTHONPATH=$(pwd)
+          pytest --nbmake "./docs/notebooks" --nbmake-timeout=240
       - name: save coverage file
         uses: actions/upload-artifact@v2
         with:

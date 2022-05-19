@@ -25,7 +25,7 @@ class TestProfiles(unittest.TestCase):
         Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq2, check_all_zeta=True)
         rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
         np.testing.assert_allclose(rho_err, 0, atol=1e-13)
-        np.testing.assert_allclose(theta_err, 0, atol=1e-16)
+        np.testing.assert_allclose(theta_err, 0, atol=1e-15)
 
         assert True
 

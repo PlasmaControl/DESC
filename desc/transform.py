@@ -716,14 +716,14 @@ class Transform(IOAble):
         return self.basis.num_modes
 
     @property
-    def modes(self):
+    def nodes(self):
         """ndarray: collocation nodes."""
         return self.grid.nodes
 
     @property
-    def nodes(self):
+    def modes(self):
         """ndarray: spectral mode numbers."""
-        return self.basis.nodes
+        return self.basis.modes
 
     @property
     def built(self):

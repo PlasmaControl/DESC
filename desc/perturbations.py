@@ -120,7 +120,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.dim_x, objective.x_idx
+        constraints
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -149,10 +149,11 @@ def perturb(
             np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
         )
     # all other perturbations besides the boundary
-    if len([arg for arg in arg_order if arg in deltas.keys()]):
-        dc = np.concatenate([deltas[arg] for arg in arg_order if arg in deltas.keys()])
+    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
+    if len([arg for arg in other_args if arg in deltas.keys()]):
+        dc = np.concatenate([deltas[arg] for arg in other_args if arg in deltas.keys()])
         x_idx = np.concatenate(
-            [objective.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
+            [objective.x_idx[arg] for arg in other_args if arg in deltas.keys()]
         )
         x_idx.sort(kind="mergesort")
         tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
@@ -291,7 +292,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective.dim_x, objective.x_idx
+        constraints
     )
 
     # update other attributes

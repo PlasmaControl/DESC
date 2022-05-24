@@ -253,8 +253,8 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
-        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            linear_constraints, objective.dim_x, objective.x_idx
+        _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            linear_constraints
         )
         timer.stop("linear constraint factorize")
         if verbose > 1:

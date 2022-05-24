@@ -50,16 +50,11 @@ class ObjectiveFunction(IOAble):
 
         self._dimensions = self.objectives[0].dimensions
 
-        idx = 0
+        self._dim_x = 0
         self._x_idx = {}
-        for arg in arg_order:
-            if arg in self.args:
-                self.x_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
-                idx += self.dimensions[arg]
-            else:
-                self.x_idx[arg] = np.array([], dtype=int)
-
-        self._dim_x = idx
+        for arg in self.args:
+            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
+            self._dim_x += self.dimensions[arg]
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
@@ -428,7 +423,7 @@ class _Objective(IOAble, ABC):
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         # only used for linear objectives so variable values are irrelevant
-        kwargs = dict(
+        kwargs = dict(  # FIXME: need to use dim_x
             [(arg, np.zeros((self.dimensions[arg],))) for arg in self.dimensions.keys()]
         )
         args = [kwargs[arg] for arg in self.args]

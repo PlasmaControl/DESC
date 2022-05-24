@@ -17,6 +17,8 @@ from .objective_funs import _Objective
     - `b` is the desired vector set by `objective.target`
 """
 
+# TODO: need dim_x attribute
+
 
 class FixedBoundaryR(_Objective):
     """Boundary condition on the R boundary parameters."""
@@ -25,7 +27,15 @@ class FixedBoundaryR(_Objective):
     _linear = True
     _fixed = False  # TODO: can we dynamically detect this instead?
 
-    def __init__(self, eq=None, target=None, weight=1, modes=True, name="lcfs R"):
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        fixed_boundary=True,
+        modes=True,
+        name="lcfs R",
+    ):
         """Initialize a FixedBoundaryR Objective.
 
         Parameters
@@ -37,6 +47,9 @@ class FixedBoundaryR(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        fixed_boundary : bool, optional
+            True to enforce the boundary condition on flux surfaces (defualt),
+            or False to fix the boundary surface coefficients.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -45,9 +58,15 @@ class FixedBoundaryR(_Objective):
             Name of the objective function.
 
         """
+        self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "R boundary error: {:10.3e} (m)"
+
+        if self._fixed_boundary:
+            self.compute = self._compute_R
+        else:
+            self.compute = self._compute_Rb
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -90,10 +109,14 @@ class FixedBoundaryR(_Objective):
 
         self._dim_f = idx.size
 
-        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-        for i, (l, m, n) in enumerate(eq.R_basis.modes):
-            j = np.argwhere((modes == [l, m, n]).all(axis=1))
-            self._A[j, i] = 1
+        if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
+            self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+            for i, (l, m, n) in enumerate(eq.R_basis.modes):
+                # FIXME: generalize for Poincare BC
+                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                self._A[j, i] = 1
+        else:  # Rb_lmn -> Rb optimization space
+            self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
@@ -110,22 +133,16 @@ class FixedBoundaryR(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
+    def compute(self, *args, **kwargs):
+        pass
 
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+    def _compute_R(self, R_lmn, **kwargs):
+        Rb = jnp.dot(self._A, R_lmn)
+        return self._shift_scale(Rb)
 
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Rb_lmn = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb_lmn)
+    def _compute_Rb(self, Rb_lmn, **kwargs):
+        Rb = jnp.dot(self._A, Rb_lmn)
+        return self._shift_scale(Rb)
 
     @property
     def target_arg(self):
@@ -140,7 +157,15 @@ class FixedBoundaryZ(_Objective):
     _linear = True
     _fixed = False
 
-    def __init__(self, eq=None, target=None, weight=1, modes=True, name="lcfs Z"):
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        fixed_boundary=True,
+        modes=True,
+        name="lcfs Z",
+    ):
         """Initialize a FixedBoundaryZ Objective.
 
         Parameters
@@ -152,6 +177,9 @@ class FixedBoundaryZ(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
+        fixed_boundary : bool, optional
+            False to enforce the boundary condition on flux surfaces (defualt),
+            or True to fix the boundary surface coefficients.
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -160,9 +188,15 @@ class FixedBoundaryZ(_Objective):
             Name of the objective function.
 
         """
+        self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Z boundary error: {:10.3e} (m)"
+
+        if self._fixed_boundary:
+            self.compute = self._compute_Z
+        else:
+            self.compute = self._compute_Zb
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -205,10 +239,14 @@ class FixedBoundaryZ(_Objective):
 
         self._dim_f = idx.size
 
-        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
-        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-            j = np.argwhere((modes == [l, m, n]).all(axis=1))
-            self._A[j, i] = 1
+        if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
+            self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+                # FIXME: generalize for Poincare BC
+                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                self._A[j, i] = 1
+        else:  # Zb_lmn -> Zb optimization space
+            self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
         if self.target.size == modes.shape[0]:
@@ -225,22 +263,16 @@ class FixedBoundaryZ(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, Z_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
+    def compute(self, *args, **kwargs):
+        pass
 
-        Parameters
-        ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+    def _compute_Z(self, Z_lmn, **kwargs):
+        Zb = jnp.dot(self._A, Z_lmn)
+        return self._shift_scale(Zb)
 
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Zb_lmn = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb_lmn)
+    def _compute_Zb(self, Zb_lmn, **kwargs):
+        Zb = jnp.dot(self._A, Zb_lmn)
+        return self._shift_scale(Zb)
 
     @property
     def target_arg(self):

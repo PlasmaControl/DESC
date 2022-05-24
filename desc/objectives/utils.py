@@ -1,3 +1,4 @@
+import numpy as np
 from scipy.linalg import block_diag
 
 from desc.backend import jnp, put
@@ -55,8 +56,19 @@ def get_equilibrium_objective(mode="force"):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, dim_x, x_idx):
+def factorize_linear_constraints(constraints, extra_args=[]):
     """Compute and factorize A to get pseudoinverse and nullspace."""
+    # set state vector
+    args = np.concatenate([obj.args for obj in constraints])
+    args = np.concatenate((args, extra_args))
+    args = [arg for arg in arg_order if arg in args]
+    dimensions = constraints[0].dimensions
+    dim_x = 0
+    x_idx = {}
+    for arg in args:
+        x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
+        dim_x += dimensions[arg]
+
     A = {}
     b = {}
     Ainv = {}
@@ -101,11 +113,11 @@ def factorize_linear_constraints(constraints, dim_x, x_idx):
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
         x_reduced = jnp.dot(Z.T, (x - xp)[unfixed_idx])
-        return jnp.squeeze(x_reduced)
+        return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
         """Recover the full state vector from the reducted optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
-        return jnp.squeeze(xp + dx)
+        return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover

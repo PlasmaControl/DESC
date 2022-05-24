@@ -82,14 +82,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._scalar = False
 
         # set_state_vector
-        self._args = ["Rb_lmn", "Zb_lmn", "p_l", "i_l", "Psi"]
+        self._args = ["p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn"]
         self._dimensions = self._objective.dimensions
-        idx = 0
+        self._dim_x = 0
         self._x_idx = {}
         for arg in self.args:
-            self.x_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
-            idx += self.dimensions[arg]
-        self._dim_x = idx
+            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
+            self._dim_x += self.dimensions[arg]
 
         (
             xp,
@@ -100,11 +99,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints,
-            self._eq_objective.dim_x,
-            self._eq_objective.x_idx,  # FIXME: this has to contain all the arguments
-        )
+        ) = factorize_linear_constraints(self._constraints)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -117,8 +112,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if jnp.all(x == self._x_old):
             pass
         else:
-            x_dict = self._unpack_state(x)
-            x_dict_old = self._unpack_state(self._x_old)
+            x_dict = self.unpack_state(x)
+            x_dict_old = self.unpack_state(self._x_old)
             deltas = {
                 "d" + str(key).split("_")[0]: x_dict[key] - x_dict_old[key]
                 for key in x_dict
@@ -144,11 +139,12 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         """
         self._update_equilibrium(x)
-        return super().compute(self._objective.x(self._eq))
+        x_obj = self._objective.x(self._eq)
+        return self._objective.compute(x_obj)
 
     def grad(self, x):
 
-        f = self.compute(x)
+        f = jnp.atleast_1d(self.compute(x))
         J = self.jac(x)
         return f.T @ J
 
@@ -156,7 +152,12 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._update_equilibrium(x)
 
-        dxdc = np.eye(self._eq_objective.dim_x)[:, self._x_idx]
+        # dx/dc
+        x_idx = np.concatenate(
+            [self._eq_objective.x_idx[arg] for arg in ["p_l", "i_l", "Psi"]]
+        )
+        x_idx.sort(kind="mergesort")
+        dxdc = np.eye(self._eq_objective.dim_x)[:, x_idx]
         dxdRb = (
             np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["R_lmn"]]
             @ self._Ainv["R_lmn"]
@@ -168,15 +169,18 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         )
         dxdc = np.hstack((dxdc, dxdZb))
 
-        # Jacobian matrices wrt full state vectors
+        # state vectors
         xf = self._eq_objective.x(self._eq)
+        xg = self._objective.x(self._eq)
+
+        # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
-        Gx = self._objective.jac(x)
+        Gx = self._objective.jac(xg)
         Fx = {
             arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
         }
         Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self.args:
+        for arg in self._eq_objective.args:
             if arg not in Fx.keys():
                 Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
             if arg not in Gx.keys():
@@ -191,7 +195,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         GxFx = Gx @ Fx_inv
         LHS = GxFx @ Fc - Gc
-        return LHS  # XXX check dimensions, shape[1] should be size of boundary, profiles, Psi
+        return LHS
 
     def hess(self, x):
 

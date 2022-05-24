@@ -179,7 +179,7 @@ status_messages = {
     "success": "Optimization terminated successfully.",
     "xtol": "`xtol` condition satisfied.",
     "ftol": "`ftol` condition satisfied.",
-    "gtol": "`agol` condition satisfied.",
+    "gtol": "`gtol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has been exceeded.",
     "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
     "max_nhev": "Maximum number of jacobian/hessian evaluations has been exceeded.",

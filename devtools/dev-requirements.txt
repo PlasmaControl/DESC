@@ -20,6 +20,7 @@ codecov
 pytest-mpl
 pytest-benchmark
 markupsafe==2.0.1
+nbmake
 
 #For building
 build

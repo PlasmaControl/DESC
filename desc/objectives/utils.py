@@ -34,7 +34,7 @@ def get_fixed_boundary_constraints():
 
 
 def get_poincare_boundary_constraints():
-    """Get the constraints necessary for a Poincare-boundary equilibrium problem.
+    """Get the constraints necessary for a Poincare-boundary equilibrium problem. (constrains R,Z but not lambda)
 
     Returns
     -------

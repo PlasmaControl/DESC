@@ -8,7 +8,10 @@ from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
 from desc.__main__ import main
 from desc.geometry import ZernikeRZToroidalSection
-from desc.basis import FourierZernike_to_PoincareZernikePolynomial
+from desc.basis import (
+    FourierZernike_to_PoincareZernikePolynomial,
+    FourierZernike_to_FourierZernike_no_N_modes,
+)
 from desc.objectives import (
     PoincareBoundaryR,
     PoincareBoundaryZ,
@@ -20,6 +23,7 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
 )
+from desc.transform import Transform
 
 
 def test_compute_geometry(DSHAPE):
@@ -189,6 +193,7 @@ def test_poincare_sfl_bc(
 
     Rb_lmn, Rb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.R_lmn, eq.R_basis)
     Zb_lmn, Zb_basis = FourierZernike_to_PoincareZernikePolynomial(eq.Z_lmn, eq.Z_basis)
+    Lb_lmn, Lb_basis = FourierZernike_to_FourierZernike_no_N_modes(eq.L_lmn, eq.L_basis)
 
     surf = ZernikeRZToroidalSection(
         R_lmn=Rb_lmn,
@@ -211,23 +216,24 @@ def test_poincare_sfl_bc(
         N_grid=eq.N_grid,  # real space toroidal resolution
         sym=True,  # explicitly enforce stellarator symmetry
         bdry_mode="poincare",
+        spectral_indexing=eq.spectral_indexing,
     )
     eq_poin.L_lmn = (
-        eq.L_lmn
-    )  # initialize the poincare eq with the lambda of the original eq
+        Lb_lmn  # initialize the poincare eq with the lambda of the original eq
+    )
+
     eq_poin.change_resolution(
         eq_poin.L, eq_poin.M, 1
     )  # add toroidal modes to the equilibrium
     eq_poin.N_grid = 2  # set resolution of toroidal grid
     eq_poin.R_lmn[1:4] = (
-        eq_poin.R_lmn[1:4] + 0.02
+        eq_poin.R_lmn[1:4] + 0.04
     )  # perturb slightly from the axisymmetric equilibrium
 
     constraints = (
         PoincareBoundaryR(),
         PoincareBoundaryZ(),
         PoincareLambda(),  # this constrains lambda at the zeta=0 surface, using the eq's current value of lambda
-        LambdaGauge(),
         FixedPressure(),
         FixedIota(),
         FixedPsi(),
@@ -239,8 +245,14 @@ def test_poincare_sfl_bc(
     Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
     Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
+
+    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=2e-3)
+
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    L_2D = eq.compute(name="lambda", grid=grid)
+    L_3D = eq_poin.compute(name="lambda", grid=grid)
+    np.testing.assert_allclose(L_2D["lambda"], L_3D["lambda"], atol=1e-15)
 
 
 def test_grid_resolution_warning(SOLOVEV):

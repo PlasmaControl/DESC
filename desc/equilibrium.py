@@ -281,15 +281,13 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(result["allx"][0])
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
             print("End of solver")
-            objective.callback(result["x"])
+            objective.callback(objective.x(self))
 
-        for key, value in objective.unpack_state(result["x"]).items():
-            value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
-            )
-            setattr(self, key, value)
         self.solved = result["success"]
         return result
 
@@ -363,15 +361,13 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(result["allx"][0])
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
             print("End of solver")
-            objective.callback(result["x"])
+            objective.callback(objective.x(self))
 
-        for key, value in objective.unpack_state(result["x"]).items():
-            value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
-            )
-            setattr(self, key, value)
         self.solved = result["success"]
         return result
 

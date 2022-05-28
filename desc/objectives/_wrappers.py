@@ -90,6 +90,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
 
+        self._full_args = np.concatenate((self.args, self._eq_objective.args))
+        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+
         (
             xp,
             A,
@@ -105,6 +108,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
+        self.history = {}
+        for arg in self._full_args:
+            self.history[arg] = list(np.atleast_1d(getattr(self._eq, arg)))
+
         self._built = True
 
     def _update_equilibrium(self, x):
@@ -118,11 +125,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 "d" + str(key).split("_")[0]: x_dict[key] - x_dict_old[key]
                 for key in x_dict
             }
-            self._eq.perturb(
+            self._eq = self._eq.perturb(
                 self._eq_objective, self._constraints, **deltas, **self._perturb_options
             )
             self._eq.solve(objective=self._eq_objective, **self._solve_options)
             self._x_old = x
+            for arg in self._full_args:
+                self.history[arg].append(getattr(self._eq, arg))
 
     def compute(self, x):
         """Compute the objective function.
@@ -187,15 +196,17 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
         Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
         Fc = Fx @ dxdc
-        Fx_inv = jnp.linalg.pinv(Fx, rcond=1e-6)
+        Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
 
-        GxFx = Gx @ Fx_inv
+        GxFx = Gx_reduced @ Fx_reduced_inv
         LHS = GxFx @ Fc - Gc
-        return LHS
+        return -LHS
 
     def hess(self, x):
 

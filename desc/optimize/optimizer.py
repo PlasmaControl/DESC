@@ -1,7 +1,8 @@
-import numpy as np
 import scipy.optimize
+import warnings
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.objectives import (
@@ -199,10 +200,12 @@ class Optimizer(IOAble):
         timer = Timer()
 
         if self.method in Optimizer._desc_methods:
-            if not isinstance(x_scale, str) and np.allclose(x_scale, 1):
+            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
                 options.setdefault("initial_trust_radius", 0.5)
                 options.setdefault("max_trust_radius", 1.0)
 
+        if not isinstance(constraints, tuple):
+            constraints = (constraints,)
         linear_constraints = tuple(
             constraint for constraint in constraints if constraint.linear
         )
@@ -211,9 +214,11 @@ class Optimizer(IOAble):
         )
 
         # wrap nonlinear constraints if necessary
+        wrapped = False
         if len(nonlinear_constraints) > 0 and (
             self.method not in Optimizer._constrained_methods
         ):
+            wrapped = True
             for constraint in nonlinear_constraints:
                 if not isinstance(
                     constraint, (ForceBalance, RadialForceBalance, HelicalForceBalance)
@@ -241,12 +246,12 @@ class Optimizer(IOAble):
                 constraint.build(eq, verbose=verbose)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
-            raise ValueError(
+            warnings.warn(
                 colored(
-                    "method {} is incompatible with scalar objective function".format(
+                    "method {} is not intended for scalar objective function".format(
                         ".".join([self.method])
                     ),
-                    "red",
+                    "yellow",
                 )
             )
 
@@ -266,7 +271,11 @@ class Optimizer(IOAble):
 
         def compute_wrapped(x_reduced):
             x = recover(x_reduced)
-            return objective.compute(x)
+            f = objective.compute(x)
+            if self.method in Optimizer._scalar_methods:
+                return f.squeeze()
+            else:
+                return jnp.atleast_1d(f)
 
         def compute_scalar_wrapped(x_reduced):
             x = recover(x_reduced)
@@ -299,13 +308,13 @@ class Optimizer(IOAble):
                 x = recover(x_reduced)
                 if len(allx) > 0:
                     dx = allx[-1] - x_reduced
-                    dx_norm = np.linalg.norm(dx)
+                    dx_norm = jnp.linalg.norm(dx)
                     if dx_norm > 0:
                         fx = objective.compute_scalar(x)
                         df = allf[-1] - fx
                         allx.append(x_reduced)
                         allf.append(fx)
-                        x_norm = np.linalg.norm(x_reduced)
+                        x_norm = jnp.linalg.norm(x_reduced)
                         if verbose > 2:
                             print_iteration_nonlinear(
                                 len(allx), None, fx, df, dx_norm, None
@@ -315,7 +324,7 @@ class Optimizer(IOAble):
                             fx,
                             dx_norm,
                             x_norm,
-                            np.inf,
+                            jnp.inf,
                             1,
                             ftol,
                             xtol,
@@ -323,11 +332,11 @@ class Optimizer(IOAble):
                             len(allx),
                             maxiter,
                             0,
-                            np.inf,
+                            jnp.inf,
                             0,
-                            np.inf,
+                            jnp.inf,
                             0,
-                            np.inf,
+                            jnp.inf,
                         )
                         if success:
                             msg[0] = message
@@ -339,7 +348,7 @@ class Optimizer(IOAble):
                     allx.append(x_reduced)
                     allf.append(fx)
                     dx_norm = None
-                    x_norm = np.linalg.norm(x_reduced)
+                    x_norm = jnp.linalg.norm(x_reduced)
                     if verbose > 2:
                         print_iteration_nonlinear(
                             len(allx), None, fx, df, dx_norm, None
@@ -441,9 +450,17 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        result["x"] = recover(result["x"])
-        for i, x_reduced in enumerate(result["allx"]):
-            result["allx"][i] = recover(x_reduced)
+        if wrapped:
+            result["history"] = objective.history
+        else:
+            result["history"] = {}
+            for arg in objective.args:
+                result["history"][arg] = []
+            for x_reduced in result["allx"]:
+                x = recover(x_reduced)
+                kwargs = objective.unpack_state(x)
+                for arg in kwargs:
+                    result["history"][arg].append(kwargs[arg])
 
         timer.stop("Solution time")
 

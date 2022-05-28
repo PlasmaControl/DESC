@@ -139,10 +139,7 @@ class ObjectiveFunction(IOAble):
         """
         kwargs = self.unpack_state(x)
         f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
-        if f.size > 1:
-            return f
-        else:
-            return f[0]
+        return f
 
     def compute_scalar(self, x):
         """Compute the scalar form of the objective function.

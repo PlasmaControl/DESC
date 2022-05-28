@@ -77,7 +77,7 @@ class ForceBalance(_Objective):
                 sym=eq.sym,
                 axis=False,
                 rotation=None,
-                node_pattern=eq.node_pattern,
+                node_pattern="jacobi",
             )
 
         self._dim_f = 2 * self.grid.num_nodes

@@ -76,13 +76,14 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     constraint_args = []  # all args used in constraints
     unfixed_args = []  # subset of constraint args for unfixed objectives
 
-    # A matrices for each unfixed constraint
+    # linear constraint matrices for each objective
     for obj in constraints:
         if len(obj.args) > 1:
-            raise ValueError("Non-fixed constraints must have only 1 argument.")
+            raise ValueError("Linear constraints must have only 1 argument.")
         arg = obj.args[0]
         constraint_args.append(arg)
-        if obj.fixed:
+        if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
+            # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
@@ -104,11 +105,14 @@ def factorize_linear_constraints(constraints, extra_args=[]):
             b[arg] = jnp.zeros((1,))
 
     # full A matrix for all unfixed constraints
-    unfixed_idx = jnp.concatenate([x_idx[arg] for arg in arg_order if arg in A.keys()])
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
-    Ainv_full, Z = svd_inv_null(A_full)
-    xp = put(xp, unfixed_idx, Ainv_full @ b_full)
+    if len(A):
+        unfixed_idx = jnp.concatenate(
+            [x_idx[arg] for arg in arg_order if arg in A.keys()]
+        )
+        A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
+        b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        Ainv_full, Z = svd_inv_null(A_full)
+        xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""

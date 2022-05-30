@@ -220,10 +220,7 @@ class ObjectiveFunction(IOAble):
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
         J = self._jac.compute(x)
-        if self.scalar:
-            return np.atleast_2d(J)
-        else:
-            return J
+        return jnp.atleast_2d(J)
 
     def jvp(self, v, x):
         """Compute Jacobian-vector product of the objective function.

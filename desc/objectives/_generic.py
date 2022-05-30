@@ -1,4 +1,3 @@
-import numpy as np
 from scipy.constants import mu_0
 from inspect import signature
 
@@ -261,7 +260,7 @@ class ToroidalCurrent(_Objective):
             self._L_transform,
             self._iota,
         )
-        I = 2 * np.pi / mu_0 * data["I"]
+        I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(jnp.atleast_1d(I))
 
 

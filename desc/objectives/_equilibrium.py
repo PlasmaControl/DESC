@@ -1,4 +1,3 @@
-import numpy as np
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid

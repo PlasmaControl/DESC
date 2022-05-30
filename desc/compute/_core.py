@@ -771,15 +771,15 @@ def compute_geometry(
     """
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    # FIXME: make grids have attributes for spacing in each dimension
-    # N = jnp.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
-    N = 2 * R_transform.grid.N + 1  # hack that works for QuadratureGrid
-    weights = R_transform.grid.weights / (2 * jnp.pi / N)  # remove toroidal weights
+    # Poincare cross-section weights
+    xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
+    # number of toroidal grid points
+    N = jnp.diff(jnp.sort(R_transform.grid.nodes[:, 2])).astype(bool).sum() + 1
 
     data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
     data["A"] = jnp.mean(
         jnp.sum(  # sqrt(g) / R * weight = dArea
-            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * weights, (N, -1)),
+            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * xs_weights, (N, -1)),
             axis=1,
         )
     )

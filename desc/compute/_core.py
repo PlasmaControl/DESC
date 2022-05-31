@@ -4,6 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import data_index
+from desc.grid import LinearGrid
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -774,7 +775,10 @@ def compute_geometry(
     # Poincare cross-section weights
     xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
     # number of toroidal grid points
-    N = jnp.diff(jnp.sort(R_transform.grid.nodes[:, 2])).astype(bool).sum() + 1
+    if isinstance(R_transform.grid, LinearGrid):
+        N = R_transform.grid.N
+    else:
+        N = 2 * R_transform.grid.N + 1
 
     data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
     data["A"] = jnp.mean(

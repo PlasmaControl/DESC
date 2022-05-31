@@ -4,7 +4,7 @@ import numbers
 from termcolor import colored
 from collections.abc import MutableSequence
 
-from desc.backend import use_jax, put
+from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
@@ -370,6 +370,167 @@ class Equilibrium(_Configuration, IOAble):
 
         self.solved = result["success"]
         return result
+
+    def _optimize(
+        self,
+        objective,
+        constraint=None,
+        ftol=1e-6,
+        xtol=1e-6,
+        maxiter=50,
+        verbose=1,
+        copy=True,
+        solve_options={},
+        perturb_options={},
+    ):
+        """Optimize an equilibrium for an objective.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to optimize.
+        constraint : ObjectiveFunction
+            Objective function to satisfy.
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on optimization step size.
+        maxiter : int
+            Maximum number of optimization steps.
+        verbose : int
+            Level of output.
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
+        solve_options : dict
+            Dictionary of additional options used in Equilibrium.solve().
+        perturb_options : dict
+            Dictionary of additional options used in Equilibrium.perturb().
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Optimized equilibrum.
+
+        """
+        import inspect
+        from copy import deepcopy
+        from desc.perturbations import optimal_perturb
+        from desc.optimize.utils import check_termination
+        from desc.optimize.tr_subproblems import update_tr_radius
+
+        if constraint is None:
+            constraint = get_equilibrium_objective()
+
+        timer = Timer()
+        timer.start("Total time")
+
+        eq = self
+        if not objective.built:
+            objective.build(eq)
+        if not constraint.built:
+            constraint.build(eq)
+
+        cost = objective.compute_scalar(objective.x(eq))
+        perturb_options = deepcopy(perturb_options)
+        tr_ratio = perturb_options.get(
+            "tr_ratio",
+            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
+        )
+
+        if verbose > 0:
+            objective.callback(objective.x(eq))
+
+        iteration = 1
+        success = None
+        while success is None:
+
+            timer.start("Step {} time".format(iteration))
+            if verbose > 0:
+                print("====================")
+                print("Optimization Step {}".format(iteration))
+                print("====================")
+                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+
+            # perturb + solve
+            (
+                eq_new,
+                predicted_reduction,
+                dc_opt,
+                dc,
+                c_norm,
+                bound_hit,
+            ) = optimal_perturb(
+                eq,
+                constraint,
+                objective,
+                copy=True,
+                **perturb_options,
+            )
+            eq_new.solve(objective=constraint, **solve_options)
+
+            # update trust region radius
+            cost_new = objective.compute_scalar(objective.x(eq_new))
+            actual_reduction = cost - cost_new
+            trust_radius, ratio = update_tr_radius(
+                tr_ratio[0] * c_norm,
+                actual_reduction,
+                predicted_reduction,
+                np.linalg.norm(dc_opt),
+                bound_hit,
+            )
+            tr_ratio[0] = trust_radius / c_norm
+            perturb_options["tr_ratio"] = tr_ratio
+
+            timer.stop("Step {} time".format(iteration))
+            if verbose > 0:
+                objective.callback(objective.x(eq_new))
+                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+                print("Reduction Ratio = {:+.3f}".format(ratio))
+            if verbose > 1:
+                timer.disp("Step {} time".format(iteration))
+
+            # stopping criteria
+            success, message = check_termination(
+                actual_reduction,
+                cost,
+                np.linalg.norm(dc),
+                c_norm,
+                np.inf,  # TODO: add g_norm
+                ratio,
+                ftol,
+                xtol,
+                0,  # TODO: add gtol
+                iteration,
+                maxiter,
+                0,
+                np.inf,
+                0,
+                np.inf,
+                0,
+                np.inf,
+            )
+            if actual_reduction > 0:
+                eq = eq_new
+                cost = cost_new
+            if success is not None:
+                break
+
+            iteration += 1
+
+        timer.stop("Total time")
+        print("====================")
+        print("Done")
+        if verbose > 0:
+            print(message)
+        if verbose > 1:
+            timer.disp("Total time")
+
+        if copy:
+            return eq
+        else:
+            for attr in self._io_attrs_:
+                setattr(self, attr, getattr(eq, attr))
+            return self
 
     def perturb(
         self,

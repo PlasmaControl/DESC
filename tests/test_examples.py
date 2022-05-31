@@ -78,7 +78,7 @@ def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    objective = ObjectiveFunction(AspectRatio(target=3))
+    objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
         ForceBalance(),
         FixBoundaryR(),
@@ -90,4 +90,22 @@ def test_1d_optimization(SOLOVEV):
     options = {"perturb_options": {"order": 1}}
     eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("V")["R0/a"], 3)
+    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+
+
+def test_1d_optimization_old(SOLOVEV):
+    """Tests 1D optimization for target aspect ratio."""
+
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    objective = ObjectiveFunction(AspectRatio(target=2.5))
+    eq._optimize(
+        objective,
+        copy=False,
+        solve_options={"verbose": 0},
+        perturb_options={
+            "dZb": True,
+            "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
+        },
+    )
+
+    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)

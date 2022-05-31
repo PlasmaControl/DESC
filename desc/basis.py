@@ -47,6 +47,7 @@ class Basis(IOAble, ABC):
             "sine",
             "cos",
             "cosine",
+            "even",
             False,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
@@ -54,6 +55,9 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "even":  # even powers of rho
+            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
 
     def _sort_modes(self):
@@ -197,13 +201,13 @@ class PowerSeries(Basis):
 
     """
 
-    def __init__(self, L):
+    def __init__(self, L, sym="even"):
 
         self._L = L
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = False
+        self._sym = sym
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)

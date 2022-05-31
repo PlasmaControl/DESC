@@ -1,12 +1,11 @@
 import numpy as np
-from termcolor import colored
 from abc import ABC, abstractmethod
 import warnings
 import scipy.optimize
 
-from desc.backend import jnp, put, jit
+from desc.backend import jnp, jit
 from desc.io import IOAble
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import Grid
 from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
 from desc.basis import PowerSeries
@@ -93,6 +92,8 @@ class PowerSeriesProfile(Profile):
         mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
         default grid to use for computing values using transform method
+    sym : bool
+        Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         name of the profile
 
@@ -100,15 +101,19 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, name=None):
+    def __init__(self, params, modes=None, grid=None, sym=True, name=None):
 
         self._name = name
+        self.sym = "even" if sym else False
         params = np.atleast_1d(params)
         if modes is None:
-            modes = np.arange(params.size)
+            if sym:
+                modes = np.arange(2 * params.size, step=2)
+            else:
+                modes = np.arange(params.size)
         else:
             modes = np.atleast_1d(modes)
-        self._basis = PowerSeries(L=int(np.max(abs(modes))))
+        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=self.sym)
         self._params = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, params):
             idx = np.where(self.basis.modes[:, 0] == int(m))[0]

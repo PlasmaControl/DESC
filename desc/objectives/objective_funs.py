@@ -1,10 +1,10 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
-from scipy.linalg import block_diag
 
-from desc.backend import use_jax, jnp, jit, put
-from desc.utils import Timer, svd_inv_null
+
+from desc.backend import use_jax, jnp, jit
+from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
@@ -17,30 +17,25 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["objectives", "constraints"]
 
-    def __init__(self, objectives, constraints=(), eq=None, use_jit=True, verbose=1):
+    def __init__(self, objectives, eq=None, use_jit=True, verbose=1):
         """Initialize an Objective Function.
 
         Parameters
         ----------
         objectives : tuple of Objective
-            List of objectives to be targeted during optimization.
-        constraints : tuple of Objective, optional
-            List of objectives to be used as constraints during optimization.
+            List of objectives to be minimized.
         eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
+            Equilibrium that will be optimized to satisfy the objectives.
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
+            Whether to just-in-time compile the objectives and derivatives.
         verbose : int, optional
             Level of output.
 
         """
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
-        if not isinstance(constraints, tuple):
-            constraints = (constraints,)
 
         self._objectives = objectives
-        self._constraints = constraints
         self._use_jit = use_jit
         self._built = False
         self._compiled = False
@@ -51,87 +46,15 @@ class ObjectiveFunction(IOAble):
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indicies."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
-        if self.constraints:
-            self._args = np.concatenate(
-                (self.args, np.concatenate([obj.args for obj in self.constraints]))
-            )
-        self._args = np.unique(self.args)
+        self._args = [arg for arg in arg_order if arg in self._args]
 
         self._dimensions = self.objectives[0].dimensions
 
-        self._b_idx = {}
-        for arg in arg_order:
-            if arg not in self._b_idx:
-                self._b_idx[arg] = np.array([], dtype=int)
-            idx = 0
-            for obj in self.constraints:
-                if arg == obj.target_arg:
-                    indicies = np.arange(idx, idx + obj.dim_f)
-                    self._b_idx[arg] = (
-                        np.hstack((self._b_idx[arg], indicies))
-                        if self._b_idx[arg].size
-                        else indicies
-                    )
-                idx += obj.dim_f
-
-        idx = 0
+        self._dim_x = 0
         self._x_idx = {}
-        for arg in arg_order:
-            if arg in self.args:
-                self._x_idx[arg] = np.arange(idx, idx + self.dimensions[arg])
-                idx += self.dimensions[arg]
-            else:
-                self._x_idx[arg] = np.array([], dtype=int)
-
-        self._dim_x = idx
-
-    def _build_linear_constraints(self):
-        """Compute and factorize A to get pseudoinverse and nullspace."""
-        self._A = {}
-        self._b = {}
-        self._Ainv = {}
-        self._x0 = jnp.zeros(self._dim_x)
-        constraint_args = []  # all args used in constraints
-        unfixed_args = []  # subset of constraint args for unfixed objectives
-
-        # A matrices for each unfixed constraint
-        for obj in self.constraints:
-            if len(obj.args) > 1:
-                raise ValueError("Non-fixed constraints must have only 1 argument.")
-            arg = obj.args[0]
-            constraint_args.append(arg)
-            if obj.fixed:
-                self._x0 = put(self._x0, self._x_idx[obj.target_arg], obj.target)
-            else:
-                unfixed_args.append(arg)
-                A = obj.derivatives[arg]
-                b = obj.target
-                if A.shape[0]:
-                    Ainv, Z = svd_inv_null(A)
-                else:
-                    Ainv = A.T
-                self._A[arg] = A
-                self._b[arg] = b
-                self._Ainv[arg] = Ainv
-
-        # catch any arguments that are not constrained
-        for arg in self._args:
-            if arg not in constraint_args:
-                unfixed_args.append(arg)
-                self._A[arg] = np.zeros((1, self._dimensions[arg]))
-                self._b[arg] = np.zeros((1,))
-
-        # full A matrix for all unfixed constraints
-        self._unfixed_idx = np.concatenate(
-            [self._x_idx[arg] for arg in arg_order if arg in unfixed_args]
-        )
-        A_full = block_diag(*[self._A[arg] for arg in arg_order if arg in unfixed_args])
-        b_full = np.concatenate(
-            [self._b[arg] for arg in arg_order if arg in unfixed_args]
-        )
-        Ainv_full, self._Z = svd_inv_null(A_full)
-        self._x0 = put(self._x0, self._unfixed_idx, Ainv_full @ b_full)
-        self._dim_x_reduced = self._Z.shape[1]
+        for arg in self.args:
+            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
+            self._dim_x += self.dimensions[arg]
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective functions.
@@ -161,7 +84,7 @@ class ObjectiveFunction(IOAble):
             # then can remove jit from Derivatives class
 
     def build(self, eq, use_jit=True, verbose=1):
-        """Build the constraints and objectives.
+        """Build the objective.
 
         Parameters
         ----------
@@ -176,16 +99,6 @@ class ObjectiveFunction(IOAble):
         self._use_jit = use_jit
         timer = Timer()
         timer.start("Objecive build")
-
-        # build constraints
-        self._dim_c = 0
-        for constraint in self.constraints:
-            if not constraint.linear:
-                raise NotImplementedError("Constraints must be linear.")
-            if verbose > 0:
-                print("Building constraint: " + constraint.name)
-            constraint.build(eq, use_jit=self.use_jit, verbose=verbose)
-            self._dim_c += constraint.dim_f
 
         # build objectives
         self._dim_f = 0
@@ -202,13 +115,6 @@ class ObjectiveFunction(IOAble):
         self._set_state_vector()
 
         # build linear constraint matrices
-        if verbose > 0:
-            print("Building linear constraints")
-        timer.start("linear constraint build")
-        self._build_linear_constraints()
-        timer.stop("linear constraint build")
-        if verbose > 1:
-            timer.disp("linear constraint build")
 
         self._set_derivatives(self.use_jit)
 
@@ -216,28 +122,6 @@ class ObjectiveFunction(IOAble):
         timer.stop("Objecive build")
         if verbose > 1:
             timer.disp("Objecive build")
-
-    def rebuild_constraints(self, eq):
-        """Rebuild the constraints.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-
-        """
-        for constraint in self.constraints:
-            constraint.update_target(eq)
-
-        self._x0 = jnp.zeros(self.dim_x)
-        for obj in self.constraints:
-            if obj.fixed:
-                self._x0 = put(self._x0, self._x_idx[obj.target_arg], obj.target)
-            else:
-                arg = obj.args[0]
-                b = obj.target
-                self._b[arg] = b
-                self._x0 = put(self._x0, self._x_idx[arg], jnp.dot(self.Ainv[arg], b))
 
     def compute(self, x):
         """Compute the objective function.
@@ -255,10 +139,7 @@ class ObjectiveFunction(IOAble):
         """
         kwargs = self.unpack_state(x)
         f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
-        if f.size > 1:
-            return f
-        else:
-            return f[0]
+        return f
 
     def compute_scalar(self, x):
         """Compute the scalar form of the objective function.
@@ -319,35 +200,12 @@ class ObjectiveFunction(IOAble):
             kwargs[arg] = x[self.x_idx[arg]]
         return kwargs
 
-    def project(self, x):
-        """Project a full state vector into the reduced optimization vector."""
-        if not self._built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        x_reduced = np.dot(self.Z.T, (x - self.x0)[self._unfixed_idx])
-        return np.squeeze(x_reduced)
-
-    def recover(self, x_reduced):
-        """Recover the full state vector from the reducted optimization vector."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        dx = put(np.zeros(self.dim_x), self._unfixed_idx, self._Z @ x_reduced)
-        return np.squeeze(self.x0 + dx)
-
-    def make_feasible(self, x):
-        """Return a state vector that satisfies the linear constraints."""
-        x_reduced = self.project(x)
-        return self.recover(x_reduced)
-
     def x(self, eq):
         """Return the full state vector from the Equilibrium eq."""
         x = np.zeros((self.dim_x,))
         for arg in self.args:
             x[self.x_idx[arg]] = getattr(eq, arg)
         return x
-
-    def x_reduced(self, eq):
-        """Return the reduced optimization vector from the Equilibrium eq."""
-        return self.project(self.x(eq))
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
@@ -362,10 +220,7 @@ class ObjectiveFunction(IOAble):
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
         J = self._jac.compute(x)
-        if self.scalar:
-            return np.atleast_2d(J)
-        else:
-            return J
+        return jnp.atleast_2d(J)
 
     def jvp(self, v, x):
         """Compute Jacobian-vector product of the objective function.
@@ -461,11 +316,6 @@ class ObjectiveFunction(IOAble):
         return self._objectives
 
     @property
-    def constraints(self):
-        """list: List of constraints."""
-        return self._constraints
-
-    @property
     def use_jit(self):
         """bool: Whether to just-in-time compile the objective and derivatives."""
         return self._use_jit
@@ -498,11 +348,6 @@ class ObjectiveFunction(IOAble):
         return self._dimensions
 
     @property
-    def b_idx(self):
-        """dict: Indicies of the components of the linear constraint vector."""
-        return self._b_idx
-
-    @property
     def x_idx(self):
         """dict: Indicies of the components of the state vector."""
         return self._x_idx
@@ -515,60 +360,11 @@ class ObjectiveFunction(IOAble):
         return self._dim_x
 
     @property
-    def dim_x_reduced(self):
-        """int: Dimension of the reduced optimization vector."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_x_reduced
-
-    @property
-    def dim_c(self):
-        """int: Number of constraint equations."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._dim_c
-
-    @property
     def dim_f(self):
         """int: Number of objective equations."""
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dim_f
-
-    @property
-    def A(self):
-        """ndarray: Linear constraint matrix: A*x = b."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._A
-
-    @property
-    def Ainv(self):
-        """ndarray: Linear constraint matrix inverse: x0 = Ainv*b."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._Ainv
-
-    @property
-    def b(self):
-        """ndarray: Linear constraint vector: A*x = b."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._b
-
-    @property
-    def x0(self):
-        """ndarray: Feasible state vector."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._x0
-
-    @property
-    def Z(self):
-        """ndarray: Linear constraint nullspace: x = x0 + Z*x_reduced."""
-        if not self.built:
-            raise RuntimeError("ObjectiveFunction must be built first.")
-        return self._Z
 
 
 class _Objective(IOAble, ABC):
@@ -608,11 +404,11 @@ class _Objective(IOAble, ABC):
         self._dimensions["R_lmn"] = eq.R_basis.num_modes
         self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
         self._dimensions["L_lmn"] = eq.L_basis.num_modes
-        self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
-        self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
         self._dimensions["p_l"] = eq.pressure.params.size
         self._dimensions["i_l"] = eq.iota.params.size
         self._dimensions["Psi"] = 1
+        self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
+        self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""
@@ -621,16 +417,9 @@ class _Objective(IOAble, ABC):
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         # only used for linear objectives so variable values are irrelevant
-        kwargs = {
-            "R_lmn": np.zeros((self.dimensions["R_lmn"],)),
-            "Z_lmn": np.zeros((self.dimensions["Z_lmn"],)),
-            "L_lmn": np.zeros((self.dimensions["L_lmn"],)),
-            "Rb_lmn": np.zeros((self.dimensions["Rb_lmn"],)),
-            "Zb_lmn": np.zeros((self.dimensions["Zb_lmn"],)),
-            "p_l": np.zeros((self.dimensions["p_l"],)),
-            "i_l": np.zeros((self.dimensions["i_l"],)),
-            "Psi": np.zeros((self.dimensions["Psi"],)),
-        }
+        kwargs = dict(  # FIXME: need to use dim_x
+            [(arg, np.zeros((self.dimensions[arg],))) for arg in self.dimensions.keys()]
+        )
         args = [kwargs[arg] for arg in self.args]
 
         # constant derivatives are pre-computed, otherwise set up Derivative instance

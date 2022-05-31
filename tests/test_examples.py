@@ -6,7 +6,11 @@ from desc.objectives import (
     RadialForceBalance,
     HelicalForceBalance,
     AspectRatio,
-    get_fixed_boundary_constraints,
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixPressure,
+    FixIota,
+    FixPsi,
 )
 from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
@@ -58,13 +62,11 @@ def test_force_balance_grids():
     eq2.M_grid = res
 
     # force balances on the same grids
-    obj1 = ObjectiveFunction(ForceBalance(), get_fixed_boundary_constraints())
+    obj1 = ObjectiveFunction(ForceBalance())
     eq1.solve(objective=obj1)
 
     # force balances on different grids
-    obj2 = ObjectiveFunction(
-        (RadialForceBalance(), HelicalForceBalance()), get_fixed_boundary_constraints()
-    )
+    obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
     eq2.solve(objective=obj2)
 
     np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
@@ -76,10 +78,16 @@ def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    objective = ObjectiveFunction(
-        AspectRatio(target=3), get_fixed_boundary_constraints()
+    objective = ObjectiveFunction(AspectRatio(target=3))
+    constraints = (
+        ForceBalance(),
+        FixBoundaryR(),
+        FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
     )
-    perturb_options = {"dZb": True, "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1])}
-    eq = eq.optimize(objective, perturb_options=perturb_options)
+    options = {"perturb_options": {"order": 1}}
+    eq.optimize(objective, constraints, options=options)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 3)

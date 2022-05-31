@@ -1,4 +1,3 @@
-import numpy as np
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid
@@ -77,7 +76,7 @@ class ForceBalance(_Objective):
                 sym=eq.sym,
                 axis=False,
                 rotation=None,
-                node_pattern=eq.node_pattern,
+                node_pattern="jacobi",
             )
 
         self._dim_f = 2 * self.grid.num_nodes

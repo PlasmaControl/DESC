@@ -1,26 +1,21 @@
 import numpy as np
 import warnings
 import numbers
-import inspect
-from copy import deepcopy
 from termcolor import colored
 from collections.abc import MutableSequence
 
-from desc.backend import use_jax, put
+from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.optimize.utils import check_termination
-from desc.optimize.tr_subproblems import update_tr_radius
 from desc.optimize import Optimizer
 from desc.objectives import (
-    get_force_balance_objective,
-    get_force_balance_poincare_objective,
-    get_energy_objective,
-    get_energy_poincare_objective,
+    ForceBalance,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
 )
-from desc.perturbations import perturb, optimal_perturb
+from desc.perturbations import perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -259,8 +254,9 @@ class Equilibrium(_Configuration, IOAble):
     # TODO: add a copy argument?
     def solve(
         self,
-        optimizer=None,
         objective=None,
+        constraints=None,
+        optimizer=None,
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
@@ -273,10 +269,10 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        optimizer : Optimizer
-            Optimization algorithm. Default = lsq-exact.
         objective : ObjectiveFunction
             Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -310,18 +306,14 @@ class Equilibrium(_Configuration, IOAble):
 
 
         """
+        if objective is None:
+            objective = get_equilibrium_objective()
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
-        if objective is None:
-            if self.bdry_mode == "lcfs":
-                objective = get_force_balance_objective()
-            elif self.bdry_mode == "poincare":
-                objective = get_force_balance_poincare_objective()
-        if not objective.built:
-            objective.build(self, verbose=verbose)
 
         if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
-
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -332,10 +324,11 @@ class Equilibrium(_Configuration, IOAble):
                     "yellow",
                 )
             )
-        x0 = objective.x(self)
+
         result = optimizer.optimize(
+            self,
             objective,
-            x0=x0,
+            constraints,
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -347,92 +340,97 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(x0)
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
             print("End of solver")
-            objective.callback(result["x"])
+            objective.callback(objective.x(self))
 
-        for key, value in objective.unpack_state(result["x"]).items():
-            value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
-            )
-            setattr(self, key, value)
         self.solved = result["success"]
         return result
 
-    def perturb(
+    def optimize(
         self,
         objective=None,
-        dR=None,
-        dZ=None,
-        dL=None,
-        dRb=None,
-        dZb=None,
-        dp=None,
-        di=None,
-        dPsi=None,
-        order=2,
-        tr_ratio=0.1,
+        constraints=None,
+        optimizer=None,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        maxiter=50,
+        x_scale="auto",
+        options={},
         verbose=1,
-        copy=True,
     ):
-        """Perturb an equilibrium.
+        """Optimize an equilibrium for an objective.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            Objective function to satisfy.
-        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
-            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, and total toroidal magnetic flux.
-            Setting to None or zero ignores that term in the expansion.
-        order : {0,1,2,3}
-            Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
-        tr_ratio : float or array of float
-            Radius of the trust region, as a fraction of ||x||.
-            Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
-            If a scalar, uses the same ratio for all steps. If an array, uses the first
-            element for the first step and so on.
+            Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on step size.
+        gtol : float
+            Stopping tolerance on norm of gradient.
+        maxiter : int
+            Maximum number of solver steps.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
+        options : dict
+            Dictionary of additional options to pass to optimizer.
         verbose : int
             Level of output.
-        copy : bool, optional
-            Whether to update the existing equilibrium or make a copy (Default).
 
         Returns
         -------
         eq_new : Equilibrium
-            Perturbed equilibrum.
+            Optimized equilibrum.
 
         """
-        if objective is None:
-            if self.bdry_mode == "lcfs":
-                objective = get_force_balance_objective()
-            elif self.bdry_mode == "poincare":
-                objective = get_force_balance_poincare_objective()
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+            constraints = (ForceBalance(), *constraints)
 
-        eq = perturb(
+        result = optimizer.optimize(
             self,
             objective,
-            dR=dR,
-            dZ=dZ,
-            dL=dL,
-            dRb=dRb,
-            dZb=dZb,
-            dp=dp,
-            di=di,
-            dPsi=dPsi,
-            order=order,
-            tr_ratio=tr_ratio,
+            constraints,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            x_scale=x_scale,
             verbose=verbose,
-            copy=copy,
+            maxiter=maxiter,
+            options=options,
         )
-        eq.solved = False
 
-        if copy:
-            return eq
-        else:
-            return self
+        if verbose > 0:
+            print("Start of solver")
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
+            print("End of solver")
+            objective.callback(objective.x(self))
 
-    def optimize(
+        self.solved = result["success"]
+        return result
+
+    def _optimize(
         self,
         objective,
         constraint=None,
@@ -473,11 +471,14 @@ class Equilibrium(_Configuration, IOAble):
             Optimized equilibrum.
 
         """
+        import inspect
+        from copy import deepcopy
+        from desc.perturbations import optimal_perturb
+        from desc.optimize.utils import check_termination
+        from desc.optimize.tr_subproblems import update_tr_radius
+
         if constraint is None:
-            if self.bdry_mode == "lcfs":
-                constraint = get_force_balance_objective()
-            elif self.bdry_mode == "poincare":
-                constraint = get_force_balance_poincare_objective()
+            constraint = get_equilibrium_objective()
 
         timer = Timer()
         timer.start("Total time")
@@ -588,6 +589,86 @@ class Equilibrium(_Configuration, IOAble):
         else:
             for attr in self._io_attrs_:
                 setattr(self, attr, getattr(eq, attr))
+            return self
+
+    def perturb(
+        self,
+        objective=None,
+        constraints=None,
+        dR=None,
+        dZ=None,
+        dL=None,
+        dRb=None,
+        dZb=None,
+        dp=None,
+        di=None,
+        dPsi=None,
+        order=2,
+        tr_ratio=0.1,
+        verbose=1,
+        copy=True,
+    ):
+        """Perturb an equilibrium.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to satisfy.
+        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
+            rotational transform, and total toroidal magnetic flux.
+            Setting to None or zero ignores that term in the expansion.
+        order : {0,1,2,3}
+            Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
+        tr_ratio : float or array of float
+            Radius of the trust region, as a fraction of ||x||.
+            Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+            If a scalar, uses the same ratio for all steps. If an array, uses the first
+            element for the first step and so on.
+        verbose : int
+            Level of output.
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Perturbed equilibrum.
+
+        """
+        if objective is None:
+            objective = get_equilibrium_objective()
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+
+        if not objective.built:
+            objective.build(self, verbose=verbose)
+        for constraint in constraints:
+            if not constraint.built:
+                constraint.build(self, verbose=verbose)
+
+        eq = perturb(
+            self,
+            objective,
+            constraints,
+            dR=dR,
+            dZ=dZ,
+            dL=dL,
+            dRb=dRb,
+            dZb=dZb,
+            dp=dp,
+            di=di,
+            dPsi=dPsi,
+            order=order,
+            tr_ratio=tr_ratio,
+            verbose=verbose,
+            copy=copy,
+        )
+        eq.solved = False
+
+        if copy:
+            return eq
+        else:
             return self
 
 
@@ -740,16 +821,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
-            if self.inputs[ii]["objective"] == "force":
-                if self.inputs[ii]["bdry_mode"] == "lcfs":
-                    objective = get_force_balance_objective()
-                elif self.inputs[ii]["bdry_mode"] == "poincare":
-                    objective = get_force_balance_poincare_objective()
-            elif self.inputs[ii]["objective"] == "energy":
-                if self.inputs[ii]["bdry_mode"] == "lcfs":
-                    objective = get_energy_objective()
-                elif self.inputs[ii]["bdry_mode"] == "poincare":
-                    objective = get_energy_poincare_objective()
+            objective = get_equilibrium_objective(self.inputs[ii]["objective"])
+            constraints = get_fixed_boundary_constraints()
 
             if ii == start_from:
                 equil = self[ii]
@@ -805,6 +878,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil.solve(
                 optimizer=optimizer,
                 objective=objective,
+                constraints=constraints,
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],

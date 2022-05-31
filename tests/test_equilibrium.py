@@ -13,15 +13,10 @@ from desc.basis import (
     FourierZernike_to_FourierZernike_no_N_modes,
 )
 from desc.objectives import (
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
-    PoincareLambda,
-    LambdaGauge,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
-    ForceBalance,
+    get_fixed_boundary_constraints,
     ObjectiveFunction,
+    PoincareLambda,
+    ForceBalance,
 )
 from desc.transform import Transform
 
@@ -230,17 +225,17 @@ def test_poincare_sfl_bc(
         eq_poin.R_lmn[1:4] + 0.04
     )  # perturb slightly from the axisymmetric equilibrium
 
-    constraints = (
-        PoincareBoundaryR(),
-        PoincareBoundaryZ(),
-        PoincareLambda(),  # this constrains lambda at the zeta=0 surface, using the eq's current value of lambda
-        FixedPressure(),
-        FixedIota(),
-        FixedPsi(),
+    # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
+    constraints = get_fixed_boundary_constraints() + (PoincareLambda(),)
+    objective = ObjectiveFunction(ForceBalance())
+    eq_poin.solve(
+        verbose=1,
+        ftol=1e-6,
+        objective=objective,
+        constraints=constraints,
+        maxiter=100,
+        xtol=1e-6,
     )
-    objectives = ForceBalance()
-    obj = ObjectiveFunction(objectives, constraints)
-    eq_poin.solve(verbose=1, ftol=1e-6, objective=obj, maxiter=100, xtol=1e-6)
 
     Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
     Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)

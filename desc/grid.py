@@ -615,9 +615,9 @@ class ConcentricGrid(Grid):
             * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
             * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
             * ``None`` for no symmetry (Default), rotates halfway between other options
-        node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
+        node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
-
+                * ``linear`` : linear spacing in r=[0,1]
                 * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
                 * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
@@ -625,7 +625,6 @@ class ConcentricGrid(Grid):
                   surface.
                 * ``'ocs'``: optimal concentric sampling to minimize the condition
                   number of the resulting transform matrix, for doing inverse transform.
-                * ``None`` : linear spacing in r=[0,1]
 
         Returns
         -------
@@ -646,12 +645,15 @@ class ConcentricGrid(Grid):
             return np.sort(rj)
 
         pattern = {
+            "linear": np.linspace(0, 1, num=L // 2 + 1),
             "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
             "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
             "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
             "ocs": ocs(L),
         }
-        rho = pattern.get(node_pattern, np.linspace(0, 1, num=L // 2 + 1))
+        rho = pattern.get(node_pattern)
+        if rho is None:
+            raise ValueError("node_pattern '{}' is not supported".format(node_pattern))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0

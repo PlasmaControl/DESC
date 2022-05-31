@@ -20,16 +20,26 @@ from .objective_funs import _Objective
     - `b` is the desired vector set by `objective.target`
 """
 
+# TODO: need dim_x attribute
 
-class LCFSBoundaryR(_Objective):
-    """Boundary condition on the last closed flux surface."""
+
+class FixBoundaryR(_Objective):
+    """Boundary condition on the R boundary parameters."""
 
     _scalar = False
     _linear = True
     _fixed = False  # TODO: can we dynamically detect this instead?
 
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs R"):
-        """Initialize a LCFSBoundary Objective.
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        fixed_boundary=False,
+        modes=True,
+        name="lcfs R",
+    ):
+        """Initialize a FixBoundaryR Objective.
 
         Parameters
         ----------
@@ -40,15 +50,26 @@ class LCFSBoundaryR(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
+        fixed_boundary : bool, optional
+            True to enforce the boundary condition on flux surfaces,
+            or Falseto fix the boundary surface coefficients (defualt).
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the profile modes.
         name : str
             Name of the objective function.
 
         """
-        self._surface = surface
+        self._fixed_boundary = fixed_boundary
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "R boundary error: {:10.3e} (m)"
+
+        if self._fixed_boundary:
+            self.compute = self._compute_R
+        else:
+            self.compute = self._compute_Rb
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -63,44 +84,70 @@ class LCFSBoundaryR(_Objective):
             Level of output.
 
         """
-        if self._surface is None:
-            self._surface = eq.surface
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.surface.R_basis.modes
+            idx = np.arange(eq.surface.R_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.surface.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
 
-        R_modes = eq.R_basis.modes
-        Rb_modes = self._surface.R_basis.modes
+        self._dim_f = idx.size
 
-        dim_R = eq.R_basis.num_modes
-        self._dim_f = self._surface.R_basis.num_modes
+        if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
+            self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+            for i, (l, m, n) in enumerate(eq.R_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                elif eq.bdry_mode == "poincare":
+                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
+                self._A[j, i] = 1
+        else:  # Rb_lmn -> Rb optimization space
+            self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
-        self._A = np.zeros((self._dim_f, dim_R))
-        for i, (l, m, n) in enumerate(R_modes):
-            j = np.argwhere(np.logical_and(Rb_modes[:, 1] == m, Rb_modes[:, 2] == n))
-            self._A[j, i] = 1
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._target[modes_idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[modes_idx]
 
-        if None in self.target:
-            self.target = self._surface.R_lmn
+        # use surface parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = eq.surface.R_lmn[idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
+    def compute(self, *args, **kwargs):
+        pass
 
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+    def _compute_R(self, R_lmn, **kwargs):
+        Rb = jnp.dot(self._A, R_lmn)
+        return self._shift_scale(Rb)
 
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Rb_lmn = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb_lmn)
+    def _compute_Rb(self, Rb_lmn, **kwargs):
+        Rb = jnp.dot(self._A, Rb_lmn)
+        return self._shift_scale(Rb)
 
     @property
     def target_arg(self):
@@ -108,15 +155,23 @@ class LCFSBoundaryR(_Objective):
         return "Rb_lmn"
 
 
-class LCFSBoundaryZ(_Objective):
-    """Boundary condition on the last closed flux surface."""
+class FixBoundaryZ(_Objective):
+    """Boundary condition on the Z boundary parameters."""
 
     _scalar = False
     _linear = True
     _fixed = False
 
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="lcfs Z"):
-        """Initialize a LCFSBoundary Objective.
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        fixed_boundary=False,
+        modes=True,
+        name="lcfs Z",
+    ):
+        """Initialize a FixBoundaryZ Objective.
 
         Parameters
         ----------
@@ -127,15 +182,26 @@ class LCFSBoundaryZ(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
-        surface : FourierRZToroidalSurface, optional
-            Toroidal surface containing the Fourier modes to evaluate at.
+        fixed_boundary : bool, optional
+            True to enforce the boundary condition on flux surfaces,
+            or Falseto fix the boundary surface coefficients (defualt).
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the profile modes.
         name : str
             Name of the objective function.
 
         """
-        self._surface = surface
+        self._fixed_boundary = fixed_boundary
+        self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Z boundary error: {:10.3e} (m)"
+
+        if self._fixed_boundary:
+            self.compute = self._compute_Z
+        else:
+            self.compute = self._compute_Zb
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -150,49 +216,164 @@ class LCFSBoundaryZ(_Objective):
             Level of output.
 
         """
-        if self._surface is None:
-            self._surface = eq.surface
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.surface.Z_basis.modes
+            idx = np.arange(eq.surface.Z_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.surface.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
 
-        Z_modes = eq.Z_basis.modes
-        Zb_modes = self._surface.Z_basis.modes
+        self._dim_f = idx.size
 
-        dim_Z = eq.Z_basis.num_modes
-        self._dim_f = self._surface.Z_basis.num_modes
+        if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
+            self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+            for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                elif eq.bdry_mode == "poincare":
+                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
+                self._A[j, i] = 1
+        else:  # Zb_lmn -> Zb optimization space
+            self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
-        self._A = np.zeros((self._dim_f, dim_Z))
-        for i, (l, m, n) in enumerate(Z_modes):
-            j = np.argwhere(np.logical_and(Zb_modes[:, 1] == m, Zb_modes[:, 2] == n))
-            self._A[j, i] = 1
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0]:
+            self.target = self._target[modes_idx]
+        if self.weight.size == modes.shape[0]:
+            self.weight = self._weight[modes_idx]
 
-        if None in self.target:
-            self.target = self._surface.Z_lmn
+        # use surface parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = eq.surface.Z_lmn[idx]
 
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, Z_lmn, **kwargs):
-        """Compute last closed flux surface boundary errors.
+    def compute(self, *args, **kwargs):
+        pass
 
-        Parameters
-        ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+    def _compute_Z(self, Z_lmn, **kwargs):
+        Zb = jnp.dot(self._A, Z_lmn)
+        return self._shift_scale(Zb)
 
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Zb_lmn = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb_lmn)
+    def _compute_Zb(self, Zb_lmn, **kwargs):
+        Zb = jnp.dot(self._A, Zb_lmn)
+        return self._shift_scale(Zb)
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Zb_lmn"
+
+
+class PoincareLambda(_Objective):
+    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta)."""
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(self, eq=None, target=None, weight=1, name="poincare lambda"):
+        """Initialize a LambdaPoincare Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        name : str
+            Name of the objective function.
+
+        """
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "lambda poincare boundary error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        L_basis = eq.L_basis
+        L_modes = eq.L_basis.modes
+        dim_L = eq.L_basis.num_modes
+
+        if (
+            None in self.target
+        ):  # uses current eq's value of lambda at zeta=0 as constraint
+            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
+                eq.L_lmn, eq.L_basis
+            )
+            Lb_modes = Lb_basis.modes
+            self._dim_f = Lb_basis.num_modes
+            self.target = Lb_lmn
+
+        self._A = np.zeros((self._dim_f, dim_L))
+        for i, (l, m, n) in enumerate(L_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
+                    Lb_modes[:, -1] >= 0,
+                )
+            )
+            self._A[j, i] = 1
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute lambda poincare section errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Lambda poincare section errors.
+
+        """
+        f = jnp.dot(self._A, L_lmn)
+        return self._shift_scale(f)
 
 
 class LambdaGauge(_Objective):
@@ -328,7 +509,7 @@ class LambdaGauge(_Objective):
         return self._shift_scale(f)
 
 
-class FixedPressure(_Objective):
+class FixPressure(_Objective):
     """Fixes pressure coefficients."""
 
     _scalar = False
@@ -344,7 +525,7 @@ class FixedPressure(_Objective):
         modes=True,
         name="fixed-pressure",
     ):
-        """Initialize a FixedPressure Objective.
+        """Initialize a FixPressure Objective.
 
         Parameters
         ----------
@@ -511,7 +692,7 @@ class FixedPressure(_Objective):
         return "p_l"
 
 
-class FixedIota(_Objective):
+class FixIota(_Objective):
     """Fixes rotational transform coefficients."""
 
     _scalar = False
@@ -527,7 +708,7 @@ class FixedIota(_Objective):
         modes=True,
         name="fixed-iota",
     ):
-        """Initialize a FixedIota Objective.
+        """Initialize a FixIota Objective.
 
         Parameters
         ----------
@@ -694,7 +875,7 @@ class FixedIota(_Objective):
         return "i_l"
 
 
-class FixedPsi(_Objective):
+class FixPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
 
     _scalar = True
@@ -702,7 +883,7 @@ class FixedPsi(_Objective):
     _fixed = True
 
     def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
-        """Initialize a FixedIota Objective.
+        """Initialize a FixIota Objective.
 
         Parameters
         ----------
@@ -851,282 +1032,3 @@ class TargetIota(_Objective):
         """
         data = compute_rotational_transform(i_l, self._profile)
         return self._shift_scale(data["iota"])
-
-
-class PoincareBoundaryR(_Objective):
-    """Boundary condition on the zeta=0 Poincare XS."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False  # TODO: can we dynamically detect this instead?
-
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="poincare R"):
-        """Initialize a PoincareBoundary Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        surface : ZernikeRZToroidalSection, optional
-            Poincare XS at zeta=0 containing the Zernike modes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
-        self._surface = surface
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "R Poincare BC error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._surface is None:
-            self._surface = eq.surface
-
-        R_modes = eq.R_basis.modes
-        Rb_modes = self._surface.R_basis.modes
-
-        dim_R = eq.R_basis.num_modes
-        self._dim_f = self._surface.R_basis.num_modes
-
-        self._A = np.zeros((self._dim_f, dim_R))
-
-        for i, (l, m, n) in enumerate(R_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Rb_modes[:, :2] == [l, m]).all(axis=1),
-                    Rb_modes[:, -1]
-                    >= 0,  # don't need to constrain sin(zeta) modes as they = 0 at zeta=0 anyways
-                )
-            )
-            self._A[j, i] = 1
-
-        if None in self.target:
-            self.target = self._surface.R_lmn
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, R_lmn, **kwargs):
-        """Compute zeta=0 Poincare XS boundary errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Rb_lmn = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb_lmn)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Rb_lmn"
-
-
-class PoincareBoundaryZ(_Objective):
-    """Boundary condition on the zeta=0 Poincare XS."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=None, weight=1, surface=None, name="poincare Z"):
-        """Initialize a PoincareBoundary Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        surface : ZernikeRZToroidalSection, optional
-            Poincare XS at zeta=0 containing the Zernike modes to evaluate at.
-        name : str
-            Name of the objective function.
-        """
-        self._surface = surface
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Z boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        # FIXME: Assumes poincare section surface is given, what to do if not
-        # the case? should just use current eq's poincare seciton
-        # make a util function to do so
-        # and same for the LCFS boundaries?
-        if self._surface is None:
-            self._surface = eq.surface
-
-        Z_modes = eq.Z_basis.modes
-        Zb_modes = self._surface.Z_basis.modes
-
-        dim_Z = eq.Z_basis.num_modes
-        self._dim_f = self._surface.Z_basis.num_modes
-
-        self._A = np.zeros((self._dim_f, dim_Z))
-        for i, (l, m, n) in enumerate(Z_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Zb_modes[:, :2] == [l, m]).all(axis=1),
-                    Zb_modes[:, -1] >= 0,
-                )
-            )
-            self._A[j, i] = 1
-
-        if None in self.target:
-            self.target = self._surface.Z_lmn
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, Z_lmn, **kwargs):
-        """Compute zeta=0 Poincare XS boundary errors.
-
-        Parameters
-        ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-
-        Returns
-        -------
-        f : ndarray
-            Boundary surface errors (m).
-
-        """
-        Zb_lmn = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb_lmn)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "Zb_lmn"
-
-
-class PoincareLambda(_Objective):
-    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta)."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=None, weight=1, name="poincare lambda"):
-        """Initialize a LambdaPoincare Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        name : str
-            Name of the objective function.
-
-        """
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "lambda poincare boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-
-        L_basis = eq.L_basis
-        L_modes = eq.L_basis.modes
-        dim_L = eq.L_basis.num_modes
-
-        if (
-            None in self.target
-        ):  # uses current eq's value of lambda at zeta=0 as constraint
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn, eq.L_basis
-            )
-            Lb_modes = Lb_basis.modes
-            self._dim_f = Lb_basis.num_modes
-            self.target = Lb_lmn
-
-        self._A = np.zeros((self._dim_f, dim_L))
-        for i, (l, m, n) in enumerate(L_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
-                    Lb_modes[:, -1] >= 0,
-                )
-            )
-            self._A[j, i] = 1
-
-        if self.target is not None:
-            self._dim_f = self._A.shape[0]
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, L_lmn, **kwargs):
-        """Compute lambda poincare section errors.
-
-        Parameters
-        ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
-
-        Returns
-        -------
-        f : ndarray
-            Lambda poincare section errors.
-
-        """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)

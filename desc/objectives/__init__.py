@@ -1,14 +1,12 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
-    LambdaGauge,
+    FixBoundaryR,
+    FixBoundaryZ,
     PoincareLambda,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
+    LambdaGauge,
+    FixPressure,
+    FixIota,
+    FixPsi,
     TargetIota,
 )
 from ._generic import (
@@ -32,24 +30,21 @@ from ._qs import (
 )
 from .utils import (
     get_fixed_boundary_constraints,
-    get_force_balance_objective,
-    get_force_balance_poincare_objective,
-    get_energy_poincare_objective,
-    get_energy_objective,
+    get_equilibrium_objective,
+    factorize_linear_constraints,
 )
+from ._wrappers import WrappedEquilibriumObjective
 
 
 __all__ = [
     "ObjectiveFunction",
-    "LCFSBoundaryR",
-    "LCFSBoundaryZ",
-    "PoincareBoundaryR",
-    "PoincareBoundaryZ",
+    "FixBoundaryR",
+    "FixBoundaryZ",
     "PoincareLambda",
     "LambdaGauge",
-    "FixedPressure",
-    "FixedIota",
-    "FixedPsi",
+    "FixPressure",
+    "FixIota",
+    "FixPsi",
     "TargetIota",
     "GenericObjective",
     "Volume",
@@ -66,8 +61,5 @@ __all__ = [
     "QuasisymmetryTwoTerm",
     "QuasisymmetryTripleProduct",
     "get_fixed_boundary_constraints",
-    "get_force_balance_objective",
-    "get_force_balance_poincare_objective",
-    "get_energy_poincare_objective",
-    "get_energy_objective",
+    "get_equilibium_objective",
 ]

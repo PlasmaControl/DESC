@@ -10,15 +10,10 @@ from desc.__main__ import main
 from desc.geometry import ZernikeRZToroidalSection
 from desc.basis import FourierZernike_to_PoincareZernikePolynomial
 from desc.objectives import (
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
-    PoincareLambda,
-    LambdaGauge,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
-    ForceBalance,
+    get_fixed_boundary_constraints,
     ObjectiveFunction,
+    PoincareLambda,
+    ForceBalance,
 )
 
 
@@ -223,15 +218,8 @@ def test_poincare_sfl_bc(
         eq_poin.R_lmn[1:4] + 0.02
     )  # perturb slightly from the axisymmetric equilibrium
 
-    constraints = (
-        PoincareBoundaryR(),
-        PoincareBoundaryZ(),
-        PoincareLambda(),  # this constrains lambda at the zeta=0 surface, using the eq's current value of lambda
-        LambdaGauge(),
-        FixedPressure(),
-        FixedIota(),
-        FixedPsi(),
-    )
+    # this constrains lambda at the zeta=0 surface, using eq's current value of lambda
+    constraints = get_fixed_boundary_constraints() + (PoincareLambda(),)
     objectives = ForceBalance()
     obj = ObjectiveFunction(objectives)
     eq_poin.solve(

@@ -6,7 +6,11 @@ from desc.objectives import (
     RadialForceBalance,
     HelicalForceBalance,
     AspectRatio,
-    get_fixed_boundary_constraints,
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixPressure,
+    FixIota,
+    FixPsi,
 )
 from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
@@ -75,8 +79,15 @@ def test_1d_optimization(SOLOVEV):
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=3))
-    constraints = get_fixed_boundary_constraints()
-    perturb_options = {"dZb": True, "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1])}
-    eq = eq.optimize(objective, constraints, perturb_options=perturb_options)
+    constraints = (
+        ForceBalance(),
+        FixBoundaryR(),
+        FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    options = {"perturb_options": {"order": 1}}
+    eq.optimize(objective, constraints, options=options)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 3)

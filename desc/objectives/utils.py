@@ -6,12 +6,12 @@ from desc.utils import svd_inv_null
 from desc.compute import arg_order
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    FixedBoundaryR,
-    FixedBoundaryZ,
+    FixBoundaryR,
+    FixBoundaryZ,
     LambdaGauge,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
+    FixPressure,
+    FixIota,
+    FixPsi,
 )
 from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
 
@@ -26,12 +26,12 @@ def get_fixed_boundary_constraints():
 
     """
     constraints = (
-        FixedBoundaryR(),
-        FixedBoundaryZ(),
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
         LambdaGauge(),
-        FixedPressure(),
-        FixedIota(),
-        FixedPsi(),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
     )
     return constraints
 

@@ -20,7 +20,7 @@ from .objective_funs import _Objective
 # TODO: need dim_x attribute
 
 
-class FixedBoundaryR(_Objective):
+class FixBoundaryR(_Objective):
     """Boundary condition on the R boundary parameters."""
 
     _scalar = False
@@ -32,11 +32,11 @@ class FixedBoundaryR(_Objective):
         eq=None,
         target=None,
         weight=1,
-        fixed_boundary=True,
+        fixed_boundary=False,
         modes=True,
         name="lcfs R",
     ):
-        """Initialize a FixedBoundaryR Objective.
+        """Initialize a FixBoundaryR Objective.
 
         Parameters
         ----------
@@ -48,8 +48,8 @@ class FixedBoundaryR(_Objective):
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
         fixed_boundary : bool, optional
-            True to enforce the boundary condition on flux surfaces (defualt),
-            or False to fix the boundary surface coefficients.
+            True to enforce the boundary condition on flux surfaces,
+            or Falseto fix the boundary surface coefficients (defualt).
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -150,7 +150,7 @@ class FixedBoundaryR(_Objective):
         return "Rb_lmn"
 
 
-class FixedBoundaryZ(_Objective):
+class FixBoundaryZ(_Objective):
     """Boundary condition on the Z boundary parameters."""
 
     _scalar = False
@@ -162,11 +162,11 @@ class FixedBoundaryZ(_Objective):
         eq=None,
         target=None,
         weight=1,
-        fixed_boundary=True,
+        fixed_boundary=False,
         modes=True,
         name="lcfs Z",
     ):
-        """Initialize a FixedBoundaryZ Objective.
+        """Initialize a FixBoundaryZ Objective.
 
         Parameters
         ----------
@@ -178,8 +178,8 @@ class FixedBoundaryZ(_Objective):
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
         fixed_boundary : bool, optional
-            False to enforce the boundary condition on flux surfaces (defualt),
-            or True to fix the boundary surface coefficients.
+            True to enforce the boundary condition on flux surfaces,
+            or Falseto fix the boundary surface coefficients (defualt).
         modes : ndarray, optional
             Basis modes numbers [l,m,n] of boundary modes to fix.
             len(target) = len(weight) = len(modes).
@@ -451,7 +451,7 @@ class LambdaGauge(_Objective):
         return self._shift_scale(f)
 
 
-class FixedPressure(_Objective):
+class FixPressure(_Objective):
     """Fixes pressure coefficients."""
 
     _scalar = False
@@ -467,7 +467,7 @@ class FixedPressure(_Objective):
         modes=True,
         name="fixed-pressure",
     ):
-        """Initialize a FixedPressure Objective.
+        """Initialize a FixPressure Objective.
 
         Parameters
         ----------
@@ -581,7 +581,7 @@ class FixedPressure(_Objective):
         return "p_l"
 
 
-class FixedIota(_Objective):
+class FixIota(_Objective):
     """Fixes rotational transform coefficients."""
 
     _scalar = False
@@ -597,7 +597,7 @@ class FixedIota(_Objective):
         modes=True,
         name="fixed-iota",
     ):
-        """Initialize a FixedIota Objective.
+        """Initialize a FixIota Objective.
 
         Parameters
         ----------
@@ -711,7 +711,7 @@ class FixedIota(_Objective):
         return "i_l"
 
 
-class FixedPsi(_Objective):
+class FixPsi(_Objective):
     """Fixes total toroidal magnetic flux within the last closed flux surface."""
 
     _scalar = True
@@ -719,7 +719,7 @@ class FixedPsi(_Objective):
     _fixed = True
 
     def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
-        """Initialize a FixedIota Objective.
+        """Initialize a FixIota Objective.
 
         Parameters
         ----------

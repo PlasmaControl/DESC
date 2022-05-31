@@ -1,12 +1,12 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    FixedBoundaryR,
-    FixedBoundaryZ,
+    FixBoundaryR,
+    FixBoundaryZ,
     PoincareLambda,
     LambdaGauge,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
+    FixPressure,
+    FixIota,
+    FixPsi,
     TargetIota,
 )
 from ._generic import (
@@ -38,13 +38,13 @@ from ._wrappers import WrappedEquilibriumObjective
 
 __all__ = [
     "ObjectiveFunction",
-    "FixedBoundaryR",
-    "FixedBoundaryZ",
+    "FixBoundaryR",
+    "FixBoundaryZ",
     "PoincareLambda",
     "LambdaGauge",
-    "FixedPressure",
-    "FixedIota",
-    "FixedPsi",
+    "FixPressure",
+    "FixIota",
+    "FixPsi",
     "TargetIota",
     "GenericObjective",
     "Volume",

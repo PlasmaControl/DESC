@@ -197,6 +197,9 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
+        disp = verbose - 1 if verbose > 1 else verbose
+
         timer = Timer()
 
         if self.method in Optimizer._desc_methods:
@@ -365,7 +368,7 @@ class Optimizer(IOAble):
                     hess=hess_wrapped,
                     tol=gtol,
                     callback=callback,
-                    options={"maxiter": maxiter, "disp": verbose, **options},
+                    options={"maxiter": maxiter, "disp": disp, **options},
                 )
                 result["allx"] = allx
             except StopIteration:
@@ -404,7 +407,7 @@ class Optimizer(IOAble):
                 xtol=xtol,
                 gtol=gtol,
                 max_nfev=maxiter,
-                verbose=verbose,
+                verbose=disp,
             )
             result["allx"] = allx
 
@@ -427,7 +430,7 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=verbose,
+                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,
@@ -444,7 +447,7 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=verbose,
+                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,

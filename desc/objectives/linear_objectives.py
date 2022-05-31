@@ -112,8 +112,10 @@ class FixBoundaryR(_Objective):
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
-                # FIXME: generalize for Poincare BC
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                elif eq.bdry_mode == "poincare":
+                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
@@ -242,8 +244,10 @@ class FixBoundaryZ(_Objective):
         if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-                # FIXME: generalize for Poincare BC
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                elif eq.bdry_mode == "poincare":
+                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]

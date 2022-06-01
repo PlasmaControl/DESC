@@ -2,7 +2,7 @@ import unittest
 import pytest
 import numpy as np
 import mpmath
-import time
+
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
@@ -185,7 +185,7 @@ class TestBasis(unittest.TestCase):
         correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
-        basis = PowerSeries(L=2)
+        basis = PowerSeries(L=2, sym=False)
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
         derivs = basis.evaluate(grid.nodes, derivatives=np.array([1, 0, 0]))
 
@@ -219,7 +219,7 @@ class TestBasis(unittest.TestCase):
 
     def test_change_resolution(self):
         """Test change_resolution function."""
-        ps = PowerSeries(L=4)
+        ps = PowerSeries(L=4, sym=False)
         ps.change_resolution(L=6)
         assert len(ps.modes) == 7
 

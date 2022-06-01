@@ -32,7 +32,9 @@ class TestProfiles(unittest.TestCase):
     @pytest.mark.slow
     def test_close_values(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
         sp = pp.to_spline()
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
@@ -68,7 +70,9 @@ class TestProfiles(unittest.TestCase):
 
     def test_get_set(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
 
         assert pp.get_params(2) == -2
         assert pp.get_idx(4) == 4

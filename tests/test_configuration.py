@@ -75,8 +75,8 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(eq.N, 2)
         self.assertEqual(eq.NFP, 3)
         self.assertEqual(eq.spectral_indexing, "ansi")
-        np.testing.assert_allclose(eq.p_l, [10, 0, 5])
-        np.testing.assert_allclose(eq.i_l, [1, 0, 3])
+        np.testing.assert_allclose(eq.p_l, [10, 5])
+        np.testing.assert_allclose(eq.i_l, [1, 3])
         self.assertIsInstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,

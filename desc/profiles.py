@@ -66,6 +66,110 @@ class Profile(IOAble, ABC):
     def compute(params=None, grid=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.params"""
 
+    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+        """Convert this profile to a PowerSeriesProfile
+
+        Parameters
+        ----------
+        order : int
+            polynomial order
+        xs : int or ndarray
+            x locations to use for fit. If an integer, uses that many points linearly
+            spaced between 0,1
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(M,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        profile : PowerSeriesProfile
+            profile in power series form.
+
+        """
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        fs = self.compute(grid=xs)
+        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
+        p.grid = self.grid
+        p.name = self.name
+        return p
+
+    def to_spline(self, knots=20, method="cubic2"):
+        """Convert this profile to a SplineProfile
+
+        Parameters
+        ----------
+        knots : int or ndarray
+            x locations to use for spline. If an integer, uses that many points linearly
+            spaced between 0,1
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+
+        Returns
+        -------
+        profile : SplineProfile
+            profile in spline form.
+
+        """
+        if np.isscalar(knots):
+            knots = np.linspace(0, 1, knots)
+        values = self.compute(grid=knots)
+        return SplineProfile(values, knots, self.grid, method, self.name)
+
+    def to_mtanh(
+        self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
+    ):
+        """Convert this profile to modified hyperbolic tangent + poly form.
+
+        Parameters
+        ----------
+        order : int
+            order of the core polynomial to fit
+        xs : int or array-like, shape(M,)
+            coordinate locations to evaluate for fitting. If an integer, assumes
+            that many linearly spaced ints in (0,1)
+        w : array-like, shape(M,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+        p0 : array-like, shape(5+order,)
+            initial guess for parameter values
+        pmin : float or array-like, shape(5+order,)
+            lower bounds for parameter values
+        pmax : float or array-like, shape(5+order,)
+            upper bounds for parameter values
+
+        Returns
+        -------
+        profile : MTanhProfile
+            profile in mtanh + polynomial form.
+
+        """
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        ys = self.compute(grid=xs)
+        return MTanhProfile.from_values(
+            xs,
+            ys,
+            order=order,
+            w=w,
+            p0=p0,
+            pmax=pmax,
+            pmin=pmin,
+            grid=self.grid,
+            name=self.name,
+            **kwargs,
+        )
+
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         return self.compute(params, grid, dr, dt, dz)
 
@@ -267,112 +371,6 @@ class PowerSeriesProfile(Profile):
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
         return cls(params, grid=grid, name=name)
 
-    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
-        """Convert this profile to a PowerSeriesProfile
-
-        Parameters
-        ----------
-        order : int
-            polynomial order
-        xs : int or ndarray
-            x locations to use for fit. If an integer, uses that many points linearly
-            spaced between 0,1
-        rcond : float
-            Relative condition number of the fit. Singular values smaller than this
-            relative to the largest singular value will be ignored. The default value
-            is len(x)*eps, where eps is the relative precision of the float type, about
-            2e-16 in most cases.
-        w : array-like, shape(M,)
-            Weights to apply to the y-coordinates of the sample points. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
-
-        Returns
-        -------
-        profile : PowerSeriesProfile
-            profile in power series form.
-
-        """
-        if len(self.params) == order + 1:
-            params = self.params
-        elif len(self.params) > order + 1:
-            params = self.params[: order + 1]
-        elif len(self.params) < order + 1:
-            params = np.pad(self.params, (0, order + 1 - len(self.params)))
-        modes = np.arange(order + 1)
-
-        return PowerSeriesProfile(params, modes, self.grid, self.name)
-
-    def to_spline(self, knots=20, method="cubic2"):
-        """Convert this profile to a SplineProfile
-
-        Parameters
-        ----------
-        knots : int or ndarray
-            x locations to use for spline. If an integer, uses that many points linearly
-            spaced between 0,1
-        method : str
-            method of interpolation
-            - `'nearest'`: nearest neighbor interpolation
-            - `'linear'`: linear interpolation
-            - `'cubic'`: C1 cubic splines (aka local splines)
-            - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
-
-        Returns
-        -------
-        profile : SplineProfile
-            profile in spline form.
-
-        """
-        if np.isscalar(knots):
-            knots = np.linspace(0, 1, knots)
-        values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)
-
-    def to_mtanh(
-        self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
-    ):
-        """Convert this profile to modified hyperbolic tangent + poly form.
-
-        Parameters
-        ----------
-        order : int
-            order of the core polynomial to fit
-        xs : int or array-like, shape(M,)
-            coordinate locations to evaluate for fitting. If an integer, assumes
-            that many linearly spaced ints in (0,1)
-        w : array-like, shape(M,)
-            Weights to apply to the y-coordinates of the sample points. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
-        p0 : array-like, shape(5+order,)
-            initial guess for parameter values
-        pmin : float or array-like, shape(5+order,)
-            lower bounds for parameter values
-        pmax : float or array-like, shape(5+order,)
-            upper bounds for parameter values
-
-        Returns
-        -------
-        profile : MTanhProfile
-            profile in mtanh + polynomial form.
-
-        """
-        if np.isscalar(xs):
-            xs = np.linspace(0, 1, xs)
-        ys = self.compute(grid=xs)
-        return MTanhProfile.from_values(
-            xs,
-            ys,
-            order=order,
-            w=w,
-            p0=p0,
-            pmax=pmax,
-            pmin=pmin,
-            grid=self.grid,
-            name=self.name,
-            **kwargs,
-        )
-
 
 class SplineProfile(Profile):
     """Profile represented by a piecewise cubic spline
@@ -511,110 +509,6 @@ class SplineProfile(Profile):
         df = self._Dx @ f
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
         return fq
-
-    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
-        """Convert this profile to a PowerSeriesProfile
-
-        Parameters
-        ----------
-        order : int
-            polynomial order
-        xs : int or ndarray
-            x locations to use for fit. If an integer, uses that many points linearly
-            spaced between 0,1
-        rcond : float
-            Relative condition number of the fit. Singular values smaller than this
-            relative to the largest singular value will be ignored. The default value
-            is len(x)*eps, where eps is the relative precision of the float type, about
-            2e-16 in most cases.
-        w : array-like, shape(M,)
-            Weights to apply to the y-coordinates of the sample points. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
-
-        Returns
-        -------
-        profile : PowerSeriesProfile
-            profile in power series form.
-
-        """
-        if np.isscalar(xs):
-            xs = np.linspace(0, 1, xs)
-        fs = self.compute(grid=xs)
-        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
-        p.grid = self.grid
-        p.name = self.name
-        return p
-
-    def to_spline(self, knots=20, method="cubic2"):
-        """Convert this profile to a SplineProfile
-
-        Parameters
-        ----------
-        knots : int or ndarray
-            x locations to use for spline. If an integer, uses that many points linearly
-            spaced between 0,1
-        method : str
-            method of interpolation
-            - `'nearest'`: nearest neighbor interpolation
-            - `'linear'`: linear interpolation
-            - `'cubic'`: C1 cubic splines (aka local splines)
-            - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
-
-        Returns
-        -------
-        profile : SplineProfile
-            profile in spline form.
-
-        """
-        if np.isscalar(knots):
-            knots = np.linspace(0, 1, knots)
-        values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)
-
-    def to_mtanh(
-        self, order=4, xs=100, w=None, p0=None, pmax=None, pmin=None, **kwargs
-    ):
-        """Convert this profile to modified hyperbolic tangent + poly form.
-
-        Parameters
-        ----------
-        order : int
-            order of the core polynomial to fit
-        xs : int or array-like, shape(M,)
-            coordinate locations to evaluate for fitting. If an integer, assumes
-            that many linearly spaced ints in (0,1)
-        w : array-like, shape(M,)
-            Weights to apply to the y-coordinates of the sample points. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
-        p0 : array-like, shape(5+order,)
-            initial guess for parameter values
-        pmin : float or array-like, shape(5+order,)
-            lower bounds for parameter values
-        pmax : float or array-like, shape(5+order,)
-            upper bounds for parameter values
-
-        Returns
-        -------
-        profile : MTanhProfile
-            profile in mtanh + polynomial form.
-
-        """
-        if np.isscalar(xs):
-            xs = np.linspace(0, 1, xs)
-        ys = self.compute(grid=xs)
-        return MTanhProfile.from_values(
-            xs,
-            ys,
-            order=order,
-            w=w,
-            p0=p0,
-            pmax=pmax,
-            pmin=pmin,
-            grid=self.grid,
-            name=self.name,
-            **kwargs,
-        )
 
 
 class MTanhProfile(Profile):
@@ -883,63 +777,3 @@ class MTanhProfile(Profile):
             warnings.warn("Fitting did not converge, parameters may not be correct")
         params = out.x
         return MTanhProfile(params, grid, name)
-
-    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
-        """Convert this profile to a PowerSeriesProfile
-
-        Parameters
-        ----------
-        order : int
-            polynomial order
-        xs : int or ndarray
-            x locations to use for fit. If an integer, uses that many points linearly
-            spaced between 0,1
-        rcond : float
-            Relative condition number of the fit. Singular values smaller than this
-            relative to the largest singular value will be ignored. The default value
-            is len(x)*eps, where eps is the relative precision of the float type, about
-            2e-16 in most cases.
-        w : array-like, shape(M,)
-            Weights to apply to the y-coordinates of the sample points. For gaussian
-            uncertainties, use 1/sigma (not 1/sigma**2).
-
-        Returns
-        -------
-        profile : PowerSeriesProfile
-            profile in power series form.
-
-        """
-        if np.isscalar(xs):
-            xs = np.linspace(0, 1, xs)
-        fs = self.compute(grid=xs)
-        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
-        p.grid = self.grid
-        p.name = self.name
-        return p
-
-    def to_spline(self, knots=20, method="cubic2"):
-        """Convert this profile to a SplineProfile
-
-        Parameters
-        ----------
-        knots : int or ndarray
-            x locations to use for spline. If an integer, uses that many points linearly
-            spaced between 0,1
-        method : str
-            method of interpolation
-            - `'nearest'`: nearest neighbor interpolation
-            - `'linear'`: linear interpolation
-            - `'cubic'`: C1 cubic splines (aka local splines)
-            - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
-
-        Returns
-        -------
-        profile : SplineProfile
-            profile in spline form.
-
-        """
-        if np.isscalar(knots):
-            knots = np.linspace(0, 1, knots)
-        values = self.compute(grid=knots)
-        return SplineProfile(values, knots, self.grid, method, self.name)

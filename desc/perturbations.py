@@ -605,6 +605,12 @@ def optimal_perturb(
     # 2nd order
     if order > 1:
 
+        idx = np.array([], dtype=int)
+        for arg in objective_f.args:
+            if arg not in objective_g.args:
+                idx = np.concatenate((idx, objective_f.x_idx[arg]))
+        dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
+
         # 2nd partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing d^2f")
@@ -619,7 +625,7 @@ def optimal_perturb(
         if verbose > 0:
             print("Computing d^2g")
         timer.start("d^2g computation")
-        tangents_g = dxdx_reduced @ dx1_reduced + dxdc @ dc1
+        tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
         RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
         timer.stop("d^2g computation")
         if verbose > 1:

@@ -183,6 +183,159 @@ class Profile(IOAble, ABC):
         )
 
 
+class ScaledProfile(Profile):
+    """Profile times a constant value.
+
+    f_1(x) = a*f(x)
+
+    Parameters
+    ----------
+    profile : Profile
+        base profile to scale
+    scale : float
+        scale factor
+
+    """
+
+    _io_attrs_ = Profile._io_attrs_ + ["_profile", "scale"]
+
+    def __init__(self, profile, scale):
+        assert isinstance(
+            profile, Profile
+        ), "profile in a ScaledProfile must be a Profile or subclass, got {}".format(
+            str(profile)
+        )
+        assert np.isscalar(scale), "scale must be a scalar"
+        self._profile = profile
+        self._scale = scale
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters to use. If not given, uses the
+            values given by the params attribute
+        grid : Grid or array-like
+            locations to compute values at. Defaults to self.grid
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        f = self._profile.compute(params, grid, dr, dt, dz)
+        return self._scale * f
+
+
+class SumProfile(Profile):
+    """Sum of two or more Profiles
+
+    f(x) = f1(x) + f2(x) + f3(x) ...
+
+    Parameters
+    ----------
+    profiles : Profile
+        profiles to sum
+
+    """
+
+    _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
+
+    def __init__(self, *profiles):
+        for profile in profiles:
+            assert isinstance(
+                profile, Profile
+            ), "Each profile in a SumProfile must be a Profile or subclass, got {}".format(
+                str(profile)
+            )
+        self._profiles = profiles
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters to use. If not given, uses the
+            values given by the params attribute
+        grid : Grid or array-like
+            locations to compute values at. Defaults to self.grid
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        if params is None:
+            params = [None] * len(self._profiles)
+        if isinstance(params, dict):
+            params = [params]
+        f = 0
+        for i, profile in enumerate(self._profiles):
+            f += profile.compute(params[i % len(params)], grid, dr, dt, dz)
+        return f
+
+
+class ProductProfile(Profile):
+    """Product of two or more Profiles
+
+    f(x) = f1(x) * f2(x) * f3(x) ...
+
+    Parameters
+    ----------
+    profiles : Profile
+        profiles to multiply
+
+    """
+
+    _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
+
+    def __init__(self, *profiles):
+        for profile in profiles:
+            assert isinstance(
+                profile, Profile
+            ), "Each profile in a ProductProfile must be a Profile or subclass, got {}".format(
+                str(profile)
+            )
+        self._profiles = profiles
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters to use. If not given, uses the
+            values given by the params attribute
+        grid : Grid or array-like
+            locations to compute values at. Defaults to self.grid
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        if params is None:
+            params = [None] * len(self._profiles)
+        if isinstance(params, dict):
+            params = [params]
+        f = 1
+        for i, profile in enumerate(self._profiles):
+            f *= profile.compute(params[i % len(params)], grid, dr, dt, dz)
+        return f
+
+
 class PowerSeriesProfile(Profile):
     """Profile represented by a monic power series
 

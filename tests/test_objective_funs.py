@@ -1,102 +1,87 @@
 import unittest
 import numpy as np
-import pytest
-from desc.grid import LinearGrid, ConcentricGrid
 from desc.equilibrium import Equilibrium
-from desc.basis import (
-    PowerSeries,
-    DoubleFourierSeries,
-    FourierZernikeBasis,
-    FourierSeries,
+from desc.objectives import (
+    GenericObjective,
+    Energy,
+    Volume,
+    AspectRatio,
+    ToroidalCurrent,
+    RadialCurrentDensity,
+    PoloidalCurrentDensity,
+    ToroidalCurrentDensity,
+    QuasisymmetryBoozer,
+    QuasisymmetryTwoTerm,
+    QuasisymmetryTripleProduct,
 )
-from desc.transform import Transform
-from desc.objective_funs import (
-    get_objective_function,
-    ForceErrorNodes,
-    EnergyVolIntegral,
-)
 
 
-class TestObjectiveFunctionFactory(unittest.TestCase):
-    """Test basic functionality of objective function getter"""
+class TestObjectiveFunction(unittest.TestCase):
+    """Test ObjectiveFunction class."""
 
-    def test_obj_fxn_types(self):
-        """test the correct objective function is returned for 'force', 'energy', and unimplemented"""
-        RZ_grid = ConcentricGrid(L=4, M=2, N=0)
-        R_basis = FourierZernikeBasis(L=-1, M=2, N=0)
-        Z_basis = FourierZernikeBasis(L=-1, M=2, N=0)
-        L_basis = FourierZernikeBasis(L=-1, M=2, N=0)
-        PI_basis = PowerSeries(L=3)
+    def test_generic(self):
+        eq = Equilibrium()
+        obj = GenericObjective("sqrt(g)", eq=eq)
+        kwargs = {"R_lmn": eq.R_lmn, "Z_lmn": eq.Z_lmn}
+        B = obj.compute(**kwargs)
+        np.testing.assert_allclose(B, eq.compute("sqrt(g)")["sqrt(g)"])
 
-        R_transform = Transform(RZ_grid, R_basis)
-        Z_transform = Transform(RZ_grid, Z_basis)
-        L_transform = Transform(RZ_grid, L_basis)
-        PI_transform = Transform(RZ_grid, PI_basis)
+    def test_volume(self):
+        eq = Equilibrium()
+        obj = Volume(target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq)
+        V = obj.compute(eq.R_lmn, eq.Z_lmn)
+        np.testing.assert_allclose(V, 10)
 
-        errr_mode = "force"
-        obj_fun = get_objective_function(
-            errr_mode,
-            R_transform=R_transform,
-            Z_transform=Z_transform,
-            L_transform=L_transform,
-            p_profile=PI_transform,
-            i_profile=PI_transform,
-        )
-        self.assertIsInstance(obj_fun, ForceErrorNodes)
-        with pytest.warns(UserWarning):
-            errr_mode = "energy"
-            obj_fun = get_objective_function(
-                errr_mode,
-                R_transform=R_transform,
-                Z_transform=Z_transform,
-                L_transform=L_transform,
-                p_profile=PI_transform,
-                i_profile=PI_transform,
-            )
-            self.assertIsInstance(obj_fun, EnergyVolIntegral)
+    def test_aspect_ratio(self):
+        eq = Equilibrium()
+        obj = AspectRatio(target=5, weight=2, eq=eq)
+        AR = obj.compute(eq.R_lmn, eq.Z_lmn)
+        np.testing.assert_allclose(AR, 10)
 
-        # test unimplemented errr_mode
-        with self.assertRaises(ValueError):
-            errr_mode = "not implemented"
-            obj_fun = get_objective_function(
-                errr_mode,
-                R_transform=R_transform,
-                Z_transform=Z_transform,
-                L_transform=L_transform,
-                p_profile=PI_transform,
-                i_profile=PI_transform,
-            )
+    def test_energy(self):
+        eq = Equilibrium()
+        obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
+        W = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.p_l, eq.Psi)
+        np.testing.assert_allclose(W, 10)
 
+    def test_toroidal_current(self):
+        eq = Equilibrium()
+        obj = ToroidalCurrent(target=1, weight=2, eq=eq)
+        I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(I, -2)
 
-class TestIsNested(unittest.TestCase):
-    """tests for functions"""
+    def test_radial_current_density(self):
+        eq = Equilibrium()
+        obj = RadialCurrentDensity(eq=eq)
+        Jr = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(np.sum(Jr), 0, atol=2e-8)
 
-    def test_is_nested(self):
+    def test_poloidal_current_density(self):
+        eq = Equilibrium()
+        obj = PoloidalCurrentDensity(eq=eq)
+        Jt = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(np.sum(Jt), 0, atol=2e-8)
 
-        inputs = {
-            "L": 4,
-            "M": 2,
-            "N": 0,
-            "NFP": 1,
-            "Psi": 1.0,
-            "pressure": np.array(
-                [
-                    [
-                        0,
-                        0,
-                    ]
-                ]
-            ),
-            "iota": np.array([[0, 0.23]]),
-            "surface": np.array([[0, 0, 0, 10, 0], [0, 1, 0, 1, 0]]),
-            "spectral_indexing": "fringe",
-        }
+    def test_toroidal_current_density(self):
+        eq = Equilibrium()
+        obj = ToroidalCurrentDensity(target=1, weight=2, eq=eq)
+        Jt = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(Jt, -2)
 
-        eq1 = Equilibrium(**inputs)
-        eq1.R_lmn = np.array([0, 1, 0, 0, 0, 0, 0, 0, 0])
-        eq1.Z_lmn = np.array([0, 0, -1, 0, 0, 0, 0, 0, 0])
-        eq2 = Equilibrium(**inputs)
-        eq2.R_lmn = np.array([0, 1, 0, 0, 0, 0, 5, 0, 0])
-        eq2.Z_lmn = np.array([0, 0, -1, 0, 0, 4, 0, 0, 0])
-        self.assertTrue(eq1.is_nested())
-        self.assertFalse(eq2.is_nested())
+    def test_qs_boozer(self):
+        eq = Equilibrium()
+        obj = QuasisymmetryBoozer(eq=eq)
+        fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(fb, 0)
+
+    def test_qs_twoterm(self):
+        eq = Equilibrium()
+        obj = QuasisymmetryTwoTerm(eq=eq)
+        fc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(fc, 0)
+
+    def test_qs_tp(self):
+        eq = Equilibrium()
+        obj = QuasisymmetryTripleProduct(eq=eq)
+        ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(ft, 0)

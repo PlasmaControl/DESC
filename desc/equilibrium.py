@@ -1,19 +1,21 @@
 import numpy as np
-from termcolor import colored
 import warnings
 import numbers
+from termcolor import colored
 from collections.abc import MutableSequence
+
 from desc.backend import use_jax
-from desc.utils import Timer, isalmostequal, unpack_state
+from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.boundary_conditions import get_boundary_condition, BoundaryCondition
-from desc.objective_funs import get_objective_function, ObjectiveFunction
-from desc.optimize import Optimizer
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
-from desc.perturbations import perturb, optimal_perturb
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.optimize import Optimizer
+from desc.objectives import (
+    ForceBalance,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+)
+from desc.perturbations import perturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -71,16 +73,10 @@ class Equilibrium(_Configuration, IOAble):
 
     _io_attrs_ = _Configuration._io_attrs_ + [
         "_solved",
-        "_x0",
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_grid",
         "_node_pattern",
-        "_transforms",
-        "_objective",
-        "optimizer_results",
-        "_optimizer",
     ]
 
     def __init__(
@@ -119,7 +115,7 @@ class Equilibrium(_Configuration, IOAble):
             spectral_indexing,
             **kwargs,
         )
-        self._x0 = self.x
+
         assert (L_grid is None) or (
             isinstance(L_grid, numbers.Real)
             and (L_grid == int(L_grid))
@@ -140,13 +136,6 @@ class Equilibrium(_Configuration, IOAble):
         self._N_grid = N_grid if N_grid is not None else self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
         self._solved = False
-        self._objective = None
-        self._optimizer = None
-        self._set_grid()
-        self._transforms = {}
-        self._set_transforms()
-        self.objective = objective
-        self.optimizer = optimizer
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -161,17 +150,6 @@ class Equilibrium(_Configuration, IOAble):
         )
 
     @property
-    def x0(self):
-        """Return initial optimization vector before solution (ndarray)."""
-        if not hasattr(self, "_x0"):
-            self._x0 = None
-        return self._x0
-
-    @x0.setter
-    def x0(self, x0):
-        self._x0 = x0
-
-    @property
     def L_grid(self):
         """Radial resolution of grid in real space (int)."""
         if not hasattr(self, "_L_grid"):
@@ -181,11 +159,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._L_grid
 
     @L_grid.setter
-    def L_grid(self, new):
-        if self.L_grid != new:
-            self._L_grid = new
-            self._set_grid()
-            self._set_transforms()
+    def L_grid(self, L_grid):
+        if self.L_grid != L_grid:
+            self._L_grid = L_grid
 
     @property
     def M_grid(self):
@@ -195,11 +171,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._M_grid
 
     @M_grid.setter
-    def M_grid(self, new):
-        if self.M_grid != new:
-            self._M_grid = new
-            self._set_grid()
-            self._set_transforms()
+    def M_grid(self, M_grid):
+        if self.M_grid != M_grid:
+            self._M_grid = M_grid
 
     @property
     def N_grid(self):
@@ -209,11 +183,9 @@ class Equilibrium(_Configuration, IOAble):
         return self._N_grid
 
     @N_grid.setter
-    def N_grid(self, new):
-        if self.N_grid != new:
-            self._N_grid = new
-            self._set_grid()
-            self._set_transforms()
+    def N_grid(self, N_grid):
+        if self.N_grid != N_grid:
+            self._N_grid = N_grid
 
     @property
     def node_pattern(self):
@@ -223,182 +195,6 @@ class Equilibrium(_Configuration, IOAble):
         return self._node_pattern
 
     @property
-    def transforms(self):
-        if not hasattr(self, "_transforms"):
-            self._transforms = {}
-            self._set_transforms()
-        return self._transforms
-
-    def _set_grid(self):
-        if self.node_pattern in ["cheb1", "cheb2", "jacobi", "ocs"]:
-            self._grid = ConcentricGrid(
-                L=self.L_grid,
-                M=self.M_grid,
-                N=self.N_grid,
-                NFP=self.NFP,
-                sym=self.sym,
-                axis=False,
-                node_pattern=self.node_pattern,
-            )
-        elif self.node_pattern in ["linear", "uniform"]:
-            self._grid = LinearGrid(
-                L=2 * self.L_grid + 1,
-                M=2 * self.M_grid + 1,
-                N=2 * self.N_grid + 1,
-                NFP=self.NFP,
-                sym=self.sym,
-                axis=False,
-            )
-        elif self.node_pattern in ["quad"]:
-            self._grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-            )
-        else:
-            raise ValueError(
-                colored("unknown grid type {}".format(self.node_pattern), "red")
-            )
-
-    def _set_transforms(self):
-
-        if len(self.transforms) == 0:
-            self._transforms["R"] = Transform(
-                self.grid, self.R_basis, derivs=0, build=False
-            )
-            self._transforms["Z"] = Transform(
-                self.grid, self.Z_basis, derivs=0, build=False
-            )
-            self._transforms["L"] = Transform(
-                self.grid, self.L_basis, derivs=0, build=False
-            )
-            self.pressure.grid = self.grid
-            self.iota.grid = self.grid
-
-        else:
-            self.transforms["R"].change_resolution(self.grid, self.R_basis, build=False)
-            self.transforms["Z"].change_resolution(self.grid, self.Z_basis, build=False)
-            self.transforms["L"].change_resolution(self.grid, self.L_basis, build=False)
-        self.pressure.grid = self.grid
-        self.iota.grid = self.grid
-
-        if self.objective is not None:
-            derivs = self.objective.derivatives
-            self.transforms["R"].change_derivatives(derivs, build=False)
-            self.transforms["Z"].change_derivatives(derivs, build=False)
-            self.transforms["L"].change_derivatives(derivs, build=False)
-
-    def build(self, verbose=1):
-        """Build transform matrices and factorizes boundary constraint.
-
-        Parameters
-        ----------
-        verbose : int
-            level of output
-
-        """
-        timer = Timer()
-        timer.start("Transform computation")
-        if verbose > 0:
-            print("Precomputing Transforms")
-        self._set_transforms()
-        for tr in self.transforms.values():
-            tr.build()
-
-        timer.stop("Transform computation")
-        if verbose > 1:
-            timer.disp("Transform computation")
-
-        timer.start("Boundary constraint factorization")
-        if verbose > 0:
-            print("Factorizing boundary constraint")
-        if self.objective is not None and self.objective.BC_constraint is not None:
-            self.objective.BC_constraint.build()
-        timer.stop("Boundary constraint factorization")
-        if verbose > 1:
-            timer.disp("Boundary constraint factorization")
-
-    def change_resolution(
-        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None
-    ):
-        """Set the spectral and real space resolution.
-
-        Parameters
-        ----------
-        L : int
-            maximum radial zernike mode number
-        M : int
-            maximum poloidal fourier mode number
-        N : int
-            maximum toroidal fourier mode number
-        L_grid : int
-            radial real space resolution
-        M_grid : int
-            poloidal real space resolution
-        N_grid : int
-            toroidal real space resolution
-
-        """
-        L_change = M_change = N_change = False
-        if L is not None and L != self.L:
-            L_change = True
-        if M is not None and M != self.M:
-            M_change = True
-        if N is not None and N != self.N:
-            N_change = True
-
-        if any([L_change, M_change, N_change]):
-            super().change_resolution(L, M, N)
-
-        L_grid_change = M_grid_change = N_grid_change = False
-        if L_grid is not None and L_grid != self.L_grid:
-            self._L_grid = L_grid
-            L_grid_change = True
-        if M_grid is not None and M_grid != self.M_grid:
-            self._M_grid = M_grid
-            M_grid_change = True
-        if N_grid is not None and N_grid != self.N_grid:
-            self._N_grid = N_grid
-            N_grid_change = True
-        if any([L_grid_change, M_grid_change, N_grid_change]):
-            self._set_grid()
-        self._set_transforms()
-        if (
-            any(
-                [
-                    L_change,
-                    M_change,
-                    N_change,
-                    L_grid_change,
-                    M_grid_change,
-                    N_grid_change,
-                ]
-            )
-            and self.objective is not None
-        ):
-            self.objective = self.objective.name
-
-    @property
-    def built(self):
-        """Whether the equilibrium is ready to solve (bool)."""
-        tr = np.all([tr.built for tr in self.transforms.values()])
-        if self.objective is not None and self.objective.BC_constraint is not None:
-            bc = self.objective.BC_constraint.built
-        else:
-            bc = True
-        return tr and bc
-
-    @property
-    def grid(self):
-        """Grid of real space collocation nodes (Grid)."""
-        return self._grid
-
-    @grid.setter
-    def grid(self, grid):
-        if not isinstance(grid, Grid):
-            raise ValueError("grid attribute must be of type 'Grid' or a subclass")
-        self._grid = grid
-        self._set_transforms()
-
-    @property
     def solved(self):
         """Whether the equilibrium has been solved (bool)."""
         return self._solved
@@ -406,129 +202,6 @@ class Equilibrium(_Configuration, IOAble):
     @solved.setter
     def solved(self, solved):
         self._solved = solved
-
-    @property
-    def objective(self):
-        """Objective function currently assigned (ObjectiveFunction)."""
-        if not hasattr(self, "_objective"):
-            self._objective = None
-        return self._objective
-
-    @objective.setter
-    def objective(self, objective):
-        if objective is None:
-            self._objective = objective
-        elif isinstance(objective, ObjectiveFunction) and objective.eq(self.objective):
-            return
-        elif isinstance(objective, ObjectiveFunction) and not objective.eq(
-            self.objective
-        ):
-            self._objective = objective
-        elif isinstance(objective, str):
-            self._set_transforms()
-            objective = get_objective_function(
-                objective,
-                R_transform=self.transforms["R"],
-                Z_transform=self.transforms["Z"],
-                L_transform=self.transforms["L"],
-                p_profile=self.pressure,
-                i_profile=self.iota,
-                BC_constraint=self.surface.get_constraint(
-                    self.R_basis, self.Z_basis, self.L_basis
-                ),
-            )
-            self.objective = objective
-        else:
-            raise ValueError(
-                "objective should be of type 'ObjectiveFunction' or string, "
-                + "got {}".format(objective)
-            )
-        self.solved = False
-        self.optimizer_results = {}
-
-    @property
-    def optimizer(self):
-        """Optimizer currently assigned (Optimizer)."""
-        if not hasattr(self, "_optimizer"):
-            self._optimizer = None
-        return self._optimizer
-
-    @optimizer.setter
-    def optimizer(self, optimizer):
-        if optimizer is None:
-            self._optimizer = optimizer
-        elif isinstance(optimizer, Optimizer) and optimizer.eq(self.optimizer):
-            return
-        elif isinstance(optimizer, Optimizer) and not optimizer.eq(self.optimizer):
-            self._optimizer = optimizer
-        elif optimizer in Optimizer._all_methods:
-            self._optimizer = Optimizer(optimizer)
-        else:
-            raise ValueError(
-                "optimizer should be of type Optimizer or str, got  {}".format(
-                    optimizer
-                )
-            )
-
-    @property
-    def initial(self):
-        """Return initial equilibrium state from which it was solved (Equilibrium)."""
-
-        R_lmn, Z_lmn, L_lmn = unpack_state(
-            self.x0, self.R_basis.num_modes, self.Z_basis.num_modes
-        )
-        inputs = {
-            "sym": self.sym,
-            "NFP": self.NFP,
-            "Psi": self.Psi,
-            "L": self.L,
-            "M": self.M,
-            "N": self.N,
-            "spectral_indexing": self.spectral_indexing,
-            "bdry_mode": self.bdry_mode,
-            "pressure": self.pressure,
-            "iota": self.iota,
-            "surface": self.surface,
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "objective": self.objective.name,
-            "optimizer": self.optimizer.method,
-        }
-        return Equilibrium(**inputs)
-
-    def evaluate(self, jac=False):
-        """Evaluate the objective function.
-
-        Parameters
-        ----------
-        jac : bool
-            whether to compute and return the jacobian df/dx as well
-
-        Returns
-        -------
-        f : ndarray or float
-            function value
-        jac : ndarray
-            derivative df/dx
-
-        """
-        if self.objective is None:
-            raise AttributeError(
-                "Equilibrium must have objective defined before evaluating."
-            )
-
-        y = self.objective.BC_constraint.project(self.x)
-        f = self.objective.compute(
-            y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
-        )
-        if jac:
-            jac = self.objective.jac_x(
-                y, self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi
-            )
-            return f, jac
-        else:
-            return f
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
@@ -541,50 +214,121 @@ class Equilibrium(_Configuration, IOAble):
             )
         )
 
+    def change_resolution(
+        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None
+    ):
+        """Set the spectral resolution and real space grid resolution.
+        Parameters
+        ----------
+        L : int
+            maximum radial zernike mode number
+        M : int
+            maximum poloidal fourier mode number
+        N : int
+            maximum toroidal fourier mode number
+        L_grid : int
+            radial real space grid resolution
+        M_grid : int
+            poloidal real space grid resolution
+        N_grid : int
+            toroidal real space grid resolution
+        """
+        L_change = M_change = N_change = False
+        if L is not None and L != self.L:
+            L_change = True
+        if M is not None and M != self.M:
+            M_change = True
+        if N is not None and N != self.N:
+            N_change = True
+
+        if any([L_change, M_change, N_change]):
+            super().change_resolution(L, M, N)
+
+        if L_grid is not None and L_grid != self.L_grid:
+            self._L_grid = L_grid
+        if M_grid is not None and M_grid != self.M_grid:
+            self._M_grid = M_grid
+        if N_grid is not None and N_grid != self.N_grid:
+            self._N_grid = N_grid
+
+    # TODO: add a copy argument?
     def solve(
         self,
-        ftol=1e-6,
-        xtol=1e-6,
+        objective=None,
+        constraints=None,
+        optimizer=None,
+        ftol=1e-2,
+        xtol=1e-4,
         gtol=1e-6,
-        verbose=1,
-        x_scale="auto",
         maxiter=50,
+        x_scale="auto",
         options={},
+        verbose=1,
     ):
         """Solve to find the equilibrium configuration.
 
         Parameters
         ----------
+        objective : ObjectiveFunction
+            Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
             Stopping tolerance on step size.
         gtol : float
             Stopping tolerance on norm of gradient.
-        verbose : int
-            Level of output.
         maxiter : int
             Maximum number of solver steps.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output.
+
+        Returns
+        -------
+        result : OptimizeResult
+            The optimization result represented as a ``OptimizeResult`` object.
+            Important attributes are: ``x`` the solution array, ``success`` a
+            Boolean flag indicating if the optimizer exited successfully and
+            ``message`` which describes the cause of the termination. See
+            `OptimizeResult` for a description of other attributes.
+
 
         """
-        if self.optimizer is None or self.objective is None:
-            raise AttributeError(
-                "Equilibrium must have objective and optimizer defined before solving."
+        if objective is None:
+            objective = get_equilibrium_objective()
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
+
+        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
+            warnings.warn(
+                colored(
+                    "Equilibrium has one or more spectral resolutions "
+                    + "less than the corresponding collocation grid resolution! "
+                    + "This is not recommended and may result in poor convergence. "
+                    + "Set grid resolutions to be higher,( i.e. like eq.N_grid=2*eq.N ) "
+                    + "To avoid this warning. "
+                    "yellow",
+                )
             )
 
-        # make sure objective is up to date
-        self.objective = self.objective.name
-        args = (self.Rb_lmn, self.Zb_lmn, self.p_l, self.i_l, self.Psi)
-
-        self.x0 = self.x
-        x_init = self.objective.BC_constraint.project(self.x)
-
-        result = self.optimizer.optimize(
-            self.objective,
-            x_init=x_init,
-            args=args,
+        result = optimizer.optimize(
+            self,
+            objective,
+            constraints,
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
@@ -596,21 +340,264 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            self.objective.callback(x_init, *args)
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
             print("End of solver")
-            self.objective.callback(result["x"], *args)
+            objective.callback(objective.x(self))
 
-        self.optimizer_results = {
-            key: val if isinstance(val, str) else np.copy(val)
-            for key, val in result.items()
-        }
-        self.x = np.copy(self.objective.BC_constraint.recover(result["x"]))
         self.solved = result["success"]
         return result
+
+    def optimize(
+        self,
+        objective=None,
+        constraints=None,
+        optimizer=None,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        maxiter=50,
+        x_scale="auto",
+        options={},
+        verbose=1,
+    ):
+        """Optimize an equilibrium for an objective.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to solve. Default = fixed-boundary force balance.
+        optimizer : Optimizer
+            Optimization algorithm. Default = lsq-exact.
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on step size.
+        gtol : float
+            Stopping tolerance on norm of gradient.
+        maxiter : int
+            Maximum number of solver steps.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the jacobian or hessian matrix.
+        options : dict
+            Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output.
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Optimized equilibrum.
+
+        """
+        if optimizer is None:
+            optimizer = Optimizer("lsq-exact")
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+            constraints = (ForceBalance(), *constraints)
+
+        result = optimizer.optimize(
+            self,
+            objective,
+            constraints,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            x_scale=x_scale,
+            verbose=verbose,
+            maxiter=maxiter,
+            options=options,
+        )
+
+        if verbose > 0:
+            print("Start of solver")
+            objective.callback(objective.x(self))
+        for key, value in result["history"].items():
+            setattr(self, key, value[-1])
+        if verbose > 0:
+            print("End of solver")
+            objective.callback(objective.x(self))
+
+        self.solved = result["success"]
+        return result
+
+    def _optimize(
+        self,
+        objective,
+        constraint=None,
+        ftol=1e-6,
+        xtol=1e-6,
+        maxiter=50,
+        verbose=1,
+        copy=True,
+        solve_options={},
+        perturb_options={},
+    ):
+        """Optimize an equilibrium for an objective.
+
+        Parameters
+        ----------
+        objective : ObjectiveFunction
+            Objective function to optimize.
+        constraint : ObjectiveFunction
+            Objective function to satisfy.
+        ftol : float
+            Relative stopping tolerance on objective function value.
+        xtol : float
+            Stopping tolerance on optimization step size.
+        maxiter : int
+            Maximum number of optimization steps.
+        verbose : int
+            Level of output.
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
+        solve_options : dict
+            Dictionary of additional options used in Equilibrium.solve().
+        perturb_options : dict
+            Dictionary of additional options used in Equilibrium.perturb().
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Optimized equilibrum.
+
+        """
+        import inspect
+        from copy import deepcopy
+        from desc.perturbations import optimal_perturb
+        from desc.optimize.utils import check_termination
+        from desc.optimize.tr_subproblems import update_tr_radius
+
+        if constraint is None:
+            constraint = get_equilibrium_objective()
+
+        timer = Timer()
+        timer.start("Total time")
+
+        eq = self
+        if not objective.built:
+            objective.build(eq)
+        if not constraint.built:
+            constraint.build(eq)
+
+        cost = objective.compute_scalar(objective.x(eq))
+        perturb_options = deepcopy(perturb_options)
+        tr_ratio = perturb_options.get(
+            "tr_ratio",
+            inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
+        )
+
+        if verbose > 0:
+            objective.callback(objective.x(eq))
+
+        iteration = 1
+        success = None
+        while success is None:
+
+            timer.start("Step {} time".format(iteration))
+            if verbose > 0:
+                print("====================")
+                print("Optimization Step {}".format(iteration))
+                print("====================")
+                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+
+            # perturb + solve
+            (
+                eq_new,
+                predicted_reduction,
+                dc_opt,
+                dc,
+                c_norm,
+                bound_hit,
+            ) = optimal_perturb(
+                eq,
+                constraint,
+                objective,
+                copy=True,
+                **perturb_options,
+            )
+            eq_new.solve(objective=constraint, **solve_options)
+
+            # update trust region radius
+            cost_new = objective.compute_scalar(objective.x(eq_new))
+            actual_reduction = cost - cost_new
+            trust_radius, ratio = update_tr_radius(
+                tr_ratio[0] * c_norm,
+                actual_reduction,
+                predicted_reduction,
+                np.linalg.norm(dc_opt),
+                bound_hit,
+            )
+            tr_ratio[0] = trust_radius / c_norm
+            perturb_options["tr_ratio"] = tr_ratio
+
+            timer.stop("Step {} time".format(iteration))
+            if verbose > 0:
+                objective.callback(objective.x(eq_new))
+                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+                print("Reduction Ratio = {:+.3f}".format(ratio))
+            if verbose > 1:
+                timer.disp("Step {} time".format(iteration))
+
+            # stopping criteria
+            success, message = check_termination(
+                actual_reduction,
+                cost,
+                np.linalg.norm(dc),
+                c_norm,
+                np.inf,  # TODO: add g_norm
+                ratio,
+                ftol,
+                xtol,
+                0,  # TODO: add gtol
+                iteration,
+                maxiter,
+                0,
+                np.inf,
+                0,
+                np.inf,
+                0,
+                np.inf,
+            )
+            if actual_reduction > 0:
+                eq = eq_new
+                cost = cost_new
+            if success is not None:
+                break
+
+            iteration += 1
+
+        timer.stop("Total time")
+        print("====================")
+        print("Done")
+        if verbose > 0:
+            print(message)
+        if verbose > 1:
+            timer.disp("Total time")
+
+        if copy:
+            return eq
+        else:
+            for attr in self._io_attrs_:
+                setattr(self, attr, getattr(eq, attr))
+            return self
 
     def perturb(
         self,
         objective=None,
+        constraints=None,
+        dR=None,
+        dZ=None,
+        dL=None,
         dRb=None,
         dZb=None,
         dp=None,
@@ -618,97 +605,71 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
-        cutoff=1e-6,
-        weight="auto",
-        Jx=None,
         verbose=1,
         copy=True,
     ):
-        """Perturb the configuration while mainting equilibrium.
+        """Perturb an equilibrium.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            objective to optimize during the perturbation (optional)
-        dRb, dZb, dp, di, dPsi : ndarray or float
-            If objective not given: deltas for perturbations of
-            R_boundary, Z_boundary, pressure, iota, and toroidal flux.
+            Objective function to satisfy.
+        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
+            rotational transform, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
-            If objective is given: indicies of modes to include in the perturbations of
-            R_boundary, Z_boundary, pressure, iota, toroidal flux, and zeta ratio.
-            Setting to True (False/None) includes (excludes) all modes.
-        order : int, optional
-            order of perturbation (0=none, 1=linear, 2=quadratic)
+        order : {0,1,2,3}
+            Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
-            radius of the trust region, as a fraction of ||x||.
-            enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||
-            if a scalar uses same ratio for all steps, if an array uses the first element
-            for the first step and so on
-        cutoff : float
-            relative cutoff for small singular values in pseudoinverse
-        weight : ndarray, "auto", or None, optional
-            1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
-            matrices. Default is to weight by (mode number)**2. None applies no weighting.
-        Jx : ndarray, optional
-            jacobian matrix df/dx
+            Radius of the trust region, as a fraction of ||x||.
+            Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+            If a scalar, uses the same ratio for all steps. If an array, uses the first
+            element for the first step and so on.
         verbose : int
-            level of output to display
-        copy : bool
-            True to return a modified copy of the current equilibrium, False to perturb
-            the current equilibrium in place
+            Level of output.
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
 
         Returns
         -------
         eq_new : Equilibrium
-            perturbed equilibrum, only returned if copy=True
+            Perturbed equilibrum.
 
         """
         if objective is None:
-            # perturb with the given input parameter deltas
-            equil = perturb(
-                self,
-                dRb,
-                dZb,
-                dp,
-                di,
-                dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                cutoff=cutoff,
-                weight=weight,
-                Jx=Jx,
-                verbose=verbose,
-                copy=copy,
-            )
-        else:
-            equil = optimal_perturb(
-                # find the deltas that optimize the objective, then perturb
-                self,
-                objective,
-                dRb,
-                dZb,
-                dp,
-                di,
-                dPsi,
-                order=order,
-                tr_ratio=tr_ratio,
-                cutoff=cutoff,
-                Jx=Jx,
-                verbose=verbose,
-                copy=copy,
-            )
+            objective = get_equilibrium_objective()
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
 
-        equil.solved = False
-        equil.optimizer_results = {}
+        if not objective.built:
+            objective.build(self, verbose=verbose)
+        for constraint in constraints:
+            if not constraint.built:
+                constraint.build(self, verbose=verbose)
+
+        eq = perturb(
+            self,
+            objective,
+            constraints,
+            dR=dR,
+            dZ=dZ,
+            dL=dL,
+            dRb=dRb,
+            dZb=dZb,
+            dp=dp,
+            di=di,
+            dPsi=dPsi,
+            order=order,
+            tr_ratio=tr_ratio,
+            verbose=verbose,
+            copy=copy,
+        )
+        eq.solved = False
 
         if copy:
-            return equil
+            return eq
         else:
-            return None
-
-    def optimize(self):
-        """Optimize an equilibrium for a physics or engineering objective."""
-        raise NotImplementedError("Optimizing equilibria has not yet been implemented.")
+            return self
 
 
 class EquilibriaFamily(IOAble, MutableSequence):
@@ -749,7 +710,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         Returns
         -------
         deltas : dict
-             Dictionary of changes in parameter values.
+            Dictionary of changes in parameter values.
 
         """
         deltas = {}
@@ -762,7 +723,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.NFP,
                 equil.sym,
             )
-            s.change_resolution(equil.M, equil.N)
+            s.change_resolution(equil.L, equil.M, equil.N)
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
             s = ZernikeRZToroidalSection(
@@ -773,7 +734,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.spectral_indexing,
                 equil.sym,
             )
-            s.change_resolution(equil.L, equil.M)
+            s.change_resolution(equil.L, equil.M, equil.N)
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
 
         p_l = np.zeros_like(equil.pressure.params)
@@ -805,9 +766,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        print("Constraint: {}".format(equil.objective.BC_constraint.name))
-        print("Objective: {}".format(equil.objective.name))
-        print("Optimizer: {}".format(equil.optimizer.method))
+        print("Objective: {}".format(self.inputs[ii]["objective"]))
+        print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
         print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
         print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
         print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
@@ -858,6 +818,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         for ii in range(start_from, len(self.inputs)):
             timer.start("Iteration {} total".format(ii + 1))
+
+            # TODO: make this more efficient (minimize re-building)
+            optimizer = Optimizer(self.inputs[ii]["optimizer"])
+            objective = get_equilibrium_objective(self.inputs[ii]["objective"])
+            constraints = get_fixed_boundary_constraints()
+
             if ii == start_from:
                 equil = self[ii]
                 if verbose > 0:
@@ -866,16 +832,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
             else:
                 equil = self[ii - 1].copy()
                 self.insert(ii, equil)
-                # this is basically free if nothings actually changing, so we can call
-                # it on each iteration
+
                 equil.change_resolution(
                     L=self.inputs[ii]["L"],
                     M=self.inputs[ii]["M"],
                     N=self.inputs[ii]["N"],
-                    L_grid=self.inputs[ii]["L_grid"],
-                    M_grid=self.inputs[ii]["M_grid"],
-                    N_grid=self.inputs[ii]["N_grid"],
                 )
+                equil.L_grid = self.inputs[ii]["L_grid"]
+                equil.M_grid = self.inputs[ii]["M_grid"]
+                equil.N_grid = self.inputs[ii]["N_grid"]
+
                 if verbose > 0:
                     self._print_iteration(ii, equil)
 
@@ -883,11 +849,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
-                    equil.build(verbose)
                     if verbose > 0:
                         print("Perturbing equilibrium")
-
+                    # TODO: pass Jx if available
                     equil.perturb(
+                        objective=objective,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,
@@ -909,30 +875,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self.save(checkpoint_path)
                 break
 
-            # objective function
-            objective = get_objective_function(
-                self.inputs[ii]["objective"],
-                R_transform=equil.transforms["R"],
-                Z_transform=equil.transforms["Z"],
-                L_transform=equil.transforms["L"],
-                p_profile=equil.pressure,
-                i_profile=equil.iota,
-                BC_constraint=equil.surface.get_constraint(
-                    R_basis=equil.R_basis, Z_basis=equil.Z_basis, L_basis=equil.L_basis
-                ),
-                use_jit=True,
-            )
-            # reuse old objective if possible to avoid recompiling
-            if objective.eq(self[ii - 1].objective):
-                equil.objective = self[ii - 1].objective
-            else:
-                equil.objective = objective
-
-            # optimization algorithm
-            optimizer = Optimizer(self.inputs[ii]["optimizer"])
-            equil.optimizer = optimizer
-
             equil.solve(
+                optimizer=optimizer,
+                objective=objective,
+                constraints=constraints,
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],

@@ -2,8 +2,9 @@ import numpy as np
 import unittest
 import pytest
 from desc.io import InputReader
-from desc.equilibrium import Equilibrium
 from desc.profiles import PowerSeriesProfile
+from desc.equilibrium import Equilibrium
+from tests.test_equilibrium import _compute_coords, area_difference
 
 
 class TestProfiles(unittest.TestCase):
@@ -20,17 +21,20 @@ class TestProfiles(unittest.TestCase):
         eq1.solve()
         eq2.solve()
 
-        np.testing.assert_allclose(
-            eq1.x,
-            eq2.x,
-            rtol=1e-05,
-            atol=1e-08,
-        )
+        Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq1, check_all_zeta=True)
+        Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq2, check_all_zeta=True)
+        rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+        np.testing.assert_allclose(rho_err, 0, atol=1e-13)
+        np.testing.assert_allclose(theta_err, 0, atol=1e-15)
+
+        assert True
 
     @pytest.mark.slow
     def test_close_values(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
         sp = pp.to_spline()
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
@@ -66,7 +70,9 @@ class TestProfiles(unittest.TestCase):
 
     def test_get_set(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
 
         assert pp.get_params(2) == -2
         assert pp.get_idx(4) == 4

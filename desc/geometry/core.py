@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
+
 from desc.backend import jnp
 from desc.io import IOAble
 from .utils import rotation_matrix, reflection_matrix
 
 
 class Curve(IOAble, ABC):
-    """Abstract base class for 1D curves in 3D space"""
+    """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
 
@@ -26,27 +27,27 @@ class Curve(IOAble, ABC):
     @property
     @abstractmethod
     def grid(self):
-        """Default grid for computation"""
+        """Grid for computation."""
 
     @abstractmethod
     def compute_coordinates(self, params=None, grid=None, dt=0):
-        """Compute real space coordinates on predefined grid"""
+        """Compute real space coordinates on predefined grid."""
 
     @abstractmethod
     def compute_frenet_frame(self, params=None, grid=None):
-        """Compute frenet frame on predefined grid"""
+        """Compute Frenet frame on predefined grid."""
 
     @abstractmethod
     def compute_curvature(self, params=None, grid=None):
-        """Compute curvature on predefined grid"""
+        """Compute curvature on predefined grid."""
 
     @abstractmethod
     def compute_torsion(self, params=None, grid=None):
-        """Compute torsion on predefined grid"""
+        """Compute torsion on predefined grid."""
 
     @abstractmethod
     def compute_length(self, params=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature"""
+        """Compute the length of the curve using specified nodes for quadrature."""
 
     def translate(self, displacement=[0, 0, 0]):
         """Translate the curve by a rigid displacement in x, y, z"""
@@ -75,15 +76,13 @@ class Curve(IOAble, ABC):
 
 
 class Surface(IOAble, ABC):
-    """Abstract base class for 2d surfaces in 3d space,
-    such as flux surfaces, plasma boundaries, poincare sections
-    """
+    """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_grid", "_sym", "_L", "_M", "_N"]
 
     @property
     def name(self):
-        """Name of the surface"""
+        """Name of the surface."""
         return self._name
 
     @name.setter
@@ -107,29 +106,33 @@ class Surface(IOAble, ABC):
 
     @property
     def sym(self):
-        """stellarator symmetry"""
+        """Stellarator symmetry."""
         return self._sym
 
     @property
     @abstractmethod
     def grid(self):
-        """Default grid for computation"""
+        """Grid for computation."""
+
+    @abstractmethod
+    def change_resolution(self, *args, **kwargs):
+        """Change the maximum resolution."""
 
     @abstractmethod
     def compute_coordinates(self, params=None, grid=None, dt=0, dz=0):
-        """Compute coordinate values at specified nodes"""
+        """Compute coordinate values at specified nodes."""
 
     @abstractmethod
     def compute_normal(self, params=None, grid=None):
-        """Compute normal vectors to the surface on predefined grid"""
+        """Compute normal vectors to the surface on predefined grid."""
 
     @abstractmethod
     def compute_surface_area(self, params=None, grids=None):
-        """Compute surface area via quadrature"""
+        """Compute surface area via quadrature."""
 
     @abstractmethod
     def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature"""
+        """Compute gaussian and mean curvature."""
 
     def __repr__(self):
         """string form of the object"""

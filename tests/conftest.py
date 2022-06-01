@@ -9,12 +9,6 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.__main__ import main
 
 
-@pytest.fixture
-def plot_eq():
-    eq = EquilibriaFamily.load(load_from="./tests/inputs/SOLOVEV_output.h5")[-1]
-    return eq
-
-
 @pytest.fixture(scope="session")
 def TmpDir(tmpdir_factory):
     """Create a temporary directory to store testing files."""
@@ -41,6 +35,37 @@ def SOLOVEV(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
+    main(args)
+
+    SOLOVEV_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return SOLOVEV_out
+
+
+@pytest.fixture(scope="session")
+def SOLOVEV_Poincare(tmpdir_factory):
+    """Run SOLOVEV poincare BC example."""
+    input_path = ".//tests//inputs//SOLOVEV_poincare"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("SOLOVEV_poincare_out.h5")
+    desc_nc_path = output_dir.join("SOLOVEV_poincare_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_SOLOVEV.nc"
+    booz_nc_path = output_dir.join("SOLOVEV_poincare_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running SOLOVEV Poincare BC test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     SOLOVEV_out = {
@@ -146,7 +171,6 @@ def DummyStellarator(tmpdir_factory):
         "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
-    eq.build()
     eq.save(output_path)
 
     DummyStellarator_out = {

@@ -19,8 +19,7 @@ Or from github (for development builds)
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    pip install -r requirements.txt
-    pip install -r tests/requirements.txt
+    pip install -r devtools/dev-requirements.txt
 
 
 On Princeton's Adroit Cluster
@@ -45,8 +44,9 @@ Or from github (for development builds)
     conda activate ./env
     conda install anaconda
     conda install pip
-    pip install -r requirements.txt
-    pip install -r tests/requirements.txt
+    pip install -r requirements.txt #if you want to use DESC
+    pip install -r devtools/dev-requirements.txt #if you also want to run the DESC tests
+
 
 
 On Traverse

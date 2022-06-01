@@ -2,7 +2,7 @@ import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import flatten_list
+from desc.utils import flatten_list, copy_coeffs
 from desc.io import IOAble
 from desc.backend import jnp, jit, sign, fori_loop, gammaln
 
@@ -47,6 +47,7 @@ class Basis(IOAble, ABC):
             "sine",
             "cos",
             "cosine",
+            "even",
             False,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
@@ -54,6 +55,9 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "even":  # even powers of rho
+            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
 
     def _sort_modes(self):
@@ -197,13 +201,13 @@ class PowerSeries(Basis):
 
     """
 
-    def __init__(self, L):
+    def __init__(self, L, sym="even"):
 
         self._L = L
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = False
+        self._sym = sym
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -1412,3 +1416,121 @@ def zernike_norm(l, m):
 
     """
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
+
+
+def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
+    """Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the coefficients at
+    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficients X_lmn_2D
+
+    Parameters
+    ----------
+    X_lmn_3D : array, size [basis_3D.num_modes,3]
+        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find the 2D ZernikePolynomial basis
+        corresponding to the quantity's value at the zeta=0 cross-section
+    basis_3D : FourierZernikeBasis
+        The Fourier-Zernike basis corresponding to the coefficients passed.
+
+    Returns
+    -------
+    X_lmn_2D : array, size [basis_2D.num_modes,3]
+        The ZernikePolynomial basis coefficients of the quantity X, such that their evaluation is the same
+        as the input 3D basis when evaluated at zeta=0. The toroidal modenumbers X_lmn_2D[:,2] are all equal to zero
+
+    basis_2D : FourierZernikeBasis
+        The ZernikePolynomial basis corresponding to the coefficients output. The radial resolution L and poloidal resolution M are
+        equal to the max radial and poloidal resolutions of the 3D basis passed as an input.
+
+    """
+    # Add up all the X_lm(n>=0) modes
+    # so that the quantity at the zeta=0 surface is described with just lm modes
+    # and get rid of the toroidal modes
+    modes_2D = []
+    X_lmn_2D = (
+        []
+    )  # these are corresponding to the 2D modes of the ZernikePolynomial Basis
+    modes_3D = basis_3D.modes
+    for i, mode in enumerate(modes_3D):
+        if mode[-1] < 0:
+            pass  # we do not want the sin(zeta) modes as they = 0 at zeta=0
+        else:
+            if (mode[0], mode[1], 0) not in modes_2D:
+                modes_2D.append((mode[0], mode[1], 0))
+                l = mode[0]
+                m = mode[1]
+
+                inds = np.where(
+                    np.logical_and(
+                        (modes_3D[:, :2] == [l, m]).all(axis=1),
+                        modes_3D[:, 2] >= 0,
+                    )
+                )[0]
+
+                SUM = np.sum(X_lmn_3D[inds])
+                X_lmn_2D.append(SUM)
+
+    X_lmn_2D = np.asarray(X_lmn_2D)
+    modes_2D = np.asarray(modes_2D)
+
+    Lmax = np.max(abs(modes_2D[:, 0]))
+    Mmax = np.max(abs(modes_2D[:, 1]))
+    LM_max = max(Lmax, Mmax)
+    basis_2D = ZernikePolynomial(
+        L=LM_max,
+        M=LM_max,
+        spectral_indexing=basis_3D._spectral_indexing,
+        sym=basis_3D.sym,
+    )
+    X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
+    return X_lmn_2D, basis_2D
+
+
+def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D):
+    """Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the coefficients at
+    the zeta=0 cross-section, returning the same 3D FourierZernike basis but with zero toroidal dependence
+    s.t. the zeta=0 XS is the same as the input
+
+    Parameters
+    ----------
+    X_lmn_3D : array, size [basis_3D.num_modes,3]
+        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find the 2D ZernikePolynomial basis
+        corresponding to the quantity's value at the zeta=0 cross-section
+    basis_3D : FourierZernikeBasis
+        The Fourier-Zernike basis corresponding to the coefficients passed.
+
+    Returns
+    -------
+    X_lmn_no_N : array, size [basis_3D.num_modes,3]
+        The FourerZernike basis coefficients of the quantity X, such that their evaluation is the same
+        as the input 3D basis when evaluated at zeta=0. The toroidal modenumbers X_lmn_no_N[:,2] are all equal to zero
+
+    basis_3D : FourierZernikeBasis
+        The Fourier-Zernike basis corresponding to the coefficients passed.
+
+    """
+    # Add up all the X_lm(n>=0) modes
+    # so that the quantity at the zeta=0 surface is described with just lm modes
+    # and set any mode with nonzero toroidal mode numebr = 0
+
+    X_lmn_no_N = np.zeros_like(X_lmn_3D)
+    modes_no_N = []
+    modes_3D = basis_3D.modes
+    for i, mode in enumerate(modes_3D):
+        if mode[-1] < 0:
+            pass  # we do not need the sin(zeta) modes as they = 0 at zeta=0
+        else:
+            if (mode[0], mode[1], 0) not in modes_no_N:
+                modes_no_N.append((mode[0], mode[1], 0))
+                l = mode[0]
+                m = mode[1]
+
+                inds = np.where(
+                    np.logical_and(
+                        (modes_3D[:, :2] == [l, m]).all(axis=1),
+                        modes_3D[:, 2] >= 0,
+                    )
+                )[0]
+
+                SUM = np.sum(X_lmn_3D[inds])
+                X_lmn_no_N[i] = SUM
+
+    return X_lmn_no_N, basis_3D

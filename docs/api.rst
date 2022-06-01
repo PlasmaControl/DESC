@@ -98,12 +98,13 @@ Objective Functions
     :recursive:
     :template: class.rst
 
-    desc.objective_funs.get_objective_function
-    desc.objective_funs.ForceErrorNodes
-    desc.objective_funs.EnergyVolIntegral
-    desc.objective_funs.QuasisymmetryTripleProduct
-    desc.objective_funs.QuasisymmetryFluxFunction
-	       
+    desc.objectives.Energy
+    desc.objectives.RadialForceBalance
+    desc.objectives.HelicalForceBalance
+    desc.objectives.QuasisymmetryBoozer
+    desc.objectives.QuasisymmetryTwoTerm
+    desc.objectives.QuasisymmetryTripleProduct
+
 Optimize
 ********
 

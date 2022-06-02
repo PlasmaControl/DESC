@@ -395,6 +395,36 @@ class ObjectiveFunction(IOAble, ABC):
             dims.append(args[a].size)
 
         return f(*args).reshape(tuple(dims))
+    
+
+class AugLagrangian(ObjectiveFunction):
+    
+    def __init__(self, func, constr):
+        self.func = func
+        self.constr = constr
+    
+    def scalar(self):
+        return False
+    
+    def name(self):
+        return "augmented lagrangian"
+    
+    def derivatives(self):
+        return
+    
+    def compute(self, x, lmbda, mu):
+        L = self.func(x)
+        
+        for i in range(len(self.constr)):
+            L = L - lmbda[i]*self.constr[i](x) + mu/2*self.constr[i](x)**2
+        return L
+    
+    def compute_scalar(self,x,lmbda,mu):
+        return self.compute(x,lmbda,mu)
+    
+    def callback(self, x, lmbda, mu):
+        L = self.compute(x,lmbda,mu)
+        print("The Lagrangian is " + str(L))
 
 
 class ForceErrorNodes(ObjectiveFunction):

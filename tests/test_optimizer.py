@@ -161,7 +161,7 @@ class TestLSQTR(unittest.TestCase):
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
         )
         np.testing.assert_allclose(out["x"], p)
-
+        print(out)
         out = lsqtr(
             res,
             p0,

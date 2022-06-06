@@ -12,6 +12,7 @@ from .linear_objectives import (
 from ._generic import (
     GenericObjective,
     ToroidalCurrent,
+    MagneticWell,
     RadialCurrentDensity,
     PoloidalCurrentDensity,
     ToroidalCurrentDensity,
@@ -51,6 +52,7 @@ __all__ = [
     "AspectRatio",
     "Energy",
     "ToroidalCurrent",
+    "MagneticWell",
     "RadialForceBalance",
     "HelicalForceBalance",
     "ForceBalance",

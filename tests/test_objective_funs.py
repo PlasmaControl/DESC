@@ -7,6 +7,7 @@ from desc.objectives import (
     Volume,
     AspectRatio,
     ToroidalCurrent,
+    MagneticWell,
     RadialCurrentDensity,
     PoloidalCurrentDensity,
     ToroidalCurrentDensity,
@@ -85,3 +86,9 @@ class TestObjectiveFunction(unittest.TestCase):
         obj = QuasisymmetryTripleProduct(eq=eq)
         ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
         np.testing.assert_allclose(ft, 0)
+
+    def test_magnetic_well(self):
+        eq = Equilibrium()
+        obj = MagneticWell(eq=eq)
+        w = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
+        np.testing.assert_allclose(w, 0)

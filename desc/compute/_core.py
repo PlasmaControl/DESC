@@ -137,7 +137,7 @@ def compute_toroidal_flux(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of toroidal magnetic flux profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
     data = compute_flux_coords(iota, data=data)
@@ -269,7 +269,7 @@ def compute_lambda(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of lambda values.
-        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
+        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt x.
 
     """
     if data is None:
@@ -324,7 +324,7 @@ def compute_pressure(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of pressure profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
     if data is None:
@@ -355,7 +355,7 @@ def compute_rotational_transform(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of rotational transform profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
     if data is None:

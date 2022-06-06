@@ -498,7 +498,7 @@ class _Objective(IOAble, ABC):
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        return (x - self.target) * self.weight
+        return (jnp.atleast_1d(x) - self.target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""

@@ -12,8 +12,13 @@ from desc.compute import (
     data_index,
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
+    compute_contravariant_basis,
     compute_contravariant_current_density,
+    compute_contravariant_magnetic_field,
+    compute_pressure,
     compute_quasisymmetry_error,
+    compute_toroidal_coords,
+    dot,
 )
 from .objective_funs import _Objective
 
@@ -147,7 +152,7 @@ class GenericObjective(_Objective):
 
 
 class ToroidalCurrent(_Objective):
-    """Toroidal current encolsed by a surface."""
+    """Toroidal current enclosed by a surface."""
 
     _scalar = True
     _linear = False
@@ -261,7 +266,194 @@ class ToroidalCurrent(_Objective):
             self._iota,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
-        return self._shift_scale(jnp.atleast_1d(I))
+        return self._shift_scale(I)
+
+
+class MagneticWell(_Objective):
+    """Magnetic well parameter.
+    As described in https://fusion.gat.com/pubs-ext/ComPlasmaPhys/A22135.pdf, the magnetic
+    well parameter is a useful figure of merit for stellarator operation. Systems with
+    positive well parameters are favorable for containment.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="magnetic well"):
+        """Initialize a Magnetic Well Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Note that MagneticWell.compute() assumes a linear grid spacing to
+            evaluate the well parameter. If the provided grid spacing is
+            highly nonlinear, the accuracy of the returned value may diminish.
+        name : str
+            Name of the objective function.
+
+        """
+        if grid is not None and not isinstance(grid, LinearGrid):
+            print(
+                "Warning: MagneticWell.compute() assumes a linear grid spacing to"
+                "evaluate the well parameter. If the provided grid spacing is"
+                "highly nonlinear, the accuracy of the returned value may diminish."
+            )
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Magnetic Well: {:10.3e}"  # choose string fmt output
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                L=1,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=1,
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._pressure = eq.pressure.copy()
+        self._iota.grid = self.grid
+        self._pressure.grid = self.grid
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["B_r"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["B_r"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["B_r"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi, **kwargs):
+        """Compute the magnetic well parameter.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        W : float
+            Magnetic well parameter. Systems with positive well
+            parameters are favorable for containment.
+
+        """
+        # collect required physical quantities
+        data = compute_contravariant_magnetic_field(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        data = compute_contravariant_basis(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
+        )
+        data = compute_toroidal_coords(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
+        )
+        data = compute_pressure(p_l, self._pressure, data)
+
+        # data["V"] is the geometry of the stellarator not the volume of the flux surface.
+        # the volume of the flux surface is computed below using divergence theorem:
+        # volume integral of (div [0, 0, Z] = 1) = surface integral of ([0, 0, Z] dot ds)
+
+        jacobian = data["sqrt(g)"]
+        dtdz = self.grid.spacing[:, 1] * self.grid.spacing[:, 2]
+        drho_dz = data["e^rho"][:, 2]  # partial derivative
+        V = jnp.sum(data["Z"] * drho_dz * jnp.abs(jacobian) * dtdz)
+
+        # compute the well parameter
+        # Note that, unlike the paper cited in the objective docstring, the
+        # derivative with respect to volume is taken with respect to the radial
+        # coordinate rho. chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho.
+
+        drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
+        # dpsi/drho also = 2*data["rho"]*Psi
+        # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label) formula.
+        dv_drho = jnp.sum(jacobian * dtdz)
+        dpsi_dv = 1 / drho_dpsi / dv_drho
+        B = data["B"]
+        dBsquare_drho = 2 * dot(B, data["B_r"])
+
+        pressure_average = MagneticWell._average(
+            dpsi_dv * drho_dpsi * (2 * mu_0 * data["p_r"] + dBsquare_drho),
+            jacobian,
+        )
+        Bsquare_average = MagneticWell._average(dot(B, B), jacobian)
+
+        W = V * pressure_average / Bsquare_average
+        # stable_criteria is: W * dpsi_dv * drho_dpsi * data["p_r"] < 0
+        return self._shift_scale(W)
+
+    @staticmethod
+    def _average(f, jacobian):
+        """
+        Returns the magnetic surface average of the given function, f.
+        Assumes linear grid spacing.
+
+        :param f:           the given function
+        :param jacobian:    jacobian of the surface integral
+        :return:            the magnetic surface average of f
+        """
+        return jnp.mean(f * jacobian) / jnp.mean(jacobian)
 
 
 class RadialCurrentDensity(_Objective):

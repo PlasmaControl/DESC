@@ -225,10 +225,10 @@ def compute_quasisymmetry_error(
     if check_derivs("I", R_transform, Z_transform, L_transform):
         data["I"] = jnp.sum(
             data["B_theta"] * jnp.prod(R_transform.grid.spacing[:, 1:], axis=1)
-        ) / (2 * jnp.pi)
+        ) / (4 * jnp.pi ** 2)
         data["G"] = jnp.sum(
             data["B_zeta"] * jnp.prod(R_transform.grid.spacing[:, 1:], axis=1)
-        ) / (2 * jnp.pi)
+        ) / (4 * jnp.pi ** 2)
 
     # QS two-term (T^3)
     if check_derivs("f_C", R_transform, Z_transform, L_transform):

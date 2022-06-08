@@ -21,6 +21,7 @@ from ._equilibrium import (
     ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
+    CurrentDensity,
 )
 from ._geometry import Volume, AspectRatio
 from ._qs import (
@@ -53,6 +54,7 @@ __all__ = [
     "ToroidalCurrent",
     "RadialForceBalance",
     "HelicalForceBalance",
+    "CurrentDensity",
     "ForceBalance",
     "RadialCurrentDensity",
     "PoloidalCurrentDensity",

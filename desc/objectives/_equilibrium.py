@@ -6,6 +6,7 @@ from desc.compute import (
     data_index,
     compute_force_error,
     compute_energy,
+    compute_contravariant_current_density,
 )
 from .objective_funs import _Objective
 
@@ -619,3 +620,155 @@ class Energy(_Objective):
     @gamma.setter
     def gamma(self, gamma):
         self._gamma = gamma
+
+
+class CurrentDensity(_Objective):
+    """Radial, poloidal, and toroidal current density.
+
+    Useful for solving vacuum equilibria."""
+
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        norm=False,
+        name="current density",
+    ):
+        """Initialize a CurrentDensity Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : Grid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+        norm : bool, optional
+            Whether to normalize the objective values (make dimensionless).
+        name : str
+            Name of the objective function.
+
+        """
+        self.grid = grid
+        self.norm = norm
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(normalized)" if self.norm else "(A/m^2)"
+        self._callback_fmt = "Total current density: {:10.3e} " + units
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation=None,
+                node_pattern="jacobi",
+            )
+
+        self._dim_f = 3 * self.grid.num_nodes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._iota = eq.iota.copy()
+        self._iota.grid = self.grid
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["J"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["J"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["J"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+        """Compute toroidal current density.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            Toroidal current at each node (A*m).
+
+        """
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+        )
+        jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
+        jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
+        jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
+        if self.norm:
+            raise NotImplementedError("Not implemented yet.")
+
+        f = jnp.concatenate([jr, jt, jz])
+        return self._shift_scale(f)
+
+    @property
+    def norm(self):
+        """bool: Whether the objective values are normalized."""
+        return self._norm
+
+    @norm.setter
+    def norm(self, norm):
+        assert norm in [True, False]
+        self._norm = norm
+        units = "(normalized)" if self.norm else "(A/m^2)"
+        self._callback_fmt = "Total current density: {:10.3e} " + units

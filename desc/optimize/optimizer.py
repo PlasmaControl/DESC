@@ -10,6 +10,7 @@ from desc.objectives import (
     ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
+    CurrentDensity,
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
@@ -224,7 +225,13 @@ class Optimizer(IOAble):
             wrapped = True
             for constraint in nonlinear_constraints:
                 if not isinstance(
-                    constraint, (ForceBalance, RadialForceBalance, HelicalForceBalance)
+                    constraint,
+                    (
+                        ForceBalance,
+                        RadialForceBalance,
+                        HelicalForceBalance,
+                        CurrentDensity,
+                    ),
                 ):
                     raise ValueError(
                         "optimizer method {} ".format(self.method)
@@ -262,11 +269,17 @@ class Optimizer(IOAble):
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            linear_constraints
+            linear_constraints, extra_args=objective.args
         )
         timer.stop("linear constraint factorize")
         if verbose > 1:
             timer.disp("linear constraint factorize")
+
+        x0_reduced = project(objective.x(eq))
+
+        if verbose > 0:
+            print("Number of parameters: {}".format(x0_reduced.size))
+            print("Number of objectives: {}".format(objective.dim_f))
 
         if verbose > 0:
             print("Starting optimization")
@@ -298,8 +311,6 @@ class Optimizer(IOAble):
             x = recover(x_reduced)
             df = objective.jac(x)
             return df[:, unfixed_idx] @ Z
-
-        x0_reduced = project(objective.x(eq))
 
         if self.method in Optimizer._scipy_scalar_methods:
 

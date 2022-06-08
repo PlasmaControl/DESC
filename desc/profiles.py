@@ -101,11 +101,21 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym=True, name=None):
+    def __init__(self, params, modes=None, grid=None, sym="auto", name=None):
 
         self._name = name
-        self.sym = "even" if sym else False
         params = np.atleast_1d(params)
+
+        if (
+            sym == "auto"
+        ):  # check if all odd terms are zero, if so return even. Print something when does so?
+            if modes is None:
+                modes = np.arange(params.size)
+            if np.all(params[modes % 2 != 0] == 0):
+                sym = "even"
+            else:
+                sym = False
+        self.sym = "even" if sym else False
         if modes is None:
             if sym:
                 modes = np.arange(2 * params.size, step=2)

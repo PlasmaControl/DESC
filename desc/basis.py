@@ -201,7 +201,7 @@ class PowerSeries(Basis):
 
     """
 
-    def __init__(self, L, sym=None):
+    def __init__(self, L, sym=False):
 
         self._L = L
         self._M = 0

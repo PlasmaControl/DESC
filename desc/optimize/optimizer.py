@@ -232,11 +232,15 @@ class Optimizer(IOAble):
                             constraint
                         )
                     )
+            perturb_options = options.pop("perturb_options", {})
+            perturb_options.set_default("verbose", 0)
+            solve_options = options.pop("solve_options", {})
+            solve_options.set_default("verbose", 0)
             objective = WrappedEquilibriumObjective(
                 objective,
                 eq_objective=ObjectiveFunction(nonlinear_constraints),
-                perturb_options=options.pop("perturb_options", {}),
-                solve_options=options.pop("solve_options", {}),
+                perturb_options=perturb_options,
+                solve_options=solve_options,
             )
 
         if not objective.built:
@@ -262,7 +266,7 @@ class Optimizer(IOAble):
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            linear_constraints
+            linear_constraints, objective.args
         )
         timer.stop("linear constraint factorize")
         if verbose > 1:

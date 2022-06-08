@@ -762,7 +762,6 @@ class FixIota(_Objective):
                 self._idx = np.arange(self._profile.basis.num_modes)
                 idx = self._idx
             else:  # specified modes
-                raise
                 modes = np.atleast_2d(self._modes)
                 dtype = {
                     "names": ["f{}".format(i) for i in range(3)],

@@ -613,7 +613,6 @@ class FixPressure(_Objective):
             # and the passed-in modes are actually the desired values at the knot locations
 
             # find indices of pressure values to fix
-            print(self._modes)
             if self._modes is False or self._modes is None:  # no values
                 values = np.array([[]], dtype=int)
                 self._idx = np.array([], dtype=int)

@@ -233,9 +233,9 @@ class Optimizer(IOAble):
                         )
                     )
             perturb_options = options.pop("perturb_options", {})
-            perturb_options.set_default("verbose", 0)
+            perturb_options.setdefault("verbose", 0)
             solve_options = options.pop("solve_options", {})
-            solve_options.set_default("verbose", 0)
+            solve_options.setdefault("verbose", 0)
             objective = WrappedEquilibriumObjective(
                 objective,
                 eq_objective=ObjectiveFunction(nonlinear_constraints),

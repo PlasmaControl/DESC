@@ -111,6 +111,8 @@ class PowerSeriesProfile(Profile):
         ):  # check if all odd terms are zero, if so return even. Print something when does so?
             if modes is None:
                 modes = np.arange(params.size)
+            else:
+                modes = np.atleast_1d(modes)
             if np.all(params[modes % 2 != 0] == 0):
                 sym = "even"
             else:

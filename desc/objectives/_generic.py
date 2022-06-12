@@ -19,6 +19,7 @@ from desc.compute import (
     compute_quasisymmetry_error,
     compute_toroidal_coords,
     dot,
+    compute_geometry,
 )
 from .objective_funs import _Objective
 
@@ -271,9 +272,17 @@ class ToroidalCurrent(_Objective):
 
 class MagneticWell(_Objective):
     """Magnetic well parameter.
-    As described in https://fusion.gat.com/pubs-ext/ComPlasmaPhys/A22135.pdf, the magnetic
-    well parameter is a useful figure of merit for stellarator operation. Systems with
-    positive well parameters are favorable for containment.
+    The magnetic well parameter is a useful figure of merit for
+    stellarator operation. Systems with positive well parameters are
+    favorable for containment.
+
+    Greene, J.M., 1997. A brief review of magnetic wells.
+    Comments on Plasma Physics and Controlled Fusion, 17, pp.389-402.
+
+    Landreman, M. and Jorge, R. (2020)
+    “Magnetic well and Mercier stability of stellarators near the magnetic axis,”
+    Journal of Plasma Physics. Cambridge University Press, 86(5), p. 905860510.
+    doi: 10.1017/S002237782000121X.
     """
 
     _scalar = True
@@ -303,14 +312,14 @@ class MagneticWell(_Objective):
         """
         if grid is not None and not isinstance(grid, LinearGrid):
             print(
-                "Warning: MagneticWell.compute() assumes a linear grid spacing to"
-                "evaluate the well parameter. If the provided grid spacing is"
+                "Warning: MagneticWell.compute() assumes a linear grid spacing to "
+                "evaluate the well parameter. If the provided grid spacing is "
                 "highly nonlinear, the accuracy of the returned value may diminish."
             )
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Magnetic Well: {:10.3e}"  # choose string fmt output
+        self._callback_fmt = "Magnetic Well: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -328,8 +337,8 @@ class MagneticWell(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(
                 L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
+                M=2 * eq.M_grid + 10,
+                N=2 * eq.N_grid + 10,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=1,
@@ -387,9 +396,10 @@ class MagneticWell(_Objective):
         Returns
         -------
         W : float
-            Magnetic well parameter. Systems with positive well
-            parameters are favorable for containment.
+            Magnetic well parameter. Systems with positive well parameters are
+            favorable for containment.
 
+            Currently, returns the tuple V, data["V"], W for debugging purposes.
         """
         # collect required physical quantities
         data = compute_contravariant_magnetic_field(
@@ -411,49 +421,55 @@ class MagneticWell(_Objective):
         )
         data = compute_pressure(p_l, self._pressure, data)
 
-        # data["V"] is the geometry of the stellarator not the volume of the flux surface.
-        # the volume of the flux surface is computed below using divergence theorem:
+        # data["V"] is not the volume enclosed by the flux surface.
+        # below, the enclosed volume is computed using divergence theorem:
         # volume integral of (div [0, 0, Z] = 1) = surface integral of ([0, 0, Z] dot ds)
 
-        jacobian = data["sqrt(g)"]
-        dtdz = self.grid.spacing[:, 1] * self.grid.spacing[:, 2]
+        dtheta_times_dzeta = self.grid.spacing[:, 1] * self.grid.spacing[:, 2]
+        area_elements = jnp.abs(data["sqrt(g)"]) * dtheta_times_dzeta
         drho_dz = data["e^rho"][:, 2]  # partial derivative
-        V = jnp.sum(data["Z"] * drho_dz * jnp.abs(jacobian) * dtdz)
+        V = jnp.sum(data["Z"] * drho_dz * area_elements)
 
-        # compute the well parameter
-        # Note that, unlike the paper cited in the objective docstring, the
-        # derivative with respect to volume is taken with respect to the radial
-        # coordinate rho. chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho.
+        # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
+        dv_drho = jnp.sum(area_elements)
+        # a basic check is to remove jnp.abs() from area_elements and
+        # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
-        drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
-        # dpsi/drho also = 2*data["rho"]*Psi
-        # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label) formula.
-        dv_drho = jnp.sum(jacobian * dtdz)
+        # Unlike the papers cited in the docstring, the derivative wrt
+        # volume is taken with respect to the radial coordinate rho.
+        # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho.
+
+        drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)  # =0.5/data["rho"]/Psi
         dpsi_dv = 1 / drho_dpsi / dv_drho
         B = data["B"]
         dBsquare_drho = 2 * dot(B, data["B_r"])
 
         pressure_average = MagneticWell._average(
             dpsi_dv * drho_dpsi * (2 * mu_0 * data["p_r"] + dBsquare_drho),
-            jacobian,
+            data["sqrt(g)"],
         )
-        Bsquare_average = MagneticWell._average(dot(B, B), jacobian)
+        Bsquare_average = MagneticWell._average(dot(B, B), data["sqrt(g)"])
 
         W = V * pressure_average / Bsquare_average
-        # stable_criteria is: W * dpsi_dv * drho_dpsi * data["p_r"] < 0
-        return self._shift_scale(W)
+        # stable_criteria = W * dpsi_dv * drho_dpsi * data["p_r"] < 0
+
+        # just to return data["V"] too
+        data = compute_geometry(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
+        )
+        return V, data["V"], self._shift_scale(W)
 
     @staticmethod
-    def _average(f, jacobian):
+    def _average(f, jacobian_determinant):
         """
         Returns the magnetic surface average of the given function, f.
         Assumes linear grid spacing.
 
-        :param f:           the given function
-        :param jacobian:    jacobian of the surface integral
-        :return:            the magnetic surface average of f
+        :param f:                    the given function
+        :param jacobian_determinant: surface integral area factor
+        :return:                     the magnetic surface average of f
         """
-        return jnp.mean(f * jacobian) / jnp.mean(jacobian)
+        return jnp.mean(f * jacobian_determinant) / jnp.mean(jacobian_determinant)
 
 
 class RadialCurrentDensity(_Objective):

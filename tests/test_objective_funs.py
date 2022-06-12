@@ -15,6 +15,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
+from desc.grid import LinearGrid
 
 
 class TestObjectiveFunction(unittest.TestCase):
@@ -91,4 +92,4 @@ class TestObjectiveFunction(unittest.TestCase):
         eq = Equilibrium()
         obj = MagneticWell(eq=eq)
         w = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(w, 0)
+        np.testing.assert_allclose(w, 0)  # should fail this

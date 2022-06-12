@@ -446,9 +446,9 @@ class MagneticWell(_Objective):
 
         pressure_average = MagneticWell._average(
             dpsi_dv * drho_dpsi * (2 * mu_0 * data["p_r"] + dBsquare_drho),
-            data["|e_theta x e_zeta|"],
+            data["sqrt(g)"],
         )
-        Bsquare_average = MagneticWell._average(dot(B, B), data["|e_theta x e_zeta|"])
+        Bsquare_average = MagneticWell._average(dot(B, B), data["sqrt(g)"])
 
         W = V * pressure_average / Bsquare_average
         # stable_criteria = W * dpsi_dv * drho_dpsi * data["p_r"] < 0
@@ -464,9 +464,10 @@ class MagneticWell(_Objective):
         """
         Returns the magnetic surface average of the given function, f.
         Assumes linear grid spacing.
+        See D'haeseleer flux coordinates eq. 4.9.11.
 
         :param f:                    the given function
-        :param jacobian_determinant: surface integral area factor
+        :param jacobian_determinant: 3D jacobian determinant
         :return:                     the magnetic surface average of f
         """
         return jnp.mean(f * jacobian_determinant) / jnp.mean(jacobian_determinant)

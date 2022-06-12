@@ -399,7 +399,7 @@ class MagneticWell(_Objective):
             Magnetic well parameter. Systems with positive well parameters are
             favorable for containment.
 
-            Currently, returns the tuple V, data["V"], W for debugging purposes.
+            Currently, returns the tuple V, data["V"], W, dv_drho for debugging purposes.
         """
         # collect required physical quantities
         data = compute_contravariant_magnetic_field(
@@ -430,34 +430,36 @@ class MagneticWell(_Objective):
         drho_dz = data["e^rho"][:, 2]  # partial derivative
         V = jnp.sum(data["Z"] * drho_dz * area_elements)
 
+        # Unlike the papers cited in the docstring, the derivative
+        # wrt volume is taken wrt the radial coordinate rho.
+        # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho = d/drho / dv/drho.
+
         # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         dv_drho = jnp.sum(area_elements)
         # a basic check is to remove jnp.abs() from area_elements and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
-        # Unlike the papers cited in the docstring, the derivative
-        # wrt volume is taken wrt the radial coordinate rho.
-        # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho.
+        # The formula for dv/drho simplifies the chain rule.
+        # So, these relations are currently no longer needed.
+        # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
+        # dpsi_dv = 1 / drho_dpsi / dv_drho
+        # assert jnp.allclose((dpsi_dv * drho_dpsi)[-1], 1 / dv_drho)
 
-        drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)  # =0.5/data["rho"]/Psi
-        dpsi_dv = 1 / drho_dpsi / dv_drho
         B = data["B"]
         dBsquare_drho = 2 * dot(B, data["B_r"])
-
         pressure_average = MagneticWell._average(
-            dpsi_dv * drho_dpsi * (2 * mu_0 * data["p_r"] + dBsquare_drho),
+            (2 * mu_0 * data["p_r"] + dBsquare_drho) / dv_drho,
             data["sqrt(g)"],
         )
         Bsquare_average = MagneticWell._average(dot(B, B), data["sqrt(g)"])
-
         W = V * pressure_average / Bsquare_average
-        # stable_criteria = W * dpsi_dv * drho_dpsi * data["p_r"] < 0
+        # stable_criteria = W * data["p_r"] / dv_drho < 0
 
         # just to return data["V"] too
         data = compute_geometry(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
-        return V, data["V"], self._shift_scale(W)
+        return V, data["V"], self._shift_scale(W), dv_drho
 
     @staticmethod
     def _average(f, jacobian_determinant):

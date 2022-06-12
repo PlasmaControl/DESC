@@ -435,8 +435,8 @@ class MagneticWell(_Objective):
         # a basic check is to remove jnp.abs() from area_elements and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
-        # Unlike the papers cited in the docstring, the derivative wrt
-        # volume is taken with respect to the radial coordinate rho.
+        # Unlike the papers cited in the docstring, the derivative
+        # wrt volume is taken wrt the radial coordinate rho.
         # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho.
 
         drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)  # =0.5/data["rho"]/Psi
@@ -446,9 +446,9 @@ class MagneticWell(_Objective):
 
         pressure_average = MagneticWell._average(
             dpsi_dv * drho_dpsi * (2 * mu_0 * data["p_r"] + dBsquare_drho),
-            data["sqrt(g)"],
+            data["|e_theta x e_zeta|"],
         )
-        Bsquare_average = MagneticWell._average(dot(B, B), data["sqrt(g)"])
+        Bsquare_average = MagneticWell._average(dot(B, B), data["|e_theta x e_zeta|"])
 
         W = V * pressure_average / Bsquare_average
         # stable_criteria = W * dpsi_dv * drho_dpsi * data["p_r"] < 0

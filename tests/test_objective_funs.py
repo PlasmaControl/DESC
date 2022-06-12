@@ -15,7 +15,6 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
-from desc.grid import LinearGrid
 
 
 class TestObjectiveFunction(unittest.TestCase):

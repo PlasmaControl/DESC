@@ -16,14 +16,20 @@ def obj_func(x):
 def constr_func(x):
     return jnp.dot(x,x) - 2
 
+def ineq_constr_func(x):
+    return -(jnp.dot(x,x) - 1)
+
+
 grad = Derivative(obj_func, argnum=0)
 gradc = Derivative(constr_func, argnum=0)
+gradineq = Derivative(ineq_constr_func,argnum=0)
 
-x0 = np.array([1.0, 1.0])
-lmbda0 = np.array([-0.1])
-mu = np.array([1, 10, 100])
-tau = 1/mu*10**(-4)
+x0 = np.array([-0.75, -0.75])
+lmbda0 = np.array([-0.4])
+mu0 = 2
+# mu = np.array([1, 10, 100])
+# tau = 1/mu*10**(-4)
 
-out = fmin_lag(obj_func,x0,lmbda0,mu,tau,grad,np.array([constr_func]),np.array([gradc]))
+out,lmbdaf,ctolf = fmin_lag(obj_func,x0,lmbda0,mu0,grad,np.array([constr_func]),np.array([gradc]),np.array([ineq_constr_func]),np.array([gradineq]),maxiter = 50)
 
     

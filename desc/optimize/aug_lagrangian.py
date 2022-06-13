@@ -34,15 +34,25 @@ from desc.derivatives import Derivative
 # def L(x,fun,lmbda,mu,c,gradc):    
 #     return fun(x) - np.dot(lmbda,c(x)) + mu/2*np.dot(c(x),c(x))
 
+def proj(x,l,u):
+    if all(x - l > np.zeros(len(x))) and all(u - x > np.zeros(len(x))):
+        return x
+    else:
+        if not (all(x - l > np.zeros(len(x)))):
+            return l
+        else:
+            return u
+
 def fmin_lag(
     fun,
     x0,
     lmbda0,
-    mu,                     #user inputs mu and tau values. is this a bad idea?
-    tau,
+    mu0,
     grad,
     constr,
     gradconstr,
+    ineq,
+    gradineq,
     hess="bfgs",
     args=(),
     method="dogleg",
@@ -50,6 +60,7 @@ def fmin_lag(
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
+    ctol=1e-6,
     verbose=1,
     maxiter=None,
     callback=None,
@@ -71,13 +82,32 @@ def fmin_lag(
     L = AugLagrangian(fun, constr)
     gradL = Derivative(L.compute,argnum=0)
     
-    for i in range(len(mu)):
-        xk = fmintr(L.compute,x0,gradL,args=(lmbda,mu[i]),gtol=tau[i])
-        # if np.abs(grad(x,*args)) < tau[i]:               #not sure what the criteria should be
-        #     break
-        
-        for j in range(len(lmbda)):
-            lmbda[j] = lmbda[j] - mu[i] * constr[j](x)
-        x = xk['x']
+    mu = mu0
+    gtolk = 1/mu0
+    ctolk = 1/(mu0**(0.1))    
     
-    return xk
+    
+    while iteration < maxiter:
+        xk = fmintr(L.compute,x,gradL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
+
+        x = xk['x']
+        c = 0
+        for i in range(len(constr)):
+            c = c + constr[i](x)**2
+        
+        c = np.sqrt(c)
+        
+        if c < ctolk:
+            if c < ctol and gradL(x,lmbda,mu)[0] < gtol:
+                break
+            else:
+                for i in range(len(lmbda)):
+                    lmbda[i] = lmbda[i] - mu * constr[i](x)
+                    ctolk = ctolk/(mu**(0.9))
+                    gtolk = gtolk/mu
+        else:
+            mu = 100 * mu
+            ctolk = 1/(mu**(0.1))
+            gtolk = gtolk/mu
+        iteration = iteration + 1
+    return [xk,lmbda,c]

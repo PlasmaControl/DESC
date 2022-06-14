@@ -33,8 +33,6 @@ class ForceBalance(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -43,14 +41,11 @@ class ForceBalance(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(
-        self, eq=None, target=0, weight=1, grid=None, norm=False, name="force"
-    ):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
 
         self.grid = grid
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(N)"
+        units = "(N)"
         self._callback_fmt = "Total force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -147,31 +142,13 @@ class ForceBalance(_Objective):
             self._iota,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
-        if self.norm:
-            # FIXME: pre-compute normalization based on initial condition,
-            # use averaged (not local) values
-            fr = fr / data["|grad(p)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
 
         fb = data["F_beta"] * data["|beta|"]
-        if self.norm:
-            fb = fb / data["|grad(p)|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
         f = jnp.concatenate([fr, fb])
         return self._shift_scale(f)
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        units = "(normalized)" if self.norm else "(N)"
-        self._callback_fmt = "Total force: {:10.3e} " + units
 
 
 class RadialForceBalance(_Objective):
@@ -192,8 +169,6 @@ class RadialForceBalance(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -202,14 +177,11 @@ class RadialForceBalance(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(
-        self, eq=None, target=0, weight=1, grid=None, norm=False, name="radial force"
-    ):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="radial force"):
 
         self.grid = grid
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(N)"
+        units = "(N)"
         self._callback_fmt = "Radial force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -306,26 +278,9 @@ class RadialForceBalance(_Objective):
             self._iota,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        if self.norm:
-            # FIXME: pre-compute normalization based on initial condition,
-            # use averaged (not local) values
-            f = f / data["|grad(p)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
 
-        # XXX: when normalized this has units of m^3 ?
         return self._shift_scale(f)
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        units = "(normalized)" if self.norm else "(N)"
-        self._callback_fmt = "Radial force: {:10.3e} " + units
 
 
 class HelicalForceBalance(_Objective):
@@ -347,8 +302,6 @@ class HelicalForceBalance(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -357,14 +310,11 @@ class HelicalForceBalance(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(
-        self, eq=None, target=0, weight=1, grid=None, norm=False, name="helical force"
-    ):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="helical force"):
 
         self.grid = grid
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(N)"
+        units = "(N)"
         self._callback_fmt = "Helical force: {:10.3e}, " + units
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -461,23 +411,9 @@ class HelicalForceBalance(_Objective):
             self._iota,
         )
         f = data["F_beta"] * data["|beta|"]
-        if self.norm:
-            f = f / data["|grad(p)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
-        # XXX: when normalized this has units of m^3 ?
+
         return self._shift_scale(f)
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        units = "(normalized)" if self.norm else "(N)"
-        self._callback_fmt = "Helical force: {:10.3e}, " + units
 
 
 class Energy(_Objective):
@@ -631,8 +567,6 @@ class CurrentDensity(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -647,14 +581,12 @@ class CurrentDensity(_Objective):
         target=0,
         weight=1,
         grid=None,
-        norm=False,
         name="current density",
     ):
 
         self.grid = grid
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(A/m^2)"
+        units = "(A/m^2)"
         self._callback_fmt = "Total current density: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -747,20 +679,6 @@ class CurrentDensity(_Objective):
         jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
         jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
-        if self.norm:
-            raise NotImplementedError("Not implemented yet.")
 
         f = jnp.concatenate([jr, jt, jz])
         return self._shift_scale(f)
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        units = "(normalized)" if self.norm else "(A/m^2)"
-        self._callback_fmt = "Total current density: {:10.3e} " + units

@@ -33,8 +33,6 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -52,7 +50,6 @@ class QuasisymmetryBoozer(_Objective):
         helicity=(1, 0),
         M_booz=None,
         N_booz=None,
-        norm=False,
         name="QS Boozer",
     ):
 
@@ -60,9 +57,8 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(T)"
+        units = "(T)"
         self._callback_fmt = (
             "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
@@ -197,8 +193,6 @@ class QuasisymmetryBoozer(_Objective):
             self._iota,
         )
         b_mn = data["|B|_mn"]
-        if self.norm:
-            b_mn = b_mn / jnp.sqrt(jnp.sum(b_mn ** 2))
         b_mn = b_mn[self._idx]
 
         return self._shift_scale(b_mn)
@@ -217,26 +211,7 @@ class QuasisymmetryBoozer(_Objective):
         )
         self._helicity = helicity
         if hasattr(self, "_callback_fmt"):
-            units = "(normalized)" if self.norm else "(T)"
-            self._callback_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
-            )
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        if hasattr(self, "_callback_fmt"):
-            units = "(normalized)" if self.norm else "(T)"
+            units = "(T)"
             self._callback_fmt = (
                 "Quasi-symmetry ({},{}) Boozer error: ".format(
                     self.helicity[0], self.helicity[1]
@@ -263,8 +238,6 @@ class QuasisymmetryTwoTerm(_Objective):
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -280,15 +253,13 @@ class QuasisymmetryTwoTerm(_Objective):
         weight=1,
         grid=None,
         helicity=(1, 0),
-        norm=False,
         name="QS two-term",
     ):
 
         self.grid = grid
         self.helicity = helicity
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(T^3)"
+        units = "(T^3)"
         self._callback_fmt = (
             "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
             + "{:10.3e} "
@@ -382,9 +353,7 @@ class QuasisymmetryTwoTerm(_Objective):
             self._helicity,
         )
         f = data["f_C"] * self.grid.weights
-        if self.norm:
-            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            f = f / B ** 3
+
         return self._shift_scale(f)
 
     @property
@@ -401,26 +370,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
         self._helicity = helicity
         if hasattr(self, "_callback_fmt"):
-            units = "(normalized)" if self.norm else "(T^3)"
-            self._callback_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
-            )
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        if hasattr(self, "_callback_fmt"):
-            units = "(normalized)" if self.norm else "(T^3)"
+            units = "(T^3)"
             self._callback_fmt = (
                 "Quasi-symmetry ({},{}) error: ".format(
                     self.helicity[0], self.helicity[1]
@@ -445,8 +395,6 @@ class QuasisymmetryTripleProduct(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
-    norm : bool, optional
-        Whether to normalize the objective values (make dimensionless).
     name : str
         Name of the objective function.
 
@@ -461,14 +409,12 @@ class QuasisymmetryTripleProduct(_Objective):
         target=0,
         weight=1,
         grid=None,
-        norm=False,
         name="QS triple product",
     ):
 
         self.grid = grid
-        self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(normalized)" if self.norm else "(T^4/m^2)"
+        units = "(T^4/m^2)"
         self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -557,20 +503,5 @@ class QuasisymmetryTripleProduct(_Objective):
             self._iota,
         )
         f = data["f_T"] * self.grid.weights
-        if self.norm:
-            B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
-            f = f * R ** 2 / B ** 4
+
         return self._shift_scale(f)
-
-    @property
-    def norm(self):
-        """bool: Whether the objective values are normalized."""
-        return self._norm
-
-    @norm.setter
-    def norm(self, norm):
-        assert norm in [True, False]
-        self._norm = norm
-        units = "(normalized)" if self.norm else "(T^4/m^2)"
-        self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units

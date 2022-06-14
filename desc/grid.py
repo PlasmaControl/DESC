@@ -33,6 +33,9 @@ class Grid(IOAble):
         "_weights",
         "_axis",
         "_node_pattern",
+        "_num_rho",
+        "_num_theta",
+        "_num_zeta",
     ]
 
     def __init__(self, nodes, sort=True):
@@ -51,6 +54,7 @@ class Grid(IOAble):
         if sort:
             self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _enforce_symmetry(self):
@@ -69,6 +73,12 @@ class Grid(IOAble):
     def _find_axis(self):
         """Find indices of axis nodes."""
         self._axis = np.where(self.nodes[:, 0] == 0)[0]
+
+    def _count_nodes(self):
+        """Count unique values of coordinates."""
+        self._num_rho = np.unique(self.nodes[:, 0]).size
+        self._num_theta = np.unique(self.nodes[:, 1]).size
+        self._num_zeta = np.unique(self.nodes[:, 2]).size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -166,6 +176,21 @@ class Grid(IOAble):
         return self.nodes.shape[0]
 
     @property
+    def num_rho(self):
+        """int: number of unique rho coordinates"""
+        return self._num_rho
+
+    @property
+    def num_theta(self):
+        """int: number of unique theta coordinates"""
+        return self._num_theta
+
+    @property
+    def num_zeta(self):
+        """int: number of unique zeta coordinates"""
+        return self._num_zeta
+
+    @property
     def axis(self):
         """ndarray: Indices of nodes at magnetic axis."""
         return self.__dict__.setdefault("_axis", np.array([]))
@@ -257,6 +282,7 @@ class LinearGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _create_nodes(
@@ -436,6 +462,7 @@ class QuadratureGrid(Grid):
         self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
@@ -592,6 +619,7 @@ class ConcentricGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _create_nodes(

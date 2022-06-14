@@ -261,7 +261,6 @@ class Equilibrium(_Configuration, IOAble):
         if N_grid is not None and N_grid != self.N_grid:
             self._N_grid = N_grid
 
-    # TODO: add a copy argument?
     def solve(
         self,
         objective=None,
@@ -274,6 +273,7 @@ class Equilibrium(_Configuration, IOAble):
         x_scale="auto",
         options={},
         verbose=1,
+        copy=False,
     ):
         """Solve to find the equilibrium configuration.
 
@@ -304,9 +304,14 @@ class Equilibrium(_Configuration, IOAble):
             Dictionary of additional options to pass to optimizer.
         verbose : int
             Level of output.
+        copy : bool
+            Whether to return the current equilibrium or a copy (leaving the original
+            unchanged).
 
         Returns
         -------
+        eq : Equilibrium
+            Either this equilibrium or a copy, depending on "copy" argument.
         result : OptimizeResult
             The optimization result represented as a ``OptimizeResult`` object.
             Important attributes are: ``x`` the solution array, ``success`` a
@@ -323,7 +328,12 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
 
-        if self.N > self.N_grid or self.M > self.M_grid or self.L > self.L_grid:
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
+        if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
@@ -336,7 +346,7 @@ class Equilibrium(_Configuration, IOAble):
             )
 
         result = optimizer.optimize(
-            self,
+            eq,
             objective,
             constraints,
             ftol=ftol,
@@ -350,15 +360,15 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(self))
+            objective.callback(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(self, key, value[-1])
+            setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(self))
+            objective.callback(objective.x(eq))
 
-        self.solved = result["success"]
-        return result
+        eq.solved = result["success"]
+        return eq, result
 
     def optimize(
         self,
@@ -372,13 +382,16 @@ class Equilibrium(_Configuration, IOAble):
         x_scale="auto",
         options={},
         verbose=1,
+        copy=False,
     ):
         """Optimize an equilibrium for an objective.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            Objective function to solve. Default = fixed-boundary force balance.
+            Objective function to optimize.
+        constraint : Objective or tuple of Objective
+            Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : Optimizer
             Optimization algorithm. Default = lsq-exact.
         ftol : float
@@ -402,11 +415,20 @@ class Equilibrium(_Configuration, IOAble):
             Dictionary of additional options to pass to optimizer.
         verbose : int
             Level of output.
+        copy : bool
+            Whether to return the current equilibrium or a copy (leaving the original
+            unchanged).
 
         Returns
         -------
-        eq_new : Equilibrium
-            Optimized equilibrum.
+        eq : Equilibrium
+            Either this equilibrium or a copy, depending on "copy" argument.
+        result : OptimizeResult
+            The optimization result represented as a ``OptimizeResult`` object.
+            Important attributes are: ``x`` the solution array, ``success`` a
+            Boolean flag indicating if the optimizer exited successfully and
+            ``message`` which describes the cause of the termination. See
+            `OptimizeResult` for a description of other attributes.
 
         """
         if optimizer is None:
@@ -415,8 +437,13 @@ class Equilibrium(_Configuration, IOAble):
             constraints = get_fixed_boundary_constraints()
             constraints = (ForceBalance(), *constraints)
 
+        if copy:
+            eq = self.copy()
+        else:
+            eq = self
+
         result = optimizer.optimize(
-            self,
+            eq,
             objective,
             constraints,
             ftol=ftol,
@@ -430,15 +457,15 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(self))
+            objective.callback(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(self, key, value[-1])
+            setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(self))
+            objective.callback(objective.x(eq))
 
-        self.solved = result["success"]
-        return result
+        eq.solved = result["success"]
+        return eq, result
 
     def _optimize(
         self,
@@ -448,7 +475,7 @@ class Equilibrium(_Configuration, IOAble):
         xtol=1e-6,
         maxiter=50,
         verbose=1,
-        copy=True,
+        copy=False,
         solve_options={},
         perturb_options={},
     ):
@@ -459,7 +486,7 @@ class Equilibrium(_Configuration, IOAble):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraint : ObjectiveFunction
-            Objective function to satisfy.
+            Objective function to satisfy. Default = fixed-boundary force balance.
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -616,14 +643,16 @@ class Equilibrium(_Configuration, IOAble):
         order=2,
         tr_ratio=0.1,
         verbose=1,
-        copy=True,
+        copy=False,
     ):
         """Perturb an equilibrium.
 
         Parameters
         ----------
         objective : ObjectiveFunction
-            Objective function to satisfy.
+            Objective function to satisfy. Default = force balance.
+        constraint : Objective or tuple of Objective
+            Constraint function to satisfy. Default = fixed-boundary.
         dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
             rotational transform, and total toroidal magnetic flux.
@@ -676,10 +705,7 @@ class Equilibrium(_Configuration, IOAble):
         )
         eq.solved = False
 
-        if copy:
-            return eq
-        else:
-            return self
+        return eq
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

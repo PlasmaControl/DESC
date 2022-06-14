@@ -12,9 +12,6 @@ from .linear_objectives import (
 from ._generic import (
     GenericObjective,
     ToroidalCurrent,
-    RadialCurrentDensity,
-    PoloidalCurrentDensity,
-    ToroidalCurrentDensity,
 )
 from ._equilibrium import (
     Energy,

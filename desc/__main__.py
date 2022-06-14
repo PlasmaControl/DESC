@@ -44,9 +44,6 @@ def main(cl_args=sys.argv[1:]):
     )
 
     if ir.args.plot > 1:
-        print("Plotting initial guess")
-        # FIXME: Equilibrium no longer has an initial attribute
-    if ir.args.plot > 2:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
             ax = plot_surfaces(eq)

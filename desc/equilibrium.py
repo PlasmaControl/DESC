@@ -203,6 +203,16 @@ class Equilibrium(_Configuration, IOAble):
     def solved(self, solved):
         self._solved = solved
 
+    def resolution(self):
+        return {
+            "L": self.L,
+            "M": self.M,
+            "N": self.N,
+            "L_grid": self.L_grid,
+            "M_grid": self.M_grid,
+            "N_grid": self.N_grid,
+        }
+
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))

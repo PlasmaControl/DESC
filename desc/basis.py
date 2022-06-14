@@ -49,6 +49,7 @@ class Basis(IOAble, ABC):
             "cosine",
             "even",
             False,
+            None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
@@ -59,6 +60,8 @@ class Basis(IOAble, ABC):
         elif self.sym == "even":  # even powers of rho
             non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym is None:
+            self._sym = False
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -198,10 +201,13 @@ class PowerSeries(Basis):
     ----------
     L : int
         Maximum radial resolution.
+    sym : {"even", False}
+        Type of symmetry. "even" has only even powers of rho, for an analytic profile
+        on the disc. False uses the full (odd + even) powers.
 
     """
 
-    def __init__(self, L, sym=False):
+    def __init__(self, L, sym="even"):
 
         self._L = L
         self._M = 0

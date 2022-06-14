@@ -321,7 +321,7 @@ class MagneticWell(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Magnetic Well: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True, verbose=0):  # change back to 1
         """Build constant arrays.
 
         Parameters
@@ -399,7 +399,7 @@ class MagneticWell(_Objective):
             Magnetic well parameter. Systems with positive well parameters are
             favorable for containment.
 
-            Currently, returns the tuple V, data["V"], W, dv_drho for debugging purposes.
+            Currently, returns the tuple V, dv_drho, data["V"], W for debugging purposes.
         """
         # collect required physical quantities
         data = compute_contravariant_magnetic_field(
@@ -459,7 +459,7 @@ class MagneticWell(_Objective):
         data = compute_geometry(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
-        return V, data["V"], self._shift_scale(W), dv_drho
+        return V, dv_drho, data["V"], self._shift_scale(W)
 
     @staticmethod
     def _average(f, jacobian_determinant):

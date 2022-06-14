@@ -34,14 +34,26 @@ from desc.derivatives import Derivative
 # def L(x,fun,lmbda,mu,c,gradc):    
 #     return fun(x) - np.dot(lmbda,c(x)) + mu/2*np.dot(c(x),c(x))
 
-def proj(x,l,u):
-    if all(x - l > np.zeros(len(x))) and all(u - x > np.zeros(len(x))):
-        return x
-    else:
-        if not (all(x - l > np.zeros(len(x)))):
-            return l
-        else:
-            return u
+# def proj(x,l,u):
+#     if all(x - l > np.zeros(len(x))) and all(u - x > np.zeros(len(x))):
+#         return x
+#     else:
+#         if not (all(x - l > np.zeros(len(x)))):
+#             return l
+#         else:
+#             return u
+        
+# def conv_test(x,gL,l,u):
+#     if not (l and u):
+#         return np.linalg.norm(gL)
+#     else:
+#         return np.linalg.norm(x - proj(x - gL, l, u))
+    
+
+def conv_test(x,gL,l,u):
+    return np.linalg.norm(gL)
+
+# def bound_constr(x,lmbda,mu,gradL)
 
 def fmin_lag(
     fun,
@@ -53,6 +65,8 @@ def fmin_lag(
     gradconstr,
     ineq,
     gradineq,
+    l = None,
+    u = None,
     hess="bfgs",
     args=(),
     method="dogleg",
@@ -79,6 +93,9 @@ def fmin_lag(
     ngev += 1
     lmbda = lmbda0
     
+    constr = np.concatenate((constr,ineq),axis=None)
+    gradconstr = np.concatenate((gradconstr,gradineq),axis=None)
+    
     L = AugLagrangian(fun, constr)
     gradL = Derivative(L.compute,argnum=0)
     
@@ -98,7 +115,7 @@ def fmin_lag(
         c = np.sqrt(c)
         
         if c < ctolk:
-            if c < ctol and gradL(x,lmbda,mu)[0] < gtol:
+            if c < ctol and conv_test(x,gradL(x,lmbda,mu),l,u) < gtol:
                 break
             else:
                 for i in range(len(lmbda)):
@@ -106,8 +123,9 @@ def fmin_lag(
                     ctolk = ctolk/(mu**(0.9))
                     gtolk = gtolk/mu
         else:
-            mu = 100 * mu
+            mu = 10 * mu
             ctolk = 1/(mu**(0.1))
             gtolk = gtolk/mu
         iteration = iteration + 1
-    return [xk,lmbda,c]
+        print(fun(x))
+    return [fun(x),x,lmbda,c]

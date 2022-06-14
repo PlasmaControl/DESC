@@ -21,6 +21,23 @@ class ForceBalance(_Objective):
     beta = -B^zeta grad(theta) + B^theta grad(zeta)
     f_beta = F_beta |beta| dV  (N)
 
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
     """
 
     _scalar = False
@@ -29,26 +46,7 @@ class ForceBalance(_Objective):
     def __init__(
         self, eq=None, target=0, weight=1, grid=None, norm=False, name="force"
     ):
-        """Initialize a ForceBalance Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -182,6 +180,23 @@ class RadialForceBalance(_Objective):
     F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
     f_rho = F_rho |grad(rho)| dV  (N)
 
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
     """
 
     _scalar = False
@@ -190,26 +205,7 @@ class RadialForceBalance(_Objective):
     def __init__(
         self, eq=None, target=0, weight=1, grid=None, norm=False, name="radial force"
     ):
-        """Initialize a RadialForceBalance Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -339,6 +335,23 @@ class HelicalForceBalance(_Objective):
     beta = -B^zeta grad(theta) + B^theta grad(zeta)
     f_beta = F_beta |beta| dV  (N)
 
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
     """
 
     _scalar = False
@@ -347,26 +360,7 @@ class HelicalForceBalance(_Objective):
     def __init__(
         self, eq=None, target=0, weight=1, grid=None, norm=False, name="helical force"
     ):
-        """Initialize a HelicalForceBalance Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -491,6 +485,23 @@ class Energy(_Objective):
 
     W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)
 
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    gamma : float, optional
+        Adiabatic (compressional) index. Default = 0.
+    name : str
+        Name of the objective function.
+
     """
 
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
@@ -498,26 +509,7 @@ class Energy(_Objective):
     _linear = False
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0, name="energy"):
-        """Initialize an Energy Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        gamma : float, optional
-            Adiabatic (compressional) index. Default = 0.
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -625,7 +617,26 @@ class Energy(_Objective):
 class CurrentDensity(_Objective):
     """Radial, poloidal, and toroidal current density.
 
-    Useful for solving vacuum equilibria."""
+    Useful for solving vacuum equilibria.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = False
@@ -639,26 +650,7 @@ class CurrentDensity(_Objective):
         norm=False,
         name="current density",
     ):
-        """Initialize a CurrentDensity Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)

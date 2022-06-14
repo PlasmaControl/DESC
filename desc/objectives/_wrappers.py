@@ -13,7 +13,22 @@ from ._equilibrium import CurrentDensity
 
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
-    """Evaluate an objective subject to equilibrium constraint."""
+    """Evaluate an objective subject to equilibrium constraint.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize.
+    eq_objective : ObjectiveFunction
+        Equilibrium objective to enforce.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the objectives.
+    use_jit : bool, optional
+        Whether to just-in-time compile the objectives and derivatives.
+    verbose : int, optional
+        Level of output.
+
+    """
 
     def __init__(
         self,
@@ -25,22 +40,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         perturb_options={},
         solve_options={},
     ):
-        """Initialize a WrappedEquilibriumObjective.
 
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        eq_objective : ObjectiveFunction
-            Equilibrium objective to enforce.
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the objectives.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objectives and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         self._objective = objective
         self._eq_objective = eq_objective
         self._perturb_options = perturb_options
@@ -123,7 +123,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._built = True
 
     def _update_equilibrium(self, x):
-        """Description."""
+        """Update the internal equilibrium with new boundary, profile etc."""
         if jnp.all(x == self._x_old):
             pass
         else:

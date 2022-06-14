@@ -553,8 +553,6 @@ class DoubleFourierSeries(Basis):
 class ZernikePolynomial(Basis):
     """2D basis set for analytic functions in a unit disc.
 
-    Initializes a ZernikePolynomial
-
     Parameters
     ----------
     L : int
@@ -765,8 +763,6 @@ class FourierZernikeBasis(Basis):
 
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
-
-    Initializes a FourierZernikeBasis
 
     Parameters
     ----------

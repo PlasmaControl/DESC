@@ -13,7 +13,32 @@ from .objective_funs import _Objective
 
 
 class QuasisymmetryBoozer(_Objective):
-    """Quasi-symmetry Boozer harmonics error."""
+    """Quasi-symmetry Boozer harmonics error.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = False
@@ -30,32 +55,7 @@ class QuasisymmetryBoozer(_Objective):
         norm=False,
         name="QS Boozer",
     ):
-        """Initialize a QuasisymmetryBoozer Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        helicity : tuple, optional
-            Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
-        M_booz : int, optional
-            Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
-        N_booz : int, optional
-            Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -247,7 +247,28 @@ class QuasisymmetryBoozer(_Objective):
 
 
 class QuasisymmetryTwoTerm(_Objective):
-    """Quasi-symmetry two-term error."""
+    """Quasi-symmetry two-term error.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of quasi-symmetry (M, N).
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = False
@@ -262,28 +283,7 @@ class QuasisymmetryTwoTerm(_Objective):
         norm=False,
         name="QS two-term",
     ):
-        """Initialize a QuasisymmetryTwoTerm Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        helicity : tuple, optional
-            Type of quasi-symmetry (M, N).
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.helicity = helicity
         self.norm = norm
@@ -431,7 +431,26 @@ class QuasisymmetryTwoTerm(_Objective):
 
 
 class QuasisymmetryTripleProduct(_Objective):
-    """Quasi-symmetry triple product error."""
+    """Quasi-symmetry triple product error.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    norm : bool, optional
+        Whether to normalize the objective values (make dimensionless).
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = False
@@ -445,26 +464,7 @@ class QuasisymmetryTripleProduct(_Objective):
         norm=False,
         name="QS triple product",
     ):
-        """Initialize a QuasisymmetryTripleProduct Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        norm : bool, optional
-            Whether to normalize the objective values (make dimensionless).
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         self.norm = norm
         super().__init__(eq=eq, target=target, weight=weight, name=name)

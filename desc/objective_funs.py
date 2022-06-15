@@ -426,6 +426,39 @@ class AugLagrangian(ObjectiveFunction):
         L = self.compute(x,lmbda,mu)
         print("The Lagrangian is " + str(L))
         
+        
+class ExLagrangian(ObjectiveFunction):
+    def __init__(self, func, eqconstr, ineqconstr):
+        self.func = func
+        self.eqconstr = eqconstr
+        self.ineqconstr = ineqconstr
+    
+    def scalar(self):
+        return False
+    
+    def name(self):
+        return "exact lagrangian"
+    
+    def derivatives(self):
+        return
+    
+    def compute(self, x, mu):
+        L = self.func(x)
+        
+        for i in range(len(self.eqconstr)):
+            L = L + mu*self.eqconstr[i](x)
+        for j in range(len(self.ineqconstr)):
+            L = L + mu*jnp.maximum(0, self.ineqconstr[i](x))
+            
+        return L
+    
+    def compute_scalar(self,x,mu):
+        return self.compute(x,mu)
+    
+    def callback(self, x, mu):
+        L = self.compute(x,mu)
+        print("The Exact Lagrangian is " + str(L))
+        
 
 # class BoundAugLagrangian(ObjectiveFunction):
     

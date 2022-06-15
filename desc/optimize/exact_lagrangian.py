@@ -26,6 +26,7 @@ from scipy.optimize import OptimizeResult
 from desc.optimize.fmin_scalar import fmintr
 
 from desc.objective_funs import AugLagrangian
+from desc.objective_funs import ExLagrangian
 from desc.derivatives import Derivative
 
 # def gradL(x,fun,lmbda,mu,c,gradc):
@@ -55,7 +56,7 @@ def conv_test(x,gL,l,u):
 
 # def bound_constr(x,lmbda,mu,gradL)
 
-def fmin_lag(
+def fmin_exlag(
     fun,
     x0,
     lmbda0,
@@ -93,10 +94,10 @@ def fmin_lag(
     ngev += 1
     lmbda = lmbda0
     
-    constr = np.concatenate((constr,ineq),axis=None)
-    gradconstr = np.concatenate((gradconstr,gradineq),axis=None)
+    #constr = np.concatenate((constr,ineq),axis=None)
+    #gradconstr = np.concatenate((gradconstr,gradineq),axis=None)
     
-    L = AugLagrangian(fun, constr)
+    L = ExLagrangian(fun, constr, ineq)
     gradL = Derivative(L.compute,argnum=0)
     hessL = Derivative(L.compute,argnum=0,mode="hess")
     
@@ -105,43 +106,32 @@ def fmin_lag(
     ctolk = 1/(mu0**(0.1))    
     xold = x
     
-    
+   
     while iteration < maxiter:
-        print(gtolk)
-        xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
+        xk = fmintr(L.compute,x,gradL,hess = hessL,args=(mu,),gtol=gtolk,maxiter = maxiter)
 
         x = xk['x']
 
-        c = 0
-        
-        for i in range(len(constr)):
-            c = c + constr[i](x)**2
-        
-        c = np.sqrt(c)
+        h = 0
         
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
-            break        
+            break
         
-        if c < ctolk:
-
-            if c < ctol and conv_test(x,gradL(x,lmbda,mu),l,u) < gtol:
-                break
-
-            else:
-                for i in range(len(lmbda)):
-                    lmbda[i] = lmbda[i] - mu * constr[i](x)
-                    ctolk = ctolk/(mu**(0.9))
-                    gtolk = gtolk/mu
+        for i in range(len(constr)):
+            h = h + jnp.abs(constr[i](x))
+        for i in range(len(ineq)):
+            h = h + jnp.maximum(0,ineq[i](x))
+        
+        if h < ctolk:
+            break
         else:
-            mu = 100 * mu
+            mu = 10 * mu
             ctolk = 1/(mu**(0.1))
             gtolk = gtolk/mu
-        
-        
         iteration = iteration + 1
         xold = x
         print(fun(x))
         print("\n")
         print(x)
-    return [fun(x),x,lmbda,c,gradL(x,lmbda,mu)]
+    return [fun(x),x,h]

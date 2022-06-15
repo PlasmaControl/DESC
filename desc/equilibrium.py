@@ -344,6 +344,10 @@ class Equilibrium(_Configuration, IOAble):
                     "yellow",
                 )
             )
+        if eq.bdry_mode == "poincare":
+            raise NotImplementedError(
+                f"Solving equilibrium with poincare XS as BC is not supported yet on master branch."
+            )
 
         result = optimizer.optimize(
             eq,
@@ -762,16 +766,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             s.change_resolution(equil.L, equil.M, equil.N)
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
-            s = ZernikeRZToroidalSection(
-                inputs["surface"][:, 3],
-                inputs["surface"][:, 4],
-                inputs["surface"][:, :2].astype(int),
-                inputs["surface"][:, :2].astype(int),
-                equil.spectral_indexing,
-                equil.sym,
+            raise NotImplementedError(
+                f"Specifying poincare XS as BC is not implemented yet on main branch."
             )
-            s.change_resolution(equil.L, equil.M, equil.N)
-            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
 
         p_l = np.zeros_like(equil.pressure.params)
         i_l = np.zeros_like(equil.iota.params)

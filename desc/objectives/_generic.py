@@ -22,6 +22,7 @@ from desc.compute import (
     compute_geometry,
 )
 from .objective_funs import _Objective
+from desc.compute._core import check_derivs
 
 
 class GenericObjective(_Objective):
@@ -399,7 +400,7 @@ class MagneticWell(_Objective):
             Magnetic well parameter. Systems with positive well parameters are
             favorable for containment.
 
-            Currently, returns the tuple V, dv_drho, data["V"], W for debugging purposes.
+            Currently, returns a dictionary of values for debugging purposes.
         """
         # collect required physical quantities
         data = compute_contravariant_magnetic_field(
@@ -459,7 +460,20 @@ class MagneticWell(_Objective):
         data = compute_geometry(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
-        return V, dv_drho, data["V"], self._shift_scale(W)
+        return {
+            "DESC Magnetic Well": self._shift_scale(W),
+            "V surface integral": V,
+            "dv_drho": dv_drho,
+            "pressure_average": pressure_average,
+            "Bsquare_average": Bsquare_average,
+            "check_derivs_B_r": check_derivs(
+                "B_r", self._R_transform, self._Z_transform, self._L_transform
+            ),
+            "check_derivs_p_r": check_derivs(
+                "p_r", self._R_transform, self._Z_transform, self._L_transform
+            ),
+            "data": data,
+        }
 
     @staticmethod
     def _average(f, jacobian_determinant):

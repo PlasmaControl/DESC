@@ -426,6 +426,36 @@ class AugLagrangian(ObjectiveFunction):
         L = self.compute(x,lmbda,mu)
         print("The Lagrangian is " + str(L))
         
+class AugLagrangianLS(ObjectiveFunction):
+    
+    def __init__(self, func, constr):
+        self.func = func
+        self.constr = constr
+    
+    def scalar(self):
+        return False
+    
+    def name(self):
+        return "least squares augmented lagrangian"
+    
+    def derivatives(self):
+        return
+    
+    def compute(self, x, lmbda, mu):
+        L = self.func(x)
+        c = 0
+        for i in range(len(self.constr)):
+            c = c - lmbda[i]*self.constr[i](x) + mu/2*self.constr[i](x)**2
+        L = L + c*np.ones(len(L))
+        return L
+    
+    def compute_scalar(self,x,lmbda,mu):
+        return np.linalg.norm(self.compute(x,lmbda,mu))
+    
+    def callback(self, x, lmbda, mu):
+        L = self.compute(x,lmbda,mu)
+        print("The Lagrangian is " + str(L))
+        
         
 class ExLagrangian(ObjectiveFunction):
     def __init__(self, func, eqconstr, ineqconstr):

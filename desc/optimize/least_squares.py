@@ -264,7 +264,7 @@ def lsqtr(
             if return_tr:
                 alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-
+            
             success, message = check_termination(
                 actual_reduction,
                 cost,
@@ -284,6 +284,7 @@ def lsqtr(
                 njev,
                 max_njev,
             )
+
             if success is not None:
                 break
 
@@ -314,9 +315,10 @@ def lsqtr(
         else:
             step_norm = 0
             actual_reduction = 0
-
+        #print("The message is")
+        #print(message)    
         iteration += 1
-
+    message = None
     result = OptimizeResult(
         x=x,
         success=success,

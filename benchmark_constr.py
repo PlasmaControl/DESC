@@ -8,12 +8,14 @@ Created on Mon Jun 13 14:27:48 2022
 import numpy as np
 from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.exact_lagrangian import fmin_exlag
+from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
 from desc.derivatives import Derivative
 from desc.backend import jnp
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
+from numpy.random import default_rng
 
 #%% G06
 def obj_func(x):
@@ -298,3 +300,38 @@ def ineq_constr_func2(x):
     return -(-4*x[0]**4 + 32*x[0]**3 - 88*x[0]**2 + 96*x[0] + x[1] - 36)
 
 out = minimize(obj_func,np.array([2.5,3.0]),bounds=((0,3),(0,4)),constraints=[{"fun": ineq_constr_func1, "type": "ineq"},{"fun": ineq_constr_func2, "type": "ineq"}])
+
+#%%Least Squares No Constraints
+
+def fun(x, p):
+    a0 = x * p[0]
+    a1 = jnp.exp(-(x ** 2) * p[1])
+    a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
+    a3 = jnp.sum(
+        jnp.array([(x + 2) ** -(i * 2) * pi ** (i + 1) for i, pi in enumerate(p[3:])]),
+        axis=0,
+    )
+    return a0 + a1 + 3 * a2 + a3
+
+p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+x = np.linspace(-1, 1, 100)
+y = fun(x, p)
+
+def res(p):
+    return fun(x, p) - y
+
+def constraint1(x):
+    return x[0] - 5 + x[6]**2
+gradc = Derivative(constraint1,argnum=0)
+
+rando = default_rng(seed=0)
+p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+
+jac = Derivative(res, 0, "fwd")
+
+lmbda0 = np.array([])
+mu0 = 10
+ic = np.array([])
+gic = np.array([])
+
+fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_ls(res,p0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)

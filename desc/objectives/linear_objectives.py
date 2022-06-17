@@ -6,7 +6,6 @@ from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.basis import (
-    FourierZernike_to_PoincareZernikePolynomial,
     zernike_radial_coeffs,
 )
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -117,8 +116,6 @@ class FixBoundaryR(_Objective):
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                elif eq.bdry_mode == "poincare":
-                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
@@ -249,8 +246,6 @@ class FixBoundaryZ(_Objective):
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                elif eq.bdry_mode == "poincare":
-                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
@@ -285,95 +280,6 @@ class FixBoundaryZ(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Zb_lmn"
-
-
-class PoincareLambda(_Objective):
-    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta).
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(self, eq=None, target=None, weight=1, name="poincare lambda"):
-
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "lambda poincare boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        L_basis = eq.L_basis
-        L_modes = eq.L_basis.modes
-        dim_L = eq.L_basis.num_modes
-
-        if (
-            None in self.target
-        ):  # uses current eq's value of lambda at zeta=0 as constraint
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn, eq.L_basis
-            )
-            Lb_modes = Lb_basis.modes
-            self._dim_f = Lb_basis.num_modes
-            self.target = Lb_lmn
-
-        self._A = np.zeros((self._dim_f, dim_L))
-        for i, (l, m, n) in enumerate(L_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
-                    Lb_modes[:, -1] >= 0,
-                )
-            )
-            self._A[j, i] = 1
-
-        if self.target is not None:
-            self._dim_f = self._A.shape[0]
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, L_lmn, **kwargs):
-        """Compute lambda poincare section errors.
-
-        Parameters
-        ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
-
-        Returns
-        -------
-        f : ndarray
-            Lambda poincare section errors.
-
-        """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)
 
 
 class LambdaGauge(_Objective):
@@ -479,10 +385,7 @@ class LambdaGauge(_Objective):
 
             A = np.zeros((c.shape[1], L_basis.num_modes))
             A[:, mnpos] = c.T
-            # b = np.zeros((c.shape[1]))
             self._A = np.vstack((self._A, A))
-            # self._b
-            # raise NotImplementedError("Lambda gauge freedom not implemented yet.")
 
         self._dim_f = self._A.shape[0]
 

@@ -101,8 +101,7 @@ Objective Functions
     desc.objectives.get_equilibrium_objective
     desc.objectives.HelicalForceBalance
     desc.objectives.LambdaGauge
-    desc.objectives.ObjectiveFunction
-    desc.objectives.PoincareLambda    
+    desc.objectives.ObjectiveFunction   
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct

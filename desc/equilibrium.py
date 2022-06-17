@@ -11,6 +11,7 @@ from desc.io import IOAble
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.optimize import Optimizer
 from desc.objectives import (
+    ObjectiveFunction,
     ForceBalance,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -263,9 +264,9 @@ class Equilibrium(_Configuration, IOAble):
 
     def solve(
         self,
-        objective=None,
+        objective="force",
         constraints=None,
-        optimizer=None,
+        optimizer="lsq-exact",
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
@@ -279,10 +280,12 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective : ObjectiveFunction
-            Objective function to solve. Default = fixed-boundary force balance.
-        optimizer : Optimizer
-            Optimization algorithm. Default = lsq-exact.
+        objective : {"force", "force2", "energy"}
+            Objective function to solve. Default = force balance on unified grid.
+        constraints : Tuple
+            set of constraints to enforce. Default = fixed boundary/profiles
+        optimizer : string
+            Optimization algorithm. Default = "lsq-exact".
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -321,11 +324,11 @@ class Equilibrium(_Configuration, IOAble):
 
 
         """
-        if objective is None:
-            objective = get_equilibrium_objective()
+        if not isinstance(objective, ObjectiveFunction):
+            objective = get_equilibrium_objective(objective)
         if constraints is None:
             constraints = get_fixed_boundary_constraints()
-        if optimizer is None:
+        if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer("lsq-exact")
 
         if copy:

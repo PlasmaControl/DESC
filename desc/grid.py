@@ -349,7 +349,7 @@ class LinearGrid(Grid):
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
         if self.L > 0:
-            dr = (1 - r[0]) / self.L
+            dr = (r[-1] - r[0]) / self.L
             if dr == 0:
                 dr = 1
         else:

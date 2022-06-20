@@ -63,5 +63,4 @@ __all__ = [
     "QuasisymmetryTwoTerm",
     "QuasisymmetryTripleProduct",
     "get_fixed_boundary_constraints",
-    "get_equilibium_objective",
 ]

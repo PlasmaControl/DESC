@@ -12,14 +12,13 @@ from desc.compute import (
     data_index,
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
-    compute_contravariant_basis,
     compute_contravariant_current_density,
     compute_contravariant_magnetic_field,
     compute_pressure,
     compute_quasisymmetry_error,
     compute_toroidal_coords,
+    cross,
     dot,
-    compute_geometry,
 )
 from .objective_funs import _Objective
 from desc.compute._core import check_derivs
@@ -313,9 +312,9 @@ class MagneticWell(_Objective):
         """
         if grid is not None and not isinstance(grid, LinearGrid):
             print(
-                "Warning: MagneticWell.compute() assumes a linear grid spacing to "
-                "evaluate the well parameter. If the provided grid spacing is "
-                "highly nonlinear, the accuracy of the returned value may diminish."
+                """Warning: MagneticWell.compute() assumes a linear grid spacing to
+                 evaluate the well parameter. If the provided grid spacing is
+                 highly nonlinear, the accuracy of the returned value may diminish."""
             )
 
         self.grid = grid
@@ -338,10 +337,10 @@ class MagneticWell(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(
                 L=1,
-                M=2 * eq.M_grid + 10,
+                M=2 * eq.M_grid + 10,  # +1 not enough for torus volume
                 N=2 * eq.N_grid + 10,
-                NFP=eq.NFP,
-                sym=eq.sym,
+                NFP=eq.NFP,  # will work if using grid.weights
+                sym=False,  # required for correctness of volume
                 rho=1,
             )
 
@@ -414,9 +413,6 @@ class MagneticWell(_Objective):
             self._L_transform,
             self._iota,
         )
-        data = compute_contravariant_basis(
-            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
-        )
         data = compute_toroidal_coords(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
@@ -425,45 +421,46 @@ class MagneticWell(_Objective):
         # data["V"] is not the volume enclosed by the flux surface.
         # below, the enclosed volume is computed using divergence theorem:
         # volume integral of (div [0, 0, Z] = 1) = surface integral of ([0, 0, Z] dot ds)
-
         dtheta_times_dzeta = self.grid.spacing[:, 1] * self.grid.spacing[:, 2]
-        area_elements = jnp.abs(data["sqrt(g)"]) * dtheta_times_dzeta
-        drho_dz = data["e^rho"][:, 2]  # partial derivative
-        V = jnp.sum(data["Z"] * drho_dz * area_elements)
+        e_sup_rho_sqrt_g = cross(data["e_theta"], data["e_zeta"])
+        V = jnp.abs(jnp.sum(data["Z"] * e_sup_rho_sqrt_g[:, 2] * dtheta_times_dzeta))
+        V2 = jnp.abs(jnp.sum(data["Z"] * e_sup_rho_sqrt_g[:, 2] * self.grid.weights))
+        # alternative
+        # drho_dz = data["e^rho"][:, 2]  # partial derivative
+        # V = jnp.sum(data["Z"] * drho_dz * jnp.abs(data["sqrt(g)"]) * dtheta_times_dzeta)
 
         # Unlike the papers cited in the docstring, the derivative
         # wrt volume is taken wrt the radial coordinate rho.
-        # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho = d/drho / dv/drho.
-
-        # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
-        dv_drho = jnp.sum(area_elements)
-        # a basic check is to remove jnp.abs() from area_elements and
-        # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
-
-        # The formula for dv/drho simplifies the chain rule.
-        # So, these relations are currently no longer needed.
+        # chain rule: d/dv = dpsi/dv * drho/dpsi * d/drho = d/drho / dv/drho
+        # The existence of a simple dv/drho formula simplifies the chain rule.
+        # So, these relations are currently no longer needed:
         # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
         # dpsi_dv = 1 / drho_dpsi / dv_drho
         # assert jnp.allclose((dpsi_dv * drho_dpsi)[-1], 1 / dv_drho)
 
+        # see D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
+        area_elements = jnp.abs(data["sqrt(g)"]) * dtheta_times_dzeta
+        dv_drho = jnp.sum(area_elements)
+        dv_drho2 = jnp.sum(jnp.abs(data["sqrt(g)"]) * self.grid.weights)
+        # a basic check is to remove jnp.abs() from area_elements and
+        # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
+
         B = data["B"]
         dBsquare_drho = 2 * dot(B, data["B_r"])
         pressure_average = MagneticWell._average(
-            (2 * mu_0 * data["p_r"] + dBsquare_drho) / dv_drho,
+            (2 * mu_0 * data["p_r"] + dBsquare_drho) / dv_drho2,
             data["sqrt(g)"],
         )
         Bsquare_average = MagneticWell._average(dot(B, B), data["sqrt(g)"])
-        W = V * pressure_average / Bsquare_average
+        W = V2 * pressure_average / Bsquare_average
         # stable_criteria = W * data["p_r"] / dv_drho < 0
 
-        # just to return data["V"] too
-        data = compute_geometry(
-            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
-        )
         return {
             "DESC Magnetic Well": self._shift_scale(W),
             "V surface integral": V,
+            "V surface integral with weights": V2,
             "dv_drho": dv_drho,
+            "dv_drho with weights": dv_drho2,
             "pressure_average": pressure_average,
             "Bsquare_average": Bsquare_average,
             "check_derivs_B_r": check_derivs(
@@ -472,6 +469,8 @@ class MagneticWell(_Objective):
             "check_derivs_p_r": check_derivs(
                 "p_r", self._R_transform, self._Z_transform, self._L_transform
             ),
+            "sum( 1 * dt * dz)": jnp.sum(dtheta_times_dzeta),
+            "sum(dr * dt * dz)": jnp.sum(self.grid.weights),
             "data": data,
         }
 

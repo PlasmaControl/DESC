@@ -36,11 +36,6 @@ class Grid(IOAble):
     ]
 
     def __init__(self, nodes, sort=True):
-
-        nodes = np.atleast_2d(nodes)
-        self._L = np.unique(nodes[:, 0]).size
-        self._M = np.unique(nodes[:, 1]).size
-        self._N = np.unique(nodes[:, 2]).size
         self._NFP = 1
         self._sym = False
         self._node_pattern = "custom"
@@ -322,7 +317,9 @@ class LinearGrid(Grid):
             else:
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
-        if self.L > 0:
+        # previously if self.L > 0:
+        # quick fix for computing grids of rho=constant
+        if self.L > 1:
             dr = (1 - r[0]) / self.L
             if dr == 0:
                 dr = 1

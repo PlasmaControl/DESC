@@ -13,6 +13,7 @@ from ._core import (
     compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
     compute_geometry,
+    cross,
     dot,
 )
 from ._field import (
@@ -58,5 +59,6 @@ __all__ = [
     "compute_quasisymmetry_error",
     "compute_energy",
     "compute_geometry",
+    "cross",
     "dot",
 ]

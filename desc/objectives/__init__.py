@@ -6,7 +6,6 @@ from .linear_objectives import (
     FixPressure,
     FixIota,
     FixPsi,
-    TargetIota,
 )
 from ._generic import (
     GenericObjective,

@@ -80,6 +80,8 @@ class _Configuration(IOAble, ABC):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "K_basis",
+        "IGphi_mn",
         "_surface",
         "_axis",
         "_pressure",

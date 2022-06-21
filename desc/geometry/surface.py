@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from desc.backend import jnp, sign, put
-from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
@@ -411,18 +410,6 @@ class FourierRZToroidalSurface(Surface):
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return LCFSConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
-        )
-
 
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
@@ -637,6 +624,7 @@ class ZernikeRZToroidalSection(Surface):
 
     def get_coeffs(self, l, m=0):
         """Get Zernike coefficients for given mode number(s)."""
+
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -658,6 +646,7 @@ class ZernikeRZToroidalSection(Surface):
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
         """Set specific Zernike coefficients."""
+
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),
@@ -806,16 +795,4 @@ class ZernikeRZToroidalSection(Surface):
         N = jnp.cross(r_r, r_t, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
             2 * np.pi
-        )
-
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return PoincareConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
         )

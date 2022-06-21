@@ -1342,7 +1342,7 @@ data_index["|grad(zeta)|"] = {
 # contravariant magnetic field
 data_index["B0"] = {
     "label": "\\psi' / \\sqrt{g}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "",
     "fun": "compute_contravariant_magnetic_field",
@@ -1353,7 +1353,7 @@ data_index["B0"] = {
 
 data_index["B^rho"] = {
     "label": "B^{\\rho}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant radial component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1364,7 +1364,7 @@ data_index["B^rho"] = {
 
 data_index["B^theta"] = {
     "label": "B^{\\theta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant poloidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1375,7 +1375,7 @@ data_index["B^theta"] = {
 
 data_index["B^zeta"] = {
     "label": "B^{\\zeta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant toroidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -2752,7 +2752,7 @@ data_index["J"] = {
     ],
 }
 data_index["J_parallel"] = {
-    "label": "\\mathbf{J}_{\parallel}",
+    "label": "\\mathbf{J} \\cdot \\mathbf{b}",
     "units": "A \\cdot m^{-2}",
     "units_long": "Amperes / square meter",
     "description": "Plasma current parallel to magnetic field",

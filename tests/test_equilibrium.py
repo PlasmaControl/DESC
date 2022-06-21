@@ -3,10 +3,17 @@ import numpy as np
 from netCDF4 import Dataset
 import pytest
 
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.utils import area_difference
 from desc.__main__ import main
+from desc.geometry import ZernikeRZToroidalSection
+from desc.objectives import (
+    get_fixed_boundary_constraints,
+    ObjectiveFunction,
+    ForceBalance,
+)
+from desc.transform import Transform
 
 
 def test_compute_geometry(DSHAPE):
@@ -131,14 +138,16 @@ def _compute_coords(equil, check_all_zeta=False):
 
 
 @pytest.mark.slow
-def test_to_sfl(plot_eq):
+def test_to_sfl(SOLOVEV):
 
-    Rr1, Zr1, Rv1, Zv1 = _compute_coords(plot_eq)
-    Rr2, Zr2, Rv2, Zv2 = _compute_coords(plot_eq.to_sfl())
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+
+    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq)
+    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-5)
-    np.testing.assert_allclose(theta_err, 0, atol=5e-10)
+    np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-7)
 
 
 @pytest.mark.slow
@@ -155,13 +164,56 @@ def test_continuation_resolution(tmpdir_factory):
     main(args)
 
 
-@pytest.mark.slow
-def test_poincare_bc(SOLOVEV, SOLOVEV_Poincare):
+def test_grid_resolution_warning(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    eq_poin = EquilibriaFamily.load(load_from=str(SOLOVEV_Poincare["desc_h5_path"]))[-1]
-    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq, check_all_zeta=True)
-    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq_poin, check_all_zeta=True)
-    rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
-    # the LCFS BC solution was found with force, while the poincare was with energy, so relatively loose tolerance btwn the two solutions
+    eqN = eq.copy()
+    eqN.change_resolution(N=1, N_grid=0)
+    with pytest.warns(Warning):
+        eqN.solve(ftol=1e-2, maxiter=2)
+    eqM = eq.copy()
+    eqM.change_resolution(M=eq.M, M_grid=eq.M - 1)
+    with pytest.warns(Warning):
+        eqM.solve(ftol=1e-2, maxiter=2)
+    eqL = eq.copy()
+    eqL.change_resolution(L=eq.L, L_grid=eq.L - 1)
+    with pytest.warns(Warning):
+        eqL.solve(ftol=1e-2, maxiter=2)
+
+
+def test_eq_change_grid_resolution(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
+    assert eq.L_grid == 10
+    assert eq.M_grid == 10
+    assert eq.N_grid == 10
+
+
+def test_resolution():
+    eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
+    eq2 = Equilibrium()
+
+    assert eq1.resolution() != eq2.resolution()
+    eq2.change_resolution(**eq1.resolution())
+    assert eq1.resolution() == eq2.resolution()
+
+
+def test_poincare_solve_not_implemented():
+    inputs = {
+        "L": 4,
+        "M": 2,
+        "N": 2,
+        "NFP": 3,
+        "sym": False,
+        "spectral_indexing": "ansi",
+        "axis": np.array([[0, 10, 0]]),
+        "pressure": np.array([[0, 10], [2, 5]]),
+        "iota": np.array([[0, 1], [2, 3]]),
+    }
+
+    inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
+    eq = Equilibrium(**inputs)
+    np.testing.assert_allclose(
+        eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )
+    with pytest.raises(NotImplementedError):
+        eq.solve()

@@ -18,7 +18,7 @@ pylint >= 2.12.2
 pytest >= 5.0.0
 pytest-cov >= 2.6.0
 codecov
-pytest-mpl
+pytest-mpl == 0.16.0
 pytest-benchmark
 markupsafe==2.0.1
 nbmake

@@ -2,7 +2,7 @@ import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import flatten_list
+from desc.utils import flatten_list, copy_coeffs
 from desc.io import IOAble
 from desc.backend import jnp, jit, sign, fori_loop, gammaln
 
@@ -47,7 +47,9 @@ class Basis(IOAble, ABC):
             "sine",
             "cos",
             "cosine",
+            "even",
             False,
+            None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
@@ -55,6 +57,11 @@ class Basis(IOAble, ABC):
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "even":  # even powers of rho
+            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym is None:
+            self._sym = False
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -194,16 +201,19 @@ class PowerSeries(Basis):
     ----------
     L : int
         Maximum radial resolution.
+    sym : {"even", False}
+        Type of symmetry. "even" has only even powers of rho, for an analytic profile
+        on the disc. False uses the full (odd + even) powers.
 
     """
 
-    def __init__(self, L):
+    def __init__(self, L, sym="even"):
 
         self._L = L
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = False
+        self._sym = sym
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -543,8 +553,6 @@ class DoubleFourierSeries(Basis):
 class ZernikePolynomial(Basis):
     """2D basis set for analytic functions in a unit disc.
 
-    Initializes a ZernikePolynomial
-
     Parameters
     ----------
     L : int
@@ -755,8 +763,6 @@ class FourierZernikeBasis(Basis):
 
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
-
-    Initializes a FourierZernikeBasis
 
     Parameters
     ----------

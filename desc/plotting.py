@@ -3,9 +3,9 @@ import matplotlib
 import numpy as np
 import numbers
 import tkinter
+import re
 from termcolor import colored
 import warnings
-from scipy.constants import mu_0
 from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
@@ -19,14 +19,17 @@ __all__ = [
     "plot_1d",
     "plot_2d",
     "plot_3d",
-    "plot_surfaces",
-    "plot_section",
-    "plot_comparison",
-    "plot_current",
+    "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_coefficients",
+    "plot_comparison",
+    "plot_fsa",
     "plot_grid",
-    "plot_basis",
+    "plot_logo",
+    "plot_qs_error",
+    "plot_section",
+    "plot_surfaces",
 ]
 
 
@@ -381,8 +384,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     data = data.flatten()
 
     if log:
+        data = np.abs(data)  # ensure data is positive for log plot
         ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
-        data = np.abs(data)  # ensure its positive for log plot
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
 
@@ -455,7 +458,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
 
     contourf_kwargs = {}
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
@@ -567,7 +570,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         Z = Z[:, 0, :].T
 
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         minn, maxx = data.min().min(), data.max().max()
         norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
     else:
@@ -617,6 +620,77 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
+    return fig, ax
+
+
+def plot_fsa(
+    eq,
+    name,
+    log=False,
+    L=20,
+    M=None,
+    N=None,
+    rho=None,
+    ax=None,
+    **kwargs,
+):
+    """Plot flux surface averaged quantities.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    name : str
+        Name of variable to plot.
+    log : bool, optional
+        Whether to use a log scale.
+    L : int, optional
+        Number of flux surfaces to evaluate at. Only used if rho=None.
+    M : int, optional
+        Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
+    N : int, optional
+        Number of toroidal nodes used in flux surface average. Default is 2*eq.N_grid+1.
+    rho : ndarray, optional
+        Radial coordinates of the flux surfaces to evaluate at.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    """
+    if rho is None:
+        rho = np.linspace(1, 0, num=L, endpoint=False)
+    if M is None:
+        M = 2 * eq.M_grid + 1
+    if N is None:
+        N = 2 * eq.N_grid + 1
+
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+
+    values = np.array([])
+    for i, r in enumerate(rho):
+        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
+        g, _ = _compute(eq, "sqrt(g)", grid)
+        data, label = _compute(eq, name, grid, kwargs.get("component", None))
+        values = np.append(values, np.mean(data * g) / np.mean(g))
+
+    if log:
+        values = np.abs(values)  # ensure data is positive for log plot
+        ax.semilogy(rho, values, label=kwargs.get("label", None))
+    else:
+        ax.plot(rho, values, label=kwargs.get("label", None))
+
+    label = label.split("~")
+    label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+
+    ax.set_xlabel(_axis_labels_rtz[0])
+    ax.set_ylabel(label)
+    fig.set_tight_layout(True)
     return fig, ax
 
 
@@ -701,7 +775,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
 
     contourf_kwargs = {}
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
@@ -1115,66 +1189,6 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     ax.set_ylabel(_axis_labels_XYZ[1])
     ax.set_zlabel(_axis_labels_XYZ[2])
 
-    return fig, ax
-
-
-# TODO: replace this with a capability of plot_1d
-def plot_current(eq, log=False, L=20, M=None, N=None, rho=None, ax=None, **kwargs):
-    """Plot current density profiles.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Object from which to plot.
-    log : bool, optional
-        Whether to use a log scale.
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None.
-    M : int, optional
-        Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
-    N : int, optional
-        Number of toroidal nodes used in flux surface average. Default is 2*eq.N_grid+1.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
-
-    """
-    if rho is None:
-        rho = np.linspace(1, 0, num=L, endpoint=False)
-    if M is None:
-        M = 2 * eq.M_grid + 1
-    if N is None:
-        N = 2 * eq.N_grid + 1
-
-    I = np.array([])
-    G = np.array([])
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
-        data = eq.compute("I", grid)
-        I = np.append(I, data["I"])
-        G = np.append(G, data["G"])
-
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
-
-    if log:
-        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(I), label="toroidal")
-        ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(G), label="poloidal")
-    else:
-        ax.plot(rho, 2 * np.pi / mu_0 * I, label="toroidal")
-        ax.plot(rho, 2 * np.pi / mu_0 * G, label="poloidal")
-
-    ax.set_xlabel(_axis_labels_rtz[0])
-    ax.set_ylabel(r"current $(A)$")
-    fig.legend(loc="center right")
-    fig.set_tight_layout(True)
     return fig, ax
 
 

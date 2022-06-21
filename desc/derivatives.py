@@ -22,7 +22,7 @@ class _Derivative(ABC):
 
     @abstractmethod
     def __init__(self, fun, argnum=0, mode=None, **kwargs):
-        """Initialize a Derivative object."""
+        pass
 
     @abstractmethod
     def compute(self, *args):

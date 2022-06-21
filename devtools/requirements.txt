@@ -6,4 +6,4 @@ pylint >= 2.12.2
 pytest >= 5.0.0
 pytest-benchmark
 pytest-cov >= 2.6.0
-pytest-mpl
+pytest-mpl == 0.16.0

@@ -603,6 +603,7 @@ class Equilibrium(_Configuration, IOAble):
         dp=None,
         di=None,
         dPsi=None,
+        dIGphi=None,
         order=2,
         tr_ratio=0.1,
         verbose=1,

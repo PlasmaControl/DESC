@@ -110,7 +110,7 @@ class ForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, IGphi_mn, **kwargs):
         """Compute MHD force balance errors.
 
         Parameters

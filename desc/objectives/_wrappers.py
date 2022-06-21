@@ -82,7 +82,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._scalar = False
 
         # set_state_vector
-        self._args = ["p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn"]
+        self._args = ["p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn", "IGphi_mn"]
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
@@ -102,7 +102,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints)
+        ) = factorize_linear_constraints(self._constraints, ["IGphi_mn"])
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:

@@ -24,6 +24,7 @@ def perturb(
     dPsi=None,
     dRb=None,
     dZb=None,
+    dIGphi=None,
     order=2,
     tr_ratio=0.1,
     weight="auto",
@@ -121,7 +122,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints
+        constraints, ["IGphi_mn"]
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -293,7 +294,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints
+        constraints, ["IGphi_mn"]
     )
 
     # update other attributes
@@ -328,6 +329,7 @@ def optimal_perturb(
     dPsi=False,
     dRb=False,
     dZb=False,
+    dIGphi=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
@@ -433,6 +435,11 @@ def optimal_perturb(
             deltas["Zb_lmn"] = np.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
     elif np.any(dZb):
         deltas["Zb_lmn"] = dZb
+    if type(dIGphi) is bool or dIGphi is None:
+        if dIGphi is True:
+            deltas["IGphi_mn"] = np.ones((objective_f.dimensions["IGphi_mn"],), dtype=bool)
+    elif np.any(dIGphi):
+        deltas["IGphi_mn"] = dIGphi
 
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
@@ -481,7 +488,7 @@ def optimal_perturb(
         unfixed_idx,
         project,
         recover,
-    ) = factorize_linear_constraints(constraints)
+    ) = factorize_linear_constraints(constraints, ['IGphi_mn'])
 
     # state vector
     xf = objective_f.x(eq)
@@ -504,12 +511,12 @@ def optimal_perturb(
     if len(
         [
             arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
+            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi", "IGphi_mn")
             if arg in deltas.keys()
         ]
     ):
         x_idx = np.concatenate(
-            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
+            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys() and arg not in ("Rb_lmn", "Zb_lmn")]
         )
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(objective_f.dim_x)[:, x_idx]
@@ -532,7 +539,7 @@ def optimal_perturb(
         timer.start("df computation")
         Fx = objective_f.jac(xf)
         Fx = {arg: Fx[:, objective_f.x_idx[arg]] for arg in objective_f.args}
-        for arg in objective_f.args:
+        for arg in objective_g.args:
             if arg not in Fx.keys():
                 Fx[arg] = np.zeros((objective_f.dim_f, objective_f.dimensions[arg]))
         Fx = np.hstack([Fx[arg] for arg in arg_order if arg in Fx])
@@ -679,7 +686,7 @@ def optimal_perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints
+        constraints, ["IGphi_mn"]
     )
 
     # update other attributes

@@ -705,10 +705,9 @@ class ConcentricGrid(Grid):
         dt = []
 
         for iring in range(L // 2 + 1, 0, -1):
-            dtheta = (
-                2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
-            )
-            theta = np.arange(0, 2 * np.pi, dtheta)
+            ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            dtheta = 2 * np.pi / ntheta
+            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
             if rotation in {None, False}:
                 if self.sym:
                     # this is emperically chosen, could be something different, just
@@ -737,7 +736,7 @@ class ConcentricGrid(Grid):
         dimzern = r.size
 
         dz = 2 * np.pi / (NFP * (2 * N + 1))
-        z = np.arange(0, 2 * np.pi / NFP, dz)
+        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
 
         r = np.tile(r, 2 * N + 1)
         t = np.tile(t, 2 * N + 1)

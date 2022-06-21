@@ -185,12 +185,12 @@ class BoundaryErrorBS(_Objective):
         Bn = jnp.sum(B_out*neval, axis=-1)*dVeval
         return jnp.concatenate([Bsq_diff, Bn])
     
-f = Dataset("../educational_VMEC/test/wout_test_beta.vmec.nc")
+f = Dataset("wout_test_beta.vmec.nc")
 print(f['mpol'][:])
 print(f['ntor'][:])
 
 
-veq = VMECIO.load("../educational_VMEC/test/wout_test_beta.vmec.nc", spectral_indexing="fringe")
+veq = VMECIO.load("wout_test_beta.vmec.nc", spectral_indexing="fringe")
 veq.change_resolution(L=16, M=8, N=8, L_grid=20, M_grid=12, N_grid=12)
 
 pres = np.asarray(f.variables['presf'])
@@ -207,12 +207,9 @@ iota = SplineProfile(iot, ri)
 veq.pressure = pressure
 veq.iota = iota
 
-
-vacini = Dataset("../educational_VMEC/test/vac/vacin_test_beta.vmec_000000.nc", "r")
-
-NFP     = int(vacini['nfp'][()])
+NFP     = veq.NFP
 mgrid = "tests/inputs/nestor/mgrid_test.nc"
-extcur = vacini['extcur'][()]        
+extcur = f['extcur'][:]        
 folder = os.getcwd()
 mgridFilename = os.path.join(folder, mgrid)
 ext_field = SplineMagneticField.from_mgrid(mgridFilename, extcur, extrap=True, period=(2*np.pi/NFP))
@@ -265,4 +262,4 @@ eq1.optimize(objective, constraints, maxiter=60, verbose=3,
 
 import pickle
 with open("freeb_beta.pkl", "wb+") as f:
-     pickle.dump(f, eqs)
+     pickle.dump(eqs, f)

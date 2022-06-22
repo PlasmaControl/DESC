@@ -420,13 +420,12 @@ class MagneticWell(_Objective):
         # grid.weights is the value we expect from dtheta * dzeta.
         dtdz = self.grid.weights
         sqrtg = jnp.abs(data["sqrt(g)"])
+        sqrtg_r = jnp.abs(data["sqrt(g)_r"])
         # data["V"] is not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
-        # volume integral of (div [0, 0, Z] = 1) = surface integral of ([0, 0, Z] dot ds)
-        e_sup_rho_sqrtg = cross(data["e_theta"], data["e_zeta"])
-        V = jnp.abs(jnp.sum(dtdz * e_sup_rho_sqrtg[:, 2] * data["Z"]))
-        # alternative
-        # V = jnp.sum(dtdz * sqrtg * data["e^rho"][:, 2] * data["Z"])
+        # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
+        sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
+        V = jnp.abs(jnp.sum(dtdz * sqrtg_e_sup_rho[:, 2] * data["Z"]))
 
         # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         # Intuitively, this formula makes sense because
@@ -443,10 +442,11 @@ class MagneticWell(_Objective):
         # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
         # dpsi_dv = 1 / drho_dpsi / dv_drho
 
-        dp_drho = data["p_r"][0]  # all elements same
+        dp_drho = data["p_r"][0]
         B = data["B"]
-        Bsquare = dot(B, B)
-        dBsquare_drho = 2 * dot(B, data["B_r"])
+        Bsq = dot(B, B)
+        Bsq_av = MagneticWell._average(sqrtg, Bsq)
+        dBsq_drho = 2 * dot(B, data["B_r"])
 
         # pressure = thermal + magnetic
         # The flux surface average function is an additive homomorphism;
@@ -454,32 +454,25 @@ class MagneticWell(_Objective):
         # Thermal pressure is constant over a rho surface.
         # Therefore, average(thermal) = thermal.
         dthermal_dv = 2 * mu_0 * dp_drho / dv_drho
-        # this should be incorrect
-        dmagnetic_dv_av = MagneticWell._average(sqrtg, dBsquare_drho) / dv_drho
-        # this should be correct
+        dmagnetic_dv_av = MagneticWell._average(sqrtg, dBsq_drho) / dv_drho
         dmagnetic_av_dv = (
-            jnp.sum(
-                dtdz * (jnp.abs(data["sqrt(g)_r"]) * Bsquare + sqrtg * dBsquare_drho)
-            )
-            - jnp.sum(dtdz * sqrtg * Bsquare)
-            * jnp.sum(dtdz * jnp.abs(data["sqrt(g)_r"]))
-            / dv_drho
+            jnp.sum(dtdz * (sqrtg_r * Bsq + sqrtg * dBsq_drho))
+            - jnp.sum(dtdz * sqrtg_r) * Bsq_av
         ) / (dv_drho ** 2)
-        Bsquare_av = MagneticWell._average(sqrtg, Bsquare)
-        W = V * (dthermal_dv + dmagnetic_dv_av) / Bsquare_av
-        W2 = V * (dthermal_dv + dmagnetic_av_dv) / Bsquare_av
 
+        W1 = V * (dthermal_dv + dmagnetic_dv_av) / Bsq_av  # should be incorrect
+        W2 = V * (dthermal_dv + dmagnetic_av_dv) / Bsq_av
         return {
-            "DESC Magnetic Well, W": self._shift_scale(W),
-            "DESC Magnetic Well, W version 2": self._shift_scale(W2),
+            "DESC Magnetic Well v1": self._shift_scale(W1),
+            "DESC Magnetic Well v2": self._shift_scale(W2),
             "volume": V,
             "dvolume/drho": dv_drho,
             "d(thermal pressure)/drho": dp_drho,
             "d(thermal pressure)/dvolume": dthermal_dv,
-            "d(magnetic pressure)/dvolume average": dmagnetic_dv_av,
-            "d(magnetic pressure average)/dvolume": dmagnetic_av_dv,
+            "d(magnetic pressure)/dvolume average v1": dmagnetic_dv_av,
+            "d(magnetic pressure average)/dvolume v2": dmagnetic_av_dv,
             "d(total pressure average)/dvolume": dthermal_dv + dmagnetic_av_dv,
-            "Bsquare average": Bsquare_av,
+            "Bsquare average": Bsq_av,
             # "data": data,
         }
 

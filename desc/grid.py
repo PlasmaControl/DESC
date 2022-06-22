@@ -317,10 +317,8 @@ class LinearGrid(Grid):
             else:
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
-        # previously if self.L > 0:
-        # quick fix for computing grids of rho=constant
-        if self.L > 1:
-            dr = (1 - r[0]) / self.L
+        if self.L > 0:
+            dr = (r[-1] - r[0]) / self.L
             if dr == 0:
                 dr = 1
         else:

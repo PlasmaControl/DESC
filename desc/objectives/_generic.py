@@ -270,10 +270,10 @@ class ToroidalCurrent(_Objective):
 
 
 class MagneticWell(_Objective):
-    """Magnetic well parameter.
-    The magnetic well parameter is a useful figure of merit for
-    stellarator operation. Systems with positive well parameters are
-    favorable for containment.
+    """
+    The magnetic well parameter is a fast proxy for MHD stability.
+    This makes it a useful figure of merit for stellarator operation.
+    Systems with positive well parameters are favorable for containment.
 
     Greene, J.M., 1997. A brief review of magnetic wells.
     Comments on Plasma Physics and Controlled Fusion, 17, pp.389-402.
@@ -336,9 +336,9 @@ class MagneticWell(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(
                 L=1,
-                M=2 * eq.M_grid + 10,  # +1 not enough for torus volume
+                M=2 * eq.M_grid + 10,  # +1 not enough for volume
                 N=2 * eq.N_grid + 10,
-                NFP=eq.NFP,  # will work if using grid.weights
+                NFP=eq.NFP,
                 sym=False,  # required for correctness of volume
                 rho=jnp.array(1.0),
             )
@@ -419,76 +419,84 @@ class MagneticWell(_Objective):
 
         # grid.weights is the value we expect from dtheta * dzeta.
         dtdz = self.grid.weights
+        sqrtg = jnp.abs(data["sqrt(g)"])
         # data["V"] is not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
         # volume integral of (div [0, 0, Z] = 1) = surface integral of ([0, 0, Z] dot ds)
-        e_sup_rho_sqrt_g = cross(data["e_theta"], data["e_zeta"])
-        V = jnp.abs(jnp.sum(data["Z"] * e_sup_rho_sqrt_g[:, 2] * dtdz))
+        e_sup_rho_sqrtg = cross(data["e_theta"], data["e_zeta"])
+        V = jnp.abs(jnp.sum(dtdz * e_sup_rho_sqrtg[:, 2] * data["Z"]))
         # alternative
-        # V = jnp.sum(data["Z"] * data["e^rho"][:, 2] * jnp.abs(data["sqrt(g)"]) * dtdz)
+        # V = jnp.sum(dtdz * sqrtg * data["e^rho"][:, 2] * data["Z"])
 
         # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         # Intuitively, this formula makes sense because
         # V = integral(drdtdz * sqrt(g)) and differentiating wrt rho removes
         # the dr integral. What remains is a surface integral with a 3D jacobian.
-        # This is the difference in volume enclosed by two shells of constant rho.
-        dv_drho = jnp.sum(jnp.abs(data["sqrt(g)"]) * dtdz)
+        # This is the volume added by a thin shell of constant rho.
+        dv_drho = jnp.sum(dtdz * sqrtg)
         # a basic check is to remove jnp.abs() and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
         # d/dv = dpsi/dv * drho/dpsi * d/drho = d/drho / dv/drho
         # The existence of a simple dv/drho formula simplifies the relation.
-        # So, these relations are currently no longer needed:
+        # So, these relations are no longer needed:
         # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
         # dpsi_dv = 1 / drho_dpsi / dv_drho
-        # assert jnp.allclose(dv_drho, 1 / (dpsi_dv * drho_dpsi))
 
-        dp_drho = data["p_r"][0]
-        # assert jnp.allclose(dp_drho, data["p_r"]), "should be constant on rho surface"
+        dp_drho = data["p_r"][0]  # all elements same
         B = data["B"]
+        Bsquare = dot(B, B)
         dBsquare_drho = 2 * dot(B, data["B_r"])
 
-        # pressure = thermal pressure + magnetic pressure
+        # pressure = thermal + magnetic
         # The flux surface average function is an additive homomorphism;
         # meaning average(a + b) = average(a) + average(b).
         # Thermal pressure is constant over a rho surface.
-        # Therefore, average(thermal pressure) = thermal pressure.
-        thermal_pressure_av = 2 * mu_0 * dp_drho / dv_drho
-        magnetic_pressure_av = MagneticWell._average(
-            dBsquare_drho / dv_drho, data["sqrt(g)"]
-        )
-        Bsquare_av = MagneticWell._average(dot(B, B), data["sqrt(g)"])
-        W = V * (thermal_pressure_av + magnetic_pressure_av) / Bsquare_av
+        # Therefore, average(thermal) = thermal.
+        dthermal_dv = 2 * mu_0 * dp_drho / dv_drho
+        # this should be incorrect
+        dmagnetic_dv_av = MagneticWell._average(sqrtg, dBsquare_drho) / dv_drho
+        # this should be correct
+        dmagnetic_av_dv = (
+            jnp.sum(
+                dtdz * (jnp.abs(data["sqrt(g)_r"]) * Bsquare + sqrtg * dBsquare_drho)
+            )
+            - jnp.sum(dtdz * sqrtg * Bsquare)
+            * jnp.sum(dtdz * jnp.abs(data["sqrt(g)_r"]))
+            / dv_drho
+        ) / (dv_drho ** 2)
+        Bsquare_av = MagneticWell._average(sqrtg, Bsquare)
+        W = V * (dthermal_dv + dmagnetic_dv_av) / Bsquare_av
+        W2 = V * (dthermal_dv + dmagnetic_av_dv) / Bsquare_av
 
-        # pressure_av = MagneticWell._average(
-        #     (2 * mu_0 * dp_drho + dBsquare_drho) / dv_drho, data["sqrt(g)"]
-        # )
-        # assert jnp.allclose(
-        #     pressure_av, thermal_pressure_av + magnetic_pressure_av, equal_nan=True
-        # ), "flux surface average function should be an additive homomorphism"
         return {
             "DESC Magnetic Well, W": self._shift_scale(W),
+            "DESC Magnetic Well, W version 2": self._shift_scale(W2),
             "volume": V,
             "dvolume/drho": dv_drho,
             "d(thermal pressure)/drho": dp_drho,
-            "thermal pressure average": thermal_pressure_av,
-            "magnetic pressure average": magnetic_pressure_av,
-            "total pressure average": thermal_pressure_av + magnetic_pressure_av,
+            "d(thermal pressure)/dvolume": dthermal_dv,
+            "d(magnetic pressure)/dvolume average": dmagnetic_dv_av,
+            "d(magnetic pressure average)/dvolume": dmagnetic_av_dv,
+            "d(total pressure average)/dvolume": dthermal_dv + dmagnetic_av_dv,
             "Bsquare average": Bsquare_av,
             # "data": data,
         }
 
     @staticmethod
-    def _average(f, jacobian_determinant):
+    def _average(sqrtg, f):
         """
         Returns the flux surface average of the given function, f.
-        Assumes linear grid spacing. See D'haeseleer flux coordinates eq. 4.9.11.
+        See D'haeseleer flux coordinates eq. 4.9.11.
 
-        :param f:                    the given function
-        :param jacobian_determinant: 3D jacobian determinant
-        :return:                     the magnetic surface average of f
+        :param sqrtg: magnitude of 3D jacobian determinant
+        :param f:     the given function
+        :return:      the magnetic surface average of f
         """
-        return jnp.mean(f * jacobian_determinant) / jnp.mean(jacobian_determinant)
+        # these are always equivalent for linear grids
+        # the former does not require linear grids for correctness
+        # jnp.sum(dtdz * sqrtg * f) / dv_drho
+        return jnp.mean(sqrtg * f) / jnp.mean(sqrtg)
 
 
 class RadialCurrentDensity(_Objective):

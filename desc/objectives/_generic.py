@@ -442,7 +442,6 @@ class MagneticWell(_Objective):
         # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
         # dpsi_dv = 1 / drho_dpsi / dv_drho
 
-        dp_drho = data["p_r"][0]
         B = data["B"]
         Bsq = dot(B, B)
         Bsq_av = MagneticWell._average(sqrtg, Bsq)
@@ -453,25 +452,24 @@ class MagneticWell(_Objective):
         # meaning average(a + b) = average(a) + average(b).
         # Thermal pressure is constant over a rho surface.
         # Therefore, average(thermal) = thermal.
-        dthermal_dv = 2 * mu_0 * dp_drho / dv_drho
-        dmagnetic_dv_av = MagneticWell._average(sqrtg, dBsq_drho) / dv_drho
-        dmagnetic_av_dv = (
-            jnp.sum(dtdz * (sqrtg_r * Bsq + sqrtg * dBsq_drho))
-            - jnp.sum(dtdz * sqrtg_r) * Bsq_av
-        ) / (dv_drho ** 2)
+        dthermal_drho = 2 * mu_0 * data["p_r"][0]
+        dmagnetic_av_drho = (
+            jnp.mean(sqrtg_r * Bsq + sqrtg * dBsq_drho) - jnp.mean(sqrtg_r) * Bsq_av
+        ) / jnp.mean(sqrtg)
 
-        W1 = V * (dthermal_dv + dmagnetic_dv_av) / Bsq_av  # should be incorrect
-        W2 = V * (dthermal_dv + dmagnetic_av_dv) / Bsq_av
+        rho = self.grid.nodes[0][0]
+        W1 = rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+        W2 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
         return {
-            "DESC Magnetic Well v1": self._shift_scale(W1),
-            "DESC Magnetic Well v2": self._shift_scale(W2),
+            "DESC Magnetic Well v1: rho * d/drho": self._shift_scale(W1),
+            "DESC Magnetic Well v2: V * d/dv": self._shift_scale(W2),
             "volume": V,
             "dvolume/drho": dv_drho,
-            "d(thermal pressure)/drho": dp_drho,
-            "d(thermal pressure)/dvolume": dthermal_dv,
-            "d(magnetic pressure)/dvolume average v1": dmagnetic_dv_av,
-            "d(magnetic pressure average)/dvolume v2": dmagnetic_av_dv,
-            "d(total pressure average)/dvolume": dthermal_dv + dmagnetic_av_dv,
+            "d(thermal pressure)/drho": dthermal_drho,
+            "d(magnetic pressure average)/drho": dmagnetic_av_drho,
+            "d(total pressure average)/drho": dthermal_drho + dmagnetic_av_drho,
+            "d(total pressure average)/dvolume": (dthermal_drho + dmagnetic_av_drho)
+            / dv_drho,
             "Bsquare average": Bsq_av,
             # "data": data,
         }

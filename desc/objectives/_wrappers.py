@@ -2,16 +2,33 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
-from .objective_funs import ObjectiveFunction
 from .utils import (
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
     factorize_linear_constraints,
 )
+from .objective_funs import ObjectiveFunction
+from .linear_objectives import FixPressure
+from ._equilibrium import CurrentDensity
 
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
-    """Evaluate an objective subject to equilibrium constraint."""
+    """Evaluate an objective subject to equilibrium constraint.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize.
+    eq_objective : ObjectiveFunction
+        Equilibrium objective to enforce.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the objectives.
+    use_jit : bool, optional
+        Whether to just-in-time compile the objectives and derivatives.
+    verbose : int, optional
+        Level of output.
+
+    """
 
     def __init__(
         self,
@@ -23,22 +40,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         perturb_options={},
         solve_options={},
     ):
-        """Initialize a WrappedEquilibriumObjective.
 
-        Parameters
-        ----------
-        objective : ObjectiveFunction
-            Objective function to optimize.
-        eq_objective : ObjectiveFunction
-            Equilibrium objective to enforce.
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the objectives.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objectives and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         self._objective = objective
         self._eq_objective = eq_objective
         self._perturb_options = perturb_options
@@ -68,6 +70,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints()
+        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
+            self._constraints = tuple(
+                obj for obj in self._constraints if not isinstance(obj, FixPressure)
+            )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
@@ -83,6 +89,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         # set_state_vector
         self._args = ["p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn"]
+        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
+            self._args.remove("p_l")
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
@@ -115,7 +123,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._built = True
 
     def _update_equilibrium(self, x):
-        """Description."""
+        """Update the internal equilibrium with new boundary, profile etc."""
         if jnp.all(x == self._x_old):
             pass
         else:
@@ -126,9 +134,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 for key in x_dict
             }
             self._eq = self._eq.perturb(
-                self._eq_objective, self._constraints, **deltas, **self._perturb_options
+                objective=self._eq_objective,
+                constraints=self._constraints,
+                **deltas,
+                **self._perturb_options
             )
-            self._eq.solve(objective=self._eq_objective, **self._solve_options)
+            self._eq.solve(
+                objective=self._eq_objective,
+                constraints=self._constraints,
+                **self._solve_options
+            )
             self._x_old = x
             for arg in self._full_args:
                 self.history[arg].append(getattr(self._eq, arg))
@@ -163,7 +178,11 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         # dx/dc
         x_idx = np.concatenate(
-            [self._eq_objective.x_idx[arg] for arg in ["p_l", "i_l", "Psi"]]
+            [
+                self._eq_objective.x_idx[arg]
+                for arg in ["p_l", "i_l", "Psi"]
+                if arg in self._eq_objective.args
+            ]
         )
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(self._eq_objective.dim_x)[:, x_idx]

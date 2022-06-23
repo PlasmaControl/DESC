@@ -1,6 +1,25 @@
 Changelog
 =========
 
+v0.5.0
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.12...v0.5.0>`_
+
+Major Changes
+
+- New API for building objectives and solving/optimizing equilibria. A brief explainer can be found in the `documentation <https://desc-docs.readthedocs.io/en/stable/notebooks/hands_on.html>`_
+- The Equilibrium class no longer "owns" an optimizer or objective, and does not build its own transforms.
+- The ObjectiveFunction class is a "super-objective" that combines multiple "sub-objectives" which follow the ABC _Objective class.
+- Each sub-objective function can be used as either an "objective" (minimized during optimization) or a "constraint" (enforced exactly).
+- Each sub-objective function takes unique inputs that can be specified by a grid/surface/etc. or use default values from an Equilibrium.
+- Each sub-objective is responsible for building its own transforms or other constant matrices, and is also responsible for computing its own derivatives.
+- The super-objective dynamically builds the state vector with the independent variables from each sub-objective, and also combines the function values and derivatives by combining the outputs from each sub-objective.
+- The super-objective only takes a single argument (the state vector x or y). Perturbations are now performed wrt the full state vector y, which contains all of the individual parameters.
+- Adds ability to optimize physics quantities under equilibrium constraint using wide array of scipy and custom optimizers.
+- New objective for solving vacuum equilibria
+
+
 v0.4.13
 #######
 

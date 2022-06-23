@@ -223,12 +223,8 @@ def compute_quasisymmetry_error(
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = jnp.mean(data["B_theta"] * data["sqrt(g)"]) / jnp.mean(
-            data["sqrt(g)"]
-        )
-        data["G"] = jnp.mean(data["B_zeta"] * data["sqrt(g)"]) / jnp.mean(
-            data["sqrt(g)"]
-        )
+        data["I"] = jnp.mean(data["B_theta"])
+        data["G"] = jnp.mean(data["B_zeta"])
 
     # QS two-term (T^3)
     if check_derivs("f_C", R_transform, Z_transform, L_transform):

@@ -15,8 +15,8 @@ from desc.objectives import (
     ObjectiveFunction,
     FixBoundaryR,
     FixBoundaryZ,
-    factorize_linear_constraints,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
     ptolemy_identity_rev,

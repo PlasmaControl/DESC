@@ -19,14 +19,17 @@ __all__ = [
     "plot_1d",
     "plot_2d",
     "plot_3d",
-    "plot_fsa",
-    "plot_section",
-    "plot_surfaces",
-    "plot_comparison",
+    "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_coefficients",
+    "plot_comparison",
+    "plot_fsa",
     "plot_grid",
-    "plot_basis",
+    "plot_logo",
+    "plot_qs_error",
+    "plot_section",
+    "plot_surfaces",
 ]
 
 

@@ -24,32 +24,32 @@ from .objective_funs import _Objective
 
 
 class GenericObjective(_Objective):
-    """A generic objective that can compute any quantity from the `data_index`."""
+    """A generic objective that can compute any quantity from the `data_index`.
+
+    Parameters
+    ----------
+    f : str
+        Name of the quatity to compute.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = False
 
     def __init__(self, f, eq=None, target=0, weight=1, grid=None, name="generic"):
-        """Initialize a Generic Objective.
 
-        Parameters
-        ----------
-        f : str
-            Name of the quatity to compute.
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
         self.f = f
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -152,30 +152,30 @@ class GenericObjective(_Objective):
 
 
 class ToroidalCurrent(_Objective):
-    """Toroidal current enclosed by a surface."""
+    """Toroidal current enclosed by a surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = True
     _linear = False
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
-        """Initialize a ToroidalCurrent Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Toroidal current: {:10.3e} (A)"

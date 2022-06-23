@@ -1342,7 +1342,7 @@ class _Configuration(IOAble, ABC):
         M_grid=None,
         N_grid=None,
         rcond=None,
-        copy=True,
+        copy=False,
     ):
         """Transform this equilibrium to use straight field line coordinates.
 
@@ -1376,7 +1376,6 @@ class _Configuration(IOAble, ABC):
         -------
         eq_sfl : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
-            Only returned if "copy" is True, otherwise modifies the current equilibrium.
 
         """
         L = L or int(1.5 * self.L)
@@ -1446,7 +1445,4 @@ class _Configuration(IOAble, ABC):
         eq_sfl.Z_lmn = Z_lmn_sfl
         eq_sfl.L_lmn = L_lmn_sfl
 
-        if copy:
-            return eq_sfl
-        else:
-            return None
+        return eq_sfl

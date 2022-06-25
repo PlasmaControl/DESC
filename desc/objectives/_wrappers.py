@@ -72,7 +72,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._constraints = get_fixed_boundary_constraints()
         if isinstance(self._eq_objective.objectives[0], CurrentDensity):
             self._constraints = tuple(
-                obj for obj in self._constraints if not isinstance(obj, FixPressure)
+                obj
+                for obj in self._constraints
+                if not isinstance(obj, FixPressure)
+                # FIXME: also remove FixIota?
             )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
@@ -110,7 +113,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints)
+        ) = factorize_linear_constraints(
+            self._constraints, extra_args=self._eq_objective.args
+        )
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:

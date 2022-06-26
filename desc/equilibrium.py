@@ -858,7 +858,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(
+                profiles=self.inputs[ii]["objective"] != "vacuum"
+            )
 
             if ii == start_from:
                 equil = self[ii]
@@ -890,6 +892,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
+                        constraints=constraints,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,

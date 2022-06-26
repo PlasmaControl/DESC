@@ -13,10 +13,16 @@ from .linear_objectives import (
     FixIota,
     FixPsi,
 )
-from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
+from ._equilibrium import (
+    Energy,
+    ForceBalance,
+    RadialForceBalance,
+    HelicalForceBalance,
+    CurrentDensity,
+)
 
 
-def get_fixed_boundary_constraints():
+def get_fixed_boundary_constraints(profiles=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Returns
@@ -29,10 +35,10 @@ def get_fixed_boundary_constraints():
         FixBoundaryR(fixed_boundary=True),
         FixBoundaryZ(fixed_boundary=True),
         FixLambdaGauge(),
-        FixPressure(),
-        FixIota(),
         FixPsi(),
     )
+    if profiles:
+        constraints = constraints + (FixPressure(), FixIota())
     return constraints
 
 
@@ -45,12 +51,14 @@ def get_equilibrium_objective(mode="force"):
         An objective function with default force balance objectives.
 
     """
-    if mode == "force":
+    if mode == "energy":
+        objectives = Energy()
+    elif mode == "force":
         objectives = ForceBalance()
     elif mode == "force2":
         objectives = (RadialForceBalance(), HelicalForceBalance())
-    elif mode == "energy":
-        objectives = Energy()
+    elif mode == "vacuum":
+        objectives = CurrentDensity()
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)

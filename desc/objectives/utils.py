@@ -8,7 +8,7 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
-    LambdaGauge,
+    FixLambdaGauge,
     FixPressure,
     FixIota,
     FixPsi,
@@ -28,7 +28,7 @@ def get_fixed_boundary_constraints():
     constraints = (
         FixBoundaryR(fixed_boundary=True),
         FixBoundaryZ(fixed_boundary=True),
-        LambdaGauge(),
+        FixLambdaGauge(),
         FixPressure(),
         FixIota(),
         FixPsi(),

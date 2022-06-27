@@ -1,5 +1,4 @@
 # This is the DESC input file for a Solov'ev equilibrium
-
 # global parameters
 sym = 1
 NFP = 1
@@ -24,13 +23,10 @@ nfev = 100
 
 # solver methods
 optimizer         = scipy-trust-exact
-objective         = energy
+objective         = vacuum
 spectral_indexing = ansi
 node_pattern      = quad
 
-# pressure and rotational transform profiles
-l:   0  p =  0  i =  1.0
-l:   2  p =  0  i =  0.0
 
 # magnetic axis initial guess
 n:   0  R0 =  4.0  Z0 =  0.0

@@ -200,7 +200,7 @@ lmbda0 = -0.1*np.ones(5)
 # lmbda0 = np.array([0.1])
 mu0 = 100
 
-fopt,xopt,lmbdaf,ctolf = fmin_lag(obj_func,x0,lmbda0,mu0,grad,eq,gradeq,ic,gic,maxiter = 50)
+fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,eq,gradeq,ic,gic,maxiter = 50)
 
 #%% G11 exact
 def obj_func(x):
@@ -325,7 +325,7 @@ def constraint1(x):
 gradc = Derivative(constraint1,argnum=0)
 
 rando = default_rng(seed=0)
-p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+p0 = p + 0.5 * (rando.random(p.size) - 0.5)
 
 jac = Derivative(res, 0, "fwd")
 
@@ -335,3 +335,151 @@ ic = np.array([])
 gic = np.array([])
 
 fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_ls(res,p0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+
+
+#%% Least squares with constraints 
+
+def res(x):
+    return x - jnp.array([1.5,2.0,0.0,0.0,0.0])
+
+def ineq_constr_func1(x):
+    return -x[0] + x[2]**2
+
+def ineq_constr_func2(x):
+    return -x[1] + x[3]**2
+
+def ineq_constr_func3(x):
+    return x[0] + x[1] - 1 + x[4]**2
+
+gradc1 = Derivative(ineq_constr_func1,argnum=0)
+gradc2 = Derivative(ineq_constr_func2,argnum=0)
+gradc3 = Derivative(ineq_constr_func3,argnum=0)
+
+x0 = np.ones(5)
+mu0 = 10*np.ones(3)
+ic = np.array([ineq_constr_func1,ineq_constr_func2,ineq_constr_func3])
+gic = np.array([gradc1,gradc2,gradc3])
+
+fopt,xopt,muf,ctolf,gradopt = fmin_lag_ls(res,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+
+
+#%% G06 square
+def obj_func(x):
+    #return jnp.dot(np.ones(2),x)
+    return (x[0]-10)**2 + (x[1] - 20)**2
+
+def ineq_constr_func1(x):
+    #return jnp.dot(x,x) - 2
+    return -(x[0]-5)**2 - (x[1]-5)**2 + 100 + x[2]**2
+
+def ineq_constr_func2(x):
+    return (x[0]-6)**2 + (x[1]-5)**2 -82.81 + x[3]**2
+
+def bound_constr1(x):
+    return -x[0] + 13 + x[4]**2
+
+def bound_constr2(x):
+    return x[0] - 100 + x[5]**2
+
+def bound_constr3(x):
+    return -x[1] + x[6]**2
+
+def bound_constr4(x):
+    return x[1] - 100 + x[7]**2
+
+grad = Derivative(obj_func, argnum=0)
+gradineq1 = Derivative(ineq_constr_func1,argnum=0)
+gradineq2 = Derivative(ineq_constr_func2,argnum=0)
+gradbound1 = Derivative(bound_constr1,argnum=0)
+gradbound2 = Derivative(bound_constr2,argnum=0)
+gradbound3 = Derivative(bound_constr3,argnum=0)
+gradbound4 = Derivative(bound_constr4,argnum=0)
+
+ic = np.array([ineq_constr_func1,ineq_constr_func2,bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+gic = np.array([gradineq1,gradineq2,gradbound1,gradbound2,gradbound3,gradbound4])
+
+x0 = np.array([15, 50, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0])
+lmbda0 = 1.0*np.ones(6)
+mu0 = 10
+# mu = np.array([1, 10, 100])
+# tau = 1/mu*10**(-4)
+
+fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+#%%G06 least squares
+
+def res(x):
+    return x - jnp.array([10.0,20.0,0.0,0.0,0.0,0.0,0.0,0.0])
+
+def ineq_constr_func1(x):
+    #return jnp.dot(x,x) - 2
+    return -(x[0]-5)**2 - (x[1]-5)**2 + 100 + x[2]**2
+
+def ineq_constr_func2(x):
+    return (x[0]-6)**2 + (x[1]-5)**2 -82.81 + x[3]**2
+
+def bound_constr1(x):
+    return -x[0] + 13 + x[4]**2
+
+def bound_constr2(x):
+    return x[0] - 100 + x[5]**2
+
+def bound_constr3(x):
+    return -x[1] + x[6]**2
+
+def bound_constr4(x):
+    return x[1] - 100 + x[7]**2
+
+grad = Derivative(obj_func, argnum=0)
+gradineq1 = Derivative(ineq_constr_func1,argnum=0)
+gradineq2 = Derivative(ineq_constr_func2,argnum=0)
+gradbound1 = Derivative(bound_constr1,argnum=0)
+gradbound2 = Derivative(bound_constr2,argnum=0)
+gradbound3 = Derivative(bound_constr3,argnum=0)
+gradbound4 = Derivative(bound_constr4,argnum=0)
+
+ic = np.array([ineq_constr_func1,ineq_constr_func2,bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+gic = np.array([gradineq1,gradineq2,gradbound1,gradbound2,gradbound3,gradbound4])
+
+x0 = np.ones(8)
+mu0 = 10*np.ones(6)
+
+
+fopt,xopt,muf,ctolf,gradopt = fmin_lag_ls(res,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+
+#%%G11 least squares
+
+def res(x):
+    return x - jnp.array([0.0,1.0,0.0,0.0,0.0,0.0,0.0])
+
+def eq_constr_func(x):
+    return x[1] - x[0]**2
+
+def bound_constr1(x):
+    return -x[0] - 1 + x[2]**2
+
+def bound_constr2(x):
+    return x[0] - 1 + x[3]**2
+
+def bound_constr3(x):
+    return -x[1] - 1 + x[4]**2
+
+def bound_constr4(x):
+    return x[1] - 1 + x[5]**2
+
+grad = Derivative(obj_func, argnum=0)
+gradeq = Derivative(eq_constr_func,argnum=0)
+gradbound1 = Derivative(bound_constr1,argnum=0)
+gradbound2 = Derivative(bound_constr2,argnum=0)
+gradbound3 = Derivative(bound_constr3,argnum=0)
+gradbound4 = Derivative(bound_constr4,argnum=0)
+
+eq = np.array([eq_constr_func])
+geq = np.array([gradeq])
+ic = np.array([bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+gic = np.array([gradbound1,gradbound2,gradbound3,gradbound4])
+
+x0 = np.ones(7)
+mu0 = 10*np.ones(5)
+
+
+fopt,xopt,muf,ctolf,gradopt = fmin_lag_ls(res,x0,lmbda0,mu0,grad,np.array([eq]),np.array([geq]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)

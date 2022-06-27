@@ -101,15 +101,14 @@ def fmin_lag_ls(
     gradL = Derivative(L.compute,0,"fwd")
     
     mu = mu0
-    gtolk = 1/(10*mu0)
-    ctolk = 1/(mu0**(0.1))    
+    gtolk = 1/(10*np.linalg.norm(mu0))
+    ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
     xold = x
     
     
     while iteration < maxiter:
         #print(gtolk)
-        xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-
+        xk = lsqtr(L.compute,x,gradL,args=(mu,),gtol=gtolk,maxiter = maxiter)
         x = xk['x']
 
         c = 0
@@ -125,18 +124,16 @@ def fmin_lag_ls(
         
         if c < ctolk:
 
-            if c < ctol and conv_test(x,L.compute(x,lmbda,mu),gradL(x,lmbda,mu)) < gtol:
+            if c < ctol and conv_test(x,L.compute(x,mu),gradL(x,mu)) < gtol:
                 break
 
             else:
-                for i in range(len(lmbda)):
-                    lmbda[i] = lmbda[i] - mu * constr[i](x)
-                    ctolk = ctolk/(mu**(0.9))
-                    gtolk = gtolk/mu
+                ctolk = ctolk/(np.linalg.norm(mu)**(0.9))
+                gtolk = gtolk/np.linalg.norm(mu)
         else:
             mu = 100 * mu
-            ctolk = 1/(mu**(0.1))
-            gtolk = gtolk/mu
+            ctolk = 1/(np.linalg.norm(mu)**(0.1))
+            gtolk = gtolk/np.linalg.norm(mu)
         
         
         iteration = iteration + 1
@@ -144,4 +141,4 @@ def fmin_lag_ls(
         #print(fun(x))
         #print("\n")
         #print(x)
-    return [fun(x),x,lmbda,c,gradL(x,lmbda,mu)]
+    return [fun(x),x,mu,c,gradL(x,mu)]

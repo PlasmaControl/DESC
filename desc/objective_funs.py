@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from termcolor import colored
 import warnings
 import copy
-from desc.backend import jnp, jit, use_jax
+from desc.backend import jnp, jit, use_jax, put
 from desc.utils import unpack_state, Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
@@ -441,20 +441,20 @@ class AugLagrangianLS(ObjectiveFunction):
     def derivatives(self):
         return
     
-    def compute(self, x, lmbda, mu):
+    def compute(self, x, mu):
         L = self.func(x)
-        c = 0
+        c = jnp.zeros(len(self.constr))
         for i in range(len(self.constr)):
-            c = c - lmbda[i]*self.constr[i](x) + mu/2*self.constr[i](x)**2
-        L = L + c*np.ones(len(L))
+            c = put(c,i,mu[i]/2*self.constr[i](x)**2)
+        L = jnp.concatenate((L,c),axis=None)
         return L
     
-    def compute_scalar(self,x,lmbda,mu):
-        return np.linalg.norm(self.compute(x,lmbda,mu))
+    def compute_scalar(self,x,mu):
+        return np.linalg.norm(self.compute(x,mu))
     
-    def callback(self, x, lmbda, mu):
-        L = self.compute(x,lmbda,mu)
-        print("The Lagrangian is " + str(L))
+    def callback(self, x, mu):
+        L = self.compute(x,mu)
+        print("The Least Squares Lagrangian is " + str(L))
         
         
 class ExLagrangian(ObjectiveFunction):

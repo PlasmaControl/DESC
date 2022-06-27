@@ -290,11 +290,11 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     eq : Equilibrium
         Object from which to plot.
     L : bool
-        Wheter to include radial mode numbers in the x-axis or not.
+        Whether to include radial mode numbers in the x-axis or not.
     M : bool
-        Wheter to include poloidal mode numbers in the x-axis or not.
+        Whether to include poloidal mode numbers in the x-axis or not.
     N : bool
-        Wheter to include toroidal mode numbers in the x-axis or not.
+        Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -304,6 +304,16 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_coefficients.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coefficients
+        fig, ax = plot_coefficients(eq)
 
     """
     lmn = np.array([], dtype=int)
@@ -369,6 +379,16 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_1d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_1d
+        plot_1d(eq, 'p')
+
     """
     if grid is None:
         grid_kwargs = {"L": 100, "NFP": eq.NFP}
@@ -421,6 +441,16 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_2d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_2d
+        plot_2d(eq, 'sqrt(g)')
 
     """
     if grid is None:
@@ -533,6 +563,23 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_3d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_3d
+        from desc.grid import LinearGrid
+        grid = LinearGrid(
+                rho=0.5,
+                theta=np.linspace(0, 2 * np.pi, 100),
+                zeta=np.linspace(0, 2 * np.pi, 100),
+                axis=True,
+            )
+        fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
 
     """
     nfp = 1 if all_field_periods else eq.NFP
@@ -662,6 +709,16 @@ def plot_fsa(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_fsa.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_fsa
+        fig, ax = plot_fsa(eq, "B_theta")
+
     """
     if rho is None:
         rho = np.linspace(1, 0, num=L, endpoint=False)
@@ -720,6 +777,16 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_section.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_section
+        fig, ax = plot_section(eq, "J^rho")
 
     """
     if grid is None:
@@ -857,6 +924,16 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_surfaces.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_surfaces
+        fig, ax = plot_surfaces(eq)
 
     """
     NR = kwargs.pop("NR", 50)
@@ -1039,6 +1116,16 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_comparison.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_comparison
+        fig, ax = plot_comparison(eqs=[eqf[0],eqf[1],eqf[2]],labels=['Axisymmetric w/o pressure','Axisymmetric w/ pressure','Nonaxisymmetric w/ pressure'])
+
     """
     figsize = kwargs.pop("figsize", None)
     neq = len(eqs)
@@ -1218,6 +1305,16 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_boozer_modes.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_modes
+        fig, ax = plot_boozer_modes(eq)
+
     """
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
@@ -1296,6 +1393,16 @@ def plot_boozer_surface(
         figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_boozer_surface.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(eq)
 
     """
     if grid_compute is None:
@@ -1390,6 +1497,16 @@ def plot_qs_error(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_qs_error.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_qs_error
+        fig, ax = plot_qs_error(eq, helicity=(1, eq.NFP), log=True)
+
     """
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
@@ -1472,6 +1589,18 @@ def plot_grid(grid, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_grid.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_grid
+        from desc.grid import ConcentricGrid
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        fig, ax = plot_grid(grid)
+
     """
     fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
@@ -1540,6 +1669,18 @@ def plot_basis(basis, **kwargs):
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
         Axes used for plotting. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_basis.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_basis
+        from desc.basis import DoubleFourierSeries
+        basis = DoubleFourierSeries(M=3, N=2)
+        fig, ax = plot_basis(basis)
 
     """
     if basis.__class__.__name__ == "PowerSeries":
@@ -1718,6 +1859,16 @@ def plot_logo(savepath=None, **kwargs):
         handle to the figure used for plotting
     ax : matplotlib.axes.Axes
         handle to the axis used for plotting
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_logo.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_logo
+        plot_logo(savepath='../_static/images/plotting/plot_logo.png')
 
     """
     eq = np.array(

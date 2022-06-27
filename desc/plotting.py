@@ -1505,7 +1505,7 @@ def plot_qs_error(
     .. code-block:: python
 
         from desc.plotting import plot_qs_error
-        fig, ax = plot_qs_error(eq, helicity=(0, 0), log=False)
+        fig, ax = plot_qs_error(eq, helicity=(1, eq.NFP), log=True)
 
     """
     if rho is None:

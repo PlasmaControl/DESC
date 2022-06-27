@@ -8,7 +8,6 @@ from .utils import (
     factorize_linear_constraints,
 )
 from .objective_funs import ObjectiveFunction
-from .linear_objectives import FixPressure
 from ._equilibrium import CurrentDensity
 
 
@@ -69,14 +68,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._eq = eq.copy()
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
-        self._constraints = get_fixed_boundary_constraints()
-        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
-            self._constraints = tuple(
-                obj
-                for obj in self._constraints
-                if not isinstance(obj, FixPressure)
-                # FIXME: also remove FixIota?
-            )
+        self._constraints = get_fixed_boundary_constraints(
+            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+        )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)

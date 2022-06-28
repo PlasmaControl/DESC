@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import copy
 import numbers
 
@@ -473,7 +474,7 @@ class _Configuration(IOAble, ABC):
                 self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
                 self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
                 self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
-            elif isinstance(args[0], str):
+            elif isinstance(args[0], (str, os.PathLike)):
                 # from file
                 path = args[0]
                 file_format = None

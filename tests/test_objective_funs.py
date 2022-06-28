@@ -21,7 +21,7 @@ class TestObjectiveFunction(unittest.TestCase):
         obj = GenericObjective("sqrt(g)", eq=eq)
         kwargs = {"R_lmn": eq.R_lmn, "Z_lmn": eq.Z_lmn}
         B = obj.compute(**kwargs)
-        np.testing.assert_allclose(B, eq.compute("sqrt(g)")["sqrt(g)"])
+        np.testing.assert_allclose(B, eq.compute("sqrt(g)", grid=obj.grid)["sqrt(g)"])
 
     def test_volume(self):
         eq = Equilibrium()

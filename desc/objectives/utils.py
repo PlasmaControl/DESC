@@ -25,6 +25,11 @@ from ._equilibrium import (
 def get_fixed_boundary_constraints(profiles=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
+    Parameters
+    ----------
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+
     Returns
     -------
     constraints, tuple of _Objectives
@@ -44,6 +49,13 @@ def get_fixed_boundary_constraints(profiles=True):
 
 def get_equilibrium_objective(mode="force"):
     """Get the objective function for a typical force balance equilibrium problem.
+
+    Parameters
+    ----------
+    mode : {"force", "force2", "energy", "vacuum"}
+        which objective to return. "force" computes force residuals on unified grid.
+        "force2" uses two different grids for radial and helical forces. "energy" is
+        for minimizing MHD energy. "vacuum" directly minimizes current density.
 
     Returns
     -------
@@ -65,7 +77,39 @@ def get_equilibrium_objective(mode="force"):
 
 
 def factorize_linear_constraints(constraints, extra_args=[]):
-    """Compute and factorize A to get pseudoinverse and nullspace."""
+    """Compute and factorize A to get pseudoinverse and nullspace.
+
+    Given constraints of the form Ax=b, factorize A to find a particular solution xp
+    and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
+    Ax=b can be written as x=xp + Zy where y is now unconstrained.
+
+
+    Parameters
+    ----------
+    constraints : tuple of Objectives
+        linear objectives/constraints to factorize for projection method.
+    extra_args : list of str
+        names of extra arguments that are not constrained but may need to be included
+        for indexing etc. Should generally include all args to all objectives.
+
+    Returns
+    -------
+    xp : ndarray
+        particular solution to Ax=b
+    A : dict of ndarray
+        Individual constraint matrices, keyed by argument
+    Ainv : dict of ndarray
+        Individual pseudoinverses of constraint matrices
+    b : dict of ndarray
+        Individual rhs vectors
+    Z : ndarray
+        Null space operator for full combined A
+    unfixed_idx : ndarray
+        indices of x that correspond to non-fixed values
+    project, recover : function
+        functions to project full vector x into reduced vector y, and recovering x from y.
+
+    """
     # set state vector
     args = np.concatenate([obj.args for obj in constraints])
     args = np.concatenate((args, extra_args))

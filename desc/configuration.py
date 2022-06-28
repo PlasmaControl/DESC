@@ -1033,7 +1033,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    def compute(self, name, grid=None, M_booz=None, N_booz=None, data=None):
+    def compute(self, name, grid=None, data=None, **kwargs):
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -1053,10 +1053,10 @@ class _Configuration(IOAble, ABC):
             raise ValueError("Unrecognized value '{}'.".format(name))
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        if M_booz is None:
-            M_booz = 2 * self.M
-        if N_booz is None:
-            N_booz = 2 * self.N
+        M_booz = kwargs.pop("M_booz", 2 * self.M)
+        N_booz = kwargs.pop("N_booz", 2 * self.N)
+        if len(kwargs) > 0 and not set(kwargs.keys()).issubset(["helicity"]):
+            raise ValueError("Unrecognized argument(s).")
 
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)
@@ -1101,7 +1101,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.iota.copy()
                 inputs[arg].grid = grid
 
-        return fun(**inputs)
+        return fun(**inputs, **kwargs)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of

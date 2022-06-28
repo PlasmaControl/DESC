@@ -283,7 +283,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("|B|", grid)
-    data = eq.compute("grad(|B|^2)theta", grid, data=data)
+    data = eq.compute("grad(|B|^2)_theta", grid, data=data)
     B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
@@ -352,7 +352,7 @@ def test_quasisymmetry(DummyStellarator):
         data["(B*grad(|B|))_z"][2:-2],
         Btilde_z[2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
+        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_z"])),
     )
 
 

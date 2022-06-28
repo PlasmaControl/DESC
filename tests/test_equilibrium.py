@@ -196,6 +196,15 @@ def test_resolution():
     eq2.change_resolution(**eq1.resolution())
     assert eq1.resolution() == eq2.resolution()
 
+    eq1.L = 2
+    eq1.M = 3
+    eq1.N = 4
+    eq1.NFP = 5
+    assert eq1.R_basis.L == 2
+    assert eq1.R_basis.M == 3
+    assert eq1.R_basis.N == 4
+    assert eq1.R_basis.NFP == 5
+
 
 def test_poincare_solve_not_implemented():
     inputs = {

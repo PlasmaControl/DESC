@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset, stringtochar
@@ -53,6 +54,14 @@ class VMECIO:
         """
         file = Dataset(path, mode="r")
         inputs = {}
+
+        version = file.variables["version_"][0]
+        if version < 9:
+            warnings.warn(
+                "VMEC output appears to be from version {}, while DESC is only designed for compatibility with VMEC version 9. Some data may not be loaded correctly.".format(
+                    str(version)
+                )
+            )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])

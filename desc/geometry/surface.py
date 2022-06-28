@@ -125,9 +125,9 @@ class FourierRZToroidalSurface(Surface):
 
     @NFP.setter
     def NFP(self, new):
-        assert isinstance(
-            new, numbers.Real
-        ), f"NFP should be a real integer or float, got {type(new)}"
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
         self.change_resolution(NFP=new)
 
     @property

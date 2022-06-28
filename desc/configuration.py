@@ -120,9 +120,9 @@ class _Configuration(IOAble, ABC):
         ), f"Psi should be a real integer or float, got {type(Psi)}"
         self._Psi = float(Psi)
 
-        assert (NFP is None) or isinstance(
-            NFP, numbers.Real
-        ), f"NFP should be a real integer or float, got {type(NFP)}"
+        assert (NFP is None) or (
+            isinstance(NFP, numbers.Real) and int(NFP) == NFP and NFP > 0
+        ), f"NFP should be a positive integer, got {type(NFP)}"
         if NFP is not None:
             self._NFP = NFP
         elif hasattr(surface, "NFP"):
@@ -844,9 +844,9 @@ class _Configuration(IOAble, ABC):
 
     @NFP.setter
     def NFP(self, NFP):
-        assert isinstance(
-            NFP, numbers.Real
-        ), f"NFP should be a real integer or float, got {type(NFP)}"
+        assert (
+            isinstance(NFP, numbers.Real) and (NFP == int(NFP)) and (NFP > 0)
+        ), f"NFP should be a positive integer, got {type(NFP)}"
         self.change_resolution(NFP=NFP)
 
     @property

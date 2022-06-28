@@ -35,7 +35,7 @@ def compute_contravariant_magnetic_field(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -214,7 +214,7 @@ def compute_covariant_magnetic_field(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -320,7 +320,7 @@ def compute_magnetic_field_magnitude(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -645,7 +645,7 @@ def compute_magnetic_pressure_gradient(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -757,7 +757,7 @@ def compute_magnetic_tension(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -865,7 +865,7 @@ def compute_B_dot_gradB(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -955,7 +955,7 @@ def compute_contravariant_current_density(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray

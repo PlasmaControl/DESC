@@ -34,7 +34,7 @@ def compute_boozer_coords(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
@@ -167,7 +167,7 @@ def compute_quasisymmetry_error(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray

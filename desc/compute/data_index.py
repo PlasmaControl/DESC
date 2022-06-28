@@ -2644,7 +2644,7 @@ data_index["(B*grad(|B|))_z"] = {
         [0, 1, 2],
     ],
 }
-# contravarian current density
+# contravariant current density
 data_index["J^rho"] = {
     "label": "J^{\\rho}",
     "units": "A \\cdot m^{-3}",

@@ -36,7 +36,7 @@ def compute_force_error(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     p_l : ndarray
@@ -143,7 +143,7 @@ def compute_energy(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     p_l : ndarray

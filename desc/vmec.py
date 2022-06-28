@@ -1181,7 +1181,7 @@ class VMECIO:
         Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
         # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
-        # the DESC radial coordiante rho = sqrt(s)
+        # the DESC radial coordinate rho = sqrt(s)
 
         # convert from rho -> s
         r_nodes = r_grid.nodes

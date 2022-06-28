@@ -1263,7 +1263,7 @@ def powers(rho, l, dr=0):
     Parameters
     ----------
     rho : ndarray, shape(N,)
-        radial coordiantes to evaluate basis
+        radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
     dr : int

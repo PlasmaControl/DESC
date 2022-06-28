@@ -273,13 +273,13 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
             poly1.symmetric_difference(poly2).area
             for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
         ]
-    ).reshape((Rr1.shape[0], Rr1.shape[2]))
+    ).reshape((Rr1.shape[2], Rr1.shape[0]))
     intersect_rho = np.array(
         [
             poly1.intersection(poly2).area
             for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
         ]
-    ).reshape((Rr1.shape[0], Rr1.shape[2]))
+    ).reshape((Rr1.shape[2], Rr1.shape[0]))
     area_rho = np.where(diff_rho > 0, diff_rho / intersect_rho, 0)
     area_theta = np.array(
         [poly.area / (poly.length) ** 2 for poly in poly_v.flat]
@@ -436,3 +436,35 @@ def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
         if len(idx):
             c_new[i] = c_old[idx]
     return c_new
+
+
+def svd_inv_null(A):
+    """Compute pseudo-inverse and null space of a matrix using an SVD.
+
+    Parameters
+    ----------
+    A : ndarray
+        Matrix to invert and find null space of.
+
+    Returns
+    -------
+    Ainv : ndarray
+        Pseudo-inverse of A.
+    Z : ndarray
+        Null space of A.
+
+    """
+    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    M, N = u.shape[0], vh.shape[1]
+    K = min(M, N)
+    rcond = np.finfo(A.dtype).eps * max(M, N)
+    tol = np.amax(s) * rcond
+    large = s > tol
+    num = np.sum(large, dtype=int)
+    uk = u[:, :K]
+    vhk = vh[:K, :]
+    s = np.divide(1, s, where=large, out=s)
+    s[(~large,)] = 0
+    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    Z = vh[num:, :].T.conj()
+    return Ainv, Z

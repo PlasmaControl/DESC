@@ -22,7 +22,7 @@ class _Derivative(ABC):
 
     @abstractmethod
     def __init__(self, fun, argnum=0, mode=None, **kwargs):
-        """Initialize a Derivative object."""
+        pass
 
     @abstractmethod
     def compute(self, *args):
@@ -128,83 +128,7 @@ class AutoDiffDerivative(_Derivative):
         self._argnum = argnum
         self._use_jit = use_jit
 
-        if ("block_size" in kwargs or "num_blocks" in kwargs) and mode in [
-            "fwd",
-            "rev",
-            "hess",
-        ]:
-            self._init_blocks(mode, kwargs)
-        else:
-            self._set_mode(mode)
-
-    def _init_blocks(self, mode, kwargs):
-
-        try:
-            self.shape = kwargs["shape"]
-        except KeyError as e:
-            raise ValueError(
-                "Block derivative requires the shape of the derivative matrix to be "
-                + "specified with the 'shape' keyword argument"
-            ) from e
-
-        N, M = self.shape
-        block_size = kwargs.get("block_size", None)
-        num_blocks = kwargs.get("num_blocks", None)
-        # TODO: some sort of "auto" sizing option by checking available memory
-        if block_size is not None and num_blocks is not None:
-            raise ValueError(
-                colored("can specify either block_size or num_blocks, not both", "red")
-            )
-        if block_size == "auto":
-            from desc import config
-
-            mem = config.get("avail_mem", 4)
-            # 150 modes/gig of GPU memory is conservative, could go as high as 250-300
-            block_size = int(150 * mem)
-        if block_size is not None and M <= block_size:
-            # if its a small matrix we don't need to break it up
-            self._set_mode(mode)
-            return
-        elif block_size is not None:
-            self._block_size = block_size
-            self._num_blocks = np.ceil(M / block_size).astype(int)
-        elif num_blocks is not None:
-            self._num_blocks = num_blocks
-            self._block_size = np.ceil(M / num_blocks).astype(int)
-        else:
-            # didn't specify num_blocks or block_size, don't break it up
-            self._set_mode(mode)
-            return
-
-        if mode in ["fwd", "rev"]:
-            self._block_fun = self._fun
-            self._mode = "blocked-fwd"
-        elif mode in ["hess"]:
-            self._block_fun = jax.grad(self._fun, self._argnum)
-            self._mode = "blocked-hess"
-
-        _jvp = lambda v, *args: self.compute_jvp(
-            self._block_fun, self._argnum, v, *args
-        )
-        _I = np.eye(M, self._block_size * self._num_blocks)
-
-        @jax.jit
-        def _jacblockfun(v, *args):
-            in_axes = [1] + [None for i in args]
-            vjvp = jax.vmap(_jvp, in_axes)
-            return vjvp(v, *args).T
-
-        def _jacfun(*args):
-            return jnp.hstack(
-                [
-                    _jacblockfun(
-                        _I[:, i * self._block_size : (i + 1) * self._block_size], *args
-                    )
-                    for i in range(self._num_blocks)
-                ]
-            )[:, : self.shape[1]]
-
-        self._compute = _jacfun
+        self._set_mode(mode)
 
     def compute(self, *args):
         """Compute the derivative matrix.

@@ -57,7 +57,7 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         s = c.copy()
         assert s.eq(c)
 
-        c.change_resolution(5, 5)
+        c.change_resolution(0, 5, 5)
         with pytest.raises(ValueError):
             c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):
@@ -116,7 +116,7 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
         s = c.copy()
         assert s.eq(c)
 
-        c.change_resolution(5, 5)
+        c.change_resolution(5, 5, 0)
         with pytest.raises(ValueError):
             c.R_lmn = s.R_lmn
         with pytest.raises(ValueError):

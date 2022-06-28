@@ -1,5 +1,0 @@
-sphinx > 3.0.0
-sphinx-rtd-theme
-sphinx-argparse 
-nbsphinx >0.8.5
-sphinx_copybutton

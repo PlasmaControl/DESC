@@ -37,7 +37,7 @@ class TestTransform(unittest.TestCase):
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
         grid = LinearGrid(L=11, endpoint=True)
-        basis = PowerSeries(L=2)
+        basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=0)
 
         # invalid derivative orders
@@ -53,7 +53,7 @@ class TestTransform(unittest.TestCase):
     def test_profile(self):
         """Tests transform of power series on a radial profile."""
         grid = LinearGrid(L=11, endpoint=True)
-        basis = PowerSeries(L=2)
+        basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=1)
 
         x = grid.nodes[:, 0]
@@ -149,6 +149,8 @@ class TestTransform(unittest.TestCase):
         transf_3.grid = grid_1
         self.assertTrue(transf_3.eq(transf_1))
 
+        np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
+
     def test_set_basis(self):
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
@@ -166,6 +168,8 @@ class TestTransform(unittest.TestCase):
 
         transf_21.basis = basis_20
         self.assertTrue(transf_21.eq(transf_20))
+
+        np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 
     def test_fft(self):
         """Tests Fast Fourier Transform method."""

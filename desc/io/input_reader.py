@@ -524,9 +524,9 @@ class InputReader:
 
         # unsupplied values
         if np.sum(inputs["M_grid"]) == 0:
-            inputs["M_grid"] = np.rint(1.5 * inputs["M"]).astype(int)
+            inputs["M_grid"] = (2 * inputs["M"]).astype(int)
         if np.sum(inputs["N_grid"]) == 0:
-            inputs["N_grid"] = np.rint(1.5 * inputs["N"]).astype(int)
+            inputs["N_grid"] = (2 * inputs["N"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
             axis_idx = np.where(inputs["surface"][:, 1] == 0)[0]
             inputs["axis"] = inputs["surface"][axis_idx, 2:]

@@ -4,6 +4,7 @@ import pytest
 
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
+import desc.examples
 
 
 class TestFourierRZToroidalSurface(unittest.TestCase):
@@ -67,6 +68,31 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         assert "my" in c.name
         assert c.name in str(c)
         assert "FourierRZToroidalSurface" in str(c)
+
+    def test_from_input_file(self):
+
+        vmec_path = ".//tests//inputs//input.DSHAPE"
+        desc_path = ".//tests//inputs//DSHAPE"
+        vmec_surf = FourierRZToroidalSurface.from_input_file(vmec_path)
+        desc_surf = FourierRZToroidalSurface.from_input_file(desc_path)
+        true_surf = desc.examples.get("DSHAPE", "boundary")
+
+        vmec_surf.change_resolution(M=6, N=0)
+        desc_surf.change_resolution(M=6, N=0)
+        true_surf.change_resolution(M=6, N=0)
+
+        np.testing.assert_allclose(
+            true_surf.R_lmn, vmec_surf.R_lmn, atol=1e-10, rtol=1e-10
+        )
+        np.testing.assert_allclose(
+            true_surf.Z_lmn, vmec_surf.Z_lmn, atol=1e-10, rtol=1e-10
+        )
+        np.testing.assert_allclose(
+            true_surf.R_lmn, desc_surf.R_lmn, atol=1e-10, rtol=1e-10
+        )
+        np.testing.assert_allclose(
+            true_surf.Z_lmn, desc_surf.Z_lmn, atol=1e-10, rtol=1e-10
+        )
 
 
 class TestZernikeRZToroidalSection(unittest.TestCase):

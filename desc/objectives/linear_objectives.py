@@ -282,7 +282,7 @@ class FixBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
-class LambdaGauge(_Objective):
+class FixLambdaGauge(_Objective):
     """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0.
 
     Parameters

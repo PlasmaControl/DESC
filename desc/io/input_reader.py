@@ -1153,7 +1153,7 @@ class InputReader:
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
-        inputs["pressure"] *= pres_scale
+        inputs["pressure"][:, 1] *= pres_scale
         vmec_file.close()
 
         return inputs

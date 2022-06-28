@@ -1,6 +1,7 @@
 import tempfile
 import numpy as np
 import warnings
+import numbers
 from desc.backend import jnp, sign, put
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
@@ -122,6 +123,13 @@ class FourierRZToroidalSurface(Surface):
         """Number of (toroidal) field periods (int)."""
         return self._NFP
 
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
+        self.change_resolution(NFP=new)
+
     @property
     def R_basis(self):
         """Spectral basis for R double Fourier series."""
@@ -152,12 +160,14 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution"""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+        assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
         L = kwargs.get("L", None)
         M = kwargs.get("M", None)
         N = kwargs.get("N", None)
+        NFP = kwargs.get("NFP", None)
+        self._NFP = NFP if NFP is not None else self.NFP
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have a radial resolution, ignoring L"
@@ -167,11 +177,17 @@ class FourierRZToroidalSurface(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        if (N != self.N) or (M != self.M):
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+        ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(M=M, N=N)
-            self.Z_basis.change_resolution(M=M, N=N)
+            self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)
+            self.Z_basis.change_resolution(M=M, N=N, NFP=self.NFP)
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
@@ -429,11 +445,9 @@ class FourierRZToroidalSurface(Surface):
         """
         f = open(path, "r")
         if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
-            f.close()
-            f = tempfile.TemporaryFile(mode="w+")
-            InputReader.vmec_to_desc_input(path, f, close=False)
-        f.seek(0)
-        inputs = InputReader().parse_inputs(f)[-1]
+            inputs = InputReader.parse_vmec_inputs(f)
+        else:
+            inputs = InputReader().parse_inputs(f)[-1]
         if inputs["bdry_ratio"] != 1:
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
@@ -623,7 +637,7 @@ class ZernikeRZToroidalSection(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        if (L != self.L) or (M != self.M):
+        if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(L=L, M=M)

@@ -9,6 +9,7 @@
 
    theory_general
    notebooks/basis_grid
+   notebooks/perturbations
    variables
 
 .. toctree::

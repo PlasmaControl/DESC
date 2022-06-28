@@ -41,6 +41,17 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
+
+Examples
+********
+
+.. autosummary::
+    :toctree: _api/examples
+    :recursive:
+
+    desc.examples.get
+
+
 Geometry
 ********
 

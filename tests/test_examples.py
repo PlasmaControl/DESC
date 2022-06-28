@@ -1,4 +1,5 @@
 import numpy as np
+import desc.examples
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.objectives import (
     ObjectiveFunction,
@@ -109,3 +110,37 @@ def test_1d_optimization_old(SOLOVEV):
     )
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+
+
+def test_example_get_eq():
+    eq = desc.examples.get("SOLOVEV")
+    assert eq.Psi == 1
+
+
+def test_example_get_eqf():
+    eqf = desc.examples.get("DSHAPE", "all")
+    np.testing.assert_allclose(eqf[0].pressure.params, 0)
+
+
+def test_example_get_boundary():
+    surf = desc.examples.get("heliotron", "boundary")
+    np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
+
+
+def test_example_get_pressure():
+    pres = desc.examples.get("ATF", "pressure")
+    np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
+
+
+def test_example_get_iota():
+    iota = desc.examples.get("ESTELL", "iota")
+    np.testing.assert_allclose(
+        iota.params[:5],
+        [
+            2.04073045e-01,
+            4.18054555e-02,
+            -2.42407677e-01,
+            7.78946528e-01,
+            -1.14166816e00,
+        ],
+    )

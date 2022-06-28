@@ -7,7 +7,7 @@ Input File
 The following is an example DESC input file, which containts all of the available input arguments. 
 This example is only intended to demonstrate the input file format, and may not necessarily converge well. 
 More realistic input examples are included in the repository. 
-DESC can also accept VMEC input files, which are converted to DESC inputs as explained below (use with caution). 
+DESC can also accept VMEC input files, which are converted to DESC inputs as explained below (however not all desc solver options have VMEC analogs, see below). 
 
 .. code-block:: text
    :linenos:
@@ -255,7 +255,6 @@ Fixed-Boundary Surface Shape
    m:   1   n:  -1  Z1 = -3.00000000E-01
    m:  -1   n:   1  Z1 = -3.00000000E-01
 
-- ``l`` (int): Radial mode number. (Only used if ``bdry_mode = Poincare``.) 
 - ``m`` (int): Poloidal mode number. 
 - ``n`` (int): Toroidal mode number. (Only used if ``bdry_mode = LCFS``.) 
 - ``R1`` (float): Fourier coefficient of the R coordinate of the boundary surface. :math:`R^{1}_{mn}` 
@@ -272,17 +271,6 @@ If ``bdry_mode = LCFS``, the shape of the last closed flux surface is given as a
    \cos(|m|\theta)\sin(|n|N_{FP}\phi) &\text{for }m\ge0, n<0 \\
    \sin(|m|\theta)\cos(|n|N_{FP}\phi) &\text{for }m<0, n\ge0 \\
    \sin(|m|\theta)\sin(|n|N_{FP}\phi) &\text{for }m<0, n<0.
-   \end{cases}
-   \end{aligned}
-
-If ``bdry_mode = Poincare``, the shape of the Poincare surface is given by a Zernike polynomial basis of the form: 
-
-.. math::
-   \begin{aligned}
-   \begin{cases}
-   R_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
-   Z_{1}(\rho,\theta) &= \sum_{m=-M}^{M} \sum_{l=0}^{L} R^{1}_{lm} \mathcal{R}^{|m|}_{l}(\rho) \mathcal{F}_{m}(\theta) \\
-   \mathcal{R}^{|m|}_{l}(\rho) &= \sum_{s=0}^{(l-|m|)/2} \frac{(-1)^{s} (l-s)!}{s! [\frac{1}{2}(l+|m|)-s]! [\frac{1}{2}(l-|m|)-s]!} \rho^{l-2s}. 
    \end{cases}
    \end{aligned}
 
@@ -307,5 +295,94 @@ The generated DESC input file will be stored at the same file path as the VMEC i
 The resulting input file will not contain any of the options that are specific to DESC, and therefore will depend on many default values. 
 This is a convenient tool for converting the profiles and boundary inputs to the DESC format, but the generated input file may not converge well with the default options for all equilibria. 
 It is recommended that the automatically generated DESC input file be manually edited to improve performance. 
+As an example, see the simple VMEC input file below titled ``input.HELIOTRON``:
+
+.. code-block:: text
+
+   &INDATA
+   LFREEB =	F
+   DELT =	0.9
+   TCON0 =	2
+   LASYM =	F
+   NFP =	19
+   NCURR =	0
+   NZETA =	200
+   NITER_ARRAY =	4000 8000 12000 16000 32000 
+   FTOL_ARRAY =	1e-8 1e-9 1e-10 1e-11 1e-12 
+   NSTEP =	250
+   NVACSKIP =	6
+   GAMMA =	0
+   PHIEDGE =	1
+   BLOAT =	1
+   CURTOR =	0
+   SPRES_PED =	1
+   PRES_SCALE =	18000.0
+   PMASS_TYPE =	"power_series"
+   RAXIS =	10
+   ZAXIS =	0
+   AM =	1 -2 1
+   AI =	1.0 1.5
+   RBC(0,0) =	10.000000
+   RBC(0,1) =	-1.000000
+   RBC(-1,0) =	0.000000
+   RBC(-1,1) =	-0.300000
+   ZBS(0,0) =	0.000000
+   ZBS(0,1) =	1.000000
+   ZBS(-1,0) =	0.000000
+   ZBS(-1,1) =	-0.300000
+   MPOL =	6
+   NTOR =	3
+   NS_ARRAY =	16 32 64 128 256
+   /
+   &END
+
+Upon running ``desc input.HELIOTRON`` from the command line, the DESC code will automatically convert the VMEC input into a DESC input file and run it.
+The DESC input file will be this, titled ``input.HELIOTRON_desc``:
+
+.. code-block:: text
+
+   # This DESC input file was auto generated from the VMEC input file
+   # /home/dpanici/DESC/examples/VMEC/input.HELIOTRON
+   # on 06/26/2022 at 15:25:54.
+
+   sym = 1
+   NFP =  19
+   Psi =   1.00000000E+00
+   M_pol =   6
+   N_tor =   3
+
+   # pressure and rotational transform profiles
+   l:   0  p =   1.80000000E+04  i =   1.00000000E+00
+   l:   1  p =   0.00000000E+00  i =   0.00000000E+00
+   l:   2  p =  -3.60000000E+04  i =   1.50000000E+00
+   l:   3  p =   0.00000000E+00  i =   0.00000000E+00
+   l:   4  p =   1.80000000E+04  i =   0.00000000E+00
+
+   # magnetic axis initial guess
+   n:   0  R0 =   1.00000000E+01  Z0 =   0.00000000E+00
+
+   # fixed-boundary surface shape
+   m:   0  n:   0  R1 =   1.00000000E+01  Z1 =   0.00000000E+00
+   m:   1  n:   0  R1 =  -1.00000000E+00  Z1 =   0.00000000E+00
+   m:   0  n:   1  R1 =   0.00000000E+00  Z1 =   0.00000000E+00
+   m:   1  n:   1  R1 =  -3.00000000E-01  Z1 =   0.00000000E+00
+   m:  -1  n:  -1  R1 =   3.00000000E-01  Z1 =   0.00000000E+00
+   m:  -1  n:   0  R1 =   0.00000000E+00  Z1 =   1.00000000E+00
+   m:   0  n:  -1  R1 =   0.00000000E+00  Z1 =   0.00000000E+00
+   m:  -1  n:   1  R1 =   0.00000000E+00  Z1 =  -3.00000000E-01
+   m:   1  n:  -1  R1 =   0.00000000E+00  Z1 =  -3.00000000E-01
+
+You can see that the main elements of the input file are present here. 
+However, no DESC solver options are listed, as currently DESC can not automatically decide on the continuation method parameters.
+As it is, this input file will run but likely not give an excellent solution. 
+Once a conversion from a VMEC input file to a DESC input file is made, it is recommended to add solver options for the continuation method and add arrays to the spectral resolution to allow for better convergence.
+See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
+
+Some general considerations
+
+The continuation parameters ``pres_ratio`` and ``bdry_ratio`` are important for complex equilibria.
+Setting these in arrays such as shown in the above section, such that first a vacuum tokamak is solved, then finite beta tokamak, and finally the non-axisymmetric modes are added, is recommended for best results for highly shaped stellarator equilibria. 
+Equally important are the spectral resolution parameters ``L_rad``, ``L_grid``, ``M_pol``, ``M_grid``, ``N_tor``, and ``N_grid``
+Starting with a low spectral resolution, then increasing the number of modes in the basis is found to achieve faster results as compared to starting the equilibrium solve with the full desired resolution.
 
 .. _Basis functions and collocation nodes: notebooks/basis_grid.ipynb

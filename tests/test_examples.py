@@ -16,6 +16,16 @@ from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
 
 
+def test_SOLOVEV_vacuum(SOLOVEV_vac):
+    """Tests that the SOLOVEV vacuum example gives no rotational transform."""
+
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
+    data = eq.compute("|J|")
+
+    np.testing.assert_allclose(eq.i_l, 0, atol=1e-16)
+    np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
+
+
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 

@@ -230,16 +230,6 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
-    def test_guess_from_file(self):
-
-        eq1 = Equilibrium(M=12, sym=True)
-        path = "./tests/inputs/SOLOVEV_output.h5"
-        eq1.set_initial_guess(path)
-        eq2 = EquilibriaFamily.load(path)[-1]
-
-        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
-
     def test_guess_from_surface(self):
 
         eq = Equilibrium()
@@ -341,6 +331,17 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq.R_lmn, eq2.R_lmn, atol=1e-8)
         np.testing.assert_allclose(eq.Z_lmn, eq2.Z_lmn, atol=1e-8)
         np.testing.assert_allclose(eq.L_lmn, eq2.L_lmn, atol=1e-8)
+
+
+def test_guess_from_file(SOLOVEV):
+
+    path = SOLOVEV["desc_h5_path"]
+    eq1 = Equilibrium(M=12, sym=True)
+    eq1.set_initial_guess(path)
+    eq2 = EquilibriaFamily.load(path)[-1]
+
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
 
 class TestSurfaces(unittest.TestCase):

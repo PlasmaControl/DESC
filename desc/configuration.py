@@ -1033,8 +1033,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    # TODO: add kwargs for M_booz, N_booz, etc.
-    def compute(self, name, grid=None, data=None):
+    def compute(self, name, grid=None, M_booz=None, N_booz=None, data=None):
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -1054,6 +1053,10 @@ class _Configuration(IOAble, ABC):
             raise ValueError("Unrecognized value '{}'.".format(name))
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        if M_booz is None:
+            M_booz = 2 * self.M
+        if N_booz is None:
+            N_booz = 2 * self.N
 
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)
@@ -1078,7 +1081,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=2 * self.M, N=2 * self.N, sym=self.R_basis.sym, NFP=self.NFP
+                        M=M_booz, N=N_booz, sym=self.R_basis.sym, NFP=self.NFP
                     ),
                     derivs=0,
                     build_pinv=True,
@@ -1087,7 +1090,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=2 * self.M, N=2 * self.N, sym=self.Z_basis.sym, NFP=self.NFP
+                        M=M_booz, N=N_booz, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
                 )

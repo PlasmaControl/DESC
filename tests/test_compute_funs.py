@@ -201,7 +201,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
     dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
-    data = eq.compute("|B|", grid)
+    data = eq.compute("|B|_tz", grid)
 
     B_sup_theta = data["B^theta"].reshape((N, M))
     B_sup_zeta = data["B^zeta"].reshape((N, M))
@@ -268,7 +268,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     L = 50
     grid = LinearGrid(L=L, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
-    data = eq.compute("grad(|B|^2)_rho", grid)
+    data = eq.compute("|B|", grid)
+    data = eq.compute("grad(|B|^2)_rho", grid, data=data)
     B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
@@ -281,7 +282,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     M = 90
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute("grad(|B|^2)theta", grid)
+    data = eq.compute("|B|", grid)
+    data = eq.compute("grad(|B|^2)theta", grid, data=data)
     B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
@@ -294,7 +296,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     N = 90
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute("grad(|B|^2)_zeta", grid)
+    data = eq.compute("|B|", grid)
+    data = eq.compute("grad(|B|^2)_zeta", grid, data=data)
     B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
@@ -330,7 +333,7 @@ def test_quasisymmetry(DummyStellarator):
     M = 120
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute("B*grad(|B|)_t", grid)
+    data = eq.compute("(B*grad(|B|))_t", grid)
     Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["(B*grad(|B|))_t"][2:-2],
@@ -343,7 +346,7 @@ def test_quasisymmetry(DummyStellarator):
     N = 120
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute("B*grad(|B|)_z", grid)
+    data = eq.compute("(B*grad(|B|))_z", grid)
     Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["(B*grad(|B|))_z"][2:-2],
@@ -359,7 +362,7 @@ def test_boozer_transform(DSHAPE):
 
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=1.0)
-    data = eq.compute("|B|_mn", grid)
+    data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -379,7 +382,7 @@ def test_boozer_transform(DSHAPE):
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"])))[0:14],
+        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
         booz_xform,
         rtol=1e-2,
         atol=1e-4,

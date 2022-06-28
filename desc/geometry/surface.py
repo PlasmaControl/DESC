@@ -19,9 +19,9 @@ class FourierRZToroidalSurface(Surface):
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
-        poloidal and toroidal mode numbers [m,n] for R_n.
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
     modes_Z : array-like, shape(k,2)
-        mode numbers associated with Z_n, defaults to modes_R
+        mode numbers associated with Z_lmn, defaults to modes_R
     NFP : int
         number of field periods
     sym : bool

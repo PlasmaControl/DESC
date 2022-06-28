@@ -1,3 +1,4 @@
+import tempfile
 import numpy as np
 import warnings
 from desc.backend import jnp, sign, put
@@ -5,6 +6,7 @@ from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
+from desc.io import InputReader
 from .core import Surface
 from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
 
@@ -409,6 +411,44 @@ class FourierRZToroidalSurface(Surface):
 
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
+
+    @classmethod
+    def from_input_file(cls, path):
+        """Create a surface objective from Fourier coefficients in a DESC or VMEC input file
+
+        Parameters
+        ----------
+        path : Path-like or str
+            path to DESC or VMEC input file
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            surface with given Fourier coefficients
+
+        """
+        f = open(path, "r")
+        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+            f.close()
+            f = tempfile.TemporaryFile(mode="w+")
+            InputReader.vmec_to_desc_input(path, f, close=False)
+        f.seek(0)
+        inputs = InputReader().parse_inputs(f)[-1]
+        if inputs["bdry_ratio"] != 1:
+            warnings.warn(
+                "boundary_ratio = {} != 1, surface may not be as expected".format(
+                    inputs["bdry_ratio"]
+                )
+            )
+        surf = cls(
+            inputs["surface"][:, 3],
+            inputs["surface"][:, 4],
+            inputs["surface"][:, 1:3].astype(int),
+            inputs["surface"][:, 1:3].astype(int),
+            inputs["NFP"],
+            inputs["sym"],
+        )
+        return surf
 
 
 class ZernikeRZToroidalSection(Surface):

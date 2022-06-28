@@ -151,16 +151,18 @@ class FourierRZCurve(Curve):
 
     def change_resolution(self, N=None, NFP=None):
         """Change the maximum toroidal resolution."""
-        self._NFP = NFP if NFP is not None else self.NFP
-        if (N is not None) and (N != self.N):
+        if ((N is not None) and (N != self.N)) or (
+            (NFP is not None) and (NFP != self.NFP)
+        ):
+            self._NFP = NFP if NFP is not None else self.NFP
+            N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(N=N, NFP=NFP)
-            self.Z_basis.change_resolution(N=N, NFP=NFP)
+            self.R_basis.change_resolution(N=N, NFP=self.NFP)
+            self.Z_basis.change_resolution(N=N, NFP=self.NFP)
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
-            self._N = N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""

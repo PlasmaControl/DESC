@@ -182,6 +182,8 @@ class FourierRZToroidalSurface(Surface):
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
         ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)

@@ -3,6 +3,7 @@ import pathlib
 import warnings
 import os
 import re
+import io
 import numpy as np
 from datetime import datetime
 from termcolor import colored
@@ -186,7 +187,12 @@ class InputReader:
         else:
             inputs["verbose"] = 1
 
-        file = open(fname, "r")
+        # open files, unless they are already open files
+        if not isinstance(fname, io.IOBase):
+            file = open(fname, "r")
+        else:
+            file = fname
+
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
         for line in file:
@@ -196,7 +202,7 @@ class InputReader:
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
-                self.vmec_to_desc_input(self.input_path, path)
+                InputReader.vmec_to_desc_input(self.input_path, path)
                 print("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
@@ -659,7 +665,8 @@ class InputReader:
 
         f.close()
 
-    def vmec_to_desc_input(self, vmec_fname, desc_fname):
+    @staticmethod
+    def vmec_to_desc_input(vmec_fname, desc_fname, close=True):
         """Convert a VMEC input file to an equivalent DESC input file.
 
         Parameters
@@ -670,9 +677,15 @@ class InputReader:
             filename of DESC input file. If it already exists it is overwritten.
 
         """
-        # file objects
-        vmec_file = open(vmec_fname, "r")
-        desc_file = open(desc_fname, "w")
+        # open files, unless they are already open files
+        if not isinstance(vmec_fname, io.IOBase):
+            vmec_file = open(vmec_fname, "r")
+        else:
+            vmec_file = vmec_fname
+        if not isinstance(desc_fname, io.IOBase):
+            desc_file = open(desc_fname, "w")
+        else:
+            desc_file = desc_fname
 
         desc_file.seek(0)
         now = datetime.now()
@@ -1094,7 +1107,8 @@ class InputReader:
 
         # close files
         vmec_file.close()
-        desc_file.close()
+        if close:
+            desc_file.close()
 
 
 # NOTE: this has to be outside the class to work with autodoc

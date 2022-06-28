@@ -14,7 +14,9 @@ with open(os.path.join(here, "requirements.txt"), encoding="utf-8") as f:
 
 with open(os.path.join(here, "devtools/dev-requirements.txt"), encoding="utf-8") as f:
     dev_requirements = f.read().splitlines()
-dev_requirements = [foo for foo in dev_requirements if not (foo.startswith("#") or foo.startswith("-r"))]
+dev_requirements = [
+    foo for foo in dev_requirements if not (foo.startswith("#") or foo.startswith("-r"))
+]
 
 setup(
     name="desc-opt",
@@ -46,6 +48,8 @@ setup(
     + "magnetohydrodynamics stability confinement plasma physics "
     + "optimization design fusion",
     packages=find_packages(exclude=["docs", "tests", "local", "report"]),
+    include_package_data=True,
+    package_dir={"": "desc"},
     install_requires=requirements,
     extras_require={
         "dev": dev_requirements,

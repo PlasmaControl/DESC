@@ -37,14 +37,14 @@ def SOLOVEV_vac(tmpdir_factory):
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
     main(args)
 
-    SOLOVEV_out = {
+    SOLOVEV_vac_out = {
         "input_path": input_path,
         "desc_h5_path": desc_h5_path,
         "desc_nc_path": desc_nc_path,
         "vmec_nc_path": vmec_nc_path,
         "booz_nc_path": booz_nc_path,
     }
-    return SOLOVEV_out
+    return SOLOVEV_vac_out
 
 
 @pytest.fixture(scope="session")

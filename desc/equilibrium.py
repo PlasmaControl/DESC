@@ -132,9 +132,9 @@ class Equilibrium(_Configuration, IOAble):
             and (N_grid == int(N_grid))
             and (N_grid >= 0)
         ), "N_grid should be a non-negative integer or None, got {N_grid}"
-        self._L_grid = L_grid if L_grid is not None else self.L
-        self._M_grid = M_grid if M_grid is not None else self.M
-        self._N_grid = N_grid if N_grid is not None else self.N
+        self._L_grid = L_grid if L_grid is not None else 2 * self.L
+        self._M_grid = M_grid if M_grid is not None else 2 * self.M
+        self._N_grid = N_grid if N_grid is not None else 2 * self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
         self._solved = False
         self.optimizer_results = {}
@@ -864,7 +864,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(
+                profiles=self.inputs[ii]["objective"] != "vacuum"
+            )
 
             if ii == start_from:
                 equil = self[ii]
@@ -896,6 +898,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
+                        constraints=constraints,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,

@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import copy
 import numbers
 
@@ -473,7 +474,7 @@ class _Configuration(IOAble, ABC):
                 self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
                 self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
                 self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
-            elif isinstance(args[0], str):
+            elif isinstance(args[0], (str, os.PathLike)):
                 # from file
                 path = args[0]
                 file_format = None
@@ -1063,8 +1064,7 @@ class _Configuration(IOAble, ABC):
         idx = [self.rev_xlabel.get(label, None) for label in labels]
         return np.array(idx)
 
-    # TODO: add kwargs for M_booz, N_booz, etc.
-    def compute(self, name, grid=None, data=None):
+    def compute(self, name, grid=None, data=None, **kwargs):
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -1083,7 +1083,11 @@ class _Configuration(IOAble, ABC):
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
         if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        M_booz = kwargs.pop("M_booz", 2 * self.M)
+        N_booz = kwargs.pop("N_booz", 2 * self.N)
+        if len(kwargs) > 0 and not set(kwargs.keys()).issubset(["helicity"]):
+            raise ValueError("Unrecognized argument(s).")
 
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)
@@ -1108,7 +1112,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=2 * self.M, N=2 * self.N, sym=self.R_basis.sym, NFP=self.NFP
+                        M=M_booz, N=N_booz, sym=self.R_basis.sym, NFP=self.NFP
                     ),
                     derivs=0,
                     build_pinv=True,
@@ -1117,7 +1121,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = Transform(
                     grid,
                     DoubleFourierSeries(
-                        M=2 * self.M, N=2 * self.N, sym=self.Z_basis.sym, NFP=self.NFP
+                        M=M_booz, N=N_booz, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
                 )
@@ -1128,7 +1132,7 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.iota.copy()
                 inputs[arg].grid = grid
 
-        return fun(**inputs)
+        return fun(**inputs, **kwargs)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find the theta coordinates (rho, theta, phi) that correspond to a set of

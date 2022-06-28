@@ -1052,7 +1052,7 @@ class _Configuration(IOAble, ABC):
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
         if grid is None:
-            grid = QuadratureGrid(self.L, self.M, self.N, self.NFP)
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)

@@ -26,9 +26,10 @@ from scipy.optimize import OptimizeResult
 from desc.optimize.fmin_scalar import fmintr
 from desc.optimize.least_squares import lsqtr
 
-from desc.objective_funs import AugLagrangian
+#from desc.objective_funs import AugLagrangian
 from desc.derivatives import Derivative
-from desc.objective_funs import AugLagrangianLS
+#from desc.objective_funs import AugLagrangianLS
+from desc.objectives.auglagrangian_objectives import AugLagrangianLS
 # def gradL(x,fun,lmbda,mu,c,gradc):
 #     return
 

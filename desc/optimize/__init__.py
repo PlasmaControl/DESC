@@ -4,4 +4,3 @@ from .optimizer import Optimizer
 from .aug_lagrangian import fmin_lag
 from .exact_lagrangian import fmin_exlag
 from .aug_lagrangian_ls import fmin_lag_ls
-__all__ = ["fmintr", "lsqtr", "Optimizer", "fmin_lag", "fmin_exlag","fmin_lag_ls"]

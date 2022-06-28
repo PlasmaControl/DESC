@@ -75,8 +75,8 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(eq.N, 2)
         self.assertEqual(eq.NFP, 3)
         self.assertEqual(eq.spectral_indexing, "ansi")
-        np.testing.assert_allclose(eq.p_l, [10, 0, 5])
-        np.testing.assert_allclose(eq.i_l, [1, 0, 3])
+        np.testing.assert_allclose(eq.p_l, [10, 5])
+        np.testing.assert_allclose(eq.i_l, [1, 3])
         self.assertIsInstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,
@@ -232,13 +232,13 @@ class TestInitialGuess(unittest.TestCase):
 
     def test_guess_from_file(self):
 
-        eq1 = Equilibrium(L=24, M=12, sym=True, spectral_indexing="fringe")
+        eq1 = Equilibrium(M=12, sym=True)
         path = "./tests/inputs/SOLOVEV_output.h5"
         eq1.set_initial_guess(path)
-        eq2 = EquilibriaFamily.load(path)
+        eq2 = EquilibriaFamily.load(path)[-1]
 
-        np.testing.assert_allclose(eq1.R_lmn, eq2[-1].R_lmn)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2[-1].Z_lmn)
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
     def test_guess_from_surface(self):
 
@@ -347,10 +347,6 @@ class TestSurfaces(unittest.TestCase):
     def test_get_rho_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)
-        print("eq", eq)
-
-        print("surf", surf)
-
         np.testing.assert_allclose(
             surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
         )

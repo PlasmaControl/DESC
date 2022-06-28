@@ -855,17 +855,6 @@ class _Configuration(IOAble, ABC):
         return self._N
 
     @property
-    def x(self):
-        """Optimization state vector (ndarray)."""
-        return jnp.concatenate([self.R_lmn, self.Z_lmn, self.L_lmn])
-
-    @x.setter
-    def x(self, x):
-        self.R_lmn, self.Z_lmn, self.L_lmn = unpack_state(
-            x, self.R_basis.num_modes, self.Z_basis.num_modes
-        )
-
-    @property
     def R_lmn(self):
         """Spectral coefficients of R (ndarray)."""
         return self._R_lmn
@@ -1353,7 +1342,7 @@ class _Configuration(IOAble, ABC):
         M_grid=None,
         N_grid=None,
         rcond=None,
-        in_place=False,
+        copy=False,
     ):
         """Transform this equilibrium to use straight field line coordinates.
 
@@ -1380,14 +1369,13 @@ class _Configuration(IOAble, ABC):
             toroidal spatial resolution to use for fit to new basis. Default = 4*self.N+1
         rcond : float, optional
             cutoff for small singular values in least squares fit.
-        in_place : bool, optional
-            whether to return a new equilibriumor modify in place
+        copy : bool, optional
+            Whether to update the existing equilibrium or make a copy (Default).
 
         Returns
         -------
         eq_sfl : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
-            Only returned if "copy" is True, otherwise modifies the current equilibrium.
 
         """
         L = L or int(1.5 * self.L)
@@ -1412,10 +1400,10 @@ class _Configuration(IOAble, ABC):
         bdry_sfl_grid = bdry_grid
         bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
 
-        if in_place:
-            eq_sfl = self
-        else:
+        if copy:
             eq_sfl = self.copy()
+        else:
+            eq_sfl = self
         eq_sfl.change_resolution(L, M, N)
 
         R_sfl_transform = Transform(
@@ -1457,5 +1445,4 @@ class _Configuration(IOAble, ABC):
         eq_sfl.Z_lmn = Z_lmn_sfl
         eq_sfl.L_lmn = L_lmn_sfl
 
-        if not in_place:
-            return eq_sfl
+        return eq_sfl

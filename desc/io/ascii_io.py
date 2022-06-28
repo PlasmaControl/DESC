@@ -169,7 +169,6 @@ def read_ascii(filename):
     eq["L"] = np.max(abs(zern_idx[:, 0]))
     eq["M"] = np.max(abs(zern_idx[:, 1]))
     eq["N"] = np.max(abs(zern_idx[:, 2]))
-    eq["spectral_indexing"] = "fringe"
 
     if np.all(
         cR[np.where(sign(zern_idx[:, 1]) != sign(zern_idx[:, 2]))] == 0

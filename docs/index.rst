@@ -25,6 +25,7 @@
    :caption: Examples
 
    notebooks/hands_on
+   notebooks/Spline_Basis
    notebooks/Saving_Equilibria_in_VMEC_Format
 
 .. toctree::

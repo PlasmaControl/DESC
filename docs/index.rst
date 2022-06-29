@@ -10,6 +10,7 @@
    theory_general
    notebooks/basis_grid
    notebooks/perturbations
+   notebooks/zernike_eval
    variables
 
 .. toctree::

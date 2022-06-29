@@ -1,13 +1,12 @@
 import numpy as np
 import os
 # os.environ["JAX_LOG_COMPILES"] = "True"
-
+import pickle
 import copy
 import matplotlib
 import matplotlib.pyplot as plt
 import scipy
 from scipy.constants import mu_0
-%matplotlib inline
 import sys
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.append(os.path.abspath('../'))
@@ -109,7 +108,7 @@ class BoundaryErrorBS(_Objective):
         if self.sgrid is None:
             self.sgrid = LinearGrid(M=ntheta,N=nzeta, rho=1, NFP=eq.NFP) 
 
-        self._dim_f = 2 * self.egrid.num_nodes
+        self._dim_f = 3 * self.egrid.num_nodes
         self.NFP = eq.NFP
             
         self.eR_transform = Transform(self.egrid, eq.R_basis, derivs=1)
@@ -120,7 +119,7 @@ class BoundaryErrorBS(_Objective):
         self.sZ_transform = Transform(self.sgrid, eq.Z_basis, derivs=1)
         self.sL_transform = Transform(self.sgrid, eq.L_basis, derivs=1)
 
-        self.K_transform = Transform(self.sgrid, eq.K_basis, derivs=1)
+        self.Ks_transform = Transform(self.sgrid, eq.K_basis, derivs=1)
 
         self.ep_profile = eq.pressure.copy()
         self.ei_profile = eq.iota.copy()
@@ -151,10 +150,14 @@ class BoundaryErrorBS(_Objective):
         G = IGphi_mn[1] / mu_0
         phi_mn = IGphi_mn[2:] / mu_0
 
-        K_t = self.K_transform.transform(phi_mn, dt=1)[:,np.newaxis] + I/(2*np.pi)
-        K_z = self.K_transform.transform(phi_mn, dz=1)[:,np.newaxis] + G/(2*np.pi)
-        K = K_t*ndata_src['e_theta'] + K_z*ndata_src['e_zeta']
-        K = rpz2xyz_vec(K, phi=self.K_transform.grid.nodes[:,2])
+        K_t = self.Ks_transform.transform(phi_mn, dt=1)[:,np.newaxis] + I/(2*np.pi)
+        K_z = self.Ks_transform.transform(phi_mn, dz=1)[:,np.newaxis] + G/(2*np.pi)
+        Ks = K_t*ndata_src['e_theta'] + K_z*ndata_src['e_zeta']
+        Ks = rpz2xyz_vec(Ks, phi=self.Ks_transform.grid.nodes[:,2])
+        K_t = self.Ke_transform.transform(phi_mn, dt=1)[:,np.newaxis] + I/(2*np.pi)
+        K_z = self.Ke_transform.transform(phi_mn, dz=1)[:,np.newaxis] + G/(2*np.pi)
+        Ke = K_t*ndata_eval['e_theta'] + K_z*ndata_eval['e_zeta']
+        Ke = rpz2xyz_vec(Ke, phi=self.Ke_transform.grid.nodes[:,2])
 
         Bsrc = Bdata_src['B']
         Bsrc = rpz2xyz_vec(Bsrc, phi=self.sR_transform.grid.nodes[:,2])
@@ -175,15 +178,17 @@ class BoundaryErrorBS(_Objective):
         
         B_tot = rpz2xyz_vec(Bdata_eval['B'], phi=self.eR_transform.grid.nodes[:,2])
         B_plasma = biot_loop_periods(reval, rsrc, J, dVsrc/self.NFP, self.NFP) + B_tot/2
-        B_sheet = biot_loop_periods(reval, rsrc, K, dVsrc/self.NFP, self.NFP)
+        B_sheet = biot_loop_periods(reval, rsrc, Ks, dVsrc/self.NFP, self.NFP)
         B_ex = self.ext_field.compute_magnetic_field(reval, basis="xyz")
+
         B_in = B_tot 
         B_out = B_ex + B_plasma + B_sheet
         Bsq_in = jnp.sum(B_in**2, axis=-1) + 2*mu_0*pdata_eval['p']
         Bsq_out = jnp.sum(B_out**2, axis=-1)
         Bsq_diff = (Bsq_in - Bsq_out)*dVeval
         Bn = jnp.sum(B_out*neval, axis=-1)*dVeval
-        return jnp.concatenate([Bsq_diff, Bn])
+        Kerr = B_out - (B_in + mu_0 * jnp.cross(neval, Ke, axis=1))
+        return jnp.concatenate([Bsq_diff, Bn, Kerr])
     
 f = Dataset("wout_test_beta.vmec.nc")
 print(f['mpol'][:])
@@ -257,9 +262,16 @@ bc_objective.callback(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi, eq.I
 bc_objective.callback(veq.R_lmn, veq.Z_lmn, veq.L_lmn, veq.p_l, veq.i_l, veq.Psi, eq.IGphi_mn)
 
 eq1 = eq.copy()
-eq1.optimize(objective, constraints, maxiter=60, verbose=3, 
+out = eq1.optimize(objective, constraints, maxiter=60, verbose=3, 
              options={"perturb_options":{"order":2}, "initial_trust_radius":1e-3, "ga_tr_ratio":0});
 
-import pickle
-with open("freeb_beta.pkl", "wb+") as f:
-     pickle.dump(eqs, f)
+eq1.save("freeb_test_out.h5")
+with open("freeb_beta_out.pkl", "wb+") as f:
+     pickle.dump(out, f)
+
+out = veq.optimize(objective, constraints, maxiter=60, verbose=3, 
+             options={"perturb_options":{"order":2}, "initial_trust_radius":1e-3, "ga_tr_ratio":0});
+
+veq.save("freeb_test_outv.h5")
+with open("freeb_beta_outv.pkl", "wb+") as f:
+     pickle.dump(out, f)

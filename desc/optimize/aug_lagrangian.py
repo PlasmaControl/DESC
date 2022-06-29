@@ -115,10 +115,8 @@ def fmin_lag(
 
         c = 0
         
-        for i in range(len(constr)):
-            c = c + constr[i](x)**2
-        
-        c = np.sqrt(c)
+        cv = L.compute_constraints(x)
+        c = np.linalg.norm(cv)
         
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
@@ -130,10 +128,9 @@ def fmin_lag(
                 break
 
             else:
-                for i in range(len(lmbda)):
-                    lmbda[i] = lmbda[i] - mu * constr[i](x)
-                    ctolk = ctolk/(mu**(0.9))
-                    gtolk = gtolk/mu
+                lmbda = lmbda - mu*cv
+                ctolk = ctolk/(mu**(0.9))
+                gtolk = gtolk/mu
         else:
             mu = 100 * mu
             ctolk = 1/(mu**(0.1))

@@ -16,7 +16,8 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
-
+from desc.optimize.aug_lagrangian import fmin_lag
+from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
 
 class Optimizer(IOAble):
     """A helper class to wrap several different optimization routines
@@ -58,8 +59,8 @@ class Optimizer(IOAble):
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
     _scipy_constrained_least_squares_methods = []
-    _desc_constrained_scalar_methods = []
-    _desc_constrained_least_squares_methods = []
+    _desc_constrained_scalar_methods = ["auglag"]
+    _desc_constrained_least_squares_methods = ["lsq-auglaq"]
     _scalar_methods = (
         _desc_scalar_methods
         + _scipy_scalar_methods
@@ -249,7 +250,25 @@ class Optimizer(IOAble):
                 perturb_options=perturb_options,
                 solve_options=solve_options,
             )
-
+        elif (self.method in Optimizer._constrained_methods):
+            
+            for constraint in nonlinear_constraints:
+                if not isinstance(
+                    constraint,
+                    (
+                        ForceBalance,
+                        RadialForceBalance,
+                        HelicalForceBalance,
+                        CurrentDensity,
+                    ),
+                ):
+                    raise ValueError(
+                        "optimizer method {} ".format(self.method)
+                        + "cannot handle general nonlinear constraint {}.".format(
+                            constraint
+                        )
+                    )
+            
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
@@ -427,12 +446,17 @@ class Optimizer(IOAble):
             result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
+            
 
             hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
             x_scale = "hess" if x_scale == "auto" else x_scale
+            
+            # if self.method == "auglag":
+            #     result = fmin_lag(fun, x0, lmbda0, mu0, grad, constr, gradconstr, ineq, gradineq)                
+
 
             result = fmintr(
                 compute_scalar_wrapped,

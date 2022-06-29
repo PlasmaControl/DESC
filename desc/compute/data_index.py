@@ -34,6 +34,7 @@ data_index["zeta"] = {
     "fun": "compute_flux_coords",
     "dim": 1,
 }
+
 # toroidal flux
 data_index["psi"] = {
     "label": "\\psi = \\Psi / (2 \\pi)",
@@ -59,6 +60,7 @@ data_index["psi_rr"] = {
     "fun": "compute_toroidal_flux",
     "dim": 1,
 }
+
 # R
 data_index["R"] = {
     "label": "R",
@@ -69,7 +71,6 @@ data_index["R"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0]],
 }
-
 data_index["R_r"] = {
     "label": "\\partial_{\\rho} R",
     "units": "m",
@@ -142,7 +143,6 @@ data_index["R_rz"] = {
     "dim": 1,
     "R_derivs": [[1, 0, 1]],
 }
-
 data_index["R_tz"] = {
     "label": "\\partial_{\\theta\\zeta} R",
     "units": "m",
@@ -242,6 +242,7 @@ data_index["R_rtz"] = {
     "dim": 1,
     "R_derivs": [[1, 1, 1]],
 }
+
 # Z
 data_index["Z"] = {
     "label": "Z",
@@ -423,6 +424,7 @@ data_index["Z_rtz"] = {
     "dim": 1,
     "R_derivs": [[1, 1, 1]],
 }
+
 # cartesian coordinates
 data_index["phi"] = {
     "label": "\\phi = \\zeta",
@@ -451,6 +453,7 @@ data_index["Y"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0]],
 }
+
 # lambda
 data_index["lambda"] = {
     "label": "\\lambda",
@@ -632,6 +635,7 @@ data_index["lambda_rtz"] = {
     "dim": 1,
     "L_derivs": [[1, 1, 1]],
 }
+
 # pressure
 data_index["p"] = {
     "label": "p",
@@ -649,6 +653,7 @@ data_index["p_r"] = {
     "fun": "compute_pressure",
     "dim": 1,
 }
+
 # rotational transform
 data_index["iota"] = {
     "label": "\\iota",
@@ -674,6 +679,7 @@ data_index["iota_rr"] = {
     "fun": "compute_rotational_transform",
     "dim": 1,
 }
+
 # covariant basis
 data_index["e_rho"] = {
     "label": "\\mathbf{e}_{\\rho}",
@@ -684,7 +690,6 @@ data_index["e_rho"] = {
     "dim": 3,
     "R_derivs": [[1, 0, 0]],
 }
-
 data_index["e_theta"] = {
     "label": "\\mathbf{e}_{\\theta}",
     "units": "m",
@@ -694,7 +699,6 @@ data_index["e_theta"] = {
     "dim": 3,
     "R_derivs": [[0, 1, 0]],
 }
-
 data_index["e_zeta"] = {
     "label": "\\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -704,7 +708,6 @@ data_index["e_zeta"] = {
     "dim": 3,
     "R_derivs": [[0, 0, 0], [0, 0, 1]],
 }
-
 data_index["e_rho_r"] = {
     "label": "\\partial_{\\rho} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -714,7 +717,6 @@ data_index["e_rho_r"] = {
     "dim": 3,
     "R_derivs": [[2, 0, 0]],
 }
-
 data_index["e_rho_t"] = {
     "label": "\\partial_{\\theta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -724,7 +726,6 @@ data_index["e_rho_t"] = {
     "dim": 3,
     "R_derivs": [[1, 1, 0]],
 }
-
 data_index["e_rho_z"] = {
     "label": "\\partial_{\\zeta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -734,7 +735,6 @@ data_index["e_rho_z"] = {
     "dim": 3,
     "R_derivs": [[1, 0, 1]],
 }
-
 data_index["e_theta_r"] = {
     "label": "\\partial_{\\rho} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -744,7 +744,6 @@ data_index["e_theta_r"] = {
     "dim": 3,
     "R_derivs": [[1, 1, 0]],
 }
-
 data_index["e_theta_t"] = {
     "label": "\\partial_{\\theta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -754,7 +753,6 @@ data_index["e_theta_t"] = {
     "dim": 3,
     "R_derivs": [[0, 2, 0]],
 }
-
 data_index["e_theta_z"] = {
     "label": "\\partial_{\\zeta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -764,7 +762,6 @@ data_index["e_theta_z"] = {
     "dim": 3,
     "R_derivs": [[0, 1, 1]],
 }
-
 data_index["e_zeta_r"] = {
     "label": "\\partial_{\\rho} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -774,7 +771,6 @@ data_index["e_zeta_r"] = {
     "dim": 3,
     "R_derivs": [[1, 0, 0], [1, 0, 1]],
 }
-
 data_index["e_zeta_t"] = {
     "label": "\\partial_{\\theta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -784,7 +780,6 @@ data_index["e_zeta_t"] = {
     "dim": 3,
     "R_derivs": [[0, 1, 0], [0, 1, 1]],
 }
-
 data_index["e_zeta_z"] = {
     "label": "\\partial_{\\zeta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -794,7 +789,6 @@ data_index["e_zeta_z"] = {
     "dim": 3,
     "R_derivs": [[0, 0, 1], [0, 0, 2]],
 }
-
 data_index["e_rho_rr"] = {
     "label": "\\partial_{\\rho\\rho} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -804,7 +798,6 @@ data_index["e_rho_rr"] = {
     "dim": 3,
     "R_derivs": [[3, 0, 0]],
 }
-
 data_index["e_rho_tt"] = {
     "label": "\\partial_{\\theta\\theta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -814,7 +807,6 @@ data_index["e_rho_tt"] = {
     "dim": 3,
     "R_derivs": [[1, 2, 0]],
 }
-
 data_index["e_rho_zz"] = {
     "label": "\\partial_{\\zeta\\zeta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -824,7 +816,6 @@ data_index["e_rho_zz"] = {
     "dim": 3,
     "R_derivs": [[1, 0, 2]],
 }
-
 data_index["e_rho_rt"] = {
     "label": "\\partial_{\\rho\\theta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -834,7 +825,6 @@ data_index["e_rho_rt"] = {
     "dim": 3,
     "R_derivs": [[2, 1, 0]],
 }
-
 data_index["e_rho_rz"] = {
     "label": "\\partial_{\\rho\\zeta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -844,7 +834,6 @@ data_index["e_rho_rz"] = {
     "dim": 3,
     "R_derivs": [[2, 1, 0]],
 }
-
 data_index["e_rho_tz"] = {
     "label": "\\partial_{\\theta\\zeta} \\mathbf{e}_{\\rho}",
     "units": "m",
@@ -854,7 +843,6 @@ data_index["e_rho_tz"] = {
     "dim": 3,
     "R_derivs": [[1, 1, 1]],
 }
-
 data_index["e_theta_rr"] = {
     "label": "\\partial_{\\rho\\rho} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -864,7 +852,6 @@ data_index["e_theta_rr"] = {
     "dim": 3,
     "R_derivs": [[2, 1, 0]],
 }
-
 data_index["e_theta_tt"] = {
     "label": "\\partial_{\\theta\\theta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -874,7 +861,6 @@ data_index["e_theta_tt"] = {
     "dim": 3,
     "R_derivs": [[0, 3, 0]],
 }
-
 data_index["e_theta_zz"] = {
     "label": "\\partial_{\\zeta\\zeta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -884,7 +870,6 @@ data_index["e_theta_zz"] = {
     "dim": 3,
     "R_derivs": [[0, 1, 2]],
 }
-
 data_index["e_theta_rt"] = {
     "label": "\\partial_{\\rho\\theta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -894,7 +879,6 @@ data_index["e_theta_rt"] = {
     "dim": 3,
     "R_derivs": [[1, 2, 0]],
 }
-
 data_index["e_theta_rz"] = {
     "label": "\\partial_{\\rho\\zeta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -904,7 +888,6 @@ data_index["e_theta_rz"] = {
     "dim": 3,
     "R_derivs": [[1, 1, 1]],
 }
-
 data_index["e_theta_tz"] = {
     "label": "\\partial_{\\theta\\zeta} \\mathbf{e}_{\\theta}",
     "units": "m",
@@ -914,7 +897,6 @@ data_index["e_theta_tz"] = {
     "dim": 3,
     "R_derivs": [[0, 2, 1]],
 }
-
 data_index["e_zeta_rr"] = {
     "label": "\\partial_{\\rho\\rho} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -924,7 +906,6 @@ data_index["e_zeta_rr"] = {
     "dim": 3,
     "R_derivs": [[2, 0, 0], [2, 0, 1]],
 }
-
 data_index["e_zeta_tt"] = {
     "label": "\\partial_{\\theta\\theta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -934,7 +915,6 @@ data_index["e_zeta_tt"] = {
     "dim": 3,
     "R_derivs": [[0, 2, 0], [0, 2, 1]],
 }
-
 data_index["e_zeta_zz"] = {
     "label": "\\partial_{\\zeta\\zeta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -944,7 +924,6 @@ data_index["e_zeta_zz"] = {
     "dim": 3,
     "R_derivs": [[0, 0, 2], [0, 0, 3]],
 }
-
 data_index["e_zeta_rt"] = {
     "label": "\\partial_{\\rho\\theta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -954,7 +933,6 @@ data_index["e_zeta_rt"] = {
     "dim": 3,
     "R_derivs": [[1, 1, 0], [1, 1, 1]],
 }
-
 data_index["e_zeta_rz"] = {
     "label": "\\partial_{\\rho\\zeta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -964,7 +942,6 @@ data_index["e_zeta_rz"] = {
     "dim": 3,
     "R_derivs": [[1, 0, 1], [1, 0, 2]],
 }
-
 data_index["e_zeta_tz"] = {
     "label": "\\partial_{\\theta\\zeta} \\mathbf{e}_{\\zeta}",
     "units": "m",
@@ -985,7 +962,6 @@ data_index["e^rho"] = {
     "dim": 3,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["e^theta"] = {
     "label": "\\mathbf{e}^{\\theta}",
     "units": "m^{-1}",
@@ -995,7 +971,6 @@ data_index["e^theta"] = {
     "dim": 3,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["e^zeta"] = {
     "label": "\\mathbf{e}^{\\zeta}",
     "units": "m^{-1}",
@@ -1016,7 +991,6 @@ data_index["sqrt(g)"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|e_theta x e_zeta|"] = {
     "label": "|e_{\\theta} \\times \e_{\\zeta}|",
     "units": "m^{2}",
@@ -1026,7 +1000,6 @@ data_index["|e_theta x e_zeta|"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|e_zeta x e_rho|"] = {
     "label": "|e_{\\zeta} \\times \e_{\\rho}|",
     "units": "m^{2}",
@@ -1036,7 +1009,6 @@ data_index["|e_zeta x e_rho|"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|e_rho x e_theta|"] = {
     "label": "|e_{\\rho} \\times \e_{\\theta}|",
     "units": "m^{2}",
@@ -1046,7 +1018,6 @@ data_index["|e_rho x e_theta|"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["sqrt(g)_r"] = {
     "label": "\\partial_{\\rho} \\sqrt{g}",
     "units": "m^{3}",
@@ -1064,7 +1035,6 @@ data_index["sqrt(g)_r"] = {
         [1, 0, 1],
     ],
 }
-
 data_index["sqrt(g)_t"] = {
     "label": "\\partial_{\\theta} \\sqrt{g}",
     "units": "m^{3}",
@@ -1082,7 +1052,6 @@ data_index["sqrt(g)_t"] = {
         [0, 1, 1],
     ],
 }
-
 data_index["sqrt(g)_z"] = {
     "label": "\\partial_{\\zeta} \\sqrt{g}",
     "units": "m^{3}",
@@ -1100,7 +1069,6 @@ data_index["sqrt(g)_z"] = {
         [0, 1, 1],
     ],
 }
-
 data_index["sqrt(g)_rr"] = {
     "label": "\\partial_{\\rho\\rho} \\sqrt{g}",
     "units": "m^{3}",
@@ -1121,7 +1089,6 @@ data_index["sqrt(g)_rr"] = {
         [2, 0, 1],
     ],
 }
-
 data_index["sqrt(g)_tt"] = {
     "label": "\\partial_{\\theta\\theta} \\sqrt{g}",
     "units": "m^{3}",
@@ -1142,7 +1109,6 @@ data_index["sqrt(g)_tt"] = {
         [0, 2, 1],
     ],
 }
-
 data_index["sqrt(g)_zz"] = {
     "label": "\\partial_{\\zeta\\zeta} \\sqrt{g}",
     "units": "m^{3}",
@@ -1163,7 +1129,6 @@ data_index["sqrt(g)_zz"] = {
         [0, 1, 2],
     ],
 }
-
 data_index["sqrt(g)_tz"] = {
     "label": "\\partial_{\\theta\\zeta} \\sqrt{g}",
     "units": "m^{3}",
@@ -1197,7 +1162,6 @@ data_index["g_rr"] = {
     "dim": 1,
     "R_derivs": [[1, 0, 0]],
 }
-
 data_index["g_tt"] = {
     "label": "g_{\\theta\\theta}",
     "units": "m^{2}",
@@ -1207,7 +1171,6 @@ data_index["g_tt"] = {
     "dim": 1,
     "R_derivs": [[0, 1, 0]],
 }
-
 data_index["g_zz"] = {
     "label": "g_{\\zeta\\zeta}",
     "units": "m^{2}",
@@ -1217,7 +1180,6 @@ data_index["g_zz"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [0, 0, 1]],
 }
-
 data_index["g_rt"] = {
     "label": "g_{\\rho\\theta}",
     "units": "m^{2}",
@@ -1227,7 +1189,6 @@ data_index["g_rt"] = {
     "dim": 1,
     "R_derivs": [[1, 0, 0], [0, 1, 0]],
 }
-
 data_index["g_rz"] = {
     "label": "g_{\\rho\\zeta}",
     "units": "m^{2}",
@@ -1237,7 +1198,6 @@ data_index["g_rz"] = {
     "dim": 1,
     "R_derivs": [[1, 0, 0], [0, 0, 1]],
 }
-
 data_index["g_tz"] = {
     "label": "g_{\\theta\\zeta}",
     "units": "m^{2}",
@@ -1258,7 +1218,6 @@ data_index["g^rr"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["g^tt"] = {
     "label": "g^{\\theta\\theta}",
     "units": "m^{-2}",
@@ -1268,7 +1227,6 @@ data_index["g^tt"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["g^zz"] = {
     "label": "g^{\\zeta\\zeta}",
     "units": "m^{-2}",
@@ -1278,7 +1236,6 @@ data_index["g^zz"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0]],
 }
-
 data_index["g^rt"] = {
     "label": "g^{\\rho\\theta}",
     "units": "m^{-2}",
@@ -1288,7 +1245,6 @@ data_index["g^rt"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["g^rz"] = {
     "label": "g^{\\rho\\zeta}",
     "units": "m^{-2}",
@@ -1298,7 +1254,6 @@ data_index["g^rz"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["g^tz"] = {
     "label": "g^{\\theta\\zeta}",
     "units": "m^{-2}",
@@ -1308,7 +1263,6 @@ data_index["g^tz"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|grad(rho)|"] = {
     "label": "|\\nabla \\rho|",
     "units": "m^{-1}",
@@ -1318,7 +1272,6 @@ data_index["|grad(rho)|"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|grad(theta)|"] = {
     "label": "|\\nabla \\theta|",
     "units": "m^{-1}",
@@ -1328,7 +1281,6 @@ data_index["|grad(theta)|"] = {
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["|grad(zeta)|"] = {
     "label": "|\\nabla \\zeta|",
     "units": "m^{-1}",
@@ -1342,7 +1294,7 @@ data_index["|grad(zeta)|"] = {
 # contravariant magnetic field
 data_index["B0"] = {
     "label": "\\psi' / \\sqrt{g}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "",
     "fun": "compute_contravariant_magnetic_field",
@@ -1350,10 +1302,9 @@ data_index["B0"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0]],
 }
-
 data_index["B^rho"] = {
     "label": "B^{\\rho}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant radial component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1361,10 +1312,9 @@ data_index["B^rho"] = {
     "R_derivs": [[0, 0, 0]],
     "L_derivs": [[0, 0, 0]],
 }
-
 data_index["B^theta"] = {
     "label": "B^{\\theta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant poloidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1372,10 +1322,9 @@ data_index["B^theta"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 0, 1]],
 }
-
 data_index["B^zeta"] = {
     "label": "B^{\\zeta}",
-    "units": "T m^{-1}",
+    "units": "T \\cdot m^{-1}",
     "units_long": "Tesla / meters",
     "description": "Contravariant toroidal component of magnetic field",
     "fun": "compute_contravariant_magnetic_field",
@@ -1383,7 +1332,6 @@ data_index["B^zeta"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0]],
 }
-
 data_index["B"] = {
     "label": "\\mathbf{B}",
     "units": "T",
@@ -1394,7 +1342,6 @@ data_index["B"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["B_R"] = {
     "label": "B_{R}",
     "units": "T",
@@ -1405,7 +1352,6 @@ data_index["B_R"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["B_phi"] = {
     "label": "B_{\\phi}",
     "units": "T",
@@ -1416,7 +1362,6 @@ data_index["B_phi"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["B_Z"] = {
     "label": "B_{Z}",
     "units": "T",
@@ -1427,7 +1372,6 @@ data_index["B_Z"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-
 data_index["B0_r"] = {
     "label": "\\psi'' / \\sqrt{g} - \\psi' \\partial_{\\rho} \\sqrt{g} / g",
     "units": "T \\cdot m^{-1}",
@@ -1446,7 +1390,6 @@ data_index["B0_r"] = {
     ],
     "L_derivs": [[0, 0, 0]],
 }
-
 data_index["B^theta_r"] = {
     "label": "\\partial_{\\rho} B^{\\theta}",
     "units": "T \\cdot m^{-1}",
@@ -1465,7 +1408,6 @@ data_index["B^theta_r"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 0, 1], [1, 0, 1]],
 }
-
 data_index["B^zeta_r"] = {
     "label": "\\partial_{\\rho} B^{\\zeta}",
     "units": "T \\cdot m^{-1}",
@@ -1484,7 +1426,6 @@ data_index["B^zeta_r"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [1, 1, 0]],
 }
-
 data_index["B_r"] = {
     "label": "\\partial_{\\rho} \\mathbf{B}",
     "units": "T",
@@ -1503,7 +1444,6 @@ data_index["B_r"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 0]],
 }
-
 data_index["B0_t"] = {
     "label": "-\\psi' \\partial_{\\theta} \\sqrt{g} / g",
     "units": "T \\cdot m^{-1}",
@@ -1522,7 +1462,6 @@ data_index["B0_t"] = {
     ],
     "L_derivs": [[0, 0, 0]],
 }
-
 data_index["B^theta_t"] = {
     "label": "\\partial_{\\theta} B^{\\theta}",
     "units": "T \\cdot m^{-1}",
@@ -1541,7 +1480,6 @@ data_index["B^theta_t"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 0, 1], [0, 1, 1]],
 }
-
 data_index["B^zeta_t"] = {
     "label": "\\partial_{\\theta} B^{\\zeta}",
     "units": "T \\cdot m^{-1}",
@@ -1560,7 +1498,6 @@ data_index["B^zeta_t"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 2, 0]],
 }
-
 data_index["B_t"] = {
     "label": "\\partial_{\\theta} \\mathbf{B}",
     "units": "T",
@@ -1579,7 +1516,6 @@ data_index["B_t"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]],
 }
-
 data_index["B0_z"] = {
     "label": "-\\psi' \\partial_{\\zeta} \\sqrt{g} / g",
     "units": "T \\cdot m^{-1}",
@@ -1598,7 +1534,6 @@ data_index["B0_z"] = {
     ],
     "L_derivs": [[0, 0, 0]],
 }
-
 data_index["B^theta_z"] = {
     "label": "\\partial_{\\zeta} B^{\\theta}",
     "units": "T \\cdot m^{-1}",
@@ -1617,7 +1552,6 @@ data_index["B^theta_z"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
 }
-
 data_index["B^zeta_z"] = {
     "label": "\\partial_{\\zeta} B^{\\zeta}",
     "units": "T \\cdot m^{-1}",
@@ -1636,7 +1570,6 @@ data_index["B^zeta_z"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 1, 1]],
 }
-
 data_index["B_z"] = {
     "label": "\\partial_{\\zeta} \\mathbf{B}",
     "units": "T",
@@ -1655,7 +1588,6 @@ data_index["B_z"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 2], [0, 1, 1]],
 }
-
 data_index["B0_tt"] = {
     "label": "-\\psi' \\partial_{\\theta\\theta} \\sqrt{g} / g + "
     + "2 \\psi' (\\partial_{\\theta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
@@ -1699,7 +1631,6 @@ data_index["B^theta_tt"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 2, 1]],
 }
-
 data_index["B^zeta_tt"] = {
     "label": "\\partial_{\\theta\\theta} B^{\\zeta}",
     "units": "T \\cdot m^{-1}",
@@ -1856,6 +1787,7 @@ data_index["B^zeta_tz"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 1, 1], [0, 2, 1]],
 }
+
 # covariant magnetic field
 data_index["B_rho"] = {
     "label": "B_{\\rho}",
@@ -2049,6 +1981,7 @@ data_index["B_zeta_z"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 2], [0, 1, 1]],
 }
+
 # magnetic field magnitude
 data_index["|B|"] = {
     "label": "|\\mathbf{B}|",
@@ -2186,6 +2119,7 @@ data_index["|B|_tz"] = {
         [0, 1, 2],
     ],
 }
+
 # magnetic pressure gradient
 data_index["grad(|B|^2)_rho"] = {
     "label": "(\\nabla B^{2})_{\\rho}",
@@ -2301,6 +2235,7 @@ data_index["|grad(|B|^2)|/2mu0"] = {
         [0, 1, 1],
     ],
 }
+
 # magnetic tension
 data_index["(curl(B)xB)_rho"] = {
     "label": "((\\nabla \\times \\mathbf{B}) \\times \\mathbf{B})_{\\rho}",
@@ -2552,6 +2487,7 @@ data_index["|(B*grad)B|"] = {
         [0, 1, 1],
     ],
 }
+
 # B dot grad(B)
 data_index["B*grad(|B|)"] = {
     "label": "\\mathbf{B} \\cdot \\nabla B",
@@ -2644,12 +2580,13 @@ data_index["(B*grad(|B|))_z"] = {
         [0, 1, 2],
     ],
 }
+
 # contravarian current density
 data_index["J^rho"] = {
     "label": "J^{\\rho}",
     "units": "A \\cdot m^{-3}",
     "units_long": "Amperes / cubic meter",
-    "description": "Contravariant radial component of plasma current",
+    "description": "Contravariant radial component of plasma current density",
     "fun": "compute_contravariant_current_density",
     "dim": 1,
     "R_derivs": [
@@ -2669,7 +2606,7 @@ data_index["J^theta"] = {
     "label": "J^{\\theta}",
     "units": "A \\cdot m^{-3}",
     "units_long": "Amperes / cubic meter",
-    "description": "Contravariant poloidal component of plasma current",
+    "description": "Contravariant poloidal component of plasma current density",
     "fun": "compute_contravariant_current_density",
     "dim": 1,
     "R_derivs": [
@@ -2697,7 +2634,7 @@ data_index["J^zeta"] = {
     "label": "J^{\\zeta}",
     "units": "A \\cdot m^{-3}",
     "units_long": "Amperes / cubic meter",
-    "description": "Contravariant toroidal component of plasma current",
+    "description": "Contravariant toroidal component of plasma current density",
     "fun": "compute_contravariant_current_density",
     "dim": 1,
     "R_derivs": [
@@ -2725,7 +2662,7 @@ data_index["J"] = {
     "label": "\\mathbf{J}",
     "units": "A \\cdot m^{-2}",
     "units_long": "Amperes / square meter",
-    "description": "Plasma current",
+    "description": "Plasma current density",
     "fun": "compute_contravariant_current_density",
     "dim": 3,
     "R_derivs": [
@@ -2751,11 +2688,131 @@ data_index["J"] = {
         [0, 1, 1],
     ],
 }
-data_index["J_parallel"] = {
-    "label": "\\mathbf{J}_{\parallel}",
+data_index["J_R"] = {
+    "label": "J_{R}",
     "units": "A \\cdot m^{-2}",
     "units_long": "Amperes / square meter",
-    "description": "Plasma current parallel to magnetic field",
+    "description": "Radial componenet of plasma current density in lab frame",
+    "fun": "compute_contravariant_current_density",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
+data_index["J_phi"] = {
+    "label": "J_{\\phi}",
+    "units": "A \\cdot m^{-2}",
+    "units_long": "Amperes / square meter",
+    "description": "Toroidal componenet of plasma current density in lab frame",
+    "fun": "compute_contravariant_current_density",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
+data_index["J_Z"] = {
+    "label": "J_{Z}",
+    "units": "A \\cdot m^{-2}",
+    "units_long": "Amperes / square meter",
+    "description": "Vertical componenet of plasma current density in lab frame",
+    "fun": "compute_contravariant_current_density",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
+data_index["|J|"] = {
+    "label": "|\\mathbf{J}|",
+    "units": "A \\cdot m^{-2}",
+    "units_long": "Amperes / square meter",
+    "description": "Magnitue of plasma current density",
+    "fun": "compute_contravariant_current_density",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
+data_index["J_parallel"] = {
+    "label": "\\mathbf{J} \\cdot \\mathbf{b}",
+    "units": "A \\cdot m^{-2}",
+    "units_long": "Amperes / square meter",
+    "description": "Plasma current density parallel to magnetic field",
     "fun": "compute_contravariant_current_density",
     "dim": 1,
     "R_derivs": [
@@ -2785,7 +2842,7 @@ data_index["div_J_perp"] = {
     "label": "\\nabla \\cdot \\mathbf{J}_{\perp}",
     "units": "A \\cdot m^{-3}",
     "units_long": "Amperes / cubic meter",
-    "description": "Divergence of Plasma current perpendicular to magnetic field",
+    "description": "Divergence of plasma current density perpendicular to magnetic field",
     "fun": "compute_force_error",
     "dim": 1,
     "R_derivs": [
@@ -2811,6 +2868,7 @@ data_index["div_J_perp"] = {
         [0, 1, 1],
     ],
 }
+
 # force error
 data_index["F_rho"] = {
     "label": "F_{\\rho}",
@@ -2982,6 +3040,7 @@ data_index["|beta|"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
+
 # quasi-symmetry
 data_index["I"] = {
     "label": "I",
@@ -3141,6 +3200,7 @@ data_index["f_T"] = {
         [0, 1, 2],
     ],
 }
+
 # energy
 data_index["W"] = {
     "label": "W",
@@ -3172,6 +3232,7 @@ data_index["W_p"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0]],
 }
+
 # geometry
 data_index["V"] = {
     "label": "V",

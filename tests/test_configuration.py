@@ -75,8 +75,8 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(eq.N, 2)
         self.assertEqual(eq.NFP, 3)
         self.assertEqual(eq.spectral_indexing, "ansi")
-        np.testing.assert_allclose(eq.p_l, [10, 0, 5])
-        np.testing.assert_allclose(eq.i_l, [1, 0, 3])
+        np.testing.assert_allclose(eq.p_l, [10, 5])
+        np.testing.assert_allclose(eq.i_l, [1, 3])
         self.assertIsInstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,
@@ -230,16 +230,6 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
-    def test_guess_from_file(self):
-
-        eq1 = Equilibrium(L=24, M=12, sym=True, spectral_indexing="fringe")
-        path = "./tests/inputs/SOLOVEV_output.h5"
-        eq1.set_initial_guess(path)
-        eq2 = EquilibriaFamily.load(path)
-
-        np.testing.assert_allclose(eq1.R_lmn, eq2[-1].R_lmn)
-        np.testing.assert_allclose(eq1.Z_lmn, eq2[-1].Z_lmn)
-
     def test_guess_from_surface(self):
 
         eq = Equilibrium()
@@ -335,7 +325,7 @@ class TestInitialGuess(unittest.TestCase):
         )
         grid = ConcentricGrid(L=6, M=6, N=2, node_pattern="ocs")
         coords = eq.compute("R", grid)
-        coords = eq.compute("lambda", grid, coords)
+        coords = eq.compute("lambda", grid, data=coords)
         eq2 = Equilibrium(L=3, M=3, N=1)
         eq2.set_initial_guess(grid.nodes, coords["R"], coords["Z"], coords["lambda"])
         np.testing.assert_allclose(eq.R_lmn, eq2.R_lmn, atol=1e-8)
@@ -343,14 +333,21 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq.L_lmn, eq2.L_lmn, atol=1e-8)
 
 
+def test_guess_from_file(SOLOVEV):
+
+    path = SOLOVEV["desc_h5_path"]
+    eq1 = Equilibrium(M=12, sym=True)
+    eq1.set_initial_guess(path)
+    eq2 = EquilibriaFamily.load(path)[-1]
+
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+
+
 class TestSurfaces(unittest.TestCase):
     def test_get_rho_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)
-        print("eq", eq)
-
-        print("surf", surf)
-
         np.testing.assert_allclose(
             surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
         )

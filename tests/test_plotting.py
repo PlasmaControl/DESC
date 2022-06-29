@@ -5,8 +5,9 @@ from desc.plotting import (
     plot_1d,
     plot_2d,
     plot_3d,
-    plot_surfaces,
+    plot_fsa,
     plot_section,
+    plot_surfaces,
     plot_comparison,
     plot_logo,
     plot_grid,
@@ -31,157 +32,190 @@ from desc.coils import FourierXYZCoil, CoilSet
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_1d_p(plot_eq):
-    fig, ax = plot_1d(plot_eq, "p")
+def test_1d_p(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_1d(eq, "p")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_1d_dpdr(plot_eq):
-    fig, ax = plot_1d(plot_eq, "p_r")
+def test_1d_dpdr(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_1d(eq, "p_r")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_1d_iota(plot_eq):
+def test_1d_iota(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=np.linspace(0, 2 * np.pi, 100), zeta=0, axis=True)
-    fig, ax = plot_1d(plot_eq, "iota", grid=grid)
+    fig, ax = plot_1d(eq, "iota", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_1d_logpsi(plot_eq):
-    fig, ax = plot_1d(plot_eq, "psi", log=True)
+def test_1d_logpsi(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_1d(eq, "psi", log=True)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_2d_logF(plot_eq):
+def test_2d_logF(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
         theta=np.linspace(0, 2 * np.pi, 100),
         zeta=0,
         axis=True,
     )
-    fig, ax = plot_2d(plot_eq, "|F|", log=True, grid=grid)
+    fig, ax = plot_2d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_2d_g_tz(plot_eq):
+def test_2d_g_tz(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=0.5,
         theta=np.linspace(0, 2 * np.pi, 100),
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_2d(plot_eq, "sqrt(g)", grid=grid)
+    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_2d_g_rz(plot_eq):
+def test_2d_g_rz(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
         theta=0,
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_2d(plot_eq, "sqrt(g)", grid=grid)
+    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_2d_lambda(plot_eq):
-    fig, ax = plot_2d(plot_eq, "lambda")
+def test_2d_lambda(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "lambda")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_3d_B(plot_eq):
-    fig, ax = plot_3d(plot_eq, "B^zeta")
+def test_3d_B(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_3d(eq, "B^zeta")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_3d_J(plot_eq):
+def test_3d_J(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=1,
         theta=np.linspace(0, 2 * np.pi, 100),
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_3d(plot_eq, "J^theta", grid=grid)
+    fig, ax = plot_3d(eq, "J^theta", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_3d_tz(plot_eq):
+def test_3d_tz(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=0.5,
         theta=np.linspace(0, 2 * np.pi, 100),
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_3d(plot_eq, "|F|", log=True, grid=grid)
+    fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_3d_rz(plot_eq):
+def test_3d_rz(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100),
         theta=0,
         zeta=np.linspace(0, 2 * np.pi, 100),
         axis=True,
     )
-    fig, ax = plot_3d(plot_eq, "p", grid=grid)
+    fig, ax = plot_3d(eq, "p", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_3d_rt(plot_eq):
+def test_3d_rt(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(
         rho=np.linspace(0, 1, 100), theta=np.linspace(0, 2 * np.pi, 100), zeta=0
     )
-    fig, ax = plot_3d(plot_eq, "psi", grid=grid)
+    fig, ax = plot_3d(eq, "psi", grid=grid)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_section_J(plot_eq):
-    fig, ax = plot_section(plot_eq, "J^rho")
+def test_fsa_I(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "B_theta")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_section_Z(plot_eq):
-    fig, ax = plot_section(plot_eq, "Z")
+def test_fsa_G(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "B_zeta", log=True)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=60)
+def test_section_J(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "J^rho")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_section_R(plot_eq):
-    fig, ax = plot_section(plot_eq, "R")
+def test_section_Z(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "Z")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_section_F(plot_eq):
-    fig, ax = plot_section(plot_eq, "F_rho")
+def test_section_R(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "R")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_section_logF(plot_eq):
-    fig, ax = plot_section(plot_eq, "|F|", log=True)
+def test_section_F(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "F_rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_section_logF(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "|F|", log=True)
     return fig
 
 
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_surfaces(plot_eq):
-    fig, ax = plot_surfaces(plot_eq)
+def test_plot_surfaces(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_surfaces(eq)
     return fig
 
 
@@ -194,62 +228,58 @@ def test_plot_comparison(DSHAPE):
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_con_basis(plot_eq):
-    fig, ax = plot_2d(plot_eq, "e^rho", component="R")
+def test_plot_con_basis(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "e^rho", component="R")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_cov_basis(plot_eq):
-    fig, ax = plot_2d(plot_eq, "e_rho")
+def test_plot_cov_basis(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "e_rho")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_magnetic_tension(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|(B*grad)B|")
+def test_plot_magnetic_tension(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "|(B*grad)B|")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_magnetic_pressure(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|grad(|B|^2)|/2mu0")
+def test_plot_magnetic_pressure(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_gradpsi(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|grad(rho)|")
+def test_plot_gradpsi(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "|grad(rho)|")
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_normF_2d(plot_eq):
-    fig, ax = plot_2d(plot_eq, "|F|", norm_F=True)
+def test_plot_normF_2d(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_2d(eq, "|F|", norm_F=True)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_normF_section(plot_eq):
-    fig, ax = plot_section(plot_eq, "|F|", norm_F=True, log=True)
+def test_plot_normF_section(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_vac_normF_section(plot_eq_vac):
-    fig, ax = plot_section(plot_eq_vac, "|F|", norm_F=True, log=True)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_vac_normF_2d(plot_eq_vac):
-    fig, ax = plot_2d(plot_eq_vac, "|F|", norm_F=True)
-    return fig
-
-
-@pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_coefficients(plot_eq):
-    fig, ax = plot_coefficients(plot_eq)
+@pytest.mark.mpl_image_compare(tolerance=60)
+def test_plot_coefficients(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_coefficients(eq)
     return fig
 
 
@@ -340,41 +370,45 @@ class TestPlotFieldLines(unittest.TestCase):
 
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_field_line(plot_eq):
-    fig, ax, _ = plot_field_lines_sfl(plot_eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
+def test_plot_field_line(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
     return fig
 
 
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_field_lines(plot_eq):
+def test_plot_field_lines(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax, _ = plot_field_lines_sfl(
-        plot_eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
+        eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
     )
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_boozer_modes(plot_eq):
-    fig, ax = plot_boozer_modes(plot_eq)
+def test_plot_boozer_modes(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_boozer_modes(eq)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_boozer_surface(plot_eq):
-    fig, ax = plot_boozer_surface(plot_eq)
+def test_plot_boozer_surface(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_boozer_surface(eq)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_qs_error(plot_eq):
-    fig, ax = plot_qs_error(plot_eq, helicity=(0, 0), log=False)
+def test_plot_qs_error(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_qs_error(eq, helicity=(0, 0), log=False)
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_coils():
-    R = 10
     N = 48
     NFP = 4
     I = 1

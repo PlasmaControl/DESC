@@ -450,7 +450,9 @@ class PowerSeriesProfile(Profile):
     modes : array-like
         mode numbers for the associated coefficients. eg a[modes[i]] = params[i].
     grid : Grid
-        default grid to use for computing values using transform method.
+        default grid to use for computing values using transform method
+    sym : bool
+        Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         name of the profile.
 
@@ -458,14 +460,31 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, name=None):
+    def __init__(self, params, modes=None, grid=None, sym="auto", name=None):
         super().__init__(grid, name)
+
         params = np.atleast_1d(params)
+
+        if (
+            sym == "auto"
+        ):  # check if all odd terms are zero, if so return even. Print something when does so?
+            if modes is None:
+                modes = np.arange(params.size)
+            else:
+                modes = np.atleast_1d(modes)
+            if np.all(params[modes % 2 != 0] == 0):
+                sym = "even"
+            else:
+                sym = False
+        self.sym = "even" if sym else False
         if modes is None:
-            modes = np.arange(params.size)
+            if sym:
+                modes = np.arange(2 * params.size, step=2)
+            else:
+                modes = np.arange(params.size)
         else:
             modes = np.atleast_1d(modes)
-        self._basis = PowerSeries(L=int(np.max(abs(modes))))
+        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=self.sym)
         self._params = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, params):
             idx = np.where(self.basis.modes[:, 0] == int(m))[0]

@@ -12,6 +12,7 @@ from .linear_objectives import (
     FixPressure,
     FixIota,
     FixPsi,
+    FixSurfaceCurrent,
 )
 from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
 
@@ -32,6 +33,7 @@ def get_fixed_boundary_constraints():
         FixPressure(),
         FixIota(),
         FixPsi(),
+        FixSurfaceCurrent(),
     )
     return constraints
 

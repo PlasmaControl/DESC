@@ -1031,3 +1031,129 @@ class TargetIota(_Objective):
         """
         data = compute_rotational_transform(i_l, self._profile)
         return self._shift_scale(data["iota"])
+
+
+class FixSurfaceCurrent(_Objective):
+    """Fixes pressure coefficients."""
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        basis=None,
+        modes=True,
+        name="fixed-surface-current",
+    ):
+        """Initialize a FixPressure Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : tuple, float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(target) = len(weight) = len(modes)
+        profile : Profile, optional
+            Profile containing the radial modes to evaluate at.
+        modes : ndarray, optional
+            Basis modes numbers [l,m,n] of boundary modes to fix.
+            len(target) = len(weight) = len(modes).
+            If True/False uses all/none of the profile modes.
+        name : str
+            Name of the objective function.
+
+        """
+        self._basis = basis
+        self._modes = modes
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Fixed-surface-current error: {:10.3e} (Pa)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._basis is None or self._basis.num_modes + 2 != len(eq.IGphi_mn):
+            self._basis = eq.K_basis
+
+            if self._modes is False or self._modes is None:  # no modes
+                modes = np.array([[]], dtype=int)
+                self._idx = np.array([], dtype=int)
+                idx = self._idx
+            elif self._modes is True:  # all modes in profile
+                modes = self._basis.modes
+                self._idx = np.arange(self._basis.num_modes + 2)
+                idx = self._idx
+            else:  # specified modes
+                modes = np.atleast_2d(self._modes)
+                dtype = {
+                    "names": ["f{}".format(i) for i in range(3)],
+                    "formats": 3 * [modes.dtype],
+                }
+                _, self._idx, idx = np.intersect1d(
+                    self._basis.modes.astype(modes.dtype).view(dtype),
+                    modes.view(dtype),
+                    return_indices=True,
+                )
+                if self._idx.size < modes.shape[0]:
+                    warnings.warn(
+                        colored(
+                            "Some of the given modes are not in the pressure profile, "
+                            + "these modes will not be fixed.",
+                            "yellow",
+                        )
+                    )
+
+            self._dim_f = self._idx.size
+            # use given targets and weights if specified
+            if self.target.size == modes.shape[0]:
+                self.target = self._target[idx]
+            if self.weight.size == modes.shape[0]:
+                self.weight = self._weight[idx]
+            # use profile parameters as target if needed
+            if None in self.target or self.target.size != self.dim_f:
+                self.target = eq.IGphi_mn[self._idx]
+
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, IGphi_mn, **kwargs):
+        """Compute fixed-pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Pressure profile errors (Pa).
+
+        """
+        p = IGphi_mn[self._idx]
+        return self._shift_scale(p)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "IGphi_mn"

@@ -1515,6 +1515,10 @@ def plot_qs_error(
 
     fig, ax = _format_ax(ax)
 
+    ls = kwargs.get("ls", ["-", "-", "-"])
+    colors = kwargs.get("colors", ["r", "b", "g"])
+    markers = kwargs.get("markers", ["o", "o", "o"])
+
     data = eq.compute("R0")
     data = eq.compute("|B|", data=data)
     R0 = data["R0"]
@@ -1554,21 +1558,64 @@ def plot_qs_error(
 
     if log is True:
         if fB:
-            ax.semilogy(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.semilogy(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.semilogy(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.semilogy(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.semilogy(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.semilogy(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
     else:
         if fB:
-            ax.plot(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.plot(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.plot(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.plot(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.plot(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.plot(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
 
     ax.set_xlabel(_axis_labels_rtz[0])
-    fig.legend(loc="center right")
+    if kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kwargs", {"loc": "center right"}))
 
     fig.set_tight_layout(True)
     return fig, ax

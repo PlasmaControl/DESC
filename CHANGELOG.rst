@@ -1,6 +1,25 @@
 Changelog
 =========
 
+v0.5.1
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.5.0...v0.5.1>`_
+
+Major Changes
+
+- Add ability to change NFP after creation for equilibria, curves, and surfaces.
+- Fix rounding errors when building high resolution grids.
+- Rename ``LambdaGauge`` constraint to ``FixLambdaGauge`` for consistency.
+- Documentation updates to hdf5 output, VMEC conversion, plotting, etc.
+- Change default spectral indexing to "ansi".
+- Adds ``desc.examples.get`` to load boundaries, profiles, and full solutions from a number of example equilibria.
+- Default grid resolution is now 2x spectral resolution.
+- New surface method ``FourierRZToroidalSurface.from_input_file`` to create a surface from boundary coefficients in a DESC or VMEC input file.
+- Adds new tutorial notebooks demonstrating VMEC io, continuation, plotting, perturbations, optimization etc.
+- New documentation on perturbation theory and evaluating Zernike polynomials.
+- Fix bug preventing vacuum solutions from solving properly.  
+
 v0.5.0
 #######
 

@@ -3,12 +3,12 @@ from abc import ABC, abstractmethod
 import warnings
 import scipy.optimize
 
-from desc.backend import jnp, jit
+from desc.backend import jnp, jit, put, sign
 from desc.io import IOAble
 from desc.grid import Grid, LinearGrid
 from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
-from desc.basis import PowerSeries
+from desc.basis import PowerSeries, FourierZernikeBasis
 from desc.derivatives import Derivative
 from desc.utils import copy_coeffs
 
@@ -563,13 +563,13 @@ class PowerSeriesProfile(Profile):
         for ll, aa in zip(l, a):
             idx = self.basis.get_idx(ll, 0, 0)
             if aa is not None:
-                self.params[idx] = aa
+                self.params = put(self.params, idx, aa)
 
     def get_idx(self, l):
         """Get index into params array for given mode number(s)."""
         return self.basis.get_idx(L=l)
 
-    def change_resolution(self, L):
+    def change_resolution(self, L, M, N):
         """Set a new maximum mode number."""
         modes_old = self.basis.modes
         self.basis.change_resolution(L)
@@ -986,3 +986,209 @@ class MTanhProfile(Profile):
             warnings.warn("Fitting did not converge, parameters may not be correct")
         params = out.x
         return MTanhProfile(params, grid, name)
+
+
+class FourierZernikeProfile(Profile):
+    """Possibly anisotropic profile represented by Fourier-Zernike basis.
+
+    Parameters
+    ----------
+    params: array-like, shape(k,)
+        coefficients of the series. If modes is not supplied, assumed to be in ascending order
+        with no missing values. If modes is given, coefficients can be in any order or indexing.
+    modes : array-like, shape(k,3)
+        mode numbers for the associated coefficients. eg a[modes[i]] = params[i].
+        If None, assumes params are only the m=0 n=0 modes
+    grid : Grid
+        default grid to use for computing values using transform method
+    sym : {"auto", "sin", "cos", False}
+        Whether the basis should be stellarator symmetric.
+    name : str
+        name of the profile.
+
+    """
+
+    _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
+
+    def __init__(self, params, modes=None, grid=None, sym="auto", NFP=1, name=None):
+        super().__init__(grid, name)
+
+        params = np.atleast_1d(params)
+
+        if modes is None:
+            modes = np.hstack(
+                [np.arange(0, 2 * len(params), 2), np.zeros((len(params), 2))]
+            )
+
+        assert issubclass(modes.dtype.type, np.integer)
+
+        L = np.max(abs(modes[:, 0]))
+        M = np.max(abs(modes[:, 1]))
+        N = np.max(abs(modes[:, 2]))
+        if sym == "auto":
+            if np.all(params[np.where(sign(modes[:, 1]) != sign(modes[:, 2]))] == 0):
+                sym = "cos"
+            elif np.all(params[np.where(sign(modes[:, 1]) == sign(modes[:, 2]))] == 0):
+                sym = "sin"
+            else:
+                sym = False
+
+        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym)
+
+        self._params = copy_coeffs(params, modes, self.basis.modes)
+
+        self._transform = self._get_transform(self.grid)
+
+    def _get_transform(self, grid):
+        if grid is None:
+            return self._transform
+        if not isinstance(grid, Grid):
+            if np.isscalar(grid):
+                grid = np.linspace(0, 1, grid)
+            grid = np.atleast_1d(grid)
+            if grid.ndim == 1:
+                grid = np.pad(grid[:, np.newaxis], ((0, 0), (0, 2)))
+            grid = Grid(grid, sort=False)
+        transform = Transform(
+            grid,
+            self.basis,
+            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            build=True,
+        )
+        return transform
+
+    def __repr__(self):
+        """String form of the object."""
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", basis={})".format(self.basis)
+        return s
+
+    @property
+    def basis(self):
+        """Spectral basis for power series."""
+        return self._basis
+
+    @property
+    def grid(self):
+        """Default grid for computation."""
+        return self._grid
+
+    @grid.setter
+    def grid(self, new):
+        Profile.grid.fset(self, new)
+        self._transform.grid = self.grid
+        self._transform.build()
+
+    @property
+    def params(self):
+        """Parameter values."""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        if len(new) == self._basis.num_modes:
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"params should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+            )
+
+    def get_params(self, l, m, n):
+        """Get power series coefficients for given mode number(s)."""
+        l = np.atleast_1d(l).astype(int)
+        m = np.atleast_1d(l).astype(int)
+        n = np.atleast_1d(l).astype(int)
+        a = np.zeros_like(l).astype(float)
+
+        for ll, mm, nn in zip(l, m, n):
+            idx = self.basis.get_idx(ll, mm, nn)
+            a[idx] = self.params[idx]
+        return a
+
+    def set_params(self, l, m, n, a=None):
+        """Set specific power series coefficients."""
+        l, m, n, a = map(np.atleast_1d, (l, m, n, a))
+        a = np.broadcast_to(a, l.shape)
+        for ll, mm, nn, aa in zip(l, m, n, a):
+            idx = self.basis.get_idx(ll, mm, nn)
+            if aa is not None:
+                self.params = put(self.params, idx, aa)
+
+    def get_idx(self, l, m, n):
+        """Get index into params array for given mode number(s)."""
+        return self.basis.get_idx(l, m, n)
+
+    def change_resolution(self, L, M, N):
+        """Set a new maximum mode number."""
+        modes_old = self.basis.modes
+        self.basis.change_resolution(L, M, N)
+        self._transform = self._get_transform(self.grid)
+        self.params = copy_coeffs(self.params, modes_old, self.basis.modes)
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        params : array-like
+            polynomial coefficients to use, in ascending order. If not given, uses the
+            values given by the params attribute
+        grid : Grid or array-like
+            locations to compute values at. Defaults to self.grid
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        if params is None:
+            params = self.params
+        transform = self._get_transform(grid)
+        return transform.transform(params, dr=dr, dt=dt, dz=dz)
+
+    @classmethod
+    def from_values(
+        cls, r, t, z, f, L=6, M=0, N=0, NFP=1, rcond=None, w=None, grid=None, name=None
+    ):
+        """Fit a FourierZernikeProfile from point data.
+
+        Parameters
+        ----------
+        r, t, z : array-like, shape(k,)
+            coordinate locations in rho, theta, zeta
+        f : array-like, shape(k,)
+            function values
+        L, M, N : int
+            maximum mode numbers to fit
+        NFP : int
+            number of field periods
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(f)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(k,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+        grid : Grid
+            default grid to use for computing values using transform method
+        name : str
+            name of the profile
+
+        Returns
+        -------
+        profile : PowerSeriesProfile
+            profile in power series basis fit to given data.
+
+        """
+        nodes = np.hstack([r, t, z])
+        fitgrid = Grid(nodes)
+        fitgrid.weights = w if w is not None else np.ones_like(f)
+        basis = FourierZernikeBasis(L, M, N, NFP)
+        transform = Transform(fitgrid, basis, build_pinv=True)
+        params = transform.fit(f)
+        return cls(params, modes=basis.modes, NFP=NFP, grid=grid, name=name)

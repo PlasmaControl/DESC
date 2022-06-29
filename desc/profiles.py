@@ -115,6 +115,39 @@ class Profile(IOAble, ABC):
         p.name = self.name
         return p
 
+    def to_fourierzernike(self, L=6, M=0, N=0, NFP=1, xs=100, w=None):
+        """Convert this profile to a PowerSeriesProfile.
+
+        Parameters
+        ----------
+        L, M, N : int
+           maximum mode numbers
+        NFP : int
+            number of field periods
+        xs : int or ndarray
+            x locations to use for fit. If an integer, uses that many points linearly
+            spaced between 0,1
+        w : array-like, shape(M,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        profile : PowerSeriesProfile
+            profile in power series form.
+
+        """
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        f = self.compute(grid=xs)
+        r = xs
+        t = np.zeros_like(xs)
+        z = np.zeros_like(xs)
+        p = FourierZernikeProfile.from_values(
+            r, t, z, f, L, M, N, NFP, w, self.grid, self.name
+        )
+        return p
+
     def to_spline(self, knots=20, method="cubic2"):
         """Convert this profile to a SplineProfile.
 
@@ -1152,7 +1185,7 @@ class FourierZernikeProfile(Profile):
 
     @classmethod
     def from_values(
-        cls, r, t, z, f, L=6, M=0, N=0, NFP=1, rcond=None, w=None, grid=None, name=None
+        cls, r, t, z, f, L=6, M=0, N=0, NFP=1, w=None, grid=None, name=None
     ):
         """Fit a FourierZernikeProfile from point data.
 
@@ -1166,11 +1199,6 @@ class FourierZernikeProfile(Profile):
             maximum mode numbers to fit
         NFP : int
             number of field periods
-        rcond : float
-            Relative condition number of the fit. Singular values smaller than this
-            relative to the largest singular value will be ignored. The default value
-            is len(f)*eps, where eps is the relative precision of the float type, about
-            2e-16 in most cases.
         w : array-like, shape(k,)
             Weights to apply to the y-coordinates of the sample points. For gaussian
             uncertainties, use 1/sigma (not 1/sigma**2).

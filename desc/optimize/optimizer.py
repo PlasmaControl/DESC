@@ -268,7 +268,15 @@ class Optimizer(IOAble):
                             constraint
                         )
                     )
-            
+            perturb_options = options.pop("perturb_options", {})
+            perturb_options.setdefault("verbose", 0)
+            solve_options = options.pop("solve_options", {})
+            solve_options.setdefault("verbose", 0)
+            objective = WrappedEquilibriumObjective(
+                objective,
+                perturb_options=perturb_options,
+                solve_options=solve_options,
+            )
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
@@ -453,9 +461,7 @@ class Optimizer(IOAble):
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
             x_scale = "hess" if x_scale == "auto" else x_scale
-            
-            # if self.method == "auglag":
-            #     result = fmin_lag(fun, x0, lmbda0, mu0, grad, constr, gradconstr, ineq, gradineq)                
+                       
 
 
             result = fmintr(
@@ -474,6 +480,30 @@ class Optimizer(IOAble):
                 callback=None,
                 options=options,
             )
+        
+        elif self.method in Optimizer._desc_constrained_scalar_methods:
+            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
+            method = (
+                self.method if "bfgs" not in self.method else self.method.split("-")[0]
+            )
+            x_scale = "hess" if x_scale == "auto" else x_scale
+            
+           
+            gradconstr = jnp.array([])
+            gradineq = jnp.array([])
+            constr = jnp.array([nonlinear_constraints])
+            ineq = jnp.array([])
+            
+            #Want to be able to call nonlinear_constraint[i](x)
+            #also need dim(lmbda0) = dim(nonlinear_constraints)imopr
+            l = 0
+            for i in range(len(nonlinear_constraints)):
+                l = l + len(nonlinear_constraints[i](x0_reduced))
+            lmbda0 = jnp.ones(l)
+            mu0 = 10
+            
+            result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq)
+            
 
         elif self.method in Optimizer._desc_least_squares_methods:
 

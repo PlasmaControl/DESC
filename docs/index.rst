@@ -37,7 +37,7 @@
    notebooks/tutorials/00_Getting_Started_with_DESC.ipynb
    notebooks/tutorials/01_Using_DESC_Outputs.ipynb
    notebooks/tutorials/02_Script_Interface.ipynb
-
+   notebooks/tutorials/03_Quasi-Symmetry_Optimization.ipynb
 
 .. toctree::
    :maxdepth: 1

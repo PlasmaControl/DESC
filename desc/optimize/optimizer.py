@@ -272,11 +272,10 @@ class Optimizer(IOAble):
             perturb_options.setdefault("verbose", 0)
             solve_options = options.pop("solve_options", {})
             solve_options.setdefault("verbose", 0)
-            objective = WrappedEquilibriumObjective(
-                objective,
-                perturb_options=perturb_options,
-                solve_options=solve_options,
-            )
+            
+            constraint_objectives = ObjectiveFunction(nonlinear_constraints, eq)
+            objective.combine_args(constraint_objectives)
+            
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
@@ -462,7 +461,7 @@ class Optimizer(IOAble):
             )
             x_scale = "hess" if x_scale == "auto" else x_scale
                        
-
+            print(x0_reduced)
 
             result = fmintr(
                 compute_scalar_wrapped,
@@ -491,14 +490,12 @@ class Optimizer(IOAble):
            
             gradconstr = jnp.array([])
             gradineq = jnp.array([])
-            constr = jnp.array([nonlinear_constraints])
+            constr = jnp.array([constraint_objectives.compute])
             ineq = jnp.array([])
             
-            #Want to be able to call nonlinear_constraint[i](x)
-            #also need dim(lmbda0) = dim(nonlinear_constraints)imopr
             l = 0
-            for i in range(len(nonlinear_constraints)):
-                l = l + len(nonlinear_constraints[i](x0_reduced))
+            for i in range(len(constr)):
+                l = l + len(constr[i](x0_reduced))
             lmbda0 = jnp.ones(l)
             mu0 = 10
             

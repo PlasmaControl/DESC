@@ -42,7 +42,30 @@ class ObjectiveFunction(IOAble):
 
         if eq is not None:
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
+    
+    def combine_args(self,objectives):
+        self._set_state_vector()
+        
+        self._args = np.concatenate((self._args,[obj.args for obj in objectives]))
+        self._args = [arg for arg in arg_order if arg in self._args]
 
+        
+        self._dimensions = self.objectives[0].dimensions
+        
+        
+        self._dim_x = 0
+        self._x_idx = {}
+        for arg in self.args:
+            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
+            self._dim_x += self.dimensions[arg]
+        
+        for obj in objectives:
+            obj._args = self._args
+            obj._dimensions = self._dimensions
+            obj._dim_x = self._dim_x
+            obj._x_idx = self._x_idx
+            
+    
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indicies."""
         self._args = np.concatenate([obj.args for obj in self.objectives])

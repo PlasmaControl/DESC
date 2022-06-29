@@ -2,7 +2,7 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
-    LambdaGauge,
+    FixLambdaGauge,
     FixPressure,
     FixIota,
     FixPsi,

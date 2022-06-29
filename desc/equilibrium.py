@@ -132,9 +132,9 @@ class Equilibrium(_Configuration, IOAble):
             and (N_grid == int(N_grid))
             and (N_grid >= 0)
         ), "N_grid should be a non-negative integer or None, got {N_grid}"
-        self._L_grid = L_grid if L_grid is not None else self.L
-        self._M_grid = M_grid if M_grid is not None else self.M
-        self._N_grid = N_grid if N_grid is not None else self.N
+        self._L_grid = L_grid if L_grid is not None else 2 * self.L
+        self._M_grid = M_grid if M_grid is not None else 2 * self.M
+        self._N_grid = N_grid if N_grid is not None else 2 * self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
         self._solved = False
         self.optimizer_results = {}
@@ -226,34 +226,40 @@ class Equilibrium(_Configuration, IOAble):
         )
 
     def change_resolution(
-        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None
+        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None, NFP=None
     ):
         """Set the spectral resolution and real space grid resolution.
+
         Parameters
         ----------
         L : int
-            maximum radial zernike mode number
+            maximum radial zernike mode number.
         M : int
-            maximum poloidal fourier mode number
+            maximum poloidal fourier mode number.
         N : int
-            maximum toroidal fourier mode number
+            maximum toroidal fourier mode number.
         L_grid : int
-            radial real space grid resolution
+            radial real space grid resolution.
         M_grid : int
-            poloidal real space grid resolution
+            poloidal real space grid resolution.
         N_grid : int
-            toroidal real space grid resolution
+            toroidal real space grid resolution.
+        NFP : int
+            number of field periods.
+
         """
-        L_change = M_change = N_change = False
+        L_change = M_change = N_change = NFP_change = False
         if L is not None and L != self.L:
             L_change = True
         if M is not None and M != self.M:
             M_change = True
         if N is not None and N != self.N:
             N_change = True
+        if NFP is not None and NFP != self.NFP:
+            NFP_change = True
 
-        if any([L_change, M_change, N_change]):
-            super().change_resolution(L, M, N)
+        if any([L_change, M_change, N_change, NFP_change]):
+            super().change_resolution(L, M, N, NFP)
 
         if L_grid is not None and L_grid != self.L_grid:
             self._L_grid = L_grid
@@ -858,7 +864,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             # TODO: make this more efficient (minimize re-building)
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(
+                profiles=self.inputs[ii]["objective"] != "vacuum"
+            )
 
             if ii == start_from:
                 equil = self[ii]
@@ -890,6 +898,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
+                        constraints=constraints,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
                         verbose=verbose,

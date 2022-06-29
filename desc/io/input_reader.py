@@ -169,7 +169,7 @@ class InputReader:
             "nfev": np.atleast_1d(None),
             "objective": "force",
             "optimizer": "lsq-exact",
-            "spectral_indexing": "fringe",
+            "spectral_indexing": "ansi",
             "node_pattern": "jacobi",
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
@@ -192,6 +192,7 @@ class InputReader:
             file = open(fname, "r")
         else:
             file = fname
+        file.seek(0)
 
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
 
@@ -530,9 +531,9 @@ class InputReader:
 
         # unsupplied values
         if np.sum(inputs["M_grid"]) == 0:
-            inputs["M_grid"] = np.rint(1.5 * inputs["M"]).astype(int)
+            inputs["M_grid"] = (2 * inputs["M"]).astype(int)
         if np.sum(inputs["N_grid"]) == 0:
-            inputs["N_grid"] = np.rint(1.5 * inputs["N"]).astype(int)
+            inputs["N_grid"] = (2 * inputs["N"]).astype(int)
         if np.sum(inputs["axis"]) == 0:
             axis_idx = np.where(inputs["surface"][:, 1] == 0)[0]
             inputs["axis"] = inputs["surface"][axis_idx, 2:]
@@ -572,22 +573,32 @@ class InputReader:
 
         return inputs_list
 
-    def write_desc_input(self, filename, inputs=None):
+    @staticmethod
+    def write_desc_input(filename, inputs, header=""):
         """Generate a DESC input file from a dictionary of parameters.
 
         Parameters
         ----------
         filename : str or path-like
             name of the file to create
-        inputs : dict
+        inputs : dict or list of dict
             dictionary of input parameters
+        header : str
+            text to print at the top of the file
 
         """
-        # default to use self.inputs
-        if inputs is None:
-            inputs = self.inputs
 
-        f = open(filename, "w+")
+        # open the file, unless its already open
+        if not isinstance(filename, io.IOBase):
+            f = open(filename, "w+")
+        else:
+            f = filename
+        f.seek(0)
+
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+
+        f.write(header + "\n")
 
         f.write("# global parameters \n")
         f.write("sym = {} \n".format(inputs[0]["sym"]))
@@ -666,7 +677,7 @@ class InputReader:
         f.close()
 
     @staticmethod
-    def vmec_to_desc_input(vmec_fname, desc_fname, close=True):
+    def vmec_to_desc_input(vmec_fname, desc_fname):
         """Convert a VMEC input file to an equivalent DESC input file.
 
         Parameters
@@ -677,34 +688,72 @@ class InputReader:
             filename of DESC input file. If it already exists it is overwritten.
 
         """
-        # open files, unless they are already open files
+        now = datetime.now()
+        date = now.strftime("%m/%d/%Y")
+        time = now.strftime("%H:%M:%S")
+        header = (
+            "# This DESC input file was auto generated from the VMEC input file\n"
+            + "# {}\n# on {} at {}.\n".format(vmec_fname, date, time)
+            + "# For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html\n"
+        )
+        inputs = InputReader.parse_vmec_inputs(vmec_fname)
+        InputReader.write_desc_input(desc_fname, inputs, header)
+
+    @staticmethod
+    def parse_vmec_inputs(vmec_fname):
+        """Parse a VMEC input file into a dictionary of DESC inputs
+
+        Parameters
+        ----------
+        vmec_fname : str or PathLike
+            path to VMEC input file
+
+        Returns
+        -------
+        inputs : dict
+            dictionary of inputs formatted for DESC
+
+        """
+
         if not isinstance(vmec_fname, io.IOBase):
             vmec_file = open(vmec_fname, "r")
         else:
             vmec_file = vmec_fname
-        if not isinstance(desc_fname, io.IOBase):
-            desc_file = open(desc_fname, "w")
-        else:
-            desc_file = desc_fname
 
-        desc_file.seek(0)
-        now = datetime.now()
-        date = now.strftime("%m/%d/%Y")
-        time = now.strftime("%H:%M:%S")
-        desc_file.write(
-            "# This DESC input file was auto generated from the VMEC input file\n"
-            + "# {}\n# on {} at {}.\n\n".format(vmec_fname, date, time)
-        )
-
+        vmec_file.seek(0)
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
         Ntor = 99
 
-        pres_scale = 1.0
-        p_l = np.array([0.0])
-        i_l = np.array([0.0])
-        axis = np.array([[0, 0, 0.0]])
-        bdry = np.array([[0, 0, 0.0, 0.0]])
+        # default values
+        inputs = {
+            "sym": False,
+            "NFP": 1,
+            "Psi": 1.0,
+            "L": None,
+            "M": 0,
+            "N": 0,
+            "L_grid": None,
+            "M_grid": 0,
+            "N_grid": 0,
+            "pres_ratio": 1.0,
+            "bdry_ratio": 1.0,
+            "pert_order": 1,
+            "ftol": 1e-2,
+            "xtol": 1e-6,
+            "gtol": 1e-6,
+            "nfev": None,
+            "objective": "force",
+            "optimizer": "lsq-exact",
+            "spectral_indexing": "ansi",
+            "node_pattern": "jacobi",
+            "bdry_mode": "lcfs",
+            "pressure": np.atleast_2d((0, 0.0)),
+            "iota": np.atleast_2d((0, 0.0)),
+            "surface": np.atleast_2d((0, 0, 0.0, 0.0)),
+            "axis": np.atleast_2d((0, 0.0, 0.0)),
+        }
 
+        pres_scale = 1.0
         for line in vmec_file:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
@@ -717,9 +766,9 @@ class InputReader:
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
                 if re.search(r"T", match.group(0), re.IGNORECASE):
-                    desc_file.write("sym = 0\n")
+                    inputs["sym"] = 0
                 else:
-                    desc_file.write("sym = 1\n")
+                    inputs["sym"] = 1
             match = re.search(r"NFP\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -727,7 +776,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("NFP = {:3d}\n".format(numbers[0]))
+                inputs["NFP"] = numbers[0]
             match = re.search(r"PHIEDGE\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -735,7 +784,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("Psi = {:16.8E}\n".format(numbers[0]))
+                inputs["Psi"] = numbers[0]
             match = re.search(r"MPOL\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -743,7 +792,10 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("M_pol = {:3d}\n".format(numbers[0]))
+                inputs["M"] = numbers[0]
+                inputs["L"] = numbers[0]
+                inputs["L_grid"] = 2 * numbers[0]
+                inputs["M_grid"] = 2 * numbers[0]
             match = re.search(r"NTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -751,7 +803,8 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                desc_file.write("N_tor = {:3d}\n".format(numbers[0]))
+                inputs["N"] = numbers[0]
+                inputs["N_grid"] = 2 * numbers[0]
                 Ntor = numbers[0]
 
             # pressure profile
@@ -803,9 +856,14 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if p_l.size < l + 1:
-                        p_l = np.pad(p_l, (0, l + 1 - p_l.size), mode="constant")
-                    p_l[l] = numbers[k]
+                    if len(inputs["pressure"]) < l + 1:
+                        inputs["pressure"] = np.pad(
+                            inputs["pressure"],
+                            ((0, l + 1 - len(inputs["pressure"])), (0, 0)),
+                            mode="constant",
+                        )
+                    inputs["pressure"][l, 1] = numbers[k]
+                    inputs["pressure"][l, 0] = l
 
             # rotational transform
             match = re.search(
@@ -831,9 +889,14 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if i_l.size < l + 1:
-                        i_l = np.pad(i_l, (0, l + 1 - i_l.size), mode="constant")
-                    i_l[l] = numbers[k]
+                    if len(inputs["iota"]) < l + 1:
+                        inputs["iota"] = np.pad(
+                            inputs["iota"],
+                            ((0, l + 1 - len(inputs["iota"])), (0, 0)),
+                            mode="constant",
+                        )
+                    inputs["iota"][l, 1] = numbers[k]
+                    inputs["iota"][l, 0] = l
 
             # magnetic axis
             match = re.search(
@@ -850,12 +913,14 @@ class InputReader:
                         l = -k + Ntor + 1
                     else:
                         l = k
-                    idx = np.where(axis[:, 0] == l)[0]
+                    idx = np.where(inputs["axis"][:, 0] == l)[0]
                     if np.size(idx):
-                        axis[idx[0], 1] += numbers[k]
+                        inputs["axis"][idx[0], 1] += numbers[k]
                     else:
-                        axis = np.pad(axis, ((0, 1), (0, 0)), mode="constant")
-                        axis[-1, :] = np.array([l, numbers[k], 0.0])
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([l, numbers[k], 0.0])
             match = re.search(
                 r"ZAXIS\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
             )
@@ -870,11 +935,11 @@ class InputReader:
                         l = k - Ntor - 1
                     else:
                         l = -k
-                    idx = np.where(axis[:, 0] == l)[0]
+                    idx = np.where(inputs["axis"][:, 0] == l)[0]
                     if np.size(idx) > 0:
-                        axis[idx[0], 2] += numbers[k]
+                        inputs["axis"][idx[0], 2] += numbers[k]
                     else:
-                        axis = np.pad(axis, ((0, 1), (0, 0)), mode="constant")
+                        axis = np.pad(inputs["axis"], ((0, 1), (0, 0)), mode="constant")
                         axis[-1, :] = np.array([l, 0.0, numbers[k]])
 
             # boundary shape
@@ -905,23 +970,27 @@ class InputReader:
                     m = abs(m)
                 RBS = numbers[2]
                 if m != 0:  # RBS*sin(m*t)*cos(n*p)
-                    m_idx = np.where(bdry[:, 0] == -m)[0]
-                    n_idx = np.where(bdry[:, 1] == n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] += m_sgn * RBS
+                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * RBS
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, n, m_sgn * RBS, 0.0])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array([-m, n, m_sgn * RBS, 0.0])
                 if n != 0:  # -RBS*cos(m*t)*sin(n*p)
-                    m_idx = np.where(bdry[:, 0] == m)[0]
-                    n_idx = np.where(bdry[:, 1] == -n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] += -n_sgn * RBS
+                        inputs["surface"][m_idx[idx[0]], 2] += -n_sgn * RBS
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([m, -n, -n_sgn * RBS, 0.0])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array([m, -n, -n_sgn * RBS, 0.0])
             # RBC*cos(m*t-n*p) = RBC*cos(m*t)*cos(n*p) + RBC*sin(m*t)*sin(n*p)
             match = re.search(
                 r"RBC\(\s*"
@@ -949,23 +1018,29 @@ class InputReader:
                     m = abs(m)
                 RBC = numbers[2]
                 # RBC*cos(m*t)*cos(n*p)
-                m_idx = np.where(bdry[:, 0] == m)[0]
-                n_idx = np.where(bdry[:, 1] == n)[0]
+                m_idx = np.where(inputs["surface"][:, 0] == m)[0]
+                n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    bdry[m_idx[idx[0]], 2] += RBC
+                    inputs["surface"][m_idx[idx[0]], 2] += RBC
                 else:
-                    bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                    bdry[-1, :] = np.array([m, n, RBC, 0.0])
+                    inputs["surface"] = np.pad(
+                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                    )
+                    inputs["surface"][-1, :] = np.array([m, n, RBC, 0.0])
                 if m != 0 and n != 0:  # RBC*sin(m*t)*sin(n*p)
-                    m_idx = np.where(bdry[:, 0] == -m)[0]
-                    n_idx = np.where(bdry[:, 1] == -n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 2] += m_sgn * n_sgn * RBC
+                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * n_sgn * RBC
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, -n, m_sgn * n_sgn * RBC, 0.0])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array(
+                            [-m, -n, m_sgn * n_sgn * RBC, 0.0]
+                        )
             # ZBS*sin(m*t-n*p) = ZBS*sin(m*t)*cos(n*p) - ZBS*cos(m*t)*sin(n*p)
             match = re.search(
                 r"ZBS\(\s*"
@@ -993,23 +1068,27 @@ class InputReader:
                     m = abs(m)
                 ZBS = numbers[2]
                 if m != 0:  # ZBS*sin(m*t)*cos(n*p)
-                    m_idx = np.where(bdry[:, 0] == -m)[0]
-                    n_idx = np.where(bdry[:, 1] == n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] += m_sgn * ZBS
+                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * ZBS
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, n, 0.0, m_sgn * ZBS])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array([-m, n, 0.0, m_sgn * ZBS])
                 if n != 0:  # -ZBS*cos(m*t)*sin(n*p)
-                    m_idx = np.where(bdry[:, 0] == m)[0]
-                    n_idx = np.where(bdry[:, 1] == -n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] += -n_sgn * ZBS
+                        inputs["surface"][m_idx[idx[0]], 3] += -n_sgn * ZBS
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([m, -n, 0.0, -n_sgn * ZBS])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array([m, -n, 0.0, -n_sgn * ZBS])
             # ZBC*cos(m*t-n*p) = ZBC*cos(m*t)*cos(n*p) + ZBC*sin(m*t)*sin(n*p)
             match = re.search(
                 r"ZBC\(\s*"
@@ -1037,23 +1116,29 @@ class InputReader:
                     m = abs(m)
                 ZBC = numbers[2]
                 # ZBC*cos(m*t)*cos(n*p)
-                m_idx = np.where(bdry[:, 0] == m)[0]
-                n_idx = np.where(bdry[:, 1] == n)[0]
+                m_idx = np.where(inputs["surface"][:, 0] == m)[0]
+                n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    bdry[m_idx[idx[0]], 3] += ZBC
+                    inputs["surface"][m_idx[idx[0]], 3] += ZBC
                 else:
-                    bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                    bdry[-1, :] = np.array([m, n, 0.0, ZBC])
+                    inputs["surface"] = np.pad(
+                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                    )
+                    inputs["surface"][-1, :] = np.array([m, n, 0.0, ZBC])
                 if m != 0 and n != 0:  # ZBC*sin(m*t)*sin(n*p)
-                    m_idx = np.where(bdry[:, 0] == -m)[0]
-                    n_idx = np.where(bdry[:, 1] == -n)[0]
+                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
+                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        bdry[m_idx[idx[0]], 3] += m_sgn * n_sgn * ZBC
+                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * n_sgn * ZBC
                     else:
-                        bdry = np.pad(bdry, ((0, 1), (0, 0)), mode="constant")
-                        bdry[-1, :] = np.array([-m, -n, 0.0, m_sgn * n_sgn * ZBC])
+                        inputs["surface"] = np.pad(
+                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["surface"][-1, :] = np.array(
+                            [-m, -n, 0.0, m_sgn * n_sgn * ZBC]
+                        )
 
             # catch multi-line inputs
             match = re.search(r"=", command)
@@ -1067,48 +1152,11 @@ class InputReader:
                     raise IOError(
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
-
-        p_l *= pres_scale
-        desc_file.write("\n")
-        desc_file.write("# pressure and rotational transform profiles\n")
-        for k in range(max(p_l.size, i_l.size)):
-            if k >= p_l.size:
-                desc_file.write(
-                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, 0.0, i_l[k])
-                )
-            elif k >= i_l.size:
-                desc_file.write(
-                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, p_l[k], 0.0)
-                )
-            else:
-                desc_file.write(
-                    "l: {:3d}  p = {:16.8E}  i = {:16.8E}\n".format(k, p_l[k], i_l[k])
-                )
-
-        desc_file.write("\n")
-        desc_file.write("# magnetic axis initial guess\n")
-        for k in range(np.shape(axis)[0]):
-            desc_file.write(
-                "n: {:3d}  R0 = {:16.8E}  Z0 = {:16.8E}\n".format(
-                    int(axis[k, 0]), axis[k, 1], axis[k, 2]
-                )
-            )
-
-        desc_file.write("\n")
-        desc_file.write("# fixed-boundary surface shape\n")
-        for k in range(np.shape(bdry)[0]):
-            desc_file.write(
-                "m: {:3d}  n: {:3d}  R1 = {:16.8E}  Z1 = {:16.8E}\n".format(
-                    int(bdry[k, 0]), int(bdry[k, 1]), bdry[k, 2], bdry[k, 3]
-                )
-            )
-
-        desc_file.truncate()
-
-        # close files
+        inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
+        inputs["pressure"][:, 1] *= pres_scale
         vmec_file.close()
-        if close:
-            desc_file.close()
+
+        return inputs
 
 
 # NOTE: this has to be outside the class to work with autodoc

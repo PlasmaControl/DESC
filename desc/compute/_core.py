@@ -453,15 +453,6 @@ def compute_rotational_transform_v2(
         data["e_theta"], data["e_zeta_r"]
     )
 
-    # start with the Δ(poloidal flux)
-    flux_scale = mu_0 / 2 / jnp.pi
-    rot_transform = flux_scale * _toroidal_current(
-        current_density.grid, data["|e_rho x e_theta|"], data["J^zeta"]
-    )
-    rot_transform_r = flux_scale * _toroidal_current(
-        current_density.grid, data["|e_rho x e_theta|"], data["J^zeta"], dr=True
-    )
-
     # numerator and denominator of iota (see eq. 11)
     num = psi_r * (A := (g_tt * lam_z - g_tz * (1 + lam_t)))
     num_r = psi_rr * A + psi_r * (
@@ -472,25 +463,36 @@ def compute_rotational_transform_v2(
     dtdz = current_density.grid.spacing[:, 1:].prod(axis=1)
     num, num_r, den, den_r = dtdz * (num, num_r, den, den_r)
 
-    # collect collocation indices for each constant rho flux surface
-    surfaces = dict()
-    for index, rho in enumerate(current_density.grid.nodes[:, 0]):
-        surfaces.setdefault(rho, list()).append(index)
+    # start with the Δ(poloidal flux)
+    iota, iota_r = (mu_0 / 2 / jnp.pi) * _toroidal_current(
+        current_density.grid, data["|e_rho x e_theta|"], data["J^zeta"]
+    )
 
-    # flux surface average integration
-    for i, surface in enumerate(surfaces.values()):
-        rot_transform[i] += num[surface].sum()
-        rot_transform[i] /= den[surface].sum()
-        rot_transform_r[i] += num_r[surface].sum()
-        rot_transform_r[i] /= den_r[surface].sum()
+    # DESIRED ALGORITHM
+    # # collect collocation indices for each constant rho flux surface
+    # surfaces = dict()
+    # for index, r in enumerate(rho):
+    #     surfaces.setdefault(r, list()).append(index)
+    # # flux surface average integration
+    # for i, surface in enumerate(surfaces.values()):
+    #     iota[i] += num[surface].sum()
+    #     iota[i] /= den[surface].sum()
 
-    data["iota"] = rot_transform
-    data["iota_r"] = rot_transform_r
+    # NO LOOP IMPLEMENTATION
+    rho = current_density.grid.nodes[:, 0]
+    bins = jnp.append(jnp.unique(rho), 1)
+    iota += jnp.histogram(rho, bins=bins, weights=num)[0]
+    iota /= jnp.histogram(rho, bins=bins, weights=den)[0]
+    iota_r += jnp.histogram(rho, bins=bins, weights=num_r)[0]
+    iota_r /= jnp.histogram(rho, bins=bins, weights=den_r)[0]
+
+    data["iota"] = iota
+    data["iota_r"] = iota
     # TODO: _rr?
     return data
 
 
-def _toroidal_current(grid, area_element, toroidal_current_density_av, dr=False):
+def _toroidal_current(grid, area_element, toroidal_current_density_av):
     """
     Parameters
     ----------
@@ -501,23 +503,14 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av, dr=False)
     toroidal_current_density_av : ndarray
         Flux surface average of the contravariant toroidal component of plasma current
         on each flux surface.
-    dr : boolean
-        Whether to return the partial derivative wrt rho of the toroidal current.
 
     Returns
     -------
-    Toroidal current: ndarray
+    current_annuli.cumsum(): ndarray
         Toroidal current enclosed by each flux surface.
+    current_annuli: ndarray
+        Toroidal current enclosed by each flux surface derivative wrt rho.
     """
-    # useful to visualize grid, paste in terminal
-    # from desc.grid import ConcentricGrid
-    # import numpy as np
-    # np.set_printoptions(precision=3, floatmode="fixed")
-    # g = ConcentricGrid(L=2, M=3, N=2, node_pattern='jacobi')
-    # print("nodes", "             ", "spacing")
-    # for a, b in zip(g.nodes, g.spacing):
-    #    print(a, b)
-
     # Want to use a portion of the collocation grid belonging to a zeta surface.
     # The grid is sorted with priority [rho=low, theta=mid, zeta=high].
     change_zeta = _where_change(grid.nodes[:, -1])
@@ -530,7 +523,7 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av, dr=False)
     change_rho = _where_change(grid.nodes[:stop_zeta, 0])
     area_annuli = jnp.add.reduceat(ds, change_rho)
     current_annuli = toroidal_current_density_av * area_annuli
-    return current_annuli if dr else current_annuli.cumsum()
+    return current_annuli.cumsum(), current_annuli
     # equivalent non-vectorized algorithm
     # for i, e in enumerate(zip(change_rho, jnp.roll(change_rho, -1))):
     #     start, stop = e
@@ -543,13 +536,13 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av, dr=False)
 # in the grid class with rho, theta, and zeta as optional booleans for which arrays to return.
 # If we want to compute objectives on multiple flux surfaces at once, this would
 # be helpful for either reshaping arrays (with awkward arrays, which I think would provide
-# the cleanest solution) or for extracting arrays corresponding to surfaces.
+# the cleanest solution) or for extracting arrays corresponding to a surface.
 def _where_change(x):
     """
-    Example:
-            change_zeta = _where_change(grid.nodes[:, -1])
-            first_constant_zeta_surface = grid.nodes[change_zeta[0]:change_zeta[1]]
-            ith_constant_zeta_surface = grid.nodes[change_zeta[i-1]:change_zeta[i]]
+    Example
+    -------
+        change_zeta = _where_change(grid.nodes[:, -1])
+        ith_constant_zeta_surface = grid.nodes[change_zeta[i-1]:change_zeta[i]]
 
     Parameters
     ----------
@@ -558,7 +551,7 @@ def _where_change(x):
 
     Returns
     -------
-    where_change : ndarray
+    change : ndarray
         Indices of x where elements change value. Empty only if x has no elements.
         Otherwise, always includes index 0. Never includes last index (unless it is 0).
     """

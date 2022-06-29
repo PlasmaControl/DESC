@@ -744,7 +744,7 @@ class InputReader:
             "nfev": None,
             "objective": "force",
             "optimizer": "lsq-exact",
-            "spectral_indexing": "fringe",
+            "spectral_indexing": "ansi",
             "node_pattern": "jacobi",
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),

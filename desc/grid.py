@@ -71,9 +71,12 @@ class Grid(IOAble):
 
     def _count_nodes(self):
         """Count unique values of coordinates."""
-        self._num_rho = np.unique(self.nodes[:, 0]).size
-        self._num_theta = np.unique(self.nodes[:, 1]).size
-        self._num_zeta = np.unique(self.nodes[:, 2]).size
+        self._unique_rho = np.unique(self.nodes[:, 0])
+        self._unique_theta = np.unique(self.nodes[:, 1])
+        self._unique_zeta = np.unique(self.nodes[:, 2])
+        self._num_rho = self._unique_rho.size
+        self._num_theta = self._unique_theta.size
+        self._num_zeta = self._unique_zeta.size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -108,6 +111,7 @@ class Grid(IOAble):
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
+        # TODO: avoid double calls to np.unique in count_nodes and create_nodes
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
@@ -186,6 +190,21 @@ class Grid(IOAble):
         return self._num_zeta
 
     @property
+    def unique_rho(self):
+        """ndarray: unique rho coordinates"""
+        return self._unique_rho
+
+    @property
+    def unique_theta(self):
+        """ndarray: unique theta coordinates"""
+        return self._unique_theta
+
+    @property
+    def unique_zeta(self):
+        """ndarray: unique zeta coordinates"""
+        return self._unique_rho
+
+    @property
     def axis(self):
         """ndarray: Indices of nodes at magnetic axis."""
         return self.__dict__.setdefault("_axis", np.array([]))
@@ -216,7 +235,7 @@ class LinearGrid(Grid):
     Parameters
     ----------
     L : int
-        radial grid resolution (L radial nodes, Defualt = 1)
+        radial grid resolution (L radial nodes, Default = 1)
     M : int
         poloidal grid resolution (M poloidal nodes, Default = 1)
     N : int
@@ -297,7 +316,7 @@ class LinearGrid(Grid):
         Parameters
         ----------
         L : int
-            radial grid resolution (L radial nodes, Defualt = 1)
+            radial grid resolution (L radial nodes, Default = 1)
         M : int
             poloidal grid resolution (M poloidal nodes, Default = 1)
         N : int
@@ -442,7 +461,6 @@ class QuadratureGrid(Grid):
     """
 
     def __init__(self, L, M, N, NFP=1):
-
         self._L = L
         self._M = M
         self._N = N
@@ -466,7 +484,7 @@ class QuadratureGrid(Grid):
         Parameters
         ----------
         L : int
-            radial grid resolution (L radial nodes, Defualt = 1)
+            radial grid resolution (L radial nodes, Default = 1)
         M : int
             poloidal grid resolution (M poloidal nodes, Default = 1)
         N : int
@@ -659,7 +677,7 @@ class ConcentricGrid(Grid):
         """
 
         def ocs(L):
-            # Ramos-Lopez, et al “Optimal Sampling Patterns for Zernike Polynomials.”
+            # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
             # Applied Mathematics and Computation 274 (February 2016): 247–57.
             # https://doi.org/10.1016/j.amc.2015.11.006.
             j = np.arange(1, L // 2 + 2)
@@ -705,7 +723,7 @@ class ConcentricGrid(Grid):
             theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
             if rotation in {None, False}:
                 if self.sym:
-                    # this is emperically chosen, could be something different, just
+                    # this is empirically chosen, could be something different, just
                     # need to avoid symmetry at theta=0, pi
                     offset = dtheta / 3
                 else:

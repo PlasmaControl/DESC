@@ -59,7 +59,7 @@ def compute_contravariant_magnetic_field(
         component of the magnetic field, differentiated wrt y.
 
     """
-    data = compute_toroidal_flux(Psi, iota, data=data)
+    data = compute_toroidal_flux(Psi, iota.grid, data=data)
     data = compute_rotational_transform(i_l, iota, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
     data = compute_jacobian(

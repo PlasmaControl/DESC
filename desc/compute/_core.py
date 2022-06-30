@@ -91,7 +91,7 @@ def cross(a, b, axis=-1):
 
 
 def compute_flux_coords(
-    iota,
+    grid,
     data=None,
     **kwargs,
 ):
@@ -99,8 +99,8 @@ def compute_flux_coords(
 
     Parameters
     ----------
-    iota : Profile
-        Transforms i_l coefficients to real space.
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
 
     Returns
     -------
@@ -111,16 +111,16 @@ def compute_flux_coords(
     if data is None:
         data = {}
 
-    data["rho"] = iota.grid.nodes[:, 0]
-    data["theta"] = iota.grid.nodes[:, 1]
-    data["zeta"] = iota.grid.nodes[:, 2]
+    data["rho"] = grid.nodes[:, 0]
+    data["theta"] = grid.nodes[:, 1]
+    data["zeta"] = grid.nodes[:, 2]
 
     return data
 
 
 def compute_toroidal_flux(
     Psi,
-    iota,
+    grid,
     data=None,
     **kwargs,
 ):
@@ -130,8 +130,8 @@ def compute_toroidal_flux(
     ----------
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
-    iota : Profile
-        Transforms i_l coefficients to real space.
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
 
     Returns
     -------
@@ -140,7 +140,7 @@ def compute_toroidal_flux(
         Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
-    data = compute_flux_coords(iota, data=data)
+    data = compute_flux_coords(grid, data=data)
 
     data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
     data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
@@ -240,7 +240,7 @@ def compute_cartesian_coords(
         Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
     """
-    data = compute_flux_coords(R_transform, data=data)
+    data = compute_flux_coords(R_transform.grid, data=data)
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     data["phi"] = data["zeta"]
@@ -368,7 +368,7 @@ def compute_rotational_transform(
     return data
 
 
-# TODO: rename function. should I combine into above function with default args?
+# TODO: rename function. combine into above function with default args?
 # TODO: test
 def compute_rotational_transform_v2(
     R_lmn,
@@ -422,11 +422,11 @@ def compute_rotational_transform_v2(
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
     I_l : ndarray
-        Spectral coefficients of I (rho) -- toroidal current profile.
+        Spectral coefficients of I(rho) -- toroidal current profile.
     toroidal_current : Profile
         Transforms I_l coefficients to real space.
     jzeta_l : ndarray
-        Spectral coefficients of J^zeta (rho) -- toroidal current density profile.
+        Spectral coefficients of J^zeta(rho) -- toroidal current density profile.
     toroidal_current_density : Profile
         Transforms jzeta_l coefficients to real space.
 
@@ -439,6 +439,7 @@ def compute_rotational_transform_v2(
     """
     input_is_current = I_l is not None and toroidal_current is not None
     input_is_density = jzeta_l is not None and toroidal_current_density is not None
+
     if input_is_current:
         profile = toroidal_current
     elif input_is_density:
@@ -448,75 +449,132 @@ def compute_rotational_transform_v2(
 
     if data is None:
         data = {}
-    # TODO: toroidal flux require iota for profile?
-    data = compute_toroidal_flux(Psi, profile, data)
+    data = compute_toroidal_flux(Psi, profile.grid, data)
     data = compute_lambda(L_lmn, L_transform, data)
     data = compute_covariant_metric_coefficients(
         R_lmn, Z_lmn, R_transform, Z_transform, data
     )
 
+    # compute the Δ(poloidal flux) generated from toroidal current
+    scale = mu_0 / 2 / jnp.pi
+    if input_is_current:
+        data["I"] = profile.compute(I_l, dr=0)
+        poloidal_flux = scale * data["I"]
+        poloidal_flux_r = scale * profile.compute(I_l, dr=1)
+        poloidal_flux_rr = scale * profile.compute(I_l, dr=2)
+    else:
+        # integrate the toroidal density current
+        data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
+        data["J^zeta"] = profile.compute(jzeta_l, dr=0)
+        poloidal_flux, poloidal_flux_r = scale * _toroidal_current(
+            profile.grid, data["|e_rho x e_theta|"], data["J^zeta"]
+        )
+        __, poloidal_flux_rr = scale * _toroidal_current(
+            profile.grid, data["|e_rho x e_theta|"], profile.compute(jzeta_l, dr=1)
+        )
+
+    # _r, _t, _z denote derivatives wrt rho, theta, zeta as usual.
+    # letters after the second _ denote derivative for the g metric coefficients
     psi_r = data["psi_r"]
     psi_rr = data["psi_rr"]
     lam_t = data["lambda_t"]
-    lam_tr = data["lambda_tr"]
+    lam_tr = data["lambda_rt"]
+    lam_trr = data["lambda_rrt"]
     lam_z = data["lambda_z"]
-    lam_zr = data["lambda_zr"]
+    lam_zr = data["lambda_rz"]
+    lam_zrr = data["lambda_rrz"]
     g_tt = data["g_tt"]
     g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
+    g_tt_rr = 2 * (
+        dot(data["e_theta_r"], data["e_theta_r"])
+        + dot(data["e_theta"], data["e_theta_rr"])
+    )
     g_tz = data["g_tz"]
     g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
         data["e_theta"], data["e_zeta_r"]
     )
-
-    # numerator and denominator of iota (see eq. 11)
-    num = psi_r * (A := (g_tt * lam_z - g_tz * (1 + lam_t)))
-    num_r = psi_rr * A + psi_r * (
-        g_tt_r * lam_z + g_tt * lam_zr - g_tz_r * (1 + lam_t) - g_tz * lam_tr
+    g_tz_rr = (
+        dot(data["e_theta_rr"], data["e_zeta"])
+        + 2 * dot(data["e_theta_r"], data["e_zeta_r"])
+        + dot(data["e_theta"], data["e_zeta_rr"])
     )
-    den = psi_r * g_tt
-    den_r = psi_rr * g_tt + psi_r * g_tt_r
+
+    # integrands of the flux surface averages in eq. 11
+    # num = numerator, den = denominator
     dtdz = profile.grid.spacing[:, 1:].prod(axis=1)
-    num, num_r, den, den_r = dtdz * (num, num_r, den, den_r)
+    num = dtdz * psi_r * (A := (g_tt * lam_z - g_tz * (1 + lam_t)))
+    num_r = dtdz * psi_rr * A + psi_r * (
+        A_r := (g_tt_r * lam_z + g_tt * lam_zr - g_tz_r * (1 + lam_t) - g_tz * lam_tr)
+    )
+    num_rr = dtdz * 2 * psi_rr * A_r + psi_r * (
+        g_tt_rr * lam_z
+        + 2 * g_tt_r * lam_zr
+        + g_tt * lam_zrr
+        - g_tz_rr * (1 + lam_t)
+        - 2 * g_tz_r * lam_tr
+        + g_tz * lam_trr
+    )
+    den = dtdz * psi_r * g_tt
+    den_r = dtdz * psi_rr * g_tt + psi_r * g_tt_r
+    den_rr = dtdz * 2 * psi_rr * g_tt_r + psi_r * g_tt_rr
 
-    # start with the Δ(poloidal flux)
-    if input_is_current:
-        data["I"] = profile.compute(I_l, dr=0)
-        I_r = profile.compute(I_l, dr=1)
-        iota = mu_0 / 2 / jnp.pi * data["I"]
-        iota_r = mu_0 / 2 / jnp.pi * I_r
-    else:
-        data["J^zeta"] = profile.compute(jzeta_l, dr=0)
-        data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
-        iota, iota_r = (mu_0 / 2 / jnp.pi) * _toroidal_current(
-            profile.grid, data["|e_rho x e_theta|"], data["J^zeta"]
-        )
+    # integrate each integrand
+    rho = profile.grid.nodes[:, 0]
+    bins = jnp.append(profile.grid.unique_rho, 1)
+    num = _surface_sums(rho, bins, num)
+    den = _surface_sums(rho, bins, den)
+    num_r = _surface_sums(rho, bins, num_r)
+    den_r = _surface_sums(rho, bins, den_r)
+    num_rr = _surface_sums(rho, bins, num_rr)
+    den_rr = _surface_sums(rho, bins, den_rr)
 
+    # derivatives computed analytically by pushing derivative into surface average
+    data["iota"] = (poloidal_flux + num) / den
+    data["iota_r"] = (poloidal_flux_r + num_r - data["iota"] * den_r) / den
+    data["iota_rr"] = (
+        poloidal_flux_rr
+        + num_rr
+        - 2 * (poloidal_flux_r + num_r) * den_r / den
+        + data["iota"] * (den_rr - 2 * (den_r ** 2) / den)
+    ) / den
+    return data
+
+
+def _surface_sums(surf_label, unique_append_upperbound, weights):
+    """
+    Parameters
+    ----------
+    surf_label : ndarray
+        The surface label. Elements of a coordinate in the collocation grid.
+        i.e. grid.nodes[:, 0]
+    unique_append_upperbound : ndarray
+        Sorted unique elements of surf_label with the upper bound of that coordinate appended.
+        i.e. grid.unique_rho + [1]
+    weights : ndarray
+        Node at surf_label[i]'s contribution to its surface's sum is weights[i].
+        For an integral, this could be: ds * function_to_integrate.
+
+    Returns
+    -------
+    ndarray
+        An array of weighted sums over each surface.
+        The returned array has length = len(unique_append_upperbound) - 1.
+    """
     # DESIRED ALGORITHM
-    # collect collocation node indices for each flux surface
+    # collect collocation node indices for each rho surface
     # surfaces = dict()
-    # for index, r in enumerate(rho):
-    #     surfaces.setdefault(r, list()).append(index)
-    # flux surface average integration
+    # for index, rho in enumerate(surf_label):
+    #     surfaces.setdefault(rho, list()).append(index)
+    # integration over non-contiguous elements
     # for i, surface in enumerate(surfaces.values()):
-    #     iota[i] += num[surface].sum()
-    #     iota[i] /= den[surface].sum()
+    #     surface_sums[i] = weights[surface].sum()
 
     # NO LOOP IMPLEMENTATION
-    # Separate nodes into bins with boundaries at unique values of rho.
+    # Separate collocation nodes into bins with boundaries at unique values of rho.
     # This groups nodes with identical rho values.
-    # Each is assigned a weight of their contribution to a flux surface average.
+    # Each is assigned a weight of their contribution to the integral.
     # The elements of each bin are summed, performing the integration.
-    rho = profile.grid.nodes[:, 0]
-    bins = jnp.append(jnp.unique(rho), 1)
-    iota += jnp.histogram(rho, bins=bins, weights=num)[0]
-    iota /= jnp.histogram(rho, bins=bins, weights=den)[0]
-    iota_r += jnp.histogram(rho, bins=bins, weights=num_r)[0]
-    iota_r /= jnp.histogram(rho, bins=bins, weights=den_r)[0]
-
-    data["iota"] = iota
-    data["iota_r"] = iota_r
-    # TODO: _rr?
-    return data
+    return jnp.histogram(surf_label, bins=unique_append_upperbound, weights=weights)[0]
 
 
 def _toroidal_current(grid, area_element, toroidal_current_density_av):
@@ -540,14 +598,14 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av):
     """
     # Use a portion of the collocation grid belonging to a zeta surface.
     # The grid is sorted with priority [rho=low, theta=mid, zeta=high].
-    change_zeta = _where_change(grid.nodes[:, -1])
-    stop_zeta = change_zeta[1] if len(change_zeta) > 1 else None
+    change_zeta = _where_change(grid.nodes[:, -1], grid.num_zeta)
+    stop_zeta = change_zeta[1] if grid.num_zeta > 1 else None
 
     drdt = grid.spacing[:stop_zeta, :-1].prod(axis=1)
     ds = drdt * area_element[:stop_zeta]
 
     # compute current through thin annuli bounded by rho surfaces in a zeta cross-section
-    change_rho = _where_change(grid.nodes[:stop_zeta, 0])
+    change_rho = _where_change(grid.nodes[:stop_zeta, 0], grid.num_rho)
     area_annuli = jnp.add.reduceat(ds, change_rho)
     current_annuli = toroidal_current_density_av * area_annuli
     return current_annuli.cumsum(), current_annuli
@@ -564,17 +622,19 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av):
 # If we want to compute objectives on multiple flux surfaces at once, this would
 # be helpful for either reshaping arrays (with awkward arrays, which I think would provide
 # the cleanest solution) or for extracting arrays corresponding to a surface.
-def _where_change(x):
+def _where_change(x, size):
     """
     Example
     -------
-        change_zeta = _where_change(grid.nodes[:, -1])
+        change_zeta = _where_change(grid.nodes[:, -1], grid.num_zeta)
         ith_constant_zeta_surface = grid.nodes[change_zeta[i-1]:change_zeta[i]]
 
     Parameters
     ----------
     x : ndarray
         Elements.
+    size : int
+        Number of unique elements in x. Required for jax.
 
     Returns
     -------
@@ -582,7 +642,7 @@ def _where_change(x):
         Indices of x where elements change value. Empty only if x has no elements.
         Otherwise, always includes index 0. Never includes last index (unless it is 0).
     """
-    return jnp.where(jnp.diff(x, prepend=jnp.nan))[0]
+    return jnp.where(jnp.diff(x, prepend=jnp.nan), size=size)[0]
 
 
 def compute_covariant_basis(

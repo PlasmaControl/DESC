@@ -437,19 +437,17 @@ def compute_rotational_transform_v2(
         Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
-    if data is None:
-        data = {}
     input_is_current = I_l is not None and toroidal_current is not None
     input_is_density = jzeta_l is not None and toroidal_current_density is not None
     if input_is_current:
         profile = toroidal_current
-        data["I"] = profile.compute(I_l, dr=0)
     elif input_is_density:
         profile = toroidal_current_density
-        data["J^zeta"] = profile.compute(jzeta_l, dr=0)
     else:
         raise ValueError("Illegal input. Specify toroidal current or its density.")
 
+    if data is None:
+        data = {}
     # TODO: toroidal flux require iota for profile?
     data = compute_toroidal_flux(Psi, profile, data)
     data = compute_lambda(L_lmn, L_transform, data)
@@ -482,9 +480,12 @@ def compute_rotational_transform_v2(
 
     # start with the Δ(poloidal flux)
     if input_is_current:
+        data["I"] = profile.compute(I_l, dr=0)
+        I_r = profile.compute(I_l, dr=1)
         iota = mu_0 / 2 / jnp.pi * data["I"]
-        iota_r = mu_0 / 2 / jnp.pi * profile.compute(I_l, dr=1)
+        iota_r = mu_0 / 2 / jnp.pi * I_r
     else:
+        data["J^zeta"] = profile.compute(jzeta_l, dr=0)
         data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
         iota, iota_r = (mu_0 / 2 / jnp.pi) * _toroidal_current(
             profile.grid, data["|e_rho x e_theta|"], data["J^zeta"]

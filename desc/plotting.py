@@ -952,6 +952,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
+    plot_theta = kwargs.pop("plot_theta", True)
     label = kwargs.pop("label", "")
     if len(kwargs):
         raise ValueError(
@@ -991,12 +992,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         "theta": theta,
         "zeta": zeta,
     }
-    t_grid = _get_grid(**grid_kwargs)
+    if plot_theta:
+        t_grid = _get_grid(**grid_kwargs)
 
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
-    # PEST-like flux coordinates
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
+        # PEST-like flux coordinates
 
-    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
+        v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
@@ -1004,11 +1006,11 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     r_coords = eq.compute("R", r_grid)
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
     Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-
-    # vartheta contours
-    v_coords = eq.compute("R", v_grid)
-    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    if plot_theta:
+        # vartheta contours
+        v_coords = eq.compute("R", v_grid)
+        Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+        Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1024,13 +1026,14 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
-        ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=theta_color,
-            linestyle=theta_ls,
-            lw=theta_lw,
-        )
+        if plot_theta:
+            ax[i].plot(
+                Rv[:, :, i].T,
+                Zv[:, :, i].T,
+                color=theta_color,
+                linestyle=theta_ls,
+                lw=theta_lw,
+            )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
@@ -1128,6 +1131,7 @@ def plot_comparison(
 
     """
     figsize = kwargs.pop("figsize", None)
+    plot_theta = kwargs.pop("plot_theta", True)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1185,6 +1189,7 @@ def plot_comparison(
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
+            plot_theta=plot_theta,
         )
     if any(labels) and kwargs.get("legend", True):
         fig.legend(**kwargs.get("legend_kw", {}))

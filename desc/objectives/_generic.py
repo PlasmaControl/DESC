@@ -278,10 +278,9 @@ class MagneticWell(_Objective):
     Greene, J.M., 1997. A brief review of magnetic wells.
     Comments on Plasma Physics and Controlled Fusion, 17, pp.389-402.
 
-    Landreman, M. and Jorge, R. (2020)
-    “Magnetic well and Mercier stability of stellarators near the magnetic axis,”
-    Journal of Plasma Physics. Cambridge University Press, 86(5), p. 905860510.
-    doi: 10.1017/S002237782000121X.
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
     """
 
     _scalar = True

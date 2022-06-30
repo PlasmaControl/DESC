@@ -377,19 +377,23 @@ def compute_rotational_transform_v2(
     R_transform,
     Z_transform,
     L_transform,
-    j_l,
-    current_density,
     Psi,
+    I_l=None,
+    toroidal_current=None,
+    jzeta_l=None,
+    toroidal_current_density=None,
     data=None,
     **kwargs,
 ):
     """
-    Compute rotational transform profile from the current density profile.
+    Compute rotational transform profile from the toroidal current or the toroidal
+    current density profile.
 
     Currently, the rotational transform is first computed to satisfy a zero toroidal
     current condition based on the geometry of the device as discussed in
-    https://doi.org/10.1016/0021-9991(86)90197-X, Section 2.3
-    by S.P. Hirshman, J.T. Hogan, Journal of Computational Physics, 63, 2, 1986, 334.
+    S.P. Hirshman, J.T. Hogan, ORMEC: A three-dimensional MHD spectral inverse
+    equilibrium code. Journal of Computational Physics, 63, 2, 1986, p. 334.
+    doi:10.1016/0021-9991(86)90197-X.
     Note their inconsistent notation for covariant and contravariant forms.
     Specifically, their j_zeta (covariant notation) should be j^zeta (contravariant).
     The covariant notation is correct for the other quantities.
@@ -415,12 +419,16 @@ def compute_rotational_transform_v2(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    j_l : ndarray
-        Spectral coefficients of J^zeta (rho) -- toroidal current density profile.
-    current_density : Profile
-        Transforms j_l coefficients to real space.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
+    I_l : ndarray
+        Spectral coefficients of I (rho) -- toroidal current profile.
+    toroidal_current : Profile
+        Transforms I_l coefficients to real space.
+    jzeta_l : ndarray
+        Spectral coefficients of J^zeta (rho) -- toroidal current density profile.
+    toroidal_current_density : Profile
+        Transforms jzeta_l coefficients to real space.
 
     Returns
     -------
@@ -431,10 +439,19 @@ def compute_rotational_transform_v2(
     """
     if data is None:
         data = {}
-    # TODO: is the input the profile for data["I"] instead?
-    data["J^zeta"] = current_density.compute(j_l, dr=0)
-    data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
-    data = compute_toroidal_flux(Psi, current_density, data)
+    input_is_current = I_l is not None and toroidal_current is not None
+    input_is_density = jzeta_l is not None and toroidal_current_density is not None
+    if input_is_current:
+        profile = toroidal_current
+        data["I"] = profile.compute(I_l, dr=0)
+    elif input_is_density:
+        profile = toroidal_current_density
+        data["J^zeta"] = profile.compute(jzeta_l, dr=0)
+    else:
+        raise ValueError("Illegal input. Specify toroidal current or its density.")
+
+    # TODO: toroidal flux require iota for profile?
+    data = compute_toroidal_flux(Psi, profile, data)
     data = compute_lambda(L_lmn, L_transform, data)
     data = compute_covariant_metric_coefficients(
         R_lmn, Z_lmn, R_transform, Z_transform, data
@@ -460,26 +477,35 @@ def compute_rotational_transform_v2(
     )
     den = psi_r * g_tt
     den_r = psi_rr * g_tt + psi_r * g_tt_r
-    dtdz = current_density.grid.spacing[:, 1:].prod(axis=1)
+    dtdz = profile.grid.spacing[:, 1:].prod(axis=1)
     num, num_r, den, den_r = dtdz * (num, num_r, den, den_r)
 
     # start with the Δ(poloidal flux)
-    iota, iota_r = (mu_0 / 2 / jnp.pi) * _toroidal_current(
-        current_density.grid, data["|e_rho x e_theta|"], data["J^zeta"]
-    )
+    if input_is_current:
+        iota = mu_0 / 2 / jnp.pi * data["I"]
+        iota_r = mu_0 / 2 / jnp.pi * profile.compute(I_l, dr=1)
+    else:
+        data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
+        iota, iota_r = (mu_0 / 2 / jnp.pi) * _toroidal_current(
+            profile.grid, data["|e_rho x e_theta|"], data["J^zeta"]
+        )
 
     # DESIRED ALGORITHM
-    # # collect collocation indices for each constant rho flux surface
+    # collect collocation node indices for each flux surface
     # surfaces = dict()
     # for index, r in enumerate(rho):
     #     surfaces.setdefault(r, list()).append(index)
-    # # flux surface average integration
+    # flux surface average integration
     # for i, surface in enumerate(surfaces.values()):
     #     iota[i] += num[surface].sum()
     #     iota[i] /= den[surface].sum()
 
     # NO LOOP IMPLEMENTATION
-    rho = current_density.grid.nodes[:, 0]
+    # Separate nodes into bins with boundaries at unique values of rho.
+    # This groups nodes with identical rho values.
+    # Each is assigned a weight of their contribution to a flux surface average.
+    # The elements of each bin are summed, performing the integration.
+    rho = profile.grid.nodes[:, 0]
     bins = jnp.append(jnp.unique(rho), 1)
     iota += jnp.histogram(rho, bins=bins, weights=num)[0]
     iota /= jnp.histogram(rho, bins=bins, weights=den)[0]
@@ -487,7 +513,7 @@ def compute_rotational_transform_v2(
     iota_r /= jnp.histogram(rho, bins=bins, weights=den_r)[0]
 
     data["iota"] = iota
-    data["iota_r"] = iota
+    data["iota_r"] = iota_r
     # TODO: _rr?
     return data
 
@@ -511,7 +537,7 @@ def _toroidal_current(grid, area_element, toroidal_current_density_av):
     current_annuli: ndarray
         Toroidal current enclosed by each flux surface derivative wrt rho.
     """
-    # Want to use a portion of the collocation grid belonging to a zeta surface.
+    # Use a portion of the collocation grid belonging to a zeta surface.
     # The grid is sorted with priority [rho=low, theta=mid, zeta=high].
     change_zeta = _where_change(grid.nodes[:, -1])
     stop_zeta = change_zeta[1] if len(change_zeta) > 1 else None

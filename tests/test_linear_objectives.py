@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from desc.equilibrium import Equilibrium
 from desc.basis import FourierZernikeBasis
-from desc.objectives import LambdaGauge
+from desc.objectives import FixLambdaGauge
 
 
 def test_LambdaGauge_axis_sym(DummyStellarator):
@@ -15,7 +15,7 @@ def test_LambdaGauge_axis_sym(DummyStellarator):
     correct_constraint_matrix[0, 0] = 1
     correct_constraint_matrix[0, 2] = -1
 
-    lam_con = LambdaGauge(eq)
+    lam_con = FixLambdaGauge(eq)
 
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
@@ -55,7 +55,7 @@ def test_LambdaGauge_asym():
     correct_constraint_matrix[1, 2] = 1.0
     correct_constraint_matrix[1, 3] = -1.0
 
-    lam_con = LambdaGauge(eq)
+    lam_con = FixLambdaGauge(eq)
 
     np.testing.assert_array_equal(
         lam_con._A[0:3, 0 : eq.L_basis.num_modes], correct_constraint_matrix

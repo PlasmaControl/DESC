@@ -13,25 +13,25 @@ from desc.compute import arg_order
 
 
 class ObjectiveFunction(IOAble):
-    """Objective function comprised of one or more Objectives."""
+    """Objective function comprised of one or more Objectives.
 
-    _io_attrs_ = ["objectives", "constraints"]
+    Parameters
+    ----------
+    objectives : tuple of Objective
+        List of objectives to be minimized.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the objectives.
+    use_jit : bool, optional
+        Whether to just-in-time compile the objectives and derivatives.
+    verbose : int, optional
+        Level of output.
+
+    """
+
+    _io_attrs_ = ["_objectives"]
 
     def __init__(self, objectives, eq=None, use_jit=True, verbose=1):
-        """Initialize an Objective Function.
 
-        Parameters
-        ----------
-        objectives : tuple of Objective
-            List of objectives to be minimized.
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the objectives.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objectives and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
 
@@ -368,27 +368,27 @@ class ObjectiveFunction(IOAble):
 
 
 class _Objective(IOAble, ABC):
-    """Objective (or constraint) used in the optimization of an Equilibrium."""
+    """Objective (or constraint) used in the optimization of an Equilibrium.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+
+    """
 
     _io_attrs_ = ["_target", "_weight", "_name"]
 
     def __init__(self, eq=None, target=0, weight=1, name=None):
-        """Initialize an Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        name : str
-            Name of the objective function.
-
-        """
         assert np.all(np.asarray(weight) > 0)
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)

@@ -122,7 +122,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, ["IGphi_mn"]
+        constraints, extra_args=objective.args + ["IGphi_mn"]
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -294,7 +294,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, ["IGphi_mn"]
+        constraints, extra_args=objective.args + ["IGphi_mn"]
     )
 
     # update other attributes
@@ -479,16 +479,10 @@ def optimal_perturb(
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)
-    (
-        xp,
-        A,
-        Ainv,
-        b,
-        Z,
-        unfixed_idx,
-        project,
-        recover,
-    ) = factorize_linear_constraints(constraints, ['IGphi_mn'])
+            
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, extra_args=objective_f.args + ["IGphi_mn"]
+    )
 
     # state vector
     xf = objective_f.x(eq)
@@ -686,7 +680,7 @@ def optimal_perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, ["IGphi_mn"]
+        constraints, extra_args=objective_f.args + ["IGphi_mn"]
     )
 
     # update other attributes

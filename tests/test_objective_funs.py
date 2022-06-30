@@ -7,9 +7,6 @@ from desc.objectives import (
     Volume,
     AspectRatio,
     ToroidalCurrent,
-    RadialCurrentDensity,
-    PoloidalCurrentDensity,
-    ToroidalCurrentDensity,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
@@ -49,24 +46,6 @@ class TestObjectiveFunction(unittest.TestCase):
         obj = ToroidalCurrent(target=1, weight=2, eq=eq)
         I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
         np.testing.assert_allclose(I, -2)
-
-    def test_radial_current_density(self):
-        eq = Equilibrium()
-        obj = RadialCurrentDensity(eq=eq)
-        Jr = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(np.sum(Jr), 0, atol=2e-8)
-
-    def test_poloidal_current_density(self):
-        eq = Equilibrium()
-        obj = PoloidalCurrentDensity(eq=eq)
-        Jt = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(np.sum(Jt), 0, atol=2e-8)
-
-    def test_toroidal_current_density(self):
-        eq = Equilibrium()
-        obj = ToroidalCurrentDensity(target=1, weight=2, eq=eq)
-        Jt = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
-        np.testing.assert_allclose(Jt, -2)
 
     def test_qs_boozer(self):
         eq = Equilibrium()

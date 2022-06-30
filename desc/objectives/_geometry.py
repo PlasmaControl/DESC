@@ -10,30 +10,30 @@ from .objective_funs import _Objective
 
 
 class Volume(_Objective):
-    """Plasma volume."""
+    """Plasma volume.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = True
     _linear = False
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="volume"):
-        """Initialize a Volume Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Plasma volume: {:10.3e} (m^3)"
@@ -100,30 +100,30 @@ class Volume(_Objective):
 
 
 class AspectRatio(_Objective):
-    """Aspect ratio = major radius / minor radius."""
+    """Aspect ratio = major radius / minor radius.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = True
     _linear = False
 
     def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
-        """Initialize an AspectRatio Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) must be equal to Objective.dim_f
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
-            Collocation grid containing the nodes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"

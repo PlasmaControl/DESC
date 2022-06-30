@@ -9,6 +9,15 @@ This documentation aims to reflect the latest version of the code, and major dis
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. 
 .. _publication: https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
 
+See also our recent pre-prints [2-4]:
+
+.. [2] D. Panici, R. Conlin, D.W. Dudt and E. Kolemen. “The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations.” pre-print.
+.. _publication: https://arxiv.org/abs/2203.17173
+.. [3] R. Conlin, D.W. Dudt, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part II: Perturbation and continuation methods.” pre-print.
+.. _publication: https://arxiv.org/abs/2203.15927
+.. [4] D.W. Dudt, R. Conlin, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization.” pre-print.
+.. _publication: https://arxiv.org/abs/2204.00078
+
 Flux coordinates
 ****************
 

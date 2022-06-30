@@ -6,7 +6,6 @@ from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.basis import (
-    FourierZernike_to_PoincareZernikePolynomial,
     zernike_radial_coeffs,
 )
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -24,7 +23,28 @@ from .objective_funs import _Objective
 
 
 class FixBoundaryR(_Objective):
-    """Boundary condition on the R boundary parameters."""
+    """Boundary condition on the R boundary parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Boundary surface coefficients to fix. If None, uses surface coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    fixed_boundary : bool, optional
+        True to enforce the boundary condition on flux surfaces,
+        or Falseto fix the boundary surface coefficients (defualt).
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = True
@@ -39,28 +59,7 @@ class FixBoundaryR(_Objective):
         modes=True,
         name="lcfs R",
     ):
-        """Initialize a FixBoundaryR Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        fixed_boundary : bool, optional
-            True to enforce the boundary condition on flux surfaces,
-            or Falseto fix the boundary surface coefficients (defualt).
-        modes : ndarray, optional
-            Basis modes numbers [l,m,n] of boundary modes to fix.
-            len(target) = len(weight) = len(modes).
-            If True/False uses all/none of the profile modes.
-        name : str
-            Name of the objective function.
-
-        """
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -117,8 +116,6 @@ class FixBoundaryR(_Objective):
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                elif eq.bdry_mode == "poincare":
-                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
@@ -156,7 +153,28 @@ class FixBoundaryR(_Objective):
 
 
 class FixBoundaryZ(_Objective):
-    """Boundary condition on the Z boundary parameters."""
+    """Boundary condition on the Z boundary parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Boundary surface coefficients to fix. If None, uses surface coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    fixed_boundary : bool, optional
+        True to enforce the boundary condition on flux surfaces,
+        or Falseto fix the boundary surface coefficients (defualt).
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = True
@@ -171,28 +189,7 @@ class FixBoundaryZ(_Objective):
         modes=True,
         name="lcfs Z",
     ):
-        """Initialize a FixBoundaryZ Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Boundary surface coefficients to fix. If None, uses surface coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        fixed_boundary : bool, optional
-            True to enforce the boundary condition on flux surfaces,
-            or Falseto fix the boundary surface coefficients (defualt).
-        modes : ndarray, optional
-            Basis modes numbers [l,m,n] of boundary modes to fix.
-            len(target) = len(weight) = len(modes).
-            If True/False uses all/none of the profile modes.
-        name : str
-            Name of the objective function.
-
-        """
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -249,8 +246,6 @@ class FixBoundaryZ(_Objective):
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                elif eq.bdry_mode == "poincare":
-                    j = np.argwhere((modes[:, :-1] == [l, m]).all(axis=1))
                 self._A[j, i] = 1
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
@@ -287,118 +282,29 @@ class FixBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
-class PoincareLambda(_Objective):
-    """Enforces lambda values at zeta=0 XS (i.e. prescribes the SFL angle vartheta)."""
+class FixLambdaGauge(_Objective):
+    """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0.
 
-    _scalar = False
-    _linear = True
-    _fixed = False
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
 
-    def __init__(self, eq=None, target=None, weight=1, name="poincare lambda"):
-        """Initialize a LambdaPoincare Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        name : str
-            Name of the objective function.
-
-        """
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "lambda poincare boundary error: {:10.3e} (m)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        L_basis = eq.L_basis
-        L_modes = eq.L_basis.modes
-        dim_L = eq.L_basis.num_modes
-
-        if (
-            None in self.target
-        ):  # uses current eq's value of lambda at zeta=0 as constraint
-            Lb_lmn, Lb_basis = FourierZernike_to_PoincareZernikePolynomial(
-                eq.L_lmn, eq.L_basis
-            )
-            Lb_modes = Lb_basis.modes
-            self._dim_f = Lb_basis.num_modes
-            self.target = Lb_lmn
-
-        self._A = np.zeros((self._dim_f, dim_L))
-        for i, (l, m, n) in enumerate(L_modes):
-            j = np.argwhere(
-                np.logical_and(
-                    (Lb_modes[:, :2] == [l, m]).all(axis=1),
-                    Lb_modes[:, -1] >= 0,
-                )
-            )
-            self._A[j, i] = 1
-
-        if self.target is not None:
-            self._dim_f = self._A.shape[0]
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, L_lmn, **kwargs):
-        """Compute lambda poincare section errors.
-
-        Parameters
-        ----------
-        L_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
-
-        Returns
-        -------
-        f : ndarray
-            Lambda poincare section errors.
-
-        """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)
-
-
-class LambdaGauge(_Objective):
-    """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0."""
+    """
 
     _scalar = False
     _linear = True
     _fixed = False
 
     def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
-        """Initialize a LambdaGauge Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, ndarray, optional
-            Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(weight) must be equal to Objective.dim_f
-        name : str
-            Name of the objective function.
-
-        """
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "lambda gauge error: {:10.3e} (m)"
 
@@ -479,10 +385,7 @@ class LambdaGauge(_Objective):
 
             A = np.zeros((c.shape[1], L_basis.num_modes))
             A[:, mnpos] = c.T
-            # b = np.zeros((c.shape[1]))
             self._A = np.vstack((self._A, A))
-            # self._b
-            # raise NotImplementedError("Lambda gauge freedom not implemented yet.")
 
         self._dim_f = self._A.shape[0]
 
@@ -510,7 +413,28 @@ class LambdaGauge(_Objective):
 
 
 class FixPressure(_Objective):
-    """Fixes pressure coefficients."""
+    """Fixes pressure coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = True
@@ -525,28 +449,7 @@ class FixPressure(_Objective):
         modes=True,
         name="fixed-pressure",
     ):
-        """Initialize a FixPressure Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : tuple, float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(target) = len(weight) = len(modes)
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
-        modes : ndarray, optional
-            Basis modes numbers [l,m,n] of boundary modes to fix.
-            len(target) = len(weight) = len(modes).
-            If True/False uses all/none of the profile modes.
-        name : str
-            Name of the objective function.
-
-        """
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -692,7 +595,28 @@ class FixPressure(_Objective):
 
 
 class FixIota(_Objective):
-    """Fixes rotational transform coefficients."""
+    """Fixes rotational transform coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = False
     _linear = True
@@ -707,28 +631,7 @@ class FixIota(_Objective):
         modes=True,
         name="fixed-iota",
     ):
-        """Initialize a FixIota Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : tuple, float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(target) = len(weight) = len(modes)
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
-        modes : ndarray, optional
-            Basis modes numbers [l,m,n] of boundary modes to fix.
-            len(target) = len(weight) = len(modes).
-            If True/False uses all/none of the profile modes.
-        name : str
-            Name of the objective function.
-
-        """
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -761,7 +664,6 @@ class FixIota(_Objective):
                 self._idx = np.arange(self._profile.basis.num_modes)
                 idx = self._idx
             else:  # specified modes
-                raise
                 modes = np.atleast_2d(self._modes)
                 dtype = {
                     "names": ["f{}".format(i) for i in range(3)],
@@ -875,27 +777,27 @@ class FixIota(_Objective):
 
 
 class FixPsi(_Objective):
-    """Fixes total toroidal magnetic flux within the last closed flux surface."""
+    """Fixes total toroidal magnetic flux within the last closed flux surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
 
     _scalar = True
     _linear = True
     _fixed = True
 
     def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
-        """Initialize a FixIota Objective.
 
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : float, optional
-            Target value(s) of the objective. If None, uses Equilibrium value.
-        weight : float, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-        name : str
-            Name of the objective function.
-
-        """
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
 
@@ -942,95 +844,6 @@ class FixPsi(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Psi"
-
-
-class TargetIota(_Objective):
-    """Targets a rotational transform profile."""
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(
-        self, eq=None, target=0, weight=1, profile=None, grid=None, name="target-iota"
-    ):
-        """Initialize a TargetIota Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : tuple, float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) = len(weight) = len(modes).
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(target) = len(weight) = len(modes)
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
-        grid : Grid, optional
-            Collocation grid containing the nodes to evaluate at.
-        name : str
-            Name of the objective function.
-
-        """
-        self._profile = profile
-        self._grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Target-iota profile error: {:10.3e}"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._profile is None or self._profile.params.size != eq.L + 1:
-            self._profile = eq.iota.copy()
-        if self._grid is None:
-            self._grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
-
-        self._dim_f = self._grid.num_nodes
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profile.grid = self._grid
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, i_l, **kwargs):
-        """Compute rotational transform profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        Returns
-        -------
-        f : ndarray
-            Rotational transform profile errors.
-
-        """
-        data = compute_rotational_transform(i_l, self._profile)
-        return self._shift_scale(data["iota"])
 
 
 class FixSurfaceCurrent(_Objective):

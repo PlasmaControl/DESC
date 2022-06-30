@@ -49,6 +49,7 @@ class Basis(IOAble, ABC):
             "cosine",
             "even",
             False,
+            None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
@@ -59,6 +60,8 @@ class Basis(IOAble, ABC):
         elif self.sym == "even":  # even powers of rho
             non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym is None:
+            self._sym = False
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -198,6 +201,9 @@ class PowerSeries(Basis):
     ----------
     L : int
         Maximum radial resolution.
+    sym : {"even", False}
+        Type of symmetry. "even" has only even powers of rho, for an analytic profile
+        on the disc. False uses the full (odd + even) powers.
 
     """
 
@@ -390,15 +396,18 @@ class FourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return toroidal
 
-    def change_resolution(self, N):
+    def change_resolution(self, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
@@ -522,7 +531,7 @@ class DoubleFourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
-    def change_resolution(self, M, N):
+    def change_resolution(self, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -531,12 +540,15 @@ class DoubleFourierSeries(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         Returns
         -------
         None
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N:
             self._M = M
             self._N = N
@@ -546,8 +558,6 @@ class DoubleFourierSeries(Basis):
 
 class ZernikePolynomial(Basis):
     """2D basis set for analytic functions in a unit disc.
-
-    Initializes a ZernikePolynomial
 
     Parameters
     ----------
@@ -760,8 +770,6 @@ class FourierZernikeBasis(Basis):
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
 
-    Initializes a FourierZernikeBasis
-
     Parameters
     ----------
     L : int
@@ -966,7 +974,7 @@ class FourierZernikeBasis(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -977,8 +985,11 @@ class FourierZernikeBasis(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -1416,121 +1427,3 @@ def zernike_norm(l, m):
 
     """
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
-
-
-def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
-    """Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the coefficients at
-    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficients X_lmn_2D
-
-    Parameters
-    ----------
-    X_lmn_3D : array, size [basis_3D.num_modes,3]
-        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find the 2D ZernikePolynomial basis
-        corresponding to the quantity's value at the zeta=0 cross-section
-    basis_3D : FourierZernikeBasis
-        The Fourier-Zernike basis corresponding to the coefficients passed.
-
-    Returns
-    -------
-    X_lmn_2D : array, size [basis_2D.num_modes,3]
-        The ZernikePolynomial basis coefficients of the quantity X, such that their evaluation is the same
-        as the input 3D basis when evaluated at zeta=0. The toroidal modenumbers X_lmn_2D[:,2] are all equal to zero
-
-    basis_2D : FourierZernikeBasis
-        The ZernikePolynomial basis corresponding to the coefficients output. The radial resolution L and poloidal resolution M are
-        equal to the max radial and poloidal resolutions of the 3D basis passed as an input.
-
-    """
-    # Add up all the X_lm(n>=0) modes
-    # so that the quantity at the zeta=0 surface is described with just lm modes
-    # and get rid of the toroidal modes
-    modes_2D = []
-    X_lmn_2D = (
-        []
-    )  # these are corresponding to the 2D modes of the ZernikePolynomial Basis
-    modes_3D = basis_3D.modes
-    for i, mode in enumerate(modes_3D):
-        if mode[-1] < 0:
-            pass  # we do not want the sin(zeta) modes as they = 0 at zeta=0
-        else:
-            if (mode[0], mode[1], 0) not in modes_2D:
-                modes_2D.append((mode[0], mode[1], 0))
-                l = mode[0]
-                m = mode[1]
-
-                inds = np.where(
-                    np.logical_and(
-                        (modes_3D[:, :2] == [l, m]).all(axis=1),
-                        modes_3D[:, 2] >= 0,
-                    )
-                )[0]
-
-                SUM = np.sum(X_lmn_3D[inds])
-                X_lmn_2D.append(SUM)
-
-    X_lmn_2D = np.asarray(X_lmn_2D)
-    modes_2D = np.asarray(modes_2D)
-
-    Lmax = np.max(abs(modes_2D[:, 0]))
-    Mmax = np.max(abs(modes_2D[:, 1]))
-    LM_max = max(Lmax, Mmax)
-    basis_2D = ZernikePolynomial(
-        L=LM_max,
-        M=LM_max,
-        spectral_indexing=basis_3D._spectral_indexing,
-        sym=basis_3D.sym,
-    )
-    X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
-    return X_lmn_2D, basis_2D
-
-
-def FourierZernike_to_FourierZernike_no_N_modes(X_lmn_3D, basis_3D):
-    """Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates the coefficients at
-    the zeta=0 cross-section, returning the same 3D FourierZernike basis but with zero toroidal dependence
-    s.t. the zeta=0 XS is the same as the input
-
-    Parameters
-    ----------
-    X_lmn_3D : array, size [basis_3D.num_modes,3]
-        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find the 2D ZernikePolynomial basis
-        corresponding to the quantity's value at the zeta=0 cross-section
-    basis_3D : FourierZernikeBasis
-        The Fourier-Zernike basis corresponding to the coefficients passed.
-
-    Returns
-    -------
-    X_lmn_no_N : array, size [basis_3D.num_modes,3]
-        The FourerZernike basis coefficients of the quantity X, such that their evaluation is the same
-        as the input 3D basis when evaluated at zeta=0. The toroidal modenumbers X_lmn_no_N[:,2] are all equal to zero
-
-    basis_3D : FourierZernikeBasis
-        The Fourier-Zernike basis corresponding to the coefficients passed.
-
-    """
-    # Add up all the X_lm(n>=0) modes
-    # so that the quantity at the zeta=0 surface is described with just lm modes
-    # and set any mode with nonzero toroidal mode numebr = 0
-
-    X_lmn_no_N = np.zeros_like(X_lmn_3D)
-    modes_no_N = []
-    modes_3D = basis_3D.modes
-    for i, mode in enumerate(modes_3D):
-        if mode[-1] < 0:
-            pass  # we do not need the sin(zeta) modes as they = 0 at zeta=0
-        else:
-            if (mode[0], mode[1], 0) not in modes_no_N:
-                modes_no_N.append((mode[0], mode[1], 0))
-                l = mode[0]
-                m = mode[1]
-
-                inds = np.where(
-                    np.logical_and(
-                        (modes_3D[:, :2] == [l, m]).all(axis=1),
-                        modes_3D[:, 2] >= 0,
-                    )
-                )[0]
-
-                SUM = np.sum(X_lmn_3D[inds])
-                X_lmn_no_N[i] = SUM
-
-    return X_lmn_no_N, basis_3D

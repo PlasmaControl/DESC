@@ -199,33 +199,38 @@ class BoundaryErrorBS(_Objective):
         )
         pdata_eval = compute_pressure(p_l, self.ep_profile)
 
-        I = IGphi_mn[0] / mu_0
-        G = IGphi_mn[1] / mu_0
-        phi_mn = IGphi_mn[2:] / mu_0
-
-        K_t = self.Ks_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
-        K_z = self.Ks_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
-        Ks = K_t * ndata_src["e_theta"] + K_z * ndata_src["e_zeta"]
-        Ks = rpz2xyz_vec(Ks, phi=self.Ks_transform.grid.nodes[:, 2])
-        K_t = self.Ke_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
-        K_z = self.Ke_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
-        Ke = K_t * ndata_eval["e_theta"] + K_z * ndata_eval["e_zeta"]
-        Ke = rpz2xyz_vec(Ke, phi=self.Ke_transform.grid.nodes[:, 2])
-
-        Bsrc = Bdata_src["B"]
-        Bsrc = rpz2xyz_vec(Bsrc, phi=self.sR_transform.grid.nodes[:, 2])
         nsrc = (
             ndata_src["e^rho"]
             / jnp.linalg.norm(ndata_src["e^rho"], axis=1)[:, np.newaxis]
         )
         nsrc = rpz2xyz_vec(nsrc, phi=self.sR_transform.grid.nodes[:, 2])
-        J = jnp.cross(nsrc, Bsrc, axis=1) / mu_0
-
         neval = (
             ndata_eval["e^rho"]
             / jnp.linalg.norm(ndata_eval["e^rho"], axis=1)[:, np.newaxis]
         )
         neval = rpz2xyz_vec(neval, phi=self.eR_transform.grid.nodes[:, 2])
+
+        
+        I = IGphi_mn[0] / mu_0
+        G = IGphi_mn[1] / mu_0
+        phi_mn = IGphi_mn[2:] / mu_0
+
+        phi_t_src = self.Ks_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
+        phi_z_src = self.Ks_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
+        gradPhi_src = phi_t_src * ndata_src["e^theta"] + phi_z_src * ndata_src["e^zeta"]
+        gradPhi_src = rpz2xyz_vec(gradPhi_src, phi=self.Ks_transform.grid.nodes[:, 2])
+        Ks = jnp.cross(nsrc, gradPhi_src, axis=-1)
+
+        phi_t_eval = self.Ke_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
+        phi_z_eval = self.Ke_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
+        gradPhi_eval = phi_t_eval * ndata_eval["e^theta"] + phi_z_eval * ndata_eval["e^zeta"]
+        gradPhi_eval = rpz2xyz_vec(gradPhi_eval, phi=self.Ke_transform.grid.nodes[:, 2])
+        Ke = jnp.cross(neval, gradPhi_eval, axis=-1)
+
+        Bsrc = Bdata_src["B"]
+        Bsrc = rpz2xyz_vec(Bsrc, phi=self.sR_transform.grid.nodes[:, 2])
+        J = jnp.cross(nsrc, Bsrc, axis=1) / mu_0
+
 
         rsrc = jnp.array(
             [Bdata_src["R"], self.sR_transform.grid.nodes[:, 2], Bdata_src["Z"]]

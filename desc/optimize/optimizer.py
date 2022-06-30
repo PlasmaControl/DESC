@@ -1,7 +1,7 @@
 import scipy.optimize
 import warnings
 from termcolor import colored
-
+import numpy as np
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.io import IOAble
@@ -90,12 +90,15 @@ class Optimizer(IOAble):
         + _desc_constrained_least_squares_methods
         + _scipy_constrained_scalar_methods
         + _scipy_constrained_least_squares_methods
+        + _desc_constrained_scalar_methods
     )
     _all_methods = (
         _scipy_least_squares_methods
         + _scipy_scalar_methods
         + _desc_scalar_methods
         + _desc_least_squares_methods
+        + _desc_constrained_scalar_methods
+        + _desc_constrained_least_squares_methods
     )
 
     def __init__(self, method):
@@ -268,12 +271,26 @@ class Optimizer(IOAble):
                             constraint
                         )
                     )
-            perturb_options = options.pop("perturb_options", {})
-            perturb_options.setdefault("verbose", 0)
-            solve_options = options.pop("solve_options", {})
-            solve_options.setdefault("verbose", 0)
-            
+            # perturb_options = options.pop("perturb_options", {})
+            # perturb_options.setdefault("verbose", 0)
+            # solve_options = options.pop("solve_options", {})
+            # solve_options.setdefault("verbose", 0)
+            # objective = WrappedEquilibriumObjective(
+            #     objective,
+            #     perturb_options=perturb_options,
+            #     solve_options=solve_options,
+            # )
             constraint_objectives = ObjectiveFunction(nonlinear_constraints, eq)
+            
+            #MESSY, MUST FIX
+            if not objective.built:
+                objective.build(eq, verbose=verbose)
+            if not objective.compiled:
+                mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+            if not constraint_objectives.built:
+                constraint_objectives.build(eq,verbose=verbose)
+            
+            objective.add_linear_args(ObjectiveFunction(linear_constraints,eq))
             objective.combine_args(constraint_objectives)
             
         if not objective.built:
@@ -294,10 +311,12 @@ class Optimizer(IOAble):
                     "yellow",
                 )
             )
-
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
+        #print(objective.args)
+        # for obj in linear_constraints:
+        #     print(obj.args)
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             linear_constraints, objective.args
         )
@@ -341,6 +360,10 @@ class Optimizer(IOAble):
             x = recover(x_reduced)
             df = objective.jac(x)
             return df[:, unfixed_idx] @ Z
+        
+        def compute_constraints_wrapped(x_reduced):
+            x = recover(x_reduced)
+            return constraint_objectives.compute(x)
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -490,16 +513,16 @@ class Optimizer(IOAble):
            
             gradconstr = jnp.array([])
             gradineq = jnp.array([])
-            constr = jnp.array([constraint_objectives.compute])
+            constr = np.array([compute_constraints_wrapped])
             ineq = jnp.array([])
             
             l = 0
             for i in range(len(constr)):
                 l = l + len(constr[i](x0_reduced))
             lmbda0 = jnp.ones(l)
-            mu0 = 10
+            mu0 = 10.0
             
-            result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq)
+            result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             
 
         elif self.method in Optimizer._desc_least_squares_methods:

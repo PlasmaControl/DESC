@@ -112,8 +112,11 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     """
     # set state vector
     args = np.concatenate([obj.args for obj in constraints])
+    #print(args)
     args = np.concatenate((args, extra_args))
+    #print(args)
     args = [arg for arg in arg_order if arg in args]
+    #print(args)
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
@@ -168,6 +171,9 @@ def factorize_linear_constraints(constraints, extra_args=[]):
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
+        print(x.shape)
+        print(xp.shape)
+        print(Z.T.shape)
         x_reduced = jnp.dot(Z.T, (x - xp)[unfixed_idx])
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 

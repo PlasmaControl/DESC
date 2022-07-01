@@ -387,9 +387,8 @@ def fmintr(
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
         print("         Hessian evaluations: {:d}".format(result["nhev"]))
-
     if return_all:
-        result["allvecs"] = allx
+        result["allx"] = allx
     if return_tr:
         result["alltr"] = alltr
     return result

@@ -400,13 +400,25 @@ def compute_covariant_basis(
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
     data["0"] = jnp.zeros(R_transform.num_nodes)
 
+    R_major = 10 # get from R_00 boundary
+    data["R0"] = jnp.ones(R_transform.num_nodes) * R_major
+
+
+    straight_stellarator = True
+
+
     # 0th order derivatives
     if check_derivs("e_rho", R_transform, Z_transform):
         data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]]).T
     if check_derivs("e_theta", R_transform, Z_transform):
         data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]]).T
+
     if check_derivs("e_zeta", R_transform, Z_transform):
-        data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]]).T
+        if straight_stellarator:
+           data["e_zeta"] = jnp.array([data["R_z"], data["R0"], data["Z_z"]]).T
+        else:
+           data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]]).T
+
 
     # 1st order derivatives
     if check_derivs("e_rho_r", R_transform, Z_transform):
@@ -422,11 +434,20 @@ def compute_covariant_basis(
     if check_derivs("e_theta_z", R_transform, Z_transform):
         data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]]).T
     if check_derivs("e_zeta_r", R_transform, Z_transform):
-        data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]]).T
+        if straight_stellarator:
+            data["e_zeta_r"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]]).T 
+        else:
+            data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]]).T 
     if check_derivs("e_zeta_t", R_transform, Z_transform):
-        data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]]).T
+        if straight_stellarator:
+            data["e_zeta_t"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]]).T 
+        else:
+            data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]]).T 
     if check_derivs("e_zeta_z", R_transform, Z_transform):
-        data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]]).T
+        if straight_stellarator:
+            data["e_zeta_z"] = jnp.array([data["R_zz"], data["0"], data["Z_zz"]]).T
+        else:
+            data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]]).T
 
     # 2nd order derivatives
     if check_derivs("e_rho_rr", R_transform, Z_transform):
@@ -454,17 +475,35 @@ def compute_covariant_basis(
     if check_derivs("e_theta_tz", R_transform, Z_transform):
         data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
     if check_derivs("e_zeta_rr", R_transform, Z_transform):
-        data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
+        if straight_stellarator:
+            data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]]).T
+        else:
+            data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
     if check_derivs("e_zeta_tt", R_transform, Z_transform):
-        data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]]).T
+        if straight_stellarator:
+            data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
+        else:
+            data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]]).T
     if check_derivs("e_zeta_zz", R_transform, Z_transform):
-        data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]]).T
+        if straight_stellarator:
+            data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["0"], data["Z_zzz"]]).T
+        else:
+            data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]]).T
     if check_derivs("e_zeta_rt", R_transform, Z_transform):
-        data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]]).T
+        if straight_stellarator:
+            data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
+        else:
+            data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]]).T
     if check_derivs("e_zeta_rz", R_transform, Z_transform):
-        data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]]).T
+        if straight_stellarator:
+            data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]]).T
+        else:
+            data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]]).T
     if check_derivs("e_zeta_tz", R_transform, Z_transform):
-        data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]]).T
+        if straight_stellarator:
+            data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]]).T
+        else:
+            data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]]).T
 
     return data
 
@@ -512,7 +551,8 @@ def compute_contravariant_basis(
     if check_derivs("e^theta", R_transform, Z_transform):
         data["e^theta"] = (cross(data["e_zeta"], data["e_rho"]).T / data["sqrt(g)"]).T
     if check_derivs("e^zeta", R_transform, Z_transform):
-        data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
+        data["e^zeta"] = (cross(data["e_rho"], data["e_theta"]).T / data["sqrt(g)"]).T
+        #data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
 
     return data
 

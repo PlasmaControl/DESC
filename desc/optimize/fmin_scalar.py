@@ -246,7 +246,7 @@ def fmintr(
             break
 
         actual_reduction = -1
-        while actual_reduction <= 0 and nfev < max_nfev:
+        while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step

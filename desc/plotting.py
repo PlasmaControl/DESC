@@ -952,13 +952,13 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     axis_alpha = kwargs.pop("axis_alpha", 1)
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
-    plot_theta = kwargs.pop("plot_theta", True)
     label = kwargs.pop("label", "")
     if len(kwargs):
         raise ValueError(
             f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
         )
 
+    plot_theta = bool(theta)
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
         rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
@@ -993,11 +993,9 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         "zeta": zeta,
     }
     if plot_theta:
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # anlge in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
-
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
-        # PEST-like flux coordinates
-
         v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)

@@ -1187,7 +1187,6 @@ def plot_comparison(
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
-            plot_theta=plot_theta,
         )
     if any(labels) and kwargs.get("legend", True):
         fig.legend(**kwargs.get("legend_kw", {}))

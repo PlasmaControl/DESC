@@ -290,7 +290,7 @@ class Optimizer(IOAble):
             if not constraint_objectives.built:
                 constraint_objectives.build(eq,verbose=verbose)
             
-            objective.add_linear_args(ObjectiveFunction(linear_constraints,eq))
+            #objective.add_linear_args(ObjectiveFunction(linear_constraints,eq))
             objective.combine_args(constraint_objectives)
             
         if not objective.built:
@@ -325,7 +325,7 @@ class Optimizer(IOAble):
             timer.disp("linear constraint factorize")
 
         x0_reduced = project(objective.x(eq))
-
+        
         if verbose > 0:
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))

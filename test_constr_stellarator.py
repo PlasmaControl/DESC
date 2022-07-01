@@ -42,8 +42,8 @@ eq = desc.io.load(path)[-1]
 objective = ObjectiveFunction(AspectRatio(target=2.5))
 constraints = (
     ForceBalance(),
-    FixBoundaryR(),
-    FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
+    FixBoundaryR(fixed_boundary=True),
+    FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :],fixed_boundary=True),
     FixPressure(),
     FixIota(),
     FixPsi(),

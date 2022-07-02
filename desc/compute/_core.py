@@ -1,7 +1,6 @@
 """Core compute functions, for profiles, geometry, and basis vectors/jacobians."""
 
 import numpy as np
-from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import data_index
@@ -456,20 +455,19 @@ def compute_rotational_transform_v2(
     )
 
     # compute the Δ(poloidal flux) generated from toroidal current
-    scale = mu_0 / 2 / jnp.pi
     if input_is_current:
         data["I"] = profile.compute(I_l, dr=0)
-        poloidal_flux = scale * data["I"]
-        poloidal_flux_r = scale * profile.compute(I_l, dr=1)
-        poloidal_flux_rr = scale * profile.compute(I_l, dr=2)
+        poloidal_flux = data["I"]
+        poloidal_flux_r = profile.compute(I_l, dr=1)
+        poloidal_flux_rr = profile.compute(I_l, dr=2)
     else:
         # integrate the toroidal density current
         data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
         data["J^zeta"] = profile.compute(jzeta_l, dr=0)
-        poloidal_flux, poloidal_flux_r = scale * _toroidal_current(
+        poloidal_flux, poloidal_flux_r = _toroidal_current(
             profile.grid, data["|e_rho x e_theta|"], data["J^zeta"]
         )
-        __, poloidal_flux_rr = scale * _toroidal_current(
+        __, poloidal_flux_rr = _toroidal_current(
             profile.grid, data["|e_rho x e_theta|"], profile.compute(jzeta_l, dr=1)
         )
 
@@ -501,6 +499,8 @@ def compute_rotational_transform_v2(
 
     # integrands of the flux surface averages in eq. 11
     # num = numerator, den = denominator
+    # TODO: There should be an error in eq.11. We need g in denominator not sqrt(g).
+    # TODO: for less computation we can pull out psi_r, psi_rr from flux surface average
     dtdz = profile.grid.spacing[:, 1:].prod(axis=1)
     num = dtdz * psi_r * (A := (g_tt * lam_z - g_tz * (1 + lam_t)))
     num_r = dtdz * psi_rr * A + psi_r * (
@@ -577,44 +577,42 @@ def _surface_sums(surf_label, unique_append_upperbound, weights):
     return jnp.histogram(surf_label, bins=unique_append_upperbound, weights=weights)[0]
 
 
-def _toroidal_current(grid, area_element, toroidal_current_density_av):
+def _toroidal_current(grid, area_element, toroidal_current_density):
     """
+    Assumes conservation of current. In other words, returns the
+    toroidal current through a single zeta surface.
+    (This can be easily altered if this assumption is invalid).
+
     Parameters
     ----------
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     area_element : ndarray
         2D jacobian for a constant zeta surface |e_rho x e_theta|.
-    toroidal_current_density_av : ndarray
-        Flux surface average of the contravariant toroidal component of plasma current
-        on each flux surface.
+    toroidal_current_density : ndarray
+        Contravariant toroidal component of plasma current density.
 
     Returns
     -------
     current_annuli.cumsum(): ndarray
         Toroidal current enclosed by each flux surface.
     current_annuli: ndarray
-        Toroidal current enclosed by each flux surface derivative wrt rho.
+        The toroidal current through each flux surface.
+        (The derivative wrt rho of current_annuli.cumsum()).
     """
     # Use a portion of the collocation grid belonging to a zeta surface.
     # The grid is sorted with priority [rho=low, theta=mid, zeta=high].
-    change_zeta = _where_change(grid.nodes[:, -1], grid.num_zeta)
+    change_zeta = _where_change(grid.nodes[:, 2], grid.num_zeta)
     stop_zeta = change_zeta[1] if grid.num_zeta > 1 else None
 
-    drdt = grid.spacing[:stop_zeta, :-1].prod(axis=1)
+    drdt = grid.spacing[:stop_zeta, :2].prod(axis=1)
     ds = drdt * area_element[:stop_zeta]
+    dcurrent = ds * toroidal_current_density[:stop_zeta]
 
     # compute current through thin annuli bounded by rho surfaces in a zeta cross-section
     change_rho = _where_change(grid.nodes[:stop_zeta, 0], grid.num_rho)
-    area_annuli = jnp.add.reduceat(ds, change_rho)
-    current_annuli = toroidal_current_density_av * area_annuli
+    current_annuli = jnp.add.reduceat(dcurrent, change_rho)
     return current_annuli.cumsum(), current_annuli
-    # equivalent non-vectorized algorithm
-    # for i, e in enumerate(zip(change_rho, jnp.roll(change_rho, -1))):
-    #     start, stop = e
-    #     if stop < start:
-    #         stop = stop_zeta
-    #     current_annuli[i] = toroidal_current_density_av[i] * ds[start:stop].sum()
 
 
 # If the grid is usually sorted, I recommend we add something like this as a private method
@@ -626,7 +624,7 @@ def _where_change(x, size):
     """
     Example
     -------
-        change_zeta = _where_change(grid.nodes[:, -1], grid.num_zeta)
+        change_zeta = _where_change(grid.nodes[:, 2], grid.num_zeta)
         ith_constant_zeta_surface = grid.nodes[change_zeta[i-1]:change_zeta[i]]
 
     Parameters
@@ -642,6 +640,7 @@ def _where_change(x, size):
         Indices of x where elements change value. Empty only if x has no elements.
         Otherwise, always includes index 0. Never includes last index (unless it is 0).
     """
+    # TODO: for jax, might need to pass grid as argument and use grid.num_zeta for size
     return jnp.where(jnp.diff(x, prepend=jnp.nan), size=size)[0]
 
 

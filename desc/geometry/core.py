@@ -10,7 +10,7 @@ class Curve(IOAble, ABC):
 
     _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
 
-    def __init__(self, name):
+    def __init__(self, name=""):
         self.shift = jnp.array([0, 0, 0])
         self.rotmat = jnp.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.name = name

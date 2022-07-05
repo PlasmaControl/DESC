@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.linalg import block_diag, null_space
 
 from desc.backend import sign
 from desc.basis import zernike_radial_poly
@@ -234,6 +235,122 @@ def zernike_to_fourier(x_lmn, basis, rho):
             x_mn[:, k] = np.matmul(A, x_lmn[idx])
 
     return m, n, x_mn
+
+
+def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):
+    """Get optimization subspace corresponding to VMEC boundary modes.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to perturb.
+    RBC : ndarray of int, size(num_modes,2), optional
+        R boundary modes of cos(m*theta-n*NFP*phi) to set as optimization parameters.
+        Each row specifies the (n,m) mode numbers of a boundary coefficient.
+    ZBS : ndarray of int, size(num_modes,2), optional
+        Z boundary modes of sin(m*theta-n*NFP*phi) to set as optimization parameters.
+        Each row specifies the (n,m) mode numbers of a boundary coefficient.
+    RBS : ndarray of int, size(num_modes,2), optional
+        R boundary modes of sin(m*theta-n*NFP*phi) to set as optimization parameters.
+        Each row specifies the (n,m) mode numbers of a boundary coefficient.
+    ZBC : ndarray of int, size(num_modes,2), optional
+        Z boundary modes of cos(m*theta-n*NFP*phi) to set as optimization parameters.
+        Each row specifies the (n,m) mode numbers of a boundary coefficient.
+
+    Returns
+    -------
+    opt_subspace: ndarray
+        Transform matrix to give a subspace from the full optimization parameter space.
+        Can be used to enforce custom optimization constraints.
+
+    """
+    idxRb = np.array([], dtype=int)
+    idxZb = np.array([], dtype=int)
+    Rb_subspace = np.array([])
+    Zb_subspace = np.array([])
+
+    if RBC is not None:
+        RBC = np.atleast_2d(RBC)
+        Rb_subspace = np.eye(eq.Rb_lmn.size)
+        for k, (n, m) in enumerate(RBC):
+            if m < 0:
+                raise ValueError("VMEC m boundary modes cannot be negative.")
+            idxRcc = eq.surface.R_basis.get_idx(M=m, N=np.abs(n))
+            idxRb = np.append(idxRb, idxRcc)
+            if m * n:
+                idxRss = eq.surface.R_basis.get_idx(M=-m, N=-np.abs(n))
+                idxRb = np.append(idxRb, idxRss)
+            if not np.where((RBC == [-n, m]).all(axis=1))[0].size and m * n:
+                Rb_constraint = np.zeros((eq.Rb_lmn.size,))
+                Rb_constraint[idxRcc] = 1
+                Rb_constraint[idxRss] = -sign(n)
+                Rb_subspace = np.vstack((Rb_subspace, Rb_constraint))
+
+    if ZBS is not None:
+        ZBS = np.atleast_2d(ZBS)
+        Zb_subspace = np.eye(eq.Zb_lmn.size)
+        for k, (n, m) in enumerate(ZBS):
+            if m < 0:
+                raise ValueError("VMEC m boundary modes cannot be negative.")
+            if m:
+                idxZsc = eq.surface.Z_basis.get_idx(M=-m, N=np.abs(n))
+                idxZb = np.append(idxZb, idxZsc)
+            if n:
+                idxZcs = eq.surface.Z_basis.get_idx(M=m, N=-np.abs(n))
+                idxZb = np.append(idxZb, idxZcs)
+            if not np.where((ZBS == [-n, m]).all(axis=1))[0].size:
+                Zb_constraint = np.zeros((eq.Zb_lmn.size,))
+                if m:
+                    Zb_constraint[idxZsc] = 1
+                if n:
+                    Zb_constraint[idxZcs] = sign(n)
+                Zb_subspace = np.vstack((Zb_subspace, Zb_constraint))
+
+    if RBS is not None:
+        RBS = np.atleast_2d(RBS)
+        if not Rb_subspace.size:
+            Rb_subspace = np.eye(eq.Rb_lmn.size)
+        for k, (n, m) in enumerate(RBS):
+            if m < 0:
+                raise ValueError("VMEC m boundary modes cannot be negative.")
+            if m:
+                idxRsc = eq.surface.R_basis.get_idx(M=-m, N=np.abs(n))
+                idxRb = np.append(idxRb, idxRsc)
+            if n:
+                idxRcs = eq.surface.R_basis.get_idx(M=m, N=-np.abs(n))
+                idxRb = np.append(idxRb, idxRcs)
+            if not np.where((RBS == [-n, m]).all(axis=1))[0].size:
+                Rb_constraint = np.zeros((eq.Rb_lmn.size,))
+                if m:
+                    Rb_constraint[idxRsc] = 1
+                if n:
+                    Rb_constraint[idxRcs] = sign(n)
+                Rb_subspace = np.vstack((Rb_subspace, Rb_constraint))
+
+    if ZBC is not None:
+        ZBC = np.atleast_2d(ZBC)
+        if not Zb_subspace.size:
+            Zb_subspace = np.eye(eq.Zb_lmn.size)
+        for k, (n, m) in enumerate(ZBC):
+            if m < 0:
+                raise ValueError("VMEC m boundary modes cannot be negative.")
+            idxZcc = eq.surface.Z_basis.get_idx(M=m, N=np.abs(n))
+            idxZb = np.append(idxZb, idxZcc)
+            if m * n:
+                idxZss = eq.surface.Z_basis.get_idx(M=-m, N=-np.abs(n))
+                idxZb = np.append(idxZb, idxZss)
+            if not np.where((ZBC == [-n, m]).all(axis=1))[0].size and m * n:
+                Zb_constraint = np.zeros((eq.Zb_lmn.size,))
+                Zb_constraint[idxZcc] = 1
+                Zb_constraint[idxZss] = -sign(n)
+                Zb_subspace = np.vstack((Zb_subspace, Zb_constraint))
+
+    Rb_subspace = np.delete(Rb_subspace, idxRb, 0)
+    Zb_subspace = np.delete(Zb_subspace, idxZb, 0)
+
+    boundary_subspace = block_diag(Rb_subspace, Zb_subspace)
+    opt_subspace = null_space(boundary_subspace)
+    return opt_subspace
 
 
 """

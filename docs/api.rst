@@ -16,17 +16,6 @@ Basis
     desc.basis.ZernikePolynomial
     desc.basis.FourierZernikeBasis
 
-Boundary Conditions
-*******************
-
-.. autosummary:: 
-    :toctree: _api/boundary_conditions/
-    :recursive:
-    :template: class.rst
-
-    desc.boundary_conditions.LCFSConstraint
-    desc.boundary_conditions.PoincareConstraint
-    desc.boundary_conditions.UmbilicConstraint
 
 Derivatives
 ***********
@@ -51,6 +40,17 @@ Equilibrium
 
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
+
+
+Examples
+********
+
+.. autosummary::
+    :toctree: _api/examples
+    :recursive:
+
+    desc.examples.get
+
 
 Geometry
 ********
@@ -94,16 +94,33 @@ Objective Functions
 *******************
 
 .. autosummary::
-    :toctree: _api/objective_funs
+    :toctree: _api/objectives
     :recursive:
     :template: class.rst
 
-    desc.objective_funs.get_objective_function
-    desc.objective_funs.ForceErrorNodes
-    desc.objective_funs.EnergyVolIntegral
-    desc.objective_funs.QuasisymmetryTripleProduct
-    desc.objective_funs.QuasisymmetryFluxFunction
-	       
+    desc.objectives.AspectRatio
+    desc.objectives.CurrentDensity
+    desc.objectives.Energy
+    desc.objectives.FixBoundaryR
+    desc.objectives.FixBoundaryZ
+    desc.objectives.FixIota
+    desc.objectives.FixLambdaGauge
+    desc.objectives.FixPressure
+    desc.objectives.FixPsi
+    desc.objectives.ForceBalance
+    desc.objectives.GenericObjective
+    desc.objectives.get_fixed_boundary_constraints
+    desc.objectives.get_equilibrium_objective
+    desc.objectives.HelicalForceBalance
+    desc.objectives.ObjectiveFunction   
+    desc.objectives.QuasisymmetryBoozer
+    desc.objectives.QuasisymmetryTwoTerm
+    desc.objectives.QuasisymmetryTripleProduct
+    desc.objectives.RadialForceBalance
+    desc.objectives.ToroidalCurrent
+    desc.objectives.Volume
+
+
 Optimize
 ********
 
@@ -136,12 +153,17 @@ Plotting
     desc.plotting.plot_1d
     desc.plotting.plot_2d
     desc.plotting.plot_3d
-    desc.plotting.plot_surfaces
-    desc.plotting.plot_section
-    desc.plotting.plot_grid
     desc.plotting.plot_basis
+    desc.plotting.plot_boozer_modes
+    desc.plotting.plot_boozer_surface
+    desc.plotting.plot_coefficients	   
+    desc.plotting.plot_comparison
+    desc.plotting.plot_fsa
+    desc.plotting.plot_grid
     desc.plotting.plot_logo
-    desc.plotting.plot_field_lines_sfl
+    desc.plotting.plot_qs_error
+    desc.plotting.plot_section
+    desc.plotting.plot_surfaces
 
 Profiles
 ********

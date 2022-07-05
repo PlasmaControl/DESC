@@ -1,9 +1,20 @@
-import numpy as np
 import scipy.optimize
+import warnings
 from termcolor import colored
+
+from desc.backend import jnp
 from desc.utils import Timer
-from desc.optimize import fmintr, lsqtr
 from desc.io import IOAble
+from desc.objectives import (
+    ObjectiveFunction,
+    ForceBalance,
+    RadialForceBalance,
+    HelicalForceBalance,
+    CurrentDensity,
+    WrappedEquilibriumObjective,
+)
+from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize import fmintr, lsqtr
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 
 
@@ -34,6 +45,7 @@ class Optimizer(IOAble):
 
     _io_attrs_ = ["_method"]
 
+    # TODO: better way to organize these:
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
@@ -44,10 +56,40 @@ class Optimizer(IOAble):
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
     _desc_least_squares_methods = ["lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
-    _scalar_methods = _desc_scalar_methods + _scipy_scalar_methods
-    _least_squares_methods = _scipy_least_squares_methods + _desc_least_squares_methods
-    _scipy_methods = _scipy_least_squares_methods + _scipy_scalar_methods
-    _desc_methods = _desc_least_squares_methods + _desc_scalar_methods
+    _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
+    _scipy_constrained_least_squares_methods = []
+    _desc_constrained_scalar_methods = []
+    _desc_constrained_least_squares_methods = []
+    _scalar_methods = (
+        _desc_scalar_methods
+        + _scipy_scalar_methods
+        + _scipy_constrained_scalar_methods
+        + _desc_constrained_scalar_methods
+    )
+    _least_squares_methods = (
+        _scipy_least_squares_methods
+        + _desc_least_squares_methods
+        + _scipy_constrained_least_squares_methods
+        + _desc_constrained_least_squares_methods
+    )
+    _scipy_methods = (
+        _scipy_least_squares_methods
+        + _scipy_scalar_methods
+        + _scipy_constrained_scalar_methods
+        + _scipy_constrained_least_squares_methods
+    )
+    _desc_methods = (
+        _desc_least_squares_methods
+        + _desc_scalar_methods
+        + _desc_constrained_scalar_methods
+        + _desc_constrained_least_squares_methods
+    )
+    _constrained_methods = (
+        _desc_constrained_scalar_methods
+        + _desc_constrained_least_squares_methods
+        + _scipy_constrained_scalar_methods
+        + _scipy_constrained_least_squares_methods
+    )
     _all_methods = (
         _scipy_least_squares_methods
         + _scipy_scalar_methods
@@ -86,29 +128,46 @@ class Optimizer(IOAble):
             )
         self._method = method
 
+    # TODO: add copy argument and return the equilibrium?
     def optimize(
         self,
+        eq,
         objective,
-        x_init,
-        args=(),
-        x_scale="auto",
+        constraints=(),
         ftol=1e-6,
         xtol=1e-6,
         gtol=1e-6,
+        x_scale="auto",
         verbose=1,
         maxiter=None,
         options={},
     ):
-        """Optimize the objective function
+        """Optimize an objective function.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Initial equilibrium.
         objective : ObjectiveFunction
-            objective function to optimize
-        x_init : ndarray
-            initial guess. Should satisfy any constraints on x
-        args : tuple, optional
-            additional arguments passed to objective fun and derivatives
+            Objective function to optimize.
+        constraints : tuple of Objective, optional
+            List of objectives to be used as constraints during optimization.
+        ftol : float or None, optional
+            Tolerance for termination by the change of the cost function.
+            Default is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+            and there was an adequate agreement between a local quadratic model and the
+            true model in the last step.
+            If None, the termination by this condition is disabled.
+        xtol : float or None, optional
+            Tolerance for termination by the change of the independent variables.
+            Default is 1e-8.
+            Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+            If None, the termination by this condition is disabled.
+        gtol : float or None, optional
+            Absolute tolerance for termination by the norm of the gradient.
+            Default is 1e-8. Optimizer teriminates when ``norm(g) < gtol``, where
+            # FIXME: missing documentation!
+            If None, the termination by this condition is disabled.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -118,29 +177,14 @@ class Optimizer(IOAble):
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the jacobian or hessian matrix.
-        ftol : float or None, optional
-            Tolerance for termination by the change of the cost function. Default
-            is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
-            and there was an adequate agreement between a local quadratic model and
-            the true model in the last step. If None, the termination by this
-            condition is disabled.
-        xtol : float or None, optional
-            Tolerance for termination by the change of the independent variables.
-            Default is 1e-8. Optimization is stopped when
-            ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-            this condition is disabled.
-        gtol : float or None, optional
-            Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-            Optimizer teriminates when ``norm(g) < gtol``, where
-            If None, the termination by this condition is disabled.
         verbose : integer, optional
             * 0  : work silently.
             * 1-2 : display a termination report.
             * 3 : display progress during iterations
         maxiter : int, optional
-            maximum number of iterations. Defaults to size(x)*100
+            Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
-            dictionary of optional keyword arguments to override default solver settings.
+            Dictionary of optional keyword arguments to override default solver settings.
             See the code for more details.
 
         Returns
@@ -154,33 +198,123 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
+        disp = verbose - 1 if verbose > 1 else verbose
+
         timer = Timer()
+
+        if self.method in Optimizer._desc_methods:
+            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
+                options.setdefault("initial_trust_radius", 0.5)
+                options.setdefault("max_trust_radius", 1.0)
+
+        if not isinstance(constraints, tuple):
+            constraints = (constraints,)
+        linear_constraints = tuple(
+            constraint for constraint in constraints if constraint.linear
+        )
+        nonlinear_constraints = tuple(
+            constraint for constraint in constraints if not constraint.linear
+        )
+
+        # wrap nonlinear constraints if necessary
+        wrapped = False
+        if len(nonlinear_constraints) > 0 and (
+            self.method not in Optimizer._constrained_methods
+        ):
+            wrapped = True
+            for constraint in nonlinear_constraints:
+                if not isinstance(
+                    constraint,
+                    (
+                        ForceBalance,
+                        RadialForceBalance,
+                        HelicalForceBalance,
+                        CurrentDensity,
+                    ),
+                ):
+                    raise ValueError(
+                        "optimizer method {} ".format(self.method)
+                        + "cannot handle general nonlinear constraint {}.".format(
+                            constraint
+                        )
+                    )
+            perturb_options = options.pop("perturb_options", {})
+            perturb_options.setdefault("verbose", 0)
+            solve_options = options.pop("solve_options", {})
+            solve_options.setdefault("verbose", 0)
+            objective = WrappedEquilibriumObjective(
+                objective,
+                eq_objective=ObjectiveFunction(nonlinear_constraints),
+                perturb_options=perturb_options,
+                solve_options=solve_options,
+            )
+
+        if not objective.built:
+            objective.build(eq, verbose=verbose)
+        if not objective.compiled:
+            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+            objective.compile(mode, verbose)
+        for constraint in linear_constraints:
+            if not constraint.built:
+                constraint.build(eq, verbose=verbose)
+
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
-            raise ValueError(
+            warnings.warn(
                 colored(
-                    "method {} is incompatible with scalar objective function".format(
+                    "method {} is not intended for scalar objective function".format(
                         ".".join([self.method])
                     ),
-                    "red",
+                    "yellow",
                 )
             )
 
-        if not objective.compiled:
-            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(x_init, args, verbose, mode=mode)
+        if verbose > 0:
+            print("Factorizing linear constraints")
+        timer.start("linear constraint factorize")
+        _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            linear_constraints, objective.args
+        )
+        timer.stop("linear constraint factorize")
+        if verbose > 1:
+            timer.disp("linear constraint factorize")
 
-        # need some weird logic because scipy optimizers expect disp={0,1,2}
-        # while we use verbose={0,1,2,3}
-        disp = verbose - 1 if verbose > 1 else verbose
+        x0_reduced = project(objective.x(eq))
 
-        if self.method in Optimizer._desc_methods:
-            if not isinstance(x_scale, str) and np.allclose(x_scale, 1):
-                options.setdefault("initial_trust_radius", 0.5)
-                options.setdefault("max_trust_radius", 1.0)
+        if verbose > 0:
+            print("Number of parameters: {}".format(x0_reduced.size))
+            print("Number of objectives: {}".format(objective.dim_f))
 
         if verbose > 0:
             print("Starting optimization")
         timer.start("Solution time")
+
+        def compute_wrapped(x_reduced):
+            x = recover(x_reduced)
+            f = objective.compute(x)
+            if self.method in Optimizer._scalar_methods:
+                return f.squeeze()
+            else:
+                return jnp.atleast_1d(f)
+
+        def compute_scalar_wrapped(x_reduced):
+            x = recover(x_reduced)
+            return objective.compute_scalar(x)
+
+        def grad_wrapped(x_reduced):
+            x = recover(x_reduced)
+            df = objective.grad(x)
+            return df[unfixed_idx] @ Z
+
+        def hess_wrapped(x_reduced):
+            x = recover(x_reduced)
+            df = objective.hess(x)
+            return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
+
+        def jac_wrapped(x_reduced):
+            x = recover(x_reduced)
+            df = objective.jac(x)
+            return df[:, unfixed_idx] @ Z
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -188,16 +322,17 @@ class Optimizer(IOAble):
             allf = []
             msg = [""]
 
-            def callback(x):
+            def callback(x_reduced):
+                x = recover(x_reduced)
                 if len(allx) > 0:
-                    dx = allx[-1] - x
-                    dx_norm = np.linalg.norm(dx)
+                    dx = allx[-1] - x_reduced
+                    dx_norm = jnp.linalg.norm(dx)
                     if dx_norm > 0:
-                        fx = objective.compute_scalar(x, *args)
+                        fx = objective.compute_scalar(x)
                         df = allf[-1] - fx
-                        allx.append(x)
+                        allx.append(x_reduced)
                         allf.append(fx)
-                        x_norm = np.linalg.norm(x)
+                        x_norm = jnp.linalg.norm(x_reduced)
                         if verbose > 2:
                             print_iteration_nonlinear(
                                 len(allx), None, fx, df, dx_norm, None
@@ -207,7 +342,7 @@ class Optimizer(IOAble):
                             fx,
                             dx_norm,
                             x_norm,
-                            np.inf,
+                            jnp.inf,
                             1,
                             ftol,
                             xtol,
@@ -215,11 +350,11 @@ class Optimizer(IOAble):
                             len(allx),
                             maxiter,
                             0,
-                            np.inf,
+                            jnp.inf,
                             0,
-                            np.inf,
+                            jnp.inf,
                             0,
-                            np.inf,
+                            jnp.inf,
                         )
                         if success:
                             msg[0] = message
@@ -227,26 +362,25 @@ class Optimizer(IOAble):
                 else:
                     dx = None
                     df = None
-                    fx = objective.compute_scalar(x, *args)
-                    allx.append(x)
+                    fx = objective.compute_scalar(x)
+                    allx.append(x_reduced)
                     allf.append(fx)
                     dx_norm = None
-                    x_norm = np.linalg.norm(x)
+                    x_norm = jnp.linalg.norm(x_reduced)
                     if verbose > 2:
                         print_iteration_nonlinear(
                             len(allx), None, fx, df, dx_norm, None
                         )
 
             print_header_nonlinear()
-            # print_iteration_nonlinear(1, None, allf[0], None, None, None)
             try:
                 result = scipy.optimize.minimize(
-                    objective.compute_scalar,
-                    x0=x_init,
-                    args=args,
+                    compute_scalar_wrapped,
+                    x0=x0_reduced,
+                    args=(),
                     method=self.method[len("scipy-") :],
-                    jac=objective.grad_x,
-                    hess=objective.hess_x,
+                    jac=grad_wrapped,
+                    hess=hess_wrapped,
                     tol=gtol,
                     callback=callback,
                     options={"maxiter": maxiter, "disp": disp, **options},
@@ -270,18 +404,18 @@ class Optimizer(IOAble):
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
-            x_scale = "jac" if x_scale == "auto" else x_scale
             allx = []
+            x_scale = "jac" if x_scale == "auto" else x_scale
 
-            def jac_wrapped(x, *args):
-                allx.append(x)
-                return objective.jac_x(x, *args)
+            def jac(x_reduced):
+                allx.append(x_reduced)
+                return jac_wrapped(x_reduced)
 
             result = scipy.optimize.least_squares(
-                objective.compute,
-                x0=x_init,
-                args=args,
-                jac=jac_wrapped,
+                compute_wrapped,
+                x0=x0_reduced,
+                args=(),
+                jac=jac,
                 method=self.method[len("scipy-") :],
                 x_scale=x_scale,
                 ftol=ftol,
@@ -294,17 +428,18 @@ class Optimizer(IOAble):
 
         elif self.method in Optimizer._desc_scalar_methods:
 
-            x_scale = "hess" if x_scale == "auto" else x_scale
+            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            hess = objective.hess_x if "bfgs" not in self.method else "bfgs"
+            x_scale = "hess" if x_scale == "auto" else x_scale
+
             result = fmintr(
-                objective.compute_scalar,
-                x0=x_init,
-                grad=objective.grad_x,
+                compute_scalar_wrapped,
+                x0=x0_reduced,
+                grad=grad_wrapped,
                 hess=hess,
-                args=args,
+                args=(),
                 method=method,
                 x_scale=x_scale,
                 ftol=ftol,
@@ -319,10 +454,10 @@ class Optimizer(IOAble):
         elif self.method in Optimizer._desc_least_squares_methods:
 
             result = lsqtr(
-                objective.compute,
-                x0=x_init,
-                jac=objective.jac_x,
-                args=args,
+                compute_wrapped,
+                x0=x0_reduced,
+                jac=jac_wrapped,
+                args=(),
                 x_scale=x_scale,
                 ftol=ftol,
                 xtol=xtol,
@@ -332,6 +467,18 @@ class Optimizer(IOAble):
                 callback=None,
                 options=options,
             )
+
+        if wrapped:
+            result["history"] = objective.history
+        else:
+            result["history"] = {}
+            for arg in objective.args:
+                result["history"][arg] = []
+            for x_reduced in result["allx"]:
+                x = recover(x_reduced)
+                kwargs = objective.unpack_state(x)
+                for arg in kwargs:
+                    result["history"][arg].append(kwargs[arg])
 
         timer.stop("Solution time")
 

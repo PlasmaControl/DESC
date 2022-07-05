@@ -24,7 +24,7 @@ def test_vmec_input(tmpdir_factory):
     vmec_inputs = ir.inputs
     vmec_inputs[0].pop("output_path")
     path = tmpdir.join("desc_from_vmec")
-    ir.write_desc_input(path)
+    ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
     desc_inputs = ir2.inputs
     desc_inputs[0].pop("output_path")
@@ -239,10 +239,10 @@ def test_pickle_io(SOLOVEV, tmpdir_factory):
     assert equals(eqf, peqf)
 
 
-def test_ascii_io(plot_eq, tmpdir_factory):
+def test_ascii_io(SOLOVEV, tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
-    eq1 = plot_eq
+    eq1 = load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     write_ascii(tmp_path, eq1)
     eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.R_lmn, eq2.R_lmn)

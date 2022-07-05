@@ -26,6 +26,7 @@ def compute_contravariant_magnetic_field(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant magnetic field components.
 
@@ -204,6 +205,7 @@ def compute_covariant_magnetic_field(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute covariant magnetic field components.
 
@@ -309,6 +311,7 @@ def compute_magnetic_field_magnitude(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic field magnitude.
 
@@ -633,6 +636,7 @@ def compute_magnetic_pressure_gradient(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic pressure gradient.
 
@@ -744,6 +748,7 @@ def compute_magnetic_tension(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute magnetic tension.
 
@@ -851,6 +856,7 @@ def compute_B_dot_gradB(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute the quantity B*grad(|B|) and its partial derivatives.
 
@@ -940,6 +946,7 @@ def compute_contravariant_current_density(
     L_transform,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant current density components.
 
@@ -1009,16 +1016,23 @@ def compute_contravariant_current_density(
         data["J_R"] = data["J"][:, 0]
         data["J_phi"] = data["J"][:, 1]
         data["J_Z"] = data["J"][:, 2]
+        data["|J|"] = jnp.sqrt(
+            data["J^rho"] ** 2 * data["g_rr"]
+            + data["J^theta"] ** 2 * data["g_tt"]
+            + data["J^zeta"] ** 2 * data["g_zz"]
+            + 2 * data["J^rho"] * data["J^theta"] * data["g_rt"]
+            + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
+            + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
+        )
         data["|B|"] = jnp.sqrt(
             data["B^theta"] ** 2 * data["g_tt"]
             + data["B^zeta"] ** 2 * data["g_zz"]
             + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
         data["J_parallel"] = (
-            data["J^theta"] * data["B^theta"] * data["g_tt"]
-            + data["J^theta"] * data["B^zeta"] * data["g_tz"]
-            + data["J^zeta"] * data["B^theta"] * data["g_tz"]
-            + data["J^zeta"] * data["B^zeta"] * data["g_zz"]
+            data["J^rho"] * data["B_rho"]
+            + data["J^theta"] * data["B_theta"]
+            + data["J^zeta"] * data["B_zeta"]
         ) / data["|B|"]
 
     return data

@@ -9,6 +9,8 @@
 
    theory_general
    notebooks/basis_grid
+   notebooks/perturbations
+   notebooks/zernike_eval
    variables
 
 .. toctree::
@@ -25,7 +27,17 @@
    :caption: Examples
 
    notebooks/hands_on
+   notebooks/Spline_Basis
    notebooks/Saving_Equilibria_in_VMEC_Format
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Tutorials
+
+   notebooks/tutorials/00_Getting_Started_with_DESC.ipynb
+   notebooks/tutorials/01_Using_DESC_Outputs.ipynb
+   notebooks/tutorials/02_Script_Interface.ipynb
+   notebooks/tutorials/03_Quasi-Symmetry_Optimization.ipynb
 
 .. toctree::
    :maxdepth: 1

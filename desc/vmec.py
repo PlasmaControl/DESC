@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset, stringtochar
@@ -11,7 +12,12 @@ from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
-from desc.boundary_conditions import LCFSConstraint
+from desc.objectives import (
+    ObjectiveFunction,
+    FixBoundaryR,
+    FixBoundaryZ,
+)
+from desc.objectives.utils import factorize_linear_constraints
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
@@ -48,6 +54,14 @@ class VMECIO:
         """
         file = Dataset(path, mode="r")
         inputs = {}
+
+        version = file.variables["version_"][0]
+        if version < 9:
+            warnings.warn(
+                "VMEC output appears to be from version {}, while DESC is only designed for compatibility with VMEC version 9. Some data may not be loaded correctly.".format(
+                    str(version)
+                )
+            )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])
@@ -110,12 +124,15 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        BC = eq.surface.get_constraint(
-            eq.R_basis,
-            eq.Z_basis,
-            eq.L_basis,
+        # apply boundary conditions
+        constraints = (FixBoundaryR(), FixBoundaryZ())
+        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, extra_args=objective.args
         )
-        eq.x = BC.make_feasible(eq.x)
+        args = objective.unpack_state(recover(project(objective.x(eq))))
+        for key, value in args.items():
+            setattr(eq, key, value)
 
         return eq
 

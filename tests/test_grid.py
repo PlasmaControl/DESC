@@ -224,6 +224,10 @@ class TestGrid(unittest.TestCase):
 
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes, atol=1e-8)
 
+    def test_concentric_grid_high_res(self):
+        # need to make sure this builds without crashing, as in GH issue #207
+        grid = ConcentricGrid(L=32, M=28, N=30)
+
     def test_quad_grid_volume_integration(self):
 
         r = 1

@@ -4,6 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import data_index
+from desc.grid import LinearGrid
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -92,6 +93,7 @@ def cross(a, b, axis=-1):
 def compute_flux_coords(
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute flux coordinates (rho,theta,zeta).
 
@@ -120,6 +122,7 @@ def compute_toroidal_flux(
     Psi,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute toroidal magnetic flux profile.
 
@@ -152,6 +155,7 @@ def compute_toroidal_coords(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute toroidal coordinates (R,phi,Z).
 
@@ -215,6 +219,7 @@ def compute_cartesian_coords(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute Cartesian coordinates (X,Y,Z).
 
@@ -249,6 +254,7 @@ def compute_lambda(
     L_lmn,
     L_transform,
     data=None,
+    **kwargs,
 ):
     """Compute lambda such that theta* = theta + lambda is a sfl coordinate.
 
@@ -303,6 +309,7 @@ def compute_pressure(
     p_l,
     pressure,
     data=None,
+    **kwargs,
 ):
     """Compute pressure profile.
 
@@ -333,6 +340,7 @@ def compute_rotational_transform(
     i_l,
     iota,
     data=None,
+    **kwargs,
 ):
     """Compute rotational transform profile.
 
@@ -366,6 +374,7 @@ def compute_covariant_basis(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute covariant basis vectors.
 
@@ -466,6 +475,7 @@ def compute_contravariant_basis(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute contravariant basis vectors.
 
@@ -513,6 +523,7 @@ def compute_jacobian(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute coordinate system Jacobian.
 
@@ -625,6 +636,7 @@ def compute_covariant_metric_coefficients(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute metric coefficients.
 
@@ -677,6 +689,7 @@ def compute_contravariant_metric_coefficients(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute reciprocal metric coefficients.
 
@@ -736,6 +749,7 @@ def compute_geometry(
     R_transform,
     Z_transform,
     data=None,
+    **kwargs,
 ):
     """Compute plasma volume.
 
@@ -758,15 +772,15 @@ def compute_geometry(
     """
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    # FIXME: make grids have attributes for spacing in each dimension
-    # N = jnp.unique(R_transform.grid.nodes[:, -1]).size  # number of toroidal angles
-    N = 2 * R_transform.grid.N + 1  # hack that works for QuadratureGrid
-    weights = R_transform.grid.weights / (2 * jnp.pi / N)  # remove toroidal weights
+    # Poincare cross-section weights
+    xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
+    # number of toroidal grid points
+    N = R_transform.grid.num_zeta
 
     data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
     data["A"] = jnp.mean(
         jnp.sum(  # sqrt(g) / R * weight = dArea
-            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * weights, (N, -1)),
+            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * xs_weights, (N, -1)),
             axis=1,
         )
     )

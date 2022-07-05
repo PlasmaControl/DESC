@@ -7,7 +7,7 @@ from desc.compute import (
     compute_geometry,
 )
 from .objective_funs import _Objective
-
+import numpy as np
 
 class Volume(_Objective):
     """Plasma volume.
@@ -98,6 +98,59 @@ class Volume(_Objective):
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
         return self._shift_scale(jnp.atleast_1d(data["V"]))
 
+class Zero(_Objective):
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, **kwargs):
+        return np.zeros(1)
 
 class AspectRatio(_Objective):
     """Aspect ratio = major radius / minor radius.

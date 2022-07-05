@@ -9,6 +9,7 @@ import numpy as np
 from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.exact_lagrangian import fmin_exlag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
+from desc.optimize.aug_lagrangian_stel import fmin_lag_stel
 from desc.derivatives import Derivative
 from desc.backend import jnp
 from scipy.optimize import minimize
@@ -59,6 +60,50 @@ mu0 = 10
 # tau = 1/mu*10**(-4)
 
 fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+
+#%% G06 wrapped
+def obj_func(x):
+    #return jnp.dot(np.ones(2),x)
+    return (x[0]-10)**3 + (x[1] - 20)**3
+
+def ineq_constr_func1(x):
+    #return jnp.dot(x,x) - 2
+    return -(x[0]-5)**2 - (x[1]-5)**2
+
+def ineq_constr_func2(x):
+    return (x[0]-6)**2 + (x[1]-5)**2
+
+def bound_constr1(x):
+    return -x[0]
+
+def bound_constr2(x):
+    return x[0]
+
+def bound_constr3(x):
+    return -x[1]
+
+def bound_constr4(x):
+    return x[1]
+
+grad = Derivative(obj_func, argnum=0)
+gradineq1 = Derivative(ineq_constr_func1,argnum=0)
+gradineq2 = Derivative(ineq_constr_func2,argnum=0)
+gradbound1 = Derivative(bound_constr1,argnum=0)
+gradbound2 = Derivative(bound_constr2,argnum=0)
+gradbound3 = Derivative(bound_constr3,argnum=0)
+gradbound4 = Derivative(bound_constr4,argnum=0)
+
+ic = np.array([ineq_constr_func1,ineq_constr_func2,bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+gic = np.array([gradineq1,gradineq2,gradbound1,gradbound2,gradbound3,gradbound4])
+
+x0 = np.array([15.0, 50.0])
+lmbda0 = 1.0*np.ones(6)
+mu0 = 10
+# mu = np.array([1, 10, 100])
+# tau = 1/mu*10**(-4)
+
+#fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,np.array([]),ic,bounds=np.array([-100,82.81,-13,100,0,100]),maxiter = 100)
 
 #%%G06 scipy
 def obj_func(x):
@@ -202,6 +247,39 @@ mu0 = 100
 
 fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,eq,gradeq,ic,gic,maxiter = 50)
 
+#%% G11 wrapped
+def obj_func(x):
+    #return jnp.dot(np.ones(2),x)
+    return x[0]**2 + (x[1] - 1)**2
+
+def eq_constr_func(x):
+    return x[1] - x[0]**2
+
+def bound_constr1(x):
+    return -x[0]
+
+def bound_constr2(x):
+    return x[0]
+
+def bound_constr3(x):
+    return -x[1]
+
+def bound_constr4(x):
+    return x[1]
+
+eq = np.array([eq_constr_func])
+ineq = np.array([bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+# ic = np.array([])
+# gic = np.array([])
+
+x0 = np.array([np.sqrt(0.1), 0.1])
+
+lmbda0 = -0.1*np.ones(5)
+# x0 = np.array([np.sqrt(0.1),0.1])
+# lmbda0 = np.array([0.1])
+mu0 = 100
+
+fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,eq,ineq,bounds=np.array([0,1,1,1,1]),maxiter = 100)
 #%% G11 exact
 def obj_func(x):
     #return jnp.dot(np.ones(2),x)

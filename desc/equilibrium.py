@@ -468,16 +468,16 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.callback(objective.x(eq))
-        for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
-        if verbose > 0:
-            print("End of solver")
-            objective.callback(objective.x(eq))
+        # if verbose > 0:
+        #     print("Start of solver")
+        #     objective.callback(objective.x(eq))
+        # for key, value in result["history"].items():
+        #     setattr(eq, key, value[-1])
+        # if verbose > 0:
+        #     print("End of solver")
+        #     objective.callback(objective.x(eq))
 
-        eq.solved = result["success"]
+        # eq.solved = result["success"]
         return eq, result
 
     def _optimize(

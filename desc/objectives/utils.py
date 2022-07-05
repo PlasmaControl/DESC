@@ -166,6 +166,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         )
         A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
         b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        
         Ainv_full, Z = svd_inv_null(A_full)
         xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 

@@ -15,6 +15,15 @@ from desc.compute import (
 
 from .objective_funs import ObjectiveFunction
 
+
+# class Zero(ObjectiveFunction):
+    
+#     def __init__(self,func):
+#         self.func = func
+    
+#     def compute(self):
+#         return self.func()
+
 class AugLagrangian(ObjectiveFunction):
     
     def __init__(self, func, constr):

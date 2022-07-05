@@ -13,11 +13,12 @@ from desc.objectives import (
     CurrentDensity,
     WrappedEquilibriumObjective,
 )
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import factorize_linear_constraints, get_fixed_boundary_constraints
 from desc.optimize import fmintr, lsqtr
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
+from desc.derivatives import Derivative
 
 class Optimizer(IOAble):
     """A helper class to wrap several different optimization routines
@@ -325,7 +326,8 @@ class Optimizer(IOAble):
             timer.disp("linear constraint factorize")
 
         x0_reduced = project(objective.x(eq))
-        
+        #objective.combine_args(constraint_objectives)
+        print(constraint_objectives.dim_x)
         if verbose > 0:
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
@@ -364,6 +366,18 @@ class Optimizer(IOAble):
         def compute_constraints_wrapped(x_reduced):
             x = recover(x_reduced)
             return constraint_objectives.compute(x)
+        
+        def compute_constraints_grad_wrapped(x_reduced):
+            x = recover(x_reduced)
+            fixed_boundary_constraints = get_fixed_boundary_constraints()
+            for constraint in fixed_boundary_constraints:
+                if not constraint.built:
+                    constraint.build(eq, verbose=verbose)
+            _, _, _, _, Zfb, unfixed_idxfb, _, _ = factorize_linear_constraints(
+                fixed_boundary_constraints
+            )
+            return constraint_objectives.grad(x)[unfixed_idxfb] @ Zfb
+            #return Derivative(constraint_objectives.compute,argnum=0)(x)
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -484,8 +498,6 @@ class Optimizer(IOAble):
             )
             x_scale = "hess" if x_scale == "auto" else x_scale
                        
-            print(x0_reduced)
-
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -513,14 +525,15 @@ class Optimizer(IOAble):
            
             gradconstr = jnp.array([])
             gradineq = jnp.array([])
-            constr = np.array([compute_constraints_wrapped])
+            constr = np.array([compute_constraints_grad_wrapped])
             ineq = jnp.array([])
             
             l = 0
             for i in range(len(constr)):
+                print(constr[i](x0_reduced).shape)
                 l = l + len(constr[i](x0_reduced))
             lmbda0 = jnp.ones(l)
-            mu0 = 10.0
+            mu0 = 1000.0
             
             result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             
@@ -542,27 +555,27 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        if wrapped:
-            result["history"] = objective.history
-        else:
-            result["history"] = {}
-            for arg in objective.args:
-                result["history"][arg] = []
-            for x_reduced in result["allx"]:
-                x = recover(x_reduced)
-                kwargs = objective.unpack_state(x)
-                for arg in kwargs:
-                    result["history"][arg].append(kwargs[arg])
+        # if wrapped:
+        #     result["history"] = objective.history
+        # else:
+        #     result["history"] = {}
+        #     for arg in objective.args:
+        #         result["history"][arg] = []
+        #     for x_reduced in result["allx"]:
+        #         x = recover(x_reduced)
+        #         kwargs = objective.unpack_state(x)
+        #         for arg in kwargs:
+        #             result["history"][arg].append(kwargs[arg])
 
-        timer.stop("Solution time")
+        # timer.stop("Solution time")
 
-        if verbose > 1:
-            timer.disp("Solution time")
-            timer.pretty_print(
-                "Avg time per step",
-                timer["Solution time"] / result.get("nit", result.get("nfev")),
-            )
-        for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
-            _ = result.pop(key, None)
+        # if verbose > 1:
+        #     timer.disp("Solution time")
+        #     timer.pretty_print(
+        #         "Avg time per step",
+        #         timer["Solution time"] / result.get("nit", result.get("nfev")),
+        #     )
+        # for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
+        #     _ = result.pop(key, None)
 
         return result

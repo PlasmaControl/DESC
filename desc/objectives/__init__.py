@@ -24,7 +24,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     CurrentDensity,
 )
-from ._geometry import Volume, AspectRatio
+from ._geometry import Volume, AspectRatio, Zero
 from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,

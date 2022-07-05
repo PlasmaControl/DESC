@@ -12,6 +12,7 @@ from desc.objectives import (
     FixPressure,
     FixIota,
     FixPsi,
+    Zero
 )
 from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
@@ -39,14 +40,14 @@ eq.optimize(objective, constraints, options=options)
 #%% Constrained Optimization
 path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 eq = desc.io.load(path)[-1]
-objective = ObjectiveFunction(AspectRatio(target=2.5))
+objective = ObjectiveFunction(Zero())
 constraints = (
     ForceBalance(),
-    FixBoundaryR(fixed_boundary=True),
-    FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :],fixed_boundary=True),
+    FixBoundaryR(fixed_boundary = True),
+    FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :],fixed_boundary = True),
     FixPressure(),
     FixIota(),
     FixPsi(),
 )
 options = {"perturb_options": {"order": 1}}
-eq.optimize(objective, constraints, optimizer = Optimizer("auglag"), options=options)
+result = eq.optimize(objective, constraints, optimizer = Optimizer("auglag"), options=options)

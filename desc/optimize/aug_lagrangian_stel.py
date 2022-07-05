@@ -52,23 +52,20 @@ from desc.derivatives import Derivative
 #         return np.linalg.norm(x - proj(x - gL, l, u))
     
 
-def conv_test(x,gL,l,u):
+def conv_test(x,gL,bounds):
     return np.linalg.norm(gL)
 
 # def bound_constr(x,lmbda,mu,gradL)
 
-def fmin_lag(
+def fmin_lag_stel(
     fun,
     x0,
     lmbda0,
     mu0,
     grad,
-    constr,
-    gradconstr,
-    ineq,
-    gradineq,
-    l = None,
-    u = None,
+    eq_constr,
+    ineq_constr,
+    bounds,
     hess="bfgs",
     args=(),
     method="dogleg",
@@ -95,9 +92,34 @@ def fmin_lag(
     ngev += 1
     lmbda = lmbda0
     
-    constr = np.concatenate((constr,ineq),axis=None)
-    gradconstr = np.concatenate((gradconstr,gradineq),axis=None)
+    ineq_dim = 0
+    for i in range(len(ineq_constr)):
+        ineq_dim = ineq_dim + len(np.array([ineq_constr[i](x)]).flatten())
     
+    x = np.append(x,5.0*np.ones(ineq_dim))
+    
+    
+    def recover(x):
+        return x[0:len(x)-ineq_dim]
+    
+    def wrapped_constraint(x):
+        c = np.array([])
+        slack = x[len(recover(x)):]**2
+
+        for i in range(len(eq_constr)):
+            eq = eq_constr[i](recover(x))
+            c = jnp.append(c,eq)
+            slack = jnp.append(jnp.zeros(len(jnp.array(eq).flatten())),slack)
+            
+        for i in range(len(ineq_constr)):
+            ineq = ineq_constr[i](recover(x))
+            c = jnp.append(c,ineq)
+        c = c - bounds + slack
+        return c
+        
+        
+    constr = np.array([wrapped_constraint])         
+
     L = AugLagrangian(fun, constr)
     gradL = Derivative(L.compute,argnum=0)
     hessL = Derivative(L.compute,argnum=0,mode="hess")
@@ -111,23 +133,23 @@ def fmin_lag(
     while iteration < maxiter:
         print("Before minimize\n")
         xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        #xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL)
+        #xk = minimize(L.compute,x_wrapped,args=(lmbda,mu),method="trust-constr",jac=gradL,hess=hessL)
         print("After minimize\n")
         x = xk['x']
-
+        print("x is ")
+        print(x)
         c = 0
         
         cv = L.compute_constraints(x)
         c = np.linalg.norm(cv)
         print("The constraints are " + str(cv))
-        print("The gradient is " + str(gradL(x,lmbda,mu)))
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break        
         
         if c < ctolk:
 
-            if c < ctol and conv_test(x,gradL(x,lmbda,mu),l,u) < gtol:
+            if c < ctol and conv_test(x,gradL(x,lmbda,mu),bounds) < gtol:
                 break
 
             else:
@@ -143,5 +165,4 @@ def fmin_lag(
         iteration = iteration + 1
         xold = x
         print(fun(x))
-        print(x)
     return [fun(x),x,lmbda,c,gradL(x,lmbda,mu)]

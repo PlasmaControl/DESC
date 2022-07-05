@@ -1,11 +1,13 @@
+import tempfile
 import numpy as np
 import warnings
+import numbers
 from desc.backend import jnp, sign, put
-from desc.boundary_conditions import LCFSConstraint, PoincareConstraint
 from desc.utils import copy_coeffs
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
+from desc.io import InputReader
 from .core import Surface
 from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
 
@@ -20,9 +22,9 @@ class FourierRZToroidalSurface(Surface):
     R_lmn, Z_lmn : array-like, shape(k,)
         Fourier coefficients for R and Z in cylindrical coordinates
     modes_R : array-like, shape(k,2)
-        poloidal and toroidal mode numbers [m,n] for R_n.
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
     modes_Z : array-like, shape(k,2)
-        mode numbers associated with Z_n, defaults to modes_R
+        mode numbers associated with Z_lmn, defaults to modes_R
     NFP : int
         number of field periods
     sym : bool
@@ -121,6 +123,13 @@ class FourierRZToroidalSurface(Surface):
         """Number of (toroidal) field periods (int)."""
         return self._NFP
 
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(new)}"
+        self.change_resolution(NFP=new)
+
     @property
     def R_basis(self):
         """Spectral basis for R double Fourier series."""
@@ -151,12 +160,14 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution"""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
+        assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
         L = kwargs.get("L", None)
         M = kwargs.get("M", None)
         N = kwargs.get("N", None)
+        NFP = kwargs.get("NFP", None)
+        self._NFP = NFP if NFP is not None else self.NFP
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have a radial resolution, ignoring L"
@@ -166,11 +177,17 @@ class FourierRZToroidalSurface(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        if (N != self.N) or (M != self.M):
+        if (
+            ((N is not None) and (N != self.N))
+            or ((M is not None) and (M != self.M))
+            or (NFP is not None)
+        ):
+            M = M if M is not None else self.M
+            N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(M=M, N=N)
-            self.Z_basis.change_resolution(M=M, N=N)
+            self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)
+            self.Z_basis.change_resolution(M=M, N=N, NFP=self.NFP)
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
@@ -411,17 +428,41 @@ class FourierRZToroidalSurface(Surface):
         N = jnp.cross(r_t, r_z, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1))
 
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return LCFSConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
+    @classmethod
+    def from_input_file(cls, path):
+        """Create a surface objective from Fourier coefficients in a DESC or VMEC input file
+
+        Parameters
+        ----------
+        path : Path-like or str
+            path to DESC or VMEC input file
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            surface with given Fourier coefficients
+
+        """
+        f = open(path, "r")
+        if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
+            inputs = InputReader.parse_vmec_inputs(f)
+        else:
+            inputs = InputReader().parse_inputs(f)[-1]
+        if inputs["bdry_ratio"] != 1:
+            warnings.warn(
+                "boundary_ratio = {} != 1, surface may not be as expected".format(
+                    inputs["bdry_ratio"]
+                )
+            )
+        surf = cls(
+            inputs["surface"][:, 3],
+            inputs["surface"][:, 4],
+            inputs["surface"][:, 1:3].astype(int),
+            inputs["surface"][:, 1:3].astype(int),
+            inputs["NFP"],
+            inputs["sym"],
         )
+        return surf
 
 
 class ZernikeRZToroidalSection(Surface):
@@ -596,7 +637,7 @@ class ZernikeRZToroidalSection(Surface):
         elif len(args) == 3:
             L, M, N = args
 
-        if (L != self.L) or (M != self.M):
+        if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(L=L, M=M)
@@ -637,6 +678,7 @@ class ZernikeRZToroidalSection(Surface):
 
     def get_coeffs(self, l, m=0):
         """Get Zernike coefficients for given mode number(s)."""
+
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -658,6 +700,7 @@ class ZernikeRZToroidalSection(Surface):
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
         """Set specific Zernike coefficients."""
+
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),
@@ -806,16 +849,4 @@ class ZernikeRZToroidalSection(Surface):
         N = jnp.cross(r_r, r_t, axis=1)
         return jnp.sum(R_transform.grid.weights * jnp.linalg.norm(N, axis=1)) / (
             2 * np.pi
-        )
-
-    def get_constraint(self, R_basis, Z_basis, L_basis):
-        """Get the linear constraint to enforce this surface as a boundary condition"""
-        return PoincareConstraint(
-            R_basis,
-            Z_basis,
-            L_basis,
-            self.R_basis,
-            self.Z_basis,
-            self.R_lmn,
-            self.Z_lmn,
         )

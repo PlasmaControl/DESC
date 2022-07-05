@@ -33,6 +33,9 @@ class Grid(IOAble):
         "_weights",
         "_axis",
         "_node_pattern",
+        "_num_rho",
+        "_num_theta",
+        "_num_zeta",
     ]
 
     def __init__(self, nodes, sort=True):
@@ -51,6 +54,7 @@ class Grid(IOAble):
         if sort:
             self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _enforce_symmetry(self):
@@ -69,6 +73,12 @@ class Grid(IOAble):
     def _find_axis(self):
         """Find indices of axis nodes."""
         self._axis = np.where(self.nodes[:, 0] == 0)[0]
+
+    def _count_nodes(self):
+        """Count unique values of coordinates."""
+        self._num_rho = np.unique(self.nodes[:, 0]).size
+        self._num_theta = np.unique(self.nodes[:, 1]).size
+        self._num_zeta = np.unique(self.nodes[:, 2]).size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -166,6 +176,21 @@ class Grid(IOAble):
         return self.nodes.shape[0]
 
     @property
+    def num_rho(self):
+        """int: number of unique rho coordinates"""
+        return self._num_rho
+
+    @property
+    def num_theta(self):
+        """int: number of unique theta coordinates"""
+        return self._num_theta
+
+    @property
+    def num_zeta(self):
+        """int: number of unique zeta coordinates"""
+        return self._num_zeta
+
+    @property
     def axis(self):
         """ndarray: Indices of nodes at magnetic axis."""
         return self.__dict__.setdefault("_axis", np.array([]))
@@ -257,6 +282,7 @@ class LinearGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _create_nodes(
@@ -323,7 +349,7 @@ class LinearGrid(Grid):
                 r0 = 1.0 / self.L
             r = np.linspace(r0, 1, self.L)
         if self.L > 0:
-            dr = (1 - r[0]) / self.L
+            dr = (r[-1] - r[0]) / self.L
             if dr == 0:
                 dr = 1
         else:
@@ -365,7 +391,7 @@ class LinearGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -376,8 +402,11 @@ class LinearGrid(Grid):
             new poloidal grid resolution (M poloidal nodes)
         N : int
             new toroidal grid resolution (N toroidal nodes)
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -436,6 +465,7 @@ class QuadratureGrid(Grid):
         self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
@@ -496,7 +526,7 @@ class QuadratureGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -507,8 +537,11 @@ class QuadratureGrid(Grid):
             new poloidal grid resolution (M poloidal nodes)
         N : int
             new toroidal grid resolution (N toroidal nodes)
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -592,6 +625,7 @@ class ConcentricGrid(Grid):
         self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
+        self._count_nodes()
         self._scale_weights()
 
     def _create_nodes(
@@ -615,9 +649,9 @@ class ConcentricGrid(Grid):
             * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
             * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
             * ``None`` for no symmetry (Default), rotates halfway between other options
-        node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
+        node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
-
+                * ``linear`` : linear spacing in r=[0,1]
                 * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
                 * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
                 * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
@@ -625,7 +659,6 @@ class ConcentricGrid(Grid):
                   surface.
                 * ``'ocs'``: optimal concentric sampling to minimize the condition
                   number of the resulting transform matrix, for doing inverse transform.
-                * ``None`` : linear spacing in r=[0,1]
 
         Returns
         -------
@@ -646,12 +679,15 @@ class ConcentricGrid(Grid):
             return np.sort(rj)
 
         pattern = {
+            "linear": np.linspace(0, 1, num=L // 2 + 1),
             "cheb1": (np.cos(np.arange(L // 2, -1, -1) * np.pi / (L // 2)) + 1) / 2,
             "cheb2": -np.cos(np.arange(L // 2, L + 1, 1) * np.pi / L),
             "jacobi": special.js_roots(L // 2 + 1, 2, 2)[0],
             "ocs": ocs(L),
         }
-        rho = pattern.get(node_pattern, np.linspace(0, 1, num=L // 2 + 1))
+        rho = pattern.get(node_pattern)
+        if rho is None:
+            raise ValueError("node_pattern '{}' is not supported".format(node_pattern))
         rho = np.sort(rho, axis=None)
         if axis:
             rho[0] = 0
@@ -675,10 +711,9 @@ class ConcentricGrid(Grid):
         dt = []
 
         for iring in range(L // 2 + 1, 0, -1):
-            dtheta = (
-                2 * np.pi / (2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int))
-            )
-            theta = np.arange(0, 2 * np.pi, dtheta)
+            ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            dtheta = 2 * np.pi / ntheta
+            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
             if rotation in {None, False}:
                 if self.sym:
                     # this is emperically chosen, could be something different, just
@@ -707,7 +742,7 @@ class ConcentricGrid(Grid):
         dimzern = r.size
 
         dz = 2 * np.pi / (NFP * (2 * N + 1))
-        z = np.arange(0, 2 * np.pi / NFP, dz)
+        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
 
         r = np.tile(r, 2 * N + 1)
         t = np.tile(t, 2 * N + 1)
@@ -720,7 +755,7 @@ class ConcentricGrid(Grid):
 
         return nodes, spacing
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.
 
         Parameters
@@ -731,8 +766,11 @@ class ConcentricGrid(Grid):
             new poloidal grid resolution
         N : int
             new toroidal grid resolution
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M

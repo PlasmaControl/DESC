@@ -102,6 +102,11 @@ class TestRZCurve(unittest.TestCase):
         assert "FourierRZCurve" in str(c)
         assert c.sym
 
+        c.NFP = 3
+        assert c.NFP == 3
+        assert c.R_basis.NFP == 3
+        assert c.Z_basis.NFP == 3
+
     def test_asserts(self):
         with pytest.raises(ValueError):
             c = FourierRZCurve(R_n=[])

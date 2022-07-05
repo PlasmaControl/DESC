@@ -1,4 +1,5 @@
 import numpy as np
+import numbers
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from .core import Curve
@@ -116,6 +117,13 @@ class FourierRZCurve(Curve):
         """Number of field periods."""
         return self._NFP
 
+    @NFP.setter
+    def NFP(self, new):
+        assert (
+            isinstance(new, numbers.Real) and int(new) == new and new > 0
+        ), f"NFP should be a positive integer, got {type(NFP)}"
+        self.change_resolution(NFP=new)
+
     @property
     def grid(self):
         """Default grid for computation."""
@@ -141,17 +149,20 @@ class FourierRZCurve(Curve):
         """Maximum mode number"""
         return max(self.R_basis.N, self.Z_basis.N)
 
-    def change_resolution(self, N):
+    def change_resolution(self, N=None, NFP=None):
         """Change the maximum toroidal resolution."""
-        if N != self.N:
+        if ((N is not None) and (N != self.N)) or (
+            (NFP is not None) and (NFP != self.NFP)
+        ):
+            self._NFP = NFP if NFP is not None else self.NFP
+            N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(N=N)
-            self.Z_basis.change_resolution(N=N)
+            self.R_basis.change_resolution(N=N, NFP=self.NFP)
+            self.Z_basis.change_resolution(N=N, NFP=self.NFP)
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
-            self._N = N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -477,9 +488,9 @@ class FourierXYZCurve(Curve):
         """Maximum mode number"""
         return self.basis.N
 
-    def change_resolution(self, N):
+    def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
-        if N != self.N:
+        if (N is not None) and (N != self.N):
             modes_old = self.basis.modes
             self.basis.change_resolution(N=N)
             self._transform = self._get_transforms(self.grid)
@@ -824,9 +835,9 @@ class FourierPlanarCurve(Curve):
         """Maximum mode number"""
         return self.basis.N
 
-    def change_resolution(self, N):
+    def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
-        if N != self.N:
+        if (N is not None) and (N != self.N):
             modes_old = self.basis.modes
             self.basis.change_resolution(N=N)
             self._transform = self._get_transforms(self.grid)

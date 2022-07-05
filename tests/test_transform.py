@@ -37,7 +37,7 @@ class TestTransform(unittest.TestCase):
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
         grid = LinearGrid(L=11, endpoint=True)
-        basis = PowerSeries(L=2)
+        basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=0)
 
         # invalid derivative orders
@@ -53,7 +53,7 @@ class TestTransform(unittest.TestCase):
     def test_profile(self):
         """Tests transform of power series on a radial profile."""
         grid = LinearGrid(L=11, endpoint=True)
-        basis = PowerSeries(L=2)
+        basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=1)
 
         x = grid.nodes[:, 0]

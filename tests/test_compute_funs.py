@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import convolve2d
 import pytest
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, Grid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.geometry import FourierRZToroidalSurface
 from desc.profiles import PowerSeriesProfile
@@ -420,57 +420,163 @@ def test_surface_areas():
 
 def test_vector_signs():
 
-    iota1 = PowerSeriesProfile([1, 0, -0.5])
-    R_lmn = np.array([10, 1])
-    modes_R = np.array([[0, 0], [1, 0]])
-    Z_lmn = np.array([0, -2])
-    modes_Z = np.array([[0, 0], [-1, 0]])
-    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-    eq1p = Equilibrium(surface=surface, L=5, M=10, N=5, NFP=1, sym=False, iota=iota1)
-
-    R_lmn = np.array([10, 1])
-    modes_R = np.array([[0, 0], [1, 0]])
-    Z_lmn = np.array([0, 2])
-    modes_Z = np.array([[0, 0], [-1, 0]])
-    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-    eq1m = Equilibrium(surface=surface, L=5, M=10, N=5, NFP=1, sym=False, iota=iota1)
-
-    iota2 = PowerSeriesProfile([-1, 0, -0.5])
-
     R_lmn = np.array([10, 1, 0.2])
     modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
     Z_lmn = np.array([0, -2, -0.2])
     modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
-    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-    eq2p = Equilibrium(surface=surface, L=5, M=10, N=5, Psi=-1.0, sym=False, iota=iota2)
-
+    surfacep = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
     R_lmn = np.array([10, 1, -0.2])
     modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
     Z_lmn = np.array([0, 2, 0.2])
     modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
-    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-    eq2m = Equilibrium(surface=surface, L=5, M=10, N=5, Psi=-1.0, sym=False, iota=iota2)
+    surfacem = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
 
-    assert np.sign(eq1p.compute("sqrt(g)")["sqrt(g)"][0]) == 1.0
-    assert np.sign(eq1m.compute("sqrt(g)")["sqrt(g)"][0]) == -1.0
-    assert np.sign(eq2p.compute("sqrt(g)")["sqrt(g)"][0]) == 1.0
-    assert np.sign(eq2m.compute("sqrt(g)")["sqrt(g)"][0]) == -1.0
+    iotap = PowerSeriesProfile([1, 0, -0.5])
+    iotam = PowerSeriesProfile([-1, 0, 0.5])
 
-    pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 2]]))
-    mgrid = Grid(np.array([[1, 0, 0], [0.5, -np.pi / 6, np.pi / 2]]))
+    # ppp = jacobian plus, psi plus, iota plus
+    # mmp = jacobian minus, psi minus, iota plus
+    # etc.
 
+    eqmmm = Equilibrium(
+        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=-1
+    )
+    eqmmp = Equilibrium(
+        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=-1
+    )
+    eqmpm = Equilibrium(
+        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=1
+    )
+    eqmpp = Equilibrium(
+        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=1
+    )
+    eqpmm = Equilibrium(
+        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=-1
+    )
+    eqpmp = Equilibrium(
+        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=-1
+    )
+    eqppm = Equilibrium(
+        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=1
+    )
+
+    eqppp = Equilibrium(
+        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=1
+    )
+
+    grid = Grid(np.array([[1, 0, 0]]))
+
+    # jacobian sign
+    assert np.sign(eqmmm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
+    assert np.sign(eqmmp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
+    assert np.sign(eqmpm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
+    assert np.sign(eqmpp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
+    assert np.sign(eqpmm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
+    assert np.sign(eqpmp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
+    assert np.sign(eqppm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
+    assert np.sign(eqppp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
+
+    grid = Grid(np.array([[0.1, 0, 0]]))
+    # toroidal field sign
+    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 1]) == -1.0
+    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 1]) == -1.0
+    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 1]) == 1.0
+    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 1]) == 1.0
+    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 1]) == -1.0
+    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 1]) == -1.0
+    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 1]) == 1.0
+    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 1]) == 1.0
+
+    grid = Grid(np.array([[1, 0, 0]]))
+    # poloidal field sign = -Bz on outboard side
+    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 2]) == 1.0
+
+    grid = Grid(np.array([[0.1, 0, 0]]))
+    # toroidal current sign
+    assert np.sign(eqmmm.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqmmp.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqmpm.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqmpp.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqpmm.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqpmp.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqppm.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqppp.compute("J", grid=grid)["J"][0, 1]) == -1.0
+
+    # for positive jacobian
+    pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 3]]))
+    # same real space, but for negative jacobian need to flip theta
+    mgrid = Grid(np.array([[1, 0, 0], [0.5, -np.pi / 6, np.pi / 3]]))
+
+    # test that just flipping jacobian gives same physics:
     keys = ["B", "B_r", "B_z", "grad(|B|^2)", "curl(B)xB", "(B*grad)B", "J", "F"]
     for key in keys:
         np.testing.assert_allclose(
-            eq1p.compute(key, grid=pgrid)[key],
-            eq1m.compute(key, grid=mgrid)[key],
+            eqpmm.compute(key, grid=pgrid)[key],
+            eqmmm.compute(key, grid=mgrid)[key],
             rtol=1e-8,
             atol=1e-8,
             err_msg=key,
         )
         np.testing.assert_allclose(
-            eq2p.compute(key, grid=pgrid)[key],
-            eq2m.compute(key, grid=mgrid)[key],
+            eqpmp.compute(key, grid=pgrid)[key],
+            eqmmp.compute(key, grid=mgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+        np.testing.assert_allclose(
+            eqppm.compute(key, grid=pgrid)[key],
+            eqmpm.compute(key, grid=mgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+        np.testing.assert_allclose(
+            eqppp.compute(key, grid=pgrid)[key],
+            eqmpp.compute(key, grid=mgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+
+    # test that flipping helicity just flips sign of field
+    keys = ["B", "B_r", "B_z", "J"]
+    for key in keys:
+        np.testing.assert_allclose(
+            eqmmm.compute(key, grid=mgrid)[key],
+            -eqppm.compute(key, grid=pgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+        np.testing.assert_allclose(
+            eqmmp.compute(key, grid=mgrid)[key],
+            -eqppp.compute(key, grid=pgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+
+    # test that flipping helicity leaves quadratic stuff unchanged
+    keys = ["grad(|B|^2)", "curl(B)xB", "(B*grad)B", "F"]
+    for key in keys:
+        np.testing.assert_allclose(
+            eqmmm.compute(key, grid=mgrid)[key],
+            eqppm.compute(key, grid=pgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+        np.testing.assert_allclose(
+            eqmmp.compute(key, grid=mgrid)[key],
+            eqppp.compute(key, grid=pgrid)[key],
             rtol=1e-8,
             atol=1e-8,
             err_msg=key,

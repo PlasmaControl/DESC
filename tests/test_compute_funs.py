@@ -509,6 +509,28 @@ def test_vector_signs():
     assert np.sign(eqppm.compute("J", grid=grid)["J"][0, 1]) == -1.0
     assert np.sign(eqppp.compute("J", grid=grid)["J"][0, 1]) == 1.0
 
+    grid = LinearGrid(rho=0.5, M=15, N=15)
+    # toroidal current sign
+    assert np.sign(eqmmm.compute("I", grid=grid)["I"]) == 1.0
+    assert np.sign(eqmmp.compute("I", grid=grid)["I"]) == -1.0
+    assert np.sign(eqmpm.compute("I", grid=grid)["I"]) == -1.0
+    assert np.sign(eqmpp.compute("I", grid=grid)["I"]) == 1.0
+    assert np.sign(eqpmm.compute("I", grid=grid)["I"]) == 1.0
+    assert np.sign(eqpmp.compute("I", grid=grid)["I"]) == -1.0
+    assert np.sign(eqppm.compute("I", grid=grid)["I"]) == -1.0
+    assert np.sign(eqppp.compute("I", grid=grid)["I"]) == 1.0
+
+    grid = LinearGrid(rho=0.5, M=15, N=15)
+    # poloidal current sign
+    assert np.sign(eqmmm.compute("G", grid=grid)["G"]) == -1.0
+    assert np.sign(eqmmp.compute("G", grid=grid)["G"]) == -1.0
+    assert np.sign(eqmpm.compute("G", grid=grid)["G"]) == 1.0
+    assert np.sign(eqmpp.compute("G", grid=grid)["G"]) == 1.0
+    assert np.sign(eqpmm.compute("G", grid=grid)["G"]) == -1.0
+    assert np.sign(eqpmp.compute("G", grid=grid)["G"]) == -1.0
+    assert np.sign(eqppm.compute("G", grid=grid)["G"]) == 1.0
+    assert np.sign(eqppp.compute("G", grid=grid)["G"]) == 1.0
+
     # for positive jacobian
     pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 3]]))
     # same real space, but for negative jacobian need to flip theta

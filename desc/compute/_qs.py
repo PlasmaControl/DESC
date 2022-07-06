@@ -99,7 +99,7 @@ def compute_boozer_coords(
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     idx0 = B_transform.basis.get_idx(M=0, N=0)
-    B_theta_mn = B_transform.fit(data["B_theta"])
+    B_theta_mn = B_transform.fit(data["B_theta"]) * orientation
     B_zeta_mn = B_transform.fit(data["B_zeta"])
     data["I"] = B_theta_mn[idx0]
     data["G"] = B_zeta_mn[idx0]
@@ -120,20 +120,18 @@ def compute_boozer_coords(
     w_z = w_transform.transform(w_mn, dr=0, dt=0, dz=1)
 
     # nu = zeta_Boozer - zeta
-    GI = data["G"] + data["iota"] * orientation * data["I"]
+    GI = data["G"] + data["iota"] * data["I"]
     data["nu"] = (w - data["I"] * data["lambda"]) / GI
     data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI
     data["nu_z"] = (w_z - data["I"] * data["lambda_z"]) / GI
 
     # Boozer angles
-    data["theta_B"] = (
-        data["theta"] + data["lambda"] + data["iota"] * orientation * data["nu"]
-    )
+    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
     data["zeta_B"] = data["zeta"] + data["nu"]
 
     # Jacobian of Boozer coordinates wrt (theta,zeta) coordinates
     data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-        data["iota"] * orientation - data["lambda_z"]
+        data["iota"] - data["lambda_z"]
     ) * data["nu_t"]
 
     # Riemann sum integration
@@ -235,7 +233,7 @@ def compute_quasisymmetry_error(
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = jnp.mean(data["B_theta"])
+        data["I"] = jnp.mean(data["B_theta"]) * orientation
         data["G"] = jnp.mean(data["B_zeta"])
 
     # QS two-term (T^3)

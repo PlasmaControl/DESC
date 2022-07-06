@@ -746,8 +746,8 @@ class _Configuration(IOAble, ABC):
             surface.Z_lmn = Zb
             surface.grid = LinearGrid(
                 rho=rho,
-                M=4 * surface.M + 1,
-                N=4 * surface.N + 1,
+                M=2 * surface.M,
+                N=2 * surface.N,
                 endpoint=True,
             )
             return surface
@@ -1309,18 +1309,18 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         nsurfs : int, optional
-            number of radial surfaces to check (Default value = 10)
+            Number of flux surfaces to check (Default = 10).
         ntheta : int, optional
-            number of sfl poloidal contours to check (Default value = 20)
+            Number of straight field-line poloidal contours to check (Default = 20).
         nzeta : int, optional
-            Number of toroidal planes to check, by default checks the zeta=0
+            Number of toroidal planes to check. By default checks the zeta=0
             plane for axisymmetric equilibria and 5 planes evenly spaced in
-            zeta between 0 and 2pi/NFP for non-axisymmetric, otherwise uses
-            nzeta planes linearly spaced  in zeta between 0 and 2pi/NFP
+            zeta between 0 and 2pi/NFP for non-axisymmetric equilibria.
+            Otherwise uses nzeta planes linearly spaced in zeta between 0 and 2pi/NFP.
         Nt : int, optional
-            number of theta points to use for the r contours (Default value = 45)
+            Number of theta coordinates to use for the rho contours (Default = 45).
         Nr : int, optional
-            number of r points to use for the theta contours (Default value = 20)
+            Number of rho coordinates to use for the theta contours (Default = 20).
 
         Returns
         -------
@@ -1331,7 +1331,7 @@ class _Configuration(IOAble, ABC):
         planes_nested_bools = []
         if nzeta is None:
             zetas = (
-                [0]
+                [0.0]
                 if self.N == 0
                 else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
             )
@@ -1339,8 +1339,8 @@ class _Configuration(IOAble, ABC):
             zetas = np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False)
 
         for zeta in zetas:
-            r_grid = LinearGrid(L=nsurfs, M=Nt, zeta=zeta, endpoint=True)
-            t_grid = LinearGrid(L=Nr, M=ntheta, zeta=zeta, endpoint=False)
+            r_grid = LinearGrid(rho=nsurfs, theta=Nt, zeta=zeta, endpoint=True)
+            t_grid = LinearGrid(rho=Nr, theta=ntheta, zeta=zeta, endpoint=False)
 
             r_coords = self.compute("R", r_grid)
             t_coords = self.compute("lambda", t_grid)
@@ -1351,12 +1351,20 @@ class _Configuration(IOAble, ABC):
             v_coords = self.compute("R", v_grid)
 
             # rho contours
-            Rr = r_coords["R"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
-            Zr = r_coords["Z"].reshape((r_grid.L, r_grid.M, r_grid.N))[:, :, 0]
+            Rr = r_coords["R"].reshape(
+                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
+            )[:, :, 0]
+            Zr = r_coords["Z"].reshape(
+                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
+            )[:, :, 0]
 
             # theta contours
-            Rv = v_coords["R"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
-            Zv = v_coords["Z"].reshape((t_grid.L, t_grid.M, t_grid.N))[:, :, 0]
+            Rv = v_coords["R"].reshape(
+                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
+            )[:, :, 0]
+            Zv = v_coords["Z"].reshape(
+                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
+            )[:, :, 0]
 
             rline = MultiLineString(
                 [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
@@ -1421,7 +1429,7 @@ class _Configuration(IOAble, ABC):
         N_grid = N_grid or N
 
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
-        bdry_grid = LinearGrid(rho=1, M=2 * M + 1, N=2 * N + 1)
+        bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
 
         toroidal_coords = self.compute("R", grid)
         theta = grid.nodes[:, 1]

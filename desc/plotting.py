@@ -723,9 +723,9 @@ def plot_fsa(
     if rho is None:
         rho = np.linspace(1, 0, num=L, endpoint=False)
     if M is None:
-        M = 2 * eq.M_grid + 1
+        M = eq.M_grid
     if N is None:
-        N = 2 * eq.N_grid + 1
+        N = eq.N_grid
 
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
@@ -1326,7 +1326,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=3 * eq.M, N=3 * eq.N, NFP=eq.NFP, rho=r)
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
@@ -1531,7 +1531,7 @@ def plot_qs_error(
     f_C = np.array([])
     f_T = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=r)
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]
@@ -1734,7 +1734,7 @@ def plot_basis(basis, **kwargs):
     """
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
-        grid = LinearGrid(100, 1, 1, endpoint=True)
+        grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1752,7 +1752,7 @@ def plot_basis(basis, **kwargs):
 
     elif basis.__class__.__name__ == "FourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
-        grid = LinearGrid(1, 1, 100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1774,7 +1774,7 @@ def plot_basis(basis, **kwargs):
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
-        grid = LinearGrid(1, 100, 100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGrid(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
         t = grid.nodes[:, 1].reshape((100, 100))
         z = grid.nodes[:, 2].reshape((100, 100))
         fig = plt.figure(
@@ -1843,7 +1843,7 @@ def plot_basis(basis, **kwargs):
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(100, 100, 1, endpoint=True)
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
         r = np.unique(grid.nodes[:, 0])
         v = np.unique(grid.nodes[:, 1])
 

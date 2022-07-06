@@ -507,7 +507,7 @@ class VMECIO:
 
         # derived quantities (approximate conversion)
 
-        grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=1)
+        grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
         coords = eq.compute("R", grid)
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
@@ -540,7 +540,7 @@ class VMECIO:
         zmax_surf[:] = np.amax(np.abs(coords["Z"]))
 
         # half grid quantities
-        half_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half)
+        half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute("|B|", half_grid)
         data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
         # Jacobian
@@ -696,7 +696,7 @@ class VMECIO:
             timer.disp("B^zeta")
 
         # full grid quantities
-        full_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full)
+        full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
         data_full_grid = eq.compute("J", full_grid)
 
         # B_psi

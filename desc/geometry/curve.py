@@ -21,19 +21,19 @@ class FourierRZCurve(Curve):
     Parameters
     ----------
     R_n, Z_n: array-like
-        fourier coefficients for R, Z
-    modes_R : array-like
-        mode numbers associated with R_n. If not given defaults to [-n:n]
-    modes_Z : array-like
-        mode numbers associated with Z_n, defaults to modes_R
+        Fourier coefficients for R, Z.
+    modes_R : array-like, optional
+        Mode numbers associated with R_n. If not given defaults to [-n:n].
+    modes_Z : array-like, optional
+        Mode numbers associated with Z_n, If not given defaults to modes_R.
     NFP : int
-        number of field periods
+        Number of field periods.
     sym : bool
-        whether to enforce stellarator symmetry
+        Whether to enforce stellarator symmetry.
     grid : Grid
-        default grid or computation
+        Default grid for computation.
     name : str
-        name for this curve
+        Name for this curve.
     """
 
     _io_attrs_ = Curve._io_attrs_ + [
@@ -93,7 +93,7 @@ class FourierRZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
 
         if grid is None:
-            grid = LinearGrid(N=4 * N + 10, endpoint=True)
+            grid = LinearGrid(N=2 * N, endpoint=True)
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
 
@@ -133,7 +133,7 @@ class FourierRZCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif jnp.isscalar(new):
+        elif isinstance(new, int):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
@@ -455,7 +455,7 @@ class FourierXYZCurve(Curve):
         self._Z_n = copy_coeffs(Z_n, modes, self.basis.modes[:, 2])
 
         if grid is None:
-            grid = LinearGrid(N=4 * N + 10, endpoint=True)
+            grid = LinearGrid(N=2 * N, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
 
@@ -473,7 +473,7 @@ class FourierXYZCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif jnp.isscalar(new):
+        elif isinstance(new, int):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
@@ -802,7 +802,7 @@ class FourierPlanarCurve(Curve):
         self.normal = normal
         self.center = center
         if grid is None:
-            grid = LinearGrid(N=4 * self.N + 10, endpoint=True)
+            grid = LinearGrid(N=2 * self.N, endpoint=True)
         self._grid = grid
         self._transform = self._get_transforms(grid)
 
@@ -820,7 +820,7 @@ class FourierPlanarCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif jnp.isscalar(new):
+        elif isinstance(new, int):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)

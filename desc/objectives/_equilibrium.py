@@ -80,6 +80,7 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
         self._iota = eq.iota.copy()
         self._pressure.grid = self.grid
@@ -140,6 +141,7 @@ class ForceBalance(_Objective):
             self._L_transform,
             self._pressure,
             self._iota,
+            self._orientation,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
@@ -216,6 +218,7 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
         self._iota = eq.iota.copy()
         self._pressure.grid = self.grid
@@ -276,6 +279,7 @@ class RadialForceBalance(_Objective):
             self._L_transform,
             self._pressure,
             self._iota,
+            self._orientation,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -349,6 +353,7 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
         self._iota.grid = self.grid
@@ -409,6 +414,7 @@ class HelicalForceBalance(_Objective):
             self._L_transform,
             self._pressure,
             self._iota,
+            self._orientation,
         )
         f = data["F_beta"] * data["|beta|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -476,6 +482,7 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
         self._iota.grid = self.grid
@@ -536,6 +543,7 @@ class Energy(_Objective):
             self._L_transform,
             self._iota,
             self._pressure,
+            self._orientation,
             self._gamma,
         )
         return self._shift_scale(jnp.atleast_1d(data["W"]))
@@ -621,6 +629,7 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -675,6 +684,7 @@ class CurrentDensity(_Objective):
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._orientation,
         )
         jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights

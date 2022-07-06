@@ -26,6 +26,7 @@ def compute_force_error(
     L_transform,
     pressure,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -55,6 +56,8 @@ def compute_force_error(
         Transforms p_l coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 0, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -75,6 +78,7 @@ def compute_force_error(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(
@@ -132,6 +136,7 @@ def compute_energy(
     L_transform,
     iota,
     pressure,
+    orientation,
     gamma=0,
     data=None,
     **kwargs,
@@ -162,6 +167,8 @@ def compute_energy(
         Transforms i_l coefficients to real space.
     pressure : Profile
         Transforms p_l coefficients to real space.
+    orientation : {-1, 0, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
     gamma : float
         Adiabatic (compressional) index.
 
@@ -182,6 +189,7 @@ def compute_energy(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 

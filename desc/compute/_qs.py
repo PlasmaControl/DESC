@@ -22,6 +22,7 @@ def compute_boozer_coords(
     B_transform,
     w_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -55,6 +56,8 @@ def compute_boozer_coords(
         w_transform.basis should be of type DoubleFourierSeries.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 0, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -72,6 +75,7 @@ def compute_boozer_coords(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -85,6 +89,7 @@ def compute_boozer_coords(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -154,6 +159,7 @@ def compute_quasisymmetry_error(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     helicity=(1, 0),
     data=None,
     **kwargs,
@@ -184,6 +190,8 @@ def compute_quasisymmetry_error(
         Transforms i_l coefficients to real space.
     helicity : tuple, int
         Type of quasi-symmetry (M, N).
+    orientation : {-1, 0, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -202,6 +210,7 @@ def compute_quasisymmetry_error(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -215,6 +224,7 @@ def compute_quasisymmetry_error(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 

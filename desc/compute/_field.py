@@ -79,9 +79,7 @@ def compute_contravariant_magnetic_field(
     if check_derivs("B^rho", R_transform, Z_transform, L_transform):
         data["B^rho"] = data["0"]
     if check_derivs("B^theta", R_transform, Z_transform, L_transform):
-        data["B^theta"] = data["B0"] * (
-            data["iota"] * (-orientation) - data["lambda_z"]
-        )
+        data["B^theta"] = data["B0"] * (data["iota"] * (orientation) - data["lambda_z"])
     if check_derivs("B^zeta", R_transform, Z_transform, L_transform):
         data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
     if check_derivs("B", R_transform, Z_transform, L_transform):
@@ -100,8 +98,8 @@ def compute_contravariant_magnetic_field(
         ) * orientation
     if check_derivs("B^theta_r", R_transform, Z_transform, L_transform):
         data["B^theta_r"] = data["B0_r"] * (
-            data["iota"] * (-orientation) - data["lambda_z"]
-        ) + data["B0"] * (data["iota_r"] * (-orientation) - data["lambda_rz"])
+            data["iota"] * (orientation) - data["lambda_z"]
+        ) + data["B0"] * (data["iota_r"] * (orientation) - data["lambda_rz"])
     if check_derivs("B^zeta_r", R_transform, Z_transform, L_transform):
         data["B^zeta_r"] = (
             data["B0_r"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_rt"]
@@ -119,7 +117,7 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B^theta_t", R_transform, Z_transform, L_transform):
         data["B^theta_t"] = (
-            data["B0_t"] * (data["iota"] * (-orientation) - data["lambda_z"])
+            data["B0_t"] * (data["iota"] * (orientation) - data["lambda_z"])
             - data["B0"] * data["lambda_tz"]
         )
     if check_derivs("B^zeta_t", R_transform, Z_transform, L_transform):
@@ -139,7 +137,7 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B^theta_z", R_transform, Z_transform, L_transform):
         data["B^theta_z"] = (
-            data["B0_z"] * (data["iota"] * (-orientation) - data["lambda_z"])
+            data["B0_z"] * (data["iota"] * (orientation) - data["lambda_z"])
             - data["B0"] * data["lambda_zz"]
         )
     if check_derivs("B^zeta_z", R_transform, Z_transform, L_transform):
@@ -166,7 +164,7 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B^theta_tt", R_transform, Z_transform, L_transform):
         data["B^theta_tt"] = data["B0_tt"] * (
-            data["iota"] * (-orientation) - data["lambda_z"]
+            data["iota"] * (orientation) - data["lambda_z"]
         )
         -2 * data["B0_t"] * data["lambda_tz"] - data["B0"] * data["lambda_ttz"]
     if check_derivs("B^zeta_tt", R_transform, Z_transform, L_transform):
@@ -183,7 +181,7 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B^theta_zz", R_transform, Z_transform, L_transform):
         data["B^theta_zz"] = data["B0_zz"] * (
-            data["iota"] * (-orientation) - data["lambda_z"]
+            data["iota"] * (orientation) - data["lambda_z"]
         )
         -2 * data["B0_z"] * data["lambda_zz"] - data["B0"] * data["lambda_zzz"]
     if check_derivs("B^zeta_zz", R_transform, Z_transform, L_transform):
@@ -203,7 +201,7 @@ def compute_contravariant_magnetic_field(
         )
     if check_derivs("B^theta_tz", R_transform, Z_transform, L_transform):
         data["B^theta_tz"] = data["B0_tz"] * (
-            data["iota"] * (-orientation) - data["lambda_z"]
+            data["iota"] * (orientation) - data["lambda_z"]
         )
         -data["B0_t"] * data["lambda_zz"] - data["B0_z"] * data["lambda_tz"]
         -data["B0"] * data["lambda_tzz"]

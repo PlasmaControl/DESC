@@ -489,25 +489,25 @@ def test_vector_signs():
 
     grid = Grid(np.array([[1, 0, 0]]))
     # poloidal field sign = -Bz on outboard side
-    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 2]) == -1.0
+    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 2]) == 1.0
+    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 2]) == -1.0
 
     grid = Grid(np.array([[0.1, 0, 0]]))
     # toroidal current sign
-    assert np.sign(eqmmm.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqmmp.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqmpm.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqmpp.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqpmm.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqpmp.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqppm.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqppp.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqmmm.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqmmp.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqmpm.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqmpp.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqpmm.compute("J", grid=grid)["J"][0, 1]) == 1.0
+    assert np.sign(eqpmp.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqppm.compute("J", grid=grid)["J"][0, 1]) == -1.0
+    assert np.sign(eqppp.compute("J", grid=grid)["J"][0, 1]) == 1.0
 
     # for positive jacobian
     pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 3]]))

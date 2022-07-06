@@ -120,18 +120,20 @@ def compute_boozer_coords(
     w_z = w_transform.transform(w_mn, dr=0, dt=0, dz=1)
 
     # nu = zeta_Boozer - zeta
-    GI = data["G"] + data["iota"] * data["I"]
+    GI = data["G"] + data["iota"] * orientation * data["I"]
     data["nu"] = (w - data["I"] * data["lambda"]) / GI
     data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI
     data["nu_z"] = (w_z - data["I"] * data["lambda_z"]) / GI
 
     # Boozer angles
-    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    data["theta_B"] = (
+        data["theta"] + data["lambda"] + data["iota"] * orientation * data["nu"]
+    )
     data["zeta_B"] = data["zeta"] + data["nu"]
 
     # Jacobian of Boozer coordinates wrt (theta,zeta) coordinates
     data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-        data["iota"] - data["lambda_z"]
+        data["iota"] * orientation - data["lambda_z"]
     ) * data["nu_t"]
 
     # Riemann sum integration

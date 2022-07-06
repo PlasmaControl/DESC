@@ -647,10 +647,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
-        bsupumnc[1:, :] = c
+        bsupumnc[1:, :] = c * signgs
         if not eq.sym:
             bsupumns[0, :] = 0
-            bsupumns[1:, :] = s
+            bsupumns[1:, :] = s * signgs
         timer.stop("B^theta")
         if verbose > 1:
             timer.disp("B^theta")
@@ -774,10 +774,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
-        bsubumnc[1:, :] = c
+        bsubumnc[1:, :] = c * signgs
         if not eq.sym:
             bsubumns[0, :] = 0
-            bsubumns[1:, :] = s
+            bsubumns[1:, :] = s * signgs
         timer.stop("B_theta")
         if verbose > 1:
             timer.disp("B_theta")

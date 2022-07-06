@@ -1677,9 +1677,9 @@ def plot_grid(grid, **kwargs):
             r"$\frac{\pi}{2}$",
             r"$\frac{3\pi}{4}$",
             r"$\pi$",
-            r"$\frac{4\pi}{4}$",
+            r"$\frac{5\pi}{4}$",
             r"$\frac{3\pi}{2}$",
-            r"$2\pi$",
+            r"$\frac{7\pi}{4}$",
         ]
     )
     ax.set_yticklabels([])

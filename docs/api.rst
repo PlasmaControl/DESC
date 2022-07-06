@@ -41,6 +41,17 @@ Equilibrium
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
+
+Examples
+********
+
+.. autosummary::
+    :toctree: _api/examples
+    :recursive:
+
+    desc.examples.get
+
+
 Geometry
 ********
 
@@ -92,22 +103,20 @@ Objective Functions
     desc.objectives.Energy
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
-    desc.objectives.FixIota    
+    desc.objectives.FixIota
+    desc.objectives.FixLambdaGauge
     desc.objectives.FixPressure
     desc.objectives.FixPsi
     desc.objectives.ForceBalance
-    desc.objectives.GenericObjective    
+    desc.objectives.GenericObjective
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_equilibrium_objective
     desc.objectives.HelicalForceBalance
-    desc.objectives.LambdaGauge
-    desc.objectives.ObjectiveFunction
-    desc.objectives.PoincareLambda    
+    desc.objectives.ObjectiveFunction   
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
-    desc.objectives.TargetIota
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

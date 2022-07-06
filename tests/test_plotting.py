@@ -176,7 +176,7 @@ def test_fsa_G(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=60)
 def test_section_J(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "J^rho")
@@ -221,9 +221,25 @@ def test_plot_surfaces(SOLOVEV):
 
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_surfaces_no_theta(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_surfaces(eq, theta=False)
+    return fig
+
+
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison(DSHAPE):
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
     fig, ax = plot_comparison(eqf)
+    return fig
+
+
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_comparison_no_theta(DSHAPE):
+    eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
+    fig, ax = plot_comparison(eqf, theta=0)
     return fig
 
 
@@ -276,7 +292,7 @@ def test_plot_normF_section(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=60)
 def test_plot_coefficients(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_coefficients(eq)

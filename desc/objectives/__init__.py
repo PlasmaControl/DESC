@@ -2,12 +2,10 @@ from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
-    PoincareLambda,
-    LambdaGauge,
+    FixLambdaGauge,
     FixPressure,
     FixIota,
     FixPsi,
-    TargetIota,
 )
 from ._generic import (
     GenericObjective,

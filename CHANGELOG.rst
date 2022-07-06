@@ -1,6 +1,44 @@
 Changelog
 =========
 
+v0.5.1
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.5.0...v0.5.1>`_
+
+Major Changes
+
+- Add ability to change NFP after creation for equilibria, curves, and surfaces.
+- Fix rounding errors when building high resolution grids.
+- Rename ``LambdaGauge`` constraint to ``FixLambdaGauge`` for consistency.
+- Documentation updates to hdf5 output, VMEC conversion, plotting, etc.
+- Change default spectral indexing to "ansi".
+- Adds ``desc.examples.get`` to load boundaries, profiles, and full solutions from a number of example equilibria.
+- Default grid resolution is now 2x spectral resolution.
+- New surface method ``FourierRZToroidalSurface.from_input_file`` to create a surface from boundary coefficients in a DESC or VMEC input file.
+- Adds new tutorial notebooks demonstrating VMEC io, continuation, plotting, perturbations, optimization etc.
+- New documentation on perturbation theory and evaluating Zernike polynomials.
+- Fix bug preventing vacuum solutions from solving properly.  
+
+v0.5.0
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.4.12...v0.5.0>`_
+
+Major Changes
+
+- New API for building objectives and solving/optimizing equilibria. A brief explainer can be found in the `documentation <https://desc-docs.readthedocs.io/en/stable/notebooks/hands_on.html>`_
+- The Equilibrium class no longer "owns" an optimizer or objective, and does not build its own transforms.
+- The ObjectiveFunction class is a "super-objective" that combines multiple "sub-objectives" which follow the ABC _Objective class.
+- Each sub-objective function can be used as either an "objective" (minimized during optimization) or a "constraint" (enforced exactly).
+- Each sub-objective function takes unique inputs that can be specified by a grid/surface/etc. or use default values from an Equilibrium.
+- Each sub-objective is responsible for building its own transforms or other constant matrices, and is also responsible for computing its own derivatives.
+- The super-objective dynamically builds the state vector with the independent variables from each sub-objective, and also combines the function values and derivatives by combining the outputs from each sub-objective.
+- The super-objective only takes a single argument (the state vector x or y). Perturbations are now performed wrt the full state vector y, which contains all of the individual parameters.
+- Adds ability to optimize physics quantities under equilibrium constraint using wide array of scipy and custom optimizers.
+- New objective for solving vacuum equilibria
+
+
 v0.4.13
 #######
 

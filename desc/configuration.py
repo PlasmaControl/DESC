@@ -815,6 +815,10 @@ class _Configuration(IOAble, ABC):
             )
 
     @property
+    def orientation(self):
+        return self.surface.orientation
+
+    @property
     def spectral_indexing(self):
         """Type of indexing used for the spectral basis (str)."""
         return self._spectral_indexing
@@ -1096,6 +1100,8 @@ class _Configuration(IOAble, ABC):
         for arg in sig.parameters.keys():
             if arg in arg_order:
                 inputs[arg] = getattr(self, arg)
+            elif arg == "orientation":
+                inputs[arg] = self.orientation
             elif arg == "R_transform":
                 inputs[arg] = Transform(
                     grid, self.R_basis, derivs=data_index[name]["R_derivs"]

@@ -116,11 +116,13 @@ def fmin_lag_stel(
             c = jnp.append(c,ineq)
         c = c - bounds + slack
         return c
-        
+    
+    def wrapped_obj(x):
+        return fun(recover(x))
         
     constr = np.array([wrapped_constraint])         
 
-    L = AugLagrangian(fun, constr)
+    L = AugLagrangian(wrapped_obj, constr)
     gradL = Derivative(L.compute,argnum=0)
     hessL = Derivative(L.compute,argnum=0,mode="hess")
 
@@ -132,8 +134,8 @@ def fmin_lag_stel(
     
     while iteration < maxiter:
         print("Before minimize\n")
-        xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        #xk = minimize(L.compute,x_wrapped,args=(lmbda,mu),method="trust-constr",jac=gradL,hess=hessL)
+        #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
+        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL)
         print("After minimize\n")
         x = xk['x']
         print("x is ")
@@ -143,6 +145,8 @@ def fmin_lag_stel(
         cv = L.compute_constraints(x)
         c = np.linalg.norm(cv)
         print("The constraints are " + str(cv))
+        f = wrapped_obj(x)
+        print("The objective is " + str(f))
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break        
@@ -164,5 +168,24 @@ def fmin_lag_stel(
         
         iteration = iteration + 1
         xold = x
-        print(fun(x))
-    return [fun(x),x,lmbda,c,gradL(x,lmbda,mu)]
+        
+        
+        
+    g = gradL(x,lmbda,mu)
+    success = True
+    message = "successful"
+    result = OptimizeResult(
+        x=x,
+        success=success,
+        fun=f,
+        grad=g,
+        optimality=jnp.linalg.norm(g),
+        nfev=nfev,
+        ngev=ngev,
+        nhev=nhev,
+        nit=iteration,
+        message=message,
+    )
+    result["allx"] = [recover(x)]
+    #return [wrapped_obj(x),x,lmbda,c,gradL(x,lmbda,mu)]
+    return result

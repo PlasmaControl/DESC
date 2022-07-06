@@ -18,6 +18,7 @@ from desc.optimize import fmintr, lsqtr
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
+from desc.optimize.aug_lagrangian_stel import fmin_lag_stel
 from desc.derivatives import Derivative
 
 class Optimizer(IOAble):
@@ -327,7 +328,7 @@ class Optimizer(IOAble):
 
         x0_reduced = project(objective.x(eq))
         #objective.combine_args(constraint_objectives)
-        print(constraint_objectives.dim_x)
+        #print(constraint_objectives.dim_x)
         if verbose > 0:
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
@@ -365,7 +366,13 @@ class Optimizer(IOAble):
         
         def compute_constraints_wrapped(x_reduced):
             x = recover(x_reduced)
-            return constraint_objectives.compute(x)
+            c = constraint_objectives.compute(x)**2
+            return c/jnp.linalg.norm(c)
+            #return c
+        
+        def compute_constraints_scalar_wrapped(x_reduced):
+            x = recover(x_reduced)
+            return constraint_objectives.compute_scalar(x)
         
         def compute_constraints_grad_wrapped(x_reduced):
             x = recover(x_reduced)
@@ -376,7 +383,8 @@ class Optimizer(IOAble):
             _, _, _, _, Zfb, unfixed_idxfb, _, _ = factorize_linear_constraints(
                 fixed_boundary_constraints
             )
-            return constraint_objectives.grad(x)[unfixed_idxfb] @ Zfb
+            c = constraint_objectives.grad(x)[unfixed_idxfb] @ Zfb
+            return c/jnp.linalg.norm(c)
             #return Derivative(constraint_objectives.compute,argnum=0)(x)
 
         if self.method in Optimizer._scipy_scalar_methods:
@@ -525,7 +533,7 @@ class Optimizer(IOAble):
            
             gradconstr = jnp.array([])
             gradineq = jnp.array([])
-            constr = np.array([compute_constraints_grad_wrapped])
+            constr = np.array([compute_constraints_wrapped])
             ineq = jnp.array([])
             
             l = 0
@@ -533,10 +541,15 @@ class Optimizer(IOAble):
                 print(constr[i](x0_reduced).shape)
                 l = l + len(constr[i](x0_reduced))
             lmbda0 = jnp.ones(l)
-            mu0 = 1000.0
-            
-            result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
-            
+            mu0 = 10.0
+            c0 = constr[0](x0_reduced)
+            bounds = 0.1*jnp.ones(l)
+            print("The bounds are " + str(bounds))
+            print("The objective is " + str(compute_scalar_wrapped(x0_reduced)))
+            print("The sum of residuals is " + str(np.linalg.norm(c0)**2))
+            print("The constraints are " + str(c0))
+            #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
+            result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, np.array([]), constr, bounds=bounds,maxiter = 100)
 
         elif self.method in Optimizer._desc_least_squares_methods:
 
@@ -555,27 +568,27 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        # if wrapped:
-        #     result["history"] = objective.history
-        # else:
-        #     result["history"] = {}
-        #     for arg in objective.args:
-        #         result["history"][arg] = []
-        #     for x_reduced in result["allx"]:
-        #         x = recover(x_reduced)
-        #         kwargs = objective.unpack_state(x)
-        #         for arg in kwargs:
-        #             result["history"][arg].append(kwargs[arg])
+        if wrapped:
+            result["history"] = objective.history
+        else:
+            result["history"] = {}
+            for arg in objective.args:
+                result["history"][arg] = []
+            for x_reduced in result["allx"]:
+                x = recover(x_reduced)
+                kwargs = objective.unpack_state(x)
+                for arg in kwargs:
+                    result["history"][arg].append(kwargs[arg])
 
-        # timer.stop("Solution time")
+        timer.stop("Solution time")
 
-        # if verbose > 1:
-        #     timer.disp("Solution time")
-        #     timer.pretty_print(
-        #         "Avg time per step",
-        #         timer["Solution time"] / result.get("nit", result.get("nfev")),
-        #     )
-        # for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
-        #     _ = result.pop(key, None)
+        if verbose > 1:
+            timer.disp("Solution time")
+            timer.pretty_print(
+                "Avg time per step",
+                timer["Solution time"] / result.get("nit", result.get("nfev")),
+            )
+        for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
+            _ = result.pop(key, None)
 
         return result

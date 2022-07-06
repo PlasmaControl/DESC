@@ -103,7 +103,8 @@ mu0 = 10
 # tau = 1/mu*10**(-4)
 
 #fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag(obj_func,x0,lmbda0,mu0,grad,np.array([]),np.array([]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
-fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,np.array([]),ic,bounds=np.array([-100,82.81,-13,100,0,100]),maxiter = 100)
+#fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,np.array([]),ic,bounds=np.array([-100,82.81,-13,100,0,100]),maxiter = 100)
+result = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,np.array([]),ic,bounds=np.array([-100,82.81,-13,100,0,100]),maxiter = 100)
 
 #%%G06 scipy
 def obj_func(x):
@@ -279,7 +280,8 @@ lmbda0 = -0.1*np.ones(5)
 # lmbda0 = np.array([0.1])
 mu0 = 100
 
-fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,eq,ineq,bounds=np.array([0,1,1,1,1]),maxiter = 100)
+#fopt,xopt,lmbdaf,ctolf,gradopt = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,eq,ineq,bounds=np.array([0,1,1,1,1]),maxiter = 100)
+result = fmin_lag_stel(obj_func,x0,lmbda0,mu0,grad,eq,ineq,bounds=np.array([0,1,1,1,1]),maxiter = 100)
 #%% G11 exact
 def obj_func(x):
     #return jnp.dot(np.ones(2),x)

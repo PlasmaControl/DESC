@@ -40,7 +40,8 @@ eq.optimize(objective, constraints, options=options)
 #%% Constrained Optimization
 path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 eq = desc.io.load(path)[-1]
-objective = ObjectiveFunction(Zero())
+#objective = ObjectiveFunction(Zero())
+objective = ObjectiveFunction(AspectRatio(target=2.5))
 constraints = (
     ForceBalance(),
     FixBoundaryR(fixed_boundary = True),

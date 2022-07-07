@@ -1,6 +1,8 @@
 import colorama
 import os
 import re
+import logging
+from logging import NullHandler
 import warnings
 from termcolor import colored
 from ._version import get_versions
@@ -95,3 +97,53 @@ def set_device(kind="cpu"):
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
+
+logging.getLogger(__name__).addHandler(NullHandler())
+
+def add_stderr_logger(level: int = logging.INFO) -> logging.StreamHandler:
+    """
+    Helper for quickly adding a StreamHandler to the base Python logger. 
+    Defaults to DEBUG logging level. In increasing order of severity, the
+    base Python logging options are DEBUG, INFO, WARNING, ERROR, and 
+    CRITICAL, with NOTSET being used to silence all logging.
+    """
+
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.debug("Added a stderr logging handler to logger: %s", __name__)
+    return handler
+
+def add_stdout_logger(level: int = logging.ERROR) -> logging.StreamHandler:
+    """
+    Helper for quickly adding a StreamHandler to the base Python logger. 
+    Defaults to DEBUG logging level. In increasing order of severity, the
+    base Python logging options are DEBUG, INFO, WARNING, ERROR, and 
+    CRITICAL, with NOTSET being used to silence all logging.
+    """
+
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.debug("Added a stdout logging handler to logger: %s", __name__)
+    return handler
+
+def add_file_logger(level: int = logging.DEBUG, filename: str = "desc.log") -> logging.FileHandler:
+    """
+    Helper for quickly adding a FileHandler to the base Python logger. Defaults
+    to DEBUG logging level, and desc.log as the filename.  In increasing order
+    of severity, the base Python logging options are DEBUG, INFO, 
+    WARNING, ERROR, and CRITICAL, with NOTSET being used to silence logging.
+    """
+    
+    logger = logging.getLogger(__name__)
+    handler = logging.FileHandler(filename)
+    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.debug("Added a stderr logging handler to logger: %s", __name__)
+    return handler

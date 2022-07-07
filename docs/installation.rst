@@ -4,7 +4,7 @@ Installation
 
 Follow these instructions to install DESC and its dependencies. 
 Note that the default installation instructions here (except for the IBM Ppower architecture instructions) do not install JAX with GPU support.
-To install JAX with GPU support, please refer to the [JAX installation docs](https://github.com/google/jax#installation).
+To install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
 
 On Your Local Machine
 *********************
@@ -46,9 +46,6 @@ Or from github (for development builds)
     pip install -r requirements.txt # install dependencies
     pip install -r devtools/dev-requirements.txt # optional, if you want to run DESC/tests
 
-
-
-
 On Clusters with IBM Power Architecture
 ***************************************
 
@@ -82,9 +79,6 @@ Finally, build and install JAX:
    python build/build.py --enable_cuda --cudnn_path /usr/local/cudnn/cuda-11.0/8.0.1 --noenable_march_native --noenable_mkl_dnn --cuda_compute_capabilities 7.0 --bazel_path /usr/bin/bazel
    pip install -e build
    pip install -e .
-
-
-
 
 Checking your Installation
 **************************

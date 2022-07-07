@@ -2962,6 +2962,36 @@ data_index["|F|"] = {
         [0, 1, 1],
     ],
 }
+data_index["<|F|>_vol"] = {
+    "label": "<|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|>_{vol}",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newtons / cubic meter",
+    "description": "Volume average of magnitude of force balance error",
+    "fun": "compute_force_error",
+    "dim": 0,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
 data_index["|grad(p)|"] = {
     "label": "|\\nabla p|",
     "units": "N \\cdot m^{-3}",
@@ -2969,6 +2999,16 @@ data_index["|grad(p)|"] = {
     "description": "Magnitude of pressure gradient",
     "fun": "compute_force_error",
     "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0]],
+}
+data_index["<|grad(p)|>_vol"] = {
+    "label": "<|\\nabla p|>_{vol}",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newtons / cubic meter",
+    "description": "Volume average of magnitude of pressure gradient",
+    "fun": "compute_force_error",
+    "dim": 0,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0]],
 }

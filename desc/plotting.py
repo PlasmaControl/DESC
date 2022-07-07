@@ -958,6 +958,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
         )
 
+    plot_theta = bool(theta)
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
         rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
@@ -991,12 +992,11 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         "theta": theta,
         "zeta": zeta,
     }
-    t_grid = _get_grid(**grid_kwargs)
-
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
-    # PEST-like flux coordinates
-
-    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
+    if plot_theta:
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # anlge in PEST-like flux coordinates
+        t_grid = _get_grid(**grid_kwargs)
+        v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
@@ -1004,11 +1004,11 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     r_coords = eq.compute("R", r_grid)
     Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
     Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-
-    # vartheta contours
-    v_coords = eq.compute("R", v_grid)
-    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    if plot_theta:
+        # vartheta contours
+        v_coords = eq.compute("R", v_grid)
+        Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+        Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1024,13 +1024,14 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
-        ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=theta_color,
-            linestyle=theta_ls,
-            lw=theta_lw,
-        )
+        if plot_theta:
+            ax[i].plot(
+                Rv[:, :, i].T,
+                Zv[:, :, i].T,
+                color=theta_color,
+                linestyle=theta_ls,
+                lw=theta_lw,
+            )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
@@ -1128,6 +1129,7 @@ def plot_comparison(
 
     """
     figsize = kwargs.pop("figsize", None)
+    plot_theta = kwargs.pop("plot_theta", True)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1515,6 +1517,10 @@ def plot_qs_error(
 
     fig, ax = _format_ax(ax)
 
+    ls = kwargs.get("ls", ["-", "-", "-"])
+    colors = kwargs.get("colors", ["r", "b", "g"])
+    markers = kwargs.get("markers", ["o", "o", "o"])
+
     data = eq.compute("R0")
     data = eq.compute("|B|", data=data)
     R0 = data["R0"]
@@ -1554,21 +1560,64 @@ def plot_qs_error(
 
     if log is True:
         if fB:
-            ax.semilogy(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.semilogy(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.semilogy(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.semilogy(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.semilogy(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.semilogy(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
     else:
         if fB:
-            ax.plot(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.plot(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.plot(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.plot(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.plot(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.plot(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
 
     ax.set_xlabel(_axis_labels_rtz[0])
-    fig.legend(loc="center right")
+    if kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kwargs", {"loc": "center right"}))
 
     fig.set_tight_layout(True)
     return fig, ax

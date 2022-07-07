@@ -49,7 +49,6 @@ setup(
     + "optimization design fusion",
     packages=find_packages(exclude=["docs", "tests", "local", "report"]),
     include_package_data=True,
-    package_dir={"": "desc"},
     install_requires=requirements,
     extras_require={
         "dev": dev_requirements,

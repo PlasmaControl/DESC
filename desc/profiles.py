@@ -493,8 +493,8 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", name=None):
-        super().__init__(grid, name)
+    def __init__(self, params, modes=None, grid=None, sym="auto", name=""):
+        super().__init__(grid, name)        
 
         params = np.atleast_1d(params)
 
@@ -634,8 +634,8 @@ class PowerSeriesProfile(Profile):
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
-    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=None):
-        """Fit a PowerSeriesProfile from point data.
+    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
+        """Fit a PowerSeriesProfile from point data
 
         Parameters
         ----------
@@ -694,8 +694,10 @@ class SplineProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
 
-    def __init__(self, values, knots=None, grid=None, method="cubic2", name=None):
+    def __init__(self, values, knots=None, grid=None, method="cubic2", name=""):
+
         super().__init__(grid, name)
+
         values = np.atleast_1d(values)
         if knots is None:
             knots = np.linspace(0, 1, values.size)
@@ -796,8 +798,10 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params, grid=None, name=None):
+    def __init__(self, params, grid=None, name=""):
+
         super().__init__(grid, name)
+
         self._params = params
 
     def __repr__(self):
@@ -938,7 +942,7 @@ class MTanhProfile(Profile):
         pmax=None,
         pmin=None,
         grid=None,
-        name=None,
+        name="",
         **kwargs,
     ):
         """Fit a MTanhProfile from point data.

@@ -398,8 +398,8 @@ def test_surface_areas():
     eq = Equilibrium()
 
     grid_r = LinearGrid(rho=1, theta=10, zeta=10)
-    grid_t = LinearGrid(rho=10, theta=0, zeta=10)
-    grid_z = LinearGrid(rho=10, theta=10, zeta=0)
+    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
+    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
 
     data_r = eq.compute("|e_theta x e_zeta|", grid_r)
     data_t = eq.compute("|e_zeta x e_rho|", grid_t)

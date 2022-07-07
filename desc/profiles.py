@@ -32,16 +32,7 @@ class Profile(IOAble, ABC):
     def __init__(self, grid=None, name=""):
 
         self.name = name
-        if isinstance(grid, Grid):
-            self._grid = grid
-        elif isinstance(grid, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(grid, sort=False)
-        elif grid is None:
-            self._grid = LinearGrid(L=20)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(grid)}"
-            )
+        self.grid = grid if grid is not None else LinearGrid(L=20)
 
     @property
     def name(self):
@@ -58,14 +49,20 @@ class Profile(IOAble, ABC):
         return self._grid
 
     @grid.setter
-    def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
+    def grid(self, grid):
+        if isinstance(grid, Grid):
+            self._grid = grid
+            return
+        if np.isscalar(grid):
+            grid = np.linspace(0, 1, grid)
+            grid = np.atleast_1d(grid)
+        if isinstance(grid, (np.ndarray, jnp.ndarray)):
+            if grid.ndim == 1:
+                grid = np.pad(grid[:, np.newaxis], ((0, 0), (0, 2)))
+            self._grid = Grid(grid, sort=False)
         else:
             raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+                f"grid should be a Grid or subclass, or ndarray, got {type(grid)}"
             )
 
     @property
@@ -235,11 +232,11 @@ class Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
-            return ScaledProfile(self, x)
+            return ScaledProfile(x, self)
         elif isinstance(x, Profile):
             return ProductProfile(self, x)
         else:
-            return NotImplemented
+            raise NotImplementedError()
 
     def __rmul__(self, x):
         """Multiply this profile by another or a constant."""
@@ -250,7 +247,7 @@ class Profile(IOAble, ABC):
         if isinstance(x, Profile):
             return SumProfile(self, x)
         else:
-            return NotImplemented
+            raise NotImplementedError()
 
     def __neg__(self):
         """Invert the sign of this profile."""
@@ -277,16 +274,20 @@ class ScaledProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_profile", "_scale"]
 
-    def __init__(self, profile, scale, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, scale, profile, **kwargs):
         assert isinstance(
             profile, Profile
         ), "profile in a ScaledProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
         assert np.isscalar(scale), "scale must be a scalar."
-        self._profile = profile
+
+        self._profile = profile.copy()
         self._scale = scale
+
+        kwargs.setdefault("name", profile.name)
+        kwargs.setdefault("grid", profile.grid)
+        super().__init__(**kwargs)
 
     @property
     def grid(self):
@@ -297,6 +298,24 @@ class ScaledProfile(Profile):
     def grid(self, new):
         Profile.grid.fset(self, new)
         self._profile.grid = new
+
+    @property
+    def params(self):
+        return (self._scale, self._profile.params)
+
+    @params.setter
+    def params(self, x):
+        if isinstance(x, tuple) and len(x) == 2:
+            params = x[1]
+            scale = x[0]
+        elif np.isscalar(x):
+            scale = x
+            params = self._profile.params
+        else:
+            scale = self._scale
+            params = x
+        self._scale = scale
+        self._profile.params = params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -343,14 +362,18 @@ class SumProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
-        super().__init__(**kwargs)
+        self._profiles = []
         for profile in profiles:
             assert isinstance(
                 profile, Profile
             ), "Each profile in a SumProfile must be a Profile or subclass, got {}.".format(
                 str(profile)
             )
-        self._profiles = profiles
+            if isinstance(profile, SumProfile):
+                self._profiles += [pro.copy() for pro in profile._profiles]
+            else:
+                self._profiles.append(profile.copy())
+        super().__init__(**kwargs)
 
     @property
     def grid(self):
@@ -362,6 +385,19 @@ class SumProfile(Profile):
         Profile.grid.fset(self, new)
         for profile in self._profiles:
             profile.grid = new
+
+    @property
+    def params(self):
+        return tuple(profile.params for profile in self._profiles)
+
+    @params.setter
+    def params(self, x):
+        if isinstance(x, tuple) and len(x) == len(self._profiles):
+            for i, profile in enumerate(self._profiles):
+                profile.params = x[i] if x[i] is not None else profile.params
+        else:
+            for profile in self._profiles:
+                profile.params = x
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -414,14 +450,19 @@ class ProductProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_profiles"]
 
     def __init__(self, *profiles, **kwargs):
-        super().__init__(**kwargs)
+
+        self._profiles = []
         for profile in profiles:
             assert isinstance(
                 profile, Profile
             ), "Each profile in a ProductProfile must be a Profile or subclass, got {}.".format(
                 str(profile)
             )
-        self._profiles = profiles
+            if isinstance(profile, ProductProfile):
+                self._profiles += [pro.copy() for pro in profile._profiles]
+            else:
+                self._profiles.append(profile.copy())
+        super().__init__(**kwargs)
 
     @property
     def grid(self):
@@ -433,6 +474,19 @@ class ProductProfile(Profile):
         Profile.grid.fset(self, new)
         for profile in self._profiles:
             profile.grid = new
+
+    @property
+    def params(self):
+        return tuple(profile.params for profile in self._profiles)
+
+    @params.setter
+    def params(self, x):
+        if isinstance(x, tuple) and len(x) == len(self._profiles):
+            for i, profile in enumerate(self._profiles):
+                profile.params = x[i] if x[i] is not None else profile.params
+        else:
+            for profile in self._profiles:
+                profile.params = x
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -562,8 +616,9 @@ class PowerSeriesProfile(Profile):
     @grid.setter
     def grid(self, new):
         Profile.grid.fset(self, new)
-        self._transform.grid = self.grid
-        self._transform.build()
+        if hasattr(self, "_transform"):
+            self._transform.grid = self.grid
+            self._transform.build()
 
     @property
     def params(self):
@@ -572,11 +627,12 @@ class PowerSeriesProfile(Profile):
 
     @params.setter
     def params(self, new):
-        if len(new) == self._basis.num_modes:
+        new = jnp.atleast_1d(new)
+        if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                f"params should have the same size as the basis, got {new.size} for basis with {self._basis.num_modes} modes"
             )
 
     def get_params(self, l):
@@ -597,10 +653,6 @@ class PowerSeriesProfile(Profile):
             idx = self.basis.get_idx(ll, 0, 0)
             if aa is not None:
                 self.params = put(self.params, idx, aa)
-
-    def get_idx(self, l):
-        """Get index into params array for given mode number(s)."""
-        return self.basis.get_idx(L=l)
 
     def change_resolution(self, L, M=None, N=None):
         """Set a new maximum mode number."""
@@ -724,11 +776,12 @@ class SplineProfile(Profile):
 
     @params.setter
     def params(self, new):
-        if len(new) == len(self._knots):
+        new = jnp.atleast_1d(new)
+        if new.size == len(self._knots):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the knots, got {len(new)} values for {len(self._knots)} knots"
+                f"params should have the same size as the knots, got {new.size} values for {len(self._knots)} knots"
             )
 
     def _get_xq(self, grid):
@@ -818,11 +871,12 @@ class MTanhProfile(Profile):
 
     @params.setter
     def params(self, new):
-        if len(new) >= 5:
+        new = jnp.atleast_1d(new)
+        if new.size >= 5:
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have at least 5 elements [ped, offset, sym, width, *core_poly]  got only {len(new)} values"
+                f"params should have at least 5 elements [ped, offset, sym, width, *core_poly]  got only {new.size} values"
             )
 
     @staticmethod
@@ -1054,10 +1108,14 @@ class FourierZernikeProfile(Profile):
 
         if modes is None:
             modes = np.hstack(
-                [np.arange(0, 2 * len(params), 2), np.zeros((len(params), 2))]
+                [
+                    np.atleast_2d(np.arange(0, 2 * len(params), 2)).T,
+                    np.zeros((len(params), 2)),
+                ]
             )
-
-        assert issubclass(modes.dtype.type, np.integer)
+        modes = np.asarray(modes)
+        assert np.all(modes.astype(int) == modes), "mode numbers should be integers"
+        modes = modes.astype(int)
 
         L = np.max(abs(modes[:, 0]))
         M = np.max(abs(modes[:, 1]))
@@ -1114,8 +1172,9 @@ class FourierZernikeProfile(Profile):
     @grid.setter
     def grid(self, new):
         Profile.grid.fset(self, new)
-        self._transform.grid = self.grid
-        self._transform.build()
+        if hasattr(self, "_transform"):
+            self._transform.grid = self.grid
+            self._transform.build()
 
     @property
     def params(self):
@@ -1124,23 +1183,24 @@ class FourierZernikeProfile(Profile):
 
     @params.setter
     def params(self, new):
-        if len(new) == self._basis.num_modes:
+        new = jnp.atleast_1d(new)
+        if new.size == self._basis.num_modes:
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                f"params should have the same size as the basis, got {new.size} for basis with {self._basis.num_modes} modes"
             )
 
     def get_params(self, l, m, n):
         """Get power series coefficients for given mode number(s)."""
         l = np.atleast_1d(l).astype(int)
-        m = np.atleast_1d(l).astype(int)
-        n = np.atleast_1d(l).astype(int)
+        m = np.atleast_1d(m).astype(int)
+        n = np.atleast_1d(n).astype(int)
         a = np.zeros_like(l).astype(float)
 
-        for ll, mm, nn in zip(l, m, n):
+        for i, (ll, mm, nn) in enumerate(zip(l, m, n)):
             idx = self.basis.get_idx(ll, mm, nn)
-            a[idx] = self.params[idx]
+            a[i] = self.params[idx]
         return a
 
     def set_params(self, l, m, n, a=None):
@@ -1152,13 +1212,12 @@ class FourierZernikeProfile(Profile):
             if aa is not None:
                 self.params = put(self.params, idx, aa)
 
-    def get_idx(self, l, m, n):
-        """Get index into params array for given mode number(s)."""
-        return self.basis.get_idx(l, m, n)
-
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L=None, M=None, N=None):
         """Set a new maximum mode number."""
         modes_old = self.basis.modes
+        L = L if L is not None else self.basis.L
+        M = M if M is not None else self.basis.M
+        N = N if N is not None else self.basis.N
         self.basis.change_resolution(L, M, N)
         self._transform = self._get_transform(self.grid)
         self.params = copy_coeffs(self.params, modes_old, self.basis.modes)

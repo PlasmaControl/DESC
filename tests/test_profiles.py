@@ -39,10 +39,13 @@ class TestProfiles(unittest.TestCase):
         sp = pp.to_spline()
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
+        zp = pp.to_fourierzernike()
         x = np.linspace(0, 0.8, 10)
 
         np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
         np.testing.assert_allclose(pp(x, dr=2), mp(x, dr=2), rtol=1e-2, atol=1e-1)
+        np.testing.assert_allclose(pp(x), zp(x), rtol=1e-5, atol=1e-3)
+        np.testing.assert_allclose(pp(x, dr=2), zp(x, dr=2), rtol=1e-2, atol=1e-1)
 
         pp1 = sp.to_powerseries(order=4)
         np.testing.assert_allclose(pp.params, pp1.params, rtol=1e-5, atol=1e-2)
@@ -64,10 +67,11 @@ class TestProfiles(unittest.TestCase):
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
         sp = pp.to_spline()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
-
+        zp = pp.to_fourierzernike()
         assert "PowerSeriesProfile" in str(pp)
         assert "SplineProfile" in str(sp)
         assert "MTanhProfile" in str(mp)
+        assert "FourierZernikeProfile" in str(zp)
 
     def test_get_set(self):
 
@@ -84,10 +88,9 @@ class TestProfiles(unittest.TestCase):
         assert pp.params.size == 3
 
         sp = pp.to_spline()
-        sp.params = sp.values + 1
-        sp.values = sp.params
+        sp.params = sp.params + 1
 
-        np.testing.assert_allclose(sp.values, 1 + pp(sp._knots))
+        np.testing.assert_allclose(sp.params, 1 + pp(sp._knots))
 
     def test_auto_sym(self):
         pp = PowerSeriesProfile(

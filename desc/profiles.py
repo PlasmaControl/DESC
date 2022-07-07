@@ -29,7 +29,7 @@ class Profile(IOAble, ABC):
 
     _io_attrs_ = ["_name", "_grid", "_params"]
 
-    def __init__(self, grid=None, name=None):
+    def __init__(self, grid=None, name=""):
 
         self.name = name
         if isinstance(grid, Grid):
@@ -494,7 +494,7 @@ class PowerSeriesProfile(Profile):
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
     def __init__(self, params, modes=None, grid=None, sym="auto", name=""):
-        super().__init__(grid, name)        
+        super().__init__(grid, name)
 
         params = np.atleast_1d(params)
 
@@ -602,7 +602,7 @@ class PowerSeriesProfile(Profile):
         """Get index into params array for given mode number(s)."""
         return self.basis.get_idx(L=l)
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M=None, N=None):
         """Set a new maximum mode number."""
         modes_old = self.basis.modes
         self.basis.change_resolution(L)
@@ -1047,7 +1047,7 @@ class FourierZernikeProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", NFP=1, name=None):
+    def __init__(self, params, modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
         params = np.atleast_1d(params)
@@ -1188,9 +1188,7 @@ class FourierZernikeProfile(Profile):
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
-    def from_values(
-        cls, r, t, z, f, L=6, M=0, N=0, NFP=1, w=None, grid=None, name=None
-    ):
+    def from_values(cls, r, t, z, f, L=6, M=0, N=0, NFP=1, w=None, grid=None, name=""):
         """Fit a FourierZernikeProfile from point data.
 
         Parameters
@@ -1217,7 +1215,7 @@ class FourierZernikeProfile(Profile):
             profile in power series basis fit to given data.
 
         """
-        nodes = np.hstack([r, t, z])
+        nodes = np.vstack([r, t, z]).T
         fitgrid = Grid(nodes)
         fitgrid.weights = w if w is not None else np.ones_like(f)
         basis = FourierZernikeBasis(L, M, N, NFP)

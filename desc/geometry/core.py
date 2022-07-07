@@ -113,15 +113,15 @@ class Surface(IOAble, ABC):
     @property
     def orientation(self):
         """Handedness of coordinate system."""
-        Rm1 = self.R_lmn[self.R_basis.get_idx(0, -1, 0, False)]
-        Rm1 = Rm1 if Rm1.size > 0 else 0
-        Rp1 = self.R_lmn[self.R_basis.get_idx(0, 1, 0, False)]
-        Rp1 = Rp1 if Rp1.size > 0 else 0
-        Zm1 = self.Z_lmn[self.Z_basis.get_idx(0, -1, 0, False)]
-        Zm1 = Zm1 if Zm1.size > 0 else 0
-        Zp1 = self.Z_lmn[self.Z_basis.get_idx(0, 1, 0, False)]
-        Zp1 = Zp1 if Zp1.size > 0 else 0
-        return compute_orientation(Rm1, Rp1, Zm1, Zp1)
+        Rsin = self.R_lmn[self.R_basis.get_idx(0, -1, 0, False)]
+        Rsin = Rsin if Rsin.size > 0 else 0
+        Rcos = self.R_lmn[self.R_basis.get_idx(0, 1, 0, False)]
+        Rcos = Rcos if Rcos.size > 0 else 0
+        Zsin = self.Z_lmn[self.Z_basis.get_idx(0, -1, 0, False)]
+        Zsin = Zsin if Zsin.size > 0 else 0
+        Zcos = self.Z_lmn[self.Z_basis.get_idx(0, 1, 0, False)]
+        Zcos = Zcos if Zcos.size > 0 else 0
+        return compute_orientation(Rsin, Rcos, Zsin, Zcos)
 
     @property
     @abstractmethod
@@ -158,18 +158,18 @@ class Surface(IOAble, ABC):
         )
 
 
-def compute_orientation(Rm1, Rp1, Zm1, Zp1):
+def compute_orientation(Rsin, Rcos, Zsin, Zcos):
     """Compute sign of jacobian based on signs of m= +/-1 modes
 
     Parameters
     ----------
-    Rm1 : float
+    Rsin : float
         R(m=-1)
-    Rp1 : float
+    Rcos : float
         R(m=+1)
-    Zm1 : float
+    Zsin : float
         Z(m=-1)
-    Zp1 : float
+    Zcos : float
         Z(m=+1)
 
     Returns
@@ -267,7 +267,7 @@ def compute_orientation(Rm1, Rp1, Zm1, Zp1):
     )
 
     idx = np.where(
-        (np.sign([Rm1, Rp1, Zm1, Zp1]) == _orientation_mat[:, :-1]).all(axis=1)
+        (np.sign([Rsin, Rcos, Zsin, Zcos]) == _orientation_mat[:, :-1]).all(axis=1)
     )
     out = _orientation_mat[idx, -1].squeeze().astype(int)
     assert (out == -1) or (out == 0) or (out == 1)

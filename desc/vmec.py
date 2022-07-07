@@ -291,7 +291,7 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = eq.orientation
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"

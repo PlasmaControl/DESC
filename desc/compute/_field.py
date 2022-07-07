@@ -51,7 +51,7 @@ def compute_contravariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -252,7 +252,7 @@ def compute_covariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -362,7 +362,7 @@ def compute_magnetic_field_magnitude(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -691,7 +691,7 @@ def compute_magnetic_pressure_gradient(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -807,7 +807,7 @@ def compute_magnetic_tension(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -920,7 +920,7 @@ def compute_B_dot_gradB(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -1006,7 +1006,7 @@ def compute_contravariant_current_density(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns

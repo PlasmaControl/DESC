@@ -56,7 +56,7 @@ def compute_boozer_coords(
         w_transform.basis should be of type DoubleFourierSeries.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
@@ -190,7 +190,7 @@ def compute_quasisymmetry_error(
         Transforms i_l coefficients to real space.
     helicity : tuple, int
         Type of quasi-symmetry (M, N).
-    orientation : {-1, 0, 1}
+    orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns

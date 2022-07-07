@@ -282,7 +282,7 @@ class FixBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
-class LambdaGauge(_Objective):
+class FixLambdaGauge(_Objective):
     """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0.
 
     Parameters
@@ -844,92 +844,3 @@ class FixPsi(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Psi"
-
-
-class TargetIota(_Objective):
-    """Targets a rotational transform profile.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : tuple, float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) = len(weight) = len(modes).
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(target) = len(weight) = len(modes)
-    profile : Profile, optional
-        Profile containing the radial modes to evaluate at.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-
-    def __init__(
-        self, eq=None, target=0, weight=1, profile=None, grid=None, name="target-iota"
-    ):
-
-        self._profile = profile
-        self._grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Target-iota profile error: {:10.3e}"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self._profile is None or self._profile.params.size != eq.L + 1:
-            self._profile = eq.iota.copy()
-        if self._grid is None:
-            self._grid = LinearGrid(L=2, NFP=eq.NFP, axis=True, rho=[0, 1])
-
-        self._dim_f = self._grid.num_nodes
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profile.grid = self._grid
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
-
-    def compute(self, i_l, **kwargs):
-        """Compute rotational transform profile errors.
-
-        Parameters
-        ----------
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-
-        Returns
-        -------
-        f : ndarray
-            Rotational transform profile errors.
-
-        """
-        data = compute_rotational_transform(i_l, self._profile)
-        return self._shift_scale(data["iota"])

@@ -246,7 +246,7 @@ def fmintr(
             break
 
         actual_reduction = -1
-        while actual_reduction <= 0 and nfev < max_nfev:
+        while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
@@ -387,9 +387,8 @@ def fmintr(
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
         print("         Hessian evaluations: {:d}".format(result["nhev"]))
-
     if return_all:
-        result["allvecs"] = allx
+        result["allx"] = allx
     if return_tr:
         result["alltr"] = alltr
     return result

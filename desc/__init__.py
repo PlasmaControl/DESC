@@ -25,7 +25,7 @@ _BANNER = r"""
 BANNER = colored(_BANNER, "magenta")
 
 
-config = {"device": None, "avail_mem": None}
+config = {"device": None, "avail_mem": None, "kind": None}
 
 
 def set_device(kind="cpu"):
@@ -42,6 +42,7 @@ def set_device(kind="cpu"):
         whether to use CPU or GPU.
 
     """
+    config["kind"] = kind
     if kind == "cpu":
         os.environ["JAX_PLATFORM_NAME"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -56,7 +57,10 @@ def set_device(kind="cpu"):
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu
 
-        devices = nvgpu.gpu_info()
+        try:
+            devices = nvgpu.gpu_info()
+        except FileNotFoundError:
+            devices = []
         if len(devices) == 0:
             warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
             set_device(kind="cpu")

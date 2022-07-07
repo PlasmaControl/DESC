@@ -71,12 +71,12 @@ class Grid(IOAble):
 
     def _count_nodes(self):
         """Count unique values of coordinates."""
-        self._unique_rho = np.unique(self.nodes[:, 0])
-        self._unique_theta = np.unique(self.nodes[:, 1])
-        self._unique_zeta = np.unique(self.nodes[:, 2])
-        self._num_rho = self._unique_rho.size
-        self._num_theta = self._unique_theta.size
-        self._num_zeta = self._unique_zeta.size
+        __, self._unique_rho_indices = np.unique(self.nodes[:, 0], return_index=True)
+        __, self._unique_theta_indices = np.unique(self.nodes[:, 1], return_index=True)
+        __, self._unique_zeta_indices = np.unique(self.nodes[:, 2], return_index=True)
+        self._num_rho = self._unique_rho_indices.size
+        self._num_theta = self._unique_theta_indices.size
+        self._num_zeta = self._unique_zeta_indices.size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -190,19 +190,19 @@ class Grid(IOAble):
         return self._num_zeta
 
     @property
-    def unique_rho(self):
-        """ndarray: unique rho coordinates"""
-        return self._unique_rho
+    def unique_rho_indices(self):
+        """ndarray: indices of rho that result in the unique rho coordinates"""
+        return self._unique_rho_indices
 
     @property
-    def unique_theta(self):
-        """ndarray: unique theta coordinates"""
-        return self._unique_theta
+    def unique_theta_indices(self):
+        """ndarray: indices of theta that result in the unique theta coordinates"""
+        return self._unique_theta_indices
 
     @property
-    def unique_zeta(self):
-        """ndarray: unique zeta coordinates"""
-        return self._unique_rho
+    def unique_zeta_indices(self):
+        """ndarray: indices of zeta that result in the unique zeta coordinates"""
+        return self._unique_zeta_indices
 
     @property
     def axis(self):

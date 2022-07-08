@@ -23,6 +23,7 @@ from ._equilibrium import (
     RadialForceBalance,
     HelicalForceBalance,
     CurrentDensity,
+    GradientForceBalance
 )
 from ._geometry import Volume, AspectRatio, Zero
 from ._qs import (

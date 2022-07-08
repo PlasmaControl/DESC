@@ -19,6 +19,7 @@ from ._equilibrium import (
     RadialForceBalance,
     HelicalForceBalance,
     CurrentDensity,
+    GradientForceBalance
 )
 
 
@@ -71,6 +72,8 @@ def get_equilibrium_objective(mode="force"):
         objectives = (RadialForceBalance(), HelicalForceBalance())
     elif mode == "vacuum":
         objectives = CurrentDensity()
+    elif mode == "gradient force":
+        objectives = GradientForceBalance()
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)

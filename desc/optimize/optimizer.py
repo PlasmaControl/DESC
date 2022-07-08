@@ -11,6 +11,7 @@ from desc.objectives import (
     RadialForceBalance,
     HelicalForceBalance,
     CurrentDensity,
+    GradientForceBalance,
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints, get_fixed_boundary_constraints
@@ -237,6 +238,7 @@ class Optimizer(IOAble):
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,
+                        GradientForceBalance
                     ),
                 ):
                     raise ValueError(
@@ -543,7 +545,7 @@ class Optimizer(IOAble):
             lmbda0 = jnp.ones(l)
             mu0 = 10.0
             c0 = constr[0](x0_reduced)
-            bounds = 0.1*jnp.ones(l)
+            bounds = 1.0*jnp.ones(l)
             print("The bounds are " + str(bounds))
             print("The objective is " + str(compute_scalar_wrapped(x0_reduced)))
             print("The sum of residuals is " + str(np.linalg.norm(c0)**2))

@@ -1,4 +1,4 @@
-from desc.backend import jnp
+from desc.backend import use_jax, put, jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid
 from desc.transform import Transform
@@ -9,8 +9,10 @@ from desc.compute import (
     compute_contravariant_current_density,
 )
 from .objective_funs import _Objective
-
-
+from desc.objectives.utils import factorize_linear_constraints, get_fixed_boundary_constraints
+if use_jax:
+    import jax
+from desc.derivatives import Derivative
 class ForceBalance(_Objective):
     """Radial and helical MHD force balance.
 
@@ -150,7 +152,151 @@ class ForceBalance(_Objective):
         f = jnp.concatenate([fr, fb])
         return self._shift_scale(f)
 
+class GradientForceBalance(_Objective):
+    _scalar = False
+    _linear = False
 
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
+        
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(N)"
+        self._callback_fmt = "Total force: {:10.3e} " + units
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation=None,
+                node_pattern="jacobi",
+            )
+
+        #self._dim_f = 2 * self.grid.num_nodes
+        
+        fixed_boundary_constraints = get_fixed_boundary_constraints()
+        for constraint in fixed_boundary_constraints:
+            if not constraint.built:
+                constraint.build(eq)
+        _, _, _, _, Zfb, unfixed_idxfb, _, _ = factorize_linear_constraints(
+            fixed_boundary_constraints
+        )
+        
+        self.Zfb = Zfb
+        self.unfixed_idxfb = unfixed_idxfb
+        self._dim_f = Zfb.shape[1]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._iota = eq.iota.copy()
+        self._pressure.grid = self.grid
+        self._iota.grid = self.grid
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+        self.eq = eq
+        self.gradB_sq = eq.compute('grad(|B|^2)_theta')['grad(|B|^2)_theta']
+        self.gradB_avg = jnp.linalg.norm(self.gradB_sq)/len(self.gradB_sq)
+        
+        
+    def compute_force_balance_scalar(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        data = compute_force_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+        )
+        fr = data["F_rho"] * data["|grad(rho)|"]
+        fr = fr * data["sqrt(g)"] * self.grid.weights
+
+        fb = data["F_beta"] * data["|beta|"]
+        fb = fb * data["sqrt(g)"] * self.grid.weights
+
+        f = jnp.concatenate([fr, fb])
+        #return jnp.sum(self._shift_scale(f) ** 2) / 2
+        return jnp.sum(f ** 2) / (2*self.gradB_avg)
+                 
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+       
+        grad = Derivative(self.compute_force_balance_scalar, mode="grad", use_jit=True)
+        #grad = jax.grad(self.compute_force_balance_scalar)
+        
+        #print("The dim of grad is " + str(len(grad.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs)[self.unfixed_idxfb])))
+        #print("The shape of Zfb is " + str(self.Zfb.shape))
+        
+        g = grad.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs)[self.unfixed_idxfb] @ self.Zfb
+        
+        #return g/jnp.linalg.norm(g)
+        return g
+        #return grad.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs)
+        
+    
 class RadialForceBalance(_Objective):
     """Radial MHD force balance.
 

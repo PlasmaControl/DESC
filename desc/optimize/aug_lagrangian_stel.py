@@ -125,7 +125,8 @@ def fmin_lag_stel(
     L = AugLagrangian(wrapped_obj, constr)
     gradL = Derivative(L.compute,argnum=0)
     hessL = Derivative(L.compute,argnum=0,mode="hess")
-
+    
+    
     mu = mu0
     gtolk = 1/(10*mu0)
     ctolk = 1/(mu0**(0.1))    
@@ -135,7 +136,7 @@ def fmin_lag_stel(
     while iteration < maxiter:
         print("Before minimize\n")
         #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL)
+        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL,hess = hessL, options = {"maxiter": int(maxiter/5),"initial_tr_radius":1e-03})
         print("After minimize\n")
         x = xk['x']
         print("x is ")

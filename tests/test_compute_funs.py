@@ -413,3 +413,9 @@ def test_surface_areas():
     np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
     np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
     np.testing.assert_allclose(Az, np.pi)
+
+
+def test_compute_grad_p_volume_avg():
+    eq = Equilibrium()  # default pressure profile is 0 pressure
+    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
+    np.testing.assert_allclose(pres_grad_vol_avg, 0)

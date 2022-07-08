@@ -7,6 +7,7 @@ from ._core import (
     check_derivs,
     compute_pressure,
     compute_contravariant_metric_coefficients,
+    compute_geometry,
 )
 from ._field import (
     compute_contravariant_current_density,
@@ -80,6 +81,7 @@ def compute_force_error(
     data = compute_contravariant_metric_coefficients(
         R_lmn, Z_lmn, R_transform, Z_transform, data=data
     )
+    data = compute_geometry(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     if check_derivs("F_rho", R_transform, Z_transform, L_transform):
         data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
@@ -110,11 +112,22 @@ def compute_force_error(
 
     if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
         data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+        data["<|grad(p)|>_vol"] = (
+            jnp.sum(
+                data["|grad(p)|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+            )
+            / data["V"]
+        )
     if check_derivs("|beta|", R_transform, Z_transform, L_transform):
         data["|beta|"] = jnp.sqrt(
             data["B^zeta"] ** 2 * data["g^tt"]
             + data["B^theta"] ** 2 * data["g^zz"]
             - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+        )
+    if check_derivs("<|F|>_vol", R_transform, Z_transform, L_transform):
+        data["<|F|>_vol"] = (
+            jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
+            / data["V"]
         )
 
     return data

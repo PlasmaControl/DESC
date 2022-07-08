@@ -751,7 +751,7 @@ def compute_geometry(
     data=None,
     **kwargs,
 ):
-    """Compute plasma volume.
+    """Compute plasma volume and other geometric quantities such as effective minor/major radius and aspect ratio.
 
     Parameters
     ----------
@@ -767,7 +767,7 @@ def compute_geometry(
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) with volume key "V".
+        Dictionary of ndarray, shape(num_nodes,) with volume key "V", cross-sectional area "A", minor radius "a", major radius "R0", and aspect ration "R0/a".
 
     """
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)

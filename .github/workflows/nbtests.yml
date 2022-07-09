@@ -1,4 +1,4 @@
-name: tests
+name: nbtests
 
 on: 
   push:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
+        python-version: [3.9]
 
     steps:
       - uses: actions/checkout@v2
@@ -35,21 +35,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-      - name: Test with pytest
+      - name: Test notebooks with pytest and nbmake
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl
-      - name: save coverage file
-        uses: actions/upload-artifact@v2
-        with:
-          name: my-artifact
-          path: ./cov.xml
-      - name: Upload coverage
-        uses: codecov/codecov-action@v2
-        with:
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
+          export PYTHONPATH=$(pwd)
+          pytest --nbmake "./docs/notebooks" --nbmake-timeout=600 --ignore=./docs/notebooks/zernike_eval.ipynb
 

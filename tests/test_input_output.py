@@ -24,7 +24,7 @@ def test_vmec_input(tmpdir_factory):
     vmec_inputs = ir.inputs
     vmec_inputs[0].pop("output_path")
     path = tmpdir.join("desc_from_vmec")
-    ir.write_desc_input(path)
+    ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
     desc_inputs = ir2.inputs
     desc_inputs[0].pop("output_path")

@@ -368,7 +368,7 @@ def compute_rotational_transform(
 
 
 # TODO: rename function. combine into above function with default args?
-# TODO: test cases which should not produce iota=0
+# TODO: for less computation we can pull out psi_r, psi_rr from flux surface average
 def compute_rotational_transform_v2(
     R_lmn,
     Z_lmn,
@@ -455,23 +455,12 @@ def compute_rotational_transform_v2(
         R_lmn, Z_lmn, R_transform, Z_transform, data
     )
 
-    # _r, _t, _z denote derivatives wrt rho, theta, zeta as usual.
-    # letters after the second _ denote derivative for the g metric coefficients
-    psi_r = data["psi_r"]
-    psi_rr = data["psi_rr"]
-    lam_t = data["lambda_t"]
-    lam_tr = data["lambda_rt"]
-    lam_trr = data["lambda_rrt"]
-    lam_z = data["lambda_z"]
-    lam_zr = data["lambda_rz"]
-    lam_zrr = data["lambda_rrz"]
-    g_tt = data["g_tt"]
+    # derivatives wrt rho of metric coefficients
     g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
     g_tt_rr = 2 * (
         dot(data["e_theta_r"], data["e_theta_r"])
         + dot(data["e_theta"], data["e_theta_rr"])
     )
-    g_tz = data["g_tz"]
     g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
         data["e_theta"], data["e_zeta_r"]
     )
@@ -481,27 +470,59 @@ def compute_rotational_transform_v2(
         + dot(data["e_theta"], data["e_zeta_rr"])
     )
 
+    # no sqrt(g) implementation
+    # term1 = data["psi_r"]
+    # term1_r = data["psi_rr"]
+    # term1_rr = 0
+    # sqrt(g) implementation
+    term1 = data["psi_r"] / data["sqrt(g)"]
+    term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
+    term1_rr = (
+        2 * data["psi_r"] * dot(data["sqrt(g)_r"], data["sqrt(g)_r"]) / data["sqrt(g)"]
+        - 2 * data["psi_rr"] * data["sqrt(g)_r"]
+        - data["psi_r"] * data["sqrt(g)_rr"]
+    ) / dot(data["sqrt(g)"], data["sqrt(g)"])
+
     # integrands of the flux surface averages in eq. 11
     # num = numerator, den = denominator
-    # TODO: There should be an error in eq.11. We need g in denominator not sqrt(g).
-    # TODO: for less computation we can pull out psi_r, psi_rr from flux surface average
-    # will change these after other test cases are run.
     dtdz = grid.spacing[:, 1:].prod(axis=1)
-    num = dtdz * psi_r * (A := (g_tt * lam_z - g_tz * (1 + lam_t)))
-    num_r = dtdz * psi_rr * A + psi_r * (
-        A_r := (g_tt_r * lam_z + g_tt * lam_zr - g_tz_r * (1 + lam_t) - g_tz * lam_tr)
+    num = (
+        dtdz
+        * term1
+        * (
+            term2 := (
+                data["g_tt"] * data["lambda_z"] - data["g_tz"] * (1 + data["lambda_t"])
+            )
+        )
     )
-    num_rr = dtdz * 2 * psi_rr * A_r + psi_r * (
-        g_tt_rr * lam_z
-        + 2 * g_tt_r * lam_zr
-        + g_tt * lam_zrr
-        - g_tz_rr * (1 + lam_t)
-        - 2 * g_tz_r * lam_tr
-        + g_tz * lam_trr
+    num_r = dtdz * (
+        term1_r * term2
+        + term1
+        * (
+            term2_r := (
+                g_tt_r * data["lambda_z"]
+                + data["g_tt"] * data["lambda_rz"]
+                - g_tz_r * (1 + data["lambda_t"])
+                - data["g_tz"] * data["lambda_rt"]
+            )
+        )
     )
-    den = dtdz * psi_r * g_tt
-    den_r = dtdz * psi_rr * g_tt + psi_r * g_tt_r
-    den_rr = dtdz * 2 * psi_rr * g_tt_r + psi_r * g_tt_rr
+    num_rr = dtdz * (
+        term1_rr * term2
+        + 2 * term1_r * term2_r
+        + term1
+        * (
+            g_tt_rr * data["lambda_z"]
+            + 2 * g_tt_r * data["lambda_rz"]
+            + data["g_tt"] * data["lambda_rrz"]
+            - g_tz_rr * (1 + data["lambda_t"])
+            - 2 * g_tz_r * data["lambda_rt"]
+            - data["g_tz"] * data["lambda_rrt"]
+        )
+    )
+    den = dtdz * term1 * data["g_tt"]
+    den_r = dtdz * (term1_r * data["g_tt"] + term1 * g_tt_r)
+    den_rr = dtdz * (term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr)
 
     # integrate each integrand
     rho = grid.nodes[:, 0]
@@ -515,8 +536,7 @@ def compute_rotational_transform_v2(
 
     # compute the Δ(poloidal flux) generated from toroidal current
     if input_is_current:
-        data["I"] = toroidal_current.compute(I_l, dr=0)
-        poloidal_flux = data["I"][grid.unique_rho_indices]
+        poloidal_flux = toroidal_current.compute(I_l, dr=0)[grid.unique_rho_indices]
         poloidal_flux_r = toroidal_current.compute(I_l, dr=1)[grid.unique_rho_indices]
         poloidal_flux_rr = toroidal_current.compute(I_l, dr=2)[grid.unique_rho_indices]
     else:
@@ -538,7 +558,7 @@ def compute_rotational_transform_v2(
         poloidal_flux_rr
         + num_rr
         - 2 * (poloidal_flux_r + num_r) * den_r / den
-        + iota * (den_rr - 2 * (den_r ** 2) / den)
+        + iota * (2 * dot(den_r, den_r) / den - den_rr)
     ) / den
 
     # iota discretizes the rotational transform to flux surfaces.

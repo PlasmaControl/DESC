@@ -1,0 +1,73 @@
+ THIS IS VMEC2000, A 3D EQUILIBRIUM CODE, VERSION 8.52
+ Lambda: Full Radial Mesh. L-Force: hybrid full/half.
+
+
+ COMPUTATION PARAMETERS: (u = theta, v = zeta)
+ ---------------------------------------------
+     ns     nu     nv     mu     mv
+    256     18    200      6      3
+
+ CONFIGURATION PARAMETERS:
+ ---------------------------------------
+    nfp      gamma      spres_ped    phiedge(wb)     curtor(A)
+     19  0.000E+00      1.000E+00      1.000E+00     1.000E+00
+
+ RUN CONTROL PARAMETERS:
+ -----------------------
+  ncurr  niter   nsin  nstep  nvacskip      ftol     tcon0    lasym   lconm1
+      1  32000     16    250         6  1.00E-12  2.00E+00        F        T
+  mfilter_fbdy nfilter_fbdy
+           -1           -1
+
+ Pressure profile factor:  1.8000E+04 (multiplier for pressure)
+ MASS PROFILE COEFFICIENTS am - newton/m**2 (EXPANSION IN NORMALIZED RADIUS):
+ PMASS parameterization type is 'power_series'
+ -----------------------------------
+   1.000E+00  -2.000E+00   1.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00
+
+ TOROIDAL CURRENT DENSITY (*V') COEFFICIENTS ac (EXPANSION IN NORMALIZED RADIUS):
+ PCURR parameterization type is 'power_series'
+ --------------------------------------
+   2.000E+00  -2.000E+00  -1.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00
+
+ NORMALIZED TOROIDAL FLUX COEFFICIENTS aphi (EXPANSION IN S):
+ -----------------------------------
+   1.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
+   0.000E+00   0.000E+00
+
+ R-Z FOURIER BOUNDARY COEFFICIENTS AND MAGNETIC AXIS INITIAL GUESS
+ R = RBC*COS(m*u - n*v) + RBS*SIN(m*u - n*v), Z = ZBC*COS(m*u - n*v) + ZBS*SIN(m*u-n*v)
+ --------------------------------------------------------------------------------------
+   nb  mb     rbc         rbs         zbc         zbs       raxis(c)    raxis(s)    zaxis(c)    zaxis(s)
+    0   0  1.0000E+01  0.0000E+00  0.0000E+00  0.0000E+00  1.0000E+01  0.0000E+00  0.0000E+00  0.0000E+00
+   -1   1 -3.0000E-01  0.0000E+00  0.0000E+00 -3.0000E-01
+    0   1 -1.0000E+00  0.0000E+00  0.0000E+00  1.0000E+00
+ FSQR, FSQZ = Normalized Physical Force Residuals
+ fsqr, fsqz = Preconditioned Force Residuals
+ -----------------------
+ BEGIN FORCE ITERATIONS
+ -----------------------
+
+
+  NS =   16 NO. FOURIER MODES =   39 FTOLV =  1.000E-08 NITER =   4000
+
+  ITER    FSQR      FSQZ      FSQL      fsqr      fsqz      fsql      DELT    RAX(v=0)      WMHD      BETA      <M>        
+
+     1   5.31E-02  4.28E-02  2.16E-01  2.92E-04  1.72E-04  1.11E-02  9.00E-01  1.000E+01  1.0191E+01  1.273E-01  1.000
+   250   9.72E-04  1.76E-05  2.79E-05  5.21E-07  1.45E-09  7.72E-07  6.21E-01  1.053E+01  9.1223E+00  1.498E-01  1.049
+   500   5.22E-03  1.92E-05  6.82E-05  2.73E-07  5.16E-10  4.17E-07  4.23E-01  1.058E+01  9.1136E+00  1.506E-01  1.060
+   750   3.87E-04  5.91E-06  2.75E-05  2.52E-07  3.88E-10  3.96E-07  2.63E-01  1.058E+01  9.1138E+00  1.506E-01  1.061
+  1000   1.85E-03  4.87E-06  3.07E-05  2.06E-07  3.42E-10  3.46E-07  1.59E-01  1.060E+01  9.1118E+00  1.508E-01  1.064
+
+ MHD Energy = 9.111357E+00
+
+ MORE THAN 75 JACOBIAN ITERATIONS (DECREASE DELT)
+

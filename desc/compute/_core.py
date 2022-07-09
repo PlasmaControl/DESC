@@ -474,6 +474,7 @@ def compute_rotational_transform_v2(
     # term1 = data["psi_r"]
     # term1_r = data["psi_rr"]
     # term1_rr = 0
+
     # sqrt(g) implementation
     term1 = data["psi_r"] / data["sqrt(g)"]
     term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
@@ -485,29 +486,20 @@ def compute_rotational_transform_v2(
 
     # integrands of the flux surface averages in eq. 11
     # num = numerator, den = denominator
-    dtdz = grid.spacing[:, 1:].prod(axis=1)
-    num = (
-        dtdz
-        * term1
-        * (
-            term2 := (
-                data["g_tt"] * data["lambda_z"] - data["g_tz"] * (1 + data["lambda_t"])
-            )
+    num = term1 * (
+        term2 := (
+            data["g_tt"] * data["lambda_z"] - data["g_tz"] * (1 + data["lambda_t"])
         )
     )
-    num_r = dtdz * (
-        term1_r * term2
-        + term1
-        * (
-            term2_r := (
-                g_tt_r * data["lambda_z"]
-                + data["g_tt"] * data["lambda_rz"]
-                - g_tz_r * (1 + data["lambda_t"])
-                - data["g_tz"] * data["lambda_rt"]
-            )
+    num_r = term1_r * term2 + term1 * (
+        term2_r := (
+            g_tt_r * data["lambda_z"]
+            + data["g_tt"] * data["lambda_rz"]
+            - g_tz_r * (1 + data["lambda_t"])
+            - data["g_tz"] * data["lambda_rt"]
         )
     )
-    num_rr = dtdz * (
+    num_rr = (
         term1_rr * term2
         + 2 * term1_r * term2_r
         + term1
@@ -520,19 +512,20 @@ def compute_rotational_transform_v2(
             - data["g_tz"] * data["lambda_rrt"]
         )
     )
-    den = dtdz * term1 * data["g_tt"]
-    den_r = dtdz * (term1_r * data["g_tt"] + term1 * g_tt_r)
-    den_rr = dtdz * (term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr)
+    den = term1 * data["g_tt"]
+    den_r = term1_r * data["g_tt"] + term1 * g_tt_r
+    den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
 
     # integrate each integrand
     rho = grid.nodes[:, 0]
     bins = jnp.append(rho[grid.unique_rho_indices], 1)
-    num = _surface_sums(rho, bins, num)
-    den = _surface_sums(rho, bins, den)
-    num_r = _surface_sums(rho, bins, num_r)
-    den_r = _surface_sums(rho, bins, den_r)
-    num_rr = _surface_sums(rho, bins, num_rr)
-    den_rr = _surface_sums(rho, bins, den_rr)
+    dtdz = grid.spacing[:, 1:].prod(axis=1)
+    num = _surface_sums(rho, bins, dtdz * num)
+    den = _surface_sums(rho, bins, dtdz * den)
+    num_r = _surface_sums(rho, bins, dtdz * num_r)
+    den_r = _surface_sums(rho, bins, dtdz * den_r)
+    num_rr = _surface_sums(rho, bins, dtdz * num_rr)
+    den_rr = _surface_sums(rho, bins, dtdz * den_rr)
 
     # compute the Δ(poloidal flux) generated from toroidal current
     if input_is_current:

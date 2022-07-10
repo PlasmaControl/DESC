@@ -368,7 +368,6 @@ def compute_rotational_transform(
 
 
 # TODO: rename function. combine into above function with default args?
-# TODO: for less computation we can pull out psi_r, psi_rr from flux surface average
 def compute_rotational_transform_v2(
     R_lmn,
     Z_lmn,
@@ -478,10 +477,9 @@ def compute_rotational_transform_v2(
     term1 = data["psi_r"] / data["sqrt(g)"]
     term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
     term1_rr = (
-        2 * term1 * dot(data["sqrt(g)_r"], data["sqrt(g)_r"])
-        - 2 * data["psi_rr"] * data["sqrt(g)_r"]
+        2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
         - data["psi_r"] * data["sqrt(g)_rr"]
-    ) / dot(data["sqrt(g)"], data["sqrt(g)"])
+    ) / jnp.square(data["sqrt(g)"])
 
     # integrands of the flux surface averages in eq. 11
     # num = numerator, den = denominator
@@ -550,7 +548,7 @@ def compute_rotational_transform_v2(
         poloidal_flux_rr
         + num_rr
         - 2 * (poloidal_flux_r + num_r) * den_r / den
-        + iota * (2 * dot(den_r, den_r) / den - den_rr)
+        + iota * (2 * jnp.square(den_r) / den - den_rr)
     ) / den
 
     # iota discretizes the rotational transform to flux surfaces.
@@ -1098,7 +1096,8 @@ def compute_geometry(
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) with volume key "V", cross-sectional area "A", minor radius "a", major radius "R0", and aspect ration "R0/a".
+        Dictionary of ndarray, shape(num_nodes,) with volume key "V", cross-sectional area "A",
+        minor radius "a", major radius "R0", and aspect ration "R0/a".
 
     """
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)

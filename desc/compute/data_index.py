@@ -1,4 +1,4 @@
-"""data_index contains all of the quantities calculated by the compute functions.
+"""data_index contains all the quantities calculated by the compute functions.
 
 label = (str) Title of the quantity in LaTeX format.
 units = (str) Units of the quantity in LaTeX format.

@@ -18,7 +18,7 @@
   GAMMA =       0.0E+00
   PHIEDGE =     1.0E+00
   BLOAT =       1.0E+00
-  CURTOR =      1
+  CURTOR =      1E+4
   SPRES_PED =   1.0E+00
   PRES_SCALE =  6.0E+02
   PMASS_TYPE = "power_series"

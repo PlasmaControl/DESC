@@ -299,7 +299,7 @@ class MagneticWell(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
-        grid : Grid, ndarray, optional
+        grid : LinearGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Note that MagneticWell.compute() assumes a linear grid spacing to
             evaluate the well parameter. If the provided grid spacing is
@@ -435,16 +435,9 @@ class MagneticWell(_Objective):
         # a basic check is to remove jnp.abs() and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
-        # d/dv = dpsi/dv * drho/dpsi * d/drho = d/drho / dv/drho
-        # The existence of a simple dv/drho formula simplifies the relation.
-        # So, these relations are no longer needed:
-        # drho_dpsi = 0.5 / jnp.sqrt(data["psi"] * Psi)
-        # dpsi_dv = 1 / drho_dpsi / dv_drho
-
-        B = data["B"]
-        Bsq = dot(B, B)
+        Bsq = dot(data["B"], data["B"])
         Bsq_av = MagneticWell._average(sqrtg, Bsq)
-        dBsq_drho = 2 * dot(B, data["B_r"])
+        dBsq_drho = 2 * dot(data["B"], data["B_r"])
 
         # pressure = thermal + magnetic
         # The flux surface average function is an additive homomorphism;
@@ -456,7 +449,7 @@ class MagneticWell(_Objective):
             jnp.mean(sqrtg_r * Bsq + sqrtg * dBsq_drho) - jnp.mean(sqrtg_r) * Bsq_av
         ) / jnp.mean(sqrtg)
 
-        rho = self.grid.nodes[0][0]
+        rho = self.grid.nodes[0, 0]
         W1 = rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
         W2 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
         return {

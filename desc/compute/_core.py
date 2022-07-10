@@ -474,12 +474,11 @@ def compute_rotational_transform_v2(
     # term1 = data["psi_r"]
     # term1_r = data["psi_rr"]
     # term1_rr = 0
-
     # sqrt(g) implementation
     term1 = data["psi_r"] / data["sqrt(g)"]
     term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
     term1_rr = (
-        2 * data["psi_r"] * dot(data["sqrt(g)_r"], data["sqrt(g)_r"]) / data["sqrt(g)"]
+        2 * term1 * dot(data["sqrt(g)_r"], data["sqrt(g)_r"])
         - 2 * data["psi_rr"] * data["sqrt(g)_r"]
         - data["psi_r"] * data["sqrt(g)_rr"]
     ) / dot(data["sqrt(g)"], data["sqrt(g)"])

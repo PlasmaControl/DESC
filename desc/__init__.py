@@ -1,14 +1,16 @@
+from cmath import log
 import colorama
 import os
 import re
 import logging
 from logging import NullHandler
+import sys
 import warnings
 from termcolor import colored
-from ._version import get_versions
+# from ._version import get_versions
 
-__version__ = get_versions()["version"]
-del get_versions
+# __version__ = get_versions()["version"]
+# del get_versions
 
 colorama.init()
 
@@ -102,52 +104,87 @@ def set_device(kind="cpu"):
         ) / 1024  # in GB
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
+
 logging.getLogger(__name__).addHandler(NullHandler())
 
-def add_stderr_logger(level: int = logging.INFO) -> logging.StreamHandler:
-    """
-    Helper for quickly adding a StreamHandler to the base Python logger. 
-    Defaults to DEBUG logging level. In increasing order of severity, the
-    base Python logging options are DEBUG, INFO, WARNING, ERROR, and 
-    CRITICAL, with NOTSET being used to silence all logging.
-    """
+def setup_logging(console_log_output = "stdout", console_log_level = "INFO", logfile_file = "desc.log", logfile_level = "DEBUG"):
+	"""Creates a python logger and handlers to output to console and logfiles.
 
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(level)
-    logger.debug("Added a stderr logging handler to logger: %s", __name__)
-    return handler
-
-def add_stdout_logger(level: int = logging.ERROR) -> logging.StreamHandler:
-    """
-    Helper for quickly adding a StreamHandler to the base Python logger. 
-    Defaults to DEBUG logging level. In increasing order of severity, the
-    base Python logging options are DEBUG, INFO, WARNING, ERROR, and 
-    CRITICAL, with NOTSET being used to silence all logging.
-    """
-
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(level)
-    logger.debug("Added a stdout logging handler to logger: %s", __name__)
-    return handler
-
-def add_file_logger(level: int = logging.DEBUG, filename: str = "desc.log") -> logging.FileHandler:
-    """
-    Helper for quickly adding a FileHandler to the base Python logger. Defaults
-    to DEBUG logging level, and desc.log as the filename.  In increasing order
-    of severity, the base Python logging options are DEBUG, INFO, 
-    WARNING, ERROR, and CRITICAL, with NOTSET being used to silence logging.
-    """
+    Arguments allow basic configuration of the logger, but this is not meant to
+    be a replacement for setting up logging when using DESC in the context of a
+    larger project- primarily meant for debugging.  Selecting a lower level of 
+    logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
+    "ERROR" and "CRITICAL" logs would be displayed as well.
     
-    logger = logging.getLogger(__name__)
-    handler = logging.FileHandler(filename)
-    handler.setFormatter(logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s"))
-    logger.addHandler(handler)
-    logger.setLevel(level)
-    logger.debug("Added a stderr logging handler to logger: %s", __name__)
-    return handler
+	Parameters
+	----------
+	console_log_output : str
+		output logging to console with either "stdout" or "stderr"
+	console_log_level : str
+		level of logging to console; "DEBUG", "INFO", WARNING", "ERROR" or 
+		"CRITICAL" are accepted values, in increasing order of severity
+	logfile_file : str
+		path to, and filename of, logfile to write output to
+	logfile_level : str
+		level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or 
+		"CRITICAL" are accepted values, in increasing order of severity
+	Returns
+	-------
+	bool : 
+		Returns True if logging setup successfully
+	"""
+	
+	#Create logger that accepts DEBUG level logs and up
+	logger = logging.getLogger("desc_auto_logger")
+	logger.setLevel(logging.DEBUG)
+	
+	# Create console handler
+	console_log_output = console_log_output.lower()
+	if (console_log_output == "stdout"):
+		console_handler = logging.StreamHandler(sys.stdout)
+	elif (console_log_output == "stderr"):
+		console_handler = logging.StreamHandler(sys.stderr)
+	else:
+		print("Failed to set console output: invalid output: '%s'" % console_log_output)
+		return False
+	
+	# Set console log level
+	try:
+		console_handler.setLevel(console_log_level.upper()) # only accepts uppercase level names
+	except:
+		print("Failed to set console log level: invalid level: '%s'" % console_log_level)
+		return False
+	console_handler.setFormatter(formatter)
+
+	# Create file handler
+	try:
+		logfile_handler = logging.FileHandler(logfile_file)
+	except Exception as exception:
+		print("Failed to set up log file: %s" % str(exception))
+		return False
+	#Set logfile log level
+	try: logfile_handler.setLevel(logfile_level.lower())
+	except:
+		print("Failed to set log file log level: invalid level: '%s'" % logfile_level)
+		return False
+
+	# Set log formatting
+	formatter = logging.Formatter("%(asctime)-15s %(levelname)-8s %(message)s")
+	console_handler.setFormatter(formatter)
+	logfile_handler.setFormatter(formatter)
+
+	# Assign handlers to logger
+	logger.addHandler(console_handler)
+	logger.addHandler(logfile_handler)
+
+	# Test messages
+	logging.debug("Debug message")
+	logging.info("Info message")
+	logging.warning("Warning message")
+	logging.error("Error message")
+	logging.critical("Critical message")
+
+	# Success returns True
+	return True
+
+del NullHandler

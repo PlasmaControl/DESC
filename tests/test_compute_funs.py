@@ -21,7 +21,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
-
     # partial derivatives wrt rho
     L = 50
     grid = LinearGrid(L=L)
@@ -90,7 +89,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_tt"][2:-2],
         B_sup_theta_tt[2:-2],
-        rtol=2e-2,
+        rtol=2e-4,
         atol=2e-2 * np.mean(np.abs(data["B^theta_tt"])),
     )
     np.testing.assert_allclose(
@@ -102,7 +101,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^zeta_tt"][2:-2],
         B_sup_zeta_tt[2:-2],
-        rtol=2e-2,
+        rtol=2e-4,
         atol=2e-2 * np.mean(np.abs(data["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
@@ -155,8 +154,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_zz"][2:-2],
         B_sup_theta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^theta_zz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_z"][2:-2],
@@ -167,8 +166,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^zeta_zz"][2:-2],
         B_sup_zeta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
         data["B_rho_z"][2:-2],
@@ -238,20 +237,20 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],
         B_sup_theta_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^theta_tz"])),
+        rtol=2e-4,
+        atol=2e-4 * np.mean(np.abs(data["B^theta_tz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tz"].reshape((N, M))[2:-2, 2:-2],
         B_sup_zeta_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^zeta_tz"])),
+        rtol=2e-4,
+        atol=2e-4 * np.mean(np.abs(data["B^zeta_tz"])),
     )
     np.testing.assert_allclose(
         data["|B|_tz"].reshape((N, M))[2:-2, 2:-2],
-        B_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["|B|_tz"])),
+        B_tz[2:-4, 2:-2],
+        rtol=2e-4,
+        atol=2e-4 * np.mean(np.abs(data["|B|_tz"])),
     )
 
 

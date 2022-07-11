@@ -690,9 +690,9 @@ def plot_fsa(
         Name of variable to plot.
     log : bool, optional
         Whether to use a log scale.
-    rho : int or ndarray of float, optional
-        Radial coordiantes (Default = 1.0).
-        Alternatively, the number of radial coordinates (if an integer).
+    rho : int or array-like
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     M : int, optional
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
@@ -717,8 +717,10 @@ def plot_fsa(
         fig, ax = plot_fsa(eq, "B_theta")
 
     """
-    if rho is None:
-        rho = eq.L + 1
+    if isinstance(rho, numbers.Integral):
+        rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
+    else:
+        rho = np.atleast_1d(rho)
     if M is None:
         M = eq.M_grid
     if N is None:
@@ -728,11 +730,15 @@ def plot_fsa(
 
     values = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
-        g, _ = _compute(eq, "sqrt(g)", grid)
-        data, label = _compute(eq, name, grid, kwargs.get("component", None))
-        values = np.append(values, np.mean(data * g) / np.mean(g))
-
+        if r > 0:
+            grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
+            g, _ = _compute(eq, "sqrt(g)", grid)
+            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            values = np.append(values, np.mean(data * g) / np.mean(g))
+        elif r == 0:
+            grid = LinearGrid(M=0, N=0, NFP=1, rho=0)
+            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            values = np.append(values, np.mean(data))
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(rho, values, label=kwargs.get("label", None))

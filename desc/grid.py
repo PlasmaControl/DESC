@@ -347,7 +347,7 @@ class LinearGrid(Grid):
             rho = self.L + 1
         # TODO: else set L?
 
-        if np.isscalar(rho) and (int(rho) == rho):
+        if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
         else:
             r = np.atleast_1d(rho)

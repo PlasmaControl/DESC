@@ -9,7 +9,7 @@ from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
 from desc.io import InputReader
 from .core import Surface
-from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
+from .utils import rpz2xyz_vec, rpz2xyz
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -159,7 +159,7 @@ class FourierRZToroidalSurface(Surface):
         self._Z_transform.grid = self.grid
 
     def change_resolution(self, *args, **kwargs):
-        """Change the maximum poloidal and toroidal resolution"""
+        """Change the maximum poloidal and toroidal resolution."""
         assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
@@ -355,7 +355,8 @@ class FourierRZToroidalSurface(Surface):
             coords = jnp.stack([R, phi, Z], axis=1)
         else:
             raise NotImplementedError(
-                "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+                "Derivatives higher than 3 have not been implemented in "
+                + "cylindrical coordinates."
             )
         if basis.lower() == "xyz":
             if (dt > 0) or (dz > 0):
@@ -619,7 +620,7 @@ class ZernikeRZToroidalSection(Surface):
         self._Z_transform.grid = self.grid
 
     def change_resolution(self, *args, **kwargs):
-        """Change the maximum radial and poloidal resolution"""
+        """Change the maximum radial and poloidal resolution."""
         assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
@@ -676,7 +677,6 @@ class ZernikeRZToroidalSection(Surface):
 
     def get_coeffs(self, l, m=0):
         """Get Zernike coefficients for given mode number(s)."""
-
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -698,7 +698,6 @@ class ZernikeRZToroidalSection(Surface):
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
         """Set specific Zernike coefficients."""
-
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),
@@ -834,6 +833,7 @@ class ZernikeRZToroidalSection(Surface):
         -------
         area : float
             surface area
+
         """
         if R_lmn is None:
             R_lmn = self.R_lmn

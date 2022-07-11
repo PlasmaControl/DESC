@@ -146,7 +146,7 @@ class FourierRZCurve(Curve):
 
     @property
     def N(self):
-        """Maximum mode number"""
+        """Maximum mode number."""
         return max(self.R_basis.N, self.Z_basis.N)
 
     def change_resolution(self, N=None, NFP=None):
@@ -258,7 +258,9 @@ class FourierRZCurve(Curve):
         Returns
         -------
         values : ndarray, shape(k,3)
-            R, phi, Z or x, y, z coordinates of the curve at specified grid locations in phi
+            R, phi, Z or x, y, z coordinates of the curve at specified grid locations
+            in phi.
+
         """
         assert basis.lower() in ["rpz", "xyz"]
         if R_n is None:
@@ -299,7 +301,8 @@ class FourierRZCurve(Curve):
             coords = jnp.stack([R, phi, Z], axis=1)
         else:
             raise NotImplementedError(
-                "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+                "Derivatives higher than 3 have not been implemented in "
+                + "cylindrical coordinates."
             )
         # convert to xyz for displacement and rotation
         if dt > 0:
@@ -329,7 +332,9 @@ class FourierRZCurve(Curve):
         Returns
         -------
         T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid locations in phi
+            tangent, normal, and binormal vectors of the curve at specified grid
+            locations in phi
+
         """
         T = self.compute_coordinates(R_n, Z_n, grid, dt=1, basis=basis)
         N = self.compute_coordinates(R_n, Z_n, grid, dt=2, basis=basis)
@@ -485,7 +490,7 @@ class FourierXYZCurve(Curve):
 
     @property
     def N(self):
-        """Maximum mode number"""
+        """Maximum mode number."""
         return self.basis.N
 
     def change_resolution(self, N=None):
@@ -612,7 +617,9 @@ class FourierXYZCurve(Curve):
         Returns
         -------
         values : ndarray, shape(k,3)
-            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations in phi
+            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations
+            in phi.
+
         """
         assert basis.lower() in ["rpz", "xyz"]
         if X_n is None:
@@ -659,7 +666,9 @@ class FourierXYZCurve(Curve):
         Returns
         -------
         T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid locations
+            tangent, normal, and binormal vectors of the curve at specified grid
+            locations
+
         """
         T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1, basis=basis)
         N = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2, basis=basis)
@@ -776,8 +785,8 @@ class FourierPlanarCurve(Curve):
         "_transform",
     ]
 
-    # We define a reference frame with center at the origin and normal in the +Z direction.
-    # The curve is computed in this frame and then shifted/rotated to the correct frame
+    # Reference frame is centered at the origin with normal in the +Z direction.
+    # The curve is computed in this frame and then shifted/rotated to the correct frame.
     def __init__(
         self,
         center=[10, 0, 0],
@@ -832,7 +841,7 @@ class FourierPlanarCurve(Curve):
 
     @property
     def N(self):
-        """Maximum mode number"""
+        """Maximum mode number."""
         return self.basis.N
 
     def change_resolution(self, N=None):
@@ -961,7 +970,9 @@ class FourierPlanarCurve(Curve):
         Returns
         -------
         values : ndarray, shape(k,3)
-            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations in theta
+            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations
+            in theta.
+
         """
         assert basis.lower() in ["rpz", "xyz"]
         if center is None:
@@ -1009,7 +1020,7 @@ class FourierPlanarCurve(Curve):
             coords = jnp.array([d3X, d3Y, Z]).T
         else:
             raise NotImplementedError(
-                "derivatives higher than 3 have not been implemented for planar curves"
+                "Derivatives higher than 3 have not been implemented for planar curves."
             )
         R = self._normal_rotmat(normal)
         coords = jnp.matmul(coords, R.T) + (center * (dt == 0))
@@ -1050,7 +1061,9 @@ class FourierPlanarCurve(Curve):
         Returns
         -------
         T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid locations in theta
+            tangent, normal, and binormal vectors of the curve at specified grid
+            locations in theta.
+
         """
         T = self.compute_coordinates(center, normal, r_n, grid, dt=1, basis=basis)
         N = self.compute_coordinates(center, normal, r_n, grid, dt=2, basis=basis)

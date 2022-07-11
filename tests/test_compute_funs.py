@@ -264,7 +264,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    L = 50
+    L = 110
     grid = LinearGrid(L=L, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute("|B|", grid)
@@ -287,8 +287,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
         B2_t[2:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["grad(|B|^2)_theta"])),
+        rtol=1e-2,
+        atol=1e-2 * np.nanmean(np.abs(data["grad(|B|^2)_theta"])),
     )
 
     # partial derivative wrt zeta
@@ -301,8 +301,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
         B2_z[2:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.mean(np.abs(data["grad(|B|^2)_zeta"])),
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["grad(|B|^2)_zeta"])),
     )
 
 

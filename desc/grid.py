@@ -346,7 +346,8 @@ class LinearGrid(Grid):
         if self.L is not None:
             rho = self.L + 1
         # TODO: else set L?
-        if int(rho) == rho and rho > 0:
+
+        if np.isscalar(rho) and (int(rho) == rho):
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
         else:
             r = np.atleast_1d(rho)
@@ -361,7 +362,7 @@ class LinearGrid(Grid):
             else:
                 theta = 2 * self.M + 1
         # TODO: else set M?
-        if int(theta) == theta and theta > 0:
+        if np.isscalar(theta) and (int(theta) == theta):
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
                 t += t[1] / 2
@@ -375,7 +376,7 @@ class LinearGrid(Grid):
         if self.N is not None:
             zeta = 2 * self.N + 1
         # TODO: else set N?
-        if int(zeta) == zeta and zeta > 0:
+        if np.isscalar(zeta) and (int(zeta) == zeta):
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
         else:
             z = np.atleast_1d(zeta)

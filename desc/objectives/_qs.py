@@ -1,14 +1,14 @@
 import numpy as np
-from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import LinearGrid
+
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 from desc.compute import (
     data_index,
     compute_boozer_coords,
     compute_quasisymmetry_error,
 )
+from desc.grid import LinearGrid
+from desc.transform import Transform
+from desc.utils import Timer
 from .objective_funs import _Objective
 
 

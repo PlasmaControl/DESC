@@ -172,7 +172,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
-        """Recover the full state vector from the reducted optimization vector."""
+        """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 

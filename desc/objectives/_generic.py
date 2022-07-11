@@ -14,6 +14,7 @@ from desc.compute import (
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
     compute_contravariant_magnetic_field,
+    compute_contravariant_metric_coefficients,
     compute_pressure,
     compute_quasisymmetry_error,
     compute_toroidal_coords,
@@ -415,6 +416,9 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
         data = compute_pressure(p_l, self._pressure, data)
+        data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
+        )
 
         # grid.weights is the value we expect from dtheta * dzeta.
         dtdz = self.grid.weights
@@ -432,6 +436,7 @@ class MagneticWell(_Objective):
         # the dr integral. What remains is a surface integral with a 3D jacobian.
         # This is the volume added by a thin shell of constant rho.
         dv_drho = jnp.sum(dtdz * sqrtg)
+        d2v_drho2 = jnp.sum(dtdz * sqrtg_r)
         # a basic check is to remove jnp.abs() and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
@@ -444,26 +449,39 @@ class MagneticWell(_Objective):
         # meaning average(a + b) = average(a) + average(b).
         # Thermal pressure is constant over a rho surface.
         # Therefore, average(thermal) = thermal.
-        dthermal_drho = 2 * mu_0 * data["p_r"][0]
+        dthermal_drho = 2 * mu_0 * data["p_r"][0]  # grid is single flux surface
         dmagnetic_av_drho = (
             jnp.mean(sqrtg_r * Bsq + sqrtg * dBsq_drho) - jnp.mean(sqrtg_r) * Bsq_av
         ) / jnp.mean(sqrtg)
 
-        rho = self.grid.nodes[0, 0]
-        W1 = rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
-        W2 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
+        W2 = self.grid.nodes[0, 0] * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+        W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
+
+        # Dwell from M. Landreman and R. Jorge eq. 4.19
+        grad_psi_sq = data["g^rr"] * jnp.square(data["psi_r"])
+        ds_over_abs_grad_psi = dtdz * sqrtg / jnp.abs(data["psi_r"])
+        W1 = (
+            mu_0
+            * jnp.sum(ds_over_abs_grad_psi / grad_psi_sq * Bsq)
+            * (
+                (d2v_drho2 - dv_drho * data["psi_rr"] / data["psi_r"]) / data["psi_r"]
+                - mu_0 * jnp.sum(ds_over_abs_grad_psi / Bsq)
+            )
+            / jnp.square(data["psi_r"])
+        )
         return {
-            "DESC Magnetic Well v1: rho * d/drho": self._shift_scale(W1),
-            "DESC Magnetic Well v2: V * d/dv": self._shift_scale(W2),
-            "volume": V,
-            "dvolume/drho": dv_drho,
-            "d(thermal pressure)/drho": dthermal_drho,
+            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1[0]),
+            "2. DESC Magnetic Well: rho * d/drho": self._shift_scale(W2),
+            "3. DESC Magnetic Well: V * d/dv": self._shift_scale(W3),
+            "B square average": Bsq_av,
             "d(magnetic pressure average)/drho": dmagnetic_av_drho,
+            "d(thermal pressure)/drho": dthermal_drho,
             "d(total pressure average)/drho": dthermal_drho + dmagnetic_av_drho,
             "d(total pressure average)/dvolume": (dthermal_drho + dmagnetic_av_drho)
             / dv_drho,
-            "Bsquare average": Bsq_av,
-            # "data": data,
+            "d^2(volume)/d(rho)^2": d2v_drho2,
+            "dvolume/drho": dv_drho,
+            "volume": V,
         }
 
     @staticmethod

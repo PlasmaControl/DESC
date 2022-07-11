@@ -98,7 +98,7 @@ class ObjectiveFunction(IOAble):
         """
         self._use_jit = use_jit
         timer = Timer()
-        timer.start("Objecive build")
+        timer.start("Objective build")
 
         # build objectives
         self._dim_f = 0
@@ -119,9 +119,9 @@ class ObjectiveFunction(IOAble):
         self._set_derivatives(self.use_jit)
 
         self._built = True
-        timer.stop("Objecive build")
+        timer.stop("Objective build")
         if verbose > 1:
-            timer.disp("Objecive build")
+            timer.disp("Objective build")
 
     def compute(self, x):
         """Compute the objective function.
@@ -349,7 +349,7 @@ class ObjectiveFunction(IOAble):
 
     @property
     def x_idx(self):
-        """dict: Indicies of the components of the state vector."""
+        """dict: Indices of the components of the state vector."""
         return self._x_idx
 
     @property

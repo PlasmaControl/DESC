@@ -880,14 +880,6 @@ def compute_B_dot_gradB(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
 
     Returns
     -------

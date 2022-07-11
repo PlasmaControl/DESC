@@ -121,7 +121,7 @@ class FourierRZCurve(Curve):
     def NFP(self, new):
         assert (
             isinstance(new, numbers.Real) and int(new) == new and new > 0
-        ), f"NFP should be a positive integer, got {type(NFP)}"
+        ), f"NFP should be a positive integer, got {type(new)}"
         self.change_resolution(NFP=new)
 
     @property

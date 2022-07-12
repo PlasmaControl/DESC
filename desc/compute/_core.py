@@ -396,7 +396,7 @@ def compute_rotational_transform_v2(
     Specifically, their j_zeta (covariant notation) should be j^zeta (contravariant).
     The covariant notation is correct for the other quantities.
 
-    This condition comes from solving a linear system for 0 average polodial
+    This condition comes from solving a linear system for 0 average poloidal
     magnetic field. Because the rotational transform is defined as
     d(poloidal flux)/d(toroidal flux), and the system yielding iota for zero toroidal
     current is linear, the rotational transform corresponding to any toroidal
@@ -517,12 +517,12 @@ def compute_rotational_transform_v2(
     rho = grid.nodes[:, 0]
     bins = jnp.append(rho[grid.unique_rho_indices], 1)
     dtdz = grid.spacing[:, 1:].prod(axis=1)
-    num = _surface_sums(rho, bins, dtdz * num)
-    den = _surface_sums(rho, bins, dtdz * den)
-    num_r = _surface_sums(rho, bins, dtdz * num_r)
-    den_r = _surface_sums(rho, bins, dtdz * den_r)
-    num_rr = _surface_sums(rho, bins, dtdz * num_rr)
-    den_rr = _surface_sums(rho, bins, dtdz * den_rr)
+    num = surface_sums(rho, bins, dtdz * num)
+    den = surface_sums(rho, bins, dtdz * den)
+    num_r = surface_sums(rho, bins, dtdz * num_r)
+    den_r = surface_sums(rho, bins, dtdz * den_r)
+    num_rr = surface_sums(rho, bins, dtdz * num_rr)
+    den_rr = surface_sums(rho, bins, dtdz * den_rr)
 
     # compute the Δ(poloidal flux) generated from toroidal current
     if input_is_current:
@@ -565,7 +565,7 @@ def compute_rotational_transform_v2(
     return data
 
 
-def _surface_sums(surf_label, unique_append_upperbound, weights):
+def surface_sums(surf_label, unique_append_upperbound, weights):
     """
     Parameters
     ----------

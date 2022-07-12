@@ -133,7 +133,7 @@ class FourierRZCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif isinstance(new, int):
+        elif jnp.isscalar(new):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
@@ -478,7 +478,7 @@ class FourierXYZCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif isinstance(new, int):
+        elif jnp.isscalar(new):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)
@@ -829,7 +829,7 @@ class FourierPlanarCurve(Curve):
     def grid(self, new):
         if isinstance(new, Grid):
             self._grid = new
-        elif isinstance(new, int):
+        elif jnp.isscalar(new):
             self._grid = LinearGrid(N=new, endpoint=True)
         elif isinstance(new, (np.ndarray, jnp.ndarray)):
             self._grid = Grid(new, sort=False)

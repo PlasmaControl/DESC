@@ -111,7 +111,7 @@ class FourierRZToroidalSurface(Surface):
             grid = LinearGrid(
                 M=2 * self.M,
                 N=2 * self.N,
-                rho=self.rho,
+                rho=np.asarray(self.rho),
                 endpoint=True,
             )
         self._grid = grid
@@ -264,10 +264,14 @@ class FourierRZToroidalSurface(Surface):
         if grid is None:
             return self._R_transform, self._Z_transform
         if not isinstance(grid, Grid):
-            if isinstance(grid, int):
-                grid = LinearGrid(M=grid, N=grid, NFP=self.NFP)
+            if np.isscalar(grid):
+                grid = LinearGrid(
+                    M=grid, N=grid, rho=np.asarray(self.rho), NFP=self.NFP
+                )
             elif len(grid) == 2:
-                grid = LinearGrid(M=grid[0], N=grid[1], NFP=self.NFP)
+                grid = LinearGrid(
+                    M=grid[0], N=grid[1], rho=np.asarray(self.rho), NFP=self.NFP
+                )
             elif grid.shape[1] == 2:
                 grid = np.pad(grid, ((0, 0), (1, 0)), constant_values=self.rho)
                 grid = Grid(grid, sort=False)
@@ -582,7 +586,9 @@ class ZernikeRZToroidalSection(Surface):
 
         self.zeta = zeta
         if grid is None:
-            grid = LinearGrid(L=self.L, M=2 * self.M, zeta=self.zeta, endpoint=True)
+            grid = LinearGrid(
+                L=self.L, M=2 * self.M, zeta=np.asarray(self.zeta), endpoint=True
+            )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
         self.name = name
@@ -717,10 +723,10 @@ class ZernikeRZToroidalSection(Surface):
         if grid is None:
             return self._R_transform, self._Z_transform
         if not isinstance(grid, Grid):
-            if isinstance(grid, int):
-                grid = LinearGrid(L=grid, M=grid)
+            if np.isscalar(grid):
+                grid = LinearGrid(L=grid, M=grid, zeta=np.asarray(self.zeta))
             elif len(grid) == 2:
-                grid = LinearGrid(L=grid[0], M=grid[1])
+                grid = LinearGrid(L=grid[0], M=grid[1], zeta=np.asarray(self.zeta))
             elif grid.shape[1] == 2:
                 grid = np.pad(grid, ((0, 0), (0, 1)), constant_values=self.zeta)
                 grid = Grid(grid, sort=False)

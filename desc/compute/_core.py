@@ -557,11 +557,9 @@ def compute_rotational_transform_v2(
     # works on sorted grids:
     repeat_length = len(grid.nodes) // grid.num_zeta
     unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
-    data["iota"] = _duplicate(iota, unique_rho_counts, repeat_length, grid.num_zeta)
-    data["iota_r"] = _duplicate(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
-    data["iota_rr"] = _duplicate(
-        iota_rr, unique_rho_counts, repeat_length, grid.num_zeta
-    )
+    data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
+    data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
+    data["iota_rr"] = expand(iota_rr, unique_rho_counts, repeat_length, grid.num_zeta)
     return data
 
 
@@ -592,7 +590,7 @@ def surface_sums(surf_label, unique_append_upperbound, weights):
     #     surfaces.setdefault(rho, list()).append(index)
     # integration over non-contiguous elements
     # for i, surface in enumerate(surfaces.values()):
-    #     surface_sums[i] = weights[surface].sum()
+    #     _surface_sums[i] = weights[surface].sum()
 
     # NO LOOP IMPLEMENTATION
     # Separate collocation nodes into bins with boundaries at unique values of rho.
@@ -602,18 +600,21 @@ def surface_sums(surf_label, unique_append_upperbound, weights):
     return jnp.histogram(surf_label, bins=unique_append_upperbound, weights=weights)[0]
 
 
-def _duplicate(x, repeats, total_repeat_length, tile_reps):
+def expand(x, repeats, total_repeat_length, tile_reps):
     """
     Parameters
     ----------
     x : ndarray
-        The array to duplicate.
+        The array to expand by repeating elements.
     repeats : int, ndarray
         The number of repetitions for each element in x. (Broadcast to fit the shape of x).
+        i.e. jnp.diff(grid.unique_rho_indices, append=repeat_length)
     total_repeat_length : int
-        https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.repeat.html
+        https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.repeat.html.
+        i.e. len(grid.nodes) // grid.num_zeta
     tile_reps : int
         The number of repetitions of the repeated array.
+        i.e. grid.num_zeta
 
     Returns
     -------

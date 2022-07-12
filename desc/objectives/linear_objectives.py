@@ -1,17 +1,14 @@
-import numpy as np
-from termcolor import colored
 import warnings
 
+import numpy as np
+from termcolor import colored
+
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import LinearGrid
 from desc.basis import (
     zernike_radial_coeffs,
 )
 from desc.profiles import PowerSeriesProfile, SplineProfile
-from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
-
 
 """Linear objective functions must be of the form `A*x-b`, where:
     - `A` is a constant matrix that can be pre-computed
@@ -369,7 +366,7 @@ class FixLambdaGauge(_Objective):
                     self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
-            # what this constraint does is make all of the coefficients of each power of rho
+            # what this constraint does is make all the coefficients of each power of rho
             # equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
             # this constraint will make
@@ -654,7 +651,7 @@ class FixIota(_Objective):
             self._profile = eq.iota
 
         if isinstance(self._profile, PowerSeriesProfile):
-            # find inidies of iota modes to fix
+            # find indices of iota modes to fix
             if self._modes is False or self._modes is None:  # no modes
                 modes = np.array([[]], dtype=int)
                 self._idx = np.array([], dtype=int)

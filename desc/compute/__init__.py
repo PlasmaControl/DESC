@@ -15,6 +15,8 @@ from ._core import (
     compute_geometry,
     cross,
     dot,
+    surface_sums,
+    expand,
 )
 from ._field import (
     compute_contravariant_magnetic_field,

@@ -21,6 +21,8 @@ from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
 from desc.optimize.aug_lagrangian_stel import fmin_lag_stel
 from desc.derivatives import Derivative
+from desc.grid import ConcentricGrid
+from scipy.constants import mu_0
 
 class Optimizer(IOAble):
     """A helper class to wrap several different optimization routines
@@ -267,6 +269,7 @@ class Optimizer(IOAble):
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,
+                        GradientForceBalance
                     ),
                 ):
                     raise ValueError(
@@ -368,9 +371,9 @@ class Optimizer(IOAble):
         
         def compute_constraints_wrapped(x_reduced):
             x = recover(x_reduced)
-            c = constraint_objectives.compute(x)**2
-            return c/jnp.linalg.norm(c)
-            #return c
+            c = constraint_objectives.compute(x)
+            #return c/jnp.linalg.norm(c)
+            return c
         
         def compute_constraints_scalar_wrapped(x_reduced):
             x = recover(x_reduced)
@@ -385,8 +388,18 @@ class Optimizer(IOAble):
             _, _, _, _, Zfb, unfixed_idxfb, _, _ = factorize_linear_constraints(
                 fixed_boundary_constraints
             )
+            
+            # grid = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            # gradB = eq.compute('grad(|B|^2)', grid=grid)['grad(|B|^2)']/(2*mu_0)
+            # g = eq.compute("sqrt(g)", grid=grid)['sqrt(g)']
+            # gradB_mag = jnp.linalg.norm(gradB, axis=-1)
+            # self.gradB_avg = jnp.sum(gradB_mag*g*grid.weights)/jnp.sum(g*grid.weights)
+            
+            
+            
             c = constraint_objectives.grad(x)[unfixed_idxfb] @ Zfb
-            return c/jnp.linalg.norm(c)
+            #return c/jnp.linalg.norm(c)
+            return c
             #return Derivative(constraint_objectives.compute,argnum=0)(x)
 
         if self.method in Optimizer._scipy_scalar_methods:
@@ -542,16 +555,18 @@ class Optimizer(IOAble):
             for i in range(len(constr)):
                 print(constr[i](x0_reduced).shape)
                 l = l + len(constr[i](x0_reduced))
-            lmbda0 = jnp.ones(l)
-            mu0 = 10.0
+            lmbda0 = 10**(-12)*jnp.ones(l)
+            mu0 = 10**(-12)
             c0 = constr[0](x0_reduced)
-            bounds = 1.0*jnp.ones(l)
+            bounds = 0.0*jnp.ones(l)
+            gc0 = compute_constraints_grad_wrapped(x0_reduced)
             print("The bounds are " + str(bounds))
             print("The objective is " + str(compute_scalar_wrapped(x0_reduced)))
             print("The sum of residuals is " + str(np.linalg.norm(c0)**2))
             print("The constraints are " + str(c0))
+            print("The gradient of the constraints is " + str(gc0))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
-            result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, np.array([]), constr, bounds=bounds,maxiter = 100)
+            result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
 
         elif self.method in Optimizer._desc_least_squares_methods:
 

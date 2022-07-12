@@ -96,7 +96,7 @@ def fmin_lag_stel(
     for i in range(len(ineq_constr)):
         ineq_dim = ineq_dim + len(np.array([ineq_constr[i](x)]).flatten())
     
-    x = np.append(x,5.0*np.ones(ineq_dim))
+    x = np.append(x,1.0*np.ones(ineq_dim))
     
     
     def recover(x):
@@ -131,23 +131,34 @@ def fmin_lag_stel(
     gtolk = 1/(10*mu0)
     ctolk = 1/(mu0**(0.1))    
     xold = x
-    
+    f = wrapped_obj(x)
+    fold = f
     
     while iteration < maxiter:
         print("Before minimize\n")
+        print("The gradient of the lagrangian is " + str(np.linalg.norm(gradL(x,lmbda,mu))))
+        print("The gradient of the objective is " + str(np.linalg.norm(grad(x))))
+        l = L.compute(x,lmbda,mu)
+        print("The objective is " + str(f))
+        print("The lagrangian is " + str(l))
         #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL,hess = hessL, options = {"maxiter": int(maxiter/5),"initial_tr_radius":1e-03})
+        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL, hess=hessL, options = {"maxiter": int(maxiter),"initial_tr_radius": 1.0,"verbose":3})
         print("After minimize\n")
         x = xk['x']
         print("x is ")
         print(x)
         c = 0
         
+        f = wrapped_obj(x)
+        if np.linalg.norm(fold - f) < 0.0001:
+            print("ftol satisfied")
+            break
+        fold = f
         cv = L.compute_constraints(x)
         c = np.linalg.norm(cv)
         print("The constraints are " + str(cv))
-        f = wrapped_obj(x)
-        print("The objective is " + str(f))
+        
+
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break        

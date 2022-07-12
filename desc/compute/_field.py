@@ -372,6 +372,29 @@ def compute_magnetic_field_magnitude(
 
     # 1st order derivatives
     # TODO: |B|_r
+    # if check_derivs("|B|_r", R_transform, Z_transform, L_transform):
+    #     data["|B|_r"] = (
+    #         data["B^theta"]
+    #         * (
+    #             data["B^zeta_r"] * data["g_tz"]
+    #             + data["B^theta_r"] * data["g_tt"]
+    #             + data["B^theta"] * dot(data["e_theta_r"], data["e_theta"])
+    #         )
+    #         + data["B^zeta"]
+    #         * (
+    #             data["B^theta_r"] * data["g_tz"]
+    #             + data["B^zeta_r"] * data["g_zz"]
+    #             + data["B^zeta"] * dot(data["e_zeta_r"], data["e_zeta"])
+    #         )
+    #         + data["B^theta"]
+    #         * data["B^zeta"]
+    #         * (
+    #             dot(data["e_theta_r"], data["e_zeta"])
+    #             + dot(data["e_zeta_r"], data["e_theta"])
+    #         )
+    #     ) / data["|B|"]
+    
+    
     if check_derivs("|B|_t", R_transform, Z_transform, L_transform):
         data["|B|_t"] = (
             data["B^theta"]

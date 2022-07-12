@@ -547,9 +547,6 @@ class _Objective(IOAble, ABC):
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
-        print("The size of x is " + str(len(x)))
-        print("The size of weights is " + str(len(self.weight)))
-        print("The size of target is " + str(len(self.target)))
         return x / self.weight + self.target
 
     @property

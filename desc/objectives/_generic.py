@@ -20,6 +20,7 @@ from desc.compute import (
     compute_toroidal_coords,
     cross,
     dot,
+    surface_sums,
 )
 from .objective_funs import _Objective
 
@@ -300,22 +301,11 @@ class MagneticWell(_Objective):
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
-        grid : LinearGrid, ndarray, optional
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Note that MagneticWell.compute() assumes a linear grid spacing to
-            evaluate the well parameter. If the provided grid spacing is
-            highly nonlinear, the accuracy of the returned value may diminish.
         name : str
             Name of the objective function.
-
         """
-        if grid is not None and not isinstance(grid, LinearGrid):
-            print(
-                """Warning: MagneticWell.compute() assumes a linear grid spacing to
-                 evaluate the well parameter. If the provided grid spacing is
-                 highly nonlinear, the accuracy of the returned value may diminish."""
-            )
-
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Magnetic Well: {:10.3e}"
@@ -331,17 +321,17 @@ class MagneticWell(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
-
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                L=1,
                 M=2 * eq.M_grid + 10,  # +1 not enough for volume
                 N=2 * eq.N_grid + 10,
                 NFP=eq.NFP,
                 sym=False,  # required for correctness of volume
                 rho=jnp.array(1.0),
             )
+        # bins adds functionality to compute magnetic well on many rho surfaces
+        self._bins = jnp.append(self.grid.nodes[self.grid.unique_rho_indices, 0], 1)
 
         self._dim_f = 1
 
@@ -394,7 +384,7 @@ class MagneticWell(_Objective):
 
         Returns
         -------
-        W : float
+        W : ndarray
             Magnetic well parameter. Systems with positive well parameters are
             favorable for containment.
 
@@ -420,28 +410,38 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
 
-        # grid.weights is the value we expect from dtheta * dzeta.
-        dtdz = self.grid.weights
+        # grid.weights is the value we expect from dtheta * dzeta if rho is constant.
+        dtdz = (
+            self.grid.weights
+            if self.grid.num_rho == 1
+            else self.grid.spacing[:, 1:].prod(axis=1)
+        )
+        rho = self.grid.nodes[:, 0]
+
         sqrtg = jnp.abs(data["sqrt(g)"])
         sqrtg_r = jnp.abs(data["sqrt(g)_r"])
         # data["V"] is not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
         # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
         sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
-        V = jnp.abs(jnp.sum(dtdz * sqrtg_e_sup_rho[:, 2] * data["Z"]))
+        V = jnp.abs(
+            surface_sums(rho, self._bins, dtdz * sqrtg_e_sup_rho[:, 2] * data["Z"])
+        )
 
         # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         # Intuitively, this formula makes sense because
         # V = integral(drdtdz * sqrt(g)) and differentiating wrt rho removes
         # the dr integral. What remains is a surface integral with a 3D jacobian.
         # This is the volume added by a thin shell of constant rho.
-        dv_drho = jnp.sum(dtdz * sqrtg)
-        d2v_drho2 = jnp.sum(dtdz * sqrtg_r)
+        dv_drho = surface_sums(rho, self._bins, dtdz * sqrtg)
+        d2v_drho2 = surface_sums(rho, self._bins, dtdz * sqrtg_r)
         # a basic check is to remove jnp.abs() and
         # assert (jnp.sign(dv_drho) == jnp.sign(data["sqrt(g)"])).all()
 
         Bsq = dot(data["B"], data["B"])
-        Bsq_av = MagneticWell._average(sqrtg, Bsq)
+        Bsq_av = surface_sums(rho, self._bins, dtdz * sqrtg * Bsq) / surface_sums(
+            rho, self._bins, dtdz * sqrtg
+        )
         dBsq_drho = 2 * dot(data["B"], data["B_r"])
 
         # pressure = thermal + magnetic
@@ -449,12 +449,17 @@ class MagneticWell(_Objective):
         # meaning average(a + b) = average(a) + average(b).
         # Thermal pressure is constant over a rho surface.
         # Therefore, average(thermal) = thermal.
-        dthermal_drho = 2 * mu_0 * data["p_r"][0]  # grid is single flux surface
+        dthermal_drho = 2 * mu_0 * data["p_r"][self.grid.unique_rho_indices]
         dmagnetic_av_drho = (
-            jnp.mean(sqrtg_r * Bsq + sqrtg * dBsq_drho) - jnp.mean(sqrtg_r) * Bsq_av
-        ) / jnp.mean(sqrtg)
+            surface_sums(rho, self._bins, dtdz * (sqrtg_r * Bsq + sqrtg * dBsq_drho))
+            - surface_sums(rho, self._bins, dtdz * sqrtg_r) * Bsq_av
+        ) / surface_sums(rho, self._bins, dtdz * sqrtg)
 
-        W2 = self.grid.nodes[0, 0] * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+        W2 = (
+            rho[self.grid.unique_rho_indices]
+            * (dthermal_drho + dmagnetic_av_drho)
+            / Bsq_av
+        )
         W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
 
         # Dwell from M. Landreman and R. Jorge eq. 4.19
@@ -462,15 +467,20 @@ class MagneticWell(_Objective):
         ds_over_abs_grad_psi = dtdz * sqrtg / jnp.abs(data["psi_r"])
         W1 = (
             mu_0
-            * jnp.sum(ds_over_abs_grad_psi / grad_psi_sq * Bsq)
+            * surface_sums(rho, self._bins, ds_over_abs_grad_psi / grad_psi_sq * Bsq)
             * (
-                (d2v_drho2 - dv_drho * data["psi_rr"] / data["psi_r"]) / data["psi_r"]
-                - mu_0 * jnp.sum(ds_over_abs_grad_psi / Bsq)
+                (
+                    d2v_drho2
+                    - dv_drho
+                    * (data["psi_rr"] / data["psi_r"])[self.grid.unique_rho_indices]
+                )
+                / data["psi_r"][self.grid.unique_rho_indices]
+                - mu_0 * surface_sums(rho, self._bins, ds_over_abs_grad_psi / Bsq)
             )
-            / jnp.square(data["psi_r"])
+            / jnp.square(data["psi_r"][self.grid.unique_rho_indices])
         )
         return {
-            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1[0]),
+            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1),
             "2. DESC Magnetic Well: rho * d/drho": self._shift_scale(W2),
             "3. DESC Magnetic Well: V * d/dv": self._shift_scale(W3),
             "B square average": Bsq_av,

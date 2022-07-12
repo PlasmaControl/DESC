@@ -235,15 +235,12 @@ class LinearGrid(Grid):
     endpoint : bool
         If True, theta=0 and zeta=0 are duplicated after a full period.
         Should be False for use with FFT. (Default = False).
-    rho : int or ndarray of float, optional
-        Radial coordiantes (Default = 1.0).
-        Alternatively, the number of radial coordinates (if an integer).
-    theta : int or ndarray of float, optional
-        Poloidal coordiantes (Default = 0.0).
-        Alternatively, the number of poloidal coordinates (if an integer).
-    zeta : int or ndarray of float, optional
-        Toroidal coordiantes (Default = 0.0).
-        Alternatively, the number of toroidal coordinates (if an integer).
+    rho : ndarray of float, optional
+        Radial coordinates (Default = 1.0).
+    theta : ndarray of float, optional
+        Poloidal coordinates (Default = 0.0).
+    zeta : ndarray of float, optional
+        Toroidal coordinates (Default = 0.0).
 
     """
 
@@ -256,9 +253,9 @@ class LinearGrid(Grid):
         sym=False,
         axis=True,
         endpoint=False,
-        rho=1.0,
-        theta=0.0,
-        zeta=0.0,
+        rho=np.array(1.0),
+        theta=np.array(0.0),
+        zeta=np.array(0.0),
     ):
 
         self._L = L
@@ -345,13 +342,17 @@ class LinearGrid(Grid):
         # rho
         if self.L is not None:
             rho = self.L + 1
-        # TODO: else set L?
+        else:
+            self._L = len(np.atleast_1d(rho))
 
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
         else:
             r = np.atleast_1d(rho)
-        dr = 1 / r.size  # FIXME: not generalized
+        if len(r) > 1:
+            dr = (r.max() - r.min()) / len(r)
+        else:
+            dr = 1
         if dr == 0:
             dr = 1
 
@@ -361,7 +362,9 @@ class LinearGrid(Grid):
                 theta = 2 * (self.M + 1)
             else:
                 theta = 2 * self.M + 1
-        # TODO: else set M?
+        else:
+            self._M = len(np.atleast_1d(theta))
+
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
@@ -375,7 +378,9 @@ class LinearGrid(Grid):
         # zeta/phi
         if self.N is not None:
             zeta = 2 * self.N + 1
-        # TODO: else set N?
+        else:
+            self._N = len(np.atleast_1d(zeta))
+
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
         else:

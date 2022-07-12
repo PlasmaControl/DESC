@@ -191,9 +191,9 @@ def _get_grid(**kwargs):
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": 1.0,
-        "theta": 0.0,
-        "zeta": 0.0,
+        "rho": np.array([1.0]),
+        "theta": np.array([0.0]),
+        "zeta": np.array([0.0]),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -717,8 +717,8 @@ def plot_fsa(
         fig, ax = plot_fsa(eq, "B_theta")
 
     """
-    if isinstance(rho, numbers.Integral):
-        rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
+    if np.isscalar(rho) and (int(rho) == rho):
+        rho = np.linspace(0, 1, rho + 1)[1:]  # offset to ignore axis
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -731,12 +731,12 @@ def plot_fsa(
     values = np.array([])
     for i, r in enumerate(rho):
         if r > 0:
-            grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
+            grid = LinearGrid(M=M, N=N, NFP=1, rho=np.array(r))
             g, _ = _compute(eq, "sqrt(g)", grid)
             data, label = _compute(eq, name, grid, kwargs.get("component", None))
             values = np.append(values, np.mean(data * g) / np.mean(g))
         elif r == 0:
-            grid = LinearGrid(M=0, N=0, NFP=1, rho=0)
+            grid = LinearGrid(M=0, N=0, NFP=1, rho=np.array(0.0))
             data, label = _compute(eq, name, grid, kwargs.get("component", None))
             values = np.append(values, np.mean(data))
     if log:
@@ -1336,7 +1336,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
@@ -1549,7 +1549,7 @@ def plot_qs_error(
     f_C = np.array([])
     f_T = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]

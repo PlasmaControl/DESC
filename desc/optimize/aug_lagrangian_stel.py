@@ -70,7 +70,7 @@ def fmin_lag_stel(
     args=(),
     method="dogleg",
     x_scale=1,
-    ftol=1e-6,
+    ftol=1e-12,
     xtol=1e-6,
     gtol=1e-6,
     ctol=1e-6,
@@ -142,7 +142,7 @@ def fmin_lag_stel(
         print("The objective is " + str(f))
         print("The lagrangian is " + str(l))
         #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL, hess=hessL, options = {"maxiter": int(maxiter),"initial_tr_radius": 1.0,"verbose":3})
+        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-exact",jac=gradL, hess=hessL, options = {"maxiter": int(maxiter),"initial_tr_radius": 1.0,"verbose":3})
         print("After minimize\n")
         x = xk['x']
         print("x is ")
@@ -150,8 +150,12 @@ def fmin_lag_stel(
         c = 0
         
         f = wrapped_obj(x)
-        if np.linalg.norm(fold - f) < 0.0001:
+        l = L.compute(x,lmbda,mu)
+        if np.linalg.norm(fold - f) < ftol:
             print("ftol satisfied")
+            break
+        if np.linalg.norm(l) < 1e-05:
+            print("ltol satisfied")
             break
         fold = f
         cv = L.compute_constraints(x)

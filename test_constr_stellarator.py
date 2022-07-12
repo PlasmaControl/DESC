@@ -34,7 +34,7 @@ constraints = (
     FixPsi(),
 )
 options = {"perturb_options": {"order": 2}}
-eq.optimize(objective, constraints, options=options)
+result_unc = eq.optimize(objective, constraints, options=options)
 
 #np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 

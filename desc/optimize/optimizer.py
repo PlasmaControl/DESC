@@ -371,7 +371,7 @@ class Optimizer(IOAble):
         
         def compute_constraints_wrapped(x_reduced):
             x = recover(x_reduced)
-            c = constraint_objectives.compute(x)
+            c = mu_0*constraint_objectives.compute(x)
             #return c/jnp.linalg.norm(c)
             return c
         
@@ -555,8 +555,10 @@ class Optimizer(IOAble):
             for i in range(len(constr)):
                 print(constr[i](x0_reduced).shape)
                 l = l + len(constr[i](x0_reduced))
-            lmbda0 = 10**(-12)*jnp.ones(l)
-            mu0 = 10**(-12)
+            # lmbda0 = 10**(-12)*jnp.ones(l)
+            # mu0 = 10**(-12)
+            lmbda0 = jnp.ones(l)
+            mu0 = 100.0
             c0 = constr[0](x0_reduced)
             bounds = 0.0*jnp.ones(l)
             gc0 = compute_constraints_grad_wrapped(x0_reduced)

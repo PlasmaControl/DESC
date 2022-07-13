@@ -376,6 +376,7 @@ def compute_rotational_transform_v2(
     Z_transform,
     L_transform,
     Psi,
+    toroidal_current_unique_rho=None,
     I_l=None,
     toroidal_current=None,
     jzeta_l=None,
@@ -419,6 +420,9 @@ def compute_rotational_transform_v2(
         Transforms L_lmn coefficients to real space.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
+    toroidal_current_unique_rho : ndarray
+        The toroidal current specified at sorted unique values of rho. (Used for testing)
+        i.e. toroidal_current.compute(I_l, 0)[grid.unique_rho_indices]
     I_l : ndarray
         Spectral coefficients of I(rho) -- toroidal current profile.
     toroidal_current : Profile
@@ -435,7 +439,9 @@ def compute_rotational_transform_v2(
         Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
-    input_is_current = I_l is not None and toroidal_current is not None
+    input_is_current = toroidal_current_unique_rho is not None or (
+        I_l is not None and toroidal_current is not None
+    )
     input_is_density = jzeta_l is not None and toroidal_current_density is not None
 
     if input_is_current:
@@ -526,9 +532,16 @@ def compute_rotational_transform_v2(
 
     # compute the Δ(poloidal flux) generated from toroidal current
     if input_is_current:
-        poloidal_flux = toroidal_current.compute(I_l, dr=0)[grid.unique_rho_indices]
-        poloidal_flux_r = toroidal_current.compute(I_l, dr=1)[grid.unique_rho_indices]
-        poloidal_flux_rr = toroidal_current.compute(I_l, dr=2)[grid.unique_rho_indices]
+        if toroidal_current_unique_rho is None:
+            poloidal_flux = toroidal_current.compute(I_l, dr=0)[grid.unique_rho_indices]
+            poloidal_flux_r = toroidal_current.compute(I_l, dr=1)[
+                grid.unique_rho_indices
+            ]
+            poloidal_flux_rr = toroidal_current.compute(I_l, dr=2)[
+                grid.unique_rho_indices
+            ]
+        else:
+            poloidal_flux = toroidal_current_unique_rho
     else:
         # integrate the toroidal density current
         data["J^zeta"] = toroidal_current_density.compute(jzeta_l, dr=0)
@@ -543,13 +556,13 @@ def compute_rotational_transform_v2(
 
     # derivatives computed analytically by pushing derivative into surface average
     iota = (poloidal_flux + num) / den
-    iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
-    iota_rr = (
-        poloidal_flux_rr
-        + num_rr
-        - 2 * (poloidal_flux_r + num_r) * den_r / den
-        + iota * (2 * jnp.square(den_r) / den - den_rr)
-    ) / den
+    # iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
+    # iota_rr = (
+    #     poloidal_flux_rr
+    #     + num_rr
+    #     - 2 * (poloidal_flux_r + num_r) * den_r / den
+    #     + iota * (2 * jnp.square(den_r) / den - den_rr)
+    # ) / den
 
     # iota discretizes the rotational transform to flux surfaces.
     # data["iota"] discretizes the rotational transform to collocation nodes.
@@ -558,8 +571,8 @@ def compute_rotational_transform_v2(
     repeat_length = len(grid.nodes) // grid.num_zeta
     unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
     data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
-    data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
-    data["iota_rr"] = expand(iota_rr, unique_rho_counts, repeat_length, grid.num_zeta)
+    # data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
+    # data["iota_rr"] = expand(iota_rr, unique_rho_counts, repeat_length, grid.num_zeta)
     return data
 
 

@@ -112,6 +112,7 @@ class Grid(IOAble):
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
         # TODO: avoid double calls to np.unique in count_nodes and create_nodes
+        #   note that unique in count_nodes stored indices after sorting.
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))

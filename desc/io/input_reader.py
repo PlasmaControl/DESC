@@ -174,9 +174,11 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
+        iota_flag = True  # True for iota input, False for current input
 
         inputs["output_path"] = self.output_path
 
@@ -254,7 +256,7 @@ class InputReader:
                     ]
                     if len(nums):
                         numbers = np.append(numbers, nums)
-            flag = False
+            flag = False  # flag for valid input lines
 
             # global parameters
             match = re.search(r"sym", argument, re.IGNORECASE)
@@ -383,6 +385,10 @@ class InputReader:
                 n = 0
 
             # profile coefficients
+            match = re.search(r"iota", argument, re.IGNORECASE)
+            if match:
+                iota_flag = int(numbers[0])
+                flag = True
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 p_l = [
@@ -502,9 +508,15 @@ class InputReader:
 
         # error handling
         if np.any(inputs["M"] == 0):
-            raise IOError(colored("M_pol is not assigned", "red"))
+            raise IOError(colored("M_pol is not assigned.", "red"))
         if np.sum(inputs["surface"]) == 0:
-            raise IOError(colored("Fixed-boundary surface is not assigned", "red"))
+            raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
+
+        # iota vs current profile
+        if not iota_flag:
+            inputs["current"] = inputs.pop("iota")
+
+        # array inputs
         arrs = [
             "L",
             "M",
@@ -600,12 +612,12 @@ class InputReader:
 
         f.write(header + "\n")
 
-        f.write("# global parameters \n")
-        f.write("sym = {} \n".format(inputs[0]["sym"]))
-        f.write("NFP = {} \n".format(inputs[0]["NFP"]))
-        f.write("Psi = {} \n".format(inputs[0]["Psi"]))
+        f.write("# global parameters\n")
+        f.write("sym = {}\n".format(inputs[0]["sym"]))
+        f.write("NFP = {}\n".format(inputs[0]["NFP"]))
+        f.write("Psi = {}\n".format(inputs[0]["Psi"]))
 
-        f.write("\n# spectral resolution \n")
+        f.write("\n# spectral resolution\n")
         for key, val in {
             "L_rad": "L",
             "M_pol": "M",
@@ -615,20 +627,20 @@ class InputReader:
             "N_grid": "N_grid",
         }.items():
             f.write(
-                key + " = {} \n".format(", ".join([str(inp[val]) for inp in inputs]))
+                key + " = {}\n".format(", ".join([str(inp[val]) for inp in inputs]))
             )
 
-        f.write("\n# continuation parameters \n")
+        f.write("\n# continuation parameters\n")
         for key in ["bdry_ratio", "pres_ratio", "pert_order"]:
             f.write(
                 key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )
 
-        f.write("\n# solver tolerances \n")
+        f.write("\n# solver tolerances\n")
         for key in ["ftol", "xtol", "gtol", "nfev"]:
             f.write(
                 key
-                + " = {} \n".format(
+                + " = {}\n".format(
                     ", ".join(
                         [
                             str(inp[key]) if inp[key] is not None else str(0)
@@ -638,31 +650,38 @@ class InputReader:
                 )
             )
 
-        f.write("\n# solver methods \n")
-        f.write("optimizer = {} \n".format(inputs[0]["optimizer"]))
-        f.write("objective = {} \n".format(inputs[0]["objective"]))
-        f.write("bdry_mode = {} \n".format(inputs[0]["bdry_mode"]))
-        f.write("spectral_indexing = {} \n".format(inputs[0]["spectral_indexing"]))
-        f.write("node_pattern = {} \n".format(inputs[0]["node_pattern"]))
+        f.write("\n# solver methods\n")
+        f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
+        f.write("objective = {}\n".format(inputs[0]["objective"]))
+        f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
+        f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+        f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
 
-        f.write("\n# pressure and rotational transform profiles \n")
-        ls = np.unique(
-            np.concatenate([inputs[0]["pressure"][:, 0], inputs[0]["iota"][:, 0]])
-        )
+        f.write("\n# pressure and iota/current profiles\n")
+        if "iota" in inputs[0].keys():
+            f.write("iota = 1\n")
+            profile = inputs[0]["iota"]
+        elif "current" in inputs[0].keys():
+            f.write("iota = 0\n")
+            profile = inputs[0]["current"]
+
+        # TODO: finish implementing current profile
+
+        ls = np.unique(np.concatenate([inputs[0]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
             idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
             if len(idxp):
                 p = inputs[0]["pressure"][idxp[0], 1]
             else:
                 p = 0.0
-            idxi = np.where(l == inputs[0]["iota"][:, 0])[0]
+            idxi = np.where(l == profile[:, 0])[0]
             if len(idxi):
-                i = inputs[0]["iota"][idxi[0], 1]
+                i = profile[idxi[0], 1]
             else:
                 i = 0.0
             f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
 
-        f.write("\n# fixed-boundary surface shape \n")
+        f.write("\n# fixed-boundary surface shape\n")
         for (l, m, n, R1, Z1) in inputs[0]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
@@ -670,7 +689,7 @@ class InputReader:
                 )
             )
 
-        f.write("\n# magnetic axis initial guess \n")
+        f.write("\n# magnetic axis initial guess\n")
         for (n, R0, Z0) in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
@@ -1152,8 +1171,10 @@ class InputReader:
                     raise IOError(
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
+
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         inputs["pressure"][:, 1] *= pres_scale
+
         vmec_file.close()
 
         return inputs

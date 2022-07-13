@@ -42,16 +42,18 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    # solver methods
    objective         = force
    optimizer         = lsq-exact
-   spectral_indexing = fringe
+   spectral_indexing = ansi
    node_pattern      = jacobi
    bdry_mode         = lcfs
    
    # pressure and rotational transform profiles
+   iota = 1
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
    
-   n:   0  R0 =  10  Z0 =  0.0  # magnetic axis initial guess
+   # magnetic axis initial guess
+   n:   0  R0 =  10  Z0 =  0.0
    
    # fixed-boundary surface shape
    m:   0   n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
@@ -171,29 +173,33 @@ Solver Methods
 The ``objective`` option ``force`` minimizes the equilibrium force balance errors in units of Newtons, while the ``energy`` option minimizes the total plasma energy in units of Joules. 
 The ``bdry_mode`` option ``LCFS`` enforces the boundary condition on the shape of the last closed flux surface, while the ``Poincare`` option constraints the shapes of the flux surfaces in the Poincare section at :math:`\zeta=0`. 
 
-Pressure & Rotational Transform Profiles
+Pressure & Iota/Current Profiles
 ****************************************
 
 .. code-block:: text
 
+   iota = 1
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
 
+- ``iota`` (bool): True (1) to specify the rotational transform profile, False (0) to specify the toroidal current profile. Default = 1. 
 - ``l`` (int): Radial polynomial order. 
-- ``p`` (float): Pressure profile coefficient :math:`p_{l}`. 
-- ``i`` (float): Rotational transform coefficient :math:`\iota_{l}`. 
+- ``p`` (float): Pressure profile coefficient :math:`p_{l}` (Pascals). 
+- ``i`` (float): Rotational transform or toroidal current coefficients :math:`\iota_{l}` or :math:`I_{l}` (Tesla-meters), respectively. 
 
-The pressure and rotational transform profiles are given as a power series in the flux surface label 
+The pressure and rotational transform or toroidal current profiles are given as a power series in the flux surface label 
 :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
 
 .. math::
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
-   \iota(\rho) &= \sum \iota_{l} \rho^{l}.
+   \iota(\rho) &= \sum \iota_{l} \rho^{l} \\
+   I(\rho) &= \sum I_{l} \rho^{l} \\.
    \end{aligned}
 
-The coefficients :math:`p_{l}` and :math:`\iota_{l}` are specified by the input variables ``p`` and ``i``, respectively. 
+The coefficients :math:`p_{l}` are specified by the input variables ``p``. 
+The coefficients :math:`\iota_{l}` or :math:`I_{l}` are specified by the input variables ``i`` (or equivalently ``I``) depending on the value of ``iota``. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 
 

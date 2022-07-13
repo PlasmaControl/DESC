@@ -2,6 +2,7 @@ import numpy as np
 import os
 import copy
 import numbers
+import warnings
 
 from termcolor import colored
 from abc import ABC
@@ -10,7 +11,7 @@ from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index, unpack_state
+from desc.utils import copy_coeffs, Index
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.profiles import Profile, PowerSeriesProfile
@@ -50,6 +51,9 @@ class _Configuration(IOAble, ABC):
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
         Default is a PowerSeriesProfile with zero rotational transform
+    current : Profile or ndarray shape(k,2) (optional)
+        Toroidal current profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -85,6 +89,7 @@ class _Configuration(IOAble, ABC):
         "_axis",
         "_pressure",
         "_iota",
+        "_current",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -98,6 +103,7 @@ class _Configuration(IOAble, ABC):
         N=None,
         pressure=None,
         iota=None,
+        current=None,
         surface=None,
         axis=None,
         sym=None,
@@ -309,6 +315,8 @@ class _Configuration(IOAble, ABC):
             )
 
         # profiles
+
+        # pressure
         if isinstance(pressure, Profile):
             self._pressure = pressure
         elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
@@ -322,18 +330,39 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
+        if iota is not None and current is not None:
+            raise ValueError("Cannot specify both iota and current profiles.")
+
+        # iota
         if isinstance(iota, Profile):
             self.iota = iota
         elif isinstance(iota, (np.ndarray, jnp.ndarray)):
             self._iota = PowerSeriesProfile(
                 modes=iota[:, 0], params=iota[:, 1], name="iota"
             )
-        elif iota is None:
+        elif iota is None and current is None:
+            warnings.warn(
+                colored(
+                    "Must specify either iota or current. "
+                    + "Using default profile of iota=0.",
+                    "yellow",
+                )
+            )
             self._iota = PowerSeriesProfile(
                 modes=np.array([0]), params=np.array([0]), name="iota"
             )
-        else:
+        elif iota is not None:
             raise TypeError("Got unknown iota profile {}".format(iota))
+
+        # current
+        if isinstance(current, Profile):
+            self.current = current
+        elif isinstance(current, (np.ndarray, jnp.ndarray)):
+            self._current = PowerSeriesProfile(
+                modes=current[:, 0], params=current[:, 1], name="current"
+            )
+        elif current is not None:
+            raise TypeError("Got unknown current profile {}".format(current))
 
         # keep track of where it came from
         self._parent = None
@@ -688,6 +717,8 @@ class _Configuration(IOAble, ABC):
             self.pressure.change_resolution(L=L)
         if L_change and hasattr(self.iota, "change_resolution"):
             self.iota.change_resolution(L=L)
+        if L_change and hasattr(self.current, "change_resolution"):
+            self.current.change_resolution(L=L)
 
         self.axis.change_resolution(self.N, NFP=self.NFP)
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
@@ -1004,6 +1035,29 @@ class _Configuration(IOAble, ABC):
         self.iota.params = i_l
 
     @property
+    def current(self):
+        """Toroidal current (I) profile."""
+        return self._current
+
+    @current.setter
+    def current(self, new):
+        if isinstance(new, Profile):
+            self._current = new
+        else:
+            raise TypeError(
+                f"current profile should be of type Profile or a subclass, got {new} "
+            )
+
+    @property
+    def I_l(self):
+        """Coefficients of current profile (ndarray)."""
+        return self.current.params
+
+    @I_l.setter
+    def I_l(self, I_l):
+        self.current.params = I_l
+
+    @property
     def R_basis(self):
         """Spectral basis for R (FourierZernikeBasis)."""
         return self._R_basis
@@ -1130,6 +1184,9 @@ class _Configuration(IOAble, ABC):
                 inputs[arg].grid = grid
             elif arg == "iota":
                 inputs[arg] = self.iota.copy()
+                inputs[arg].grid = grid
+            elif arg == "current":
+                inputs[arg] = self.current.copy()
                 inputs[arg].grid = grid
 
         return fun(**inputs, **kwargs)

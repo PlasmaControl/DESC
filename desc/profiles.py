@@ -62,7 +62,7 @@ class Profile(IOAble, ABC):
         """Set default params for computation"""
 
     @abstractmethod
-    def compute(params=None, grid=None, dr=0, dt=0, dz=0):
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.params"""
 
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):

@@ -21,9 +21,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
-
     # partial derivatives wrt rho
-    L = 50
+    L = 75
     grid = LinearGrid(L=L)
     drho = grid.nodes[1, 0]
     data = eq.compute("J", grid)
@@ -37,36 +36,36 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_r"][3:-2],
         B_sup_theta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B^theta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B^theta_r"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_r"][3:-2],
         B_sup_zeta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B^zeta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B^zeta_r"])),
     )
     np.testing.assert_allclose(
         data["B_rho_r"][3:-2],
         B_sub_rho_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_rho_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_rho_r"])),
     )
     np.testing.assert_allclose(
         data["B_theta_r"][3:-2],
         B_sub_theta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_theta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_theta_r"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_r"][3:-2],
         B_sub_zeta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_zeta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_zeta_r"])),
     )
 
     # partial derivatives wrt theta
-    M = 90
+    M = 120
     grid = LinearGrid(M=M, NFP=eq.NFP)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("J", grid)
@@ -84,44 +83,44 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_t"][2:-2],
         B_sup_theta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_t"])),
+        rtol=2e-3,
+        atol=3e-3 * np.mean(np.abs(data["B^theta_t"])),
     )
     np.testing.assert_allclose(
         data["B^theta_tt"][2:-2],
         B_sup_theta_tt[2:-2],
-        rtol=2e-2,
+        rtol=2e-4,
         atol=2e-2 * np.mean(np.abs(data["B^theta_tt"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_t"][2:-2],
         B_sup_zeta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_t"])),
+        rtol=3e-3,
+        atol=3e-3 * np.mean(np.abs(data["B^zeta_t"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tt"][2:-2],
         B_sup_zeta_tt[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^zeta_tt"])),
+        rtol=6e-3,
+        atol=6e-3 * np.mean(np.abs(data["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
         data["B_rho_t"][2:-2],
         B_sub_rho_t[2:-2],
         rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_rho_t"])),
+        atol=1e-3 * np.mean(np.abs(data["B_rho_t"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_t"][2:-2],
         B_sub_zeta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_zeta_t"])),
+        rtol=2e-2,
+        atol=2e-2 * np.mean(np.abs(data["B_zeta_t"])),
     )
     np.testing.assert_allclose(
         data["|B|_t"][2:-2],
         B_t[2:-2],
         rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_t"])),
+        atol=1e-3 * np.mean(np.abs(data["|B|_t"])),
     )
     np.testing.assert_allclose(
         data["|B|_tt"][2:-2],
@@ -131,7 +130,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt zeta
-    N = 90
+    N = 120
     grid = LinearGrid(N=N, NFP=eq.NFP)
     dzeta = grid.nodes[1, 2]
     data = eq.compute("J", grid)
@@ -149,55 +148,55 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_z"][2:-2],
         B_sup_theta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B^theta_z"])),
     )
     np.testing.assert_allclose(
         data["B^theta_zz"][2:-2],
         B_sup_theta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^theta_zz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_z"][2:-2],
         B_sup_zeta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B^zeta_z"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_zz"][2:-2],
         B_sup_zeta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
         data["B_rho_z"][2:-2],
         B_sub_rho_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_rho_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B_rho_z"])),
     )
     np.testing.assert_allclose(
         data["B_theta_z"][2:-2],
         B_sub_theta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_theta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B_theta_z"])),
     )
     np.testing.assert_allclose(
         data["|B|_z"][2:-2],
         B_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["|B|_z"])),
     )
     np.testing.assert_allclose(
         data["|B|_zz"][2:-2],
         B_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_zz"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["|B|_zz"])),
     )
 
     # mixed derivatives wrt theta & zeta
-    M = 125
-    N = 125
+    M = 180
+    N = 180
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
     dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
@@ -239,19 +238,19 @@ def test_magnetic_field_derivatives(DummyStellarator):
         data["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],
         B_sup_theta_tz[2:-2, 2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^theta_tz"])),
+        atol=1e-2 * np.mean(np.abs(data["B^theta_tz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tz"].reshape((N, M))[2:-2, 2:-2],
         B_sup_zeta_tz[2:-2, 2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^zeta_tz"])),
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_tz"])),
     )
     np.testing.assert_allclose(
         data["|B|_tz"].reshape((N, M))[2:-2, 2:-2],
         B_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["|B|_tz"])),
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_tz"])),
     )
 
 
@@ -265,7 +264,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    L = 50
+    L = 110
     grid = LinearGrid(L=L, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute("|B|", grid)
@@ -274,8 +273,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
         B2_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["grad(|B|^2)_rho"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["grad(|B|^2)_rho"])),
     )
 
     # partial derivative wrt theta
@@ -384,7 +383,7 @@ def test_boozer_transform(DSHAPE):
     np.testing.assert_allclose(
         np.flipud(np.sort(np.abs(data["|B|_mn"]))),
         booz_xform,
-        rtol=1e-2,
+        rtol=1e-3,
         atol=1e-4,
     )
 

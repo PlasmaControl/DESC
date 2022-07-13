@@ -14599,8 +14599,8 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 <li>Increases performance. I used to wait for this jupyter notebook to run for 30 minutes to get values to plot. Now it runs in 1 minute.</li>
 </ul>
 <h4 id="Update-1:-alternative-version-of-magnetic-well-in-Landerman-paper-added.">Update 1: alternative version of magnetic well in Landerman paper added.<a class="anchor-link" href="#Update-1:-alternative-version-of-magnetic-well-in-Landerman-paper-added.">&#182;</a></h4><p>It seems to have more responsive curves, and it has the same abrupt change as STELLOPT for HELIOTRON.
-However, there are qualities which do not look promising. Maybe I made a sign error from the s<sub>$\psi$</sub> term in eq. 4.19. I've multiplied eq. 4.19 by -1 to make the form of the curve match our expectations, but I couldn't explain why this would be consistent with eq. 4.19.
-Perhaps the upcoming hotfix for the magnetic field in master could fix this issue as the magnetic well computation does rely on B.</p>
+Though, I'm uncertain how exactly to incorporate the s<sub>$\psi$</sub> term in eq. 4.19. Could be a sign error somewhere. I've multiplied eq. 4.19 by -1 to make the form of the curve match our expectations.
+Perhaps the upcoming hotfixes or grid class changes could fix this issue.</p>
 <h2 id="the-Bad">the Bad<a class="anchor-link" href="#the-Bad">&#182;</a></h2><p>The curves produced by DESC and STELLOPT for the magnetic well parameter as a function of $\rho$ look different.</p>
 <h2 id="the-Good">the Good<a class="anchor-link" href="#the-Good">&#182;</a></h2><p>The magnetic well parameter computed by DESC matches the sign of the magnetic well parameter computed by STELLOPT. This is technically all we need, but it seems bad to not have them match.</p>
 <p>The volume computation is now 100% correct. The solution to the bug in the <code>grid.py</code> class works, which was necessary to correct volume and dv/d$\rho$. An <a href="#Volume-computation-problem-and-solution">explanation to the solution is given here</a>. Might be useful in case we have run into this bug somewhere else in the code.</p>
@@ -14684,8 +14684,8 @@ Perhaps the upcoming hotfix for the magnetic field in master could fix this issu
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>DESC version 0.5.1+54.gdaa20db.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
-Using device: CPU, with 9.04 GB available memory
+<pre>DESC version 0.5.1+60.g708f88c.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 7.43 GB available memory
 </pre>
 </div>
 </div>
@@ -14865,7 +14865,7 @@ Using device: CPU, with 9.04 GB available memory
     <span class="c1">#             self.eq.Psi,</span>
     <span class="c1">#         )</span>
     <span class="c1">#         for key, val in m.items():</span>
-    <span class="c1">#             self.st.setdefault(key, (self.rho, np.empty(len(self.rho))))[1][i] = val</span>
+    <span class="c1">#             self.st.setdefault(key, (self.rho, np.empty_like(self.rho)))[1][i] = val</span>
     <span class="c1">#     self.has_values = True</span>
 
     <span class="k">def</span> <span class="nf">compute_plot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -15136,7 +15136,7 @@ class="
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
 <pre>torus
-Equilibrium at 0x7fa118716460 (L=1, M=1, N=0, NFP=1, sym=False, spectral_indexing=ansi)
+Equilibrium at 0x7fb628095670 (L=1, M=1, N=0, NFP=1, sym=False, spectral_indexing=ansi)
 grid.spacing(dr,dt,dz) [1.0000 0.4488 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [0.0002]
 2. DESC Magnetic Well: rho * d/drho [4.7781e-16]
@@ -15153,7 +15153,7 @@ volume [197.3921]
 data[&#34;V&#34;] 198.93421370945737
 
 DSHAPE
-Equilibrium at 0x7fa1047708b0 (L=26, M=13, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fb60c3bbfd0 (L=26, M=13, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [1.0000 0.1013 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-3.6840]
 2. DESC Magnetic Well: rho * d/drho [0.0632]
@@ -15170,7 +15170,7 @@ volume [99.4570]
 data[&#34;V&#34;] 99.99847305109907
 
 HELIOTRON
-Equilibrium at 0x7fa104747d90 (L=24, M=12, N=3, NFP=19.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fb60c347940 (L=24, M=12, N=3, NFP=19.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [2.6684 0.3645 0.0401]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-77.6863]
 2. DESC Magnetic Well: rho * d/drho [-2.2638]
@@ -15187,7 +15187,7 @@ volume [179.6268]
 data[&#34;V&#34;] 182.39728011165477
 
 ATF
-Equilibrium at 0x7fa10434adc0 (L=24, M=12, N=4, NFP=12.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fb60c18ba90 (L=24, M=12, N=4, NFP=12.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [2.2894 0.3425 0.0545]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-0.1412]
 2. DESC Magnetic Well: rho * d/drho [-1.3754]
@@ -15204,7 +15204,7 @@ volume [3.1325]
 data[&#34;V&#34;] 3.1732604121741517
 
 AXISYM
-Equilibrium at 0x7fa118095fd0 (L=40, M=20, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fb60c751550 (L=40, M=20, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [1.0000 0.0698 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-10.9082]
 2. DESC Magnetic Well: rho * d/drho [-0.2903]
@@ -15325,7 +15325,7 @@ AXISYM [39.8951]
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>&lt;matplotlib.legend.Legend at 0x7f9ffd7266a0&gt;</pre>
+<pre>&lt;matplotlib.legend.Legend at 0x7fb5053fd280&gt;</pre>
 </div>
 
 </div>
@@ -15477,11 +15477,11 @@ class="
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># for s in stellarators:</span>
-<span class="c1">#     s.save()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">stellarators</span><span class="p">:</span>
+    <span class="n">s</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
 </pre></div>
 
      </div>
@@ -15563,16 +15563,16 @@ class="
  [1.0000 2.0944 2.0944]
  [1.0000 2.0944 2.0944]]
 
-NFP: 56.06376438627812
-[[3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]
- [3.8273 8.0159 0.1430]]
+NFP: 18.99178924109637
+[[2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]
+ [2.6680 5.5879 0.2942]]
 </pre>
 </div>
 </div>
@@ -15593,10 +15593,10 @@ NFP: 56.06376438627812
 <ul>
 <li>Let $g1 \in Grid : g1.NFP = 1$ and $g2 \in Grid : g2.NFP \in \mathbb{R}^{+}$. Then given g2, d$\theta$ * d$\zeta$ = <code>g2.weights / g1.spacing[:, 0]</code>.</li>
 <li>I don't know how to retrieve g1.d$\rho$ from g2, other than storing it during grid construction.</li>
-<li>Until this can be fixed, any computation which requires differential surface elements (i.e. flux surface averages require the columns from <code>grid.spacing</code>) will yield incorrect quantities $\forall g \in Grid : g.num\_rho \in \mathbb{N} \setminus {1} and g.NFP \in \mathbb{R}^{+} \setminus {1}$.</li>
+<li>Until this can be fixed, any computation which requires differential surface elements (i.e. flux surface averages require the columns from <code>grid.spacing</code>) will yield incorrect quantities $\forall g \in Grid : g.num\_rho \in \mathbb{N} \setminus {1}\ and\ g.NFP \in \mathbb{R}^{+} \setminus {1}$.</li>
 <li>Which is disappointing because bulk flux surface averaging was a massive performance improvement for the end user (me wanting to compute magnetic well over many surfaces).</li>
 </ul>
-<p>The next, and last to my knowledge, source of error in the volume is the symmetry (quasi?) boolean. <code>enforce_symmetry()</code> again modifies d$\theta$ * d$\zeta$. Visual given below. The error in computed volume that results from this is much smaller than the NFP error fixed above.</p>
+<p>The next, and last to my knowledge, source of error in the volume is the stellarator symmetry boolean. <code>enforce_symmetry()</code> again modifies d$\theta$ * d$\zeta$. Visual given below. The error in computed volume that results from this is much smaller than the NFP error fixed above.</p>
 <p>The nodes with $\theta$ &gt; $\pi$ are removed and so too are the spacings in the grid that correspond to those nodes. Now because <code>grid.spacing</code> is missing these nodes, to preserve the overall volume in ($\rho$, $\theta$, $\zeta$) space (<code>grid.weights.sum()</code>), the differential volume d$\rho$ <em> d$\theta$ </em> d$\zeta$ of the remaining spaces is increased so that the sum is still 4$\pi$<sup>2</sup>. This makes sense since we do want to increase the weight of the nodes 0 to $\pi$ to double count for the removed nodes. This process has preserving the volume d$\rho$ <em> d$\theta$ </em> d$\zeta$ in mind. It's not clear to me if a different scale factor (other than 4$\pi$<sup>2</sup>) would be better to preserve an area element d$\theta$ * d$\zeta$. Might be dependent on $\rho$.</p>
 <p>In any case, the solution implemented here is to force stellarator symmetry to <code>False</code>. This is not ideal since it can simplify the computation of the transforms and such. An alternative could be to just recreate the grid with the nodes that were removed from <code>enforce_symmetry()</code> in the <code>MagneticWell</code> class and use this grid just for the volume computation. This could allow the grid with symmetry to still be used elsewhere.</p>
 

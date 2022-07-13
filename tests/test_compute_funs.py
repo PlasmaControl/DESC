@@ -23,7 +23,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    num_rho = 50
+    num_rho = 75
     grid = LinearGrid(rho=num_rho)
     drho = grid.nodes[1, 0]
     data = eq.compute("J", grid)
@@ -66,7 +66,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt theta
-    num_theta = 90
+    num_theta = 120
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("J", grid)
@@ -131,7 +131,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt zeta
-    num_zeta = 90
+    num_zeta = 120
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute("J", grid)
@@ -196,8 +196,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # mixed derivatives wrt theta & zeta
-    num_theta = 125
-    num_zeta = 125
+    num_theta = 180
+    num_zeta = 180
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
     dtheta = grid.nodes[:, 1].reshape((num_zeta, num_theta))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((num_zeta, num_theta))[1, 0]
@@ -265,7 +265,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    num_rho = 50
+    num_rho = 110
     grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
     data = eq.compute("|B|", grid)

@@ -10,6 +10,7 @@ from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.exact_lagrangian import fmin_exlag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
 from desc.optimize.aug_lagrangian_stel import fmin_lag_stel
+from desc.optimize.aug_lagrangian_ls_stel import fmin_lag_ls_stel
 from desc.derivatives import Derivative
 from desc.backend import jnp
 from scipy.optimize import minimize
@@ -546,7 +547,7 @@ def bound_constr3(x):
 def bound_constr4(x):
     return x[1] - 1 + x[5]**2
 
-grad = Derivative(obj_func, argnum=0)
+grad = Derivative(res, argnum=0)
 gradeq = Derivative(eq_constr_func,argnum=0)
 gradbound1 = Derivative(bound_constr1,argnum=0)
 gradbound2 = Derivative(bound_constr2,argnum=0)
@@ -563,3 +564,43 @@ mu0 = 10*np.ones(5)
 
 
 fopt,xopt,muf,ctolf,gradopt = fmin_lag_ls(res,x0,lmbda0,mu0,grad,np.array([eq]),np.array([geq]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+
+#%%G11 least squares wrapped
+
+def res(x):
+    return x - jnp.array([0.0,1.0])
+
+def eq_constr_func(x):
+    return x[1] - x[0]**2
+
+def bound_constr1(x):
+    return -x[0]
+
+def bound_constr2(x):
+    return x[0]
+
+def bound_constr3(x):
+    return -x[1]
+
+def bound_constr4(x):
+    return x[1]
+
+grad = Derivative(res, argnum=0)
+gradeq = Derivative(eq_constr_func,argnum=0)
+gradbound1 = Derivative(bound_constr1,argnum=0)
+gradbound2 = Derivative(bound_constr2,argnum=0)
+gradbound3 = Derivative(bound_constr3,argnum=0)
+gradbound4 = Derivative(bound_constr4,argnum=0)
+
+eq = np.array([eq_constr_func])
+geq = np.array([gradeq])
+ic = np.array([bound_constr1,bound_constr2,bound_constr3,bound_constr4])
+gic = np.array([gradbound1,gradbound2,gradbound3,gradbound4])
+
+x0 = 0.5*np.ones(2)
+mu0 = 10*np.ones(5)
+
+bounds=np.array([0,1,1,1,1])
+
+# fopt,xopt,muf,ctolf,gradopt = fmin_lag_ls(res,x0,lmbda0,mu0,grad,np.array([eq]),np.array([geq]),ic,gic,l=np.array([13,0]),u=np.array([100,100]),maxiter = 100)
+result = fmin_lag_ls_stel(res,x0,mu0,grad,eq,ic,bounds,maxiter = 100)

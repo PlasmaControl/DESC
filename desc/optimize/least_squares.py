@@ -332,6 +332,7 @@ def lsqtr(
         nit=iteration,
         message=message,
     )
+    result["message"] = ""
     if verbose > 0:
         if result["success"]:
             print(result["message"])

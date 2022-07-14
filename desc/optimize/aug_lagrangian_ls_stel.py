@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon May 30 15:25:26 2022
+Created on Wed Jul 13 10:39:48 2022
 
 @author: pk123
 """
+
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
@@ -22,14 +23,14 @@ from .tr_subproblems import (
     update_tr_radius,
 )
 from scipy.optimize import OptimizeResult
-from scipy.optimize import minimize
 
 from desc.optimize.fmin_scalar import fmintr
+from desc.optimize.least_squares import lsqtr
 
 #from desc.objective_funs import AugLagrangian
-from desc.objectives.auglagrangian_objectives import AugLagrangian
 from desc.derivatives import Derivative
-
+#from desc.objective_funs import AugLagrangianLS
+from desc.objectives.auglagrangian_objectives import AugLagrangianLS
 # def gradL(x,fun,lmbda,mu,c,gradc):
 #     return
 
@@ -52,15 +53,14 @@ from desc.derivatives import Derivative
 #         return np.linalg.norm(x - proj(x - gL, l, u))
     
 
-def conv_test(x,gL,bounds):
-    return np.linalg.norm(gL)
+def conv_test(x,L,gL):
+    return np.linalg.norm(jnp.dot(gL.T,L))
 
 # def bound_constr(x,lmbda,mu,gradL)
 
-def fmin_lag_stel(
+def fmin_lag_ls_stel(
     fun,
     x0,
-    lmbda0,
     mu0,
     grad,
     eq_constr,
@@ -70,7 +70,7 @@ def fmin_lag_stel(
     args=(),
     method="dogleg",
     x_scale=1,
-    ftol=1e-12,
+    ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
     ctol=1e-6,
@@ -90,7 +90,7 @@ def fmin_lag_stel(
     nfev += 1
     g = grad(x, *args)
     ngev += 1
-    lmbda = lmbda0
+    
     
     ineq_dim = 0
     for i in range(len(ineq_constr)):
@@ -122,77 +122,70 @@ def fmin_lag_stel(
         
     constr = np.array([wrapped_constraint])         
 
-    L = AugLagrangian(wrapped_obj, constr)
-    gradL = Derivative(L.compute,argnum=0)
+    L = AugLagrangianLS(wrapped_obj, constr)
+    gradL = Derivative(L.compute,0,"fwd")
     hessL = Derivative(L.compute,argnum=0,mode="hess")
     
+    # constr = np.concatenate((constr,ineq),axis=None)
+    # gradconstr = np.concatenate((gradconstr,gradineq),axis=None)
+    
+    # L = AugLagrangianLS(fun, constr)
+    # gradL = Derivative(L.compute,0,"fwd")
     
     mu = mu0
-    gtolk = 1/(10*mu0)
-    ctolk = 1/(mu0**(0.1))    
+    gtolk = 1/(10*np.linalg.norm(mu0))
+    ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
     xold = x
-    f = wrapped_obj(x)
-    fold = f
+    
     
     while iteration < maxiter:
-        print("Before minimize\n")
-
-        #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-exact",jac=gradL, hess=hessL, options = {"maxiter": int(maxiter),"initial_tr_radius": 1.0,"verbose":3})
-        print("After minimize\n")
-        
-        print("The gradient of the lagrangian is " + str(np.linalg.norm(gradL(x,lmbda,mu))))
-        print("The gradient of the objective is " + str(np.linalg.norm(grad(x))))
-        l = L.compute(x,lmbda,mu)
-        print("The objective is " + str(f))
-        print("The lagrangian is " + str(l))
-        
+        #print(gtolk)
+        xk = lsqtr(L.compute,x,gradL,args=(mu,),gtol=gtolk,maxiter = int(4*maxiter),verbose=2)
         x = xk['x']
-        print("x is ")
-        print(x)
+
         c = 0
         
-        f = wrapped_obj(x)
+        # for i in range(len(constr)):
+        #     c = c + constr[i](x)**2
+        
+        # c = np.sqrt(c)
         
         cv = L.compute_constraints(x)
         c = np.linalg.norm(cv)
-        print("The constraints are " + str(c))
         
-        if np.linalg.norm(fold - f) < ftol:
-            print("ftol satisfied")
-            break
-        if np.linalg.norm(l) < 1e-05:
-            print("ltol satisfied")
-            break
-        fold = f
-        
-        
-
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break        
         
         if c < ctolk:
 
-            if c < ctol and conv_test(x,gradL(x,lmbda,mu),bounds) < gtol:
+            if c < ctol and conv_test(x,L.compute(x,mu),gradL(x,mu)) < gtol:
                 break
 
             else:
-                lmbda = lmbda - mu*cv
-                ctolk = ctolk/(mu**(0.9))
-                gtolk = gtolk/mu
+                ctolk = ctolk/(np.linalg.norm(mu)**(0.9))
+                gtolk = gtolk/np.linalg.norm(mu)
         else:
             mu = 100 * mu
-            ctolk = 1/(mu**(0.1))
-            gtolk = gtolk/mu
+            ctolk = 1/(np.linalg.norm(mu)**(0.1))
+            gtolk = gtolk/np.linalg.norm(mu)
         
         
         iteration = iteration + 1
         xold = x
+        #print(fun(x))
+        #print("\n")
+        #print(x)
+
         
-        
-        
-    g = gradL(x,lmbda,mu)
+        print("The objective function is " + str(np.linalg.norm(f)))
+        print("The constraints are " + str(c))
+        print("x is " + str(recover(x)))
+        print("The iteration is " + str(iteration))
+        #xr = recover(x)
+    #return [fun(xr),xr,mu,c,gradL(x,mu)]
+    g = gradL(x,mu)
+    f = fun(recover(x))
     success = True
     message = "successful"
     result = OptimizeResult(
@@ -208,5 +201,4 @@ def fmin_lag_stel(
         message=message,
     )
     result["allx"] = [recover(x)]
-    #return [wrapped_obj(x),x,lmbda,c,gradL(x,lmbda,mu)]
     return result

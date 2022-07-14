@@ -110,8 +110,8 @@ def fmin_lag(
     
     while iteration < maxiter:
         print("Before minimize\n")
-        #xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL)
+        xk = fmintr(L.compute,x,gradL,hess = hessL,args=(lmbda,mu),gtol=gtolk,maxiter = maxiter)
+        #xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-constr",jac=gradL)
         print("After minimize\n")
         x = xk['x']
 

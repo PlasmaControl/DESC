@@ -20,6 +20,7 @@ from .utils import check_termination, print_header_nonlinear, print_iteration_no
 from desc.optimize.aug_lagrangian import fmin_lag
 from desc.optimize.aug_lagrangian_ls import fmin_lag_ls
 from desc.optimize.aug_lagrangian_stel import fmin_lag_stel
+from desc.optimize.aug_lagrangian_ls_stel import fmin_lag_ls_stel
 from desc.derivatives import Derivative
 from desc.grid import ConcentricGrid
 from scipy.constants import mu_0
@@ -65,7 +66,7 @@ class Optimizer(IOAble):
     _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
     _scipy_constrained_least_squares_methods = []
     _desc_constrained_scalar_methods = ["auglag"]
-    _desc_constrained_least_squares_methods = ["lsq-auglaq"]
+    _desc_constrained_least_squares_methods = ["lsq-auglag"]
     _scalar_methods = (
         _desc_scalar_methods
         + _scipy_scalar_methods
@@ -294,6 +295,7 @@ class Optimizer(IOAble):
                 objective.build(eq, verbose=verbose)
             if not objective.compiled:
                 mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+                objective.compile(mode,verbose)
             if not constraint_objectives.built:
                 constraint_objectives.build(eq,verbose=verbose)
             
@@ -304,7 +306,7 @@ class Optimizer(IOAble):
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(mode, verbose)
+            #objective.compile(mode, verbose)
         for constraint in linear_constraints:
             if not constraint.built:
                 constraint.build(eq, verbose=verbose)
@@ -496,7 +498,7 @@ class Optimizer(IOAble):
             def jac(x_reduced):
                 allx.append(x_reduced)
                 return jac_wrapped(x_reduced)
-
+            
             result = scipy.optimize.least_squares(
                 compute_wrapped,
                 x0=x0_reduced,
@@ -569,8 +571,46 @@ class Optimizer(IOAble):
             print("The gradient of the constraints is " + str(gc0))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
+            
+        
+        elif self.method in Optimizer._desc_constrained_least_squares_methods:
+            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
+            method = (
+                self.method if "bfgs" not in self.method else self.method.split("-")[0]
+            )
+            x_scale = "hess" if x_scale == "auto" else x_scale
+            
+           
+            gradconstr = jnp.array([])
+            gradineq = jnp.array([])
+            constr = np.array([compute_constraints_wrapped])
+            ineq = jnp.array([])
+            
+            l = 0
+            for i in range(len(constr)):
+                print(constr[i](x0_reduced).shape)
+                l = l + len(constr[i](x0_reduced))
+            # lmbda0 = 10**(-12)*jnp.ones(l)
+            # mu0 = 10**(-12)
+            mu0 = 100.0*jnp.ones(l)
+            c0 = constr[0](x0_reduced)
+            bounds = 0.0*jnp.ones(l)
+            gc0 = compute_constraints_grad_wrapped(x0_reduced)
+            print("The bounds are " + str(bounds))
+            print("The objective is " + str(np.sum(compute_wrapped(x0_reduced)**2)))
+            print("The sum of residuals is " + str(np.sum(c0**2)))
+            print("The constraints are " + str(c0))
+            print("The gradient of the constraints is " + str(gc0))
+            print("The length of the constraints is " + str(l))
+            print("The size of x is " + str(len(x0_reduced)))
+            #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
+            #result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
+            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,mu0,jac_wrapped,constr,np.array([]),bounds=bounds,maxiter=0)
 
         elif self.method in Optimizer._desc_least_squares_methods:
+            
+            print("the objective is " + str(np.sum(compute_wrapped(x0_reduced)**2)))
+            print("the size of x is " + str(len(x0_reduced)))
 
             result = lsqtr(
                 compute_wrapped,

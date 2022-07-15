@@ -556,13 +556,13 @@ def compute_rotational_transform_v2(
 
     # derivatives computed analytically by pushing derivative into surface average
     iota = (poloidal_flux + num) / den
-    # iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
-    # iota_rr = (
-    #     poloidal_flux_rr
-    #     + num_rr
-    #     - 2 * (poloidal_flux_r + num_r) * den_r / den
-    #     + iota * (2 * jnp.square(den_r) / den - den_rr)
-    # ) / den
+    iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
+    iota_rr = (
+        poloidal_flux_rr
+        + num_rr
+        - 2 * (poloidal_flux_r + num_r) * den_r / den
+        + iota * (2 * jnp.square(den_r) / den - den_rr)
+    ) / den
 
     # iota discretizes the rotational transform to flux surfaces.
     # data["iota"] discretizes the rotational transform to collocation nodes.
@@ -571,8 +571,8 @@ def compute_rotational_transform_v2(
     repeat_length = len(grid.nodes) // grid.num_zeta
     unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
     data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
-    # data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
-    # data["iota_rr"] = expand(iota_rr, unique_rho_counts, repeat_length, grid.num_zeta)
+    data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
+    data["iota_rr"] = expand(iota_rr, unique_rho_counts, repeat_length, grid.num_zeta)
     return data
 
 

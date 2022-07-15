@@ -8,6 +8,8 @@ from desc.compute import (
     compute_energy,
     compute_contravariant_current_density,
 )
+
+from desc.compute._core import compute_rotational_transform_v2
 from .objective_funs import _Objective
 
 
@@ -81,18 +83,36 @@ class ForceBalance(_Objective):
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
-        self._iota = eq.iota.copy()
+        self._current = eq.current.copy()
+        self._current.grid = self.grid
+        self._iota = self._current
         self._pressure.grid = self.grid
         self._iota.grid = self.grid
 
+        r_derivs = jnp.vstack((
+            data_index["F_rho"]["R_derivs"],
+            data_index["sqrt(g)_rr"]["R_derivs"],
+        ))
+        l_derivs = jnp.vstack(
+            (
+                data_index["lambda_t"]["L_derivs"],
+                data_index["lambda_rt"]["L_derivs"],
+                data_index["lambda_rrt"]["L_derivs"],
+                data_index["lambda_z"]["L_derivs"],
+                data_index["lambda_rz"]["L_derivs"],
+                data_index["lambda_rrz"]["L_derivs"],
+                data_index["F_rho"]["L_derivs"],
+            )
+        )
+
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=r_derivs, build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=r_derivs, build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=l_derivs, build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -133,13 +153,13 @@ class ForceBalance(_Objective):
             Z_lmn,
             L_lmn,
             p_l,
-            i_l,
+            i_l,  # assuming toroidal current spectral coefficients
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
-            self._iota,
+            iota=self._current,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights

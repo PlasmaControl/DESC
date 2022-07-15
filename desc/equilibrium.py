@@ -786,7 +786,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         for l, p in inputs["pressure"]:
             idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
             p_l[idx_p] = p
-        for l, i in inputs["iota"]:
+        for l, i in inputs["current"]:  # changed from "iota"
             idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
             i_l[idx_i] = i
 
@@ -854,7 +854,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             warnings.warn(
                 colored(
                     "Computing perturbations with finite differences can be "
-                    + "highly innacurate, consider using JAX or setting all "
+                    + "highly inaccurate, consider using JAX or setting all "
                     + "perturbation ratios to 1",
                     "yellow",
                 )
@@ -891,7 +891,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 if verbose > 0:
                     self._print_iteration(ii, equil)
 
-                # figure out if we we need perturbations
+                # figure out if we need perturbations
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:

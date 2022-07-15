@@ -1014,7 +1014,7 @@ class _Configuration(IOAble, ABC):
     @property
     def iota(self):
         """Rotational transform (iota) profile."""
-        return self._iota
+        return self._current  # changed from self._iota
 
     @iota.setter
     def iota(self, new):

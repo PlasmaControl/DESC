@@ -648,7 +648,7 @@ class FixIota(_Objective):
 
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
-            self._profile = eq.iota
+            self._profile = eq.current
 
         if isinstance(self._profile, PowerSeriesProfile):
             # find indices of iota modes to fix

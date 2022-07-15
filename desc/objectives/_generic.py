@@ -324,10 +324,10 @@ class MagneticWell(_Objective):
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                M=2 * eq.M_grid + 10,  # +1 not enough for volume
+                M=2 * eq.M_grid + 10,  # +1 not enough accuracy for volume
                 N=2 * eq.N_grid + 10,
                 NFP=eq.NFP,
-                sym=False,  # required for correctness of volume
+                sym=False,  # required for correctness of dt * dz
                 rho=jnp.array(1.0),
             )
         # adds functionality to compute magnetic well on many rho surfaces
@@ -456,7 +456,8 @@ class MagneticWell(_Objective):
         W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
 
         # Dwell from M. Landreman and R. Jorge eq. 4.19
-        grad_psi_sq = data["g^rr"] * jnp.square(data["psi_r"])
+        psi_r_sq = jnp.square(data["psi_r"])
+        grad_psi_sq = data["g^rr"] * psi_r_sq
         ds_over_abs_grad_psi = dtdz * sqrtg / jnp.abs(data["psi_r"])
         # One of these terms below inside the deepest parenthesis may need to be multiplied by jnp.sign(psi)
         W1 = -(  # I don't think this negative should be here. But the plots match STELLOPT much more with it.
@@ -471,7 +472,7 @@ class MagneticWell(_Objective):
                 / data["psi_r"][self.grid.unique_rho_indices]
                 - mu_0 * surface_sums(rho, self._bins, ds_over_abs_grad_psi / Bsq)
             )
-            / jnp.square(data["psi_r"][self.grid.unique_rho_indices])
+            / psi_r_sq[self.grid.unique_rho_indices]
         )
         return {
             "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1),

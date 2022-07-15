@@ -14684,8 +14684,8 @@ Perhaps the upcoming hotfixes or grid class changes could fix this issue.</p>
 
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>DESC version 0.5.1+60.g708f88c.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
-Using device: CPU, with 7.43 GB available memory
+<pre>DESC version 0.5.1+61.ge820c72.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 9.81 GB available memory
 </pre>
 </div>
 </div>
@@ -14735,7 +14735,7 @@ Using device: CPU, with 7.43 GB available memory
         <span class="n">name</span><span class="p">,</span>
         <span class="n">eq</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">use_stellopt_rho</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_stellopt</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">rho</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">64</span><span class="p">),</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -14750,8 +14750,8 @@ Using device: CPU, with 7.43 GB available memory
 <span class="sd">            The equilibrium.</span>
 <span class="sd">        use_previous : bool</span>
 <span class="sd">            True to use compute values from a previous run; False to recompute.</span>
-<span class="sd">        use_stellopt_rho : bool</span>
-<span class="sd">            True to use same rho values as STELLOPT data; False to use input rho.</span>
+<span class="sd">        include_stellopt : bool</span>
+<span class="sd">            True to plot STELLOPT data.</span>
 <span class="sd">        rho : ndarray</span>
 <span class="sd">            The flux surface values to compute the magnetic well on.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -14768,10 +14768,9 @@ Using device: CPU, with 7.43 GB available memory
             <span class="c1"># values are tuples of (x[i], y[i]) of plotable data</span>
             <span class="c1"># y points are cached when compute_plot() is called</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">st</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">use_stellopt_rho</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">include_stellopt</span><span class="p">:</span>
                 <span class="n">mat</span> <span class="o">=</span> <span class="n">sio</span><span class="o">.</span><span class="n">loadmat</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_magwell.mat&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">st</span><span class="p">[</span><span class="s2">&quot;0. STELLOPT Magnetic Well&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mat</span><span class="p">[</span><span class="s2">&quot;rho&quot;</span><span class="p">],</span> <span class="n">mat</span><span class="p">[</span><span class="s2">&quot;magwell&quot;</span><span class="p">]</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">rho</span> <span class="o">=</span> <span class="n">mat</span><span class="p">[</span><span class="s2">&quot;rho&quot;</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">rho</span> <span class="o">=</span> <span class="n">rho</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">has_values</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -14876,7 +14875,7 @@ Using device: CPU, with 7.43 GB available memory
         <span class="n">m</span> <span class="o">=</span> <span class="n">MagneticWell</span><span class="p">(</span>
             <span class="n">eq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">eq</span><span class="p">,</span>
             <span class="n">grid</span><span class="o">=</span><span class="n">LinearGrid</span><span class="p">(</span>
-                <span class="n">M</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">eq</span><span class="o">.</span><span class="n">M_grid</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span>  <span class="c1"># +1 not enough for volume</span>
+                <span class="n">M</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">eq</span><span class="o">.</span><span class="n">M_grid</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span>  <span class="c1"># +1 not enough accuracy for volume</span>
                 <span class="n">N</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">eq</span><span class="o">.</span><span class="n">N_grid</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span>
                 <span class="n">NFP</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># required for grid.num_rho != 1</span>
                 <span class="n">sym</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># required for correctness of dt * dz</span>
@@ -14949,8 +14948,8 @@ Using device: CPU, with 7.43 GB available memory
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">torus</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;torus&quot;</span><span class="p">,</span> <span class="n">Equilibrium</span><span class="p">(),</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-<span class="n">dshape</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;DSHAPE&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_stellopt_rho</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">heliotron</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;HELIOTRON&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_stellopt_rho</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">dshape</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;DSHAPE&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">include_stellopt</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">heliotron</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;HELIOTRON&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">include_stellopt</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">atf</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;ATF&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="n">axisym</span> <span class="o">=</span> <span class="n">MagneticWellVisual</span><span class="p">(</span><span class="s2">&quot;AXISYM&quot;</span><span class="p">,</span> <span class="n">use_previous</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="n">stellarators</span> <span class="o">=</span> <span class="p">(</span><span class="n">torus</span><span class="p">,</span> <span class="n">dshape</span><span class="p">,</span> <span class="n">heliotron</span><span class="p">,</span> <span class="n">atf</span><span class="p">,</span> <span class="n">axisym</span><span class="p">)</span>
@@ -15136,7 +15135,7 @@ class="
 
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
 <pre>torus
-Equilibrium at 0x7fb628095670 (L=1, M=1, N=0, NFP=1, sym=False, spectral_indexing=ansi)
+Equilibrium at 0x7fe3d01a9760 (L=1, M=1, N=0, NFP=1, sym=False, spectral_indexing=ansi)
 grid.spacing(dr,dt,dz) [1.0000 0.4488 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [0.0002]
 2. DESC Magnetic Well: rho * d/drho [4.7781e-16]
@@ -15153,7 +15152,7 @@ volume [197.3921]
 data[&#34;V&#34;] 198.93421370945737
 
 DSHAPE
-Equilibrium at 0x7fb60c3bbfd0 (L=26, M=13, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fe3c0704700 (L=26, M=13, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [1.0000 0.1013 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-3.6840]
 2. DESC Magnetic Well: rho * d/drho [0.0632]
@@ -15170,7 +15169,7 @@ volume [99.4570]
 data[&#34;V&#34;] 99.99847305109907
 
 HELIOTRON
-Equilibrium at 0x7fb60c347940 (L=24, M=12, N=3, NFP=19.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fe3c06cebe0 (L=24, M=12, N=3, NFP=19.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [2.6684 0.3645 0.0401]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-77.6863]
 2. DESC Magnetic Well: rho * d/drho [-2.2638]
@@ -15187,7 +15186,7 @@ volume [179.6268]
 data[&#34;V&#34;] 182.39728011165477
 
 ATF
-Equilibrium at 0x7fb60c18ba90 (L=24, M=12, N=4, NFP=12.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fe3c02e5d60 (L=24, M=12, N=4, NFP=12.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [2.2894 0.3425 0.0545]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-0.1412]
 2. DESC Magnetic Well: rho * d/drho [-1.3754]
@@ -15204,7 +15203,7 @@ volume [3.1325]
 data[&#34;V&#34;] 3.1732604121741517
 
 AXISYM
-Equilibrium at 0x7fb60c751550 (L=40, M=20, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
+Equilibrium at 0x7fe3c07bea00 (L=40, M=20, N=0, NFP=1.0, sym=1, spectral_indexing=fringe)
 grid.spacing(dr,dt,dz) [1.0000 0.0698 0.6283]
 1. DESC Magnetic Well: M. Landreman eq. 4.19 [-10.9082]
 2. DESC Magnetic Well: rho * d/drho [-0.2903]
@@ -15239,7 +15238,7 @@ data[&#34;V&#34;] 98.71375616900771
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
 <div class="jp-Cell-inputWrapper">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -15249,40 +15248,12 @@ data[&#34;V&#34;] 98.71375616900771
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">stellarators</span><span class="p">:</span>
     <span class="n">s</span><span class="o">.</span><span class="n">compute_plot</span><span class="p">()</span>
-    <span class="n">dtdz</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">st</span><span class="p">[</span><span class="s2">&quot;dtdz&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">dtdz</span><span class="p">))</span>
+    <span class="n">s</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
 </pre></div>
 
      </div>
 </div>
 </div>
-</div>
-
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-
-
-<div class="jp-OutputArea jp-Cell-outputArea">
-
-<div class="jp-OutputArea-child">
-
-    
-    <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-
-
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain">
-<pre>torus [39.8951]
-DSHAPE [39.8951]
-HELIOTRON [39.8951]
-ATF [39.8951]
-AXISYM [39.8951]
-</pre>
-</div>
-</div>
-
-</div>
-
 </div>
 
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell   ">
@@ -15325,7 +15296,7 @@ AXISYM [39.8951]
 
 
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain">
-<pre>&lt;matplotlib.legend.Legend at 0x7fb5053fd280&gt;</pre>
+<pre>&lt;matplotlib.legend.Legend at 0x7fe2cc69b100&gt;</pre>
 </div>
 
 </div>
@@ -15472,23 +15443,6 @@ class="
 
 </div>
 
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">stellarators</span><span class="p">:</span>
-    <span class="n">s</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
-</pre></div>
-
-     </div>
-</div>
-</div>
-</div>
-
 </div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
 <div class="jp-Cell-inputWrapper">
@@ -15508,7 +15462,7 @@ class="
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># For any constant rho (L=1) and NFP=1, grid.spacing is going</span>
@@ -15563,16 +15517,16 @@ class="
  [1.0000 2.0944 2.0944]
  [1.0000 2.0944 2.0944]]
 
-NFP: 18.99178924109637
-[[2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]
- [2.6680 5.5879 0.2942]]
+NFP: 43.53382001426996
+[[3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]
+ [3.5178 7.3677 0.1692]]
 </pre>
 </div>
 </div>
@@ -15594,7 +15548,7 @@ NFP: 18.99178924109637
 <li>Let $g1 \in Grid : g1.NFP = 1$ and $g2 \in Grid : g2.NFP \in \mathbb{R}^{+}$. Then given g2, d$\theta$ * d$\zeta$ = <code>g2.weights / g1.spacing[:, 0]</code>.</li>
 <li>I don't know how to retrieve g1.d$\rho$ from g2, other than storing it during grid construction.</li>
 <li>Until this can be fixed, any computation which requires differential surface elements (i.e. flux surface averages require the columns from <code>grid.spacing</code>) will yield incorrect quantities $\forall g \in Grid : g.num\_rho \in \mathbb{N} \setminus {1}\ and\ g.NFP \in \mathbb{R}^{+} \setminus {1}$.</li>
-<li>Which is disappointing because bulk flux surface averaging was a massive performance improvement for the end user (me wanting to compute magnetic well over many surfaces).</li>
+<li>Which is disappointing because bulk flux surface averaging was a performance improvement for the end user (me wanting to compute magnetic well over many surfaces).</li>
 </ul>
 <p>The next, and last to my knowledge, source of error in the volume is the stellarator symmetry boolean. <code>enforce_symmetry()</code> again modifies d$\theta$ * d$\zeta$. Visual given below. The error in computed volume that results from this is much smaller than the NFP error fixed above.</p>
 <p>The nodes with $\theta$ &gt; $\pi$ are removed and so too are the spacings in the grid that correspond to those nodes. Now because <code>grid.spacing</code> is missing these nodes, to preserve the overall volume in ($\rho$, $\theta$, $\zeta$) space (<code>grid.weights.sum()</code>), the differential volume d$\rho$ <em> d$\theta$ </em> d$\zeta$ of the remaining spaces is increased so that the sum is still 4$\pi$<sup>2</sup>. This makes sense since we do want to increase the weight of the nodes 0 to $\pi$ to double count for the removed nodes. This process has preserving the volume d$\rho$ <em> d$\theta$ </em> d$\zeta$ in mind. It's not clear to me if a different scale factor (other than 4$\pi$<sup>2</sup>) would be better to preserve an area element d$\theta$ * d$\zeta$. Might be dependent on $\rho$.</p>
@@ -15608,7 +15562,7 @@ NFP: 18.99178924109637
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">g3</span> <span class="o">=</span> <span class="n">LinearGrid</span><span class="p">(</span><span class="n">L</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">M</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">N</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">sym</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>

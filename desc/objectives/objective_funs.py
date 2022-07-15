@@ -9,7 +9,7 @@ from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
 
-# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -44,7 +44,7 @@ class ObjectiveFunction(IOAble):
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def _set_state_vector(self):
-        """Set state vector components, dimensions, and indicies."""
+        """Set state vector components, dimensions, and indices."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
         self._args = [arg for arg in arg_order if arg in self._args]
 
@@ -405,7 +405,7 @@ class _Objective(IOAble, ABC):
         self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
         self._dimensions["L_lmn"] = eq.L_basis.num_modes
         self._dimensions["p_l"] = eq.pressure.params.size
-        self._dimensions["i_l"] = eq.iota.params.size
+        self._dimensions["i_l"] = eq.current.params.size
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes

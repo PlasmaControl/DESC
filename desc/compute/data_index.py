@@ -662,6 +662,8 @@ data_index["iota"] = {
     "description": "Rotational transform",
     "fun": "compute_rotational_transform",
     "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 1, 0], [0, 0, 1]],
 }
 data_index["iota_r"] = {
     "label": "\\partial_{\\rho} \\iota",

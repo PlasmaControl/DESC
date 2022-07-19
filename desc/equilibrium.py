@@ -335,7 +335,7 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer("lsq-exact")
 
@@ -449,7 +449,7 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -693,7 +693,7 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
 
         if not objective.built:
             objective.build(self, verbose=verbose)
@@ -786,8 +786,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
         for l, p in inputs["pressure"]:
             idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
             p_l[idx_p] = p
-        for l, i in inputs["current"]:  # changed from "iota"
+        for l, i in inputs["iota"]:
             idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
+            i_l[idx_i] = i
+        for l, i in inputs["current"]:
+            idx_i = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
             i_l[idx_i] = i
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
@@ -867,7 +870,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
             constraints = get_fixed_boundary_constraints(
-                profiles=self.inputs[ii]["objective"] != "vacuum"
+                profiles=self.inputs[ii]["objective"] != "vacuum",
+                iota="iota" in self.inputs[ii],
             )
 
             if ii == start_from:

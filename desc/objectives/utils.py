@@ -11,6 +11,7 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixIota,
+    FixCurrent,
     FixPsi,
 )
 from ._equilibrium import (
@@ -22,7 +23,7 @@ from ._equilibrium import (
 )
 
 
-def get_fixed_boundary_constraints(profiles=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -43,7 +44,11 @@ def get_fixed_boundary_constraints(profiles=True):
         FixPsi(),
     )
     if profiles:
-        constraints = constraints + (FixPressure(), FixIota())
+        constraints += (FixPressure(),)
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
     return constraints
 
 

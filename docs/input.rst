@@ -185,8 +185,8 @@ Pressure & Iota/Current Profiles
 
 - ``iota`` (bool): True (1) to specify the rotational transform profile, False (0) to specify the toroidal current profile. Default = 1. 
 - ``l`` (int): Radial polynomial order. 
-- ``p`` (float): Pressure profile coefficient :math:`p_{l}` (Pascals). 
-- ``i`` (float): Rotational transform or toroidal current coefficients :math:`\iota_{l}` or :math:`I_{l}` (Tesla-meters), respectively. 
+- ``p`` (float): Pressure profile coefficient :math:`p_{l}`. 
+- ``i`` (float): Rotational transform or toroidal current coefficients :math:`\iota_{l}` or :math:`I_{l}`, respectively. 
 
 The pressure and rotational transform or toroidal current profiles are given as a power series in the flux surface label 
 :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
@@ -198,8 +198,9 @@ The pressure and rotational transform or toroidal current profiles are given as 
    I(\rho) &= \sum I_{l} \rho^{l} \\.
    \end{aligned}
 
-The coefficients :math:`p_{l}` are specified by the input variables ``p``. 
+The coefficients :math:`p_{l}` are specified by the input variables ``p`` in Pascals. 
 The coefficients :math:`\iota_{l}` or :math:`I_{l}` are specified by the input variables ``i`` (or equivalently ``I``) depending on the value of ``iota``. 
+The rotational transform is unitless, and the toroidal current is given in Amperes. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 
 

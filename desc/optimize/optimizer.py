@@ -250,6 +250,7 @@ class Optimizer(IOAble):
                             constraint
                         )
                     )
+            
             perturb_options = options.pop("perturb_options", {})
             perturb_options.setdefault("verbose", 0)
             solve_options = options.pop("solve_options", {})
@@ -295,18 +296,20 @@ class Optimizer(IOAble):
                 objective.build(eq, verbose=verbose)
             if not objective.compiled:
                 mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-                objective.compile(mode,verbose)
+                #objective.compile(mode,verbose)
             if not constraint_objectives.built:
                 constraint_objectives.build(eq,verbose=verbose)
             
             #objective.add_linear_args(ObjectiveFunction(linear_constraints,eq))
+            # print("The objective args are " + str(objective.args))
             objective.combine_args(constraint_objectives)
+            # print("The objective args are " + str(objective.args))
             
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            #objective.compile(mode, verbose)
+            objective.compile(mode, verbose)
         for constraint in linear_constraints:
             if not constraint.built:
                 constraint.build(eq, verbose=verbose)
@@ -323,9 +326,9 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
-        #print(objective.args)
-        # for obj in linear_constraints:
-        #     print(obj.args)
+        # print("The objective args are " + str(objective.args))
+        for obj in linear_constraints:
+            print(obj.args)
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             linear_constraints, objective.args
         )
@@ -595,17 +598,17 @@ class Optimizer(IOAble):
             mu0 = 100.0*jnp.ones(l)
             c0 = constr[0](x0_reduced)
             bounds = 0.0*jnp.ones(l)
-            gc0 = compute_constraints_grad_wrapped(x0_reduced)
+            #gc0 = compute_constraints_grad_wrapped(x0_reduced)
             print("The bounds are " + str(bounds))
             print("The objective is " + str(np.sum(compute_wrapped(x0_reduced)**2)))
             print("The sum of residuals is " + str(np.sum(c0**2)))
             print("The constraints are " + str(c0))
-            print("The gradient of the constraints is " + str(gc0))
+            #print("The gradient of the constraints is " + str(gc0))
             print("The length of the constraints is " + str(l))
             print("The size of x is " + str(len(x0_reduced)))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             #result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
-            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,mu0,jac_wrapped,constr,np.array([]),bounds=bounds,maxiter=0)
+            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,mu0,jac_wrapped,constr,np.array([]),bounds=bounds,maxiter=5)
 
         elif self.method in Optimizer._desc_least_squares_methods:
             

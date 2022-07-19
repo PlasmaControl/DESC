@@ -25,10 +25,10 @@ from scipy.constants import mu_0
 
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
-path = '/home/pk123/DESC/examples/DESC/DSHAPE_output.h5'
+path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 psi = 0.5
 alpha = 0
-npol = 1
+npol = 1.0
 nzgrid = 32
 
 
@@ -49,8 +49,8 @@ coords = eq.compute_theta_coords(c)
 #%%
 #normalizations
 grid = Grid(coords)
-#Lref = eq.compute('a',grid=grid)['a']
-Lref = 1.19836555357704
+Lref = eq.compute('a')['a']
+#Lref = 1.19836555357704
 Bref = 2*psib/Lref**2
 
 #calculate bmag
@@ -186,13 +186,61 @@ for i in range(2*nzgrid+1):
 
 final_theta_grid = uniform_zgrid
 
-bmag_gx = interp_to_new_grid(bmag,zeta,uniform_zgrid)
-grho_gx = interp_to_new_grid(grho,zeta,uniform_zgrid)
-gds2_gx = interp_to_new_grid(gds2,zeta,uniform_zgrid)
-gds21_gx = interp_to_new_grid(gds21,zeta,uniform_zgrid)
-gds22_gx = interp_to_new_grid(gds22,zeta,uniform_zgrid)
-gbdrift_gx = interp_to_new_grid(gbdrift,zeta,uniform_zgrid)
-gbdrift0_gx = interp_to_new_grid(gbdrift0,zeta,uniform_zgrid)
-cvdrift_gx = interp_to_new_grid(cvdrift,zeta,uniform_zgrid)
-cvdrift0_gx = interp_to_new_grid(cvdrift0,zeta,uniform_zgrid)
+bmag_gx = interp_to_new_grid(bmag,z_on_theta_grid,uniform_zgrid)
+grho_gx = interp_to_new_grid(grho,z_on_theta_grid,uniform_zgrid)
+gds2_gx = interp_to_new_grid(gds2,z_on_theta_grid,uniform_zgrid)
+gds21_gx = interp_to_new_grid(gds21,z_on_theta_grid,uniform_zgrid)
+gds22_gx = interp_to_new_grid(gds22,z_on_theta_grid,uniform_zgrid)
+gbdrift_gx = interp_to_new_grid(gbdrift,z_on_theta_grid,uniform_zgrid)
+gbdrift0_gx = interp_to_new_grid(gbdrift0,z_on_theta_grid,uniform_zgrid)
+cvdrift_gx = interp_to_new_grid(cvdrift,z_on_theta_grid,uniform_zgrid)
+cvdrift0_gx = interp_to_new_grid(cvdrift0,z_on_theta_grid,uniform_zgrid)
+gradpar_gx = gradpar_temp
 
+#%% Make gx input file
+gxgridNA  = "gxinput2.out"
+
+# ## GX geometric quantities
+# zMax= self.zscale * self.pi
+# zMin=-self.zscale * self.pi
+
+# iotaN=self.iota-self.nNormal
+# nz=self.ntgrid*2
+
+# thetamax = self.tgridmax
+# thetamin = -self.tgridmax
+
+# # gradparGX = 2*pi*(2*iotaN*pi)/(Laxis*(iotaN*(phiMax - phiMin) + etabar*rVMEC*(-np.sin(iotaN*phiMax) + np.sin(iotaN*phiMin))))
+# # z0 = pi - 2*pi*(iotaN*phiMax-rVMEC*etabar*np.sin(iotaN*phiMax))/(iotaN*(phiMax - phiMin) + etabar*rVMEC*(-np.sin(iotaN*phiMax) + np.sin(iotaN*phiMin)))
+# self.gradparGX = self.zscale * 4*self.pi**2*iotaN*self.Aminor/(self.Laxis*(thetamax-thetamin-self.rVMEC*self.etabar*(np.sin(thetamax)-np.sin(thetamin))))
+# self.z0 = self.zscale * self.pi*(thetamax + thetamin - self.rVMEC*self.etabar*(np.sin(thetamax)+np.sin(thetamin)))/((-thetamax+thetamin+self.rVMEC*self.etabar*(np.sin(thetamax)-np.sin(thetamin))))
+
+# zGXgrid=np.linspace(zMin, zMax, 2*self.ntgrid+1)
+# paramThetaGX = [self.thetaGXgrid(zz) for zz in zGXgrid]
+
+#Output to GX grid (bottleneck, thing that takes longer to do, needs to be more pythy)
+nperiod = 1
+rmaj = eq.compute('R0')['R0']
+kxfac = 1.0
+open(gxgridNA, 'w').close()
+f = open(gxgridNA, "w")
+f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
+f.write("\n"+str(nzgrid)+" "+str(nperiod)+" "+str(2*nzgrid)+" "+str(1.0)+" "+ str(rmaj)+" "+str(shat)+" "+str(kxfac)+" "+str(1/iota) + " " + str(2*npol-1))
+
+f.write("\ngbdrift gradpar grho tgrid")
+for i in range(len(uniform_zgrid)):
+    f.write("\n"+str(gbdrift_gx[i])+" "+str(2*gradpar_gx[i])+ " " + str(grho_gx[i]) + " " + str(uniform_zgrid[i]))
+    
+f.write("\ncvdrift gds2 bmag tgrid")
+for i in range(len(uniform_zgrid)):
+    f.write("\n"+str(cvdrift_gx[i])+" "+str(gds2_gx[i])+ " " + str(bmag_gx[i]) + " " + str(uniform_zgrid[i]))
+
+f.write("\ngds21 gds22 tgrid")
+for i in range(len(uniform_zgrid)):
+    f.write("\n"+str(gds21_gx[i])+" "+str(gds22_gx[i])+  " " + str(uniform_zgrid[i]))
+
+f.write("\ncvdrift0 gbdrift0 tgrid")
+for i in range(len(uniform_zgrid)):
+    f.write("\n"+str(cvdrift0_gx[i])+" "+str(gbdrift0_gx[i])+ " " + str(uniform_zgrid[i]))
+    
+f.close()

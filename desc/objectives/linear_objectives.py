@@ -89,12 +89,16 @@ class FixBoundaryR(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
             }
+            
+            # print("The basis modes are " + str(len(eq.surface.R_basis.modes.astype(modes.dtype).view(dtype))))
+            # print("The modes are " + str(modes.view(dtype)))
             _, idx, modes_idx = np.intersect1d(
                 eq.surface.R_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
@@ -110,13 +114,24 @@ class FixBoundaryR(_Objective):
                 )
 
         self._dim_f = idx.size
-
+        # nb = len(eq.surface.R_basis.modes.astype(modes.dtype).view(dtype))
+        # self._dim_f = nb
+        
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+            #self._A = np.zeros((nb, eq.R_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 self._A[j, i] = 1
+            # print("The shape of A is " + str(self._A.shape))
+            # print("idx is " + str(np.sort(idx)))
+            # print("modes_idx is " + str(np.sort(modes_idx)))
+            # print("The len of idx is " + str(len(idx)))
+            # print("The len of modes_idx is " + str(len(modes_idx)))
+            print("len of idx R is " + str(len(idx)))
+            print("idx R is " + str(idx))
+            self._A = self._A[modes_idx]
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
@@ -125,11 +140,11 @@ class FixBoundaryR(_Objective):
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0]:
             self.weight = self._weight[modes_idx]
-
+            
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
-
+            
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
@@ -219,6 +234,7 @@ class FixBoundaryZ(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.Z_basis.modes
             idx = np.arange(eq.surface.Z_basis.num_modes)
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -240,13 +256,18 @@ class FixBoundaryZ(_Objective):
                 )
 
         self._dim_f = idx.size
-
+        # nb = len(eq.surface.R_basis.modes.astype(modes.dtype).view(dtype))
+        # self._dim_f = nb
         if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+            #self._A = np.zeros((nb, eq.R_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 self._A[j, i] = 1
+            print("len of idx Z is " + str(len(idx)))
+            print("idx Z is " + str(idx))
+            self._A = self._A[modes_idx]
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 

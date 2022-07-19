@@ -324,8 +324,8 @@ class MagneticWell(_Objective):
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                M=2 * eq.M_grid + 10,  # +1 not enough accuracy for volume
-                N=2 * eq.N_grid + 10,
+                M=2 * eq.M_grid + 1,
+                N=2 * eq.N_grid + 1,
                 NFP=eq.NFP,
                 sym=False,  # required for correctness of dt * dz
                 rho=jnp.array(1.0),

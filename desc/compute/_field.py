@@ -7,7 +7,7 @@ from ._core import (
     dot,
     check_derivs,
     compute_toroidal_flux,
-    compute_rotational_transform_v2,
+    compute_rotational_transform,
     compute_lambda,
     compute_jacobian,
     compute_covariant_metric_coefficients,
@@ -60,19 +60,7 @@ def compute_contravariant_magnetic_field(
 
     """
     data = compute_toroidal_flux(Psi, iota.grid, data=data)
-    # data = compute_rotational_transform(i_l, iota, data=data)\
-    data = compute_rotational_transform_v2(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        R_transform,
-        Z_transform,
-        L_transform,
-        Psi,
-        I_l=i_l,  # assuming this is spectral coefficients of current now
-        toroidal_current=iota,  # assuming this is current now
-        data=data,
-    )
+    data = compute_rotational_transform(i_l, iota, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
     data = compute_jacobian(
         R_lmn,

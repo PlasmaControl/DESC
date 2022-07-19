@@ -1014,7 +1014,10 @@ class _Configuration(IOAble, ABC):
     @property
     def iota(self):
         """Rotational transform (iota) profile."""
-        return self._current  # changed from self._iota
+        try:
+            return self._iota
+        except AttributeError:
+            return None
 
     @iota.setter
     def iota(self, new):
@@ -1028,7 +1031,10 @@ class _Configuration(IOAble, ABC):
     @property
     def i_l(self):
         """Coefficients of iota profile (ndarray)."""
-        return self.iota.params
+        try:
+            return self.iota.params
+        except AttributeError:
+            return None
 
     @i_l.setter
     def i_l(self, i_l):
@@ -1037,7 +1043,10 @@ class _Configuration(IOAble, ABC):
     @property
     def current(self):
         """Toroidal current (I) profile."""
-        return self._current
+        try:
+            return self._current
+        except AttributeError:
+            return None
 
     @current.setter
     def current(self, new):
@@ -1051,7 +1060,10 @@ class _Configuration(IOAble, ABC):
     @property
     def I_l(self):
         """Coefficients of current profile (ndarray)."""
-        return self.current.params
+        try:
+            return self.current.params
+        except AttributeError:
+            return None
 
     @I_l.setter
     def I_l(self, I_l):
@@ -1183,11 +1195,17 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
-                inputs[arg] = self.iota.copy()
-                inputs[arg].grid = grid
+                if self.iota is not None:
+                    inputs[arg] = self.iota.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
             elif arg == "current":
-                inputs[arg] = self.current.copy()
-                inputs[arg].grid = grid
+                if self.current is not None:
+                    inputs[arg] = self.current.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
 
         return fun(**inputs, **kwargs)
 

@@ -405,7 +405,12 @@ class _Objective(IOAble, ABC):
         self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
         self._dimensions["L_lmn"] = eq.L_basis.num_modes
         self._dimensions["p_l"] = eq.pressure.params.size
-        self._dimensions["i_l"] = eq.current.params.size
+        try:
+            self._dimensions["i_l"] = eq.iota.params.size
+            self._dimensions["I_l"] = 0
+        except AttributeError:
+            self._dimensions["i_l"] = 0
+            self._dimensions["I_l"] = eq.current.params.size
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes

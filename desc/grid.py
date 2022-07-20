@@ -154,7 +154,7 @@ class Grid(IOAble):
 
     @property
     def spacing(self):
-        """ndarray: node spacing, in (rho,theta,zeta)"""
+        """ndarray: Node spacing, in (rho,theta,zeta)."""
         return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
 
     @spacing.setter
@@ -172,22 +172,22 @@ class Grid(IOAble):
 
     @property
     def num_nodes(self):
-        """int: total number of nodes."""
+        """int: Total number of nodes."""
         return self.nodes.shape[0]
 
     @property
     def num_rho(self):
-        """int: number of unique rho coordinates"""
+        """int: Number of unique rho coordinates."""
         return self._num_rho
 
     @property
     def num_theta(self):
-        """int: number of unique theta coordinates"""
+        """int: Number of unique theta coordinates."""
         return self._num_theta
 
     @property
     def num_zeta(self):
-        """int: number of unique zeta coordinates"""
+        """int: Number of unique zeta coordinates."""
         return self._num_zeta
 
     @property
@@ -220,42 +220,42 @@ class LinearGrid(Grid):
 
     Parameters
     ----------
-    L : int
-        radial grid resolution (L radial nodes, Defualt = 1)
-    M : int
-        poloidal grid resolution (M poloidal nodes, Default = 1)
-    N : int
-        toroidal grid resolution (N toroidal nodes, Default = 1)
+    L : int, optional
+        Radial grid resolution.
+    M : int, optional
+        Poloidal grid resolution.
+    N : int, optional
+        Toroidal grid resolution.
     NFP : int
-        number of field periods (Default = 1)
+        Number of field periods (Default = 1).
     sym : bool
-        True for stellarator symmetry, False otherwise (Default = False)
+        True for stellarator symmetry, False otherwise (Default = False).
     axis : bool
-        True to include a point at rh0==0, False for rho[0] = rho[1]/4. (Default = True)
+        True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
     endpoint : bool
-        if True, theta=0 and zeta=0 are duplicated after a full period.
-        Should be False for use with FFT (Default = False)
+        If True, theta=0 and zeta=0 are duplicated after a full period.
+        Should be False for use with FFT. (Default = False).
     rho : ndarray of float, optional
-        radial coordinates
+        Radial coordinates (Default = 1.0).
     theta : ndarray of float, optional
-        poloidal coordinates
+        Poloidal coordinates (Default = 0.0).
     zeta : ndarray of float, optional
-        toroidal coordinates
+        Toroidal coordinates (Default = 0.0).
 
     """
 
     def __init__(
         self,
-        L=1,
-        M=1,
-        N=1,
+        L=None,
+        M=None,
+        N=None,
         NFP=1,
         sym=False,
         axis=True,
         endpoint=False,
-        rho=None,
-        theta=None,
-        zeta=None,
+        rho=np.array(1.0),
+        theta=np.array(0.0),
+        zeta=np.array(0.0),
     ):
 
         self._L = L
@@ -287,39 +287,44 @@ class LinearGrid(Grid):
 
     def _create_nodes(
         self,
-        L=1,
-        M=1,
-        N=1,
+        L=None,
+        M=None,
+        N=None,
         NFP=1,
         axis=True,
         endpoint=False,
-        rho=None,
-        theta=None,
-        zeta=None,
+        rho=1.0,
+        theta=0.0,
+        zeta=0.0,
     ):
         """Create grid nodes and weights.
 
         Parameters
         ----------
-        L : int
-            radial grid resolution (L radial nodes, Defualt = 1)
-        M : int
-            poloidal grid resolution (M poloidal nodes, Default = 1)
-        N : int
-            toroidal grid resolution (N toroidal nodes, Default = 1)
+        L : int, optional
+            Radial grid resolution.
+        M : int, optional
+            Poloidal grid resolution.
+        N : int, optional
+            Toroidal grid resolution.
         NFP : int
-            number of field periods (Default = 1)
+            Number of field periods (Default = 1).
+        sym : bool
+            True for stellarator symmetry, False otherwise (Default = False).
         axis : bool
-            True to include a point at rh0==0, False to include points at rho==1e-4.
+            True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool
-            if True, theta=0 and zeta=0 are duplicated after a full period.
-            Should be False for use with FFT (Default = False)
-        rho : ndarray of float, optional
-            radial coordinates
-        theta : ndarray of float, optional
-            poloidal coordinates
-        zeta : ndarray of float, optional
-            toroidal coordinates
+            If True, theta=0 and zeta=0 are duplicated after a full period.
+            Should be False for use with FFT. (Default = False).
+        rho : int or ndarray of float, optional
+            Radial coordiantes (Default = 1.0).
+            Alternatively, the number of radial coordinates (if an integer).
+        theta : int or ndarray of float, optional
+            Poloidal coordiantes (Default = 0.0).
+            Alternatively, the number of poloidal coordinates (if an integer).
+        zeta : int or ndarray of float, optional
+            Toroidal coordiantes (Default = 0.0).
+            Alternatively, the number of toroidal coordinates (if an integer).
 
         Returns
         -------
@@ -335,46 +340,53 @@ class LinearGrid(Grid):
         self._NFP = NFP
 
         # rho
-        if rho is not None:
+        if self.L is not None:
+            rho = self.L + 1
+        else:
+            self._L = len(np.atleast_1d(rho))
+
+        if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
+            r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
+        else:
             r = np.atleast_1d(rho)
-            self._L = r.size
-        elif self.L == 0:
-            r = np.array([], dtype=float)
-        elif self.L == 1:
-            r = np.array([1.0])
+        if len(r) > 1:
+            dr = (r.max() - r.min()) / len(r)
         else:
-            if axis:
-                r0 = 0
-            else:
-                r0 = 1.0 / self.L
-            r = np.linspace(r0, 1, self.L)
-        if self.L > 0:
-            dr = (r[-1] - r[0]) / self.L
-            if dr == 0:
-                dr = 1
-        else:
+            dr = 1
+        if dr == 0:
             dr = 1
 
         # theta/vartheta
-        if theta is not None:
-            t = np.asarray(theta)
-            self._M = t.size
+        if self.M is not None:
+            if self.sym:
+                theta = 2 * (self.M + 1)
+            else:
+                theta = 2 * self.M + 1
         else:
-            t = np.linspace(0, 2 * np.pi, self.M, endpoint=endpoint)
-        if self.M > 0:
-            dt = 2 * np.pi / self.M
+            self._M = len(np.atleast_1d(theta))
+
+        if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
+            t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
+            if self.sym:
+                t += t[1] / 2
         else:
+            t = np.atleast_1d(theta)
+        dt = 2 * np.pi / t.size
+        if dt == 0:
             dt = 2 * np.pi
 
         # zeta/phi
-        if zeta is not None:
-            z = np.asarray(zeta)
-            self._N = z.size
+        if self.N is not None:
+            zeta = 2 * self.N + 1
         else:
-            z = np.linspace(0, 2 * np.pi / self.NFP, self.N, endpoint=endpoint)
-        if self.N > 0:
-            dz = 2 * np.pi / self.NFP / self.N
+            self._N = len(np.atleast_1d(zeta))
+
+        if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
+            z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
         else:
+            z = np.atleast_1d(zeta)
+        dz = 2 * np.pi / self.NFP / z.size
+        if dz == 0:
             dz = 2 * np.pi / self.NFP
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")

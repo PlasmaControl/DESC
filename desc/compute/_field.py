@@ -153,8 +153,11 @@ def compute_contravariant_magnetic_field(
             * (data["sqrt(g)_tt"] - 2 * data["sqrt(g)_t"] ** 2 / data["sqrt(g)"])
         )
     if check_derivs("B^theta_tt", R_transform, Z_transform, L_transform):
-        data["B^theta_tt"] = data["B0_tt"] * (data["iota"] - data["lambda_z"])
-        -2 * data["B0_t"] * data["lambda_tz"] - data["B0"] * data["lambda_ttz"]
+        data["B^theta_tt"] = (
+            data["B0_tt"] * (data["iota"] - data["lambda_z"])
+            - 2 * data["B0_t"] * data["lambda_tz"]
+            - data["B0"] * data["lambda_ttz"]
+        )
     if check_derivs("B^zeta_tt", R_transform, Z_transform, L_transform):
         data["B^zeta_tt"] = (
             data["B0_tt"] * (1 + data["lambda_t"])
@@ -168,8 +171,11 @@ def compute_contravariant_magnetic_field(
             * (data["sqrt(g)_zz"] - 2 * data["sqrt(g)_z"] ** 2 / data["sqrt(g)"])
         )
     if check_derivs("B^theta_zz", R_transform, Z_transform, L_transform):
-        data["B^theta_zz"] = data["B0_zz"] * (data["iota"] - data["lambda_z"])
-        -2 * data["B0_z"] * data["lambda_zz"] - data["B0"] * data["lambda_zzz"]
+        data["B^theta_zz"] = (
+            data["B0_zz"] * (data["iota"] - data["lambda_z"])
+            - 2 * data["B0_z"] * data["lambda_zz"]
+            - data["B0"] * data["lambda_zzz"]
+        )
     if check_derivs("B^zeta_zz", R_transform, Z_transform, L_transform):
         data["B^zeta_zz"] = (
             data["B0_zz"] * (1 + data["lambda_t"])
@@ -186,9 +192,12 @@ def compute_contravariant_magnetic_field(
             )
         )
     if check_derivs("B^theta_tz", R_transform, Z_transform, L_transform):
-        data["B^theta_tz"] = data["B0_tz"] * (data["iota"] - data["lambda_z"])
-        -data["B0_t"] * data["lambda_zz"] - data["B0_z"] * data["lambda_tz"]
-        -data["B0"] * data["lambda_tzz"]
+        data["B^theta_tz"] = (
+            data["B0_tz"] * (data["iota"] - data["lambda_z"])
+            - data["B0_t"] * data["lambda_zz"]
+            - data["B0_z"] * data["lambda_tz"]
+            - data["B0"] * data["lambda_tzz"]
+        )
     if check_derivs("B^zeta_tz", R_transform, Z_transform, L_transform):
         data["B^zeta_tz"] = (
             data["B0_tz"] * (1 + data["lambda_t"])

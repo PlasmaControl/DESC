@@ -291,7 +291,7 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = eq.orientation
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -653,10 +653,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
-        bsupumnc[1:, :] = c * signgs[:]
+        bsupumnc[1:, :] = c * signgs
         if not eq.sym:
             bsupumns[0, :] = 0
-            bsupumns[1:, :] = s * signgs[:]
+            bsupumns[1:, :] = s * signgs
         timer.stop("B^theta")
         if verbose > 1:
             timer.disp("B^theta")
@@ -786,10 +786,10 @@ class VMECIO:
             x_mn[:, :] = full_transform.fit(data.T).T
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
-        bsubumnc[1:, :] = c * signgs[:]
+        bsubumnc[1:, :] = c * signgs
         if not eq.sym:
             bsubumns[0, :] = 0
-            bsubumns[1:, :] = s * signgs[:]
+            bsubumns[1:, :] = s * signgs
         timer.stop("B_theta")
         if verbose > 1:
             timer.disp("B_theta")

@@ -94,6 +94,7 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -186,6 +187,7 @@ class QuasisymmetryBoozer(_Objective):
             self._B_transform,
             self._w_transform,
             self._iota,
+            self._orientation,
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
@@ -284,6 +286,7 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -338,6 +341,7 @@ class QuasisymmetryTwoTerm(_Objective):
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._orientation,
             self._helicity,
         )
         f = data["f_C"] * self.grid.weights
@@ -428,6 +432,7 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -482,6 +487,7 @@ class QuasisymmetryTripleProduct(_Objective):
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._orientation,
         )
         f = data["f_T"] * self.grid.weights
 

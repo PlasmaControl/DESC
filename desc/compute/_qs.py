@@ -22,6 +22,7 @@ def compute_boozer_coords(
     B_transform,
     w_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -55,6 +56,8 @@ def compute_boozer_coords(
         w_transform.basis should be of type DoubleFourierSeries.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -72,6 +75,7 @@ def compute_boozer_coords(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -85,6 +89,7 @@ def compute_boozer_coords(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -94,7 +99,7 @@ def compute_boozer_coords(
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     idx0 = B_transform.basis.get_idx(M=0, N=0)
-    B_theta_mn = B_transform.fit(data["B_theta"])
+    B_theta_mn = B_transform.fit(data["B_theta"]) * orientation
     B_zeta_mn = B_transform.fit(data["B_zeta"])
     data["I"] = B_theta_mn[idx0]
     data["G"] = B_zeta_mn[idx0]
@@ -154,6 +159,7 @@ def compute_quasisymmetry_error(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     helicity=(1, 0),
     data=None,
     **kwargs,
@@ -184,6 +190,8 @@ def compute_quasisymmetry_error(
         Transforms i_l coefficients to real space.
     helicity : tuple, int
         Type of quasi-symmetry (M, N).
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -202,6 +210,7 @@ def compute_quasisymmetry_error(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -215,6 +224,7 @@ def compute_quasisymmetry_error(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -223,7 +233,7 @@ def compute_quasisymmetry_error(
 
     # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = jnp.mean(data["B_theta"])
+        data["I"] = jnp.mean(data["B_theta"]) * orientation
         data["G"] = jnp.mean(data["B_zeta"])
 
     # QS two-term (T^3)

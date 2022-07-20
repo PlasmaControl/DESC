@@ -69,6 +69,8 @@ class GenericObjective(_Objective):
         for arg in self.sig.parameters.keys():
             if arg in arg_order:
                 args.append(arg)
+            elif arg == "orientation":
+                self.inputs[arg] = eq.orientation
             elif arg == "R_transform":
                 self.inputs[arg] = Transform(
                     self.grid,
@@ -192,6 +194,7 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -246,6 +249,7 @@ class ToroidalCurrent(_Objective):
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._orientation,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(jnp.atleast_1d(I))

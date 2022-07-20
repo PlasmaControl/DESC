@@ -25,6 +25,7 @@ def compute_contravariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -50,6 +51,8 @@ def compute_contravariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -72,13 +75,13 @@ def compute_contravariant_magnetic_field(
 
     # 0th order terms
     if check_derivs("B0", R_transform, Z_transform, L_transform):
-        data["B0"] = data["psi_r"] / data["sqrt(g)"]
+        data["B0"] = data["psi_r"] / data["sqrt(g)"] * orientation
     if check_derivs("B^rho", R_transform, Z_transform, L_transform):
         data["B^rho"] = data["0"]
     if check_derivs("B^theta", R_transform, Z_transform, L_transform):
-        data["B^theta"] = data["B0"] * (data["iota"] - data["lambda_z"])
+        data["B^theta"] = data["B0"] * (data["iota"] * (orientation) - data["lambda_z"])
     if check_derivs("B^zeta", R_transform, Z_transform, L_transform):
-        data["B^zeta"] = data["B0"] * (1 + data["lambda_t"]) * jnp.sign(data["sqrt(g)"])
+        data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
     if check_derivs("B", R_transform, Z_transform, L_transform):
         data["B"] = (
             data["B^theta"] * data["e_theta"].T + data["B^zeta"] * data["e_zeta"].T
@@ -92,15 +95,15 @@ def compute_contravariant_magnetic_field(
         data["B0_r"] = (
             data["psi_rr"] / data["sqrt(g)"]
             - data["psi_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
-        )
+        ) * orientation
     if check_derivs("B^theta_r", R_transform, Z_transform, L_transform):
-        data["B^theta_r"] = data["B0_r"] * (data["iota"] - data["lambda_z"]) + data[
-            "B0"
-        ] * (data["iota_r"] - data["lambda_rz"])
+        data["B^theta_r"] = data["B0_r"] * (
+            data["iota"] * (orientation) - data["lambda_z"]
+        ) + data["B0"] * (data["iota_r"] * (orientation) - data["lambda_rz"])
     if check_derivs("B^zeta_r", R_transform, Z_transform, L_transform):
         data["B^zeta_r"] = (
             data["B0_r"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_rt"]
-        ) * jnp.sign(data["sqrt(g)"])
+        )
     if check_derivs("B_r", R_transform, Z_transform, L_transform):
         data["B_r"] = (
             data["B^theta_r"] * data["e_theta"].T
@@ -109,16 +112,18 @@ def compute_contravariant_magnetic_field(
             + data["B^zeta"] * data["e_zeta_r"].T
         ).T
     if check_derivs("B0_t", R_transform, Z_transform, L_transform):
-        data["B0_t"] = -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2
+        data["B0_t"] = (
+            -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2 * orientation
+        )
     if check_derivs("B^theta_t", R_transform, Z_transform, L_transform):
         data["B^theta_t"] = (
-            data["B0_t"] * (data["iota"] - data["lambda_z"])
+            data["B0_t"] * (data["iota"] * (orientation) - data["lambda_z"])
             - data["B0"] * data["lambda_tz"]
         )
     if check_derivs("B^zeta_t", R_transform, Z_transform, L_transform):
         data["B^zeta_t"] = (
             data["B0_t"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tt"]
-        ) * jnp.sign(data["sqrt(g)"])
+        )
     if check_derivs("B_t", R_transform, Z_transform, L_transform):
         data["B_t"] = (
             data["B^theta_t"] * data["e_theta"].T
@@ -127,16 +132,18 @@ def compute_contravariant_magnetic_field(
             + data["B^zeta"] * data["e_zeta_t"].T
         ).T
     if check_derivs("B0_z", R_transform, Z_transform, L_transform):
-        data["B0_z"] = -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
+        data["B0_z"] = (
+            -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2 * orientation
+        )
     if check_derivs("B^theta_z", R_transform, Z_transform, L_transform):
         data["B^theta_z"] = (
-            data["B0_z"] * (data["iota"] - data["lambda_z"])
+            data["B0_z"] * (data["iota"] * (orientation) - data["lambda_z"])
             - data["B0"] * data["lambda_zz"]
         )
     if check_derivs("B^zeta_z", R_transform, Z_transform, L_transform):
         data["B^zeta_z"] = (
             data["B0_z"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tz"]
-        ) * jnp.sign(data["sqrt(g)"])
+        )
     if check_derivs("B_z", R_transform, Z_transform, L_transform):
         data["B_z"] = (
             data["B^theta_z"] * data["e_theta"].T
@@ -147,64 +154,64 @@ def compute_contravariant_magnetic_field(
 
     # 2nd order derivatives
     if check_derivs("B0_tt", R_transform, Z_transform, L_transform):
-        data["B0_tt"] = -(
-            data["psi_r"]
-            / data["sqrt(g)"] ** 2
-            * (data["sqrt(g)_tt"] - 2 * data["sqrt(g)_t"] ** 2 / data["sqrt(g)"])
+        data["B0_tt"] = (
+            -(
+                data["psi_r"]
+                / data["sqrt(g)"] ** 2
+                * (data["sqrt(g)_tt"] - 2 * data["sqrt(g)_t"] ** 2 / data["sqrt(g)"])
+            )
+            * orientation
         )
     if check_derivs("B^theta_tt", R_transform, Z_transform, L_transform):
-        data["B^theta_tt"] = (
-            data["B0_tt"] * (data["iota"] - data["lambda_z"])
-            - 2 * data["B0_t"] * data["lambda_tz"]
-            - data["B0"] * data["lambda_ttz"]
+        data["B^theta_tt"] = data["B0_tt"] * (
+            data["iota"] * (orientation) - data["lambda_z"]
         )
+        -2 * data["B0_t"] * data["lambda_tz"] - data["B0"] * data["lambda_ttz"]
     if check_derivs("B^zeta_tt", R_transform, Z_transform, L_transform):
-        data["B^zeta_tt"] = (
-            data["B0_tt"] * (1 + data["lambda_t"])
-            + 2 * data["B0_t"] * data["lambda_tt"]
-            + data["B0"] * data["lambda_ttt"]
-        ) * jnp.sign(data["sqrt(g)"])
+        data["B^zeta_tt"] = data["B0_tt"] * (1 + data["lambda_t"])
+        +2 * data["B0_t"] * data["lambda_tt"] + data["B0"] * data["lambda_ttt"]
     if check_derivs("B0_zz", R_transform, Z_transform, L_transform):
-        data["B0_zz"] = -(
-            data["psi_r"]
-            / data["sqrt(g)"] ** 2
-            * (data["sqrt(g)_zz"] - 2 * data["sqrt(g)_z"] ** 2 / data["sqrt(g)"])
+        data["B0_zz"] = (
+            -(
+                data["psi_r"]
+                / data["sqrt(g)"] ** 2
+                * (data["sqrt(g)_zz"] - 2 * data["sqrt(g)_z"] ** 2 / data["sqrt(g)"])
+            )
+            * orientation
         )
     if check_derivs("B^theta_zz", R_transform, Z_transform, L_transform):
-        data["B^theta_zz"] = (
-            data["B0_zz"] * (data["iota"] - data["lambda_z"])
-            - 2 * data["B0_z"] * data["lambda_zz"]
-            - data["B0"] * data["lambda_zzz"]
+        data["B^theta_zz"] = data["B0_zz"] * (
+            data["iota"] * (orientation) - data["lambda_z"]
         )
+        -2 * data["B0_z"] * data["lambda_zz"] - data["B0"] * data["lambda_zzz"]
     if check_derivs("B^zeta_zz", R_transform, Z_transform, L_transform):
-        data["B^zeta_zz"] = (
-            data["B0_zz"] * (1 + data["lambda_t"])
-            + 2 * data["B0_z"] * data["lambda_tz"]
-            + data["B0"] * data["lambda_tzz"]
-        ) * jnp.sign(data["sqrt(g)"])
+        data["B^zeta_zz"] = data["B0_zz"] * (1 + data["lambda_t"])
+        +2 * data["B0_z"] * data["lambda_tz"] + data["B0"] * data["lambda_tzz"]
     if check_derivs("B0_tz", R_transform, Z_transform, L_transform):
-        data["B0_tz"] = -(
-            data["psi_r"]
-            / data["sqrt(g)"] ** 2
-            * (
-                data["sqrt(g)_tz"]
-                - 2 * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"]
+        data["B0_tz"] = (
+            -(
+                data["psi_r"]
+                / data["sqrt(g)"] ** 2
+                * (
+                    data["sqrt(g)_tz"]
+                    - 2 * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"]
+                )
             )
+            * orientation
         )
     if check_derivs("B^theta_tz", R_transform, Z_transform, L_transform):
-        data["B^theta_tz"] = (
-            data["B0_tz"] * (data["iota"] - data["lambda_z"])
-            - data["B0_t"] * data["lambda_zz"]
-            - data["B0_z"] * data["lambda_tz"]
-            - data["B0"] * data["lambda_tzz"]
+        data["B^theta_tz"] = data["B0_tz"] * (
+            data["iota"] * (orientation) - data["lambda_z"]
         )
+        -data["B0_t"] * data["lambda_zz"] - data["B0_z"] * data["lambda_tz"]
+        -data["B0"] * data["lambda_tzz"]
     if check_derivs("B^zeta_tz", R_transform, Z_transform, L_transform):
-        data["B^zeta_tz"] = (
-            data["B0_tz"] * (1 + data["lambda_t"])
-            + data["B0_t"] * data["lambda_tz"]
+        data["B^zeta_tz"] = data["B0_tz"] * (1 + data["lambda_t"])
+        (
+            +data["B0_t"] * data["lambda_tz"]
             + data["B0_z"] * data["lambda_tt"]
             + data["B0"] * data["lambda_ttz"]
-        ) * jnp.sign(data["sqrt(g)"])
+        )
 
     return data
 
@@ -219,6 +226,7 @@ def compute_covariant_magnetic_field(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -244,6 +252,8 @@ def compute_covariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -263,6 +273,7 @@ def compute_covariant_magnetic_field(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -325,6 +336,7 @@ def compute_magnetic_field_magnitude(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -350,6 +362,8 @@ def compute_magnetic_field_magnitude(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -369,6 +383,7 @@ def compute_magnetic_field_magnitude(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     data = compute_covariant_metric_coefficients(
@@ -650,6 +665,7 @@ def compute_magnetic_pressure_gradient(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -675,6 +691,8 @@ def compute_magnetic_pressure_gradient(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -694,6 +712,7 @@ def compute_magnetic_pressure_gradient(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(
@@ -762,6 +781,7 @@ def compute_magnetic_tension(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -787,6 +807,8 @@ def compute_magnetic_tension(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -806,6 +828,7 @@ def compute_magnetic_tension(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     data = compute_magnetic_pressure_gradient(
@@ -818,6 +841,7 @@ def compute_magnetic_tension(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -870,6 +894,7 @@ def compute_B_dot_gradB(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -895,14 +920,8 @@ def compute_B_dot_gradB(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    dr : int, optional
-        Order of derivative wrt the radial coordinate, rho.
-    dt : int, optional
-        Order of derivative wrt the poloidal coordinate, theta.
-    dz : int, optional
-        Order of derivative wrt the toroidal coordinate, zeta.
-    drtz : int, optional
-        Order of mixed derivatives wrt multiple coordinates.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -921,6 +940,7 @@ def compute_B_dot_gradB(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
 
@@ -960,6 +980,7 @@ def compute_contravariant_current_density(
     Z_transform,
     L_transform,
     iota,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -985,6 +1006,8 @@ def compute_contravariant_current_density(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -1004,6 +1027,7 @@ def compute_contravariant_current_density(
         Z_transform,
         L_transform,
         iota,
+        orientation,
         data=data,
     )
     data = compute_covariant_metric_coefficients(

@@ -21,12 +21,14 @@ def compute_force_error(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     pressure,
     iota,
+    current,
     data=None,
     **kwargs,
 ):
@@ -44,6 +46,8 @@ def compute_force_error(
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -56,6 +60,8 @@ def compute_force_error(
         Transforms p_l coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -71,11 +77,13 @@ def compute_force_error(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(
@@ -139,12 +147,14 @@ def compute_energy(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
-    iota,
     pressure,
+    iota,
+    current,
     gamma=0,
     data=None,
     **kwargs,
@@ -163,6 +173,8 @@ def compute_energy(
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -171,10 +183,12 @@ def compute_energy(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    iota : Profile
-        Transforms i_l coefficients to real space.
     pressure : Profile
         Transforms p_l coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     gamma : float
         Adiabatic (compressional) index.
 
@@ -190,11 +204,13 @@ def compute_energy(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 

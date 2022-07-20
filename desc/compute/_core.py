@@ -340,14 +340,13 @@ def compute_rotational_transform(
     Z_lmn,
     L_lmn,
     i_l,
-    I_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
     current,
-    toroidal_current_unique_rho=None,
     data=None,
     **kwargs,
 ):
@@ -381,7 +380,7 @@ def compute_rotational_transform(
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
-    I_l : ndarray
+    c_l : ndarray
         Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
@@ -394,10 +393,7 @@ def compute_rotational_transform(
     iota : Profile
         Transforms i_l coefficients to real space.
     current : Profile
-        Transforms I_l coefficients to real space.
-    toroidal_current_unique_rho : ndarray
-        The toroidal current specified at sorted unique values of rho. (Used for testing)
-        i.e. toroidal_current.compute(I_l, 0)[grid.unique_rho_indices]
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -415,7 +411,7 @@ def compute_rotational_transform(
         data["iota_rr"] = iota.compute(i_l, dr=2)
 
     elif current is not None:
-        grid = current.grid
+        grid = R_transform.grid
 
         data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data)
         data = compute_toroidal_flux(Psi, grid, data)
@@ -424,15 +420,15 @@ def compute_rotational_transform(
             R_lmn, Z_lmn, R_transform, Z_transform, data
         )
 
-        """
         # derivatives wrt rho of metric coefficients
         g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
+        g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
+            data["e_theta"], data["e_zeta_r"]
+        )
+        """
         g_tt_rr = 2 * (
             dot(data["e_theta_r"], data["e_theta_r"])
             + dot(data["e_theta"], data["e_theta_rr"])
-        )
-        g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
-            data["e_theta"], data["e_zeta_r"]
         )
         g_tz_rr = (
             dot(data["e_theta_rr"], data["e_zeta"])
@@ -447,8 +443,8 @@ def compute_rotational_transform(
         # term1_rr = 0
         # sqrt(g) implementation
         term1 = data["psi_r"] / data["sqrt(g)"]
-        """
         term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
+        """
         term1_rr = (
             2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
             - data["psi_r"] * data["sqrt(g)_rr"]
@@ -462,7 +458,6 @@ def compute_rotational_transform(
                 data["g_tt"] * data["lambda_z"] - data["g_tz"] * (1 + data["lambda_t"])
             )
         )
-        """
         num_r = term1_r * term2 + term1 * (
             term2_r := (
                 g_tt_r * data["lambda_z"]
@@ -471,6 +466,7 @@ def compute_rotational_transform(
                 - data["g_tz"] * data["lambda_rt"]
             )
         )
+        """
         num_rr = (
             term1_rr * term2
             + 2 * term1_r * term2_r
@@ -486,10 +482,8 @@ def compute_rotational_transform(
         )
         """
         den = term1 * data["g_tt"]
-        """
         den_r = term1_r * data["g_tt"] + term1 * g_tt_r
-        den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
-        """
+        # den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
 
         # integrate each integrand
         rho = grid.nodes[:, 0]
@@ -497,25 +491,21 @@ def compute_rotational_transform(
         dtdz = grid.spacing[:, 1:].prod(axis=1)
         num = surface_sums(rho, bins, dtdz * num)
         den = surface_sums(rho, bins, dtdz * den)
-        """
         num_r = surface_sums(rho, bins, dtdz * num_r)
         den_r = surface_sums(rho, bins, dtdz * den_r)
-        num_rr = surface_sums(rho, bins, dtdz * num_rr)
-        den_rr = surface_sums(rho, bins, dtdz * den_rr)
-        """
+        # num_rr = surface_sums(rho, bins, dtdz * num_rr)
+        # den_rr = surface_sums(rho, bins, dtdz * den_rr)
 
         # compute the Δ(poloidal flux) generated from toroidal current
-        if toroidal_current_unique_rho is None:
-            poloidal_flux = current.compute(I_l, dr=0)[grid.unique_rho_indices]
-            poloidal_flux_r = current.compute(I_l, dr=1)[grid.unique_rho_indices]
-            poloidal_flux_rr = current.compute(I_l, dr=2)[grid.unique_rho_indices]
-        else:
-            poloidal_flux = toroidal_current_unique_rho
+        # FIXME: this is now units of Amperes
+        poloidal_flux = current.compute(c_l, dr=0)[grid.unique_rho_indices]
+        poloidal_flux_r = current.compute(c_l, dr=1)[grid.unique_rho_indices]
+        # poloidal_flux_rr = current.compute(c_l, dr=2)[grid.unique_rho_indices]
 
         # derivatives computed analytically by pushing derivative into surface average
         iota = (poloidal_flux + num) / den
-        """
         iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
+        """
         iota_rr = (
             poloidal_flux_rr
             + num_rr
@@ -526,13 +516,13 @@ def compute_rotational_transform(
 
         # iota discretizes the rotational transform to flux surfaces.
         # data["iota"] discretizes the rotational transform to collocation nodes.
-        # Therefore, the elements of iota must be duplicated to match the grid's pattern.
+        # Therefore the elements of iota must be duplicated to match the grid's pattern.
         # works on sorted grids:
         repeat_length = len(grid.nodes) // grid.num_zeta
         unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
         data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
-        """
         data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
+        """
         data["iota_rr"] = expand(
             iota_rr, unique_rho_counts, repeat_length, grid.num_zeta
         )
@@ -600,80 +590,11 @@ def expand(x, repeats, total_repeat_length, tile_reps):
         First forms an array Y, which repeats elements in x as specified by repeats.
         Then returns Y repeated tile_reps times.
     """
+    # TODO: if not using JAX, make compatible with regular NumPy
     return jnp.tile(
         jnp.repeat(x, repeats=repeats, total_repeat_length=total_repeat_length),
         tile_reps,
     )
-
-
-def _toroidal_current(grid, area_element, toroidal_current_density):
-    """
-    Assumes conservation of current. In other words, returns the
-    toroidal current through a single zeta surface.
-    (This can be easily altered if this assumption is invalid).
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    area_element : ndarray
-        2D jacobian for a constant zeta surface |e_rho x e_theta|.
-    toroidal_current_density : ndarray
-        Contravariant toroidal component of plasma current density.
-
-    Returns
-    -------
-    current_annuli.cumsum(): ndarray
-        Toroidal current enclosed by each flux surface.
-    current_annuli: ndarray
-        The toroidal current through each flux surface.
-        (The derivative wrt rho of current_annuli.cumsum()).
-    """
-    # Use a portion of the collocation grid belonging to a zeta surface.
-    # The grid is sorted with priority [rho=low, theta=mid, zeta=high].
-    change_zeta = _where_change(grid.nodes[:, 2], size=grid.num_zeta)
-    stop_zeta = change_zeta[1] if grid.num_zeta > 1 else None
-
-    drdt = grid.spacing[:stop_zeta, :2].prod(axis=1)
-    ds = drdt * area_element[:stop_zeta]
-    dcurrent = ds * toroidal_current_density[:stop_zeta]
-
-    # compute current through thin annuli bounded by rho surfaces in a zeta cross-section
-    change_rho = _where_change(grid.nodes[:stop_zeta, 0], size=grid.num_rho)
-    current_annuli = jnp.add.reduceat(dcurrent, change_rho)
-    return current_annuli.cumsum(), current_annuli
-
-
-# If the grid is usually sorted, I recommend we add something like this as a private method
-# in the grid class with rho, theta, and zeta as optional booleans for which arrays to return.
-# If we want to compute objectives on multiple flux surfaces at once, this would
-# be helpful for either reshaping arrays (with awkward arrays, which I think would provide
-# the cleanest solution) or for extracting arrays corresponding to a surface.
-def _where_change(x, size=None):
-    """
-    Example
-    -------
-        change_zeta = _where_change(grid.nodes[:, 2], size=grid.num_zeta)
-        ith_constant_zeta_surface = grid.nodes[change_zeta[i-1]:change_zeta[i]]
-        last_constant_zeta_surface = grid.nodes[change_zeta[i]:]
-
-    Parameters
-    ----------
-    x : ndarray
-        Elements.
-    size : int
-        If specified, first size indices where elements change value will be returned.
-        If there are fewer elements to return than size indicates, the behavior matches
-        jax.numpy.where.
-
-    Returns
-    -------
-    change : ndarray
-        Indices of x where elements change value. If size is not specified, the returned
-        array is empty only if x has no elements. Otherwise, always includes index 0.
-        Never includes last index (unless it is 0).
-    """
-    return jnp.where(jnp.diff(x, prepend=jnp.nan), size=size)[0]
 
 
 def compute_covariant_basis(

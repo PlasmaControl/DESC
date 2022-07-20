@@ -178,7 +178,9 @@ class InputReader:
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
-        iota_flag = True  # True for iota input, False for current input
+
+        iota_flag = False
+        current_flag = False
 
         inputs["output_path"] = self.output_path
 
@@ -385,10 +387,6 @@ class InputReader:
                 n = 0
 
             # profile coefficients
-            match = re.search(r"iota", argument, re.IGNORECASE)
-            if match:
-                iota_flag = int(numbers[0])
-                flag = True
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 p_l = [
@@ -407,6 +405,7 @@ class InputReader:
                 flag = True
             match = re.search(r"\si\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                iota_flag = True
                 i_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -420,6 +419,23 @@ class InputReader:
                     )
                     inputs["iota"][prof_idx[0], 0] = l
                 inputs["iota"][prof_idx[0], 1] = i_l
+                flag = True
+            match = re.search(r"\sc\s*=\s*" + num_form, command, re.IGNORECASE)
+            if match:
+                current_flag = True
+                c_l = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ][0]
+                prof_idx = np.where(inputs["current"][:, 0] == l)[0]
+                if prof_idx.size == 0:
+                    prof_idx = np.atleast_1d(inputs["current"].shape[0])
+                    inputs["current"] = np.pad(
+                        inputs["current"], ((0, 1), (0, 0)), mode="constant"
+                    )
+                    inputs["current"][prof_idx[0], 0] = l
+                inputs["current"][prof_idx[0], 1] = c_l
                 flag = True
 
             # boundary surface coefficients
@@ -512,9 +528,11 @@ class InputReader:
         if np.sum(inputs["surface"]) == 0:
             raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
 
-        # iota vs current profile
+        # remove unused profiles
         if not iota_flag:
-            inputs["current"] = inputs.pop("iota")
+            del inputs["iota"]
+        if not current_flag:
+            del inputs["current"]
 
         # array inputs
         arrs = [
@@ -599,7 +617,6 @@ class InputReader:
             text to print at the top of the file
 
         """
-
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
             f = open(filename, "w+")
@@ -659,27 +676,26 @@ class InputReader:
 
         f.write("\n# pressure and iota/current profiles\n")
         if "iota" in inputs[0].keys():
-            f.write("iota = 1\n")
+            char = "i"
             profile = inputs[0]["iota"]
         elif "current" in inputs[0].keys():
-            f.write("iota = 0\n")
+            char = "c"
             profile = inputs[0]["current"]
-
-        # TODO: finish implementing current profile
-
         ls = np.unique(np.concatenate([inputs[0]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
-            idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            if len(idxp):
-                p = inputs[0]["pressure"][idxp[0], 1]
+            idx = np.where(l == inputs[0]["pressure"][:, 0])[0]
+            if len(idx):
+                p = inputs[0]["pressure"][idx[0], 1]
             else:
                 p = 0.0
-            idxi = np.where(l == profile[:, 0])[0]
-            if len(idxi):
-                i = profile[idxi[0], 1]
+            idx = np.where(l == profile[:, 0])[0]
+            if len(idx):
+                i = profile[idx[0], 1]
             else:
                 i = 0.0
-            f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
+            f.write(
+                "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
+            )
 
         f.write("\n# fixed-boundary surface shape\n")
         for (l, m, n, R1, Z1) in inputs[0]["surface"]:
@@ -768,11 +784,14 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
 
+        iota_flag = True
         pres_scale = 1.0
+
         for line in vmec_file:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
@@ -825,6 +844,17 @@ class InputReader:
                 inputs["N"] = numbers[0]
                 inputs["N_grid"] = 2 * numbers[0]
                 Ntor = numbers[0]
+            match = re.search(
+                r"NCURR\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                if numbers[0] != 0:
+                    iota_flag = False
 
             # pressure profile
             match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
@@ -885,17 +915,6 @@ class InputReader:
                     inputs["pressure"][l, 0] = l
 
             # rotational transform
-            match = re.search(
-                r"NCURR\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                if numbers[0] != 0:
-                    warnings.warn(colored("Not using rotational transform!", "yellow"))
             if re.search(r"\bPIOTA_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Iota is not a power series!", "yellow"))
@@ -916,6 +935,28 @@ class InputReader:
                         )
                     inputs["iota"][l, 1] = numbers[k]
                     inputs["iota"][l, 0] = l
+
+            # current
+            if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
+                    warnings.warn(colored("Current is not a power series!", "yellow"))
+            match = re.search(r"AC\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    l = 2 * k
+                    if len(inputs["current"]) < l + 1:
+                        inputs["current"] = np.pad(
+                            inputs["current"],
+                            ((0, l + 1 - len(inputs["current"])), (0, 0)),
+                            mode="constant",
+                        )
+                    inputs["current"][l, 1] = numbers[k]
+                    inputs["current"][l, 0] = l
 
             # magnetic axis
             match = re.search(
@@ -1174,6 +1215,10 @@ class InputReader:
 
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         inputs["pressure"][:, 1] *= pres_scale
+        if iota_flag:
+            del inputs["current"]
+        else:
+            del inputs["iota"]
 
         vmec_file.close()
 

@@ -47,7 +47,6 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    bdry_mode         = lcfs
    
    # pressure and rotational transform profiles
-   iota = 1
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
@@ -183,10 +182,10 @@ Pressure & Iota/Current Profiles
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
 
-- ``iota`` (bool): True (1) to specify the rotational transform profile, False (0) to specify the toroidal current profile. Default = 1. 
 - ``l`` (int): Radial polynomial order. 
-- ``p`` (float): Pressure profile coefficient :math:`p_{l}`. 
-- ``i`` (float): Rotational transform or toroidal current coefficients :math:`\iota_{l}` or :math:`I_{l}`, respectively. 
+- ``p`` (float): Pressure profile coefficients :math:`p_{l}`. 
+- ``i`` (float): Rotational transform coefficients :math:`\iota_{l}`. 
+- ``c`` (float): Toroidal current coefficients :math:`\iota_{l}`. 
 
 The pressure and rotational transform or toroidal current profiles are given as a power series in the flux surface label 
 :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
@@ -195,12 +194,13 @@ The pressure and rotational transform or toroidal current profiles are given as 
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
    \iota(\rho) &= \sum \iota_{l} \rho^{l} \\
-   I(\rho) &= \sum I_{l} \rho^{l} \\.
+   \frac{2\pi}{\mu_0} I(\rho) &= \sum c_{l} \rho^{l} \\.
    \end{aligned}
 
 The coefficients :math:`p_{l}` are specified by the input variables ``p`` in Pascals. 
-The coefficients :math:`\iota_{l}` or :math:`I_{l}` are specified by the input variables ``i`` (or equivalently ``I``) depending on the value of ``iota``. 
-The rotational transform is unitless, and the toroidal current is given in Amperes. 
+The coefficients :math:`\iota_{l}` are specified by the input variables ``i``. 
+The coefficients :math:`c_{l}` are specified by the input variables ``i`` in Amperes. 
+Either the rotational transform or toroidal current profiles can be specified, but not both. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 
 

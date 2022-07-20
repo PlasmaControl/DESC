@@ -1058,16 +1058,16 @@ class _Configuration(IOAble, ABC):
             )
 
     @property
-    def I_l(self):
+    def c_l(self):
         """Coefficients of current profile (ndarray)."""
         try:
             return self.current.params
         except AttributeError:
             return None
 
-    @I_l.setter
-    def I_l(self, I_l):
-        self.current.params = I_l
+    @c_l.setter
+    def c_l(self, c_l):
+        self.current.params = c_l
 
     @property
     def R_basis(self):

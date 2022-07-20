@@ -8,7 +8,7 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry import FourierRZToroidalSurface
 from desc.optimize import Optimizer
 from desc.objectives import (
     ObjectiveFunction,

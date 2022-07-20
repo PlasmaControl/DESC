@@ -12,7 +12,10 @@ import sys
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../"))
-import functools
+from desc import set_device
+
+set_device("gpu")
+
 
 import jax
 import jax.numpy as jnp
@@ -21,9 +24,6 @@ from jax import jit, jacfwd
 from netCDF4 import Dataset
 import h5py
 
-from desc import set_device
-
-set_device("gpu")
 
 from desc.backend import put
 from desc.basis import FourierZernikeBasis, DoubleFourierSeries, FourierSeries
@@ -210,27 +210,35 @@ class BoundaryErrorBS(_Objective):
         )
         neval = rpz2xyz_vec(neval, phi=self.eR_transform.grid.nodes[:, 2])
 
-        
         I = IGphi_mn[0] / mu_0
         G = IGphi_mn[1] / mu_0
         phi_mn = IGphi_mn[2:] / mu_0
 
-        phi_t_src = self.Ks_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
-        phi_z_src = self.Ks_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
+        phi_t_src = self.Ks_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (
+            2 * np.pi
+        )
+        phi_z_src = self.Ks_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (
+            2 * np.pi
+        )
         gradPhi_src = phi_t_src * ndata_src["e^theta"] + phi_z_src * ndata_src["e^zeta"]
         gradPhi_src = rpz2xyz_vec(gradPhi_src, phi=self.Ks_transform.grid.nodes[:, 2])
         Ks = jnp.cross(nsrc, gradPhi_src, axis=-1)
 
-        phi_t_eval = self.Ke_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (2 * np.pi)
-        phi_z_eval = self.Ke_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (2 * np.pi)
-        gradPhi_eval = phi_t_eval * ndata_eval["e^theta"] + phi_z_eval * ndata_eval["e^zeta"]
+        phi_t_eval = self.Ke_transform.transform(phi_mn, dt=1)[:, np.newaxis] + I / (
+            2 * np.pi
+        )
+        phi_z_eval = self.Ke_transform.transform(phi_mn, dz=1)[:, np.newaxis] + G / (
+            2 * np.pi
+        )
+        gradPhi_eval = (
+            phi_t_eval * ndata_eval["e^theta"] + phi_z_eval * ndata_eval["e^zeta"]
+        )
         gradPhi_eval = rpz2xyz_vec(gradPhi_eval, phi=self.Ke_transform.grid.nodes[:, 2])
         Ke = jnp.cross(neval, gradPhi_eval, axis=-1)
 
         Bsrc = Bdata_src["B"]
         Bsrc = rpz2xyz_vec(Bsrc, phi=self.sR_transform.grid.nodes[:, 2])
         J = jnp.cross(nsrc, Bsrc, axis=1) / mu_0
-
 
         rsrc = jnp.array(
             [Bdata_src["R"], self.sR_transform.grid.nodes[:, 2], Bdata_src["Z"]]
@@ -271,7 +279,7 @@ print(f["ntor"][:])
 
 
 veq = VMECIO.load("wout_test_beta.vmec.nc", spectral_indexing="fringe")
-veq.change_resolution(L=16, M=8, N=8, L_grid=20, M_grid=12, N_grid=12)
+veq.change_resolution(L=20, M=10, N=10, L_grid=30, M_grid=15, N_grid=15)
 
 pres = np.asarray(f.variables["presf"])
 sp = np.linspace(0, 1, pres.size)
@@ -323,7 +331,7 @@ eq.solve(ftol=1e-2, verbose=3)
 from desc.objectives import (
     ObjectiveFunction,
     ForceBalance,
-    LambdaGauge,
+    FixLambdaGauge,
     FixPressure,
     FixIota,
     FixPsi,

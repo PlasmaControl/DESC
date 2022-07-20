@@ -663,7 +663,7 @@ data_index["iota"] = {
     "fun": "compute_rotational_transform",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["iota_r"] = {
     "label": "\\partial_{\\rho} \\iota",
@@ -672,6 +672,16 @@ data_index["iota_r"] = {
     "description": "Rotational transform, first radial derivative",
     "fun": "compute_rotational_transform",
     "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 data_index["iota_rr"] = {
     "label": "\\partial_{\\rho\\rho} \\iota",
@@ -680,6 +690,9 @@ data_index["iota_rr"] = {
     "description": "Rotational transform, second radial derivative",
     "fun": "compute_rotational_transform",
     "dim": 1,
+    "R_derivs": [[0, 0, 0]],
+    "L_derivs": [[0, 0, 0]],
+    # FIXME: Update derivs. But does this ever get used?
 }
 
 # covariant basis
@@ -1322,7 +1335,7 @@ data_index["B^theta"] = {
     "fun": "compute_contravariant_magnetic_field",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["B^zeta"] = {
     "label": "B^{\\zeta}",

@@ -420,99 +420,9 @@ def compute_rotational_transform(
             R_lmn, Z_lmn, R_transform, Z_transform, data
         )
 
-        # derivatives wrt rho of metric coefficients
-        g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
-        g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
-            data["e_theta"], data["e_zeta_r"]
-        )
-        """
-        g_tt_rr = 2 * (
-            dot(data["e_theta_r"], data["e_theta_r"])
-            + dot(data["e_theta"], data["e_theta_rr"])
-        )
-        g_tz_rr = (
-            dot(data["e_theta_rr"], data["e_zeta"])
-            + 2 * dot(data["e_theta_r"], data["e_zeta_r"])
-            + dot(data["e_theta"], data["e_zeta_rr"])
-        )
-        """
-
-        # no sqrt(g) implementation
-        # term1 = data["psi_r"]
-        # term1_r = data["psi_rr"]
-        # term1_rr = 0
-        # sqrt(g) implementation
-        term1 = data["psi_r"] / data["sqrt(g)"]
-        term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
-        """
-        term1_rr = (
-            2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
-            - data["psi_r"] * data["sqrt(g)_rr"]
-        ) / jnp.square(data["sqrt(g)"])
-        """
-
-        # integrands of the flux surface averages in eq. 11
-        # num = numerator, den = denominator
-        num = term1 * (
-            term2 := (
-                data["g_tt"] * data["lambda_z"] - data["g_tz"] * (1 + data["lambda_t"])
-            )
-        )
-        num_r = term1_r * term2 + term1 * (
-            term2_r := (
-                g_tt_r * data["lambda_z"]
-                + data["g_tt"] * data["lambda_rz"]
-                - g_tz_r * (1 + data["lambda_t"])
-                - data["g_tz"] * data["lambda_rt"]
-            )
-        )
-        """
-        num_rr = (
-            term1_rr * term2
-            + 2 * term1_r * term2_r
-            + term1
-            * (
-                g_tt_rr * data["lambda_z"]
-                + 2 * g_tt_r * data["lambda_rz"]
-                + data["g_tt"] * data["lambda_rrz"]
-                - g_tz_rr * (1 + data["lambda_t"])
-                - 2 * g_tz_r * data["lambda_rt"]
-                - data["g_tz"] * data["lambda_rrt"]
-            )
-        )
-        """
-        den = term1 * data["g_tt"]
-        den_r = term1_r * data["g_tt"] + term1 * g_tt_r
-        # den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
-
-        # integrate each integrand
         rho = grid.nodes[:, 0]
         bins = jnp.append(rho[grid.unique_rho_indices], 1)
         dtdz = grid.spacing[:, 1:].prod(axis=1)
-        num = surface_sums(rho, bins, dtdz * num)
-        den = surface_sums(rho, bins, dtdz * den)
-        num_r = surface_sums(rho, bins, dtdz * num_r)
-        den_r = surface_sums(rho, bins, dtdz * den_r)
-        # num_rr = surface_sums(rho, bins, dtdz * num_rr)
-        # den_rr = surface_sums(rho, bins, dtdz * den_rr)
-
-        # compute the Δ(poloidal flux) generated from toroidal current
-        # FIXME: this is now units of Amperes
-        poloidal_flux = current.compute(c_l, dr=0)[grid.unique_rho_indices]
-        poloidal_flux_r = current.compute(c_l, dr=1)[grid.unique_rho_indices]
-        # poloidal_flux_rr = current.compute(c_l, dr=2)[grid.unique_rho_indices]
-
-        # derivatives computed analytically by pushing derivative into surface average
-        iota = (poloidal_flux + num) / den
-        iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
-        """
-        iota_rr = (
-            poloidal_flux_rr
-            + num_rr
-            - 2 * (poloidal_flux_r + num_r) * den_r / den
-            + iota * (2 * jnp.square(den_r) / den - den_rr)
-        ) / den
-        """
 
         # iota discretizes the rotational transform to flux surfaces.
         # data["iota"] discretizes the rotational transform to collocation nodes.
@@ -520,13 +430,88 @@ def compute_rotational_transform(
         # works on sorted grids:
         repeat_length = len(grid.nodes) // grid.num_zeta
         unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
-        data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
-        data["iota_r"] = expand(iota_r, unique_rho_counts, repeat_length, grid.num_zeta)
-        """
-        data["iota_rr"] = expand(
-            iota_rr, unique_rho_counts, repeat_length, grid.num_zeta
-        )
-        """
+
+        if check_derivs("iota", R_transform, Z_transform, L_transform):
+            term1 = data["psi_r"] / data["sqrt(g)"]
+            num = term1 * (
+                term2 := (
+                    data["g_tt"] * data["lambda_z"]
+                    - data["g_tz"] * (1 + data["lambda_t"])
+                )
+            )
+            den = term1 * data["g_tt"]
+            num = surface_sums(rho, bins, dtdz * num)
+            den = surface_sums(rho, bins, dtdz * den)
+            poloidal_flux = current.compute(c_l, dr=0)[grid.unique_rho_indices]
+            iota = (poloidal_flux + num) / den
+            data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
+
+        if check_derivs("iota_r", R_transform, Z_transform, L_transform):
+            term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
+            g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
+            g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
+                data["e_theta"], data["e_zeta_r"]
+            )
+            num_r = term1_r * term2 + term1 * (
+                term2_r := (
+                    g_tt_r * data["lambda_z"]
+                    + data["g_tt"] * data["lambda_rz"]
+                    - g_tz_r * (1 + data["lambda_t"])
+                    - data["g_tz"] * data["lambda_rt"]
+                )
+            )
+            den_r = term1_r * data["g_tt"] + term1 * g_tt_r
+            num_r = surface_sums(rho, bins, dtdz * num_r)
+            den_r = surface_sums(rho, bins, dtdz * den_r)
+            poloidal_flux_r = current.compute(c_l, dr=1)[grid.unique_rho_indices]
+            iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
+            data["iota_r"] = expand(
+                iota_r, unique_rho_counts, repeat_length, grid.num_zeta
+            )
+
+        if check_derivs("iota_rr", R_transform, Z_transform, L_transform):
+            # FIXME: Do we need this term?
+            """
+            term1_rr = (
+                2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
+                - data["psi_r"] * data["sqrt(g)_rr"]
+            ) / jnp.square(data["sqrt(g)"])
+            g_tt_rr = 2 * (
+                dot(data["e_theta_r"], data["e_theta_r"])
+                + dot(data["e_theta"], data["e_theta_rr"])
+            )
+            g_tz_rr = (
+                dot(data["e_theta_rr"], data["e_zeta"])
+                + 2 * dot(data["e_theta_r"], data["e_zeta_r"])
+                + dot(data["e_theta"], data["e_zeta_rr"])
+            )
+            num_rr = (
+                term1_rr * term2
+                + 2 * term1_r * term2_r
+                + term1
+                * (
+                    g_tt_rr * data["lambda_z"]
+                    + 2 * g_tt_r * data["lambda_rz"]
+                    + data["g_tt"] * data["lambda_rrz"]
+                    - g_tz_rr * (1 + data["lambda_t"])
+                    - 2 * g_tz_r * data["lambda_rt"]
+                    - data["g_tz"] * data["lambda_rrt"]
+                )
+            )
+            den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
+            num_rr = surface_sums(rho, bins, dtdz * num_rr)
+            den_rr = surface_sums(rho, bins, dtdz * den_rr)
+            poloidal_flux_rr = current.compute(c_l, dr=2)[grid.unique_rho_indices]
+            iota_rr = (
+                poloidal_flux_rr
+                + num_rr
+                - 2 * (poloidal_flux_r + num_r) * den_r / den
+                + iota * (2 * jnp.square(den_r) / den - den_rr)
+            ) / den
+            data["iota_rr"] = expand(
+                iota_rr, unique_rho_counts, repeat_length, grid.num_zeta
+            )
+            """
 
     return data
 

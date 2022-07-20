@@ -932,12 +932,12 @@ class FixCurrent(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, i_l, **kwargs):
+    def compute(self, c_l, **kwargs):
         """Compute fixed-current profile errors.
 
         Parameters
         ----------
-        i_l : ndarray
+        c_l : ndarray
             Spectral coefficients of I(rho) -- toroidal current profile.
 
         Returns
@@ -946,13 +946,13 @@ class FixCurrent(_Objective):
             Toroidal current profile errors.
 
         """
-        i = i_l[self._idx]
-        return self._shift_scale(i)
+        c = c_l[self._idx]
+        return self._shift_scale(c)
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "I_l"
+        return "c_l"
 
 
 class FixPsi(_Objective):

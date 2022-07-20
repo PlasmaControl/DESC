@@ -306,7 +306,7 @@ ext_field = SplineMagneticField.from_mgrid(
 
 
 veq.resolution_summary()
-veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=1000, verbose=3)
+veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
@@ -321,11 +321,17 @@ eq = Equilibrium(
 )
 
 surf.Z_lmn = surf.R_lmn[-1:]
-
 eq.set_initial_guess(surf)
 eq.surface = surf
 
-eq.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq.change_resolution(
+    veq.L // 2,
+    veq.M // 2,
+    veq.N // 2,
+    veq.L_grid // 2,
+    veq.M_grid // 2,
+    veq.N_grid // 2,
+)
 eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
@@ -352,21 +358,6 @@ fb_objective.build(eq)
 bc_objective.build(eq)
 
 
-def print_error_summary(eqis):
-    for eqi in eqis:
-        f = fb_objective.callback(
-            eqi.R_lmn, eqi.Z_lmn, eqi.L_lmn, eqi.p_l, eqi.i_l, eqi.Psi, eq.IGphi_mn
-        )
-        b = bc_objective.callback(
-            eqi.R_lmn, eqi.Z_lmn, eqi.L_lmn, eqi.p_l, eqi.i_l, eqi.Psi, eq.IGphi_mn
-        )
-
-
-bc_objective.callback(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi, eq.IGphi_mn)
-bc_objective.callback(
-    veq.R_lmn, veq.Z_lmn, veq.L_lmn, veq.p_l, veq.i_l, veq.Psi, eq.IGphi_mn
-)
-
 eq1 = eq.copy()
 out = eq1.optimize(
     objective,
@@ -380,9 +371,49 @@ out = eq1.optimize(
     },
 )
 
-eq1.save("freeb_test_out.h5")
-with open("freeb_beta_out.pkl", "wb+") as f:
+eq1.save("freeb_test_out1.h5")
+with open("freeb_beta_out1.pkl", "wb+") as f:
     pickle.dump(out, f)
+
+
+eq2 = eq1.copy()
+
+eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq2.solve(ftol=1e-2, verbose=3)
+
+
+bc_objective = BoundaryErrorBS(ext_field)
+fb_objective = ForceBalance()
+
+objective = ObjectiveFunction(bc_objective)
+constraints = (
+    fb_objective,
+    FixPressure(),
+    FixIota(),
+    FixPsi(),
+)
+
+fb_objective.build(eq2)
+bc_objective.build(eq2)
+
+
+out = eq2.optimize(
+    objective,
+    constraints,
+    maxiter=60,
+    verbose=3,
+    options={
+        "perturb_options": {"order": 2},
+        "initial_trust_radius": 1e-3,
+        "ga_tr_ratio": 0,
+    },
+)
+
+
+eq1.save("freeb_test_out2.h5")
+with open("freeb_beta_out2.pkl", "wb+") as f:
+    pickle.dump(out, f)
+
 
 out = veq.optimize(
     objective,

@@ -125,8 +125,17 @@ class GenericObjective(_Objective):
                 self.inputs[arg] = eq.pressure.copy()
                 self.inputs[arg].grid = self.grid
             elif arg == "iota":
-                self.inputs[arg] = eq.iota.copy()
-                self.inputs[arg].grid = self.grid
+                if eq.iota is not None:
+                    self.inputs[arg] = eq.iota.copy()
+                    self.inputs[arg].grid = self.grid
+                else:
+                    self.inputs[arg] = None
+            elif arg == "current":
+                if eq.current is not None:
+                    self.inputs[arg] = eq.current.copy()
+                    self.inputs[arg].grid = self.grid
+                else:
+                    self.inputs[arg] = None
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -212,8 +221,14 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["I"]["R_derivs"], build=True
@@ -234,7 +249,7 @@ class ToroidalCurrent(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current.
 
         Parameters
@@ -247,6 +262,8 @@ class ToroidalCurrent(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -261,11 +278,13 @@ class ToroidalCurrent(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(I)
@@ -340,10 +359,16 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self.grid
         self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["B_r"]["R_derivs"], build=True
@@ -364,7 +389,7 @@ class MagneticWell(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute the magnetic well parameter.
 
         Parameters
@@ -379,6 +404,8 @@ class MagneticWell(_Objective):
             Spectral coefficients of p(rho) -- pressure profile.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -395,11 +422,13 @@ class MagneticWell(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         data = compute_toroidal_coords(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
@@ -582,8 +611,14 @@ class RadialCurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["J^rho"]["R_derivs"], build=True
@@ -604,7 +639,7 @@ class RadialCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute radial current density.
 
         Parameters
@@ -617,6 +652,8 @@ class RadialCurrentDensity(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -631,11 +668,13 @@ class RadialCurrentDensity(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         data = compute_covariant_metric_coefficients(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
@@ -647,11 +686,13 @@ class RadialCurrentDensity(_Objective):
                 Z_lmn,
                 L_lmn,
                 i_l,
+                c_l,
                 Psi,
                 self._R_transform,
                 self._Z_transform,
                 self._L_transform,
                 self._iota,
+                self._current,
             )
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
@@ -746,8 +787,14 @@ class PoloidalCurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["J^theta"]["R_derivs"], build=True
@@ -768,7 +815,7 @@ class PoloidalCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute poloidal current density.
 
         Parameters
@@ -781,6 +828,8 @@ class PoloidalCurrentDensity(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -795,11 +844,13 @@ class PoloidalCurrentDensity(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         data = compute_covariant_metric_coefficients(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
@@ -811,11 +862,13 @@ class PoloidalCurrentDensity(_Objective):
                 Z_lmn,
                 L_lmn,
                 i_l,
+                c_l,
                 Psi,
                 self._R_transform,
                 self._Z_transform,
                 self._L_transform,
                 self._iota,
+                self._current,
             )
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
@@ -910,8 +963,14 @@ class ToroidalCurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["J^zeta"]["R_derivs"], build=True
@@ -932,7 +991,7 @@ class ToroidalCurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current density.
 
         Parameters
@@ -945,6 +1004,8 @@ class ToroidalCurrentDensity(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -959,11 +1020,13 @@ class ToroidalCurrentDensity(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         data = compute_covariant_metric_coefficients(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data=data
@@ -975,11 +1038,13 @@ class ToroidalCurrentDensity(_Objective):
                 Z_lmn,
                 L_lmn,
                 i_l,
+                c_l,
                 Psi,
                 self._R_transform,
                 self._Z_transform,
                 self._L_transform,
                 self._iota,
+                self._current,
             )
             B = jnp.mean(data["|B|"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])
             R = jnp.mean(data["R"] * data["sqrt(g)"]) / jnp.mean(data["sqrt(g)"])

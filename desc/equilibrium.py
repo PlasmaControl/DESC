@@ -802,8 +802,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dZb"] = Zb_lmn - equil.Zb_lmn
         if not np.allclose(p_l, equil.p_l):
             deltas["dp"] = p_l - equil.p_l
-        if not np.allclose(i_l, equil.i_l):
+        if equil.iota is not None and not np.allclose(i_l, equil.i_l):
             deltas["di"] = i_l - equil.i_l
+        if equil.current is not None and not np.allclose(c_l, equil.c_l):
+            deltas["dc"] = c_l - equil.c_l
         if not np.allclose(inputs["Psi"], equil.Psi):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas

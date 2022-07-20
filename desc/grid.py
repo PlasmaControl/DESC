@@ -33,9 +33,6 @@ class Grid(IOAble):
         "_weights",
         "_axis",
         "_node_pattern",
-        "_unique_rho",  # don't need these in grid, need unique_rho_indices
-        "_unique_theta",
-        "_unique_zeta",
         "_unique_rho_indices",
         "_unique_theta_indices",
         "_unique_zeta_indices",

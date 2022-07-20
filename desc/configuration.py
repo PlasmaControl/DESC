@@ -1038,7 +1038,10 @@ class _Configuration(IOAble, ABC):
 
     @i_l.setter
     def i_l(self, i_l):
-        self.iota.params = i_l
+        try:
+            self.iota.params = i_l
+        except AttributeError:
+            pass
 
     @property
     def current(self):
@@ -1067,7 +1070,10 @@ class _Configuration(IOAble, ABC):
 
     @c_l.setter
     def c_l(self, c_l):
-        self.current.params = c_l
+        try:
+            self.current.params = c_l
+        except AttributeError:
+            pass
 
     @property
     def R_basis(self):

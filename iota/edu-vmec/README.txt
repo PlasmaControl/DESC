@@ -1,5 +1,5 @@
 https://princetonuniversity.github.io/STELLOPT/Tutorial%20VMEC%20Input%20Namelist.html
-../../../educational_VMEC/build/bin/xvmec input.NAME
+../../../../educational_VMEC/build/bin/xvmec input.NAME
 
 change NCURR = 0 to 1
 change CURTOR = 0 to 1E+4 to 1E+6

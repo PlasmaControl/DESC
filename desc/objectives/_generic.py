@@ -3,7 +3,7 @@ from inspect import signature
 
 from desc.backend import jnp
 from desc.utils import Timer
-from desc.grid import QuadratureGrid, LinearGrid
+from desc.grid import QuadratureGrid, LinearGrid, ConcentricGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 import desc.compute as compute_funs
@@ -337,11 +337,10 @@ class MagneticWell(_Objective):
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
+                M=eq.M_grid,
+                N=eq.N_grid,
                 NFP=eq.NFP,
-                sym=False,  # required for correctness of dt * dz
-                rho=jnp.array(1.0),
+                sym=eq.sym,
             )
 
         self._dim_f = 1

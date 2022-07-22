@@ -410,7 +410,7 @@ out = eq2.optimize(
 )
 
 
-eq1.save("freeb_test_out2.h5")
+eq2.save("freeb_test_out2.h5")
 with open("freeb_beta_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
 

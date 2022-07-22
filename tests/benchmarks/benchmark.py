@@ -1,20 +1,9 @@
-from warnings import WarningMessage
-import pytest
-import subprocess
 import os
-import h5py
-import numpy as np
-import time
-from desc.__main__ import main
+import pytest
 
-from desc.grid import Grid, LinearGrid, ConcentricGrid
-from desc.basis import (
-    PowerSeries,
-    FourierSeries,
-    DoubleFourierSeries,
-    ZernikePolynomial,
-    FourierZernikeBasis,
-)
+from desc.__main__ import main
+from desc.grid import ConcentricGrid
+from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
 
 
@@ -22,7 +11,7 @@ from desc.transform import Transform
     min_rounds=1, max_time=50, disable_gc=False, warmup=True, warmup_iterations=50
 )
 def test_build_transform_fft_lowres(benchmark):
-    """Tests how long it takes to build a transform (after it has already been compiled) for lowres"""
+    """Test time to build a transform (after compilation) for low resolution."""
 
     def build():
         L = 5
@@ -38,7 +27,7 @@ def test_build_transform_fft_lowres(benchmark):
 
 @pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
 def test_build_transform_fft_midres(benchmark):
-    """Tests how long it takes to build a transform (after it has already been compiled) for midres"""
+    """Test time to build a transform (after compilation) for mid resolution."""
 
     def build():
         L = 15
@@ -54,7 +43,7 @@ def test_build_transform_fft_midres(benchmark):
 
 @pytest.mark.benchmark(min_rounds=1, max_time=100, disable_gc=False, warmup=True)
 def test_build_transform_fft_highres(benchmark):
-    """Tests how long it takes to build a transform (after it has already been compiled) for highres"""
+    """Test time to build a transform (after compilation) for high resolution."""
 
     def build():
         L = 25
@@ -77,7 +66,7 @@ def TmpDir(tmpdir_factory):
 
 @pytest.mark.benchmark(min_rounds=1, max_time=200, disable_gc=True, warmup=False)
 def test_SOLOVEV_run(tmpdir_factory, benchmark):
-    """Benchmark the SOLOVEV example"""
+    """Benchmark the SOLOVEV example."""
     input_path = ".//tests//benchmarks//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("SOLOVEV_out.h5")
@@ -111,7 +100,6 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
-
     return None
 
 
@@ -132,5 +120,4 @@ def test_HELIOTRON_run(tmpdir_factory, benchmark):
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
-
     return None

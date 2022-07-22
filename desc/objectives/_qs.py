@@ -86,12 +86,7 @@ class QuasisymmetryBoozer(_Objective):
             self.N_booz = 2 * eq.N
         if self.grid is None:
             self.grid = LinearGrid(
-                L=1,
-                M=3 * self.M_booz + 1,
-                N=3 * self.N_booz + 1,
-                NFP=eq.NFP,
-                sym=False,
-                rho=1,
+                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
 
         timer = Timer()
@@ -290,14 +285,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=1,
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
 
@@ -451,14 +439,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=1,
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
 

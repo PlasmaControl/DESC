@@ -184,16 +184,16 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": 1,
-        "M": 1,
-        "N": 1,
+        "L": None,
+        "M": None,
+        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": None,
-        "theta": None,
-        "zeta": None,
+        "rho": np.array([1.0]),
+        "theta": np.array([0.0]),
+        "zeta": np.array([0.0]),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -279,7 +279,7 @@ def _compute(eq, name, grid, component=None):
                 label += r"\phi"
     label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
 
-    return data.reshape((grid.M, grid.L, grid.N), order="F"), label
+    return data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F"), label
 
 
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
@@ -510,12 +510,12 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
 
     xx = (
         grid.nodes[:, plot_axes[1]]
-        .reshape((grid.M, grid.L, grid.N), order="F")
+        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
     yy = (
         grid.nodes[:, plot_axes[0]]
-        .reshape((grid.M, grid.L, grid.N), order="F")
+        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
 
@@ -595,9 +595,9 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute("X", grid)
-    X = coords["X"].reshape((grid.M, grid.L, grid.N), order="F")
-    Y = coords["Y"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
     if 0 in plot_axes:
         if 1 in plot_axes:  # rho & theta
@@ -674,10 +674,9 @@ def plot_fsa(
     eq,
     name,
     log=False,
-    L=20,
+    rho=20,
     M=None,
     N=None,
-    rho=None,
     ax=None,
     **kwargs,
 ):
@@ -691,14 +690,13 @@ def plot_fsa(
         Name of variable to plot.
     log : bool, optional
         Whether to use a log scale.
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None.
+    rho : int or array-like
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
     M : int, optional
-        Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
+        Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
-        Number of toroidal nodes used in flux surface average. Default is 2*eq.N_grid+1.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
+        Toroidal grid resolution. Defualt is eq.N_grid.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -711,7 +709,6 @@ def plot_fsa(
 
     Examples
     --------
-
     .. image:: ../../_static/images/plotting/plot_fsa.png
 
     .. code-block:: python
@@ -720,22 +717,28 @@ def plot_fsa(
         fig, ax = plot_fsa(eq, "B_theta")
 
     """
-    if rho is None:
-        rho = np.linspace(1, 0, num=L, endpoint=False)
+    if np.isscalar(rho) and (int(rho) == rho):
+        rho = np.linspace(0, 1, rho + 1)[1:]  # offset to ignore axis
+    else:
+        rho = np.atleast_1d(rho)
     if M is None:
-        M = 2 * eq.M_grid + 1
+        M = eq.M_grid
     if N is None:
-        N = 2 * eq.N_grid + 1
+        N = eq.N_grid
 
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
     values = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
-        g, _ = _compute(eq, "sqrt(g)", grid)
-        data, label = _compute(eq, name, grid, kwargs.get("component", None))
-        values = np.append(values, np.mean(data * g) / np.mean(g))
-
+        if r > 0:
+            grid = LinearGrid(M=M, N=N, NFP=1, rho=np.array(r))
+            g, _ = _compute(eq, "sqrt(g)", grid)
+            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            values = np.append(values, np.mean(data * g) / np.mean(g))
+        elif r == 0:
+            grid = LinearGrid(M=0, N=0, NFP=1, rho=np.array(0.0))
+            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            values = np.append(values, np.mean(data))
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(rho, values, label=kwargs.get("label", None))
@@ -837,8 +840,8 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     ax = np.atleast_1d(ax).flatten()
 
     coords = eq.compute("R", grid)
-    R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
     contourf_kwargs = {}
     if log:
@@ -1002,13 +1005,21 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
 
     # rho contours
     r_coords = eq.compute("R", r_grid)
-    Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Rr = r_coords["R"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
+    Zr = r_coords["Z"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
     if plot_theta:
         # vartheta contours
         v_coords = eq.compute("R", v_grid)
-        Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-        Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+        Rv = v_coords["R"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
+        Zv = v_coords["Z"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1309,7 +1320,6 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
 
     Examples
     --------
-
     .. image:: ../../_static/images/plotting/plot_boozer_modes.png
 
     .. code-block:: python
@@ -1326,7 +1336,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
@@ -1425,7 +1435,7 @@ def plot_boozer_surface(
         DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
     )
     data = B_transform.transform(data["|B|_mn"])
-    data = data.reshape((grid_plot.M, grid_plot.N), order="F")
+    data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
     divider = make_axes_locatable(ax)
@@ -1440,8 +1450,16 @@ def plot_boozer_surface(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
-    yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
+    xx = (
+        grid_plot.nodes[:, 2]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    yy = (
+        grid_plot.nodes[:, 1]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
 
     if fill:
         im = ax.contourf(xx, yy, data, **contourf_kwargs)
@@ -1531,7 +1549,7 @@ def plot_qs_error(
     f_C = np.array([])
     f_T = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]
@@ -1677,9 +1695,9 @@ def plot_grid(grid, **kwargs):
             r"$\frac{\pi}{2}$",
             r"$\frac{3\pi}{4}$",
             r"$\pi$",
-            r"$\frac{4\pi}{4}$",
+            r"$\frac{5\pi}{4}$",
             r"$\frac{3\pi}{2}$",
-            r"$2\pi$",
+            r"$\frac{7\pi}{4}$",
         ]
     )
     ax.set_yticklabels([])
@@ -1734,7 +1752,7 @@ def plot_basis(basis, **kwargs):
     """
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
-        grid = LinearGrid(100, 1, 1, endpoint=True)
+        grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1752,7 +1770,7 @@ def plot_basis(basis, **kwargs):
 
     elif basis.__class__.__name__ == "FourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
-        grid = LinearGrid(1, 1, 100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1774,9 +1792,9 @@ def plot_basis(basis, **kwargs):
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
-        grid = LinearGrid(1, 100, 100, NFP=basis.NFP, endpoint=True)
-        t = grid.nodes[:, 1].reshape((100, 100))
-        z = grid.nodes[:, 2].reshape((100, 100))
+        grid = LinearGrid(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
+        t = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta))
+        z = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta))
         fig = plt.figure(
             # 2 * mmax + 1,
             # 2 * nmax + 1,
@@ -1810,7 +1828,7 @@ def plot_basis(basis, **kwargs):
             im = ax[mmax + m, nmax + n].contourf(
                 z,
                 t,
-                fi.reshape((100, 100)),
+                fi.reshape((grid.num_theta, grid.num_zeta)),
                 levels=100,
                 vmin=-1,
                 vmax=1,
@@ -1843,7 +1861,7 @@ def plot_basis(basis, **kwargs):
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(100, 100, 1, endpoint=True)
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
         r = np.unique(grid.nodes[:, 0])
         v = np.unique(grid.nodes[:, 1])
 
@@ -1861,7 +1879,7 @@ def plot_basis(basis, **kwargs):
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
-            Z = Zs[:, i].reshape((100, 100))
+            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
             ax[l][m] = plt.subplot(
                 gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
             )

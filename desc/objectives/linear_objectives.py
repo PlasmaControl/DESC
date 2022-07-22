@@ -4,9 +4,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import (
-    zernike_radial_coeffs,
-)
+from desc.basis import zernike_radial_coeffs
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from .objective_funs import _Objective
 

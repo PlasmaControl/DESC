@@ -10,29 +10,29 @@ import desc.examples
 class TestFourierRZToroidalSurface(unittest.TestCase):
     def test_area(self):
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(L=1, M=50, N=50)
+        grid = LinearGrid(M=24, N=24)
         s.grid = grid
-        np.testing.assert_allclose(s.compute_surface_area(), 4 * np.pi ** 2 * 10)
-        np.testing.assert_allclose(s.compute_surface_area(grid=20), 4 * np.pi ** 2 * 10)
-        np.testing.assert_allclose(
-            s.compute_surface_area(grid=(20, 30)), 4 * np.pi ** 2 * 10
-        )
+
+        area = 4 * np.pi ** 2 * 10
+        np.testing.assert_allclose(s.compute_surface_area(), area)
+        np.testing.assert_allclose(s.compute_surface_area(grid=10), area)
+        np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
 
     def test_normal(self):
         s = FourierRZToroidalSurface()
-        grid = LinearGrid(L=1, theta=np.pi / 2, zeta=np.pi)
+        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
         s.grid = grid
         N = s.compute_normal()
         # note default surface is left handed
         np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
-        grid = LinearGrid(L=1, theta=0, zeta=0)
+        grid = LinearGrid(theta=0.0, zeta=0.0)
         s.grid = grid
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
     def test_misc(self):
         c = FourierRZToroidalSurface()
-        grid = LinearGrid(L=1, M=4, N=4)
+        grid = LinearGrid(L=0, M=2, N=2)
         c.grid = grid
         assert grid.eq(c.grid)
 
@@ -103,24 +103,24 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
 class TestZernikeRZToroidalSection(unittest.TestCase):
     def test_area(self):
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=20, M=20, N=1)
+        grid = LinearGrid(L=10, M=10)
         s.grid = grid
-        np.testing.assert_allclose(s.compute_surface_area(), np.pi * 1 ** 2)
-        np.testing.assert_allclose(s.compute_surface_area(grid=30), np.pi * 1 ** 2)
-        np.testing.assert_allclose(
-            s.compute_surface_area(grid=(10, 10)), np.pi * 1 ** 2
-        )
+
+        area = np.pi * 1 ** 2
+        np.testing.assert_allclose(s.compute_surface_area(), area)
+        np.testing.assert_allclose(s.compute_surface_area(grid=15), area)
+        np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)
 
     def test_normal(self):
         s = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=20, M=20, N=1)
+        grid = LinearGrid(L=8, M=4, N=0)
         s.grid = grid
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
     def test_misc(self):
         c = ZernikeRZToroidalSection()
-        grid = LinearGrid(L=4, M=4, N=1)
+        grid = LinearGrid(L=2, M=2, N=0)
         c.grid = grid
         assert grid.eq(c.grid)
 

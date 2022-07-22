@@ -4,6 +4,8 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import data_index
+from desc.compute.utils import surface_integrals, _expand
+from scipy.constants import mu_0
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -420,17 +422,6 @@ def compute_rotational_transform(
             R_lmn, Z_lmn, R_transform, Z_transform, data
         )
 
-        rho = grid.nodes[:, 0]
-        bins = jnp.append(rho[grid.unique_rho_indices], 1)
-        dtdz = grid.spacing[:, 1:].prod(axis=1)
-
-        # iota discretizes the rotational transform to flux surfaces.
-        # data["iota"] discretizes the rotational transform to collocation nodes.
-        # Therefore the elements of iota must be duplicated to match the grid's pattern.
-        # works on sorted grids:
-        repeat_length = len(grid.nodes) // grid.num_zeta
-        unique_rho_counts = jnp.diff(grid.unique_rho_indices, append=repeat_length)
-
         if check_derivs("iota", R_transform, Z_transform, L_transform):
             term1 = data["psi_r"] / data["sqrt(g)"]
             num = term1 * (
@@ -440,11 +431,13 @@ def compute_rotational_transform(
                 )
             )
             den = term1 * data["g_tt"]
-            num = surface_sums(rho, bins, dtdz * num)
-            den = surface_sums(rho, bins, dtdz * den)
-            poloidal_flux = current.compute(c_l, dr=0)[grid.unique_rho_indices]
-            iota = (poloidal_flux + num) / den
-            data["iota"] = expand(iota, unique_rho_counts, repeat_length, grid.num_zeta)
+            num = surface_integrals(grid, num)
+            den = surface_integrals(grid, den)
+            enclosed_toroidal_current = (
+                2 * jnp.pi / mu_0 * current.compute(c_l, dr=0)[grid.unique_rho_indices]
+            )
+            iota = (enclosed_toroidal_current + num) / den
+            data["iota"] = _expand(grid, iota)
 
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
             term1_r = (data["psi_rr"] - term1 * data["sqrt(g)_r"]) / data["sqrt(g)"]
@@ -461,16 +454,18 @@ def compute_rotational_transform(
                 )
             )
             den_r = term1_r * data["g_tt"] + term1 * g_tt_r
-            num_r = surface_sums(rho, bins, dtdz * num_r)
-            den_r = surface_sums(rho, bins, dtdz * den_r)
-            poloidal_flux_r = current.compute(c_l, dr=1)[grid.unique_rho_indices]
-            iota_r = (poloidal_flux_r + num_r - iota * den_r) / den
-            data["iota_r"] = expand(
-                iota_r, unique_rho_counts, repeat_length, grid.num_zeta
+            num_r = surface_integrals(grid, num_r)
+            den_r = surface_integrals(grid, den_r)
+            enclosed_toroidal_current_r = (
+                2 * jnp.pi / mu_0 * current.compute(c_l, dr=1)[grid.unique_rho_indices]
             )
+            iota_r = (enclosed_toroidal_current_r + num_r - iota * den_r) / den
+            data["iota_r"] = _expand(grid, iota_r)
 
         if check_derivs("iota_rr", R_transform, Z_transform, L_transform):
-            # FIXME: Do we need this term?
+            # FIXME: Daniel asks: Do we need this term?
+            # Kaya responds: I thought we needed iota_rr for magnetic shear stuff.
+            # I have checked this for typos and confirmed computation with mathematica.
             """
             term1_rr = (
                 2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
@@ -499,87 +494,21 @@ def compute_rotational_transform(
                 )
             )
             den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
-            num_rr = surface_sums(rho, bins, dtdz * num_rr)
-            den_rr = surface_sums(rho, bins, dtdz * den_rr)
-            poloidal_flux_rr = current.compute(c_l, dr=2)[grid.unique_rho_indices]
+            num_rr = surface_integrals(grid, num_rr)
+            den_rr = surface_integrals(grid, den_rr)
+            enclosed_toroidal_current_rr = (
+                2 * jnp.pi / mu_0 * current.compute(c_l, dr=2)[grid.unique_rho_indices]
+            )
             iota_rr = (
-                poloidal_flux_rr
+                enclosed_toroidal_current_rr
                 + num_rr
-                - 2 * (poloidal_flux_r + num_r) * den_r / den
+                - 2 * (enclosed_toroidal_current_r + num_r) * den_r / den
                 + iota * (2 * jnp.square(den_r) / den - den_rr)
             ) / den
-            data["iota_rr"] = expand(
-                iota_rr, unique_rho_counts, repeat_length, grid.num_zeta
-            )
+            data["iota_rr"] = _expand(grid, iota_rr)
             """
 
     return data
-
-
-def surface_sums(surf_label, unique_append_upperbound, weights):
-    """
-    Parameters
-    ----------
-    surf_label : ndarray
-        The surface label. Elements of a coordinate in the collocation grid.
-        i.e. grid.nodes[:, 0]
-    unique_append_upperbound : ndarray
-        Sorted unique elements of surf_label with the upper bound of that coordinate appended.
-        i.e. grid.unique_rho + [1]
-    weights : ndarray
-        Node at surf_label[i]'s contribution to its surface's sum is weights[i].
-        For an integral, this could be: ds * function_to_integrate.
-
-    Returns
-    -------
-    ndarray
-        Weighted sums over each surface.
-        The returned array has length = len(unique_append_upperbound) - 1.
-    """
-    # DESIRED ALGORITHM
-    # collect collocation node indices for each rho surface
-    # surfaces = dict()
-    # for index, rho in enumerate(surf_label):
-    #     surfaces.setdefault(rho, list()).append(index)
-    # integration over non-contiguous elements
-    # for i, surface in enumerate(surfaces.values()):
-    #     _surface_sums[i] = weights[surface].sum()
-
-    # NO LOOP IMPLEMENTATION
-    # Separate collocation nodes into bins with boundaries at unique values of rho.
-    # This groups nodes with identical rho values.
-    # Each is assigned a weight of their contribution to the integral.
-    # The elements of each bin are summed, performing the integration.
-    return jnp.histogram(surf_label, bins=unique_append_upperbound, weights=weights)[0]
-
-
-def expand(x, repeats, total_repeat_length, tile_reps):
-    """
-    Parameters
-    ----------
-    x : ndarray
-        The array to expand by repeating elements.
-    repeats : int, ndarray
-        The number of repetitions for each element in x. (Broadcast to fit the shape of x).
-        i.e. jnp.diff(grid.unique_rho_indices, append=repeat_length)
-    total_repeat_length : int
-        https://jax.readthedocs.io/en/latest/_autosummary/jax.numpy.repeat.html.
-        i.e. len(grid.nodes) // grid.num_zeta
-    tile_reps : int
-        The number of repetitions of the repeated array.
-        i.e. grid.num_zeta
-
-    Returns
-    -------
-    ndarray
-        First forms an array Y, which repeats elements in x as specified by repeats.
-        Then returns Y repeated tile_reps times.
-    """
-    # TODO: if not using JAX, make compatible with regular NumPy
-    return jnp.tile(
-        jnp.repeat(x, repeats=repeats, total_repeat_length=total_repeat_length),
-        tile_reps,
-    )
 
 
 def compute_covariant_basis(

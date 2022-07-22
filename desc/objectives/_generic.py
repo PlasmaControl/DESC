@@ -20,8 +20,8 @@ from desc.compute import (
     compute_toroidal_coords,
     cross,
     dot,
-    surface_sums,
 )
+from desc.compute.utils import surface_averages, surface_integrals
 from .objective_funs import _Objective
 
 
@@ -329,7 +329,7 @@ class MagneticWell(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Magnetic Well: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=0):  # change back to 1
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -349,8 +349,6 @@ class MagneticWell(_Objective):
                 sym=False,  # required for correctness of dt * dz
                 rho=jnp.array(1.0),
             )
-        # adds functionality to compute magnetic well on many rho surfaces
-        self._bins = jnp.append(self.grid.nodes[self.grid.unique_rho_indices, 0], 1)
 
         self._dim_f = 1
 
@@ -438,32 +436,23 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
 
-        # grid.weights is the value we expect from dtheta * dzeta if rho is constant.
-        dtdz = (
-            self.grid.weights
-            if self.grid.num_rho == 1
-            else self.grid.spacing[:, 1:].prod(axis=1)
-        )
         sqrtg = jnp.abs(data["sqrt(g)"])
         sqrtg_r = jnp.abs(data["sqrt(g)_r"])
         # data["V"] is the total volume, not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
         # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
         sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
-        rho = self.grid.nodes[:, 0]
-        V = jnp.abs(
-            surface_sums(rho, self._bins, dtdz * sqrtg_e_sup_rho[:, 2] * data["Z"])
-        )
+        V = jnp.abs(surface_integrals(self.grid, sqrtg_e_sup_rho[:, 2] * data["Z"]))
 
         # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         # Intuitively, this formula makes sense because
         # V = integral(drdtdz * sqrt(g)) and differentiating wrt rho removes
         # the dr integral. What remains is a surface integral with a 3D jacobian.
         # This is the volume added by a thin shell of constant rho.
-        dv_drho = surface_sums(rho, self._bins, dtdz * sqrtg)
-        d2v_drho2 = surface_sums(rho, self._bins, dtdz * sqrtg_r)
+        dv_drho = surface_integrals(self.grid, sqrtg)
+        d2v_drho2 = surface_integrals(self.grid, sqrtg_r)
         Bsq = dot(data["B"], data["B"])
-        Bsq_av = self._average(dtdz * sqrtg * Bsq, dv_drho)
+        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, denominator=dv_drho)
         dBsq_drho = 2 * dot(data["B"], data["B_r"])
 
         # pressure = thermal + magnetic
@@ -473,12 +462,12 @@ class MagneticWell(_Objective):
         # Therefore, average(thermal) = thermal.
         dthermal_drho = 2 * mu_0 * data["p_r"][self.grid.unique_rho_indices]
         dmagnetic_av_drho = (
-            self._average(dtdz * (sqrtg_r * Bsq + sqrtg * dBsq_drho), dv_drho)
-            - self._average(dtdz * sqrtg_r, dv_drho) * Bsq_av
-        )
+            surface_integrals(self.grid, sqrtg_r * Bsq + sqrtg * dBsq_drho)
+            - surface_integrals(self.grid, sqrtg_r) * Bsq_av
+        ) / dv_drho
 
         W2 = (
-            rho[self.grid.unique_rho_indices]
+            self.grid.nodes[self.grid.unique_rho_indices, 0]
             * (dthermal_drho + dmagnetic_av_drho)
             / Bsq_av
         )
@@ -486,22 +475,30 @@ class MagneticWell(_Objective):
 
         # Dwell from M. Landreman and R. Jorge eq. 4.19
         psi_r_sq = jnp.square(data["psi_r"])
+        dp_dpsi = (data["p_r"] / data["psi_r"])[self.grid.unique_rho_indices]
         grad_psi_sq = data["g^rr"] * psi_r_sq
-        ds_over_abs_grad_psi = dtdz * sqrtg / jnp.abs(data["psi_r"])
-        # One of these terms below inside the deepest parenthesis may need to be multiplied by jnp.sign(psi)
-        W1 = -(  # I don't think this negative should be here. But the plots match STELLOPT much more with it.
+        # ds / |grad(psi)| / dtdz = |sqrt(g) * grad(rho) / grad(psi)|
+        ds_over_grad_psi_over_dtdz = sqrtg / jnp.abs(data["psi_r"])
+        W1 = (
             mu_0
-            * surface_sums(rho, self._bins, ds_over_abs_grad_psi / grad_psi_sq * Bsq)
+            / 64
+            / jnp.pi ** 6
+            * dp_dpsi
+            * surface_integrals(
+                self.grid, ds_over_grad_psi_over_dtdz / grad_psi_sq * Bsq
+            )
             * (
                 (
                     d2v_drho2
                     - dv_drho
                     * (data["psi_rr"] / data["psi_r"])[self.grid.unique_rho_indices]
                 )
-                / data["psi_r"][self.grid.unique_rho_indices]
-                - mu_0 * surface_sums(rho, self._bins, ds_over_abs_grad_psi / Bsq)
+                / psi_r_sq[self.grid.unique_rho_indices]
+                * jnp.sign(data["psi"][self.grid.unique_rho_indices])
+                - mu_0
+                * dp_dpsi
+                * surface_integrals(self.grid, ds_over_grad_psi_over_dtdz / Bsq)
             )
-            / psi_r_sq[self.grid.unique_rho_indices]
         )
         return {
             "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1),
@@ -516,26 +513,8 @@ class MagneticWell(_Objective):
             "d^2(volume)/d(rho)^2": d2v_drho2,
             "dvolume/drho": dv_drho,
             "volume": V,
-            "dtdz": surface_sums(rho, self._bins, dtdz),
+            "dtdz": surface_integrals(self.grid, jnp.ones(len(self.grid.nodes))),
         }
-
-    def _average(self, f, dv_drho):
-        """
-        Parameters
-        ----------
-        f : ndarray
-            Function to average. Standard flux surface average has f = dt * dz * sqrt(g) * some quantity.
-        dv_drho : ndarray
-            Derivative of volume enclosed by flux surface wrt the surface label rho.
-
-        Returns
-        -------
-        ndarray
-            The flux surface average of the given function, f. See D'haeseleer flux coordinates eq. 4.9.11.
-        """
-        # these are equivalent but the former requires linear grids of single surface for correctness
-        # jnp.mean(f) / jnp.mean(data["sqrt(g)"])
-        return surface_sums(self.grid.nodes[:, 0], self._bins, f) / dv_drho
 
 
 class RadialCurrentDensity(_Objective):

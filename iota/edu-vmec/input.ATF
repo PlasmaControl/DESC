@@ -22,7 +22,7 @@
   PRES_SCALE = 2.0E+06
   PMASS_TYPE = "power_series"
   PCURR_TYPE = "power_series"
-  AM =  1 -2 1
+  AM =  1 -0.5 1
   AI = 0.35 0.65
   AC = 1 -1 0
   RAXIS_CC =   2.00 0.00

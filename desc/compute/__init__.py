@@ -15,9 +15,8 @@ from ._core import (
     compute_geometry,
     cross,
     dot,
-    surface_sums,
-    expand,
 )
+from .utils import surface_averages, surface_integrals
 from ._field import (
     compute_contravariant_magnetic_field,
     compute_covariant_magnetic_field,

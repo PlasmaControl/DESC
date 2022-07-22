@@ -6,7 +6,7 @@ from termcolor import colored
 from desc import set_device, config as desc_config
 
 # we divide by zero in a few places but then overwrite with the
-# correct values, so lets suppress annoying warnings about that
+# correct values, so let's suppress annoying warnings about that
 np.seterr(divide="ignore", invalid="ignore")
 
 if os.environ.get("DESC_BACKEND") == "numpy":

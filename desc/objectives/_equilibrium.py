@@ -60,12 +60,14 @@ class ForceBalance(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force",equality = True, lb = None):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
         self._callback_fmt = "Total force: {:10.3e} " + units
+        self.lb = lb
+        self.equality = equality
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -167,7 +169,11 @@ class ForceBalance(_Objective):
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
         f = jnp.concatenate([fr, fb])
-        return self._shift_scale(f)
+        
+        if self.lb:
+            return -self._shift_scale(f)
+        else:
+            return self._shift_scale(f)
 
 class GradientForceBalance(_Objective):
     _scalar = False

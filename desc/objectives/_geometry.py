@@ -175,11 +175,13 @@ class AspectRatio(_Objective):
     _scalar = True
     _linear = False
 
-    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
+    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio",equality = True, lb = None):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+        self.lb = lb
+        self.equality = equality
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -239,4 +241,8 @@ class AspectRatio(_Objective):
 
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(jnp.atleast_1d(data["R0/a"]))
+
+        if self.lb:
+            return -self._shift_scale(jnp.atleast_1d(data["R0/a"]))
+        else:
+            return self._shift_scale(jnp.atleast_1d(data["R0/a"]))

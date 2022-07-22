@@ -353,8 +353,7 @@ def compute_rotational_transform(
     **kwargs,
 ):
     """
-    Compute rotational transform profile from the toroidal current or the toroidal
-    current density profile.
+    Compute rotational transform profile from the iota or the toroidal current profile.
 
     Currently, the rotational transform is first computed to satisfy a zero toroidal
     current condition based on the geometry of the device as discussed in
@@ -433,8 +432,10 @@ def compute_rotational_transform(
             den = term1 * data["g_tt"]
             num = surface_integrals(grid, num)
             den = surface_integrals(grid, den)
+            # profile in units of amps. want current in units of tesla-meters
+            # should try without 2pi
             enclosed_toroidal_current = (
-                2 * jnp.pi / mu_0 * current.compute(c_l, dr=0)[grid.unique_rho_indices]
+                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=0)[grid.unique_rho_indices]
             )
             iota = (enclosed_toroidal_current + num) / den
             data["iota"] = _expand(grid, iota)
@@ -457,15 +458,14 @@ def compute_rotational_transform(
             num_r = surface_integrals(grid, num_r)
             den_r = surface_integrals(grid, den_r)
             enclosed_toroidal_current_r = (
-                2 * jnp.pi / mu_0 * current.compute(c_l, dr=1)[grid.unique_rho_indices]
+                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=1)[grid.unique_rho_indices]
             )
             iota_r = (enclosed_toroidal_current_r + num_r - iota * den_r) / den
             data["iota_r"] = _expand(grid, iota_r)
 
         if check_derivs("iota_rr", R_transform, Z_transform, L_transform):
             # FIXME: Daniel asks: Do we need this term?
-            # Kaya responds: I thought we needed iota_rr for magnetic shear stuff.
-            # I have checked this for typos and confirmed computation with mathematica.
+            # Kaya responds: I thought we needed iota_rr for magnetic shear derivative stuff.
             """
             term1_rr = (
                 2 * (term1 * data["sqrt(g)_r"] - data["psi_rr"]) * data["sqrt(g)_r"]
@@ -497,7 +497,7 @@ def compute_rotational_transform(
             num_rr = surface_integrals(grid, num_rr)
             den_rr = surface_integrals(grid, den_rr)
             enclosed_toroidal_current_rr = (
-                2 * jnp.pi / mu_0 * current.compute(c_l, dr=2)[grid.unique_rho_indices]
+                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=2)[grid.unique_rho_indices]
             )
             iota_rr = (
                 enclosed_toroidal_current_rr

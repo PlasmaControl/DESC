@@ -140,12 +140,9 @@ class TestComputeUtils:
             N=eq.N_grid,
             NFP=eq.NFP,
             sym=eq.sym,
-            rho=rho,
+            rho=np.array(rho),
         )
         B = eq.compute("|B|", grid=grid)["|B|"]
         sqrtg = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
         B_average = surface_averages(grid, B, sqrtg, match_grid=False)
-        # grid has 1 rho value only
-        # match_grid=True returns an array of len(grid.nodes) with all elements same value.
-        # match_grid=False returns that single value.
         assert np.allclose(B_average, np.mean(sqrtg * B) / np.mean(sqrtg))

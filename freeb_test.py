@@ -142,6 +142,8 @@ class BoundaryErrorBS(_Objective):
         self._dim_f = 5 * self.egrid.num_nodes
         self.NFP = eq.NFP
 
+        self.orientation = eq.orientation
+        
         self.eR_transform = Transform(self.egrid, eq.R_basis, derivs=1)
         self.eZ_transform = Transform(self.egrid, eq.Z_basis, derivs=1)
         self.eL_transform = Transform(self.egrid, eq.L_basis, derivs=1)
@@ -179,6 +181,7 @@ class BoundaryErrorBS(_Objective):
             self.sZ_transform,
             self.sL_transform,
             self.si_profile,
+            self.orientation,
         )
         ndata_src = compute_contravariant_basis(
             R_lmn, Z_lmn, self.sR_transform, self.sZ_transform
@@ -193,6 +196,7 @@ class BoundaryErrorBS(_Objective):
             self.eZ_transform,
             self.eL_transform,
             self.ei_profile,
+            self.orientation,            
         )
         ndata_eval = compute_contravariant_basis(
             R_lmn, Z_lmn, self.eR_transform, self.eZ_transform

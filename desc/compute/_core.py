@@ -432,10 +432,11 @@ def compute_rotational_transform(
             den = term1 * data["g_tt"]
             num = surface_integrals(grid, num)
             den = surface_integrals(grid, den)
-            # profile in units of amps. want current in units of tesla-meters
-            # should try without 2pi
+            # profile in units of amps. want current in units of 2pi * tesla-meters
             enclosed_toroidal_current = (
-                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=0)[grid.unique_rho_indices]
+                # mu_0 / 2pi matched plots better
+                mu_0
+                * current.compute(c_l, dr=0)[grid.unique_rho_indices]
             )
             iota = (enclosed_toroidal_current + num) / den
             data["iota"] = _expand(grid, iota)
@@ -458,7 +459,7 @@ def compute_rotational_transform(
             num_r = surface_integrals(grid, num_r)
             den_r = surface_integrals(grid, den_r)
             enclosed_toroidal_current_r = (
-                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=1)[grid.unique_rho_indices]
+                mu_0 * current.compute(c_l, dr=1)[grid.unique_rho_indices]
             )
             iota_r = (enclosed_toroidal_current_r + num_r - iota * den_r) / den
             data["iota_r"] = _expand(grid, iota_r)
@@ -496,9 +497,7 @@ def compute_rotational_transform(
             den_rr = term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
             num_rr = surface_integrals(grid, num_rr)
             den_rr = surface_integrals(grid, den_rr)
-            enclosed_toroidal_current_rr = (
-                mu_0 / 2 / jnp.pi * current.compute(c_l, dr=2)[grid.unique_rho_indices]
-            )
+            enclosed_toroidal_current_rr = mu_0 * current.compute(c_l, dr=2)[grid.unique_rho_indices]
             iota_rr = (
                 enclosed_toroidal_current_rr
                 + num_rr

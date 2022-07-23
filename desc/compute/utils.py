@@ -78,6 +78,7 @@ def _expand(grid, x, surface_label="rho"):
     """
 
     # assert len(x) == grid.num_ of the surface_label
+    # TODO: confirm this is standard way to get whether user has jax
     no_jax = os.environ.get("DESC_BACKEND") == "numpy"
     number_nodes_zeta_surface = len(grid.nodes) // grid.num_zeta
 
@@ -112,7 +113,7 @@ def _expand(grid, x, surface_label="rho"):
     raise ValueError("Surface label must be 'rho', 'theta', or 'zeta'.")
 
 
-def surface_integrals(grid, integrand, surface_label="rho", match_grid=False):
+def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
     """
     Bulk surface integral function.
     Computes the surface integral of the specified quantity for all surfaces in the grid.
@@ -121,7 +122,7 @@ def surface_integrals(grid, integrand, surface_label="rho", match_grid=False):
     ----------
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
-    integrand : ndarray
+    integrands : ndarray
         Quantity to integrate.
         Should not include the surface differential element ds (dtheta * dzeta for rho surface).
     surface_label : str
@@ -151,7 +152,7 @@ def surface_integrals(grid, integrand, surface_label="rho", match_grid=False):
     #     surfaces.setdefault(surface_label_value, list()).append(index_in_grid_column)
     # integration over non-contiguous elements
     # for i, surface_indices in enumerate(surfaces.values()):
-    #     integrals[i] = (ds * integrand)[surface_indices].sum()
+    #     integrals[i] = (ds * integrands)[surface_indices].sum()
 
     # NO LOOP IMPLEMENTATION
     # Separate collocation nodes into bins with boundaries at unique values of the surface label.
@@ -160,7 +161,7 @@ def surface_integrals(grid, integrand, surface_label="rho", match_grid=False):
     # The elements of each bin are summed, performing the integration.
     bins = jnp.append(surface_label_nodes[unique_indices], upper_bound)
     # assert bins is sorted. satisfied by grid being sorted at the time the unique indices are stored.
-    integrals = jnp.histogram(surface_label_nodes, bins, weights=ds * integrand)[0]
+    integrals = jnp.histogram(surface_label_nodes, bins, weights=ds * integrands)[0]
     return _expand(grid, integrals, surface_label) if match_grid else integrals
 
 
@@ -199,8 +200,8 @@ def surface_averages(
     ndarray
         Surface averages of the given quantity, q, over each surface in grid.
     """
-    numerator = surface_integrals(grid, sqrtg * q, surface_label, match_grid=False)
+    numerator = surface_integrals(grid, sqrtg * q, surface_label)
     if denominator is None:
-        denominator = surface_integrals(grid, sqrtg, surface_label, match_grid=False)
+        denominator = surface_integrals(grid, sqrtg, surface_label)
     averages = numerator / denominator
     return _expand(grid, averages, surface_label) if match_grid else averages

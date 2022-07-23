@@ -5,7 +5,7 @@
  COMPUTATION PARAMETERS: (u = theta, v = zeta)
  ---------------------------------------------
      ns     nu     nv     mu     mv
-    256     18    200      6      3
+    512     18    200      6      3
 
  CONFIGURATION PARAMETERS:
  ---------------------------------------

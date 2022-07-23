@@ -21,7 +21,7 @@ def random_grid():
     return ConcentricGrid(L=L, N=N, M=M, NFP=NFP, sym=sym)
 
 
-def benchmark(grid, integrand, surface_label="rho"):
+def benchmark(grid, integrands, surface_label="rho"):
     """
     More intuitive implementation with loops of bulk surface integral function in compute.utils.
 
@@ -31,7 +31,7 @@ def benchmark(grid, integrand, surface_label="rho"):
     ----------
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
-    integrand : ndarray
+    integrands : ndarray
         Quantity to integrate.
         Should not include the surface differential element ds (dtheta * dzeta for rho surface).
     surface_label : str
@@ -54,12 +54,12 @@ def benchmark(grid, integrand, surface_label="rho"):
     integrals = np.empty(len(unique_indices))
 
     surfaces = dict()
-    # collect collocation node indices for each rho surface
+    # collect collocation node indices for each surface_label surface
     for index_in_grid_column, surface_label_value in enumerate(surface_label_nodes):
         surfaces.setdefault(surface_label_value, list()).append(index_in_grid_column)
     # integration over non-contiguous elements
     for i, surface_indices in enumerate(surfaces.values()):
-        integrals[i] = (ds * integrand)[surface_indices].sum()
+        integrals[i] = (ds * integrands)[surface_indices].sum()
     return integrals, surfaces
 
 
@@ -67,31 +67,27 @@ class TestComputeUtils:
     def test_surface_integrals(self):
         """Test the bulk surface averaging against the more intuitive implementation with loops."""
         grid = random_grid()
-        integrand = np.random.random_sample(size=len(grid.nodes))
+        integrands = np.random.random_sample(size=len(grid.nodes))
 
         def test(surface_label):
-            integrals_1 = benchmark(grid, integrand, surface_label)[0]
-            integrals_2 = surface_integrals(
-                grid, integrand, surface_label, match_grid=False
-            )
+            integrals_1 = benchmark(grid, integrands, surface_label)[0]
+            integrals_2 = surface_integrals(grid, integrands, surface_label)
             assert np.allclose(integrals_1, integrals_2), surface_label + " fail"
 
         test("rho")
         test("zeta")
 
     def test_expand(self):
-        """Test the expand function. Relies on correctness of the surface_integrals function."""
+        """Test the expand function."""
         grid = random_grid()
-        integrand = np.random.random_sample(size=len(grid.nodes))
+        integrands = np.random.random_sample(size=len(grid.nodes))
 
         def test(surface_label):
-            integrals = surface_integrals(
-                grid, integrand, surface_label, match_grid=False
-            )
+            integrals = surface_integrals(grid, integrands, surface_label)
             integrals_match_grid = surface_integrals(
-                grid, integrand, surface_label, match_grid=True
+                grid, integrands, surface_label, match_grid=True
             )
-            surface_indices = benchmark(grid, integrand, surface_label)[1].values()
+            surface_indices = benchmark(grid, integrands, surface_label)[1].values()
             for i, indices in enumerate(surface_indices):
                 for index in indices:
                     assert np.allclose(integrals[i], integrals_match_grid[index]), (
@@ -134,7 +130,7 @@ class TestComputeUtils:
         except FileNotFoundError:
             assert False, "Could not locate equilibrium output file."
 
-        rho = (1 - 1e-3) * np.random.default_rng().random() + 1e-3  # uniform [1e-3, 1)
+        rho = (1 - 1e-4) * np.random.default_rng().random() + 1e-4  # uniform [1e-4, 1)
         grid = LinearGrid(
             M=eq.M_grid,
             N=eq.N_grid,
@@ -144,5 +140,6 @@ class TestComputeUtils:
         )
         B = eq.compute("|B|", grid=grid)["|B|"]
         sqrtg = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
-        B_average = surface_averages(grid, B, sqrtg, match_grid=False)
-        assert np.allclose(B_average, np.mean(sqrtg * B) / np.mean(sqrtg))
+        assert np.allclose(
+            surface_averages(grid, B, sqrtg), np.mean(sqrtg * B) / np.mean(sqrtg)
+        )

@@ -290,9 +290,6 @@ class MagneticWell(_Objective):
     This makes it a useful figure of merit for stellarator operation.
     Systems with positive well parameters are favorable for containment.
 
-    Greene, J.M., 1997. A brief review of magnetic wells.
-    Comments on Plasma Physics and Controlled Fusion, 17, pp.389-402.
-
     Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
     stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
     doi:10.1017/S002237782000121X.
@@ -495,8 +492,10 @@ class MagneticWell(_Objective):
         )
         return {
             "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1),
-            "2. DESC Magnetic Well: rho * d/drho": self._shift_scale(W2),
-            "3. DESC Magnetic Well: V * d/dv": self._shift_scale(W3),
+            "2. DESC Magnetic Well: M. Landreman eq. 3.2 with rho * d/drho": self._shift_scale(
+                W2
+            ),
+            "3. DESC Magnetic Well: M. Landreman eq. 3.2": self._shift_scale(W3),
             "B square average": Bsq_av,
             "d(magnetic pressure average)/drho": dmagnetic_av_drho,
             "d(thermal pressure)/drho": dthermal_drho,

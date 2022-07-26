@@ -453,11 +453,11 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
 
-        dv_drho, __ = self._volume_derivatives(data)
+        dv_drho = self._enclosed_volume(data, dr=1)
         sqrtg = jnp.abs(data["sqrt(g)"])
         sqrtg_r = jnp.abs(data["sqrt(g)_r"])
         Bsq = dot(data["B"], data["B"])
-        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, dv_dsurface=dv_drho)
+        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, denominator=dv_drho)
 
         # pressure = thermal + magnetic
         # The flux surface average function is an additive homomorphism
@@ -475,11 +475,7 @@ class MagneticWell(_Objective):
         unique_rho = compress(self.grid, self.grid.nodes[:, 0])
         W2 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
 
-        # data["V"] is the total volume, not the volume enclosed by the flux surface.
-        # enclosed volume is computed using divergence theorem:
-        # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
-        sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
-        V = jnp.abs(surface_integrals(self.grid, sqrtg_e_sup_rho[:, 2] * data["Z"]))
+        V = self._enclosed_volume(data)
         W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
 
         return {
@@ -500,39 +496,52 @@ class MagneticWell(_Objective):
             "d(total pressure average)/drho": dthermal_drho + dmagnetic_av_drho,
             "d(total pressure average)/dvolume": (dthermal_drho + dmagnetic_av_drho)
             / dv_drho,
-            "d^2(volume)/d(rho)^2": __,
+            "d^2(volume)/d(rho)^2": self._enclosed_volume(data, dr=2),
             "dvolume/drho": dv_drho,
             "volume": V,
             "dtdz": surface_integrals(self.grid, jnp.ones(len(self.grid.nodes))),
         }
 
-    def _volume_derivatives(self, data):
+    # TODO: should add to compute.utils
+    def _enclosed_volume(self, data, dr=0):
         """
-        Returns enclosed volume derivatives wrt rho.
+        Returns enclosed positive volume derivatives wrt rho.
         See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
         Intuitively, this formula makes sense because
         V = integral(dr dt dz * sqrt(g)) and differentiating wrt rho removes
         the dr integral. What remains is a surface integral with a 3D jacobian.
         This is the volume added by a thin shell of constant rho.
 
+        Parameters
+        ----------
+        dr: int
+            Derivative order
+
         Returns
         -------
-        :rtype: (ndarray, ndarray)
-        dv_drho : ndarray
-            1st derivative of volume enclosed by flux surface wrt rho.
-        d2v_drho2 : ndarray
-            2nd derivative of volume enclosed by flux surface wrt rho.
+        ndarray
+            dr derivative of volume enclosed by flux surface wrt rho.
         """
-        dv_drho = surface_integrals(self.grid, jnp.abs(data["sqrt(g)"]))
-        d2v_drho2 = surface_integrals(self.grid, jnp.abs(data["sqrt(g)_r"]))
-        return dv_drho, d2v_drho2
+        if dr == 0:
+            # data["V"] is the total volume, not the volume enclosed by the flux surface.
+            # enclosed volume is computed using divergence theorem:
+            # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
+            sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
+            return jnp.abs(
+                surface_integrals(self.grid, sqrtg_e_sup_rho[:, 2] * data["Z"])
+            )
+        if dr == 1:
+            return surface_integrals(self.grid, jnp.abs(data["sqrt(g)"]))
+        if dr == 2:
+            return surface_integrals(self.grid, jnp.abs(data["sqrt(g)_r"]))
 
+    # TODO:
+    #   How do we want to return these quantities?
+    #   New objectives?
     def Dshear(self, data):
         """M. Landreman Equation 4.17"""
-        return (
-            compress(self.grid, jnp.square(data["iota_r"] / data["psi_r"]))
-            / 16
-            / jnp.pi ** 2
+        return compress(self.grid, jnp.square(data["iota_r"] / data["psi_r"])) / (
+            16 * jnp.pi ** 2
         )
 
     def Dcurr(self, data):
@@ -541,12 +550,12 @@ class MagneticWell(_Objective):
         # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
         A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
 
-        dI_dpsi = (
-            surface_integrals(
-                self.grid, data["B_theta_r"] / data["psi_r"], match_grid=True
-            )
-            / 4
-            / jnp.pi ** 2
+        # TODO: confirm whether this commit
+        #   https://github.com/PlasmaControl/DESC/commit/5d38b9ddb90f7efaed88447d3f19fd7a023c92cd
+        #   altered the computation to just make it simpler, or because the old one gave an incorrect result.
+        #   Mathematically, they should be equivalent if the rho surface is rho = 1.
+        dI_dpsi = surface_averages(
+            self.grid, data["B_theta_r"] / data["psi_r"], match_grid=True
         )
         xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
         # data["G"] = poloidal current
@@ -554,8 +563,7 @@ class MagneticWell(_Objective):
 
         return (
             -sign_G
-            / 16
-            / jnp.pi ** 4
+            / (16 * jnp.pi ** 4)
             * compress(self.grid, data["iota_r"] / data["psi_r"])
             * surface_integrals(self.grid, A * dot(xi, data["B"]))
         )
@@ -568,7 +576,8 @@ class MagneticWell(_Objective):
         # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
         A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
 
-        dv_drho, d2v_drho2 = self._volume_derivatives(data)
+        dv_drho = self._enclosed_volume(data, dr=1)
+        d2v_drho2 = self._enclosed_volume(data, dr=2)
         d2v_dpsi2 = compress(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
             d2v_drho2 - dv_drho * compress(self.grid, data["psi_rr"] / data["psi_r"])
         )
@@ -577,8 +586,7 @@ class MagneticWell(_Objective):
 
         return (
             mu_0
-            / 64
-            / jnp.pi ** 6
+            / (64 * jnp.pi ** 6)
             * dp_dpsi
             * (d2v_dpsi2 - mu_0 * dp_dpsi * surface_integrals(self.grid, A / Bsq))
             * surface_integrals(self.grid, A / grad_psi_sq * Bsq)
@@ -594,14 +602,10 @@ class MagneticWell(_Objective):
         Bsq = dot(data["B"], data["B"])
 
         return (
-            (
-                jnp.square(surface_integrals(self.grid, A * j_dot_b))
-                - surface_integrals(self.grid, A * Bsq)
-                * surface_integrals(self.grid, A * jnp.square(j_dot_b) / Bsq)
-            )
-            / 64
-            / jnp.pi ** 6
-        )
+            jnp.square(surface_integrals(self.grid, A * j_dot_b))
+            - surface_integrals(self.grid, A * Bsq)
+            * surface_integrals(self.grid, A * jnp.square(j_dot_b) / Bsq)
+        ) / (64 * jnp.pi ** 6)
 
 
 class RadialCurrentDensity(_Objective):

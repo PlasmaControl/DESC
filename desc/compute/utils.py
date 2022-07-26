@@ -25,7 +25,7 @@ def _get_proper_surface(grid, surface_label):
     upper_bound : float
         The supremum of the set of all values of the surface_label.
     ds : ndarray
-        The surface differential element (dtheta * dzeta for rho surface)
+        The differential elements (dtheta * dzeta for rho surface)
     """
 
     if surface_label == "rho":
@@ -139,7 +139,7 @@ def expand(grid, x, surface_label="rho"):
     raise ValueError("Surface label must be 'rho', 'theta', or 'zeta'.")
 
 
-def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
+def surface_integrals(grid, integrands=1, surface_label="rho", match_grid=False):
     """
     Bulk surface integral function.
     Computes the surface integral of the specified quantity for all surfaces in the grid.
@@ -150,7 +150,7 @@ def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
         Collocation grid containing the nodes to evaluate at.
     integrands : ndarray
         Quantity to integrate.
-        Should not include the surface differential element ds (dtheta * dzeta for rho surface).
+        Should not include the differential elements (dtheta * dzeta for rho surface).
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
         Defaults to the flux surface label rho.
@@ -192,7 +192,7 @@ def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
 
 
 def surface_averages(
-    grid, q, sqrtg, surface_label="rho", match_grid=False, dv_dsurface=None
+    grid, q, sqrtg=1, surface_label="rho", match_grid=False, denominator=None
 ):
     """
     Bulk surface average function.
@@ -206,7 +206,7 @@ def surface_averages(
     q : ndarray
         Quantity to average.
     sqrtg : ndarray
-        Magnitude of the 3d jacobian determinant, data["sqrt(g)"].
+        Magnitude of the 3d jacobian determinant, data["sqrt(g)"]. Defaults to 1.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
         Defaults to the flux surface label rho.
@@ -216,17 +216,19 @@ def surface_averages(
         True to return an array which assigns every surface integral to all indices in grid.nodes which
         are associated with that surface.
         This array will match the grid's pattern and have length = len(grid.nodes).
-    dv_dsurface : ndarray
-        The denominator of a surface average, d(volume)/d(surface label) does not depend on q.
-        Multiple calls to surface_averages() on the same surface label will recompute this quantity.
-        Some users may prefer to cache the denominator externally and supply it to avoid this.
+    denominator : ndarray
+        The denominator in the surface average is independent of the quantity q.
+        To avoid recomputing it, some users may prefer to cache and supply it.
+        When the sqrt(g) factor is included in the average, the denominator is d(volume)/d(surface label).
+        When the sqrt(g) factor is not included, the denominator is the surface area.
+        See D'haeseleer flux coordinates eq. 4.9.11.
 
     Returns
     -------
     ndarray
         Surface averages of the given quantity, q, over each surface in grid.
     """
-    if dv_dsurface is None:
-        dv_dsurface = surface_integrals(grid, sqrtg, surface_label)
-    averages = surface_integrals(grid, sqrtg * q, surface_label) / dv_dsurface
+    if denominator is None:
+        denominator = surface_integrals(grid, sqrtg, surface_label)
+    averages = surface_integrals(grid, sqrtg * q, surface_label) / denominator
     return expand(grid, averages, surface_label) if match_grid else averages

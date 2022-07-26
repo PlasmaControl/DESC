@@ -55,16 +55,16 @@ def _get_proper_surface(grid, surface_label):
     return surface_label_nodes, unique_indices, upper_bound, ds
 
 
-def condense(grid, x, surface_label="rho"):
+def compress(grid, x, surface_label="rho"):
     """
-    Condense the array x by returning only the elements in x at unique surface_label indices.
+    Compress the array x by returning only the elements in x at unique surface_label indices.
 
     Parameters
     ----------
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
-        The array to downsample.
+        The array to compress.
     surface_label : str
         The surface label of rho, theta, or zeta.
 
@@ -81,7 +81,7 @@ def condense(grid, x, surface_label="rho"):
         return x[grid.unique_zeta_indices]
 
 
-def _expand(grid, x, surface_label="rho"):
+def expand(grid, x, surface_label="rho"):
     """
     Expand the array x by duplicating elements in x to match the grid's pattern.
 
@@ -155,10 +155,10 @@ def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
         The surface label of rho, theta, or zeta to compute integration over.
         Defaults to the flux surface label rho.
     match_grid : bool
-        False to return an array which assigns every surface integral to a single element of the array.
+        False to return a compressed array which assigns every surface integral to a single element.
         This array will have length = number of unique surfaces in the grid.
-        True to return an array which assigns every surface integral to all indices in grid.nodes which
-        are associated with that surface.
+        True to return an expanded array which assigns every surface integral to all indices in
+        grid.nodes which are associated with that surface.
         This array will match the grid's pattern and have length = len(grid.nodes).
 
     Returns
@@ -188,7 +188,7 @@ def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
     bins = jnp.append(surface_label_nodes[unique_indices], upper_bound)
     # assert bins is sorted. satisfied by grid being sorted at the time the unique indices are stored.
     integrals = jnp.histogram(surface_label_nodes, bins, weights=ds * integrands)[0]
-    return _expand(grid, integrals, surface_label) if match_grid else integrals
+    return expand(grid, integrals, surface_label) if match_grid else integrals
 
 
 def surface_averages(
@@ -229,4 +229,4 @@ def surface_averages(
     if dv_dsurface is None:
         dv_dsurface = surface_integrals(grid, sqrtg, surface_label)
     averages = surface_integrals(grid, sqrtg * q, surface_label) / dv_dsurface
-    return _expand(grid, averages, surface_label) if match_grid else averages
+    return expand(grid, averages, surface_label) if match_grid else averages

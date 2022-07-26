@@ -1,6 +1,11 @@
 import pytest
 import numpy as np
-from desc.compute.utils import surface_averages, surface_integrals, _get_proper_surface
+from desc.compute.utils import (
+    compress,
+    surface_averages,
+    surface_integrals,
+    _get_proper_surface,
+)
 from desc.grid import ConcentricGrid, LinearGrid
 import desc.io
 
@@ -87,6 +92,10 @@ class TestComputeUtils:
             integrals_match_grid = surface_integrals(
                 grid, integrands, surface_label, match_grid=True
             )
+            assert np.allclose(
+                integrals, compress(grid, integrals_match_grid, surface_label)
+            ), (surface_label + " fail")
+
             surface_indices = benchmark(grid, integrands, surface_label)[1].values()
             for i, indices in enumerate(surface_indices):
                 for index in indices:

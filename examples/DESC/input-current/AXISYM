@@ -2,7 +2,7 @@
 ! aspect ratio = 3, q0 = 1.1, qa = 3.5, beta = 1%
 
 # global parameters
-sym = 1
+sym = 0
 NFP = 1
 Psi = 1.0
 

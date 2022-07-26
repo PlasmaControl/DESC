@@ -2,8 +2,8 @@
 # It is similar to the VMEC example from Hirshman & Witson 1983
 
 # solver parameters
-sym =  1
-NFP = 12
+sym =  0
+NFP = 1
 Psi =  1.00000000E+00
 
 # spectral resolution

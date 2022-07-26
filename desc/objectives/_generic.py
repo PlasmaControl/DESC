@@ -20,7 +20,7 @@ from desc.compute import (
     cross,
     dot,
 )
-from desc.compute.utils import condense, surface_averages, surface_integrals
+from desc.compute.utils import compress, surface_averages, surface_integrals
 from .objective_funs import _Objective
 
 
@@ -464,7 +464,7 @@ class MagneticWell(_Objective):
         # This means average(a + b) = average(a) + average(b).
         # Thermal pressure is constant over a rho surface.
         # Therefore average(thermal) = thermal.
-        dthermal_drho = 2 * mu_0 * condense(self.grid, data["p_r"])
+        dthermal_drho = 2 * mu_0 * compress(self.grid, data["p_r"])
         dmagnetic_av_drho = (
             surface_integrals(
                 self.grid, sqrtg_r * Bsq + sqrtg * 2 * dot(data["B"], data["B_r"])
@@ -472,7 +472,7 @@ class MagneticWell(_Objective):
             - surface_integrals(self.grid, sqrtg_r) * Bsq_av
         ) / dv_drho
 
-        unique_rho = condense(self.grid, self.grid.nodes[:, 0])
+        unique_rho = compress(self.grid, self.grid.nodes[:, 0])
         W2 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
 
         # data["V"] is the total volume, not the volume enclosed by the flux surface.
@@ -530,7 +530,7 @@ class MagneticWell(_Objective):
     def Dshear(self, data):
         """M. Landreman Equation 4.17"""
         return (
-            condense(self.grid, jnp.square(data["iota_r"] / data["psi_r"]))
+            compress(self.grid, jnp.square(data["iota_r"] / data["psi_r"]))
             / 16
             / jnp.pi ** 2
         )
@@ -556,7 +556,7 @@ class MagneticWell(_Objective):
             -sign_G
             / 16
             / jnp.pi ** 4
-            * condense(self.grid, data["iota_r"] / data["psi_r"])
+            * compress(self.grid, data["iota_r"] / data["psi_r"])
             * surface_integrals(self.grid, A * dot(xi, data["B"]))
         )
 
@@ -569,10 +569,10 @@ class MagneticWell(_Objective):
         A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
 
         dv_drho, d2v_drho2 = self._volume_derivatives(data)
-        d2v_dpsi2 = condense(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
-            d2v_drho2 - dv_drho * condense(self.grid, data["psi_rr"] / data["psi_r"])
+        d2v_dpsi2 = compress(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
+            d2v_drho2 - dv_drho * compress(self.grid, data["psi_rr"] / data["psi_r"])
         )
-        dp_dpsi = condense(self.grid, data["p_r"] / data["psi_r"])
+        dp_dpsi = compress(self.grid, data["p_r"] / data["psi_r"])
         Bsq = dot(data["B"], data["B"])
 
         return (

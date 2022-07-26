@@ -2,8 +2,8 @@
 # It is similar to the VMEC example from Hirshman & Witson 1983
 
 # global parameters
-sym = 1
-NFP = 19
+sym = 0
+NFP = 1
 Psi = 1.0
 
 # spectral resolution

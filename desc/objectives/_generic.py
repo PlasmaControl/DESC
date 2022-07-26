@@ -13,7 +13,6 @@ from desc.compute import (
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
-    compute_contravariant_magnetic_field,
     compute_contravariant_metric_coefficients,
     compute_pressure,
     compute_quasisymmetry_error,
@@ -21,7 +20,7 @@ from desc.compute import (
     cross,
     dot,
 )
-from desc.compute.utils import surface_averages, surface_integrals
+from desc.compute.utils import condense, surface_averages, surface_integrals
 from .objective_funs import _Objective
 
 
@@ -358,14 +357,28 @@ class MagneticWell(_Objective):
             self._current.grid = self.grid
             self._iota = None
 
+        R_derivs = jnp.vstack(
+            (
+                data_index["B_r"]["R_derivs"],
+                data_index["B_theta_r"]["R_derivs"],
+                data_index["J"]["R_derivs"],
+            )
+        )
+        L_derivs = jnp.vstack(
+            (
+                data_index["B_r"]["L_derivs"],
+                data_index["B_theta_r"]["L_derivs"],
+                data_index["J"]["L_derivs"],
+            )
+        )
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["B_r"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=R_derivs, build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["B_r"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=R_derivs, build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["B_r"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=L_derivs, build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -400,12 +413,25 @@ class MagneticWell(_Objective):
         Returns
         -------
         W : ndarray
-            Magnetic well parameter. Systems with positive well parameters are
-            favorable for containment.
+            Magnetic well parameter.
 
             Currently, returns a dictionary of values for debugging purposes.
         """
-        data = compute_contravariant_magnetic_field(
+        # data = compute_contravariant_magnetic_field(
+        #     R_lmn,
+        #     Z_lmn,
+        #     L_lmn,
+        #     i_l,
+        #     c_l,
+        #     Psi,
+        #     self._R_transform,
+        #     self._Z_transform,
+        #     self._L_transform,
+        #     self._iota,
+        #     self._current,
+        # )
+        # Dcurr specific call
+        data = compute_contravariant_current_density(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -418,6 +444,7 @@ class MagneticWell(_Objective):
             self._iota,
             self._current,
         )
+        # end Dcurr specific calls
         data = compute_toroidal_coords(
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
@@ -426,72 +453,43 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
 
+        dv_drho, __ = self._volume_derivatives(data)
         sqrtg = jnp.abs(data["sqrt(g)"])
         sqrtg_r = jnp.abs(data["sqrt(g)_r"])
+        Bsq = dot(data["B"], data["B"])
+        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, dv_dsurface=dv_drho)
+
+        # pressure = thermal + magnetic
+        # The flux surface average function is an additive homomorphism
+        # This means average(a + b) = average(a) + average(b).
+        # Thermal pressure is constant over a rho surface.
+        # Therefore average(thermal) = thermal.
+        dthermal_drho = 2 * mu_0 * condense(self.grid, data["p_r"])
+        dmagnetic_av_drho = (
+            surface_integrals(
+                self.grid, sqrtg_r * Bsq + sqrtg * 2 * dot(data["B"], data["B_r"])
+            )
+            - surface_integrals(self.grid, sqrtg_r) * Bsq_av
+        ) / dv_drho
+
+        unique_rho = condense(self.grid, self.grid.nodes[:, 0])
+        W2 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+
         # data["V"] is the total volume, not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
         # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
         sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
         V = jnp.abs(surface_integrals(self.grid, sqrtg_e_sup_rho[:, 2] * data["Z"]))
-
-        # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
-        # Intuitively, this formula makes sense because
-        # V = integral(drdtdz * sqrt(g)) and differentiating wrt rho removes
-        # the dr integral. What remains is a surface integral with a 3D jacobian.
-        # This is the volume added by a thin shell of constant rho.
-        dv_drho = surface_integrals(self.grid, sqrtg)
-        d2v_drho2 = surface_integrals(self.grid, sqrtg_r)
-        Bsq = dot(data["B"], data["B"])
-        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, denominator=dv_drho)
-        dBsq_drho = 2 * dot(data["B"], data["B_r"])
-
-        # pressure = thermal + magnetic
-        # The flux surface average function is an additive homomorphism;
-        # meaning average(a + b) = average(a) + average(b).
-        # Thermal pressure is constant over a rho surface.
-        # Therefore, average(thermal) = thermal.
-        dthermal_drho = 2 * mu_0 * data["p_r"][self.grid.unique_rho_indices]
-        dmagnetic_av_drho = (
-            surface_integrals(self.grid, sqrtg_r * Bsq + sqrtg * dBsq_drho)
-            - surface_integrals(self.grid, sqrtg_r) * Bsq_av
-        ) / dv_drho
-
-        W2 = (
-            self.grid.nodes[self.grid.unique_rho_indices, 0]
-            * (dthermal_drho + dmagnetic_av_drho)
-            / Bsq_av
-        )
         W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
 
-        # Dwell from M. Landreman and R. Jorge eq. 4.19
-        psi_r_sq = jnp.square(data["psi_r"])
-        dp_dpsi = (data["p_r"] / data["psi_r"])[self.grid.unique_rho_indices]
-        grad_psi_sq = data["g^rr"] * psi_r_sq
-        # ds / |grad(psi)| / dtdz = |sqrt(g) * grad(rho) / grad(psi)|
-        ds_over_grad_psi_over_dtdz = sqrtg / jnp.abs(data["psi_r"])
-        W1 = (
-            mu_0
-            / 64
-            / jnp.pi ** 6
-            * dp_dpsi
-            * surface_integrals(
-                self.grid, ds_over_grad_psi_over_dtdz / grad_psi_sq * Bsq
-            )
-            * (
-                (
-                    d2v_drho2
-                    - dv_drho
-                    * (data["psi_rr"] / data["psi_r"])[self.grid.unique_rho_indices]
-                )
-                / psi_r_sq[self.grid.unique_rho_indices]
-                * jnp.sign(data["psi"][self.grid.unique_rho_indices])
-                - mu_0
-                * dp_dpsi
-                * surface_integrals(self.grid, ds_over_grad_psi_over_dtdz / Bsq)
-            )
-        )
         return {
-            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(W1),
+            "Dshear": (a := self.Dshear(data)),
+            "Dcurr": (b := self.Dcurr(data)),
+            "Dgeod": (c := self.Dgeod(data)),
+            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(
+                d := self.Dwell(data)
+            ),
+            "Mercier": a + b + c + d,
             "2. DESC Magnetic Well: M. Landreman eq. 3.2 with rho * d/drho": self._shift_scale(
                 W2
             ),
@@ -502,11 +500,108 @@ class MagneticWell(_Objective):
             "d(total pressure average)/drho": dthermal_drho + dmagnetic_av_drho,
             "d(total pressure average)/dvolume": (dthermal_drho + dmagnetic_av_drho)
             / dv_drho,
-            "d^2(volume)/d(rho)^2": d2v_drho2,
+            "d^2(volume)/d(rho)^2": __,
             "dvolume/drho": dv_drho,
             "volume": V,
             "dtdz": surface_integrals(self.grid, jnp.ones(len(self.grid.nodes))),
         }
+
+    def _volume_derivatives(self, data):
+        """
+        Returns enclosed volume derivatives wrt rho.
+        See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
+        Intuitively, this formula makes sense because
+        V = integral(dr dt dz * sqrt(g)) and differentiating wrt rho removes
+        the dr integral. What remains is a surface integral with a 3D jacobian.
+        This is the volume added by a thin shell of constant rho.
+
+        Returns
+        -------
+        :rtype: (ndarray, ndarray)
+        dv_drho : ndarray
+            1st derivative of volume enclosed by flux surface wrt rho.
+        d2v_drho2 : ndarray
+            2nd derivative of volume enclosed by flux surface wrt rho.
+        """
+        dv_drho = surface_integrals(self.grid, jnp.abs(data["sqrt(g)"]))
+        d2v_drho2 = surface_integrals(self.grid, jnp.abs(data["sqrt(g)_r"]))
+        return dv_drho, d2v_drho2
+
+    def Dshear(self, data):
+        """M. Landreman Equation 4.17"""
+        return (
+            condense(self.grid, jnp.square(data["iota_r"] / data["psi_r"]))
+            / 16
+            / jnp.pi ** 2
+        )
+
+    def Dcurr(self, data):
+        """M. Landreman Equation 4.18"""
+        # grad(psi) = grad(rho) * dpsi/drho
+        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+
+        dI_dpsi = (
+            surface_integrals(
+                self.grid, data["B_theta_r"] / data["psi_r"], match_grid=True
+            )
+            / 4
+            / jnp.pi ** 2
+        )
+        xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
+        # data["G"] = poloidal current
+        sign_G = jnp.sign(surface_integrals(self.grid, data["B_zeta"]))
+
+        return (
+            -sign_G
+            / 16
+            / jnp.pi ** 4
+            * condense(self.grid, data["iota_r"] / data["psi_r"])
+            * surface_integrals(self.grid, A * dot(xi, data["B"]))
+        )
+
+    def Dwell(self, data):
+        """M. Landreman Equation 4.19"""
+        # grad(psi) = grad(rho) * dpsi/drho
+        psi_r_sq = jnp.square(data["psi_r"])
+        grad_psi_sq = data["g^rr"] * psi_r_sq
+        # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
+
+        dv_drho, d2v_drho2 = self._volume_derivatives(data)
+        d2v_dpsi2 = condense(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
+            d2v_drho2 - dv_drho * condense(self.grid, data["psi_rr"] / data["psi_r"])
+        )
+        dp_dpsi = condense(self.grid, data["p_r"] / data["psi_r"])
+        Bsq = dot(data["B"], data["B"])
+
+        return (
+            mu_0
+            / 64
+            / jnp.pi ** 6
+            * dp_dpsi
+            * (d2v_dpsi2 - mu_0 * dp_dpsi * surface_integrals(self.grid, A / Bsq))
+            * surface_integrals(self.grid, A / grad_psi_sq * Bsq)
+        )
+
+    def Dgeod(self, data):
+        """M. Landreman Equation 4.20"""
+        # grad(psi) = grad(rho) * dpsi/drho
+        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+
+        j_dot_b = mu_0 * dot(data["J"], data["B"])
+        Bsq = dot(data["B"], data["B"])
+
+        return (
+            (
+                jnp.square(surface_integrals(self.grid, A * j_dot_b))
+                - surface_integrals(self.grid, A * Bsq)
+                * surface_integrals(self.grid, A * jnp.square(j_dot_b) / Bsq)
+            )
+            / 64
+            / jnp.pi ** 6
+        )
 
 
 class RadialCurrentDensity(_Objective):

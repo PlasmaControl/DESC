@@ -55,6 +55,32 @@ def _get_proper_surface(grid, surface_label):
     return surface_label_nodes, unique_indices, upper_bound, ds
 
 
+def condense(grid, x, surface_label="rho"):
+    """
+    Condense the array x by returning only the elements in x at unique surface_label indices.
+
+    Parameters
+    ----------
+    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+    x : ndarray
+        The array to downsample.
+    surface_label : str
+        The surface label of rho, theta, or zeta.
+
+    Returns
+    -------
+    ndarray
+        x[unique_surface_label_indices].
+    """
+    if surface_label == "rho":
+        return x[grid.unique_rho_indices]
+    if surface_label == "theta":
+        return x[grid.unique_theta_indices]
+    if surface_label == "zeta":
+        return x[grid.unique_zeta_indices]
+
+
 def _expand(grid, x, surface_label="rho"):
     """
     Expand the array x by duplicating elements in x to match the grid's pattern.
@@ -166,7 +192,7 @@ def surface_integrals(grid, integrands, surface_label="rho", match_grid=False):
 
 
 def surface_averages(
-    grid, q, sqrtg, surface_label="rho", match_grid=False, denominator=None
+    grid, q, sqrtg, surface_label="rho", match_grid=False, dv_dsurface=None
 ):
     """
     Bulk surface average function.
@@ -190,8 +216,8 @@ def surface_averages(
         True to return an array which assigns every surface integral to all indices in grid.nodes which
         are associated with that surface.
         This array will match the grid's pattern and have length = len(grid.nodes).
-    denominator : ndarray
-        The denominator of a surface average does not depend on the quantity q.
+    dv_dsurface : ndarray
+        The denominator of a surface average, d(volume)/d(surface label) does not depend on q.
         Multiple calls to surface_averages() on the same surface label will recompute this quantity.
         Some users may prefer to cache the denominator externally and supply it to avoid this.
 
@@ -200,8 +226,7 @@ def surface_averages(
     ndarray
         Surface averages of the given quantity, q, over each surface in grid.
     """
-    numerator = surface_integrals(grid, sqrtg * q, surface_label)
-    if denominator is None:
-        denominator = surface_integrals(grid, sqrtg, surface_label)
-    averages = numerator / denominator
+    if dv_dsurface is None:
+        dv_dsurface = surface_integrals(grid, sqrtg, surface_label)
+    averages = surface_integrals(grid, sqrtg * q, surface_label) / dv_dsurface
     return _expand(grid, averages, surface_label) if match_grid else averages

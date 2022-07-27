@@ -10,6 +10,25 @@ from desc.grid import ConcentricGrid, LinearGrid
 import desc.io
 
 
+def load_eq(name):
+    """
+    Parameters
+    ----------
+    name : str
+        Name of the equilibrium.
+
+    Returns
+    -------
+    eq : Equilibrium
+        The equilibrium.
+    """
+    try:
+        eq = desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
+    except FileNotFoundError:
+        assert False, "Could not locate equilibrium output file."
+    return eq
+
+
 def random_grid(NFP=None, sym=None):
     """
     NFP: int
@@ -59,6 +78,7 @@ def benchmark(grid, integrands=1, surface_label="rho"):
         Keys are unique surface label values.
         Values are list of indices the key appears at in grid.nodes column.
     """
+    integrands = np.asarray(integrands)  # to use fancy indexing
 
     surface_label_nodes, unique_indices, upper_bound, ds = _get_proper_surface(
         grid, surface_label
@@ -89,21 +109,36 @@ class TestComputeUtils:
         test("rho")
         test("zeta")
 
-    def test_surface_area(self):
-        """Test the surface area is computed correctly."""
+    def test_surface_area_unweighted(self):
+        """Test the surface area without the sqrt(g) factor is computed correctly."""
         grid = random_grid(NFP=1, sym=False)  # for the grid bugs
 
-        def test(surface_label, max_area):
+        def test(surface_label, area):
             areas_1 = benchmark(grid, surface_label=surface_label)[0]
             areas_2 = surface_integrals(grid, surface_label=surface_label)
             assert np.allclose(areas_1, areas_2), surface_label + ", fail"
-            assert np.allclose(areas_2, np.sort(areas_2)), (
-                surface_label + ", area not increasing"
-            )
-            assert np.isclose(areas_2[-1], max_area), surface_label + ", max area fail"
+            assert np.allclose(areas_2, area), surface_label + ", unweighted area fail"
 
         test("rho", 4 * np.pi ** 2)
         test("zeta", 2 * np.pi)
+
+    def test_surface_area_weighted(self):
+        """Test the rho surface area with the sqrt(g) factor is monotonic."""
+        eq = load_eq("HELIOTRON")
+        grid = ConcentricGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
+            node_pattern=eq.node_pattern,
+        )
+        sqrtg = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
+
+        areas_1 = benchmark(grid, sqrtg)[0]
+        areas_2 = surface_integrals(grid, sqrtg)
+        assert np.allclose(areas_1, areas_2)
+        assert np.allclose(areas_2, np.sort(areas_2)), "weighted area not monotonic"
 
     def test_expand(self):
         """Test the expand function."""
@@ -134,11 +169,7 @@ class TestComputeUtils:
         Test that all surface averages of a flux surface function are identity operations.
         Relies on correctness of the surface_integrals and _expand functions.
         """
-        try:
-            eq = desc.io.load("examples/DESC/" + "HELIOTRON" + "_output.h5")[-1]
-        except FileNotFoundError:
-            assert False, "Could not locate equilibrium output file."
-
+        eq = load_eq("HELIOTRON")
         grid = ConcentricGrid(
             L=eq.L_grid,
             M=eq.M_grid,
@@ -157,11 +188,7 @@ class TestComputeUtils:
         Test that surface average on LinearGrid with single rho surface matches mean() shortcut.
         Relies on correctness of surface_integrals.
         """
-        try:
-            eq = desc.io.load("examples/DESC/" + "HELIOTRON" + "_output.h5")[-1]
-        except FileNotFoundError:
-            assert False, "Could not locate equilibrium output file."
-
+        eq = load_eq("HELIOTRON")
         rho = (1 - 1e-4) * np.random.default_rng().random() + 1e-4  # uniform [1e-4, 1)
         grid = LinearGrid(
             M=eq.M_grid,

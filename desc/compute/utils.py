@@ -1,4 +1,3 @@
-import numpy as np
 import os
 
 from desc.backend import jnp
@@ -105,6 +104,7 @@ def expand(grid, x, surface_label="rho"):
 
     # assert len(x) == grid.num_ of the surface_label
     # TODO: confirm this is standard way to get whether user has jax
+    #   and that desc.backend.jnp is an alias for numpy when user doesn't have jax
     no_jax = os.environ.get("DESC_BACKEND") == "numpy"
     number_nodes_zeta_surface = len(grid.nodes) // grid.num_zeta
 
@@ -116,7 +116,9 @@ def expand(grid, x, surface_label="rho"):
             grid.unique_rho_indices, append=number_nodes_zeta_surface
         )
         if no_jax:
-            return np.tile(np.repeat(x, repeats=theta_node_repeats), reps=grid.num_zeta)
+            return jnp.tile(
+                jnp.repeat(x, repeats=theta_node_repeats), reps=grid.num_zeta
+            )
         return jnp.tile(
             jnp.repeat(
                 x,
@@ -131,7 +133,7 @@ def expand(grid, x, surface_label="rho"):
 
     if surface_label == "zeta":
         if no_jax:
-            return np.repeat(x, repeats=number_nodes_zeta_surface)
+            return jnp.repeat(x, repeats=number_nodes_zeta_surface)
         return jnp.repeat(
             x, repeats=number_nodes_zeta_surface, total_repeat_length=len(grid.nodes)
         )
@@ -163,7 +165,7 @@ def surface_integrals(grid, integrands=1, surface_label="rho", match_grid=False)
 
     Returns
     -------
-    ndarray
+    integrals : ndarray
         Surface integrals of integrand over each surface in grid.
     """
 
@@ -220,15 +222,16 @@ def surface_averages(
         The denominator in the surface average is independent of the quantity q.
         To avoid recomputing it, some users may prefer to cache and supply it.
         When the sqrt(g) factor is included in the average, the denominator is d(volume)/d(surface label).
-        When the sqrt(g) factor is not included, the denominator is the surface area.
+        When the sqrt(g) factor is not included, the denominator is the unweighted surface area.
         See D'haeseleer flux coordinates eq. 4.9.11.
 
     Returns
     -------
-    ndarray
+    averages : ndarray
         Surface averages of the given quantity, q, over each surface in grid.
     """
     if denominator is None:
+        # sqrt(g) = 1 -> denominator = array of 4pi^2 for rho surface, 2pi for other surface.
         denominator = surface_integrals(grid, sqrtg, surface_label)
     averages = surface_integrals(grid, sqrtg * q, surface_label) / denominator
     return expand(grid, averages, surface_label) if match_grid else averages

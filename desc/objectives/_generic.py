@@ -553,9 +553,12 @@ class MagneticWell(_Objective):
         # TODO: confirm whether this commit
         #   https://github.com/PlasmaControl/DESC/commit/5d38b9ddb90f7efaed88447d3f19fd7a023c92cd
         #   altered the computation to just make it simpler, or because the old one gave an incorrect result.
-        #   Mathematically, they should be equivalent if the rho surface is rho = 1.
+        #   Mathematically, they should be equivalent.
         dI_dpsi = surface_averages(
-            self.grid, data["B_theta_r"] / data["psi_r"], match_grid=True
+            self.grid,
+            data["B_theta_r"] / data["psi_r"],
+            match_grid=True,
+            denominator=4 * jnp.pi ** 2,
         )
         xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
         # data["G"] = poloidal current

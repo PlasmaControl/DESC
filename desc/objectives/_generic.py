@@ -17,10 +17,14 @@ from desc.compute import (
     compute_pressure,
     compute_quasisymmetry_error,
     compute_toroidal_coords,
-    cross,
     dot,
 )
-from desc.compute.utils import compress, surface_averages, surface_integrals
+from desc.compute.utils import (
+    compress,
+    enclosed_volumes,
+    surface_averages,
+    surface_integrals,
+)
 from .objective_funs import _Objective
 
 
@@ -453,7 +457,7 @@ class MagneticWell(_Objective):
             R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
         )
 
-        dv_drho = self._enclosed_volume(data, dr=1)
+        dv_drho = enclosed_volumes(self.grid, data, dr=1)
         sqrtg = jnp.abs(data["sqrt(g)"])
         sqrtg_r = jnp.abs(data["sqrt(g)_r"])
         Bsq = dot(data["B"], data["B"])
@@ -473,87 +477,39 @@ class MagneticWell(_Objective):
         ) / dv_drho
 
         unique_rho = compress(self.grid, self.grid.nodes[:, 0])
-        W2 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+        W1 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
 
-        V = self._enclosed_volume(data)
-        W3 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
+        V = enclosed_volumes(self.grid, data)
+        W2 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
 
         return {
-            "Dshear": (a := self.Dshear(data)),
-            "Dcurr": (b := self.Dcurr(data)),
-            "Dgeod": (c := self.Dgeod(data)),
-            "1. DESC Magnetic Well: M. Landreman eq. 4.19": self._shift_scale(
-                d := self.Dwell(data)
+            "DESC DShear": (a := self.DShear(data)),
+            "DESC DCurr": (b := self.DCurr(data)),
+            "DESC DWell": self._shift_scale(c := self.DWell(data)),
+            "DESC DGeod": (d := self.DGeod(data)),
+            "DESC DMerc": a + b + c + d,
+            "1. DESC Well: M. Landreman eq. 3.2 with rho * d/drho": self._shift_scale(
+                W1
             ),
-            "Mercier": a + b + c + d,
-            "2. DESC Magnetic Well: M. Landreman eq. 3.2 with rho * d/drho": self._shift_scale(
-                W2
-            ),
-            "3. DESC Magnetic Well: M. Landreman eq. 3.2": self._shift_scale(W3),
-            "B square average": Bsq_av,
-            "d(magnetic pressure average)/drho": dmagnetic_av_drho,
-            "d(thermal pressure)/drho": dthermal_drho,
-            "d(total pressure average)/drho": dthermal_drho + dmagnetic_av_drho,
-            "d(total pressure average)/dvolume": (dthermal_drho + dmagnetic_av_drho)
-            / dv_drho,
-            "d^2(volume)/d(rho)^2": self._enclosed_volume(data, dr=2),
-            "dvolume/drho": dv_drho,
+            "2. DESC Well: M. Landreman eq. 3.2": self._shift_scale(W2),
             "volume": V,
-            "dtdz": surface_integrals(self.grid, jnp.ones(len(self.grid.nodes))),
         }
-
-    # TODO: should add to compute.utils
-    def _enclosed_volume(self, data, dr=0):
-        """
-        Returns enclosed positive volume derivatives wrt rho.
-        See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
-        Intuitively, this formula makes sense because
-        V = integral(dr dt dz * sqrt(g)) and differentiating wrt rho removes
-        the dr integral. What remains is a surface integral with a 3D jacobian.
-        This is the volume added by a thin shell of constant rho.
-
-        Parameters
-        ----------
-        dr: int
-            Derivative order
-
-        Returns
-        -------
-        ndarray
-            dr derivative of volume enclosed by flux surface wrt rho.
-        """
-        if dr == 0:
-            # data["V"] is the total volume, not the volume enclosed by the flux surface.
-            # enclosed volume is computed using divergence theorem:
-            # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
-            sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
-            return jnp.abs(
-                surface_integrals(self.grid, sqrtg_e_sup_rho[:, 2] * data["Z"])
-            )
-        if dr == 1:
-            return surface_integrals(self.grid, jnp.abs(data["sqrt(g)"]))
-        if dr == 2:
-            return surface_integrals(self.grid, jnp.abs(data["sqrt(g)_r"]))
 
     # TODO:
     #   How do we want to return these quantities?
     #   New objectives?
-    def Dshear(self, data):
+    def DShear(self, data):
         """M. Landreman Equation 4.17"""
         return compress(self.grid, jnp.square(data["iota_r"] / data["psi_r"])) / (
             16 * jnp.pi ** 2
         )
 
-    def Dcurr(self, data):
+    def DCurr(self, data):
         """M. Landreman Equation 4.18"""
         # grad(psi) = grad(rho) * dpsi/drho
         # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
         A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
 
-        # TODO: confirm whether this commit
-        #   https://github.com/PlasmaControl/DESC/commit/5d38b9ddb90f7efaed88447d3f19fd7a023c92cd
-        #   altered the computation to just make it simpler, or because the old one gave an incorrect result.
-        #   Mathematically, they should be equivalent.
         dI_dpsi = surface_averages(
             self.grid,
             data["B_theta_r"] / data["psi_r"],
@@ -571,7 +527,7 @@ class MagneticWell(_Objective):
             * surface_integrals(self.grid, A * dot(xi, data["B"]))
         )
 
-    def Dwell(self, data):
+    def DWell(self, data):
         """M. Landreman Equation 4.19"""
         # grad(psi) = grad(rho) * dpsi/drho
         psi_r_sq = jnp.square(data["psi_r"])
@@ -579,8 +535,8 @@ class MagneticWell(_Objective):
         # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
         A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
 
-        dv_drho = self._enclosed_volume(data, dr=1)
-        d2v_drho2 = self._enclosed_volume(data, dr=2)
+        dv_drho = enclosed_volumes(self.grid, data, dr=1)
+        d2v_drho2 = enclosed_volumes(self.grid, data, dr=2)
         d2v_dpsi2 = compress(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
             d2v_drho2 - dv_drho * compress(self.grid, data["psi_rr"] / data["psi_r"])
         )
@@ -595,7 +551,7 @@ class MagneticWell(_Objective):
             * surface_integrals(self.grid, A / grad_psi_sq * Bsq)
         )
 
-    def Dgeod(self, data):
+    def DGeod(self, data):
         """M. Landreman Equation 4.20"""
         # grad(psi) = grad(rho) * dpsi/drho
         # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz

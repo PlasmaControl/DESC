@@ -235,3 +235,50 @@ def surface_averages(
         denominator = surface_integrals(grid, sqrtg, surface_label)
     averages = surface_integrals(grid, sqrtg * q, surface_label) / denominator
     return expand(grid, averages, surface_label) if match_grid else averages
+
+
+def enclosed_volumes(grid, data, dr=0, match_grid=False):
+    """
+    Returns enclosed positive volume derivatives wrt rho of each rho surface in grid.
+
+    Parameters
+    ----------
+    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors and toroidal coords.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
+    dr : int
+        Enclosed volume derivative order to return.
+    match_grid : bool
+        False to return an array which assigns every surface integral to a single element of the array.
+        This array will have length = number of unique surfaces in the grid.
+        True to return an array which assigns every surface integral to all indices in grid.nodes which
+        are associated with that surface.
+        This array will match the grid's pattern and have length = len(grid.nodes).
+
+    Returns
+    -------
+    ndarray
+        Specified derivative of volume enclosed by flux surface wrt rho.
+    """
+    if dr == 0:
+        from desc.compute import cross
+
+        # data["V"] is the total volume, not the volume enclosed by the flux surface.
+        # enclosed volume is computed using divergence theorem:
+        # volume integral(div [0, 0, Z] = 1) = surface integral([0, 0, Z] dot ds)
+        sqrtg_e_sup_rho = cross(data["e_theta"], data["e_zeta"])
+        V = jnp.abs(surface_integrals(grid, sqrtg_e_sup_rho[:, 2] * data["Z"]))
+        return expand(grid, V) if match_grid else V
+    if dr == 1:
+        # See D'haeseleer flux coordinates eq. 4.9.10 for dv/d(flux label).
+        # Intuitively, this formula makes sense because
+        # V = integral(dr dt dz * sqrt(g)) and differentiating wrt rho removes
+        # the dr integral. What remains is a surface integral with a 3D jacobian.
+        # This is the volume added by a thin shell of constant rho.
+        dv_drho = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        return expand(grid, dv_drho) if match_grid else dv_drho
+    if dr == 2:
+        d2v_drho2 = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
+        return expand(grid, d2v_drho2) if match_grid else d2v_drho2

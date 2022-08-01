@@ -34,14 +34,18 @@ class ObjectiveFunction(IOAble):
 
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
+        if len(objectives) == 0:
+            self._objectives = []
+            self._built = True
+            self._compiled = True
+        else:
+            self._objectives = objectives
+            self._use_jit = use_jit
+            self._built = False
+            self._compiled = False
 
-        self._objectives = objectives
-        self._use_jit = use_jit
-        self._built = False
-        self._compiled = False
-
-        if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            if eq is not None:
+                self.build(eq, use_jit=self._use_jit, verbose=verbose)
     
     def combine_args(self,objectives):
         #self._set_state_vector()

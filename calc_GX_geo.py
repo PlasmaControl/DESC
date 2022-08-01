@@ -25,7 +25,9 @@ from scipy.constants import mu_0
 
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
-path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
+#path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
+#path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
+path = '/scratch/gpfs/pk2354/DESC/desc/examples/W7X_output.h5'
 psi = 0.5
 alpha = 0
 npol = 1.0
@@ -38,9 +40,16 @@ iota_data = eq.compute('iota', grid=grid_1d)
 fi = interp1d(grid_1d.nodes[:,0],iota_data['iota'])
 
 psib = eq.compute('psi')["psi"][-1]
+if psib < 0:
+    sgn = False
+    psib = np.abs(psib)
+else:
+    sgn = True
+
 rho = np.sqrt(psi)
 iota = fi(rho)
-zeta = np.linspace(-np.pi*npol,np.pi*npol,2*nzgrid+1)
+print(psib)
+zeta = np.linspace(-np.pi*npol/iota,np.pi*npol/iota,2*nzgrid+1)
 thetas = alpha*np.ones(len(zeta)) + iota*zeta
 
 rhoa = rho*np.ones(len(zeta))
@@ -53,12 +62,14 @@ Lref = eq.compute('a')['a']
 #Lref = 1.19836555357704
 Bref = 2*psib/Lref**2
 
+print(eq.compute('sqrt(g)',grid=grid)['sqrt(g)'])
+
 #calculate bmag
 modB = eq.compute('|B|',grid=grid)['|B|']
 bmag = modB/Bref
 
 #calculate gradpar and grho
-gradpar  = -Lref*eq.compute('B^zeta',grid=grid)['B^zeta']/modB
+gradpar  = Lref*eq.compute('B^zeta',grid=grid)['B^zeta']/modB
 grho = eq.compute('|grad(rho)|',grid=grid)['|grad(rho)|']*Lref
 
 #calculate grad_psi and grad_alpha
@@ -89,7 +100,7 @@ x = Lref * rho
 shat = -x/iota_data['iota'][0] * shear[0]/Lref
 gds2 = grad_alpha**2 * Lref**2 *psi
 #gds21 with negative sign?
-gds21 = -shat/Bref * grad_psi_dot_grad_alpha
+gds21 = shat/Bref * grad_psi_dot_grad_alpha
 gds22 = (shat/(Lref*Bref))**2 /psi * grad_psi**2*grad['g^rr']
 
 #calculate gbdrift0 and cvdrift0
@@ -100,7 +111,7 @@ dB_z = eq.compute('|B|_z',grid=grid)['|B|_z']
 jac = eq.compute('sqrt(g)',grid=grid)['sqrt(g)']
 #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
 #gbdrift0 with negative sign?
-gbdrift0 = -shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
+gbdrift0 = shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
 cvdrift0 = gbdrift0
 #%%
 #calculate gbdrift and cvdrift
@@ -196,6 +207,13 @@ gbdrift0_gx = interp_to_new_grid(gbdrift0,z_on_theta_grid,uniform_zgrid)
 cvdrift_gx = interp_to_new_grid(cvdrift,z_on_theta_grid,uniform_zgrid)
 cvdrift0_gx = interp_to_new_grid(cvdrift0,z_on_theta_grid,uniform_zgrid)
 gradpar_gx = gradpar_temp
+
+if sgn:
+    gds21_gx = -gds21_gx
+    gbdrift_gx = -gbdrift_gx
+    gbdrift0_gx = -gbdrift0_gx
+    cvdrift_gx = -cvdrift_gx
+    cvdrift0_gx = -cvdrift0_gx
 
 #%% Make gx input file
 gxgridNA  = "gxinput2.out"

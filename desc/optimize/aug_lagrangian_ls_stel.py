@@ -30,7 +30,7 @@ from desc.optimize.least_squares import lsqtr
 #from desc.objective_funs import AugLagrangian
 from desc.derivatives import Derivative
 #from desc.objective_funs import AugLagrangianLS
-from desc.objectives.auglagrangian_objectives import AugLagrangianLS
+from desc.objectives.auglagrangian_objectives import AugLagrangianLS2
 # def gradL(x,fun,lmbda,mu,c,gradc):
 #     return
 
@@ -61,6 +61,7 @@ def conv_test(x,L,gL):
 def fmin_lag_ls_stel(
     fun,
     x0,
+    lmbda0,
     mu0,
     grad,
     eq_constr,
@@ -122,7 +123,7 @@ def fmin_lag_ls_stel(
         
     constr = np.array([wrapped_constraint])         
 
-    L = AugLagrangianLS(wrapped_obj, constr)
+    L = AugLagrangianLS2(wrapped_obj, constr)
     gradL = Derivative(L.compute,0,"fwd")
     hessL = Derivative(L.compute,argnum=0,mode="hess")
     
@@ -133,14 +134,16 @@ def fmin_lag_ls_stel(
     # gradL = Derivative(L.compute,0,"fwd")
     
     mu = mu0
+    lmbda = lmbda0
     gtolk = 1/(10*np.linalg.norm(mu0))
     ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
     xold = x
-    
+    f = fun(recover(x))
+    fold = f
     
     while iteration < maxiter:
         #print(gtolk)
-        xk = lsqtr(L.compute,x,gradL,args=(mu,),gtol=gtolk,maxiter = int(4*maxiter),verbose=2)
+        xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter = int(10),verbose=2)
         x = xk['x']
 
         c = 0
@@ -150,29 +153,42 @@ def fmin_lag_ls_stel(
         
         # c = np.sqrt(c)
         
+        f = fun(recover(x))
         cv = L.compute_constraints(x)
         c = np.linalg.norm(cv)
-        
+        print("The slack variable is now: " + str(x[len(x)-1]))
+
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break        
         
-        if c < ctolk:
 
-            if c < ctol and conv_test(x,L.compute(x,mu),gradL(x,mu)) < gtol:
+        if (np.linalg.norm(f) - np.linalg.norm(fold))/np.linalg.norm(fold) > 0.1:
+            mu = mu / 2
+            print("Decreasing mu. mu is now " + str(np.mean(mu)))
+        elif c < ctolk:
+
+            if c < ctol and conv_test(x,L.compute(x,lmbda,mu),gradL(x,lmbda,mu)) < gtol:
                 break
 
             else:
-                ctolk = ctolk/(np.linalg.norm(mu)**(0.9))
-                gtolk = gtolk/np.linalg.norm(mu)
+                print("Updating lambda")
+                lmbda = lmbda - mu*cv
+                #ctolk = ctolk/(np.linalg.norm(mu)**(0.9))
+                #gtolk = gtolk/np.linalg.norm(mu)
+                ctolk = ctolk/(np.max(mu)**(0.9))
+                gtolk = gtolk/(np.max(mu))
         else:
-            mu = 100 * mu
-            ctolk = 1/(np.linalg.norm(mu)**(0.1))
-            gtolk = gtolk/np.linalg.norm(mu)
+             mu = 5 * mu
+             #ctolk = 1/(np.linalg.norm(mu)**(0.1))
+             #gtolk = gtolk/np.linalg.norm(mu)
+             ctolk = 1/(np.max(mu)**(0.1))
+             gtolk = gtolk/np.max(mu)
         
         
         iteration = iteration + 1
         xold = x
+        fold = f
         #print(fun(x))
         #print("\n")
         #print(x)
@@ -180,11 +196,12 @@ def fmin_lag_ls_stel(
         
         print("The objective function is " + str(np.linalg.norm(f)))
         print("The constraints are " + str(c))
+        print("The aspect ratio constraint is " + str(cv[-1]))
         print("x is " + str(recover(x)))
         print("The iteration is " + str(iteration))
         #xr = recover(x)
     #return [fun(xr),xr,mu,c,gradL(x,mu)]
-    g = gradL(x,mu)
+    g = gradL(x,lmbda,mu)
     f = fun(recover(x))
     success = True
     message = "successful"

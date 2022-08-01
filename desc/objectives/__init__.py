@@ -10,7 +10,8 @@ from .linear_objectives import (
 from .auglagrangian_objectives import (
     AugLagrangian,
     AugLagrangianLS,
-    ExLagrangian  
+    ExLagrangian,
+    AugLagrangianLS2
         
 )
 from ._generic import (

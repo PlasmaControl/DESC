@@ -298,10 +298,9 @@ class Optimizer(IOAble):
             #     solve_options=solve_options,
             # )
             constraint_objectives = ObjectiveFunction(nonlinear_constraints, eq)
-            if len(equality_constraints) != 0:
-                equality_objectives = ObjectiveFunction(equality_constraints,eq)
-            if len(inequality_constraints) != 0:
-                inequality_objectives = ObjectiveFunction(inequality_constraints,eq)
+            equality_objectives = ObjectiveFunction(equality_constraints,eq)
+            
+            inequality_objectives = ObjectiveFunction(inequality_constraints,eq)
             
             #MESSY, MUST FIX
             if not objective.built:
@@ -319,8 +318,10 @@ class Optimizer(IOAble):
             #objective.add_linear_args(ObjectiveFunction(linear_constraints,eq))
             # print("The objective args are " + str(objective.args))
             objective.combine_args(constraint_objectives)
-            objective.combine_args(inequality_objectives)
-            objective.combine_args(equality_objectives)
+            if len(inequality_constraints) != 0:
+                objective.combine_args(inequality_objectives)
+            if len(equality_constraints) != 0:
+                objective.combine_args(equality_objectives)
             # print("The objective args are " + str(objective.args))
             
         if not objective.built:
@@ -405,7 +406,7 @@ class Optimizer(IOAble):
             
         def compute_ineq_constraints_wrapped(x_reduced):
             x = recover(x_reduced)
-            c = 0.001*inequality_objectives.compute(x)
+            c = inequality_objectives.compute(x)
             return c
         
         def compute_constraints_scalar_wrapped(x_reduced):
@@ -648,9 +649,15 @@ class Optimizer(IOAble):
            
             gradconstr = jnp.array([])
             gradineq = jnp.array([])
-            constr = np.array([compute_eq_constraints_wrapped])
-            ineq = np.array([compute_ineq_constraints_wrapped])
-            
+
+            if len(equality_constraints) != 0:
+                constr = np.array([compute_eq_constraints_wrapped])
+            else:
+                constr = np.array([])
+            if len(inequality_constraints) != 0:
+                ineq = np.array([compute_ineq_constraints_wrapped])
+            else:
+                ineq = np.array([])
             l = 0
             il = 0
             for i in range(len(constr)):
@@ -663,22 +670,23 @@ class Optimizer(IOAble):
             
             # lmbda0 = 10**(-12)*jnp.ones(l)
             # mu0 = 10**(-12)
-            mu0 = 100.0*jnp.ones(l+il)
+            mu0 = 10.0*jnp.ones(l+il)
+            lmbda0 = 10.0*jnp.ones(l+il)
             c0 = constr[0](x0_reduced)
-            ic0 = ineq[0](x0_reduced)
+            #ic0 = ineq[0](x0_reduced)
             bounds = 0.0*jnp.ones(l+il)
             #gc0 = compute_constraints_grad_wrapped(x0_reduced)
             print("The bounds are " + str(bounds))
             print("The objective is " + str(np.sum(compute_wrapped(x0_reduced)**2)))
             print("The sum of residuals is " + str(np.sum(c0**2)))
             print("The constraints are " + str(c0))
-            print("The inequality constraints are " + str(ic0))
+            #print("The inequality constraints are " + str(ic0))
             #print("The gradient of the constraints is " + str(gc0))
             print("The length of the constraints is " + str(l))
             print("The size of x is " + str(len(x0_reduced)))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             #result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
-            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=5)
+            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,lmbda0,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=20)
             
             
         elif self.method in Optimizer._desc_least_squares_methods:

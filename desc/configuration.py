@@ -301,11 +301,11 @@ class _Configuration(IOAble, ABC):
         # make sure field periods agree
         eqNFP = self.NFP
         surfNFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        axNFP = self.axis.NFP
-        if not (eqNFP == surfNFP == axNFP):
+        axisNFP = self.axis.NFP
+        if not (eqNFP == surfNFP == axisNFP):
             raise ValueError(
                 "Unequal number of field periods for equilirium "
-                + f"{eqNFP}, surface {surfNFP}, and axis {axNFP}"
+                + f"{eqNFP}, surface {surfNFP}, and axis {axisNFP}"
             )
 
         # profiles

@@ -15,7 +15,7 @@ from desc.compute._core import (
     dot)
 
 from scipy.constants import mu_0
-
+import netCDF4 as nc
 
 
 #%%
@@ -27,15 +27,15 @@ from scipy.constants import mu_0
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
-path = '/scratch/gpfs/pk2354/DESC/desc/examples/W7X_output.h5'
+path = '/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5'
 psi = 0.5
 alpha = 0
 npol = 1.0
-nzgrid = 32
+nzgrid = 64
 
 
 eq = desc.io.load(path)[-1]
-grid_1d = LinearGrid(L = 100, theta=0, zeta=0)
+grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
 iota_data = eq.compute('iota', grid=grid_1d)
 fi = interp1d(grid_1d.nodes[:,0],iota_data['iota'])
 
@@ -60,6 +60,8 @@ coords = eq.compute_theta_coords(c)
 grid = Grid(coords)
 Lref = eq.compute('a')['a']
 #Lref = 1.19836555357704
+#psib = 0.3394774936
+#Lref = 0.505870915155837
 Bref = 2*psib/Lref**2
 
 print(eq.compute('sqrt(g)',grid=grid)['sqrt(g)'])
@@ -83,13 +85,17 @@ lmbda_t = eq.compute('lambda_t',grid=grid)['lambda_t']
 lmbda_z = eq.compute('lambda_z',grid=grid)['lambda_z']
 iota_data = eq.compute('iota',grid=grid)
 shear = iota_data['iota_r']
-
-# grad_alpha_r = (lmbda_r - zeta*shear)*grad['|grad(rho)|'] 
-# grad_alpha_t = (1 + lmbda_t)*grad['|grad(theta)|'] 
-# grad_alpha_z = (-iota_data['iota']+lmbda_z)*grad['|grad(zeta)|']
+iota = iota_data['iota']
+#grad_alpha_r = (lmbda_r - zeta*shear)*grad['|grad(rho)|'] 
+#grad_alpha_t = (1 + lmbda_t)*grad['|grad(theta)|'] 
+#grad_alpha_z = (-iota_data['iota']+lmbda_z)*grad['|grad(zeta)|']
 grad_alpha_r = (lmbda_r - zeta*shear)
 grad_alpha_t = (1 + lmbda_t)
-grad_alpha_z = (-iota_data['iota']+lmbda_z)
+grad_alpha_z = (-iota+lmbda_z)
+
+print("shear is" + str(shear))
+print("iota is " + str(iota_data['iota']))
+
 grad_alpha = np.sqrt(grad_alpha_r**2 * grad['g^rr'] + grad_alpha_t**2 * grad['g^tt'] + grad_alpha_z**2 * grad['g^zz'] + 2*grad_alpha_r*grad_alpha_t*grad['g^rt'] + 2*grad_alpha_r*grad_alpha_z*grad['g^rz']
                      + 2*grad_alpha_t*grad_alpha_z*grad['g^tz'])
 
@@ -111,7 +117,7 @@ dB_z = eq.compute('|B|_z',grid=grid)['|B|_z']
 jac = eq.compute('sqrt(g)',grid=grid)['sqrt(g)']
 #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
 #gbdrift0 with negative sign?
-gbdrift0 = shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
+gbdrift0 = shat * 2 / modB**3 / rho*(B_t*dB_z + B_z*dB_t)*psib/jac * 2 * rho
 cvdrift0 = gbdrift0
 #%%
 #calculate gbdrift and cvdrift
@@ -160,9 +166,14 @@ def interp_to_new_grid(geo_array,zgrid,uniform_grid):
     geo_array_gx = np.zeros(len(geo_array))
     
     f = interp1d(zgrid,geo_array,kind='cubic')
-    
+    #print("The old grid is " + str(zgrid))
+    #print("The new grid is " + str(uniform_grid))
+
     for i in range(len(geo_array_gx)):
-        geo_array_gx[i] = f(uniform_grid[i])
+        #print("zeta old is " + str(zgrid[i]))
+        #print("zeta new is " + str(uniform_grid[i]))
+        
+        geo_array_gx[i] = f(np.round(uniform_grid[i],5))
     
     return geo_array_gx
 
@@ -175,7 +186,7 @@ temp_grid = np.zeros(2*nzgrid+1)
 z_on_theta_grid = np.zeros(2*nzgrid+1)
 uniform_zgrid = np.zeros(2*nzgrid+1)
 
-gradpar_temp = np.zeros(len(gradpar))
+gradpar_temp = np.copy(gradpar)
 
 for i in range(2*nzgrid - 1):
     gradpar_half_grid[i] = 0.5*(np.abs(gradpar[i]) + np.abs(gradpar_temp[i+1]))    
@@ -237,17 +248,26 @@ gxgridNA  = "gxinput2.out"
 # paramThetaGX = [self.thetaGXgrid(zz) for zz in zGXgrid]
 
 #Output to GX grid (bottleneck, thing that takes longer to do, needs to be more pythy)
+
+#ds = nc.Dataset('/scratch/gpfs/pk2354/GX/ESTELL_desc/linear/cyc_nl.nc')
+#g = ds['/Geometry/gds2'][:]
+#g = np.append(g,np.array([g[len(g)-1]]))
+#gds2_gx = g
+#print(len(gds2_gx))
+#print(len(uniform_zgrid))
+
+
 nperiod = 1
 rmaj = eq.compute('R0')['R0']
 kxfac = 1.0
 open(gxgridNA, 'w').close()
 f = open(gxgridNA, "w")
 f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
-f.write("\n"+str(nzgrid)+" "+str(nperiod)+" "+str(2*nzgrid)+" "+str(1.0)+" "+ str(rmaj)+" "+str(shat)+" "+str(kxfac)+" "+str(1/iota) + " " + str(2*npol-1))
+f.write("\n"+str(nzgrid)+" "+str(nperiod)+" "+str(2*nzgrid)+" "+str(1.0)+" "+ str(1/Lref)+" "+str(shat)+" "+str(kxfac)+" "+str(1/iota) + " " + str(2*npol-1))
 
 f.write("\ngbdrift gradpar grho tgrid")
 for i in range(len(uniform_zgrid)):
-    f.write("\n"+str(gbdrift_gx[i])+" "+str(2*gradpar_gx[i])+ " " + str(grho_gx[i]) + " " + str(uniform_zgrid[i]))
+    f.write("\n"+str(gbdrift_gx[i])+" "+str(gradpar_gx[i])+ " " + str(grho_gx[i]) + " " + str(uniform_zgrid[i]))
     
 f.write("\ncvdrift gds2 bmag tgrid")
 for i in range(len(uniform_zgrid)):
@@ -259,6 +279,6 @@ for i in range(len(uniform_zgrid)):
 
 f.write("\ncvdrift0 gbdrift0 tgrid")
 for i in range(len(uniform_zgrid)):
-    f.write("\n"+str(cvdrift0_gx[i])+" "+str(gbdrift0_gx[i])+ " " + str(uniform_zgrid[i]))
+    f.write("\n"+str(-cvdrift0_gx[i])+" "+str(-gbdrift0_gx[i])+ " " + str(uniform_zgrid[i]))
     
 f.close()

@@ -72,5 +72,5 @@ eq_qs_T, result_T = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_test.h5')
+eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fb.h5')
 

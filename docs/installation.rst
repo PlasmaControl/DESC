@@ -52,33 +52,48 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-First get the latest stable release and load the necessary modules:
+The following are instrctions tested to work on the Traverse supercomputer at Princeton:
 
 .. code-block:: bash
 
-    git clone https://github.com/PlasmaControl/DESC.git   
-    wget https://github.com/google/jax/archive/jaxlib-v0.1.55.tar.gz
-    tar zxf jaxlib-v0.1.55.tar.gz # you can extract this tarball into any directory
-    module load anaconda3 cudatoolkit cudnn/cuda-11.0/8.0.1
+    git clone https://github.com/PlasmaControl/DESC.git
+    cd DESC
+    module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
+
 
 Then install python dependencies:
 
 .. code-block:: bash
 
-   conda create --name desc-env python=3.9 # create a new conda virtual environment
+   conda create --name desc-env python=3.8 # create a new conda virtual environment
    conda activate desc-env
-   conda install numpy scipy cython six # install JAX dependencies
-   conda install h5py netcdf4 matplotlib # install other DESC dependencies
-   conda install pytest pytest-cov codecov # optional, if you also want to run DESC/tests
+   # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.0.0,<=3.4.2" "mpmath>=1.0.0" "numpy>=1.2.0" "netcdf4>=1.5.4" psutil "scipy>=1.5.0" shapely termcolor
+    pip install nvgpu
 
 Finally, build and install JAX:
 
 .. code-block:: bash
 
-   cd jax-jaxlib-v0.1.55 # or wherever you put the contents of the tarball
-   python build/build.py --enable_cuda --cudnn_path /usr/local/cudnn/cuda-11.0/8.0.1 --noenable_march_native --noenable_mkl_dnn --cuda_compute_capabilities 7.0 --bazel_path /usr/bin/bazel
-   pip install -e build
-   pip install -e .
+    cd ..
+    # git clone JAX repo
+
+    git clone https://github.com/google/jax.git
+    cd jax
+   
+    # last commit of JAX that we got to work with Traverse
+    git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
+
+    python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
+    pip install dist/*.whl
+    pip install .
+
+Optionally, if you want to be able to use pytest and other development tools:
+
+.. code-block:: bash
+
+    cd ../DESC
+    pip install -r devtools/dev-requirements.txt
 
 Checking your Installation
 **************************

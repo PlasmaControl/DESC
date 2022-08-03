@@ -1,6 +1,6 @@
 from desc.backend import jnp
 from desc.utils import Timer
-from desc.grid import QuadratureGrid
+from desc.grid import QuadratureGrid,ConcentricGrid
 from desc.transform import Transform
 from desc.compute import (
     data_index,
@@ -246,3 +246,102 @@ class AspectRatio(_Objective):
             return -self._shift_scale(jnp.atleast_1d(data["R0/a"]))
         else:
             return self._shift_scale(jnp.atleast_1d(data["R0/a"]))
+        
+
+class SpectralCondensation(_Objective):
+    """Aspect ratio = major radius / minor radius.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="spectral",equality = True, lb = None):
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "spectral condensation: {:10.3e} (dimensionless)"
+        self.lb = lb
+        self.equality = equality
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP
+            )
+
+        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+
+
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=2, build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=2, build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, **kwargs):
+        """Compute aspect ratio.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        AR : float
+            Aspect ratio, dimensionless.
+
+        """
+        I = -(self._R_transform.transform(R_lmn,dt=1)*self._R_transform.transform(R_lmn,dt=2) + self._Z_transform.transform(Z_lmn,dt=1)*self._Z_transform.transform(Z_lmn,dt=2))
+            
+        if self.lb:
+            return -self._shift_scale(jnp.atleast_1d(I))
+        else:
+            return self._shift_scale(jnp.atleast_1d(I))
+

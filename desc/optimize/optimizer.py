@@ -689,7 +689,7 @@ class Optimizer(IOAble):
             print("The size of x is " + str(len(x0_reduced)))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             #result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
-            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,lmbda0,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=5)
+            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,lmbda0,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=20)
             
             
         elif self.method in Optimizer._desc_least_squares_methods:

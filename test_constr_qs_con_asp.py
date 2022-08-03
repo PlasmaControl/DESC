@@ -23,7 +23,7 @@ from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error
 
 
-eq_init = desc.io.load("/home/pk123/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 #eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5")[-1]
 optimizer = Optimizer("lsq-auglag")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)

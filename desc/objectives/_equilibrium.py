@@ -174,6 +174,155 @@ class ForceBalance(_Objective):
             return -self._shift_scale(f)
         else:
             return self._shift_scale(f)
+        
+class ForceBalanceGalerkin(_Objective):
+    """Radial and helical MHD force balance.
+
+    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
+    f_rho = F_rho |grad(rho)| dV  (N)
+
+    F_beta = sqrt(g) J^rho
+    beta = -B^zeta grad(theta) + B^theta grad(zeta)
+    f_beta = F_beta |beta| dV  (N)
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force_gal",equality = True, lb = None):
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(N)"
+        self._callback_fmt = "Total force: {:10.3e} " + units
+        self.lb = lb
+        self.equality = equality
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation=None,
+                node_pattern="jacobi",
+            )
+
+        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._iota = eq.iota.copy()
+        self._pressure.grid = self.grid
+        self._iota.grid = self.grid
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+        """Compute MHD force balance errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N).
+
+        """
+        data = compute_force_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+        )
+        fr = data["F_rho"] * data["|grad(rho)|"]
+        fr = fr * data["sqrt(g)"] * self.grid.weights
+
+        fb = data["F_beta"] * data["|beta|"]
+        fb = fb * data["sqrt(g)"] * self.grid.weights
+        
+        fr_proj = self._R_transform.project(fr)
+        fb_proj = self._Z_transform.project(fb)
+        
+        f = jnp.concatenate([fr_proj, fb_proj])
+        
+        if self.lb:
+            return -self._shift_scale(f)
+        else:
+            return self._shift_scale(f)
+
 
 class GradientForceBalance(_Objective):
     _scalar = False

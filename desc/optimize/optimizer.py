@@ -13,7 +13,8 @@ from desc.objectives import (
     CurrentDensity,
     GradientForceBalance,
     WrappedEquilibriumObjective,
-    AspectRatio
+    AspectRatio,
+    ForceBalanceGalerkin
 )
 from desc.objectives.utils import factorize_linear_constraints, get_fixed_boundary_constraints
 from desc.optimize import fmintr, lsqtr
@@ -248,7 +249,8 @@ class Optimizer(IOAble):
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,
-                        GradientForceBalance
+                        GradientForceBalance,
+                        ForceBalanceGalerkin
                     ),
                 ):
                     raise ValueError(
@@ -279,7 +281,8 @@ class Optimizer(IOAble):
                         HelicalForceBalance,
                         CurrentDensity,
                         GradientForceBalance,
-                        AspectRatio
+                        AspectRatio,
+                        ForceBalanceGalerkin
                     ),
                 ):
                     raise ValueError(
@@ -686,7 +689,7 @@ class Optimizer(IOAble):
             print("The size of x is " + str(len(x0_reduced)))
             #result = fmin_lag(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, gradconstr, ineq, gradineq,maxiter = 100)
             #result = fmin_lag_stel(compute_scalar_wrapped, x0_reduced, lmbda0, mu0, grad_wrapped, constr, np.array([]), bounds=bounds,maxiter = 100)
-            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,lmbda0,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=20)
+            result = fmin_lag_ls_stel(compute_wrapped,x0_reduced,lmbda0,mu0,jac_wrapped,constr,ineq,bounds=bounds,maxiter=5)
             
             
         elif self.method in Optimizer._desc_least_squares_methods:

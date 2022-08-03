@@ -23,7 +23,7 @@ from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error
 
 
-eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+eq_init = desc.io.load("/home/pk123/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 #eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5")[-1]
 optimizer = Optimizer("lsq-auglag")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
@@ -48,7 +48,7 @@ constraints = (
     FixIota(),  # fix rotational transform profile
     FixPsi(),  # fix total toroidal magnetic flux
     FixLambdaGauge(),
-    AspectRatio(target=6.0,equality=False,lb = False)
+    AspectRatio(target=7.0,equality=False,lb = False)
 )
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
@@ -70,5 +70,5 @@ eq_qs_T, result_T = eq_init.optimize(
     copy=True,  # return a new Equilibrium object (copy=False will overwrite the original)
     verbose=3,
 )
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_weight_ub.h5')
+eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_weight.h5')
 

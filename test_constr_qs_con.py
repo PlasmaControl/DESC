@@ -25,13 +25,15 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
-    FixLambdaGauge
+    FixLambdaGauge,
+    ForceBalanceGalerkin
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error
 
 #%%
-eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+#eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+eq_init = desc.io.load("/home/pk123/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 optimizer = Optimizer("lsq-auglag")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
 idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
@@ -43,7 +45,7 @@ R_modes = np.delete(eq_init.surface.R_basis.modes, [idx_Rcc, idx_Rss], axis=0)
 Z_modes = np.delete(eq_init.surface.Z_basis.modes, [idx_Zsc, idx_Zcs], axis=0)
 
 constraints = (
-    ForceBalance(),  # enforce JxB-grad(p)=0 during optimization
+    ForceBalanceGalerkin(),  # enforce JxB-grad(p)=0 during optimization
     FixBoundaryR(modes=R_modes,fixed_boundary=True),  # fix specified R boundary modes
     FixBoundaryZ(modes=Z_modes,fixed_boundary=True),  # fix specified Z boundary modes
     FixPressure(),  # fix pressure profile
@@ -72,5 +74,5 @@ eq_qs_T, result_T = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fb.h5')
+eq_qs_T.save('/home/pk123/DESC/test_equilibria/constrained_qs_fbg.h5')
 

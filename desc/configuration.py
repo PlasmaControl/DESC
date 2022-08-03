@@ -696,7 +696,6 @@ class _Configuration(IOAble, ABC):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
-
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -1279,7 +1278,7 @@ class _Configuration(IOAble, ABC):
         """
         data = self.compute(name="sqrt(g)", grid=grid)
 
-        return np.all(np.sign(data["sqrt(g)"][0]) == np.sign(data["sqrt(g)"]))
+        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
 
     def to_sfl(
         self,

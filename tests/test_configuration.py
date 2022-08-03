@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import unittest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import ConcentricGrid
+from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.geometry import (
     FourierRZCurve,
@@ -370,3 +370,17 @@ class TestSurfaces(unittest.TestCase):
             surf = eq.get_surface_at(rho=1, zeta=2)
         with pytest.raises(AssertionError):
             surf = eq.get_surface_at(rho=1.2)
+
+
+def test_is_nested():
+
+    eq = Equilibrium()
+    grid = QuadratureGrid(L=10, M=10, N=0)
+    assert eq.is_nested(grid=grid)
+
+    eq.change_resolution(L=2, M=2)
+    eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)] = 1
+    # make unnested by setting higher order mode to same amplitude as lower order mode
+    eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
+
+    assert eq.is_nested(grid=grid) == False

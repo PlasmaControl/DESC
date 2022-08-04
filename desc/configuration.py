@@ -140,6 +140,8 @@ class _Configuration(IOAble, ABC):
         ], f"sym should be one of True, False, None, got {sym}"
         if sym is None and hasattr(surface, "sym"):
             self._sym = surface.sym
+        if sym is None and surface is None:  # default surface is symmetric
+            self._sym = True
         elif sym is None:
             self._sym = False
         else:
@@ -321,6 +323,8 @@ class _Configuration(IOAble, ABC):
             )
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
+        if hasattr(self.pressure, "change_resolution"):
+            self.pressure.change_resolution(self.L)
 
         if isinstance(iota, Profile):
             self.iota = iota
@@ -334,6 +338,8 @@ class _Configuration(IOAble, ABC):
             )
         else:
             raise TypeError("Got unknown iota profile {}".format(iota))
+        if hasattr(self.iota, "change_resolution"):
+            self.iota.change_resolution(self.L)
 
         # keep track of where it came from
         self._parent = None

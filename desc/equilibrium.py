@@ -16,7 +16,7 @@ from desc.objectives import (
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
-from desc.perturbations import perturb
+from desc.perturbations import perturb, autoperturb
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -640,6 +640,97 @@ class Equilibrium(_Configuration, IOAble):
             for attr in self._io_attrs_:
                 setattr(self, attr, getattr(eq, attr))
             return self
+
+    def autoperturb(
+        self,
+        objective,
+        constraints=(),
+        surface=None,
+        pressure=None,
+        iota=None,
+        Psi=None,
+        nsteps=1,
+        maxiter=10,
+        order=2,
+        tr_ratio=0.1,
+        weight="auto",
+        verbose=1,
+        copy=True,
+    ):
+        """Perturb an Equilibrium with respect to input parameters, with adaptive step sizing.
+
+        Recommended to use this method over directly calling ``perturb``
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to perturb.
+        objective : ObjectiveFunction
+            Objective function to satisfy.
+        constraints : tuple of Objective, optional
+            List of objectives to be used as constraints during perturbation.
+        surface : Surface
+            target surface to perturb to
+        pressure, iota : Profile
+            target profiles to perturb to
+        Psi : float
+            target toroidal flux to perturb to
+        nsteps : int > 0
+            initial number of perturbation steps to try. If this fails, nsteps will be
+            increased until it succeeds or the total number of steps exceeds maxiter.
+        maxiter : int > 0
+            total number of perturbation steps to try before giving up.
+        order : {0,1,2,3}
+            Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
+        tr_ratio : float or array of float
+            Radius of the trust region, as a fraction of ||x||.
+            Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+            If a scalar, uses the same ratio for all steps. If an array, uses the first
+            element for the first step and so on.
+        weight : ndarray, "auto", or None, optional
+            1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+            matrices. Default is to weight by (mode number)**2. None applies no weighting.
+        verbose : int
+            Level of output.
+        copy : bool
+            Whether to perturb the input equilibrium (False) or make a copy (True, Default).
+
+        Returns
+        -------
+        eq_new : Equilibrium
+            Perturbed equilibrium.
+
+        """
+        if objective is None:
+            objective = get_equilibrium_objective()
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints()
+
+        if not objective.built:
+            objective.build(self, verbose=verbose)
+        for constraint in constraints:
+            if not constraint.built:
+                constraint.build(self, verbose=verbose)
+
+        eq = autoperturb(
+            self,
+            objective,
+            constraints,
+            surface=surface,
+            pressure=pressure,
+            iota=iota,
+            Psi=Psi,
+            nsteps=nsteps,
+            maxiter=maxiter,
+            order=order,
+            tr_ratio=tr_ratio,
+            weight=weight,
+            verbose=verbose,
+            copy=copy,
+        )
+        eq.solved = False
+
+        return eq
 
     def perturb(
         self,

@@ -9,7 +9,133 @@ from desc.optimize.utils import evaluate_quadratic
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.objectives import ObjectiveFunction, get_fixed_boundary_constraints
 
-__all__ = ["perturb", "optimal_perturb"]
+__all__ = ["autoperturb", "perturb", "optimal_perturb"]
+
+
+def autoperturb(
+    eq,
+    objective,
+    constraints=(),
+    surface=None,
+    pressure=None,
+    iota=None,
+    Psi=None,
+    nsteps=1,
+    maxiter=10,
+    order=2,
+    tr_ratio=0.1,
+    weight="auto",
+    verbose=1,
+    copy=True,
+):
+    """Perturb an Equilibrium with respect to input parameters, with adaptive step sizing.
+
+    Recommended to use this method over directly calling ``perturb``
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to perturb.
+    objective : ObjectiveFunction
+        Objective function to satisfy.
+    constraints : tuple of Objective, optional
+        List of objectives to be used as constraints during perturbation.
+    surface : Surface
+        target surface to perturb to
+    pressure, iota : Profile
+        target profiles to perturb to
+    Psi : float
+        target toroidal flux to perturb to
+    nsteps : int > 0
+        initial number of perturbation steps to try. If this fails, nsteps will be
+        increased until it succeeds or the total number of steps exceeds maxiter.
+    maxiter : int > 0
+        total number of perturbation steps to try before giving up.
+    order : {0,1,2,3}
+        Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
+    tr_ratio : float or array of float
+        Radius of the trust region, as a fraction of ||x||.
+        Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
+        If a scalar, uses the same ratio for all steps. If an array, uses the first
+        element for the first step and so on.
+    weight : ndarray, "auto", or None, optional
+        1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
+        matrices. Default is to weight by (mode number)**2. None applies no weighting.
+    verbose : int
+        Level of output.
+    copy : bool
+        Whether to perturb the input equilibrium (False) or make a copy (True, Default).
+
+    Returns
+    -------
+    eq_new : Equilibrium
+        Perturbed equilibrium.
+
+    """
+    assert (
+        int(nsteps) == nsteps and nsteps >= 1
+    ), "nsteps must be a strictly positive integer"
+    assert (
+        int(maxiter) == maxiter and maxiter >= 1
+    ), "maxiter must be a strictly positive integer"
+    deltas = {}
+    if hasattr(surface, "change_resolution"):
+        surface.change_resolution(eq.L, eq.M, eq.N)
+        deltas["dRb"] = surface.R_lmn - eq.surface.R_lmn
+        deltas["dZb"] = surface.Z_lmn - eq.surface.Z_lmn
+    if hasattr(pressure, "change_resolution"):
+        pressure.change_resolution(eq.L)
+        deltas["dp"] = pressure.params - eq.pressure.params
+    if hasattr(iota, "change_resolution"):
+        iota.change_resolution(eq.L)
+        deltas["di"] = iota.params - eq.iota.params
+    if Psi is not None:
+        deltas["dPsi"] = Psi - eq.Psi
+
+    istep = 0
+    k = 0
+    eq1 = eq.copy()
+    while istep < nsteps and k < maxiter:
+        if verbose:
+            print("Perturbing, step {}/{}".format(istep + 1, nsteps))
+        k += 1
+        deltas_istep = {key: val / nsteps for key, val in deltas.items()}
+        eq2 = perturb(
+            eq1,
+            objective,
+            constraints,
+            **deltas_istep,
+            order=order,
+            tr_ratio=tr_ratio,
+            copy=True,
+            verbose=verbose
+        )
+        if eq2.is_nested():
+            istep += 1
+            eq1 = eq2
+        else:
+            if verbose:
+                print(
+                    "autoperturb failed with {} steps, retrying with {} steps".format(
+                        nsteps, nsteps + 1
+                    )
+                )
+            nsteps += 1
+            istep = 0
+            eq1 = eq.copy()
+
+    if k >= maxiter and istep < nsteps:
+        warnings.warn(
+            "Maximum number of perturbation steps reached, solution may not be correct"
+        )
+
+    if not copy:
+        eq.surface = eq2.surface
+        eq.pressure = eq2.pressure
+        eq.iota = eq2.iota
+        eq.Psi = eq2.Psi
+        return eq
+    return eq2
 
 
 def perturb(

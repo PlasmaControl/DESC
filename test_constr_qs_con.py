@@ -51,7 +51,6 @@ constraints = (
     FixPressure(),  # fix pressure profile
     FixIota(),  # fix rotational transform profile
     FixPsi(),  # fix total toroidal magnetic flux
-    FixLambdaGauge()
 )
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
@@ -74,5 +73,5 @@ eq_qs_T, result_T = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fb.h5')
+eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fb_mu10.h5')
 

@@ -136,7 +136,7 @@ def fmin_lag_ls_stel(
     mu = mu0
     lmbda = lmbda0
     gtolk = 1/(10*np.linalg.norm(mu0))
-    ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
+    ctolk = 1/(np.linalg.norm(mu0))    
     xold = x
     f = fun(recover(x))
     fold = f
@@ -182,7 +182,7 @@ def fmin_lag_ls_stel(
              mu = 5 * mu
              #ctolk = 1/(np.linalg.norm(mu)**(0.1))
              #gtolk = gtolk/np.linalg.norm(mu)
-             ctolk = 1/(np.max(mu)**(0.1))
+             ctolk = ctolk/(np.max(mu)**(0.1))
              gtolk = gtolk/np.max(mu)
         
         

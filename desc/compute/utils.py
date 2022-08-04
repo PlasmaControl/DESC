@@ -109,24 +109,22 @@ def expand(grid, x, surface_label="rho"):
     number_nodes_zeta_surface = len(grid.nodes) // grid.num_zeta
 
     if surface_label == "rho":
-        # first repeat x[i], x at each rho surface, to become x at each theta node at each rho surface
-        # the difference between unique indices, when sorted, is the number of theta nodes to repeat for each rho value
-        # then tile x to repeat its pattern on a single zeta surface over all zeta surfaces.
-        theta_node_repeats = jnp.diff(
+        # First duplicate each x[i] over every theta node of the same rho surface.
+        # The difference between unique rho indices is the number of theta nodes at each rho surface.
+        # Next, tile the result to repeat the pattern on a single zeta surface over all zeta surfaces.
+        theta_node_counts = jnp.diff(
             grid.unique_rho_indices, append=number_nodes_zeta_surface
         )
-        if no_jax:
-            return jnp.tile(
-                jnp.repeat(x, repeats=theta_node_repeats), reps=grid.num_zeta
-            )
-        return jnp.tile(
-            jnp.repeat(
+        zeta_surface = (
+            jnp.repeat(x, repeats=theta_node_counts)
+            if no_jax
+            else jnp.repeat(
                 x,
-                repeats=theta_node_repeats,
+                repeats=theta_node_counts,
                 total_repeat_length=number_nodes_zeta_surface,
-            ),
-            reps=grid.num_zeta,
+            )
         )
+        return jnp.tile(zeta_surface, reps=grid.num_zeta)
 
     if surface_label == "theta":
         raise ValueError("Not implemented yet.")

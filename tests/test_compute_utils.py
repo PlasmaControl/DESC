@@ -1,4 +1,5 @@
 import pytest
+import matplotlib.pyplot as plt
 import numpy as np
 from desc.compute.utils import (
     compress,
@@ -6,8 +7,26 @@ from desc.compute.utils import (
     surface_integrals,
     _get_proper_surface,
 )
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 import desc.io
+
+
+def plot_compare(title, x, y, label_1, x2, y2, label_2):
+    """Displays log plot of two quantities on same axis."""
+    fig, ax = plt.subplots()
+    ax.plot(x, y, label=label_1)
+    ax.scatter(x, y)
+    ax.plot(x2, y2, label=label_2)
+    ax.scatter(x2, y2, s=10)
+    ax.set(
+        yscale="log",
+        xlabel=r"$\rho$",
+        title=title,
+        facecolor="white",
+    )
+    ax.grid()
+    fig.legend()
+    plt.savefig(title)
 
 
 def load_eq(name):
@@ -178,10 +197,32 @@ class TestComputeUtils:
             sym=eq.sym,
             node_pattern=eq.node_pattern,
         )
-        pressure = eq.compute("p", grid=grid)["p"]
-        sqrtg = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
-        pressure_average = surface_averages(grid, pressure, sqrtg, match_grid=True)
-        assert np.allclose(pressure, pressure_average)
+        data = eq.compute("p", grid=grid)
+        data = eq.compute("sqrt(g)", grid=grid, data=data)
+        pressure_average = surface_averages(
+            grid, data["p"], data["sqrt(g)"], match_grid=True
+        )
+        assert np.allclose(data["p"], pressure_average)
+
+    def test_surface_averages_homomorphism(self):
+        """
+        Test that all surface averages of a flux surface function are additive homomorphisms.
+        Meaning average(a + b) = average(a) + average(b).
+        """
+        eq = load_eq("HELIOTRON")
+        grid = ConcentricGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
+            node_pattern=eq.node_pattern,
+        )
+        data = eq.compute("|B|_t", grid=grid)
+        a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
+        b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
+        a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
+        assert np.allclose(a_plus_b, a + b)
 
     def test_surface_averages_shortcut(self):
         """
@@ -197,10 +238,57 @@ class TestComputeUtils:
             sym=eq.sym,
             rho=np.atleast_1d(rho),
         )
-        B = eq.compute("|B|", grid=grid)["|B|"]
-        sqrtg = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
+        data = eq.compute("|B|", grid=grid)
 
         assert np.allclose(
-            surface_averages(grid, B, sqrtg), np.mean(sqrtg * B) / np.mean(sqrtg)
+            surface_averages(grid, data["|B|"], data["sqrt(g)"]),
+            np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
         ), "sqrt(g) fail"
-        assert np.allclose(surface_averages(grid, B), np.mean(B)), "no sqrt(g) fail"
+        assert np.allclose(
+            surface_averages(grid, data["|B|"]), np.mean(data["|B|"])
+        ), "no sqrt(g) fail"
+
+    def test_grid_diffs(self):
+        """
+        Test that surface average on Concentric grids and Quadrature grids are similar.
+        Displays plot.
+        """
+
+        def iota_zero_current(eq, grid):
+            data = eq.compute("|B|", grid=grid)  # puts most quantities in data
+            num = surface_averages(
+                grid,
+                data["psi_r"]
+                / data["sqrt(g)"]
+                * (
+                    data["g_tt"] * data["lambda_z"]
+                    - data["g_tz"] * (1 + data["lambda_t"])
+                ),
+            )
+            den = surface_averages(grid, data["psi_r"] / data["sqrt(g)"] * data["g_tt"])
+            return np.abs(num / den)
+
+        eq = load_eq("HELIOTRON")
+        conc_grid = ConcentricGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+            node_pattern=eq.node_pattern,
+        )
+        quad_grid = QuadratureGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        plot_compare(
+            "magnitude of iota zero current",
+            conc_grid.nodes[conc_grid.unique_rho_indices, 0],
+            iota_zero_current(eq, conc_grid),
+            "conc",
+            quad_grid.nodes[quad_grid.unique_rho_indices, 0],
+            iota_zero_current(eq, quad_grid),
+            "quad",
+        )

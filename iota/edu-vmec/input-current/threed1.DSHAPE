@@ -28,7 +28,7 @@
    0.000E+00   0.000E+00   0.000E+00
 
  TOROIDAL CURRENT DENSITY (*V') COEFFICIENTS ac (EXPANSION IN NORMALIZED RADIUS):
- PCURR parameterization type is 'power_series'
+ PCURR parameterization type is 'power_series_I'
  --------------------------------------
    0.000E+00   2.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00
    0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00   0.000E+00

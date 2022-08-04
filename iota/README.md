@@ -1,6 +1,10 @@
+# input file locations for constrained current
+VMEC inputs are in edu-vmec/input-current.
+DESC inputs are in ../examples/DESC/input-current.
+
 Note that the symmetry and NFP bugs in the grid class described in magwell/magwell-test.html persist. My solution for the NFP bug is still in that notebook. Until this is fixed, any quantity that relies on `grid.spacing` (except for their triple product, `grid.weights`) will give incorrect results under the conditions described in that notebook.
 
-I've added a unit test in tests/test_compute_utils.py that may help debug this. The function is `test_surface_area_unweighted`. Currently it passes when the supplied grid is `random_grid(NFP=1, sym=False)`. When the sym/NFP issues are fixed, I think this test should pass when `NFP != 1` and `sym=True`.
+I've added a unit test in tests/test_compute_utils.py that may help debug this. The function is `test_surface_area_unweighted`. Currently it passes when the supplied grid is `random_grid(NFP=1, sym=False)`. When the sym/NFP issues are fixed, I think this test should pass when `NFP != 1` and `sym=True`. It basically checks if sum of grid spacing is 4$\pi$<sup>2</sup>.
 
 For testing the rotational transform we need to make sure we
 * compute the rotational transform on grids with NFP = 1 and sym = False.

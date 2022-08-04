@@ -7,9 +7,8 @@ Note that:
 
 ## fail list
 On some inputs the solver just exits early saying no nested surfaces.
+* Heliotron - flux surfaces no longer nested
+* Estell, QAS, Wistell-A - stops at computing df with message "killed"
 This can either mean
 * the input current profile does not lend itself to nested surfaces
 * the rotational transform function is being computed incorrectly, messing up force balance
-
-Heliotron - flux surfaces no longer nested
-Estell, QAS, Wistell-A - stops at computing df with message "killed"

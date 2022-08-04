@@ -26,14 +26,15 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
     FixLambdaGauge,
-    ForceBalanceGalerkin
+    ForceBalanceGalerkin,
+    SpectralCondensation
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error
 
 #%%
-eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
-#eq_init = desc.io.load("/home/pk123/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+#eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
+eq_init = desc.io.load("/home/pk123/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 #eq_init.change_resolution(L=12,M=12,N=6,L_grid=20,M_grid=20,N_grid=12)
 optimizer = Optimizer("lsq-auglag")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
@@ -52,6 +53,7 @@ constraints = (
     FixPressure(),  # fix pressure profile
     FixIota(),  # fix rotational transform profile
     FixPsi(),  # fix total toroidal magnetic flux
+    SpectralCondensation(),
 )
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
@@ -74,5 +76,6 @@ eq_qs_T, result_T = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fbg_weight.h5')
+#eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fbg_weight.h5')
+eq_qs_T.save('/home/pk123/DESC/test_equilibria/constrained_qs_fbg_weight.h5')
 

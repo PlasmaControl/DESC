@@ -14,7 +14,8 @@ from desc.objectives import (
     GradientForceBalance,
     WrappedEquilibriumObjective,
     AspectRatio,
-    ForceBalanceGalerkin
+    ForceBalanceGalerkin,
+    SpectralCondensation
 )
 from desc.objectives.utils import factorize_linear_constraints, get_fixed_boundary_constraints
 from desc.optimize import fmintr, lsqtr
@@ -282,7 +283,8 @@ class Optimizer(IOAble):
                         CurrentDensity,
                         GradientForceBalance,
                         AspectRatio,
-                        ForceBalanceGalerkin
+                        ForceBalanceGalerkin,
+                        SpectralCondensation
                     ),
                 ):
                     raise ValueError(

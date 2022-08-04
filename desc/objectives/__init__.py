@@ -27,7 +27,7 @@ from ._equilibrium import (
     GradientForceBalance,
     ForceBalanceGalerkin
 )
-from ._geometry import Volume, AspectRatio, Zero
+from ._geometry import Volume, AspectRatio, Zero, SpectralCondensation
 from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,

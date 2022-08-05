@@ -316,6 +316,11 @@ class Optimizer(IOAble):
             df = objective.jac(x)
             return df[:, unfixed_idx] @ Z
 
+        def is_unnested_wrapped(x_reduced):
+            x = recover(x_reduced)
+            nested = objective.is_unnested(x)
+            return nested
+
         if self.method in Optimizer._scipy_scalar_methods:
 
             allx = []
@@ -447,7 +452,7 @@ class Optimizer(IOAble):
                 gtol=gtol,
                 verbose=disp,
                 maxiter=maxiter,
-                callback=None,
+                callback=is_unnested_wrapped,
                 options=options,
             )
 
@@ -464,7 +469,7 @@ class Optimizer(IOAble):
                 gtol=gtol,
                 verbose=disp,
                 maxiter=maxiter,
-                callback=None,
+                callback=is_unnested_wrapped,
                 options=options,
             )
 

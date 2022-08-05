@@ -7,7 +7,7 @@ from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
-from desc.compute import arg_order
+from desc.compute import arg_order, compute_jacobian
 
 # XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
 
@@ -309,6 +309,20 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Total compilation time")
         self._compiled = True
+
+    def is_unnested(
+        self, x
+    ):  # assuming objective uses R_lmn, Z_lmn... not elegant at all
+        kwargs = self.unpack_state(x)
+        data = compute_jacobian(
+            R_transform=self._objectives[0]._R_transform,
+            Z_transform=self._objectives[0]._Z_transform,
+            **kwargs
+        )
+        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        if not nested:
+            print("eq is unnested")
+        return not nested
 
     @property
     def objectives(self):

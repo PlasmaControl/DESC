@@ -282,7 +282,7 @@ def _compute(eq, name, grid, component=None):
     return data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F"), label
 
 
-def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
+def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     """Plot spectral coefficient magnitudes vs spectral mode number.
 
     Parameters
@@ -332,7 +332,12 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
         lmn = np.append(lmn, np.array([2]))
         xlabel += "|n|"
 
-    fig, ax = _format_ax(ax, rows=1, cols=3)
+    fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
+
+    if len(kwargs):
+        raise ValueError(
+            f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
+        )
 
     ax[0, 0].semilogy(
         np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
@@ -353,6 +358,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     ax[0, 2].set_title("$|\\lambda_{lmn}|$")
 
     fig.set_tight_layout(True)
+
     return fig, ax
 
 
@@ -397,17 +403,20 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.get("component", None))
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     # reshape data to 1D
     data = data.flatten()
 
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
+        ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
     else:
-        ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
+        ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
+
+    if len(kwargs):
+        raise ValueError(f"plot_1d got unexpected keyword argument: {kwargs.keys()}")
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_ylabel(label)
@@ -460,8 +469,8 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.get("component", None))
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
     if norm_F:
@@ -491,20 +500,23 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
-            contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
+            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-            contourf_kwargs["levels"] = kwargs.get(
+            contourf_kwargs["levels"] = kwargs.pop(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
             )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
-        contourf_kwargs["levels"] = kwargs.get(
+        contourf_kwargs["levels"] = kwargs.pop(
             "levels", np.linspace(np.nanmin(data), np.nanmax(data), 100)
         )
-    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
+
+    if len(kwargs):
+        raise ValueError(f"plot_2d got unexpected keyword argument: {kwargs.keys()}")
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -590,8 +602,8 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.get("component", None))
-    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute("X", grid)
@@ -625,7 +637,10 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         norm = matplotlib.colors.Normalize(vmin=minn, vmax=maxx)
     m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
     m.set_array([])
-    alpha = kwargs.get("alpha", 1)
+    alpha = kwargs.pop("alpha", 1)
+
+    if len(kwargs):
+        raise ValueError(f"plot_3d got unexpected keyword argument: {kwargs.keys()}")
 
     ax.plot_surface(
         X,
@@ -726,24 +741,27 @@ def plot_fsa(
     if N is None:
         N = eq.N_grid
 
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
-
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    component = kwargs.pop("component", None)
     values = np.array([])
     for i, r in enumerate(rho):
         if r > 0:
             grid = LinearGrid(M=M, N=N, NFP=1, rho=np.array(r))
             g, _ = _compute(eq, "sqrt(g)", grid)
-            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            data, label = _compute(eq, name, grid, component)
             values = np.append(values, np.mean(data * g) / np.mean(g))
         elif r == 0:
             grid = LinearGrid(M=0, N=0, NFP=1, rho=np.array(0.0))
-            data, label = _compute(eq, name, grid, kwargs.get("component", None))
+            data, label = _compute(eq, name, grid, component)
             values = np.append(values, np.mean(data))
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(rho, values, label=kwargs.get("label", None))
+        ax.semilogy(rho, values, label=kwargs.pop("label", None))
     else:
-        ax.plot(rho, values, label=kwargs.get("label", None))
+        ax.plot(rho, values, label=kwargs.pop("label", None))
+
+    if len(kwargs):
+        raise ValueError(f"plot_fsa got unexpected keyword argument: {kwargs.keys()}")
 
     label = label.split("~")
     label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
@@ -794,9 +812,9 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     """
     if grid is None:
         if eq.N == 0:
-            nzeta = int(kwargs.get("nzeta", 1))
+            nzeta = int(kwargs.pop("nzeta", 1))
         else:
-            nzeta = int(kwargs.get("nzeta", 6))
+            nzeta = int(kwargs.pop("nzeta", 6))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
@@ -814,7 +832,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
-    data, label = _compute(eq, name, grid, kwargs.get("component", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
         if name != "|F|":
             return ValueError(colored("Can only normalize |F|.", "red"))
@@ -834,7 +852,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         ax,
         rows=rows,
         cols=cols,
-        figsize=kwargs.get("figsize", (figw, figh)),
+        figsize=kwargs.pop("figsize", (figw, figh)),
         equal=True,
     )
     ax = np.atleast_1d(ax).flatten()
@@ -848,20 +866,25 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
-            contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
+            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
             logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-            contourf_kwargs["levels"] = kwargs.get(
+            contourf_kwargs["levels"] = kwargs.pop(
                 "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
             )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
-        contourf_kwargs["levels"] = kwargs.get(
+        contourf_kwargs["levels"] = kwargs.pop(
             "levels", np.linspace(data.min(), data.max(), 100)
         )
-    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
+
+    if len(kwargs):
+        raise ValueError(
+            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+        )
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1140,7 +1163,6 @@ def plot_comparison(
 
     """
     figsize = kwargs.pop("figsize", None)
-    plot_theta = kwargs.pop("plot_theta", True)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1199,8 +1221,12 @@ def plot_comparison(
             axis_size=0,
             label=labels[i % len(labels)],
         )
-    if any(labels) and kwargs.get("legend", True):
-        fig.legend(**kwargs.get("legend_kw", {}))
+    if any(labels) and kwargs.pop("legend", True):
+        fig.legend(**kwargs.pop("legend_kw", {}))
+    if len(kwargs):
+        raise ValueError(
+            f"plot_comparison got unexpected keyword argument: {kwargs.keys()}"
+        )
     return fig, ax
 
 
@@ -1237,6 +1263,8 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         color = [cmap(norm(cur)) for cur in currents]
+    if len(kwargs):
+        raise ValueError(f"plot_coils got unexpected keyword argument: {kwargs.keys()}")
     if not isinstance(lw, (list, tuple)):
         lw = [lw]
     if not isinstance(ls, (list, tuple)):
@@ -1334,7 +1362,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
         rho = np.linspace(1, 0, num=rho, endpoint=False)
     ds = []
     B_mn = np.array([[]])
-    linestyle = kwargs.get("linestyle", "-")
+    linestyle = kwargs.pop("linestyle", "-")
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         data = eq.compute("|B|_mn", grid)
@@ -1349,7 +1377,11 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     B_mn = B_mn[:, idx]
     modes = data["B modes"][idx, :]
 
-    fig, ax = _format_ax(ax)
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    if len(kwargs):
+        raise ValueError(
+            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+        )
     for i in range(modes.shape[0]):
         M = modes[i, 1]
         N = modes[i, 2]
@@ -1437,16 +1469,21 @@ def plot_boozer_surface(
     data = B_transform.transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
     contourf_kwargs = {}
     contourf_kwargs["norm"] = matplotlib.colors.Normalize()
-    contourf_kwargs["levels"] = kwargs.get(
+    contourf_kwargs["levels"] = kwargs.pop(
         "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
     )
-    contourf_kwargs["cmap"] = kwargs.get("cmap", "jet")
+    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
+
+    if len(kwargs):
+        raise ValueError(
+            f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
+        )
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1533,11 +1570,11 @@ def plot_qs_error(
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
 
-    fig, ax = _format_ax(ax)
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    ls = kwargs.get("ls", ["-", "-", "-"])
-    colors = kwargs.get("colors", ["r", "b", "g"])
-    markers = kwargs.get("markers", ["o", "o", "o"])
+    ls = kwargs.pop("ls", ["-", "-", "-"])
+    colors = kwargs.pop("colors", ["r", "b", "g"])
+    markers = kwargs.pop("markers", ["o", "o", "o"])
 
     data = eq.compute("R0")
     data = eq.compute("|B|", data=data)
@@ -1634,9 +1671,12 @@ def plot_qs_error(
             )
 
     ax.set_xlabel(_axis_labels_rtz[0])
-    if kwargs.get("legend", True):
-        fig.legend(**kwargs.get("legend_kwargs", {"loc": "center right"}))
-
+    if kwargs.pop("legend", True):
+        fig.legend(**kwargs.pop("legend_kwargs", {"loc": "center right"}))
+    if len(kwargs):
+        raise ValueError(
+            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+        )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -1669,9 +1709,10 @@ def plot_grid(grid, **kwargs):
         fig, ax = plot_grid(grid)
 
     """
-    fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
+    fig = plt.figure(figsize=kwargs.pop("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
-
+    if len(kwargs):
+        raise ValueError(f"plot_grid got unexpected keyword argument: {kwargs.keys()}")
     # node locations
     nodes = grid.nodes[np.where(grid.nodes[:, 2] == 0)]
     ax.scatter(nodes[:, 1], nodes[:, 0], s=4)
@@ -2179,7 +2220,7 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     """
     if rho == 0:
         raise NotImplementedError(
-            "Currently does not support field line tracing of the magnetic axis, please input 0 < rho < 1"
+            "Currently does not support field line tracing of the magnetic axis, please input 0 < rho <= 1"
         )
 
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))

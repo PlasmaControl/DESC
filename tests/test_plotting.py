@@ -31,6 +31,13 @@ from desc.equilibrium import EquilibriaFamily
 from desc.coils import FourierXYZCoil, CoilSet
 
 
+def test_kwarg_warning(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    with pytest.raises(ValueError):
+        fig, ax = plot_1d(eq, "p", not_a_kwarg=True)
+    return None
+
+
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]

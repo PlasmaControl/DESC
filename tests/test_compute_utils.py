@@ -1,32 +1,15 @@
 import pytest
-import matplotlib.pyplot as plt
 import numpy as np
 from desc.compute.utils import (
     compress,
+    enclosed_volumes,
     surface_averages,
     surface_integrals,
     _get_proper_surface,
 )
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, LinearGrid
+from desc.equilibrium import Equilibrium
 import desc.io
-
-
-def plot_compare(title, x, y, label_1, x2, y2, label_2):
-    """Displays log plot of two quantities on same axis."""
-    fig, ax = plt.subplots()
-    ax.plot(x, y, label=label_1)
-    ax.scatter(x, y)
-    ax.plot(x2, y2, label=label_2)
-    ax.scatter(x2, y2, s=10)
-    ax.set(
-        yscale="log",
-        xlabel=r"$\rho$",
-        title=title,
-        facecolor="white",
-    )
-    ax.grid()
-    fig.legend()
-    plt.savefig(title)
 
 
 def load_eq(name):
@@ -51,9 +34,9 @@ def load_eq(name):
 def random_grid(NFP=None, sym=None):
     """
     NFP: int
-        Number of field periods. Random is not specified.
+        Number of field periods.
     sym: bool
-        Stellarator symmetry. Random is not specified.
+        Stellarator symmetry.
 
     Returns
     -------
@@ -61,11 +44,11 @@ def random_grid(NFP=None, sym=None):
         Randomized grid.
     """
     rng = np.random.default_rng()
-    L = rng.integers(low=1, high=30)
-    M = rng.integers(low=1, high=30)
-    N = rng.integers(low=1, high=30)
+    L = rng.integers(low=1, high=20)
+    M = rng.integers(low=1, high=20)
+    N = rng.integers(low=1, high=20)
     if NFP is None:
-        NFP = rng.integers(low=1, high=30)
+        NFP = rng.integers(low=1, high=20)
     if sym is None:
         sym = True if rng.integers(2) > 0 else False
     return ConcentricGrid(L=L, N=N, M=M, NFP=NFP, sym=sym)
@@ -97,12 +80,11 @@ def benchmark(grid, integrands=1, surface_label="rho"):
         Keys are unique surface label values.
         Values are list of indices the key appears at in grid.nodes column.
     """
-    integrands = np.asarray(integrands)  # to use fancy indexing
-
     surface_label_nodes, unique_indices, upper_bound, ds = _get_proper_surface(
         grid, surface_label
     )
     integrals = np.empty(len(unique_indices))
+    integrands = np.asarray(integrands)  # to use fancy indexing
 
     surfaces = dict()
     # collect collocation node indices for each surface_label surface
@@ -123,41 +105,42 @@ class TestComputeUtils:
         def test(surface_label):
             integrals_1 = benchmark(grid, integrands, surface_label)[0]
             integrals_2 = surface_integrals(grid, integrands, surface_label)
-            assert np.allclose(integrals_1, integrals_2), surface_label + ", fail"
+            np.testing.assert_allclose(
+                integrals_1, integrals_2, err_msg=surface_label + ", fail"
+            )
 
         test("rho")
         test("zeta")
 
     def test_surface_area_unweighted(self):
         """Test the surface area without the sqrt(g) factor is computed correctly."""
-        grid = random_grid(NFP=1, sym=False)  # for the grid bugs
+        grid = random_grid(NFP=1, sym=False)
 
         def test(surface_label, area):
             areas_1 = benchmark(grid, surface_label=surface_label)[0]
             areas_2 = surface_integrals(grid, surface_label=surface_label)
-            assert np.allclose(areas_1, areas_2), surface_label + ", fail"
-            assert np.allclose(areas_2, area), surface_label + ", unweighted area fail"
+            np.testing.assert_allclose(
+                areas_1, areas_2, err_msg=surface_label + ", fail"
+            )
+            np.testing.assert_allclose(
+                areas_2, area, err_msg=surface_label + ", unweighted area fail"
+            )
 
         test("rho", 4 * np.pi ** 2)
         test("zeta", 2 * np.pi)
 
     def test_surface_area_weighted(self):
         """Test the rho surface area with the sqrt(g) factor is monotonic."""
+        grid = random_grid()
         eq = load_eq("HELIOTRON")
-        grid = ConcentricGrid(
-            L=eq.L_grid,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=eq.sym,
-            node_pattern=eq.node_pattern,
-        )
         sqrtg = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
 
         areas_1 = benchmark(grid, sqrtg)[0]
         areas_2 = surface_integrals(grid, sqrtg)
-        assert np.allclose(areas_1, areas_2)
-        assert np.allclose(areas_2, np.sort(areas_2)), "weighted area not monotonic"
+        np.testing.assert_allclose(areas_1, areas_2)
+        np.testing.assert_allclose(
+            areas_2, np.sort(areas_2), err_msg="weighted area not monotonic"
+        )
 
     def test_expand(self):
         """Test the expand function."""
@@ -169,15 +152,18 @@ class TestComputeUtils:
             integrals_match_grid = surface_integrals(
                 grid, integrands, surface_label, match_grid=True
             )
-            assert np.allclose(
-                integrals, compress(grid, integrals_match_grid, surface_label)
-            ), (surface_label + ", fail")
-
+            np.testing.assert_allclose(
+                integrals,
+                compress(grid, integrals_match_grid, surface_label),
+                err_msg=surface_label + ", fail",
+            )
             surface_indices = benchmark(grid, integrands, surface_label)[1].values()
             for i, indices in enumerate(surface_indices):
                 for index in indices:
-                    assert np.allclose(integrals[i], integrals_match_grid[index]), (
-                        surface_label + ", fail"
+                    np.testing.assert_allclose(
+                        integrals[i],
+                        integrals_match_grid[index],
+                        err_msg=surface_label + ", fail",
                     )
 
         test("rho")
@@ -188,41 +174,27 @@ class TestComputeUtils:
         Test that all surface averages of a flux surface function are identity operations.
         Relies on correctness of the surface_integrals and _expand functions.
         """
+        grid = random_grid()
         eq = load_eq("HELIOTRON")
-        grid = ConcentricGrid(
-            L=eq.L_grid,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=eq.sym,
-            node_pattern=eq.node_pattern,
-        )
         data = eq.compute("p", grid=grid)
         data = eq.compute("sqrt(g)", grid=grid, data=data)
         pressure_average = surface_averages(
             grid, data["p"], data["sqrt(g)"], match_grid=True
         )
-        assert np.allclose(data["p"], pressure_average)
+        np.testing.assert_allclose(data["p"], pressure_average)
 
     def test_surface_averages_homomorphism(self):
         """
         Test that all surface averages of a flux surface function are additive homomorphisms.
         Meaning average(a + b) = average(a) + average(b).
         """
+        grid = random_grid()
         eq = load_eq("HELIOTRON")
-        grid = ConcentricGrid(
-            L=eq.L_grid,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=eq.sym,
-            node_pattern=eq.node_pattern,
-        )
         data = eq.compute("|B|_t", grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
         b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
         a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
-        assert np.allclose(a_plus_b, a + b)
+        np.testing.assert_allclose(a_plus_b, a + b)
 
     def test_surface_averages_shortcut(self):
         """
@@ -240,55 +212,66 @@ class TestComputeUtils:
         )
         data = eq.compute("|B|", grid=grid)
 
-        assert np.allclose(
+        np.testing.assert_allclose(
             surface_averages(grid, data["|B|"], data["sqrt(g)"]),
             np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
-        ), "sqrt(g) fail"
-        assert np.allclose(
-            surface_averages(grid, data["|B|"]), np.mean(data["|B|"])
-        ), "no sqrt(g) fail"
+            err_msg="sqrt(g) fail",
+        )
+        np.testing.assert_allclose(
+            surface_averages(grid, data["|B|"]),
+            np.mean(data["|B|"]),
+            err_msg="no sqrt(g) fail",
+        )
 
-    def test_grid_diffs(self):
-        """
-        Test that surface average on Concentric grids and Quadrature grids are similar.
-        Displays plot.
-        """
-
-        def iota_zero_current(eq, grid):
-            data = eq.compute("|B|", grid=grid)  # puts most quantities in data
-            num = surface_averages(
-                grid,
-                data["psi_r"]
-                / data["sqrt(g)"]
-                * (
-                    data["g_tt"] * data["lambda_z"]
-                    - data["g_tz"] * (1 + data["lambda_t"])
-                ),
-            )
-            den = surface_averages(grid, data["psi_r"] / data["sqrt(g)"] * data["g_tt"])
-            return np.abs(num / den)
-
-        eq = load_eq("HELIOTRON")
-        conc_grid = ConcentricGrid(
-            L=eq.L_grid,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
+    def test_enclosed_volumes(self):
+        """Test that the volume enclosed by flux surfaces matches the known analytic formula."""
+        torus = Equilibrium()
+        rho = np.linspace(1 / 128, 1, 128)
+        grid = LinearGrid(
+            M=torus.M_grid,
+            N=torus.N_grid,
+            NFP=1,
             sym=False,
-            node_pattern=eq.node_pattern,
+            rho=rho,
         )
-        quad_grid = QuadratureGrid(
-            L=eq.L_grid,
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-        )
-        plot_compare(
-            "magnitude of iota zero current",
-            conc_grid.nodes[conc_grid.unique_rho_indices, 0],
-            iota_zero_current(eq, conc_grid),
-            "conc",
-            quad_grid.nodes[quad_grid.unique_rho_indices, 0],
-            iota_zero_current(eq, quad_grid),
-            "quad",
-        )
+        data = torus.compute("sqrt(g)_rr", grid=grid)
+        volume = enclosed_volumes(grid, data)
+        volume_r = enclosed_volumes(grid, data, dr=1)
+        volume_rr = enclosed_volumes(grid, data, dr=2)
+
+        np.testing.assert_allclose(volume, 20 * (np.pi * rho) ** 2, rtol=1e-2)
+        np.testing.assert_allclose(volume_r, 40 * np.pi ** 2 * rho, rtol=1e-2)
+        np.testing.assert_allclose(volume_rr, 40 * np.pi ** 2, rtol=1e-2)
+
+    def test_total_volume(self):
+        """Test that the volume enclosed by flux surfaces matches the device volume."""
+
+        def test(eq):
+            # TODO: sym/NFP bug in grid class.
+            #   If the grid is over multiple rho values, sym and NFP must be forced to False, 1.
+            #   I have fixed the bug for single surface grids to be able to use any sym / NFP.
+            #   Either of these grids will pass this test.
+            # grid = LinearGrid(
+            #     M=eq.M_grid,
+            #     N=eq.N_grid,
+            #     NFP=eq.NFP,
+            #     sym=eq.sym,
+            #     rho=np.atleast_1d(1),
+            # )
+            grid = LinearGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=1,
+                sym=False,
+            )
+            data = eq.compute("e_theta", grid=grid)
+            data = eq.compute("e_zeta", grid=grid, data=data)
+            total_volume = enclosed_volumes(grid, data)[-1]
+            np.testing.assert_allclose(
+                total_volume, eq.compute("V", grid=grid)["V"], rtol=1e-2
+            )
+
+        test(Equilibrium())
+        test(load_eq("DSHAPE"))
+        test(load_eq("HELIOTRON"))

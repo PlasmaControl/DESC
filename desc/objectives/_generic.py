@@ -13,18 +13,15 @@ from desc.compute import (
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
     compute_contravariant_current_density,
-    compute_contravariant_metric_coefficients,
-    compute_pressure,
     compute_quasisymmetry_error,
-    compute_toroidal_coords,
-    dot,
+    compute_DMerc,
+    compute_DShear,
+    compute_DCurr,
+    compute_DWell,
+    compute_DGeod,
+    compute_AltWell,
 )
-from desc.compute.utils import (
-    compress,
-    enclosed_volumes,
-    surface_averages,
-    surface_integrals,
-)
+from desc.compute.utils import compress
 from .objective_funs import _Objective
 
 
@@ -287,12 +284,13 @@ class ToroidalCurrent(_Objective):
         return self._shift_scale(I)
 
 
-class MagneticWell(_Objective):
+class MercierStability(_Objective):
     """
-    The magnetic well parameter is a fast proxy for MHD stability.
+    The Mercier criterion is a fast proxy for MHD stability.
     This makes it a useful figure of merit for stellarator operation.
-    Systems with positive well parameters are favorable for containment.
+    Systems with DMerc > 0 are favorable for stability.
 
+    See equation 4.16 in
     Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
     stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
     doi:10.1017/S002237782000121X.
@@ -301,8 +299,8 @@ class MagneticWell(_Objective):
     _scalar = True
     _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="magnetic well"):
-        """Initialize a Magnetic Well Objective.
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Mercier DMerc"):
+        """Initialize a Mercier Stability Objective.
 
         Parameters
         ----------
@@ -316,12 +314,14 @@ class MagneticWell(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
         name : str
             Name of the objective function.
         """
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Magnetic Well: {:10.3e}"
+        self._callback_fmt = "Mercier DMerc: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -361,28 +361,14 @@ class MagneticWell(_Objective):
             self._current.grid = self.grid
             self._iota = None
 
-        R_derivs = jnp.vstack(
-            (
-                data_index["B_r"]["R_derivs"],
-                data_index["B_theta_r"]["R_derivs"],
-                data_index["J"]["R_derivs"],
-            )
-        )
-        L_derivs = jnp.vstack(
-            (
-                data_index["B_r"]["L_derivs"],
-                data_index["B_theta_r"]["L_derivs"],
-                data_index["J"]["L_derivs"],
-            )
-        )
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=R_derivs, build=True
+            self.grid, eq.R_basis, derivs=data_index["DMerc"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=R_derivs, build=True
+            self.grid, eq.Z_basis, derivs=data_index["DMerc"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=L_derivs, build=True
+            self.grid, eq.L_basis, derivs=data_index["DMerc"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -395,7 +381,7 @@ class MagneticWell(_Objective):
         self._built = True
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
-        """Compute the magnetic well parameter.
+        """Compute the Mercier stability criterion.
 
         Parameters
         ----------
@@ -416,26 +402,144 @@ class MagneticWell(_Objective):
 
         Returns
         -------
-        W : ndarray
-            Magnetic well parameter.
-
-            Currently, returns a dictionary of values for debugging purposes.
+        DMerc : ndarray
+            Mercier stability criterion.
         """
-        # data = compute_contravariant_magnetic_field(
-        #     R_lmn,
-        #     Z_lmn,
-        #     L_lmn,
-        #     i_l,
-        #     c_l,
-        #     Psi,
-        #     self._R_transform,
-        #     self._Z_transform,
-        #     self._L_transform,
-        #     self._iota,
-        #     self._current,
-        # )
-        # Dcurr specific call
-        data = compute_contravariant_current_density(
+        data = compute_DMerc(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+            self._current,
+        )
+        return self._shift_scale(compress(self.grid, data["DMerc"]))
+
+
+class MercierShear(_Objective):
+    """Mercier stability criterion magnetic shear term.
+
+    See equation 4.17 in
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Mercier DShear"):
+        """Initialize a Mercier Shear Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+        name : str
+            Name of the objective function.
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Mercier DShear: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["DShear"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["DShear"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["DShear"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+        """Compute the Mercier stability criterion magnetic sheer term.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        DShear : ndarray
+            Mercier stability criterion magnetic sheer term.
+        """
+        data = compute_DShear(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -448,123 +552,553 @@ class MagneticWell(_Objective):
             self._iota,
             self._current,
         )
-        # end Dcurr specific calls
-        data = compute_toroidal_coords(
-            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
-        )
-        data = compute_pressure(p_l, self._pressure, data)
-        data = compute_contravariant_metric_coefficients(
-            R_lmn, Z_lmn, self._R_transform, self._Z_transform, data
-        )
+        return self._shift_scale(compress(self.grid, data["DShear"]))
 
-        dv_drho = enclosed_volumes(self.grid, data, dr=1)
-        sqrtg = jnp.abs(data["sqrt(g)"])
-        sqrtg_r = jnp.abs(data["sqrt(g)_r"])
-        Bsq = dot(data["B"], data["B"])
-        Bsq_av = surface_averages(self.grid, Bsq, sqrtg, denominator=dv_drho)
 
-        # pressure = thermal + magnetic
-        # The flux surface average function is an additive homomorphism
-        # This means average(a + b) = average(a) + average(b).
-        # Thermal pressure is constant over a rho surface.
-        # Therefore average(thermal) = thermal.
-        dthermal_drho = 2 * mu_0 * compress(self.grid, data["p_r"])
-        dmagnetic_av_drho = (
-            surface_integrals(
-                self.grid, sqrtg_r * Bsq + sqrtg * 2 * dot(data["B"], data["B_r"])
+class MercierCurr(_Objective):
+    """Mercier stability criterion toroidal current term.
+
+    See equation 4.18 in
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Mercier DCurr"):
+        """Initialize a Mercier Curr Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+        name : str
+            Name of the objective function.
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Mercier DCurr: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
             )
-            - surface_integrals(self.grid, sqrtg_r) * Bsq_av
-        ) / dv_drho
 
-        unique_rho = compress(self.grid, self.grid.nodes[:, 0])
-        W1 = unique_rho * (dthermal_drho + dmagnetic_av_drho) / Bsq_av
+        self._dim_f = 1
 
-        V = enclosed_volumes(self.grid, data)
-        W2 = V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
 
-        return {
-            "DESC DShear": (a := self.DShear(data)),
-            "DESC DCurr": (b := self.DCurr(data)),
-            "DESC DWell": self._shift_scale(c := self.DWell(data)),
-            "DESC DGeod": (d := self.DGeod(data)),
-            "DESC DMerc": a + b + c + d,
-            "1. DESC Well: M. Landreman eq. 3.2 with rho * d/drho": self._shift_scale(
-                W1
-            ),
-            "2. DESC Well: M. Landreman eq. 3.2": self._shift_scale(W2),
-            "volume": V,
-        }
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
-    # TODO:
-    #   How do we want to return these quantities?
-    #   New objectives?
-    def DShear(self, data):
-        """M. Landreman Equation 4.17"""
-        return compress(self.grid, jnp.square(data["iota_r"] / data["psi_r"])) / (
-            16 * jnp.pi ** 2
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["DCurr"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["DCurr"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["DCurr"]["L_derivs"], build=True
         )
 
-    def DCurr(self, data):
-        """M. Landreman Equation 4.18"""
-        # grad(psi) = grad(rho) * dpsi/drho
-        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
-        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
-        dI_dpsi = surface_averages(
-            self.grid,
-            data["B_theta_r"] / data["psi_r"],
-            match_grid=True,
-            denominator=4 * jnp.pi ** 2,
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+        """Compute the Mercier stability criterion toroidal current term.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        DCurr : ndarray
+            Mercier stability criterion toroidal current term.
+        """
+        data = compute_DCurr(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._current,
         )
-        xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
-        # data["G"] = poloidal current
-        sign_G = jnp.sign(surface_integrals(self.grid, data["B_zeta"]))
+        return self._shift_scale(compress(self.grid, data["DCurr"]))
 
-        return (
-            -sign_G
-            / (16 * jnp.pi ** 4)
-            * compress(self.grid, data["iota_r"] / data["psi_r"])
-            * surface_integrals(self.grid, A * dot(xi, data["B"]))
+
+class MercierWell(_Objective):
+    """Mercier stability criterion magnetic well term.
+
+    The magnetic well is a fast proxy for MHD stability.
+    This makes it a useful figure of merit for stellarator operation.
+    Systems with DWell > 0 are favorable for stability.
+
+    See equation 4.19 in
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Mercier DWell"):
+        """Initialize a Mercier Well Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+        name : str
+            Name of the objective function.
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Mercier DWell: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["DWell"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["DWell"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["DWell"]["L_derivs"], build=True
         )
 
-    def DWell(self, data):
-        """M. Landreman Equation 4.19"""
-        # grad(psi) = grad(rho) * dpsi/drho
-        psi_r_sq = jnp.square(data["psi_r"])
-        grad_psi_sq = data["g^rr"] * psi_r_sq
-        # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
-        A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
-        dv_drho = enclosed_volumes(self.grid, data, dr=1)
-        d2v_drho2 = enclosed_volumes(self.grid, data, dr=2)
-        d2v_dpsi2 = compress(self.grid, jnp.sign(data["psi"]) / psi_r_sq) * (
-            d2v_drho2 - dv_drho * compress(self.grid, data["psi_rr"] / data["psi_r"])
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+        """Compute the Mercier stability criterion magnetic well term.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        DWell : ndarray
+            Mercier stability criterion magnetic well term.
+        """
+        data = compute_DWell(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+            self._current,
         )
-        dp_dpsi = compress(self.grid, data["p_r"] / data["psi_r"])
-        Bsq = dot(data["B"], data["B"])
+        return self._shift_scale(compress(self.grid, data["DWell"]))
 
-        return (
-            mu_0
-            / (64 * jnp.pi ** 6)
-            * dp_dpsi
-            * (d2v_dpsi2 - mu_0 * dp_dpsi * surface_integrals(self.grid, A / Bsq))
-            * surface_integrals(self.grid, A / grad_psi_sq * Bsq)
+
+class MercierGeod(_Objective):
+    """Mercier stability criterion geodesic curvature term.
+
+    See equation 4.20 in
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Mercier DGeod"):
+        """Initialize a Mercier Geod Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+        name : str
+            Name of the objective function.
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Mercier DGeod: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["DGeod"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["DGeod"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["DGeod"]["L_derivs"], build=True
         )
 
-    def DGeod(self, data):
-        """M. Landreman Equation 4.20"""
-        # grad(psi) = grad(rho) * dpsi/drho
-        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
-        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
-        j_dot_b = mu_0 * dot(data["J"], data["B"])
-        Bsq = dot(data["B"], data["B"])
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
 
-        return (
-            jnp.square(surface_integrals(self.grid, A * j_dot_b))
-            - surface_integrals(self.grid, A * Bsq)
-            * surface_integrals(self.grid, A * jnp.square(j_dot_b) / Bsq)
-        ) / (64 * jnp.pi ** 6)
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+        """Compute the Mercier stability criterion geodesic curvature term.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        DGeod : ndarray
+            Mercier stability criterion geodesic curvature term.
+        """
+        data = compute_DGeod(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._current,
+        )
+        return self._shift_scale(compress(self.grid, data["DGeod"]))
+
+
+class AltMagneticWell(_Objective):
+    """Alternative magnetic well parameter.
+
+    The magnetic well is a fast proxy for MHD stability.
+    This makes it a useful figure of merit for stellarator operation.
+    Systems with DWell > 0 are favorable for stability.
+
+    See equation 3.2 in
+    Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
+    stellarators near the magnetic axis. Journal of Plasma Physics, 86(5), 905860510.
+    doi:10.1017/S002237782000121X.
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(
+        self, eq=None, target=0, weight=1, grid=None, name="alternative magnetic well"
+    ):
+        """Initialize an Alternative Magnetic Well Objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        target : float, ndarray, optional
+            Target value(s) of the objective.
+            len(target) must be equal to Objective.dim_f
+        weight : float, ndarray, optional
+            Weighting to apply to the Objective, relative to other Objectives.
+            len(weight) must be equal to Objective.dim_f
+        grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+            Collocation grid containing the nodes to evaluate at.
+            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+        name : str
+            Name of the objective function.
+        """
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "alternative magnetic well: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["AltWell"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["AltWell"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["AltWell"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+        """Compute an alternative magnetic well parameter.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        AltWell : ndarray
+            Alternative magnetic well parameter.
+        """
+        data = compute_AltWell(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+            self._current,
+        )
+        return self._shift_scale(compress(self.grid, data["AltWell"]))
 
 
 class RadialCurrentDensity(_Objective):

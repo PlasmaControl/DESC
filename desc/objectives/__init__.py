@@ -10,7 +10,12 @@ from .linear_objectives import (
 from ._generic import (
     GenericObjective,
     ToroidalCurrent,
-    MagneticWell,
+    MercierStability,
+    MercierShear,
+    MercierCurr,
+    MercierWell,
+    MercierGeod,
+    AltMagneticWell,
 )
 from ._equilibrium import (
     Energy,

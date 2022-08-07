@@ -26,6 +26,14 @@ from ._field import (
     compute_B_dot_gradB,
     compute_contravariant_current_density,
 )
+from ._mercier import (
+    compute_DMerc,
+    compute_DShear,
+    compute_DCurr,
+    compute_DWell,
+    compute_DGeod,
+    compute_AltWell,
+)
 from ._qs import compute_boozer_coords, compute_quasisymmetry_error
 from ._equil import compute_force_error, compute_energy
 

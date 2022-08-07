@@ -42,7 +42,7 @@ def _get_proper_surface(grid, surface_label):
             if grid.num_theta == 1
             else grid.spacing[:, [0, 2]].prod(axis=1)
         )
-        raise ValueError("Not implemented yet.")
+        raise NotImplementedError("theta not implemented yet")
     elif surface_label == "zeta":
         surface_label_nodes = grid.nodes[:, 2]
         unique_indices = grid.unique_zeta_indices
@@ -70,7 +70,7 @@ def compress(grid, x, surface_label="rho"):
     Returns
     -------
     ndarray
-        x[unique_surface_label_indices].
+        x[grid.unique_surface_label_indices].
     """
     if surface_label == "rho":
         return x[grid.unique_rho_indices]
@@ -91,7 +91,7 @@ def expand(grid, x, surface_label="rho"):
     x : ndarray
         Stores the values of some surface function - (a function whose output is constant over a surface) -
         for all unique surfaces of the specified label on the grid.
-        len(x) should be grid.num_ of the surface label. x should be sorted such that x[0] corresponds to the
+        len(x) should be grid.num_surface_label. x should be sorted such that x[0] corresponds to the
         value associated with the smallest surface value on the grid and x[-1] the largest.
     surface_label : str
         The surface label of rho, theta, or zeta.
@@ -102,13 +102,13 @@ def expand(grid, x, surface_label="rho"):
         An array that matches the grid pattern.
     """
 
-    # assert len(x) == grid.num_ of the surface_label
-    # TODO: confirm this is standard way to get whether user has jax
+    # TODO: confirm this is the standard way to get whether user has jax
     #   and that desc.backend.jnp is an alias for numpy when user doesn't have jax
     no_jax = os.environ.get("DESC_BACKEND") == "numpy"
     number_nodes_zeta_surface = len(grid.nodes) // grid.num_zeta
 
     if surface_label == "rho":
+        assert len(x) == grid.num_rho
         # First duplicate each x[i] over every theta node of the same rho surface.
         # The difference between unique rho indices is the number of theta nodes at each rho surface.
         # Next, tile the result to repeat the pattern on a single zeta surface over all zeta surfaces.
@@ -127,9 +127,11 @@ def expand(grid, x, surface_label="rho"):
         return jnp.tile(zeta_surface, reps=grid.num_zeta)
 
     if surface_label == "theta":
-        raise ValueError("Not implemented yet.")
+        assert len(x) == grid.num_theta
+        raise NotImplementedError("theta not implemented yet")
 
     if surface_label == "zeta":
+        assert len(x) == grid.num_zeta
         if no_jax:
             return jnp.repeat(x, repeats=number_nodes_zeta_surface)
         return jnp.repeat(
@@ -166,7 +168,6 @@ def surface_integrals(grid, integrands=1, surface_label="rho", match_grid=False)
     integrals : ndarray
         Surface integrals of integrand over each surface in grid.
     """
-
     surface_label_nodes, unique_indices, upper_bound, ds = _get_proper_surface(
         grid, surface_label
     )
@@ -203,6 +204,8 @@ def surface_averages(
     ----------
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
+        Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+            assert (grid.sym is False) and (grid.NFP == 1 or grid.num_surface_label == 1)
     q : ndarray
         Quantity to average.
     sqrtg : ndarray
@@ -229,7 +232,6 @@ def surface_averages(
         Surface averages of the given quantity, q, over each surface in grid.
     """
     if denominator is None:
-        # sqrt(g) = 1 -> denominator = array of 4pi^2 for rho surface, 2pi for other surface.
         denominator = surface_integrals(grid, sqrtg, surface_label)
     averages = surface_integrals(grid, sqrtg * q, surface_label) / denominator
     return expand(grid, averages, surface_label) if match_grid else averages
@@ -258,7 +260,7 @@ def enclosed_volumes(grid, data, dr=0, match_grid=False):
     Returns
     -------
     ndarray
-        Specified derivative of volume enclosed by flux surface wrt rho.
+        Derivative wrt rho of specified order of volume enclosed by flux surface.
     """
     if dr == 0:
         from desc.compute import cross

@@ -1,4 +1,4 @@
-"""Compute functions for quasisymmetry objectives, ie Boozer, Two-Term, and Triple Product."""
+"""Compute functions for quasisymmetry objectives, i.e. Boozer, Two-Term, and Triple Product."""
 
 from desc.backend import jnp, put, sign
 

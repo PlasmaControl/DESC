@@ -173,7 +173,7 @@ The ``objective`` option ``force`` minimizes the equilibrium force balance error
 The ``bdry_mode`` option ``LCFS`` enforces the boundary condition on the shape of the last closed flux surface, while the ``Poincare`` option constraints the shapes of the flux surfaces in the Poincare section at :math:`\zeta=0`. 
 
 Pressure & Iota/Current Profiles
-****************************************
+********************************
 
 .. code-block:: text
 
@@ -185,21 +185,20 @@ Pressure & Iota/Current Profiles
 - ``l`` (int): Radial polynomial order. 
 - ``p`` (float): Pressure profile coefficients :math:`p_{l}`. 
 - ``i`` (float): Rotational transform coefficients :math:`\iota_{l}`. 
-- ``c`` (float): Toroidal current coefficients :math:`\iota_{l}`. 
+- ``c`` (float): Toroidal current derivative coefficients :math:`c_{l}`. 
 
-The pressure and rotational transform or toroidal current profiles are given as a power series in the flux surface label 
-:math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
+The profiles are given as a power series in the flux surface label :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
 
 .. math::
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
    \iota(\rho) &= \sum \iota_{l} \rho^{l} \\
-   \frac{2\pi}{\mu_0} I(\rho) &= \sum c_{l} \rho^{l} \\.
+   \frac{2\pi}{\mu_0} \partial_{\rho} I(\rho) &= \sum c_{l} \rho^{l} \\.
    \end{aligned}
 
 The coefficients :math:`p_{l}` are specified by the input variables ``p`` in Pascals. 
 The coefficients :math:`\iota_{l}` are specified by the input variables ``i``. 
-The coefficients :math:`c_{l}` are specified by the input variables ``i`` in Amperes. 
+The coefficients :math:`c_{l}` are specified by the input variables ``c`` in Amperes. 
 Either the rotational transform or toroidal current profiles can be specified, but not both. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 

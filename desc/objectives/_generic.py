@@ -1,18 +1,15 @@
-from scipy.constants import mu_0
 from inspect import signature
+from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, LinearGrid, ConcentricGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 import desc.compute as compute_funs
 from desc.compute import (
     arg_order,
     data_index,
+    compute_contravariant_current_density,
     compute_covariant_metric_coefficients,
     compute_magnetic_field_magnitude,
-    compute_contravariant_current_density,
     compute_quasisymmetry_error,
     compute_DMerc,
     compute_DShear,
@@ -22,6 +19,9 @@ from desc.compute import (
     compute_AltWell,
 )
 from desc.compute.utils import compress
+from desc.grid import QuadratureGrid, LinearGrid, ConcentricGrid
+from desc.transform import Transform
+from desc.utils import Timer
 from .objective_funs import _Objective
 
 
@@ -315,7 +315,7 @@ class MercierStability(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -451,7 +451,7 @@ class MercierShear(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -583,7 +583,7 @@ class MercierCurr(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -719,7 +719,7 @@ class MercierWell(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -855,7 +855,7 @@ class MercierGeod(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -993,7 +993,7 @@ class AltMagneticWell(_Objective):
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
             Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.sym is False) and (grid.NFP == 1 or grid.num_rho == 1)
+                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """

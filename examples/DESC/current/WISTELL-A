@@ -23,7 +23,7 @@ pert_order = 2
 ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 50
+nfev = 150
 
 # solver methods
 optimizer         = lsq-exact
@@ -31,13 +31,20 @@ objective         = force
 spectral_indexing = fringe
 node_pattern      = jacobi
 
-# pressure and rotational transform profiles
+# pressure and current profiles
 l:   0	p =   0.00000000E+00	c =   0
-l:   2	p =   0.00000000E+00	c =   1E+5
-l:   4	p =   0.00000000E+00	c =   0
-l:   6	p =   0.00000000E+00	c =   0
-l:   8	p =   0.00000000E+00	c =   0
-l:  10	p =   0.00000000E+00	c =   0
+l:   2	p =   0.00000000E+00	c =   1.96568821e+03
+l:   4	p =   0.00000000E+00	c =  -1.79334860e+04
+l:   6	p =   0.00000000E+00	c =   1.82353636e+04
+l:   8	p =   0.00000000E+00	c =   2.46159320e+05
+l:  10	p =   0.00000000E+00	c =  -1.10122259e+06
+l:  12	p =   0             	c =   2.82520513e+06
+l:  14	p =   0             	c =  -7.35036099e+06
+l:  16	p =   0             	c =   1.70495519e+07
+l:  18	p =   0             	c =  -2.63241057e+07
+l:  20	p =   0             	c =   2.40710690e+07
+l:  22	p =   0             	c =  -1.18296598e+07
+l:  24	p =   0             	c =   2.41097153e+06
 
 # magnetic axis initial guess
 n:   0	R0 =   2.01244000E+00	Z0 =   0.00000000E+00

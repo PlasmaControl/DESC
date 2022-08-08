@@ -29,11 +29,12 @@ objective         = force
 spectral_indexing = fringe
 node_pattern      = jacobi
 
-# pressure and rotational transform profiles
+# pressure and current profiles
 l:   0  p =  1.6E+3  c = 0
-l:   2  p = -3.2E+3  c = -445654.858
-l:   4  p =  1.6E+3  c = 213247.774
-l:   6  p = 0        c = 7679.370
+l:   2  p = -3.2E+3  c = -438474.58565238
+l:   4  p =  1.6E+3  c = 175194.00076555
+l:   6  p = 0        c = 71469.55268625
+l:   8  p = 0        c = -33076.95424078
 
 # magnetic axis initial guess
 n:   0  R0 =  3.65

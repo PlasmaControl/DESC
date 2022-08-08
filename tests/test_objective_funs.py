@@ -61,7 +61,7 @@ def get_desc_eq(name):
 
     Returns
     -------
-    eq : Equilibrium
+    Equilibrium
         DESC equilibrium.
     """
     return desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
@@ -101,9 +101,8 @@ def get_grid(eq, rho):
 
     Returns
     -------
-    :rtype: (ndarray, ndarray)
-    grid : LinearGrid
-        Defined over rho array with equilibrium resolution.
+    LinearGrid
+        Defined over the given rho array with resolution matching equilibrium's.
     """
     return LinearGrid(
         M=eq.M_grid,

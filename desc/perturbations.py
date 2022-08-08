@@ -21,6 +21,7 @@ def perturb(
     dL=None,
     dp=None,
     di=None,
+    dc=None,
     dPsi=None,
     dRb=None,
     dZb=None,
@@ -40,9 +41,9 @@ def perturb(
         Objective function to satisfy.
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
-    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or float
+    dR, dZ, dL, dp, di, dc, dPsi, dRb, dZb : ndarray or float
         Deltas for perturbations of R, Z, lambda, pressure, rotational transform,
-        total toroidal magnetic flux, R_boundary, and Z_boundary.
+        toroidal current, total toroidal magnetic flux, R_boundary, and Z_boundary.
         Setting to None or zero ignores that term in the expansion.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -69,7 +70,7 @@ def perturb(
         warnings.warn(
             colored(
                 "Computing perturbations with finite differences can be "
-                + "highly innacurate. Consider using JAX for exact derivatives.",
+                + "highly inaccurate. Consider using JAX for exact derivatives.",
                 "yellow",
             )
         )
@@ -104,6 +105,8 @@ def perturb(
         deltas["p_l"] = dp
     if di is not None and np.any(di):
         deltas["i_l"] = di
+    if dc is not None and np.any(dc):
+        deltas["c_l"] = dc
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
     if dRb is not None and np.any(dRb):
@@ -120,6 +123,7 @@ def perturb(
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
+    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective.args
     )
@@ -292,6 +296,7 @@ def perturb(
         setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
         constraint.update_target(eq_new)
+    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective.args
     )
@@ -346,7 +351,7 @@ def optimal_perturb(
     objective_g : ObjectiveFunction
         Objective function to optimize.
     dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
-        Array of indicies of modes to include in the perturbations of R, Z, lambda,
+        Array of indices of modes to include in the perturbations of R, Z, lambda,
         pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
         Setting to True (False) includes (excludes) all modes.
     subspace : ndarray, optional
@@ -376,7 +381,7 @@ def optimal_perturb(
         warnings.warn(
             colored(
                 "Computing perturbations with finite differences can be "
-                + "highly innacurate. Consider using JAX for exact derivatives.",
+                + "highly inaccurate. Consider using JAX for exact derivatives.",
                 "yellow",
             )
         )
@@ -472,6 +477,7 @@ def optimal_perturb(
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)
+    # FIXME: linting/editor picks up that not enough values are unpacked here
     (
         xp,
         A,
@@ -678,6 +684,7 @@ def optimal_perturb(
         idx0 += len(value)
     for constraint in constraints:
         constraint.update_target(eq_new)
+    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective_f.args
     )

@@ -12,7 +12,6 @@ from desc.compute import (
     compute_toroidal_flux,
     dot,
 )
-from desc.compute._core import check_derivs
 from desc.compute.utils import (
     compress,
     enclosed_volumes,
@@ -20,6 +19,7 @@ from desc.compute.utils import (
     surface_averages,
     surface_integrals,
 )
+from desc.compute._core import check_derivs
 
 
 def compute_DMerc(
@@ -564,9 +564,6 @@ def compute_AltWell(
         return data
     grid = R_transform.grid
     data = compute_pressure(p_l, pressure, data)
-    data = compute_contravariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data
-    )
     data = compute_contravariant_magnetic_field(
         R_lmn,
         Z_lmn,

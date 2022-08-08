@@ -12,7 +12,7 @@ from desc.equilibrium import Equilibrium
 import desc.io
 
 
-def load_eq(name):
+def get_desc_eq(name):
     """
     Parameters
     ----------
@@ -21,14 +21,10 @@ def load_eq(name):
 
     Returns
     -------
-    eq : Equilibrium
-        The equilibrium.
+    Equilibrium
+        DESC equilibrium.
     """
-    try:
-        eq = desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
-    except FileNotFoundError:
-        assert False, "Could not locate equilibrium output file."
-    return eq
+    return desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
 
 
 def random_grid(NFP=None, sym=None):
@@ -132,7 +128,7 @@ class TestComputeUtils:
     def test_surface_area_weighted(self):
         """Test the rho surface area with the sqrt(g) factor is monotonic."""
         grid = random_grid()
-        eq = load_eq("HELIOTRON")
+        eq = get_desc_eq("HELIOTRON")
         sqrtg = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
 
         areas_1 = benchmark(grid, sqrtg)[0]
@@ -175,7 +171,7 @@ class TestComputeUtils:
         Relies on correctness of the surface_integrals and _expand functions.
         """
         grid = random_grid()
-        eq = load_eq("HELIOTRON")
+        eq = get_desc_eq("HELIOTRON")
         data = eq.compute("p", grid=grid)
         data = eq.compute("sqrt(g)", grid=grid, data=data)
         pressure_average = surface_averages(
@@ -189,7 +185,7 @@ class TestComputeUtils:
         Meaning average(a + b) = average(a) + average(b).
         """
         grid = random_grid()
-        eq = load_eq("HELIOTRON")
+        eq = get_desc_eq("HELIOTRON")
         data = eq.compute("|B|_t", grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
         b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
@@ -201,7 +197,7 @@ class TestComputeUtils:
         Test that surface average on LinearGrid with single rho surface matches mean() shortcut.
         Relies on correctness of surface_integrals.
         """
-        eq = load_eq("HELIOTRON")
+        eq = get_desc_eq("HELIOTRON")
         rho = (1 - 1e-4) * np.random.default_rng().random() + 1e-4  # uniform [1e-4, 1)
         grid = LinearGrid(
             M=eq.M_grid,
@@ -247,7 +243,7 @@ class TestComputeUtils:
         """Test that the volume enclosed by flux surfaces matches the device volume."""
 
         def test(eq):
-            # TODO: sym/NFP bug in grid class.
+            # TODO: Good test for the sym/NFP bug in grid.py.
             #   If the grid is over multiple rho values, sym and NFP must be forced to False, 1.
             #   I have fixed the bug for single surface grids to be able to use any sym / NFP.
             #   Either of these grids will pass this test.
@@ -273,5 +269,5 @@ class TestComputeUtils:
             )
 
         test(Equilibrium())
-        test(load_eq("DSHAPE"))
-        test(load_eq("HELIOTRON"))
+        test(get_desc_eq("DSHAPE"))
+        test(get_desc_eq("HELIOTRON"))

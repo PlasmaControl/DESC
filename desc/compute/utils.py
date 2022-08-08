@@ -94,7 +94,7 @@ def expand(grid, x, surface_label="rho"):
         len(x) should be grid.num_surface_label. x should be sorted such that x[0] corresponds to the
         value associated with the smallest surface value on the grid and x[-1] the largest.
     surface_label : str
-        The surface label of rho, theta, or zeta.
+        The surface label of rho, theta (not implemented yet), or zeta.
 
     Returns
     -------
@@ -150,11 +150,13 @@ def surface_integrals(grid, integrands=1, surface_label="rho", match_grid=False)
     ----------
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
+        Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
+            assert (grid.num_surface_label == 1) or (grid.sym is False and grid.NFP == 1)
     integrands : ndarray
         Quantity to integrate.
         Should not include the differential elements (dtheta * dzeta for rho surface).
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
+        The surface label of rho, theta (not implemented yet), or zeta to compute integration over.
         Defaults to the flux surface label rho.
     match_grid : bool
         False to return a compressed array which assigns every surface integral to a single element.
@@ -171,6 +173,9 @@ def surface_integrals(grid, integrands=1, surface_label="rho", match_grid=False)
     surface_label_nodes, unique_indices, upper_bound, ds = _get_proper_surface(
         grid, surface_label
     )
+    # assert (len(unique_indices) <= 1) or (
+    #     (grid.sym is False or grid.sym == 0) and grid.NFP == 1
+    # ), "The symmetry / NFP bugs in grid.py are not fixed yet."
 
     # DESIRED ALGORITHM
     # surfaces = dict()
@@ -205,13 +210,13 @@ def surface_averages(
     grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
         Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-            assert (grid.sym is False) and (grid.NFP == 1 or grid.num_surface_label == 1)
+            assert (grid.num_surface_label == 1) or (grid.sym is False and grid.NFP == 1)
     q : ndarray
         Quantity to average.
     sqrtg : ndarray
         Magnitude of the 3d jacobian determinant, data["sqrt(g)"]. Defaults to 1.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
+        The surface label of rho, theta (not implemented yet), or zeta to compute integration over.
         Defaults to the flux surface label rho.
     match_grid : bool
         False to return an array which assigns every surface integral to a single element of the array.

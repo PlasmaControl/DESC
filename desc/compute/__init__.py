@@ -16,7 +16,13 @@ from ._core import (
     cross,
     dot,
 )
-from .utils import surface_averages, surface_integrals
+from .utils import (
+    compress,
+    enclosed_volumes,
+    expand,
+    surface_averages,
+    surface_integrals,
+)
 from ._field import (
     compute_contravariant_magnetic_field,
     compute_covariant_magnetic_field,

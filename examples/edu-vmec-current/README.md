@@ -1,4 +1,4 @@
-These are inputs that are adjusted to match the DESC inputs in ../../../examples/DESC/input-current.
+I will switch this to normal vmec on stellar.
 
 ## Fail list:
 The inputs that exit early / don't converge are:

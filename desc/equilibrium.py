@@ -654,6 +654,7 @@ class Equilibrium(_Configuration, IOAble):
         dZb=None,
         dp=None,
         di=None,
+        dc=None,
         dPsi=None,
         order=2,
         tr_ratio=0.1,
@@ -666,11 +667,11 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to satisfy. Default = force balance.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, and total toroidal magnetic flux.
+            rotational transform, toroidal current, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -687,7 +688,7 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Perturbed equilibrum.
+            Perturbed equilibrium.
 
         """
         if objective is None:
@@ -712,6 +713,7 @@ class Equilibrium(_Configuration, IOAble):
             dZb=dZb,
             dp=dp,
             di=di,
+            dc=dc,
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,

@@ -123,15 +123,23 @@ def _compute_coords(equil, check_all_zeta=False):
     v_coords = equil.compute("Z", v_grid)
 
     # rho contours
-    Rr1 = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Rr1 = r_coords["R"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
     Rr1 = np.swapaxes(Rr1, 0, 1)
-    Zr1 = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+    Zr1 = r_coords["Z"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
     Zr1 = np.swapaxes(Zr1, 0, 1)
 
     # vartheta contours
-    Rv1 = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Rv1 = v_coords["R"].reshape(
+        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+    )
     Rv1 = np.swapaxes(Rv1, 0, 1)
-    Zv1 = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Zv1 = v_coords["Z"].reshape(
+        (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+    )
     Zv1 = np.swapaxes(Zv1, 0, 1)
 
     return Rr1, Zr1, Rv1, Zv1

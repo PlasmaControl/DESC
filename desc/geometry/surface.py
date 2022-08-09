@@ -9,7 +9,7 @@ from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.transform import Transform
 from desc.io import InputReader
 from .core import Surface
-from .utils import xyz2rpz_vec, rpz2xyz_vec, xyz2rpz, rpz2xyz
+from .utils import rpz2xyz_vec, rpz2xyz
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -109,9 +109,9 @@ class FourierRZToroidalSurface(Surface):
         self.rho = rho
         if grid is None:
             grid = LinearGrid(
-                rho=self.rho,
-                M=4 * self.M + 1,
-                N=4 * self.N + 1,
+                M=2 * self.M,
+                N=2 * self.N,
+                rho=np.asarray(self.rho),
                 endpoint=True,
             )
         self._grid = grid
@@ -159,7 +159,7 @@ class FourierRZToroidalSurface(Surface):
         self._Z_transform.grid = self.grid
 
     def change_resolution(self, *args, **kwargs):
-        """Change the maximum poloidal and toroidal resolution"""
+        """Change the maximum poloidal and toroidal resolution."""
         assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
@@ -265,9 +265,13 @@ class FourierRZToroidalSurface(Surface):
             return self._R_transform, self._Z_transform
         if not isinstance(grid, Grid):
             if np.isscalar(grid):
-                grid = LinearGrid(rho=1, M=grid, N=grid, NFP=self.NFP)
+                grid = LinearGrid(
+                    M=grid, N=grid, rho=np.asarray(self.rho), NFP=self.NFP
+                )
             elif len(grid) == 2:
-                grid = LinearGrid(rho=1, M=grid[0], N=grid[1], NFP=self.NFP)
+                grid = LinearGrid(
+                    M=grid[0], N=grid[1], rho=np.asarray(self.rho), NFP=self.NFP
+                )
             elif grid.shape[1] == 2:
                 grid = np.pad(grid, ((0, 0), (1, 0)), constant_values=self.rho)
                 grid = Grid(grid, sort=False)
@@ -355,7 +359,8 @@ class FourierRZToroidalSurface(Surface):
             coords = jnp.stack([R, phi, Z], axis=1)
         else:
             raise NotImplementedError(
-                "Derivatives higher than 3 have not been implemented in cylindrical coordinates"
+                "Derivatives higher than 3 have not been implemented in "
+                + "cylindrical coordinates."
             )
         if basis.lower() == "xyz":
             if (dt > 0) or (dz > 0):
@@ -524,7 +529,7 @@ class ZernikeRZToroidalSection(Surface):
         modes_Z=None,
         spectral_indexing="fringe",
         sym="auto",
-        zeta=0,
+        zeta=0.0,
         grid=None,
         name="",
     ):
@@ -582,7 +587,7 @@ class ZernikeRZToroidalSection(Surface):
         self.zeta = zeta
         if grid is None:
             grid = LinearGrid(
-                L=2 * self.L, M=4 * self.M + 1, zeta=self.zeta, endpoint=True
+                L=self.L, M=2 * self.M, zeta=np.asarray(self.zeta), endpoint=True
             )
         self._grid = grid
         self._R_transform, self._Z_transform = self._get_transforms(grid)
@@ -621,7 +626,7 @@ class ZernikeRZToroidalSection(Surface):
         self._Z_transform.grid = self.grid
 
     def change_resolution(self, *args, **kwargs):
-        """Change the maximum radial and poloidal resolution"""
+        """Change the maximum radial and poloidal resolution."""
         assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
             len(args) == 0
         ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
@@ -678,7 +683,6 @@ class ZernikeRZToroidalSection(Surface):
 
     def get_coeffs(self, l, m=0):
         """Get Zernike coefficients for given mode number(s)."""
-
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
 
@@ -700,7 +704,6 @@ class ZernikeRZToroidalSection(Surface):
 
     def set_coeffs(self, l, m=0, R=None, Z=None):
         """Set specific Zernike coefficients."""
-
         l, m, R, Z = (
             np.atleast_1d(l),
             np.atleast_1d(m),
@@ -721,9 +724,9 @@ class ZernikeRZToroidalSection(Surface):
             return self._R_transform, self._Z_transform
         if not isinstance(grid, Grid):
             if np.isscalar(grid):
-                grid = LinearGrid(L=grid, M=grid, zeta=0, NFP=1)
+                grid = LinearGrid(L=grid, M=grid, zeta=np.asarray(self.zeta))
             elif len(grid) == 2:
-                grid = LinearGrid(L=grid[0], M=grid[1], zeta=0, NFP=1)
+                grid = LinearGrid(L=grid[0], M=grid[1], zeta=np.asarray(self.zeta))
             elif grid.shape[1] == 2:
                 grid = np.pad(grid, ((0, 0), (0, 1)), constant_values=self.zeta)
                 grid = Grid(grid, sort=False)
@@ -836,6 +839,7 @@ class ZernikeRZToroidalSection(Surface):
         -------
         area : float
             surface area
+
         """
         if R_lmn is None:
             R_lmn = self.R_lmn

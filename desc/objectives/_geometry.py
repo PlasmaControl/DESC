@@ -8,6 +8,7 @@ from desc.compute import (
 )
 from .objective_funs import _Objective
 import numpy as np
+from scipy.constants import mu_0
 
 class Volume(_Objective):
     """Plasma volume.
@@ -338,7 +339,7 @@ class SpectralCondensation(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        I = -(self._R_transform.transform(R_lmn,dt=1)*self._R_transform.transform(R_lmn,dt=2) + self._Z_transform.transform(Z_lmn,dt=1)*self._Z_transform.transform(Z_lmn,dt=2))
+        I = -(self._R_transform.transform(R_lmn,dt=1)*self._R_transform.transform(R_lmn,dt=2) + self._Z_transform.transform(Z_lmn,dt=1)*self._Z_transform.transform(Z_lmn,dt=2))/mu_0
             
         if self.lb:
             return -self._shift_scale(jnp.atleast_1d(I))

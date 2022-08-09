@@ -38,3 +38,6 @@ from .utils import (
     get_equilibrium_objective,
 )
 from ._wrappers import WrappedEquilibriumObjective
+
+import desc.objectives._gx_wrapper
+

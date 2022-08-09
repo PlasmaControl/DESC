@@ -136,11 +136,11 @@ def fmin_lag_ls_stel(
     mu = mu0
     lmbda = lmbda0
     gtolk = 1/(10*np.linalg.norm(mu0))
-    ctolk = 1/(np.linalg.norm(mu0))    
+    ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
     xold = x
     f = fun(recover(x))
     fold = f
-    
+    print("mu is " + str(mu)) 
     while iteration < maxiter:
         #print(gtolk)
         xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter = int(10),verbose=2)

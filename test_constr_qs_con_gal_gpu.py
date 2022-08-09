@@ -46,7 +46,7 @@ R_modes = np.delete(eq_init.surface.R_basis.modes, [idx_Rcc, idx_Rss], axis=0)
 Z_modes = np.delete(eq_init.surface.Z_basis.modes, [idx_Zsc, idx_Zcs], axis=0)
 
 constraints = (
-    ForceBalanceGalerkin(weight=10),  # enforce JxB-grad(p)=0 during optimization
+    ForceBalanceGalerkin(),  # enforce JxB-grad(p)=0 during optimization
     FixBoundaryR(modes=R_modes,fixed_boundary=True),  # fix specified R boundary modes
     FixBoundaryZ(modes=Z_modes,fixed_boundary=True),  # fix specified Z boundary modes
     FixPressure(),  # fix pressure profile
@@ -75,5 +75,5 @@ eq_qs_T, result_T = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fbg_weight.h5')
+eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_fbg_gpu.h5')
 

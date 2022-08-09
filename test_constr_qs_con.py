@@ -26,7 +26,8 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
     FixLambdaGauge,
-    ForceBalanceGalerkin
+    ForceBalanceGalerkin,
+    SpectralCondensation
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error

@@ -126,7 +126,7 @@ class AugLagrangianLS2(ObjectiveFunction):
         for i in range(len(c)):
             c = put(c,i,-lmbda[i]*c[i] + mu[i]/2*c[i]**2)
         L = jnp.concatenate((L,c),axis=None)
-        #print("L is evaluated")
+        print("L is evaluated")
         return L
     
     def compute_scalar(self,x,lmbda,mu):

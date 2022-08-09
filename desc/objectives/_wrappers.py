@@ -1,4 +1,5 @@
 import numpy as np
+import subprocess
 
 from desc.backend import jnp
 from desc.compute import arg_order
@@ -27,7 +28,9 @@ from scipy.constants import mu_0
 
 from desc.grid import LinearGrid, Grid
 from jax import core
-
+from jax.interpreters import ad
+from desc.derivatives import FiniteDiffDerivative
+import netCDF4 as nc
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
     """Evaluate an objective subject to equilibrium constraint.
@@ -256,7 +259,9 @@ class GXWrapper(_Objective):
     _scalar = True
     _linear = False
     
-    gx_call = core.Primitive("gx")
+    gx_compute = core.Primitive("gx")
+    gx_compute.def_impl(compute_impl)
+    ad.primitive_jvps[gx_compute] = compute_jvp
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False):
         self.eq = eq
@@ -273,10 +278,21 @@ class GXWrapper(_Objective):
         self.equality = equality
 
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+                rotation="sin",
+                node_pattern=eq.node_pattern,
+
+
             grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
-            data = self.compute_iota(grid=grid_1d)
+            data = eq.compute_iota(grid=grid_1d)
             iotad = data['iota']
             fi = interp1d(grid_1d.nodes[:,0],iotad)
             
@@ -289,7 +305,7 @@ class GXWrapper(_Objective):
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
             coords = self.eq.compute_theta_coords(c)
-            self.grid = Grid(coords)
+            self.grid_ft = Grid(coords)
 
         self._dim_f = 1
 
@@ -313,24 +329,37 @@ class GXWrapper(_Objective):
             self.grid, eq.L_basis, derivs=3, build=True
         )
 
+
+        self._pressure
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
+        #self._set_derivatives(use_jit=use_jit)
         self._built = True
     
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
+        gx_compute.bind(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+
+    def compute_impl(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
         
         #grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
         data = compute_rotational_transform(i_l,self._iota)
         iota= data['iota']
+        #iotad = data['iota']
+        #fi = interp1d(grid_1d.nodes[:,0],iotad)
+            
+        #get coordinate system
+        #rho = np.sqrt(self.psi)
+        #iota = fi(rho)
+
         #fi = interp1d(grid_1d.nodes[:,0],iota)
 
-        data = compute_toroidal_flux(Psi,self._iota)
-        psib = data['psi'][-1]
+        data = compute_toroidal_flux(Psi,self._iota,data=data)
+        psib = Psi
         if psib < 0:
             sgn = False
             psib = np.abs(psib)
@@ -452,6 +481,28 @@ class GXWrapper(_Objective):
         #self.write_input()
         self.run_gx()
 
+        ds = nc.Dataset('gx.in')
+        om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
+        #ky = ds['ky']
+        #omega = np.zeros(len(om))
+        gamma = np.zeros(len(om))
+        for i in range(len(omega)):
+            #omega[i] = om[i][0][0]
+            gamma[i] = om[i][0][1]
+        return max(gamma)
+    
+    def compute_jvp(values,tangents):
+        R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values
+        primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        
+        n = sum(self._dimensions.values()) 
+        argnum = np.arange(0,n,1)
+        fd = FiniteDiffDerivative(self.compute,argnum)
+
+        jvp = fd.compute_jvp(fun,argnum,tangents)
+
+        return (primal_out, jvp)
+
 
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
@@ -550,6 +601,15 @@ class GXWrapper(_Objective):
         f.close()
 
     #def write_input(self)
+    
+    
 
     def run_gx():
+        fs = open('stdout.out','w')
+        path = '/home/bdorland/GX/'
+        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','gx.in']
+        #process = []
+        #print(cmd)
+        p = subprocess.Popen(cmd,stdout=fs)
+        p.wait()
 

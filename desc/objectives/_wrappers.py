@@ -280,7 +280,7 @@ class GXWrapper(_Objective):
 
     def build(self, eq, use_jit=False, verbose=1):
         if self.grid is None:
-            self.grid = ConcentricGrid(
+            self.grid_eq = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -305,7 +305,7 @@ class GXWrapper(_Objective):
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
             coords = self.eq.compute_theta_coords(c)
-            self.grid_ft = Grid(coords)
+            self.grid = Grid(coords)
 
         self._dim_f = 1
 
@@ -329,8 +329,13 @@ class GXWrapper(_Objective):
             self.grid, eq.L_basis, derivs=3, build=True
         )
 
+        self._R_transform_eq = Transform(
+            self.grid_eq, eq.R_basis, derivs=3, build=True
+        )
+        self._Z_transform_eq = Transform(
+            self.grid_eq, eq.R_basis, derivs=3, build=True
+        )
 
-        self._pressure
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -379,7 +384,7 @@ class GXWrapper(_Objective):
         
         #normalizations
         #grid = Grid(coords)
-        data = compute_geometry(R_lmn,Z_lmn,self._R_transform,self._Z_transform,data=data)
+        data = compute_geometry(R_lmn,Z_lmn,self._R_transform_eq,self._Z_transform_eq,data=data)
         Lref = data['a']
         Bref = 2*psib/Lref**2
 
@@ -481,7 +486,7 @@ class GXWrapper(_Objective):
         #self.write_input()
         self.run_gx()
 
-        ds = nc.Dataset('gx.in')
+        ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
         #ky = ds['ky']
         #omega = np.zeros(len(om))
@@ -573,12 +578,11 @@ class GXWrapper(_Objective):
 
 
     def write_geo(self):
-        self.calc_geo()
         nperiod = 1
         rmaj = self.eq.compute('R0')['R0']
         kxfac = 1.0
-        open('gxinput_wrap.out', 'w').close()
-        f = open('gxinput_wrap.out', "w")
+        #open('gxinput_wrap.out', 'w').close()
+        f = open('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out', "w")
         f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
         f.write("\n"+str(self.nzgrid)+" "+str(nperiod)+" "+str(2*self.nzgrid)+" "+str(1.0)+" "+ str(1/self.Lref)+" "+str(self.shat)+" "+str(kxfac)+" "+str(1/self.iota) + " " + str(2*self.npol-1))
 
@@ -607,7 +611,7 @@ class GXWrapper(_Objective):
     def run_gx():
         fs = open('stdout.out','w')
         path = '/home/bdorland/GX/'
-        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','gx.in']
+        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
         #process = []
         #print(cmd)
         p = subprocess.Popen(cmd,stdout=fs)

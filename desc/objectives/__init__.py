@@ -28,4 +28,7 @@ from .utils import (
     get_fixed_boundary_constraints,
     get_equilibrium_objective,
 )
-from ._wrappers import WrappedEquilibriumObjective
+from ._wrappers import (
+    WrappedEquilibriumObjective,
+    GXWrapper
+)

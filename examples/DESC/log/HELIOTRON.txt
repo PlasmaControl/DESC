@@ -1,0 +1,332 @@
+
+ ____  ____  _____   ___ 
+|  _ \| ___|/  ___|/ ___|
+| | \ | |_  | (__ | |
+| | | |  _| \___ \| |
+| |_/ | |__  ___) | |___ 
+|____/|____||____/ \____|
+                         
+
+DESC version 0.5.1+118.g71ace73.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 12.45 GB available memory
+Reading input from /home/kaya/Documents/edu/pton/plasma/DESC/examples/DESC/HELIOTRON
+Outputs will be written to /home/kaya/Documents/edu/pton/plasma/DESC/examples/DESC/HELIOTRON_output.h5
+================
+Step 1/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(12,6,0)
+Node pattern: jacobi
+Node resolution (L,M,N)=(24,12,0)
+Boundary ratio = 0.0
+Pressure ratio = 0.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 150
+================
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 485 ms
+Timer: Objective build = 488 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 1.97 sec
+Timer: Jacobian compilation time = 5.50 sec
+Timer: Total compilation time = 7.48 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 262 ms
+Number of parameters: 57
+Number of objectives: 182
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         2.7203e+10                                    1.30e+13    
+       1              2         1.4769e+10      1.24e+10       3.02e-01       2.78e+13    
+       2              3         2.1288e+08      1.46e+10       1.34e-01       1.44e+12    
+       3              4         6.4102e+07      1.49e+08       5.11e-02       1.61e+12    
+       4              5         1.2624e+07      5.15e+07       2.49e-02       7.03e+11    
+       5              6         2.1246e+06      1.05e+07       1.19e-02       3.33e+11    
+       6              7         7.2554e+05      1.40e+06       1.11e-02       1.66e+11    
+       7              9         1.0944e+04      7.15e+05       4.72e-03       2.57e+10    
+       8             11         4.4990e+02      1.05e+04       2.76e-03       3.88e+09    
+       9             13         6.0599e+01      3.89e+02       1.23e-03       1.18e+09    
+      10             15         3.2865e+00      5.73e+01       7.15e-04       1.56e+08    
+      11             17         1.4210e+00      1.87e+00       3.08e-04       7.13e+07    
+      12             19         1.1932e+00      2.28e-01       1.56e-04       2.25e+07    
+      13             21         1.1644e+00      2.88e-02       7.55e-05       5.91e+06    
+      14             22         1.1533e+00      1.12e-02       1.51e-04       2.40e+07    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 1.153e+00
+         Iterations: 14
+         Function evaluations: 22
+         Jacobian evaluations: 15
+Timer: Solution time = 1.29 sec
+Timer: Avg time per step = 92.4 ms
+Start of solver
+Total (sum of squares):  2.720e+10, 
+Total force:  2.333e+05 (N)
+End of solver
+Total (sum of squares):  1.153e+00, 
+Total force:  1.519e+00 (N)
+Saving latest iteration
+Timer: Iteration 1 total = 14.8 sec
+================
+Step 2/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(18,9,0)
+Node pattern: jacobi
+Node resolution (L,M,N)=(36,18,0)
+Boundary ratio = 0.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 150
+================
+Perturbing equilibrium
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 811 ms
+Timer: Objective build = 815 ms
+Perturbing p_l
+Factorizing linear constraints
+Timer: linear constraint factorize = 160 ms
+Computing df
+Timer: df computation = 12.2 sec
+Factoring df
+Timer: df/dx factorization = 10.9 ms
+Computing d^2f
+Timer: d^2f computation = 16.9 sec
+||dx||/||x|| =  6.120e-02
+Timer: Total perturbation = 32.1 sec
+Compiling objective function and derivatives
+Timer: Objective compilation time = 137 us
+Timer: Jacobian compilation time = 15.5 ms
+Timer: Total compilation time = 15.9 ms
+Factorizing linear constraints
+Timer: linear constraint factorize = 6.92 ms
+Number of parameters: 126
+Number of objectives: 380
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         9.0419e+11                                    8.69e+13    
+       1              2         7.2837e+10      8.31e+11       2.70e-01       2.82e+13    
+       2              3         1.7660e+10      5.52e+10       2.41e-01       1.91e+13    
+       3              4         5.3973e+08      1.71e+10       1.12e-01       2.81e+12    
+       4              6         9.2837e+06      5.30e+08       4.74e-02       3.85e+11    
+       5              8         9.0013e+05      8.38e+06       1.94e-02       7.63e+10    
+       6             10         3.6166e+05      5.38e+05       8.80e-03       1.31e+10    
+       7             12         2.9231e+05      6.94e+04       4.06e-03       6.16e+09    
+       8             13         2.5181e+05      4.05e+04       6.51e-03       8.81e+09    
+       9             14         2.0942e+05      4.24e+04       6.00e-03       7.25e+09    
+      10             16         1.8130e+05      2.81e+04       2.95e-03       1.75e+09    
+      11             17         1.6178e+05      1.95e+04       5.95e-03       6.23e+09    
+      12             18         1.3516e+05      2.66e+04       6.14e-03       5.61e+09    
+      13             20         1.1785e+05      1.73e+04       3.17e-03       1.53e+09    
+      14             21         1.0338e+05      1.45e+04       6.91e-03       7.94e+09    
+      15             23         9.0682e+04      1.27e+04       3.66e-03       1.89e+09    
+      16             24         7.9554e+04      1.11e+04       7.99e-03       7.31e+09    
+      17             25         6.7000e+04      1.26e+04       8.69e-03       6.57e+09    
+      18             27         5.7486e+04      9.51e+03       4.52e-03       1.52e+09    
+      19             28         5.2184e+04      5.30e+03       9.52e-03       6.41e+09    
+      20             29         4.4402e+04      7.78e+03       9.91e-03       5.83e+09    
+      21             30         3.7990e+04      6.41e+03       1.01e-02       5.32e+09    
+      22             31         3.2657e+04      5.33e+03       1.02e-02       8.36e+09    
+      23             32         2.8286e+04      4.37e+03       1.00e-02       1.37e+10    
+      24             33         2.5075e+04      3.21e+03       9.71e-03       1.89e+10    
+      25             34         2.2697e+04      2.38e+03       9.28e-03       1.84e+10    
+      26             35         2.0744e+04      1.95e+03       8.93e-03       1.17e+10    
+      27             36         1.9577e+04      1.17e+03       8.79e-03       7.42e+09    
+      28             37         1.4465e+04      5.11e+03       2.17e-03       1.34e+09    
+      29             38         1.4250e+04      2.14e+02       4.39e-03       4.16e+09    
+      30             39         1.3677e+04      5.73e+02       4.39e-03       3.65e+09    
+      31             40         1.3237e+04      4.40e+02       4.32e-03       5.29e+09    
+      32             41         1.2905e+04      3.32e+02       4.22e-03       6.93e+09    
+      33             42         1.2674e+04      2.31e+02       4.09e-03       9.01e+09    
+      34             43         1.1626e+04      1.05e+03       1.04e-03       6.03e+08    
+      35             44         1.1454e+04      1.72e+02       1.97e-03       3.13e+09    
+      36             45         1.1186e+04      2.68e+02       1.99e-03       2.82e+09    
+      37             47         1.0961e+04      2.25e+02       9.94e-04       7.77e+08    
+      38             48         1.0768e+04      1.93e+02       1.95e-03       3.12e+09    
+      39             49         1.0463e+04      3.05e+02       1.97e-03       2.93e+09    
+      40             51         1.0209e+04      2.54e+02       9.95e-04       8.08e+08    
+      41             52         9.9894e+03      2.19e+02       1.95e-03       3.14e+09    
+      42             53         9.6672e+03      3.22e+02       1.98e-03       2.92e+09    
+      43             55         9.4112e+03      2.56e+02       1.01e-03       7.73e+08    
+      44             56         9.2019e+03      2.09e+02       1.98e-03       2.74e+09    
+      45             57         8.9122e+03      2.90e+02       1.99e-03       2.86e+09    
+      46             59         8.6813e+03      2.31e+02       1.01e-03       8.49e+08    
+      47             60         8.5089e+03      1.72e+02       1.96e-03       2.64e+09    
+      48             61         8.2752e+03      2.34e+02       1.93e-03       2.24e+09    
+      49             63         8.1055e+03      1.70e+02       9.57e-04       5.51e+08    
+      50             64         7.9684e+03      1.37e+02       1.81e-03       1.73e+09    
+      51             65         7.7901e+03      1.78e+02       1.72e-03       1.55e+09    
+      52             67         7.6598e+03      1.30e+02       8.42e-04       4.03e+08    
+      53             68         7.5467e+03      1.13e+02       1.60e-03       1.50e+09    
+      54             69         7.3959e+03      1.51e+02       1.54e-03       1.61e+09    
+      55             71         7.2742e+03      1.22e+02       7.60e-04       4.76e+08    
+      56             72         7.1838e+03      9.04e+01       1.46e-03       2.18e+09    
+      57             73         7.0480e+03      1.36e+02       1.43e-03       2.49e+09    
+      58             74         6.9175e+03      1.31e+02       1.40e-03       2.77e+09    
+      59             75         6.7903e+03      1.27e+02       1.37e-03       3.01e+09    
+      60             76         6.6663e+03      1.24e+02       1.35e-03       3.20e+09    
+      61             77         6.5452e+03      1.21e+02       1.32e-03       3.34e+09    
+      62             78         6.4267e+03      1.18e+02       1.30e-03       3.42e+09    
+      63             79         6.3109e+03      1.16e+02       1.28e-03       3.47e+09    
+      64             80         6.1977e+03      1.13e+02       1.27e-03       3.49e+09    
+      65             81         6.0873e+03      1.10e+02       1.25e-03       3.49e+09    
+      66             82         5.9798e+03      1.08e+02       1.24e-03       3.47e+09    
+      67             83         5.8751e+03      1.05e+02       1.22e-03       3.44e+09    
+      68             84         5.7734e+03      1.02e+02       1.21e-03       3.40e+09    
+      69             85         5.6745e+03      9.89e+01       1.20e-03       3.37e+09    
+      70             86         5.5785e+03      9.60e+01       1.20e-03       3.39e+09    
+      71             87         5.4853e+03      9.32e+01       1.19e-03       3.47e+09    
+      72             88         5.3948e+03      9.04e+01       1.18e-03       3.53e+09    
+      73             89         5.3072e+03      8.77e+01       1.18e-03       3.59e+09    
+      74             90         5.2222e+03      8.50e+01       1.18e-03       3.64e+09    
+      75             91         5.1398e+03      8.24e+01       1.17e-03       3.67e+09    
+      76             92         5.0600e+03      7.98e+01       1.17e-03       3.70e+09    
+      77             93         4.9827e+03      7.73e+01       1.17e-03       3.71e+09    
+      78             94         4.9079e+03      7.48e+01       1.16e-03       3.71e+09    
+      79             95         4.8355e+03      7.24e+01       1.16e-03       3.68e+09    
+      80             96         4.7655e+03      7.00e+01       1.16e-03       3.62e+09    
+      81             97         4.6979e+03      6.76e+01       1.17e-03       3.52e+09    
+      82             98         4.6327e+03      6.51e+01       1.18e-03       3.39e+09    
+      83             99         4.5701e+03      6.26e+01       1.19e-03       3.22e+09    
+      84             100        4.5102e+03      6.00e+01       1.21e-03       3.00e+09    
+      85             101        4.4530e+03      5.72e+01       1.23e-03       2.75e+09    
+      86             102        4.3987e+03      5.43e+01       1.26e-03       2.64e+09    
+      87             103        4.3476e+03      5.11e+01       1.30e-03       2.51e+09    
+      88             104        4.2998e+03      4.78e+01       1.35e-03       2.37e+09    
+      89             105        4.2555e+03      4.43e+01       1.39e-03       2.21e+09    
+      90             106        4.2148e+03      4.07e+01       1.44e-03       2.05e+09    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 4.215e+03
+         Iterations: 90
+         Function evaluations: 106
+         Jacobian evaluations: 91
+Timer: Solution time = 8.82 sec
+Timer: Avg time per step = 98.0 ms
+Start of solver
+Total (sum of squares):  9.042e+11, 
+Total force:  1.345e+06 (N)
+End of solver
+Total (sum of squares):  4.215e+03, 
+Total force:  9.181e+01 (N)
+Saving latest iteration
+Timer: Iteration 2 total = 48.6 sec
+================
+Step 3/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,3)
+Node pattern: jacobi
+Node resolution (L,M,N)=(36,18,6)
+Boundary ratio = 1.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 150
+================
+Perturbing equilibrium
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 599 ms
+Timer: Objective build = 657 ms
+Perturbing Rb_lmn, Zb_lmn
+Factorizing linear constraints
+Timer: linear constraint factorize = 935 ms
+Computing df
+Timer: df computation = 27.1 sec
+Factoring df
+Timer: df/dx factorization = 2.75 sec
+Computing d^2f
+Timer: d^2f computation = 26.3 sec
+||dx||/||x|| =  4.947e-02
+Timer: Total perturbation = 1.09 min
+Compiling objective function and derivatives
+Timer: Objective compilation time = 2.71 ms
+Timer: Jacobian compilation time = 1.95 sec
+Timer: Total compilation time = 2.01 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 647 ms
+Number of parameters: 1590
+Number of objectives: 4940
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         2.8454e+11                                    1.56e+14    
+       1              3         6.5331e+10      2.19e+11       5.83e-01       2.96e+13    
+       2              4         9.2296e+09      5.61e+10       3.38e-01       5.20e+13    
+       3              5         7.9139e+08      8.44e+09       1.55e-01       1.10e+13    
+       4              6         6.9018e+08      1.01e+08       2.42e-01       7.38e+12    
+       5              7         2.7189e+07      6.63e+08       7.02e-02       1.98e+12    
+       6              9         3.8980e+06      2.33e+07       2.75e-02       1.03e+12    
+       7             11         4.5036e+05      3.45e+06       1.25e-02       3.97e+11    
+       8             13         7.0823e+04      3.80e+05       6.38e-03       1.30e+11    
+       9             15         3.0404e+04      4.04e+04       3.45e-03       3.39e+10    
+      10             17         2.7052e+04      3.35e+03       1.82e-03       8.38e+09    
+      11             19         2.6538e+04      5.14e+02       9.27e-04       2.06e+09    
+      12             20         2.5989e+04      5.49e+02       1.74e-03       7.66e+09    
+      13             22         2.5536e+04      4.54e+02       8.80e-04       1.82e+09    
+      14             23         2.5020e+04      5.16e+02       1.66e-03       6.70e+09    
+      15             25         2.4619e+04      4.01e+02       8.34e-04       1.58e+09    
+      16             26         2.4136e+04      4.84e+02       1.57e-03       5.94e+09    
+      17             28         2.3774e+04      3.62e+02       7.91e-04       1.41e+09    
+      18             29         2.3321e+04      4.53e+02       1.50e-03       5.41e+09    
+      19             31         2.2987e+04      3.34e+02       7.53e-04       1.29e+09    
+      20             32         2.2565e+04      4.23e+02       1.43e-03       5.04e+09    
+      21             34         2.2253e+04      3.11e+02       7.21e-04       1.20e+09    
+      22             35         2.1858e+04      3.95e+02       1.38e-03       4.78e+09    
+      23             37         2.1566e+04      2.92e+02       6.95e-04       1.15e+09    
+      24             38         2.1196e+04      3.70e+02       1.34e-03       4.57e+09    
+      25             40         2.0921e+04      2.75e+02       6.74e-04       1.10e+09    
+      26             41         2.0575e+04      3.47e+02       1.30e-03       4.37e+09    
+      27             43         2.0317e+04      2.58e+02       6.55e-04       1.05e+09    
+      28             44         1.9991e+04      3.26e+02       1.27e-03       4.17e+09    
+      29             46         1.9749e+04      2.41e+02       6.39e-04       1.01e+09    
+      30             47         1.9442e+04      3.07e+02       1.25e-03       3.95e+09    
+      31             49         1.9217e+04      2.26e+02       6.25e-04       9.55e+08    
+      32             50         1.8926e+04      2.90e+02       1.22e-03       3.72e+09    
+      33             51         1.8913e+04      1.31e+01       2.38e-03       1.33e+10    
+      34             52         1.8096e+04      8.18e+02       6.01e-04       8.12e+08    
+      35             53         1.7841e+04      2.55e+02       1.19e-03       3.19e+09    
+      36             54         1.7776e+04      6.51e+01       2.37e-03       1.12e+10    
+      37             55         1.7122e+04      6.54e+02       5.94e-04       6.98e+08    
+      38             56         1.6896e+04      2.26e+02       1.19e-03       2.70e+09    
+      39             57         1.6792e+04      1.04e+02       2.42e-03       9.48e+09    
+      40             58         1.6271e+04      5.21e+02       6.07e-04       5.96e+08    
+      41             59         1.6069e+04      2.01e+02       1.23e-03       2.28e+09    
+      42             60         1.5938e+04      1.31e+02       2.52e-03       8.07e+09    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 1.594e+04
+         Iterations: 42
+         Function evaluations: 60
+         Jacobian evaluations: 43
+Timer: Solution time = 3.69 min
+Timer: Avg time per step = 5.27 sec
+Start of solver
+Total (sum of squares):  2.845e+11, 
+Total force:  7.544e+05 (N)
+End of solver
+Total (sum of squares):  1.594e+04, 
+Total force:  1.785e+02 (N)
+Saving latest iteration
+Timer: Iteration 3 total = 5.07 min
+====================
+Done
+Timer: Total time = 6.15 min
+Output written to /home/kaya/Documents/edu/pton/plasma/DESC/examples/DESC/HELIOTRON_output.h5
+====================

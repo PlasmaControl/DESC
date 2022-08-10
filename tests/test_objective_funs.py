@@ -87,6 +87,7 @@ def get_vmec_data(name, quantity):
     f = Dataset("examples/VMEC/wout_" + name + ".nc")
     rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
     quantity = np.asarray(f.variables[quantity])
+    f.close()
     return rho, quantity
 
 
@@ -107,8 +108,8 @@ def get_grid(eq, rho):
     return LinearGrid(
         M=eq.M_grid,
         N=eq.N_grid,
-        NFP=1,
-        sym=False,
+        NFP=eq.NFP,
+        sym=eq.sym,
         rho=np.atleast_1d(rho),
     )
 

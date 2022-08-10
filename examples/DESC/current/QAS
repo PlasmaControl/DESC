@@ -1,11 +1,11 @@
 # This DESC input file was auto generated from the VMEC input file
-# /home/kaya/Documents/edu/pton/plasma/DESC/examples/DESC/input-current/QAS
-# on 08/02/2022 at 19:55:23.
+# /home/kaya/Documents/edu/pton/plasma/DESC/examples/DESC/current/input.QAS
+# on 08/08/2022 at 19:16:04.
 # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
 # global parameters
 sym = 0
-NFP = 1
+NFP = 3
 Psi = 0.497070205837336
 
 # spectral resolution
@@ -32,9 +32,9 @@ optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = quad
+node_pattern = jacobi
 
-# pressure and iota/current profiles, adjusted for current derivative and curtor
+# pressure and iota/current profiles
 l:   0	p =   6.85517649E+04	c =   0
 l:   2	p =  -5.12027745E+03	c =   0
 l:   4	p =  -3.61510452E+04	c =  -128242466691.25002

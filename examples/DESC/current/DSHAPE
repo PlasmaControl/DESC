@@ -2,7 +2,7 @@
 # It is similar to the VMEC example from Hirshman & Witson 1983
 
 # global parameters
-sym = 0
+sym = 1
 NFP = 1
 Psi = 1.0
 
@@ -31,10 +31,10 @@ node_pattern      = jacobi
 
 # pressure and current profiles
 l:   0  p =  1.6E+3  c = 0
-l:   2  p = -3.2E+3  c = -438474.58565238
-l:   4  p =  1.6E+3  c = 175194.00076555
-l:   6  p = 0        c = 71469.55268625
-l:   8  p = 0        c = -33076.95424078
+l:   2  p = -3.2E+3  c = -438474.59377869
+l:   4  p =  1.6E+3  c = 175194.056811
+l:   6  p = 0        c = 71469.4336739
+l:   8  p = 0        c = -33076.87769384
 
 # magnetic axis initial guess
 n:   0  R0 =  3.65

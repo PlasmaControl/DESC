@@ -1,7 +1,7 @@
 # This is the DESC input file for a Solov'ev equilibrium
 
 # global parameters
-sym = 0
+sym = 1
 NFP = 1
 Psi = 1.0
 

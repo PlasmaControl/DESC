@@ -79,67 +79,66 @@ def compute_DMerc(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion terms.
     """
-    if not check_derivs("DMerc", R_transform, Z_transform, L_transform):
-        return data
-    data = compute_DShear(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
-    data = compute_DCurr(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
-    data = compute_DWell(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        p_l,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        pressure,
-        iota,
-        current,
-        data,
-    )
-    data = compute_DGeod(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
-    data["DMerc"] = data["DShear"] + data["DCurr"] + data["DWell"] + data["DGeod"]
+    if check_derivs("DMerc", R_transform, Z_transform, L_transform):
+        data = compute_DShear(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
+        data = compute_DCurr(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
+        data = compute_DWell(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            pressure,
+            iota,
+            current,
+            data,
+        )
+        data = compute_DGeod(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
+        data["DMerc"] = data["DShear"] + data["DCurr"] + data["DWell"] + data["DGeod"]
     return data
 
 
@@ -194,24 +193,23 @@ def compute_DShear(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion magnetic sheer term.
     """
-    if not check_derivs("DShear", R_transform, Z_transform, L_transform):
-        return data
-    data = compute_toroidal_flux(Psi, R_transform.grid, data=data)
-    data = compute_rotational_transform(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data=data,
-    )
-    data["DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (16 * jnp.pi ** 2)
+    if check_derivs("DShear", R_transform, Z_transform, L_transform):
+        data = compute_toroidal_flux(Psi, R_transform.grid, data=data)
+        data = compute_rotational_transform(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data=data,
+        )
+        data["DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (16 * jnp.pi ** 2)
     return data
 
 
@@ -266,47 +264,45 @@ def compute_DCurr(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion toroidal current term.
     """
-    if not check_derivs("DCurr", R_transform, Z_transform, L_transform):
-        return data
-    grid = R_transform.grid
-    data = compute_contravariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data
-    )
-    data = compute_contravariant_current_density(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
+    if check_derivs("DCurr", R_transform, Z_transform, L_transform):
+        grid = R_transform.grid
+        data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, R_transform, Z_transform, data
+        )
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
 
-    # grad(psi) = grad(rho) * dpsi/drho
-    # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
-    A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
-    dI_dpsi = surface_averages(
-        grid,
-        data["B_theta_r"] / data["psi_r"],
-        match_grid=True,
-        denominator=4 * jnp.pi ** 2,
-    )
-    xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
-    # sign of poloidal current, data["G"]
-    sign_G = jnp.sign(surface_integrals(grid, data["B_zeta"], match_grid=True))
+        # grad(psi) = grad(rho) * dpsi/drho
+        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+        dI_dpsi = surface_averages(
+            grid,
+            data["B_theta_r"] / data["psi_r"],
+            match_grid=True,
+        )
+        xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
+        # sign of poloidal current, data["G"]
+        sign_G = jnp.sign(surface_integrals(grid, data["B_zeta"], match_grid=True))
 
-    data["DCurr"] = (
-        -sign_G
-        / (16 * jnp.pi ** 4)
-        * data["iota_r"]
-        / data["psi_r"]
-        * surface_integrals(grid, A * dot(xi, data["B"]), match_grid=True)
-    )
+        data["DCurr"] = (
+            -sign_G
+            / (16 * jnp.pi ** 4)
+            * data["iota_r"]
+            / data["psi_r"]
+            * surface_integrals(grid, A * dot(xi, data["B"]), match_grid=True)
+        )
     return data
 
 
@@ -367,49 +363,48 @@ def compute_DWell(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion magnetic well term.
     """
-    if not check_derivs("DWell", R_transform, Z_transform, L_transform):
-        return data
-    grid = R_transform.grid
-    data = compute_pressure(p_l, pressure, data)
-    data = compute_contravariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data
-    )
-    data = compute_contravariant_magnetic_field(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
-
-    psi_r_sq = jnp.square(data["psi_r"])
-    grad_psi_sq = data["g^rr"] * psi_r_sq  # grad(psi) = grad(rho) * dpsi/drho
-    # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
-    A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
-
-    dv_drho = enclosed_volumes(grid, data, dr=1, match_grid=True)
-    d2v_drho2 = enclosed_volumes(grid, data, dr=2, match_grid=True)
-    d2v_dpsi2 = (d2v_drho2 - dv_drho * data["psi_rr"] / data["psi_r"]) / psi_r_sq
-    dp_dpsi = data["p_r"] / data["psi_r"]
-    Bsq = dot(data["B"], data["B"])
-
-    data["DWell"] = (
-        mu_0
-        / (64 * jnp.pi ** 6)
-        * dp_dpsi
-        * (
-            jnp.sign(data["psi"]) * d2v_dpsi2
-            - mu_0 * dp_dpsi * surface_integrals(grid, A / Bsq, match_grid=True)
+    if check_derivs("DWell", R_transform, Z_transform, L_transform):
+        grid = R_transform.grid
+        data = compute_pressure(p_l, pressure, data)
+        data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, R_transform, Z_transform, data
         )
-        * surface_integrals(grid, A / grad_psi_sq * Bsq, match_grid=True)
-    )
+        data = compute_contravariant_magnetic_field(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
+
+        psi_r_sq = jnp.square(data["psi_r"])
+        grad_psi_sq = data["g^rr"] * psi_r_sq  # grad(psi) = grad(rho) * dpsi/drho
+        # A * dtdz = |ds / grad(psi)| = |sqrt(g) * grad(rho) / grad(psi)| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"])
+
+        dv_drho = enclosed_volumes(grid, data, dr=1, match_grid=True)
+        d2v_drho2 = enclosed_volumes(grid, data, dr=2, match_grid=True)
+        d2v_dpsi2 = (d2v_drho2 - dv_drho * data["psi_rr"] / data["psi_r"]) / psi_r_sq
+        dp_dpsi = data["p_r"] / data["psi_r"]
+        Bsq = dot(data["B"], data["B"])
+
+        data["DWell"] = (
+            mu_0
+            / (64 * jnp.pi ** 6)
+            * dp_dpsi
+            * (
+                jnp.sign(data["psi"]) * d2v_dpsi2
+                - mu_0 * dp_dpsi * surface_integrals(grid, A / Bsq, match_grid=True)
+            )
+            * surface_integrals(grid, A / grad_psi_sq * Bsq, match_grid=True)
+        )
     return data
 
 
@@ -464,42 +459,41 @@ def compute_DGeod(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion geodesic curvature term.
     """
-    if not check_derivs("DGeod", R_transform, Z_transform, L_transform):
-        return data
-    grid = R_transform.grid
-    data = compute_contravariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data
-    )
-    data = compute_contravariant_current_density(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
-
-    # grad(psi) = grad(rho) * dpsi/drho
-    # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
-    A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
-    j_dot_b = mu_0 * dot(data["J"], data["B"])
-    Bsq = dot(data["B"], data["B"])
-
-    data["DGeod"] = (
-        expand(
-            grid,
-            jnp.square(surface_integrals(grid, A * j_dot_b))
-            - surface_integrals(grid, A * Bsq)
-            * surface_integrals(grid, A * jnp.square(j_dot_b) / Bsq),
+    if check_derivs("DGeod", R_transform, Z_transform, L_transform):
+        grid = R_transform.grid
+        data = compute_contravariant_metric_coefficients(
+            R_lmn, Z_lmn, R_transform, Z_transform, data
         )
-        / (64 * jnp.pi ** 6)
-    )
+        data = compute_contravariant_current_density(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
+
+        # grad(psi) = grad(rho) * dpsi/drho
+        # A * dtdz = |ds / grad(psi)^3| = |sqrt(g) * grad(rho) / grad(psi)^3| * dtdz
+        A = jnp.abs(data["sqrt(g)"] / data["psi_r"] ** 3) / data["g^rr"]
+        j_dot_b = mu_0 * dot(data["J"], data["B"])
+        Bsq = dot(data["B"], data["B"])
+
+        data["DGeod"] = (
+            expand(
+                grid,
+                jnp.square(surface_integrals(grid, A * j_dot_b))
+                - surface_integrals(grid, A * Bsq)
+                * surface_integrals(grid, A * jnp.square(j_dot_b) / Bsq),
+            )
+            / (64 * jnp.pi ** 6)
+        )
     return data
 
 
@@ -560,47 +554,48 @@ def compute_AltWell(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of the magnetic well parameter.
     """
-    if not check_derivs("AltWell", R_transform, Z_transform, L_transform):
-        return data
-    grid = R_transform.grid
-    data = compute_pressure(p_l, pressure, data)
-    data = compute_contravariant_magnetic_field(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
-    )
+    if check_derivs("AltWell", R_transform, Z_transform, L_transform):
+        grid = R_transform.grid
+        data = compute_pressure(p_l, pressure, data)
+        data = compute_contravariant_magnetic_field(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            R_transform,
+            Z_transform,
+            L_transform,
+            iota,
+            current,
+            data,
+        )
 
-    dv_drho = enclosed_volumes(grid, data, dr=1)
-    sqrtg = jnp.abs(data["sqrt(g)"])
-    sqrtg_r = jnp.abs(data["sqrt(g)_r"])
-    Bsq = dot(data["B"], data["B"])
-    Bsq_av = surface_averages(grid, Bsq, sqrtg, denominator=dv_drho)
+        dv_drho = enclosed_volumes(grid, data, dr=1)
+        sqrtg = jnp.abs(data["sqrt(g)"])
+        sqrtg_r = jnp.abs(data["sqrt(g)_r"])
+        Bsq = dot(data["B"], data["B"])
+        Bsq_av = surface_averages(grid, Bsq, sqrtg, denominator=dv_drho)
 
-    # pressure = thermal + magnetic
-    # The flux surface average function is an additive homomorphism.
-    # This means average(a + b) = average(a) + average(b).
-    # Thermal pressure is constant over a rho surface.
-    # Therefore average(thermal) = thermal.
-    dthermal_drho = 2 * mu_0 * compress(grid, data["p_r"])
-    dmagnetic_av_drho = (
-        surface_integrals(grid, sqrtg_r * Bsq + sqrtg * 2 * dot(data["B"], data["B_r"]))
-        - surface_integrals(grid, sqrtg_r) * Bsq_av
-    ) / dv_drho
+        # pressure = thermal + magnetic
+        # The flux surface average function is an additive homomorphism.
+        # This means average(a + b) = average(a) + average(b).
+        # Thermal pressure is constant over a rho surface.
+        # Therefore average(thermal) = thermal.
+        dthermal_drho = 2 * mu_0 * compress(grid, data["p_r"])
+        dmagnetic_av_drho = (
+            surface_integrals(
+                grid, sqrtg_r * Bsq + sqrtg * 2 * dot(data["B"], data["B_r"])
+            )
+            - surface_integrals(grid, sqrtg_r) * Bsq_av
+        ) / dv_drho
 
-    V = enclosed_volumes(grid, data)
-    data["AltWell"] = expand(
-        grid, V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
-    )
+        V = enclosed_volumes(grid, data)
+        data["AltWell"] = expand(
+            grid, V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
+        )
+        # alternative that avoids computing the volume
+        # matches above implementation to a scale factor
+        # data["Well"] = data["rho"] * expand(grid, (dthermal_drho + dmagnetic_av_drho) / Bsq_av)
     return data
-    # alternative that avoids computing the volume
-    # matches above implementation to a scale factor
-    # data["Well"] = data["rho"] * expand(grid, (dthermal_drho + dmagnetic_av_drho) / Bsq_av)

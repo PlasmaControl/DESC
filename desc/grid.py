@@ -33,17 +33,15 @@ class Grid(IOAble):
         "_weights",
         "_axis",
         "_node_pattern",
+        "_unique_rho_indices",
+        "_unique_theta_indices",
+        "_unique_zeta_indices",
         "_num_rho",
         "_num_theta",
         "_num_zeta",
     ]
 
     def __init__(self, nodes, sort=True):
-
-        nodes = np.atleast_2d(nodes)
-        self._L = np.unique(nodes[:, 0]).size
-        self._M = np.unique(nodes[:, 1]).size
-        self._N = np.unique(nodes[:, 2]).size
         self._NFP = 1
         self._sym = False
         self._node_pattern = "custom"
@@ -59,10 +57,36 @@ class Grid(IOAble):
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""
-        if self.sym:  # remove nodes with theta > pi
+        # 1. Remove nodes with theta > pi.
+        # 2. Rescale theta spacing to preserve dtheta weight.
+        #   Need to rescale on each theta coordinate curve by a different factor.
+        #       dtheta should = 2pi / number of nodes remaining on that theta curve
+        #       scale = number of nodes / (number of nodes - number of nodes to delete) on that theta curve
+
+        if self.sym:
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
+            # X is np.unique(X)[return_inverse]
+            # return_counts[i] is the frequency the element np.sort(X)[i] appears in X
+            __, inverse, nodes_per_rho_surf = np.unique(
+                self.nodes[:, 0], return_inverse=True, return_counts=True
+            )
+            __, non_sym_per_rho_surf = np.unique(
+                self.nodes[non_sym_idx, 0], return_counts=True
+            )
+            if len(nodes_per_rho_surf) > len(non_sym_per_rho_surf):
+                # edge case where theta curve near axis lacks theta > pi nodes
+                non_sym_per_rho_surf = np.insert(non_sym_per_rho_surf, 0, 0)
+            # assumes number of nodes to delete from each theta curve is constant over zeta
+            scale = nodes_per_rho_surf / (nodes_per_rho_surf - non_sym_per_rho_surf)
+            # arrange scale factors to match spacing's arbitrary ordering
+            scale = scale[inverse]
+
+            self._spacing[:, 1] *= scale
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
             self._spacing = np.delete(self.spacing, non_sym_idx, axis=0)
+        # TODO: this code passes all my compute.utils() pytests and more basic function average tests,
+        #  but I've come to the conclusion there might still be a bug with symmetry (not a coding mistake)
+        #  or at least some other part of the code preferred it when dtheta had wrong values.
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -76,9 +100,12 @@ class Grid(IOAble):
 
     def _count_nodes(self):
         """Count unique values of coordinates."""
-        self._num_rho = np.unique(self.nodes[:, 0]).size
-        self._num_theta = np.unique(self.nodes[:, 1]).size
-        self._num_zeta = np.unique(self.nodes[:, 2]).size
+        __, self._unique_rho_indices = np.unique(self.nodes[:, 0], return_index=True)
+        __, self._unique_theta_indices = np.unique(self.nodes[:, 1], return_index=True)
+        __, self._unique_zeta_indices = np.unique(self.nodes[:, 2], return_index=True)
+        self._num_rho = self._unique_rho_indices.size
+        self._num_theta = self._unique_theta_indices.size
+        self._num_zeta = self._unique_zeta_indices.size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -113,6 +140,8 @@ class Grid(IOAble):
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
+        # TODO: avoid double calls to np.unique in count_nodes and create_nodes
+        #   note that unique in count_nodes stored indices after sorting.
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
@@ -189,6 +218,21 @@ class Grid(IOAble):
     def num_zeta(self):
         """int: Number of unique zeta coordinates."""
         return self._num_zeta
+
+    @property
+    def unique_rho_indices(self):
+        """ndarray: indices of rho that result in the unique rho coordinates"""
+        return self._unique_rho_indices
+
+    @property
+    def unique_theta_indices(self):
+        """ndarray: indices of theta that result in the unique theta coordinates"""
+        return self._unique_theta_indices
+
+    @property
+    def unique_zeta_indices(self):
+        """ndarray: indices of zeta that result in the unique zeta coordinates"""
+        return self._unique_zeta_indices
 
     @property
     def axis(self):
@@ -317,13 +361,13 @@ class LinearGrid(Grid):
             If True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT. (Default = False).
         rho : int or ndarray of float, optional
-            Radial coordiantes (Default = 1.0).
+            Radial coordinates (Default = 1.0).
             Alternatively, the number of radial coordinates (if an integer).
         theta : int or ndarray of float, optional
-            Poloidal coordiantes (Default = 0.0).
+            Poloidal coordinates (Default = 0.0).
             Alternatively, the number of poloidal coordinates (if an integer).
         zeta : int or ndarray of float, optional
-            Toroidal coordiantes (Default = 0.0).
+            Toroidal coordinates (Default = 0.0).
             Alternatively, the number of toroidal coordinates (if an integer).
 
         Returns
@@ -385,9 +429,9 @@ class LinearGrid(Grid):
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
         else:
             z = np.atleast_1d(zeta)
-        dz = 2 * np.pi / self.NFP / z.size
+        dz = 2 * np.pi / z.size
         if dz == 0:
-            dz = 2 * np.pi / self.NFP
+            dz = 2 * np.pi
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
@@ -462,7 +506,6 @@ class QuadratureGrid(Grid):
     """
 
     def __init__(self, L, M, N, NFP=1):
-
         self._L = L
         self._M = M
         self._N = N
@@ -486,7 +529,7 @@ class QuadratureGrid(Grid):
         Parameters
         ----------
         L : int
-            radial grid resolution (L radial nodes, Defualt = 1)
+            radial grid resolution (L radial nodes, Default = 1)
         M : int
             poloidal grid resolution (M poloidal nodes, Default = 1)
         N : int
@@ -512,29 +555,29 @@ class QuadratureGrid(Grid):
         N = 2 * self.N + 1
 
         # rho
-        r, wr = special.js_roots(L, 2, 2)
+        r, dr = special.js_roots(L, 2, 2)
 
         # theta/vartheta
         t = np.linspace(0, 2 * np.pi, M, endpoint=False)
-        wt = 2 * np.pi / M * np.ones_like(t)
+        dt = 2 * np.pi / M * np.ones_like(t)
 
         # zeta/phi
         z = np.linspace(0, 2 * np.pi / self.NFP, N, endpoint=False)
-        wz = 2 * np.pi / N * np.ones_like(z)
+        dz = 2 * np.pi / N * np.ones_like(z)
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
         t = t.flatten()
         z = z.flatten()
 
-        wr, wt, wz = np.meshgrid(wr, wt, wz, indexing="ij")
-        wr = wr.flatten()
-        wt = wt.flatten()
-        wz = wz.flatten()
-        wr /= r  # remove r weight function associated with the shifted Jacobi weights
+        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
+        dr = dr.flatten()
+        dt = dt.flatten()
+        dz = dz.flatten()
+        dr /= r  # remove r weight function associated with the shifted Jacobi weights
 
         nodes = np.stack([r, t, z]).T
-        spacing = np.stack([wr, wt, wz]).T
+        spacing = np.stack([dr, dt, dz]).T
 
         return nodes, spacing
 
@@ -682,7 +725,7 @@ class ConcentricGrid(Grid):
         """
 
         def ocs(L):
-            # Ramos-Lopez, et al “Optimal Sampling Patterns for Zernike Polynomials.”
+            # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
             # Applied Mathematics and Computation 274 (February 2016): 247–57.
             # https://doi.org/10.1016/j.amc.2015.11.006.
             j = np.arange(1, L // 2 + 2)
@@ -728,7 +771,7 @@ class ConcentricGrid(Grid):
             theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
             if rotation in {None, False}:
                 if self.sym:
-                    # this is emperically chosen, could be something different, just
+                    # this is empirically chosen, could be something different, just
                     # need to avoid symmetry at theta=0, pi
                     offset = dtheta / 3
                 else:
@@ -753,8 +796,8 @@ class ConcentricGrid(Grid):
         dt = np.asarray(dt)
         dimzern = r.size
 
-        dz = 2 * np.pi / (NFP * (2 * N + 1))
         z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
+        dz = 2 * np.pi / z.size
 
         r = np.tile(r, 2 * N + 1)
         t = np.tile(t, 2 * N + 1)

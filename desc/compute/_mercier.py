@@ -77,9 +77,6 @@ def compute_DMerc(
         data = compute_DShear(
             i_l,
             Psi,
-            R_transform,
-            Z_transform,
-            L_transform,
             iota,
             data,
         )
@@ -128,9 +125,6 @@ def compute_DMerc(
 def compute_DShear(
     i_l,
     Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
     iota,
     data=None,
 ):
@@ -147,12 +141,6 @@ def compute_DShear(
         Spectral coefficients of iota(rho) -- rotational transform profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform
-        Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
 
@@ -161,10 +149,9 @@ def compute_DShear(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion magnetic sheer term.
     """
-    if check_derivs("DShear", R_transform, Z_transform, L_transform):
-        data = compute_toroidal_flux(Psi, R_transform, data=data)
-        data = compute_rotational_transform(i_l, iota, data=data)
-        data["DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (16 * jnp.pi ** 2)
+    data = compute_toroidal_flux(Psi, iota, data=data)
+    data = compute_rotational_transform(i_l, iota, data=data)
+    data["DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (16 * jnp.pi ** 2)
     return data
 
 

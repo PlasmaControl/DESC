@@ -457,14 +457,8 @@ class MercierShear(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
-
-        self._R_transform = Transform(self.grid, eq.R_basis, build=True)
-        self._Z_transform = Transform(self.grid, eq.Z_basis, build=True)
-        self._L_transform = Transform(self.grid, eq.L_basis, build=True)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -493,9 +487,6 @@ class MercierShear(_Objective):
         data = compute_DShear(
             i_l,
             Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
             self._iota,
         )
         return self._shift_scale(compress(self.grid, data["DShear"]))
@@ -564,8 +555,6 @@ class MercierCurr(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 
@@ -816,8 +805,6 @@ class MercierGeod(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         self._iota = eq.iota.copy()
         self._iota.grid = self.grid
 

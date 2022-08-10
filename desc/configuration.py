@@ -5,7 +5,6 @@ import numbers
 
 from termcolor import colored
 from abc import ABC
-from shapely.geometry import LineString, MultiLineString
 from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop

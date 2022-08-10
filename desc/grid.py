@@ -84,8 +84,8 @@ class Grid(IOAble):
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
             self._spacing = np.delete(self.spacing, non_sym_idx, axis=0)
         # TODO: this code passes all my compute.utils() pytests and more basic function average tests,
-        #  but I've come to the conclusion there might still be a bug with symmetry (not a coding mistake)
-        #  or at least some other part of the code preferred it when dtheta had wrong values.
+        #  But compute_geometry() relied on using the old values for dtheta.
+        #  Line 775 of compute._core: xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -139,8 +139,6 @@ class Grid(IOAble):
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
-        # TODO: avoid double calls to np.unique in count_nodes and create_nodes
-        #   note that unique in count_nodes stored indices after sorting.
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))

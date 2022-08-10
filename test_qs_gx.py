@@ -8,6 +8,8 @@ Created on Wed Jul 13 09:39:53 2022
 #%%
 import numpy as np
 import matplotlib.pyplot as plt
+from desc import set_device
+set_device('gpu')
 
 plt.rcParams["font.size"] = 12
 
@@ -51,12 +53,12 @@ constraints = (
     FixPressure(),  # fix pressure profile
     FixIota(),  # fix rotational transform profile
     FixPsi(),  # fix total toroidal magnetic flux
-    GXWrapper(weight=0)
+    GXWrapper(weight=0.001)
 )
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
 #plot_grid(grid_vol);
-objective_fT = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid_vol), verbose=0)
+objective_fT = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid_vol), verbose=0,use_jit=False)
 
 eq_qs_T_unc, result_T_unc = eq_init.optimize(
     objective=objective_fT,

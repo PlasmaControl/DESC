@@ -27,14 +27,15 @@ import netCDF4 as nc
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
-path = '/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5'
+#path = '/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5'
+path = "/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5"
 psi = 0.5
 alpha = 0
 npol = 1.0
-nzgrid = 64
+nzgrid = 32
 
 
-eq = desc.io.load(path)[-1]
+eq = desc.io.load(path)
 grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
 iota_data = eq.compute('iota', grid=grid_1d)
 fi = interp1d(grid_1d.nodes[:,0],iota_data['iota'])
@@ -63,11 +64,13 @@ Lref = eq.compute('a')['a']
 #psib = 0.3394774936
 #Lref = 0.505870915155837
 Bref = 2*psib/Lref**2
-
-print(eq.compute('sqrt(g)',grid=grid)['sqrt(g)'])
+print("Bref is " + str(Bref))
+print('psib is ' + str(psib))
+#print(eq.compute('sqrt(g)',grid=grid)['sqrt(g)'])
 
 #calculate bmag
 modB = eq.compute('|B|',grid=grid)['|B|']
+#print("modB is " + str(modB))
 bmag = modB/Bref
 
 #calculate gradpar and grho

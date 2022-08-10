@@ -354,13 +354,13 @@ class FiniteDiffDerivative(_Derivative):
             tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
             return self._fun(*tempargs)
 
-        x = jnp.atleast_1d(args[self._argnum])
+        x = np.atleast_1d(args[self._argnum])
         n = len(x)
         fx = f(x)
-        h = jnp.maximum(1.0, np.abs(x)) * self.rel_step
-        ee = jnp.diag(h)
+        h = np.maximum(1.0, np.abs(x)) * self.rel_step
+        ee = np.diag(h)
         dtype = fx.dtype
-        hess = jnp.outer(h, h)
+        hess = np.outer(h, h)
 
         for i in range(n):
             eei = ee[i, :]
@@ -398,13 +398,13 @@ class FiniteDiffDerivative(_Derivative):
             tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
             return self._fun(*tempargs)
 
-        x0 = jnp.atleast_1d(args[self._argnum])
+        x0 = np.atleast_1d(args[self._argnum])
         f0 = f(x0)
         m = f0.size
         n = x0.size
-        J = jnp.zeros((m, n))
-        h = jnp.maximum(1.0, np.abs(x0)) * self.rel_step
-        h_vecs = jnp.diag(np.atleast_1d(h))
+        J = np.zeros((m, n))
+        h = np.maximum(1.0, np.abs(x0)) * self.rel_step
+        h_vecs = np.diag(np.atleast_1d(h))
         for i in range(n):
             x1 = x0 - h_vecs[i]
             x2 = x0 + h_vecs[i]
@@ -415,7 +415,7 @@ class FiniteDiffDerivative(_Derivative):
             dfdx = df / dx
             J = put(J.T, i, dfdx.flatten()).T
         if m == 1:
-            J = jnp.ravel(J)
+            J = np.ravel(J)
         return J
 
     @classmethod
@@ -441,20 +441,20 @@ class FiniteDiffDerivative(_Derivative):
         """
         rel_step = kwargs.get("rel_step", 1e-3)
 
-        if jnp.isscalar(argnum):
+        if np.isscalar(argnum):
             nargs = 1
             argnum = (argnum,)
         else:
             nargs = len(argnum)
         v = (v,) if not isinstance(v, tuple) else v
-        #print("V IS " + str(v))
-        f = jnp.array(
+        print("V IS " + str(v))
+        f = np.array(
             [
                 cls._compute_jvp_1arg(fun, argnum[i], v[i], *args, rel_step=rel_step)
                 for i in range(nargs)
             ]
         )
-        return jnp.sum(f, axis=0)
+        return np.sum(f, axis=0)
 
     @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
@@ -553,9 +553,7 @@ class FiniteDiffDerivative(_Derivative):
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
         """Compute a jvp wrt to a single argument."""
         rel_step = kwargs.get("rel_step", 1e-3)
-        normv = jnp.linalg.norm(jnp.linalg.norm(v))
-        print("V IS " + str(v))
-        print("NORMV IS " + str(normv))
+        normv = np.linalg.norm(v)
         if normv != 0:
             vh = v / normv
         else:

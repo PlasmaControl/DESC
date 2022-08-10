@@ -12,6 +12,7 @@ from desc.objectives import (
     HelicalForceBalance,
     CurrentDensity,
     WrappedEquilibriumObjective,
+    GXWrapper
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
@@ -231,6 +232,7 @@ class Optimizer(IOAble):
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,
+                        GXWrapper
                     ),
                 ):
                     raise ValueError(
@@ -248,16 +250,18 @@ class Optimizer(IOAble):
                 eq_objective=ObjectiveFunction(nonlinear_constraints),
                 perturb_options=perturb_options,
                 solve_options=solve_options,
+                use_jit = False
             )
-
+        
+        #setting use_jit=False for GX
         if not objective.built:
-            objective.build(eq, verbose=verbose)
+            objective.build(eq, verbose=verbose,use_jit=False)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
             objective.compile(mode, verbose)
         for constraint in linear_constraints:
             if not constraint.built:
-                constraint.build(eq, verbose=verbose)
+                constraint.build(eq, verbose=verbose,use_jit=False)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             warnings.warn(

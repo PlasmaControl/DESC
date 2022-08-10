@@ -1,6 +1,8 @@
 import numpy as np
 import subprocess
-
+from scipy.interpolate import interp1d
+import os
+import time
 from desc.backend import jnp
 from desc.compute import arg_order
 from .utils import (
@@ -8,6 +10,9 @@ from .utils import (
     get_fixed_boundary_constraints,
     factorize_linear_constraints,
 )
+
+from desc.utils import Timer
+from desc.transform import Transform
 from .objective_funs import ObjectiveFunction, _Objective
 from ._equilibrium import CurrentDensity
 
@@ -16,19 +21,22 @@ from desc.compute._core import (
     compute_toroidal_flux,    
     compute_geometry,
     compute_contravariant_metric_coefficients,
-    compute_lambda
+    compute_lambda,
+    dot,
+    compute_pressure,
+    data_index
 )
 
 from desc.compute._field import (
     compute_magnetic_field_magnitude,        
-
+    compute_covariant_magnetic_field
 )
 
-from scipy.constants import mu_0
+from scipy.constants import mu_0, pi
 
-from desc.grid import LinearGrid, Grid
+from desc.grid import LinearGrid, Grid, ConcentricGrid, QuadratureGrid
 from jax import core
-from jax.interpreters import ad
+from jax.interpreters import ad, batching
 from desc.derivatives import FiniteDiffDerivative
 import netCDF4 as nc
 
@@ -259,10 +267,7 @@ class GXWrapper(_Objective):
     _scalar = True
     _linear = False
     
-    gx_compute = core.Primitive("gx")
-    gx_compute.def_impl(compute_impl)
-    ad.primitive_jvps[gx_compute] = compute_jvp
-
+    
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False):
         self.eq = eq
         self.npol = npol
@@ -280,19 +285,19 @@ class GXWrapper(_Objective):
 
     def build(self, eq, use_jit=False, verbose=1):
         if self.grid is None:
-            self.grid_eq = ConcentricGrid(
+            self.grid_eq = QuadratureGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="sin",
-                node_pattern=eq.node_pattern,
-
+                #sym=eq.sym,
+                #axis=False,
+                #rotation="sin",
+                #node_pattern=eq.node_pattern,
+            )
 
             grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
-            data = eq.compute_iota(grid=grid_1d)
+            data = eq.compute('iota',grid=grid_1d)
             iotad = data['iota']
             fi = interp1d(grid_1d.nodes[:,0],iotad)
             
@@ -304,7 +309,7 @@ class GXWrapper(_Objective):
 
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
-            coords = self.eq.compute_theta_coords(c)
+            coords = eq.compute_theta_coords(c)
             self.grid = Grid(coords)
 
         self._dim_f = 1
@@ -330,12 +335,20 @@ class GXWrapper(_Objective):
         )
 
         self._R_transform_eq = Transform(
-            self.grid_eq, eq.R_basis, derivs=3, build=True
+            self.grid_eq, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
         self._Z_transform_eq = Transform(
-            self.grid_eq, eq.R_basis, derivs=3, build=True
+            self.grid_eq, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
 
+
+        
+        self._args = ["R_lmn","Z_lmn","L_lmn","i_l","p_l","Psi"]
+        
+        self.gx_compute = core.Primitive("gx")
+        self.gx_compute.def_impl(self.compute_impl)
+        ad.primitive_jvps[self.gx_compute] = self.compute_gx_jvp
+        batching.primitive_batchers[self.gx_compute] = self.compute_gx_batch
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -347,10 +360,13 @@ class GXWrapper(_Objective):
         self._built = True
     
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        gx_compute.bind(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        #print("At the beginning of compute: " + str(R_lmn[0]) + " " +str(Z_lmn[0]) + " " + str(L_lmn[0]))
+        args = (R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        #self.gx_compute.bind(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)
+        return self.gx_compute.bind(*args)
 
-    def compute_impl(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
-        
+    def compute_impl(self, *args):
+        (R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi) = args
         #grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
         data = compute_rotational_transform(i_l,self._iota)
         iota= data['iota']
@@ -364,7 +380,7 @@ class GXWrapper(_Objective):
         #fi = interp1d(grid_1d.nodes[:,0],iota)
 
         data = compute_toroidal_flux(Psi,self._iota,data=data)
-        psib = Psi
+        psib = Psi/(2*pi)
         if psib < 0:
             sgn = False
             psib = np.abs(psib)
@@ -384,18 +400,21 @@ class GXWrapper(_Objective):
         
         #normalizations
         #grid = Grid(coords)
-        data = compute_geometry(R_lmn,Z_lmn,self._R_transform_eq,self._Z_transform_eq,data=data)
-        Lref = data['a']
+        data_eq = compute_geometry(R_lmn,Z_lmn,self._R_transform_eq,self._Z_transform_eq)
+        Lref = data_eq['a']
         Bref = 2*psib/Lref**2
+        #print('psib is ' + str(psib))
+        #print("Bref is " + str(Bref))
 
         #calculate bmag
         data = compute_magnetic_field_magnitude(R_lmn,Z_lmn,L_lmn,i_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,data=data)
         modB = data['|B|']
+        #print("modB is " + str(modB))
         bmag = modB/Bref
 
         #calculate gradpar and grho
         gradpar  = Lref*data['B^zeta']/modB
-        data = compute_contravariant_metric_coefficients(R_lmn,Z_lmnm,self._R_transform,self._Z_transform,data=data)
+        data = compute_contravariant_metric_coefficients(R_lmn,Z_lmn,self._R_transform,self._Z_transform,data=data)
         grho = data['|grad(rho)|']*Lref
 
         #calculate grad_psi and grad_alpha
@@ -427,6 +446,7 @@ class GXWrapper(_Objective):
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
+        data = compute_covariant_magnetic_field(R_lmn,Z_lmn,L_lmn,i_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,data=data)
         B_t = data['B_theta']
         B_z = data['B_zeta']
         dB_t = data['|B|_t']
@@ -474,7 +494,7 @@ class GXWrapper(_Objective):
         Bsa = 1/jac * (B_z*(1+lmbda_t) - B_t*(lmbda_z - iota))
         data = compute_pressure(p_l,self._pressure,data=data)
         p_r = data['p_r']
-        cvdrift = gbdrift + 2*Bref*Lref**2/modB**2 * rho*mu_0/B**2*p_r*Bsa
+        cvdrift = gbdrift + 2*Bref*Lref**2/modB**2 * rho*mu_0/modB**2*p_r*Bsa
 
         self.Lref = Lref
         self.shat = shat
@@ -485,30 +505,57 @@ class GXWrapper(_Objective):
         self.write_geo()
         #self.write_input()
         self.run_gx()
-
+        #time.sleep(1)
         ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
         #ky = ds['ky']
         #omega = np.zeros(len(om))
         gamma = np.zeros(len(om))
-        for i in range(len(omega)):
+        for i in range(len(gamma)):
             #omega[i] = om[i][0][0]
             gamma[i] = om[i][0][1]
+        print(max(gamma))
+        
+        t = str(time.time())
+        nm = 'gx' + t + '.nc'
+        nmg = 'gxinput_wrap' + t + '.out'
+        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
+        os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
+ 
         return max(gamma)
     
-    def compute_jvp(values,tangents):
+    def compute_gx_jvp(self,values,tangents):
+        #print("values are " + str(values))
+        #print("tangents are " + str(tangents))
         R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values
         primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         
-        n = sum(self._dimensions.values()) 
+        n = len(values) 
         argnum = np.arange(0,n,1)
-        fd = FiniteDiffDerivative(self.compute,argnum)
-
-        jvp = fd.compute_jvp(fun,argnum,tangents)
-
+        #fd = FiniteDiffDerivative(self.compute,argnum)
+        
+        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values)
+        
         return (primal_out, jvp)
+    
+    def compute_gx_batch(self,values,axis):
+        print("AT BATCH!!!")
+        if not np.iscalar(axis):
+            raise Exception('axis should be a scalar.')
+        res = jnp.array([])
+        if axis == 0:
+            for i in range(len(values)):
+                R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values[i,:]
+                #res = res + (self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi),)
+                res = jnp.vstack([res,self.compute(r_lmn, z_lmn, l_lmn, i_l, p_l, psi)])
 
+        else:
+            for i in range(len(values[0])):
+                R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values[:,i]
+                #res = res + (self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi),)
+                res = jnp.vstack([res,self.compute(r_lmn, z_lmn, l_lmn, i_l, p_l, psi)])
 
+        return res, axis
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         #l = 2*nzgrid + 1
@@ -579,12 +626,13 @@ class GXWrapper(_Objective):
 
     def write_geo(self):
         nperiod = 1
-        rmaj = self.eq.compute('R0')['R0']
+        #rmaj = self.eq.compute('R0')['R0']
         kxfac = 1.0
+        #print("At write geo: " + str(self.gbdrift_gx[0]) + str(self.gds2_gx[0]) + str(self.bmag_gx[0]))
         #open('gxinput_wrap.out', 'w').close()
         f = open('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out', "w")
         f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
-        f.write("\n"+str(self.nzgrid)+" "+str(nperiod)+" "+str(2*self.nzgrid)+" "+str(1.0)+" "+ str(1/self.Lref)+" "+str(self.shat)+" "+str(kxfac)+" "+str(1/self.iota) + " " + str(2*self.npol-1))
+        f.write("\n"+str(self.nzgrid)+" "+str(nperiod)+" "+str(2*self.nzgrid)+" "+str(1.0)+" "+ str(1/self.Lref)+" "+str(self.shat)+" "+str(kxfac)+" "+str(1/self.iota[0]) + " " + str(2*self.npol-1))
 
         f.write("\ngbdrift gradpar grho tgrid")
         for i in range(len(self.uniform_zgrid)):
@@ -608,12 +656,14 @@ class GXWrapper(_Objective):
     
     
 
-    def run_gx():
+    def run_gx(self):
         fs = open('stdout.out','w')
         path = '/home/bdorland/GX/'
-        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
+        #cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
+        cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
         #process = []
         #print(cmd)
         p = subprocess.Popen(cmd,stdout=fs)
         p.wait()
+
 

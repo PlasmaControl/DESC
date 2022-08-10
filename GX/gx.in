@@ -28,13 +28,13 @@
  restart_to_file = "restart.nc"
 
 [Dimensions]
- ntheta = 128
+ ntheta = 64
  nperiod = 1
  ny = 81
  nx = 1
 
- nhermite  = 32
- nlaguerre = 16
+ nhermite  = 16
+ nlaguerre = 8
  nspecies = 1
 
 
@@ -44,7 +44,7 @@
 
 [Time]
  dt = 0.01
- nstep  = 25000
+ nstep  = 5000
  nwrite = 100
  navg = 5000
 

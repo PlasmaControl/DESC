@@ -107,6 +107,27 @@ def test_1d_optimization(SOLOVEV):
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
 
+def test_unnested_warning_optimization(SOLOVEV):
+    """Tests 1D optimization for target aspect ratio."""
+    optimizer = Optimizer("scipy-trust-exact")
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)] = 1
+    # make unnested by setting higher order mode to same amplitude as lower order mode
+    eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
+    objective = ObjectiveFunction(AspectRatio(target=2.5))
+    constraints = (
+        ForceBalance(),
+        FixBoundaryR(),
+        FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    options = {"perturb_options": {"order": 1}}
+    with pytest.warns(Warning):
+        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
+
+
 def test_1d_optimization_old(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 

@@ -2,7 +2,8 @@ import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-
+import warnings
+from termcolor import colored
 from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer
 from desc.io import IOAble
@@ -327,7 +328,14 @@ class ObjectiveFunction(IOAble):
             )
             nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
             if not nested:
-                print("Equilibrium is unnested! Stopping Optimization")
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
             return not nested
         else:
             return False

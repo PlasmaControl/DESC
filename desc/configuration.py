@@ -685,9 +685,9 @@ class _Configuration(IOAble, ABC):
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
 
         if L_change and hasattr(self.pressure, "change_resolution"):
-            self.pressure.change_resolution(L=L)
+            self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
         if L_change and hasattr(self.iota, "change_resolution"):
-            self.iota.change_resolution(L=L)
+            self.iota.change_resolution(L=max(L, self.iota.basis.L))
 
         self.axis.change_resolution(self.N, NFP=self.NFP)
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)

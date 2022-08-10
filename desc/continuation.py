@@ -77,7 +77,6 @@ def solve_continuation(
     """
 
     # TODO: broadcast arrays against each other
-
     # TODO: how to combine automatic w/ user specified stuff?
 
     surf_i = surface.copy()
@@ -86,7 +85,7 @@ def solve_continuation(
 
     res_step = 6
     pres_step = 1 / 2
-    bdry_step = 1 / 2
+    bdry_step = 1 / 4
     Mi = min(M // 2, res_step)
     Li = 2 * Mi if spectral_indexing == "fringe" else Mi
     Ni = 0
@@ -105,8 +104,11 @@ def solve_continuation(
     eqfam = []
 
     surf_i.change_resolution(Li, Mi, Ni)
-    pres_i.change_resolution(Li, Mi, Ni)
-    iota_i.change_resolution(Li, Mi, Ni)
+    pres_i.change_resolution(Li)
+    iota_i.change_resolution(Li)
+
+    # start with zero pressure
+    pres_i.params *= 0
 
     eq_init = Equilibrium(
         Psi,
@@ -137,8 +139,11 @@ def solve_continuation(
             Li = 2 * Mi if spectral_indexing == "fringe" else Mi
             surf_i2 = surface.copy()
             surf_i2.change_resolution(Li, Mi, Ni)
-            pres_i.change_resolution(Li, Mi, Ni)
-            deltas = get_deltas(surf_i2, surf_i, iota2, iota1)
+            iota_i2 = iota.copy()
+            iota_i2.change_resolution(Li)
+            deltas = _get_deltas(
+                {"surface": [surf_i, surf_i2], "iota": [iota_i, iota_i2]}
+            )
             eqi.change_resolution(Li, Mi, Ni)
             eqi.perturb(**deltas)
             eqi.solve(objective, optimizer)
@@ -149,9 +154,12 @@ def solve_continuation(
             else:
                 eqfam.append(eqi)
                 ii += 1
+                surf_i = surf_i2
+                iota_i = iota_i2
         if ii > res_steps and ii < res_steps + pres_steps:
             # increase pressure
-            deltas = get_deltas(eqfam[res_steps].pressure, pressure) * pres_step
+            deltas = _get_deltas({"pressure": [eqfam[res_steps].pressure, pressure]})
+            deltas["p_l"] *= pres_step
             eqi.perturb(**deltas)
             eqi.solve(objective, optimizer)
             if not eqi.isnested():
@@ -169,9 +177,11 @@ def solve_continuation(
             # boundary perturbations
             # TODO: do we want to jump to full N? or maybe step that up too?
             eqi.change_resolution(L, M, N)
-            deltas = (
-                get_deltas(eqfam[res_steps + pres_steps].surface, surface) * bdry_step
+            deltas = _get_deltas(
+                {"surface": [eqfam[res_steps + pres_steps].surface, surface]}
             )
+            deltas["Rb_lmn"] *= bdry_step
+            deltas["Zb_lmn"] *= bdry_step
             eqi.perturb(**deltas)
             eqi.solve(objective, optimizer)
             if not eqi.isnested():
@@ -185,8 +195,28 @@ def solve_continuation(
     return eqfam
 
 
-def get_deltas(thing1, thing2):
+def _get_deltas(things):
 
-    # TODO: stuff for making resolutions the same etc
+    deltas = {}
+    n = len(things)
+    if "surface" in things:
+        s1 = things["surface"][0].copy()
+        s2 = things["surface"][1].copy()
 
-    return thing2.params - thing1.params
+        s1.change_resolution(s2.L, s2.M, s2.N)
+        deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
+        deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
+    if "iota" in things:
+        i1 = things["iota"][0].copy()
+        i2 = things["iota"][1].copy()
+
+        i1.change_resolution(i2.L)
+        deltas["i_l"] = i2.params - i1.params
+    if "pressure" in things:
+        p1 = things["pressure"][0].copy()
+        p2 = things["pressure"][1].copy()
+
+        p1.change_resolution(p2.L)
+        deltas["p_l"] = p2.params - p1.params
+
+    return deltas

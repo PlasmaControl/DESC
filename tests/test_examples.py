@@ -124,8 +124,8 @@ def test_unnested_warning_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    with pytest.warns(Warning):
-        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
+    with pytest.warns(UserWarning):
+        eq.optimize(objective, constraints, options=options, optimizer=optimizer)
 
 
 def test_1d_optimization_old(SOLOVEV):

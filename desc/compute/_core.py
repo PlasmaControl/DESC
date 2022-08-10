@@ -404,6 +404,7 @@ def compute_rotational_transform(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of rotational transform profile.
         Keys are of the form 'X_y' meaning the derivative of X wrt y.
+
     """
     if data is None:
         data = {}
@@ -535,6 +536,7 @@ def compute_covariant_basis(
         Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors.
         Keys are of the form 'e_x_y', meaning the covariant basis vector in the x
         direction, differentiated wrt y.
+
     """
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
     data["0"] = jnp.zeros(R_transform.num_nodes)

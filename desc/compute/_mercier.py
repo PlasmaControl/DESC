@@ -293,8 +293,7 @@ def compute_DCurr(
             match_grid=True,
         )
         xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
-        # sign of poloidal current, data["G"]
-        sign_G = jnp.sign(surface_integrals(grid, data["B_zeta"], match_grid=True))
+        sign_G = jnp.sign(surface_averages(grid, data["B_zeta"], match_grid=True))
 
         data["DCurr"] = (
             -sign_G

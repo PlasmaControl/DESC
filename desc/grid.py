@@ -33,9 +33,9 @@ class Grid(IOAble):
         "_weights",
         "_axis",
         "_node_pattern",
-        "_unique_rho_indices",
-        "_unique_theta_indices",
-        "_unique_zeta_indices",
+        "_unique_rho_idx",
+        "_unique_theta_idx",
+        "_unique_zeta_idx",
         "_num_rho",
         "_num_theta",
         "_num_zeta",
@@ -62,7 +62,6 @@ class Grid(IOAble):
         #   Need to rescale on each theta coordinate curve by a different factor.
         #       dtheta should = 2pi / number of nodes remaining on that theta curve
         #       scale = number of nodes / (number of nodes - number of nodes to delete) on that theta curve
-
         if self.sym:
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
             # X is np.unique(X)[return_inverse]
@@ -85,8 +84,8 @@ class Grid(IOAble):
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
             self._spacing = np.delete(self.spacing, non_sym_idx, axis=0)
         # TODO: this code passes all my compute.utils() pytests and more basic function average tests,
-        #  but I've come to the conclusion there might still be a bug with symmetry (not a coding mistake)
-        #  or at least some other part of the code preferred it when dtheta had wrong values.
+        #  But compute_geometry() relied on using the old values for dtheta.
+        #  Line 775 of compute._core: xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -100,12 +99,12 @@ class Grid(IOAble):
 
     def _count_nodes(self):
         """Count unique values of coordinates."""
-        __, self._unique_rho_indices = np.unique(self.nodes[:, 0], return_index=True)
-        __, self._unique_theta_indices = np.unique(self.nodes[:, 1], return_index=True)
-        __, self._unique_zeta_indices = np.unique(self.nodes[:, 2], return_index=True)
-        self._num_rho = self._unique_rho_indices.size
-        self._num_theta = self._unique_theta_indices.size
-        self._num_zeta = self._unique_zeta_indices.size
+        __, self._unique_rho_idx = np.unique(self.nodes[:, 0], return_index=True)
+        __, self._unique_theta_idx = np.unique(self.nodes[:, 1], return_index=True)
+        __, self._unique_zeta_idx = np.unique(self.nodes[:, 2], return_index=True)
+        self._num_rho = self._unique_rho_idx.size
+        self._num_theta = self._unique_theta_idx.size
+        self._num_zeta = self._unique_zeta_idx.size
 
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce weights for duplicated nodes."""
@@ -140,8 +139,6 @@ class Grid(IOAble):
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
-        # TODO: avoid double calls to np.unique in count_nodes and create_nodes
-        #   note that unique in count_nodes stored indices after sorting.
         self._L = len(np.unique(nodes[:, 0]))
         self._M = len(np.unique(nodes[:, 1]))
         self._N = len(np.unique(nodes[:, 2]))
@@ -220,19 +217,19 @@ class Grid(IOAble):
         return self._num_zeta
 
     @property
-    def unique_rho_indices(self):
+    def unique_rho_idx(self):
         """ndarray: indices of rho that result in the unique rho coordinates"""
-        return self._unique_rho_indices
+        return self._unique_rho_idx
 
     @property
-    def unique_theta_indices(self):
+    def unique_theta_idx(self):
         """ndarray: indices of theta that result in the unique theta coordinates"""
-        return self._unique_theta_indices
+        return self._unique_theta_idx
 
     @property
-    def unique_zeta_indices(self):
+    def unique_zeta_idx(self):
         """ndarray: indices of zeta that result in the unique zeta coordinates"""
-        return self._unique_zeta_indices
+        return self._unique_zeta_idx
 
     @property
     def axis(self):
@@ -934,7 +931,7 @@ def most_rational(a, b):  # pragma: no cover
 
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)
-    idx = 0  # first idex of dissimilar digits
+    idx = 0  # first index of dissimilar digits
     for i in range(min(a_cf.size, b_cf.size)):
         if a_cf[i] != b_cf[i]:
             idx = i

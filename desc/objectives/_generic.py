@@ -486,8 +486,6 @@ class MercierShear(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         if eq.iota is not None:
             self._iota = eq.iota.copy()
             self._iota.grid = self.grid
@@ -618,8 +616,6 @@ class MercierCurr(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         if eq.iota is not None:
             self._iota = eq.iota.copy()
             self._iota.grid = self.grid
@@ -890,8 +886,6 @@ class MercierGeod(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
         if eq.iota is not None:
             self._iota = eq.iota.copy()
             self._iota.grid = self.grid

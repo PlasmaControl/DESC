@@ -62,9 +62,7 @@ def benchmark(grid, q=1, surface_label="rho"):
     integrals : ndarray
         Surface integrals of q over each surface in grid.
     """
-    surface_label_nodes, unique_indices, _, ds = _get_proper_surface(
-        grid, surface_label
-    )
+    surface_label_nodes, unique_indices, ds = _get_proper_surface(grid, surface_label)
     integrals = np.empty(len(unique_indices))
     q = np.asarray(q)
 
@@ -105,7 +103,7 @@ class TestComputeUtils:
                 grid, q, surface_label, match_grid=True
             )
 
-            surface_label_nodes, _, _, _ = _get_proper_surface(grid, surface_label)
+            surface_label_nodes, _, _ = _get_proper_surface(grid, surface_label)
             _, inverse = np.unique(surface_label_nodes, return_inverse=True)
             np.testing.assert_allclose(integrals[inverse], integrals_expand)
 

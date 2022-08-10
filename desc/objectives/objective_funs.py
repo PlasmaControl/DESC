@@ -313,16 +313,24 @@ class ObjectiveFunction(IOAble):
     def is_unnested(
         self, x
     ):  # assuming objective uses R_lmn, Z_lmn... not elegant at all
+        """Check if equilibrium is unnested, returning True if unnested and False if it is nested.
+
+        This function only works if the objective takes R_lmn and Z_lmn as arguments.
+        Otherwise, it returns False but does not actually check if the equilibrium is nested or not"""
         kwargs = self.unpack_state(x)
-        data = compute_jacobian(
-            R_transform=self._objectives[0]._R_transform,
-            Z_transform=self._objectives[0]._Z_transform,
-            **kwargs
-        )
-        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
-        if not nested:
-            print("eq is unnested")
-        return not nested
+        if "R_lmn" in kwargs.keys() and "Z_lmn" in kwargs.keys():
+
+            data = compute_jacobian(
+                R_transform=self._objectives[0]._R_transform,
+                Z_transform=self._objectives[0]._Z_transform,
+                **kwargs
+            )
+            nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+            if not nested:
+                print("Equilibrium is unnested! Stopping Optimization")
+            return not nested
+        else:
+            return False
 
     @property
     def objectives(self):

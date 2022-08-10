@@ -16,6 +16,7 @@ from desc.objectives import (
 from desc.vmec_utils import vmec_boundary_subspace
 from desc.optimize import Optimizer
 from .utils import area_difference_vmec
+import pytest
 
 
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
@@ -88,7 +89,7 @@ def test_force_balance_grids():
 
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    optimizer = Optimizer("scipy-trust-exact")
+    optimizer = Optimizer("lsq-exact")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
@@ -100,7 +101,8 @@ def test_1d_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    eq.optimize(objective, constraints, options=options, optimizer=optimizer)
+    with pytest.warns(UserWarning):
+        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 

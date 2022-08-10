@@ -26,6 +26,10 @@ class Optimizer(IOAble):
     Also offers several custom routines specifically designed for DESC, both scalar and
     least squares routines with and without jacobian/hessian information.
 
+    Note: surface nestedness is tracked during optimization iterations, and optimization exits early
+        if surfaces go unnested. However this is NOT tracked in the scipy.optimize.least_squares routines,
+        as those routines do not accept a custom callback function.
+
     Parameters
     ----------
     method : str
@@ -328,6 +332,10 @@ class Optimizer(IOAble):
             msg = [""]
 
             def callback(x_reduced):
+                # check for nestedness
+                is_unnested = is_unnested_wrapped(x_reduced)
+                if is_unnested:
+                    raise StopIteration
                 x = recover(x_reduced)
                 if len(allx) > 0:
                     dx = allx[-1] - x_reduced

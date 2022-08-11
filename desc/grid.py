@@ -48,20 +48,26 @@ class Grid(IOAble):
 
         self._nodes, self._spacing = self._create_nodes(nodes)
 
-        self._enforce_symmetry()
+        dtheta_scale = self._enforce_symmetry()
         if sort:
             self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights()
+        self._scale_weights(dtheta_scale)
 
     def _enforce_symmetry(self):
-        """Enforce stellarator symmetry."""
-        # 1. Remove nodes with theta > pi.
-        # 2. Rescale theta spacing to preserve dtheta weight.
-        #   Need to rescale on each theta coordinate curve by a different factor.
-        #       dtheta should = 2pi / number of nodes remaining on that theta curve
-        #       scale = number of nodes / (number of nodes - number of nodes to delete) on that theta curve
+        """Enforce stellarator symmetry.
+        1. Remove nodes with theta > pi.
+        2. Rescale theta spacing to preserve dtheta weight.
+            Need to rescale on each theta coordinate curve by a different factor.
+            dtheta should = 2pi / number of nodes remaining on that theta curve
+
+        Returns
+        -------
+        dtheta_scale : ndarray
+            The multiplicative factor used to scale the theta spacing for each theta curve.
+                number of nodes / (number of nodes - number of nodes to delete)
+        """
         if self.sym:
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
             # X is np.unique(X)[return_inverse]
@@ -83,9 +89,8 @@ class Grid(IOAble):
             self._spacing[:, 1] *= scale
             self._nodes = np.delete(self.nodes, non_sym_idx, axis=0)
             self._spacing = np.delete(self.spacing, non_sym_idx, axis=0)
-        # TODO: this code passes all my compute.utils() pytests and more basic function average tests,
-        #  But compute_geometry() relied on using the old values for dtheta.
-        #  Line 775 of compute._core: xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
+            return np.delete(scale, non_sym_idx)
+        return 1
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -106,8 +111,14 @@ class Grid(IOAble):
         self._num_theta = self._unique_theta_idx.size
         self._num_zeta = self._unique_zeta_idx.size
 
-    def _scale_weights(self):
-        """Scale weights sum to full volume and reduce weights for duplicated nodes."""
+    def _scale_weights(self, dtheta_scale):
+        """Scale weights sum to full volume and reduce weights for duplicated nodes.
+
+        Parameters
+        ----------
+        dtheta_scale : ndarray
+            The multiplicative factor used to scale the theta spacing.
+        """
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
         nodes[:, 2] %= 2 * np.pi / self.NFP
@@ -116,8 +127,12 @@ class Grid(IOAble):
             nodes, axis=0, return_inverse=True, return_counts=True
         )
         self._spacing /= np.tile(np.atleast_2d(counts[inverse]).T, 3) ** (1 / 3)
+        # assign weights pretending _enforce_symmetry didn't change theta spacing
+        temp_spacing = np.copy(self.spacing)
+        temp_spacing[:, 1] /= dtheta_scale
+        temp_spacing *= (4 * np.pi ** 2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        self._weights = temp_spacing.prod(axis=1)
         self._spacing *= (4 * np.pi ** 2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
-        self._weights = self.spacing.prod(axis=1)
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -320,11 +335,11 @@ class LinearGrid(Grid):
             zeta=zeta,
         )
 
-        self._enforce_symmetry()
+        dtheta_scale = self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights()
+        self._scale_weights(dtheta_scale)
 
     def _create_nodes(
         self,
@@ -472,10 +487,10 @@ class LinearGrid(Grid):
                 axis=len(self.axis) > 0,
                 endpoint=self.endpoint,
             )
-            self._enforce_symmetry()
+            dtheta_scale = self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
-            self._scale_weights()
+            self._scale_weights(dtheta_scale)
 
     @property
     def endpoint(self):
@@ -514,11 +529,15 @@ class QuadratureGrid(Grid):
             L=self.L, M=self.M, N=self.N, NFP=self.NFP
         )
 
-        self._enforce_symmetry()  # symmetry is never enforced for Quadrature Grid
+        dtheta_scale = (
+            self._enforce_symmetry()
+        )  # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
+        temp_spacing = np.copy(self.spacing)
+        temp_spacing[:, 1] /= dtheta_scale
+        self._weights = temp_spacing.prod(axis=1)  # Quad weights don't need scaling
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """Create grid nodes and weights.
@@ -599,10 +618,12 @@ class QuadratureGrid(Grid):
             self._M = M
             self._N = N
             self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=self.NFP)
-            self._enforce_symmetry()
+            dtheta_scale = self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
-            self._weights = self.spacing.prod(axis=1)  # instead of _scale_weights
+            temp_spacing = np.copy(self.spacing)
+            temp_spacing[:, 1] /= dtheta_scale
+            self._weights = temp_spacing.prod(axis=1)  # instead of _scale_weights
 
 
 class ConcentricGrid(Grid):
@@ -674,11 +695,11 @@ class ConcentricGrid(Grid):
             node_pattern=self.node_pattern,
         )
 
-        self._enforce_symmetry()
+        dtheta_scale = self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights()
+        self._scale_weights(dtheta_scale)
 
     def _create_nodes(
         self, L, M, N, NFP=1, axis=False, rotation=None, node_pattern="jacobi"
@@ -835,10 +856,10 @@ class ConcentricGrid(Grid):
                 axis=len(self.axis) > 0,
                 node_pattern=self.node_pattern,
             )
-            self._enforce_symmetry()
+            dtheta_scale = self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
-            self._scale_weights()
+            self._scale_weights(dtheta_scale)
 
 
 # these functions are currently unused ---------------------------------------

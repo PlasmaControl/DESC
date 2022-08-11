@@ -23,7 +23,7 @@ def get_desc_eq(name):
     Equilibrium
         DESC equilibrium.
     """
-    return desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
+    return desc.io.load("desc/examples/" + name + "_output.h5")[-1]
 
 
 def random_grid(linear=False):

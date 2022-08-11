@@ -322,8 +322,15 @@ class Optimizer(IOAble):
 
         def is_unnested_wrapped(x_reduced):
             x = recover(x_reduced)
-            nested = objective.is_unnested(x)
-            return nested
+            kwargs = objective.unpack_state(x)
+            R_lmn = None
+            Z_lmn = None
+            if "R_lmn" in kwargs.keys():
+                R_lmn = kwargs["R_lmn"]
+            if "Z_lmn" in kwargs.keys():
+                Z_lmn = kwargs["Z_lmn"]
+            nested = eq.is_nested(R_lmn=R_lmn, Z_lmn=Z_lmn)
+            return not nested
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -332,12 +339,12 @@ class Optimizer(IOAble):
             msg = [""]
 
             def callback(x_reduced):
-                # check for nestedness
-                is_unnested = is_unnested_wrapped(x_reduced)
-                if is_unnested:
-                    raise StopIteration
                 x = recover(x_reduced)
                 if len(allx) > 0:
+                    # check for nestedness
+                    is_unnested = is_unnested_wrapped(x_reduced)
+                    if is_unnested:
+                        raise StopIteration
                     dx = allx[-1] - x_reduced
                     dx_norm = jnp.linalg.norm(dx)
                     if dx_norm > 0:

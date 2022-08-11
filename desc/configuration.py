@@ -1254,7 +1254,7 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, grid=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
             Does so by checking coordianate jacobian (sqrt(g)) sign.
@@ -1275,6 +1275,11 @@ class _Configuration(IOAble, ABC):
             whether or not the surfaces are nested
 
         """
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
+
         data = self.compute(name="sqrt(g)", grid=grid)
 
         return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))

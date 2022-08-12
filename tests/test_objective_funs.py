@@ -64,7 +64,7 @@ def get_desc_eq(name):
     Equilibrium
         DESC equilibrium.
     """
-    return desc.io.load("examples/DESC/" + name + "_output.h5")[-1]
+    return desc.io.load("desc/examples/" + name + "_output.h5")[-1]
 
 
 def get_vmec_data(name, quantity):
@@ -84,7 +84,7 @@ def get_vmec_data(name, quantity):
     quantity : ndarray
         Variable from VMEC output.
     """
-    f = Dataset("examples/VMEC/wout_" + name + ".nc")
+    f = Dataset("tests/inputs/wout_" + name + ".nc")
     rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
     quantity = np.asarray(f.variables[quantity])
     f.close()

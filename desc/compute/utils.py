@@ -10,7 +10,7 @@ def _get_proper_surface(grid, surface_label):
 
     Parameters
     ----------
-    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, theta, or zeta.
@@ -49,7 +49,7 @@ def compress(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         The array to compress.
@@ -81,7 +81,7 @@ def expand(grid, x, surface_label="rho"):
 
     Parameters
     ----------
-    grid : LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
         Note that support for concentric grids on surface_label="theta" is not implemented yet.
     x : ndarray
@@ -165,7 +165,7 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
 
     Parameters
     ----------
-    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -220,7 +220,7 @@ def surface_averages(
 
     Parameters
     ----------
-    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to average.
@@ -262,7 +262,7 @@ def enclosed_volumes(grid, data, dr=0, match_grid=False):
 
     Parameters
     ----------
-    grid : Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
         Collocation grid containing the nodes to evaluate at.
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors and toroidal coords.

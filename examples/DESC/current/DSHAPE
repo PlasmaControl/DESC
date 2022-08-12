@@ -27,14 +27,25 @@ nfev = 100
 optimizer         = lsq-exact
 objective         = force
 spectral_indexing = fringe
-node_pattern      = jacobi
+node_pattern      = quad
 
 # pressure and current profiles
-l:   0  p =  1.6E+3  c = 0
-l:   2  p = -3.2E+3  c = -438474.59377869
-l:   4  p =  1.6E+3  c = 175194.056811
-l:   6  p = 0        c = 71469.4336739
-l:   8  p = 0        c = -33076.87769384
+l:   0  p =  1.6E+3  c = 0.00000000e+00
+l:   2  p = -3.2E+3  c = -4.41027814e+05
+l:   4  p =  1.6E+3  c = 1.94900905e+05
+l:   6  p = 0        c = 2.19054098e+04
+l:   8  p = 0        c = 1.10384148e+04
+l:  10  p = 0        c = -5.88970422e+03
+l:  12  p = 0        c = -1.80819331e+04
+l:  14  p = 0        c = -7.91180078e+04
+l:  16  p = 0        c = 1.12657052e+06
+l:  18  p = 0        c = -4.87938498e+06 
+l:  20  p = 0        c = 1.17585722e+07
+l:  22  p = 0        c = -1.78807340e+07
+l:  24  p = 0        c = 1.76818820e+07
+l:  26  p = 0        c = -1.11235576e+07
+l:  28  p = 0        c = 4.06970193e+06
+l:  30  p = 0        c = -6.61997199e+05
 
 # magnetic axis initial guess
 n:   0  R0 =  3.65

@@ -518,14 +518,24 @@ class Energy(_Objective):
             ]:
                 warnings.warn(
                     colored(
-                        "Energy objective attempted to be built using grid "
+                        "Energy objective built using grid "
                         + "that is not the quadrature grid! "
                         + "This is not recommended and may result in poor convergence. "
-                        + "Setting grid to use QuadratureGrid."
                         "yellow",
                     )
                 )
-            elif eq.node_pattern is None or eq.node_pattern == "quad":
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation=None,
+                    node_pattern=eq.node_pattern,
+                )
+
+            else:
                 self.grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,

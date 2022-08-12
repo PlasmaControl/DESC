@@ -330,6 +330,15 @@ class Optimizer(IOAble):
             if "Z_lmn" in kwargs.keys():
                 Z_lmn = kwargs["Z_lmn"]
             nested = eq.is_nested(R_lmn=R_lmn, Z_lmn=Z_lmn)
+            if not nested:
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
             return not nested
 
         if self.method in Optimizer._scipy_scalar_methods:

@@ -317,7 +317,7 @@ def lsqtr(
             actual_reduction = 0
 
         iteration += 1
-
+    message = None
     result = OptimizeResult(
         x=x,
         success=success,
@@ -331,6 +331,7 @@ def lsqtr(
         nit=iteration,
         message=message,
     )
+    result["message"] = ""
     if verbose > 0:
         if result["success"]:
             print(result["message"])

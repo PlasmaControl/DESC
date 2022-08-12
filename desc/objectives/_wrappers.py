@@ -63,7 +63,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
-        use_jit=True,
+        use_jit=False,
         verbose=1,
         perturb_options={},
         solve_options={},
@@ -81,7 +81,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build the objective.
 
         Parameters
@@ -321,8 +321,10 @@ class GXWrapper(_Objective):
 
         self._pressure = eq.pressure.copy()
         self._iota = eq.iota.copy()
+        self._iota_eq = eq.iota.copy()
         self._pressure.grid = self.grid
         self._iota.grid = self.grid
+        self._iota_eq.grid = self.grid_eq
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=3, build=True
@@ -379,8 +381,8 @@ class GXWrapper(_Objective):
 
         #fi = interp1d(grid_1d.nodes[:,0],iota)
 
-        data = compute_toroidal_flux(Psi,self._iota,data=data)
-        psib = Psi/(2*pi)
+        data = compute_toroidal_flux(Psi,self._iota_eq,data=data)
+        psib = data['psi'][-1]
         if psib < 0:
             sgn = False
             psib = np.abs(psib)
@@ -504,6 +506,7 @@ class GXWrapper(_Objective):
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn)
         self.write_geo()
         #self.write_input()
+        
         self.run_gx()
         #time.sleep(1)
         ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
@@ -512,7 +515,7 @@ class GXWrapper(_Objective):
         #omega = np.zeros(len(om))
         gamma = np.zeros(len(om))
         for i in range(len(gamma)):
-            #omega[i] = om[i][0][0]
+        #    #omega[i] = om[i][0][0]
             gamma[i] = om[i][0][1]
         print(max(gamma))
         
@@ -521,8 +524,9 @@ class GXWrapper(_Objective):
         nmg = 'gxinput_wrap' + t + '.out'
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
- 
-        return max(gamma)
+        #gamma = 1.0
+        #print(gamma)
+        return self._shift_scale(jnp.atleast_1d(max(gamma)))
     
     def compute_gx_jvp(self,values,tangents):
         #print("values are " + str(values))
@@ -538,7 +542,7 @@ class GXWrapper(_Objective):
         
         return (primal_out, jvp)
     
-    def compute_gx_batch(self,values,axis):
+    def compute_gx_batch_old(self,values,axis):
         print("AT BATCH!!!")
         if not np.iscalar(axis):
             raise Exception('axis should be a scalar.')
@@ -556,6 +560,51 @@ class GXWrapper(_Objective):
                 res = jnp.vstack([res,self.compute(r_lmn, z_lmn, l_lmn, i_l, p_l, psi)])
 
         return res, axis
+
+    def compute_gx_batch(self, values, axis):
+        print("AT BATCH!!!")
+        ind = 0
+        for i in range(len(axis)):
+            if axis[i] != None:
+                ind = i
+
+        for i in range(len(values)):
+            if i == ind:
+                continue
+            elif i == 0:
+                R_lmn = values[i]
+            elif i == 1:
+                Z_lmn = values[i]
+            elif i == 2:
+                L_lmn = values[i]
+            elif i == 3:
+                i_l = values[i]
+            elif i == 4:
+                p_l = values[i]
+            else:
+                Psi = values[i]
+        res = jnp.array([0.0])
+
+        for i in range(len(values[ind])):
+            if ind == 0:
+                R_lmn = values[ind][i]
+            elif ind == 1:
+                Z_lmn = values[ind][i]
+            elif ind == 2:
+                L_lmn = values[ind][i]
+            elif ind == 3:
+                i_l = values[ind][i]
+            elif ind == 4:
+                p_l = values[ind][i]
+            else:
+                Psi = values[ind][i]
+            res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
+
+        res = res[1:]
+        print("res is " + str(res))
+
+        return res, axis[ind]
+
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         #l = 2*nzgrid + 1
@@ -658,12 +707,12 @@ class GXWrapper(_Objective):
 
     def run_gx(self):
         fs = open('stdout.out','w')
-        path = '/home/bdorland/GX/'
+        path = '/home/pk2354/src/gx/'
         #cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
         cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
         #process = []
         #print(cmd)
-        p = subprocess.Popen(cmd,stdout=fs)
-        p.wait()
+        p = subprocess.run(cmd,stdout=fs)
+        #p.wait()
 
 

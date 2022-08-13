@@ -36,7 +36,7 @@ from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plo
 #%%
 #eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 eq_init = desc.io.load('/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5')[-1]
-eq_init.change_resolution(M=2,N=2,L=2,M_grid=4,L_grid=4)
+eq_init.change_resolution(M=4,L=4,M_grid=8,L_grid=8)
 optimizer = Optimizer("lsq-exact")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=0)
 #idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)

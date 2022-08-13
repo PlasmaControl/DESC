@@ -522,8 +522,11 @@ class GXWrapper(_Objective):
         t = str(time.time())
         nm = 'gx' + t + '.nc'
         nmg = 'gxinput_wrap' + t + '.out'
-        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
-        os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
+        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
+        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
+        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
+        os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
+
         #gamma = 1.0
         #print(gamma)
         return self._shift_scale(jnp.atleast_1d(max(gamma)))
@@ -601,7 +604,7 @@ class GXWrapper(_Objective):
             res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
 
         res = res[1:]
-        print("res is " + str(res))
+        #print("res is " + str(res))
 
         return res, axis[ind]
 

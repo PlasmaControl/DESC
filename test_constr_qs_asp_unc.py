@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jul 13 09:39:53 2022
+
+@author: pk123
+"""
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -22,40 +30,33 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plot_qs_error
 
-
+#%%
 eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
-#eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5")[-1]
-optimizer = Optimizer("lsq-auglag")
+optimizer = Optimizer("lsq-exact")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
 idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
 idx_Zsc = eq_init.surface.Z_basis.get_idx(M=-1, N=2)
 idx_Zcs = eq_init.surface.Z_basis.get_idx(M=1, N=-2)
 
-#idx_Rcc2 = eq_init.surface.R_basis.get_idx(M=2, N=2)
-#idx_Rss2 = eq_init.surface.R_basis.get_idx(M=-2, N=-2)
-#idx_Zsc2 = eq_init.surface.Z_basis.get_idx(M=-2, N=2)
-#idx_Zcs2 = eq_init.surface.Z_basis.get_idx(M=2, N=-2)
-
 # boundary modes to constrain
 R_modes = np.delete(eq_init.surface.R_basis.modes, [idx_Rcc, idx_Rss], axis=0)
 Z_modes = np.delete(eq_init.surface.Z_basis.modes, [idx_Zsc, idx_Zcs], axis=0)
 
+# constraints
 constraints = (
     ForceBalance(),  # enforce JxB-grad(p)=0 during optimization
-    FixBoundaryR(modes=R_modes,fixed_boundary=True),  # fix specified R boundary modes
-    FixBoundaryZ(modes=Z_modes,fixed_boundary=True),  # fix specified Z boundary modes
+    FixBoundaryR(modes=R_modes),  # fix specified R boundary modes
+    FixBoundaryZ(modes=Z_modes),  # fix specified Z boundary modes
     FixPressure(),  # fix pressure profile
     FixIota(),  # fix rotational transform profile
     FixPsi(),  # fix total toroidal magnetic flux
-    FixLambdaGauge(),
-    AspectRatio(target=7.0,equality=False,lb = True)
 )
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
 #plot_grid(grid_vol);
-objective_fT = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid_vol), verbose=0)
+objective_fT = ObjectiveFunction((QuasisymmetryTripleProduct(grid=grid_vol),AspectRatio(target=7.0,weight=50)), verbose=0)
 
-eq_qs_T, result_T = eq_init.optimize(
+eq_qs_T_unc, result_T_unc = eq_init.optimize(
     objective=objective_fT,
     constraints=constraints,
     optimizer=optimizer,
@@ -70,5 +71,6 @@ eq_qs_T, result_T = eq_init.optimize(
     copy=True,  # return a new Equilibrium object (copy=False will overwrite the original)
     verbose=3,
 )
-eq_qs_T.save('/scratch/gpfs/pk2354/DESC/test_equilibria/constrained_qs_asp_niter10.h5')
+
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs_asp_w50.h5')
 

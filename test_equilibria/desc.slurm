@@ -18,5 +18,5 @@
 
 cd /scratch/gpfs/pk2354/DESC/test_equilibria
 #srun /home/pk2354/src/stella/stella simple.in
-srun python3 /scratch/gpfs/pk2354/DESC/test_constr_qs_con_asp.py
+srun python3 /scratch/gpfs/pk2354/DESC/test_constr_qs_asp_unc.py
 #srun /scratch/gpfs/ethier/STELLAR/STELLA_GK/stella/stella

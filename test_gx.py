@@ -69,14 +69,14 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     ftol=1e-2,  # stopping tolerance on the function value
     xtol=1e-6,  # stopping tolerance on the step size
     gtol=1e-6,  # stopping tolerance on the gradient
-    maxiter=5,  # maximum number of iterations
+    maxiter=1,  # maximum number of iterations
     options={
-        "perturb_options": {"order": 2, "verbose": 0},  # use 2nd-order perturbations
+        "perturb_options": {"order": 0, "verbose": 0},  # use 2nd-order perturbations
         "solve_options": {"ftol": 1e-2, "xtol": 1e-6, "gtol": 1e-6, "verbose": 0}, # for equilibrium subproblem
     },
     copy=True,  # return a new Equilibrium object (copy=False will overwrite the original)
     verbose=3,
 )
 
-eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx.h5')
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_niter.h5')
 

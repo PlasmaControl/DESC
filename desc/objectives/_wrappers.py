@@ -544,7 +544,33 @@ class GXWrapper(_Objective):
         jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values)
         
         return (primal_out, jvp)
-    
+
+    def compute_gx_batch(self, values, axis):
+        print("AT BATCH!!!")
+        print("VALUES IS " + str(values))
+        
+        numdiff = len(values[0])
+        print("NUMDIFF IS " + str(numdiff))
+        
+        res = jnp.array([0.0])
+
+        for i in range(numdiff):
+            R_lmn = values[0][i]
+            Z_lmn = values[1][i]
+            L_lmn = values[2][i]
+            i_l = values[3][i]
+            p_l = values[4][i]
+            Psi = values[5][i]
+            
+            res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
+
+        res = res[1:]
+
+        return res, axis[0]
+
+
+
+
     def compute_gx_batch_old(self,values,axis):
         print("AT BATCH!!!")
         if not np.iscalar(axis):
@@ -564,8 +590,9 @@ class GXWrapper(_Objective):
 
         return res, axis
 
-    def compute_gx_batch(self, values, axis):
+    def compute_gx_batch_old2(self, values, axis):
         print("AT BATCH!!!")
+        print("axis is " + str(axis))
         ind = 0
         for i in range(len(axis)):
             if axis[i] != None:

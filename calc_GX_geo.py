@@ -26,16 +26,17 @@ import netCDF4 as nc
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
-#path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
+path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
 #path = '/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5'
-path = "/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5"
+#path = "/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5"
 psi = 0.5
 alpha = 0
 npol = 1.0
 nzgrid = 32
 
 
-eq = desc.io.load(path)
+eq = desc.io.load(path)[-1]
+eq.change_resolution(M=4,L=4,M_grid=8,L_grid=8)
 grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
 iota_data = eq.compute('iota', grid=grid_1d)
 fi = interp1d(grid_1d.nodes[:,0],iota_data['iota'])

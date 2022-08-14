@@ -417,9 +417,48 @@ class FiniteDiffDerivative(_Derivative):
         if m == 1:
             J = jnp.ravel(J)
         return J
-
+    
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
+        rel_step = kwargs.get("rel_step",1e-3)
+        h = rel_step
+        if jnp.isscalar(argnum):
+            nargs = 1
+            argnum = (argnum,)
+        else:
+            nargs = len(argnum,)
+        v = (v,) if not isinstance(v, tuple) else v
+        v = v[:-1] + (jnp.array(v[-1]),)
+        print("v is " + str(v))
+        args = args[:-1] + (jnp.array(args[-1]),)
+        varr, vtreedef, vidx = cls._tree2arr(v)
+        xarr, xtreedef, xidx = cls._tree2arr(args)
+
+        def fwrap(x):
+            x = cls._arr2tree(x,xtreedef,xidx)
+            #R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = x
+            #return fun(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+            print("len(x) is " + str(len(x)))
+            print("len(x[3]) is" +  str(len(x[3])))
+            return fun(*x)
+        
+        return (fwrap(xarr + h*varr) - fwrap(xarr - h*varr))/(2*h)
+
+    @classmethod
+    def _tree2arr(cls, tree):
+        leaves, treedef = jax.tree_util.tree_flatten(tree)
+        #print("leaves are " + str(leaves))
+        #leaves = jnp.array(leaves)
+        idx = np.cumsum([foo.size for foo in leaves])
+        return jnp.concatenate(leaves), treedef, idx[:-1]
+
+    @classmethod
+    def _arr2tree(cls, arr, treedef, idx):
+        leaves = jnp.split(arr, idx)
+        return jax.tree_util.tree_unflatten(treedef, leaves)
+
+    @classmethod
+    def compute_jvp_old(cls, fun, argnum, v, *args, **kwargs):
         """Compute df/dx*v.
 
         Parameters
@@ -565,7 +604,7 @@ class FiniteDiffDerivative(_Derivative):
 
         def f(x):
             tempargs = args[0:argnum] + (x,) + args[argnum + 1 :]
-            print("The args are " + str(tempargs))
+            #print("The args are " + str(tempargs))
             return fun(*tempargs)
 
         h = rel_step

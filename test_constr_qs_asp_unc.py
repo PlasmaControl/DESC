@@ -38,6 +38,12 @@ idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
 idx_Zsc = eq_init.surface.Z_basis.get_idx(M=-1, N=2)
 idx_Zcs = eq_init.surface.Z_basis.get_idx(M=1, N=-2)
 
+#idx_Rcc2 = eq_init.surface.R_basis.get_idx(M=2, N=2)
+#idx_Rss2 = eq_init.surface.R_basis.get_idx(M=-2, N=-2)
+#idx_Zsc2 = eq_init.surface.Z_basis.get_idx(M=-2, N=2)
+#idx_Zcs2 = eq_init.surface.Z_basis.get_idx(M=2, N=-2)
+
+
 # boundary modes to constrain
 R_modes = np.delete(eq_init.surface.R_basis.modes, [idx_Rcc, idx_Rss], axis=0)
 Z_modes = np.delete(eq_init.surface.Z_basis.modes, [idx_Zsc, idx_Zcs], axis=0)
@@ -54,7 +60,7 @@ constraints = (
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
 #plot_grid(grid_vol);
-objective_fT = ObjectiveFunction((QuasisymmetryTripleProduct(grid=grid_vol),AspectRatio(target=7.0,weight=50)), verbose=0)
+objective_fT = ObjectiveFunction((QuasisymmetryTripleProduct(grid=grid_vol),AspectRatio(target=5.0,weight=20)), verbose=0)
 
 eq_qs_T_unc, result_T_unc = eq_init.optimize(
     objective=objective_fT,
@@ -72,5 +78,5 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs_asp_w50.h5')
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs_asp_w20_ub5.h5')
 

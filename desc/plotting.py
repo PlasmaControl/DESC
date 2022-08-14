@@ -800,7 +800,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
             "NFP": nfp,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
+            "zeta": np.linspace(0, 2*np.pi / nfp, nzeta, endpoint=False),
         }
         grid = _get_grid(**grid_kwargs)
         zeta = np.unique(grid.nodes[:, 2])

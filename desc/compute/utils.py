@@ -1,4 +1,5 @@
 import warnings
+from termcolor import colored
 
 from desc.backend import jnp
 from desc.grid import LinearGrid
@@ -135,8 +136,10 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
     """
     if surface_label == "theta" and not isinstance(grid, LinearGrid):
         warnings.warn(
-            "Nonlinear grids may have bad accuracy for theta surface computations.",
-            RuntimeWarning,
+            colored(
+                "Nonlinear grids may have bad accuracy for theta surface computations.",
+                "yellow",
+            )
         )
     surface_label_nodes, unique_idx, ds = _get_proper_surface(grid, surface_label)
 

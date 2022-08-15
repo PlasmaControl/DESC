@@ -3,6 +3,7 @@ import numpy as np
 
 from desc import examples
 from desc.compute.utils import (
+    compress,
     enclosed_volumes,
     surface_averages,
     surface_integrals,
@@ -90,6 +91,24 @@ class TestComputeUtils:
             surface_label_nodes, _, _ = _get_proper_surface(grid, surface_label)
             _, inverse = np.unique(surface_label_nodes, return_inverse=True)
             np.testing.assert_allclose(integrals[inverse], integrals_expand)
+
+        test("rho")
+        test("theta")
+        test("zeta")
+
+    def test_compress(self):
+        """Test the compress function."""
+
+        def test(surface_label):
+            grid = random_grid()
+            q = np.random.random_sample(size=grid.num_nodes)
+            integrals = surface_integrals(grid, q, surface_label)
+            integrals_expand = surface_integrals(
+                grid, q, surface_label, match_grid=True
+            )
+            np.testing.assert_allclose(
+                integrals, compress(grid, integrals_expand, surface_label)
+            )
 
         test("rho")
         test("theta")

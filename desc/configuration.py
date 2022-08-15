@@ -3,13 +3,12 @@ import os
 import copy
 import numbers
 
-from termcolor import colored
 from abc import ABC
 from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index, unpack_state
+from desc.utils import copy_coeffs, Index
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.profiles import Profile, PowerSeriesProfile
@@ -21,7 +20,7 @@ from desc.geometry import (
 )
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
 import desc.compute as compute_funs
-from desc.compute import arg_order, data_index
+from desc.compute import arg_order, data_index, compute_jacobian
 
 
 class _Configuration(IOAble, ABC):
@@ -1268,6 +1267,8 @@ class _Configuration(IOAble, ABC):
         ----------
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate jacobian and check for the sign. (Default to QuadratureGrid with eq's current grid resolutions)
+        R_lmn, Z_lmn : ndarray, optional
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
 
         Returns
         -------
@@ -1279,8 +1280,21 @@ class _Configuration(IOAble, ABC):
             R_lmn = self.R_lmn
         if Z_lmn is None:
             Z_lmn = self.Z_lmn
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
-        data = self.compute(name="sqrt(g)", grid=grid)
+        R_transform = Transform(
+            grid, self.R_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        Z_transform = Transform(
+            grid, self.Z_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        data = compute_jacobian(
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+        )
 
         return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
 

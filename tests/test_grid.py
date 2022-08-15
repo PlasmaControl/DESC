@@ -32,12 +32,12 @@ class TestGrid(unittest.TestCase):
 
     def test_linear_grid(self):
 
-        L = 3
-        M = 3
-        N = 3
+        L = 2
+        M = 1
+        N = 1
         NFP = 1
 
-        grid = LinearGrid(L, M, N, NFP, sym=False, axis=True, endpoint=False)
+        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, axis=True, endpoint=False)
 
         nodes = np.stack(
             [

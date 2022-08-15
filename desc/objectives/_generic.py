@@ -3,18 +3,11 @@ from inspect import signature
 
 from desc.backend import jnp
 from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
+from desc.grid import QuadratureGrid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 import desc.compute as compute_funs
-from desc.compute import (
-    arg_order,
-    data_index,
-    compute_covariant_metric_coefficients,
-    compute_magnetic_field_magnitude,
-    compute_contravariant_current_density,
-    compute_quasisymmetry_error,
-)
+from desc.compute import arg_order, data_index, compute_quasisymmetry_error
 from .objective_funs import _Objective
 
 
@@ -146,6 +139,7 @@ class GenericObjective(_Objective):
         return self._shift_scale(f)
 
 
+# TODO: move this class to a different file (not generic)
 class ToroidalCurrent(_Objective):
     """Toroidal current encolsed by a surface.
 
@@ -189,14 +183,7 @@ class ToroidalCurrent(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=1,
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = 1
 

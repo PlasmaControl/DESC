@@ -177,7 +177,7 @@ class TestBasis(unittest.TestCase):
 
     def test_power_series(self):
         """Test PowerSeries evaluation."""
-        grid = LinearGrid(L=11, endpoint=True)
+        grid = LinearGrid(rho=11)
         r = grid.nodes[:, 0]  # rho coordinates
 
         correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
@@ -192,7 +192,7 @@ class TestBasis(unittest.TestCase):
 
     def test_double_fourier(self):
         """Test DoubleFourierSeries evaluation."""
-        grid = LinearGrid(M=5, N=5)
+        grid = LinearGrid(M=2, N=2)
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 

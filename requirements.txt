@@ -9,5 +9,5 @@ netcdf4 >= 1.5.4
 nvgpu
 psutil
 scipy >= 1.5.0
-shapely
+shapely >= 1.8.2
 termcolor

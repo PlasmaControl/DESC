@@ -10,10 +10,10 @@ from desc.compute import (
     compute_pressure,
     compute_rotational_transform,
     compute_toroidal_flux,
-    dot,
 )
 from desc.compute.utils import (
     compress,
+    dot,
     enclosed_volumes,
     expand,
     surface_averages,

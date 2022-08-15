@@ -13,8 +13,6 @@ from ._core import (
     compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
     compute_geometry,
-    cross,
-    dot,
 )
 from .utils import (
     compress,

@@ -4,7 +4,6 @@ from desc.backend import jnp
 from scipy.constants import mu_0
 
 from ._core import (
-    dot,
     check_derivs,
     compute_toroidal_flux,
     compute_rotational_transform,
@@ -13,6 +12,7 @@ from ._core import (
     compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
 )
+from .utils import dot
 
 
 def compute_contravariant_magnetic_field(

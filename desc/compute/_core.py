@@ -4,6 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import data_index
+from desc.compute.utils import dot, cross
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -45,48 +46,6 @@ def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
         ).all()
 
     return R_flag and Z_flag and L_flag
-
-
-def dot(a, b, axis=-1):
-    """Batched vector dot product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = sum(a*b, axis=axis)
-
-    """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
-
-
-def cross(a, b, axis=-1):
-    """Batched vector cross product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = a x b
-
-    """
-    return jnp.cross(a, b, axis=axis)
 
 
 def compute_flux_coords(

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from netCDF4 import Dataset
-import desc.io
+from desc import examples
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.objectives import (
@@ -50,21 +50,6 @@ def all_close(
     minimum, maximum = rho_range
     interval = np.where((minimum < rho) & (rho < maximum))
     np.testing.assert_allclose(y1[interval], y2[interval], rtol=rtol, atol=atol)
-
-
-def get_desc_eq(name):
-    """
-    Parameters
-    ----------
-    name : str
-        Name of the equilibrium.
-
-    Returns
-    -------
-    Equilibrium
-        DESC equilibrium.
-    """
-    return desc.io.load("desc/examples/" + name + "_output.h5")[-1]
 
 
 def get_vmec_data(name, quantity):
@@ -174,7 +159,7 @@ class TestObjectiveFunction(unittest.TestCase):
 
         def test(name, rho_range=default_range, rtol=default_rtol, atol=default_atol):
             rho, vmec = get_vmec_data(name, "DMerc")
-            eq = get_desc_eq(name)
+            eq = examples.get(name)
             grid = get_grid(eq, rho)
             obj = MercierStability(eq=eq, grid=grid)
             DMerc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
@@ -193,7 +178,7 @@ class TestObjectiveFunction(unittest.TestCase):
 
         def test(name, rho_range=default_range, rtol=default_rtol, atol=default_atol):
             rho, vmec = get_vmec_data(name, "DShear")
-            eq = get_desc_eq(name)
+            eq = examples.get(name)
             grid = get_grid(eq, rho)
             obj = MercierShear(eq=eq, grid=grid)
             DShear = obj.compute(eq.i_l, eq.Psi)
@@ -213,7 +198,7 @@ class TestObjectiveFunction(unittest.TestCase):
 
         def test(name, rho_range=default_range, rtol=default_rtol, atol=default_atol):
             rho, vmec = get_vmec_data(name, "DCurr")
-            eq = get_desc_eq(name)
+            eq = examples.get(name)
             grid = get_grid(eq, rho)
             obj = MercierCurr(eq=eq, grid=grid)
             DCurr = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
@@ -230,7 +215,7 @@ class TestObjectiveFunction(unittest.TestCase):
 
         def test(name, rho_range=default_range, rtol=default_rtol, atol=default_atol):
             rho, vmec = get_vmec_data(name, "DWell")
-            eq = get_desc_eq(name)
+            eq = examples.get(name)
             grid = get_grid(eq, rho)
             obj = MercierWell(eq=eq, grid=grid)
             DWell = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
@@ -249,7 +234,7 @@ class TestObjectiveFunction(unittest.TestCase):
 
         def test(name, rho_range=default_range, rtol=default_rtol, atol=default_atol):
             rho, vmec = get_vmec_data(name, "DGeod")
-            eq = get_desc_eq(name)
+            eq = examples.get(name)
             grid = get_grid(eq, rho)
             obj = MercierGeod(eq=eq, grid=grid)
             DGeod = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)

@@ -266,8 +266,8 @@ class ToroidalCurrent(_Objective):
 
 
 class MercierStability(_Objective):
-    """
-    The Mercier criterion is a fast proxy for MHD stability.
+    """The Mercier criterion is a fast proxy for MHD stability.
+
     This makes it a useful figure of merit for stellarator operation.
     Systems with DMerc > 0 are favorable for stability.
 
@@ -295,8 +295,6 @@ class MercierStability(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -421,8 +419,6 @@ class MercierShear(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -519,8 +515,6 @@ class MercierCurr(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -643,8 +637,6 @@ class MercierWell(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -769,8 +761,6 @@ class MercierGeod(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """
@@ -895,8 +885,6 @@ class AltMagneticWell(_Objective):
             len(weight) must be equal to Objective.dim_f
         grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
             Collocation grid containing the nodes to evaluate at.
-            Due to the symmetry / NFP bugs, the grid should temporarily be limited to pass this assertion:
-                assert (grid.num_rho == 1) or (grid.sym is False and grid.NFP == 1)
         name : str
             Name of the objective function.
         """

@@ -26,10 +26,6 @@ class Optimizer(IOAble):
     Also offers several custom routines specifically designed for DESC, both scalar and
     least squares routines with and without jacobian/hessian information.
 
-    Note: surface nestedness is tracked during optimization iterations, and optimization exits early
-        if surfaces go unnested. However this is NOT tracked in the scipy.optimize.least_squares routines,
-        as those routines do not accept a custom callback function.
-
     Parameters
     ----------
     method : str
@@ -320,27 +316,6 @@ class Optimizer(IOAble):
             df = objective.jac(x)
             return df[:, unfixed_idx] @ Z
 
-        def is_unnested_wrapped(x_reduced):
-            x = recover(x_reduced)
-            kwargs = objective.unpack_state(x)
-            R_lmn = None
-            Z_lmn = None
-            if "R_lmn" in kwargs.keys():
-                R_lmn = kwargs["R_lmn"]
-            if "Z_lmn" in kwargs.keys():
-                Z_lmn = kwargs["Z_lmn"]
-            nested = eq.is_nested(R_lmn=R_lmn, Z_lmn=Z_lmn)
-            if not nested:
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
-            return not nested
-
         if self.method in Optimizer._scipy_scalar_methods:
 
             allx = []
@@ -350,10 +325,6 @@ class Optimizer(IOAble):
             def callback(x_reduced):
                 x = recover(x_reduced)
                 if len(allx) > 0:
-                    # check for nestedness
-                    is_unnested = is_unnested_wrapped(x_reduced)
-                    if is_unnested:
-                        raise StopIteration
                     dx = allx[-1] - x_reduced
                     dx_norm = jnp.linalg.norm(dx)
                     if dx_norm > 0:
@@ -476,7 +447,7 @@ class Optimizer(IOAble):
                 gtol=gtol,
                 verbose=disp,
                 maxiter=maxiter,
-                callback=is_unnested_wrapped,
+                callback=None,
                 options=options,
             )
 
@@ -493,7 +464,7 @@ class Optimizer(IOAble):
                 gtol=gtol,
                 verbose=disp,
                 maxiter=maxiter,
-                callback=is_unnested_wrapped,
+                callback=None,
                 options=options,
             )
 

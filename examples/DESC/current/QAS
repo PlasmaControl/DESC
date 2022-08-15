@@ -25,7 +25,7 @@ pert_order = 1
 ftol = 0.01
 xtol = 1e-06
 gtol = 1e-06
-nfev = 0
+nfev = 100
 
 # solver methods
 optimizer = lsq-exact
@@ -36,7 +36,7 @@ node_pattern = quad
 
 # pressure and iota/current profiles
 l:   0	p =   6.85517649E+04	c =   0
-l:   2	p =  -5.12027745E+03	c =   0
+l:   2	p =  -5.12027745E+03	c =   -1461705869.93125
 l:   4	p =  -3.61510452E+04	c =  -128242466691.25002
 l:   6	p =  -4.74263014E+05	c =   639452883287.5
 l:   8	p =   1.78878195E+06	c =  -3323814088812.5

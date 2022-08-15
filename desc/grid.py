@@ -36,6 +36,9 @@ class Grid(IOAble):
         "_unique_rho_idx",
         "_unique_theta_idx",
         "_unique_zeta_idx",
+        "_inverse_rho_idx",
+        "_inverse_theta_idx",
+        "_inverse_zeta_idx",
         "_num_rho",
         "_num_theta",
         "_num_zeta",
@@ -57,6 +60,7 @@ class Grid(IOAble):
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
+
         1. Remove nodes with theta > pi.
         2. Rescale theta spacing to preserve dtheta weight.
             Need to rescale on each theta coordinate curve by a different factor.
@@ -105,9 +109,15 @@ class Grid(IOAble):
 
     def _count_nodes(self):
         """Count unique values of coordinates."""
-        __, self._unique_rho_idx = np.unique(self.nodes[:, 0], return_index=True)
-        __, self._unique_theta_idx = np.unique(self.nodes[:, 1], return_index=True)
-        __, self._unique_zeta_idx = np.unique(self.nodes[:, 2], return_index=True)
+        __, self._unique_rho_idx, self._inverse_rho_idx = np.unique(
+            self.nodes[:, 0], return_index=True, return_inverse=True
+        )
+        __, self._unique_theta_idx, self._inverse_theta_idx = np.unique(
+            self.nodes[:, 1], return_index=True, return_inverse=True
+        )
+        __, self._unique_zeta_idx, self._inverse_zeta_idx = np.unique(
+            self.nodes[:, 2], return_index=True, return_inverse=True
+        )
         self._num_rho = self._unique_rho_idx.size
         self._num_theta = self._unique_theta_idx.size
         self._num_zeta = self._unique_zeta_idx.size
@@ -118,7 +128,7 @@ class Grid(IOAble):
         Parameters
         ----------
         dtheta_scale : ndarray
-            The multiplicative factor used to scale the theta spacing.
+            The multiplicative factor that was used to scale the theta spacing in _enforce_symmetry().
         """
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
@@ -246,6 +256,21 @@ class Grid(IOAble):
     def unique_zeta_idx(self):
         """ndarray: indices of zeta that result in the unique zeta coordinates"""
         return self._unique_zeta_idx
+
+    @property
+    def inverse_rho_idx(self):
+        """ndarray: indices of the unique rho array that recover the rho coordinates"""
+        return self._inverse_rho_idx
+
+    @property
+    def inverse_theta_idx(self):
+        """ndarray: indices of the unique theta array that recover the theta coordinates"""
+        return self._inverse_theta_idx
+
+    @property
+    def inverse_zeta_idx(self):
+        """ndarray: indices of the unique zeta array that recover the zeta coordinates"""
+        return self._inverse_zeta_idx
 
     @property
     def axis(self):
@@ -530,15 +555,12 @@ class QuadratureGrid(Grid):
             L=self.L, M=self.M, N=self.N, NFP=self.NFP
         )
 
-        dtheta_scale = (
-            self._enforce_symmetry()
-        )  # symmetry is never enforced for Quadrature Grid
+        # symmetry is never enforced for Quadrature Grid
+        self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        temp_spacing = np.copy(self.spacing)
-        temp_spacing[:, 1] /= dtheta_scale
-        self._weights = temp_spacing.prod(axis=1)  # Quad weights don't need scaling
+        self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """Create grid nodes and weights.

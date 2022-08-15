@@ -1,16 +1,16 @@
-import os
+import warnings
+from termcolor import colored
 
 from desc.backend import jnp
-from desc.grid import LinearGrid, ConcentricGrid
+from desc.grid import LinearGrid
 
 
 def _get_proper_surface(grid, surface_label):
-    """
-    Returns grid quantities associated with the given surface label.
+    """Returns grid quantities associated with the given surface label.
 
     Parameters
     ----------
-    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, theta, or zeta.
@@ -25,6 +25,7 @@ def _get_proper_surface(grid, surface_label):
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
     """
+    assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
         surface_label_nodes = grid.nodes[:, 0]
         unique_idx = grid.unique_rho_idx
@@ -33,23 +34,20 @@ def _get_proper_surface(grid, surface_label):
         surface_label_nodes = grid.nodes[:, 1]
         unique_idx = grid.unique_theta_idx
         ds = grid.spacing[:, [0, 2]].prod(axis=1)
-    elif surface_label == "zeta":
+    else:
         surface_label_nodes = grid.nodes[:, 2]
         unique_idx = grid.unique_zeta_idx
         ds = grid.spacing[:, :2].prod(axis=1)
-    else:
-        raise ValueError("Surface label must be 'rho', 'theta', or 'zeta'.")
 
     return surface_label_nodes, unique_idx, ds
 
 
 def compress(grid, x, surface_label="rho"):
-    """
-    Compress the array x by returning only the elements in x at unique surface_label indices.
+    """Compress x by returning only the elements at unique surface_label indices.
 
     Parameters
     ----------
-    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         The array to compress.
@@ -66,24 +64,23 @@ def compress(grid, x, surface_label="rho"):
             first element corresponds to the value associated with the smallest surface
             last element  corresponds to the value associated with the largest surface
     """
+    assert surface_label in {"rho", "theta", "zeta"}
+    assert len(x) == grid.num_nodes
     if surface_label == "rho":
         return x[grid.unique_rho_idx]
     if surface_label == "theta":
         return x[grid.unique_theta_idx]
     if surface_label == "zeta":
         return x[grid.unique_zeta_idx]
-    raise ValueError("Surface label must be 'rho', 'theta', or 'zeta'.")
 
 
 def expand(grid, x, surface_label="rho"):
-    """
-    Expand the array x by duplicating elements in x to match the grid's pattern.
+    """Expand x by duplicating elements to match the grid's pattern.
 
     Parameters
     ----------
-    grid : LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
-        Note that support for concentric grids on surface_label="theta" is not implemented yet.
     x : ndarray
         Stores the values of a surface function (a function constant over a surface)
         for all unique surfaces of the specified label on the grid.
@@ -99,73 +96,26 @@ def expand(grid, x, surface_label="rho"):
     ndarray
         X expanded to match the grid's pattern.
     """
-    # TODO: This function assumes the grid is sorted like a typical grid.
-    #   If we could store the inverse array when we call np.unique() in grid.py, then this function would become
-    #       a 1-liner,
-    #       wouldn't need separate conditional branches if the user has or doesn't have jax,
-    #       wouldn't need to assume the grid is sorted (the grid could be completely custom)....
-    no_jax = os.environ.get("DESC_BACKEND") == "numpy"
-
+    assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
         assert len(x) == grid.num_rho
-        # First, duplicate each x[i] over nodes on a theta curve of a constant zeta surface.
-        # The difference between unique rho indices is the number of nodes on a theta curve of a constant zeta surface.
-        # Second, tile the result to repeat the pattern on a single zeta surface over all zeta surfaces.
-        nodes_per_zeta_surface = grid.num_nodes // grid.num_zeta
-        nodes_per_theta_curve = jnp.diff(
-            grid.unique_rho_idx, append=nodes_per_zeta_surface
-        )
-        zeta_surface = (
-            jnp.repeat(x, repeats=nodes_per_theta_curve)
-            if no_jax
-            else jnp.repeat(
-                x,
-                repeats=nodes_per_theta_curve,
-                total_repeat_length=nodes_per_zeta_surface,
-            )
-        )
-        return jnp.tile(zeta_surface, reps=grid.num_zeta)
-
+        return x[grid.inverse_rho_idx]
     if surface_label == "theta":
         assert len(x) == grid.num_theta
-        if isinstance(grid, ConcentricGrid):
-            raise NotImplementedError(
-                "expand(ConcentricGrid, surface_label='theta') not implemented yet"
-            )
-
-        nodes_per_theta_surface = grid.num_nodes // grid.num_theta
-        assert grid.num_nodes == grid.num_theta * nodes_per_theta_surface
-        theta_sort_x = (
-            jnp.repeat(x, repeats=nodes_per_theta_surface)
-            if no_jax
-            else jnp.repeat(
-                x, repeats=nodes_per_theta_surface, total_repeat_length=grid.num_nodes
-            )
-        )
-        # arrange theta sorted x to match grid.nodes ordering
-        theta_sort_inverse_idx = jnp.argsort(jnp.argsort(grid.nodes[:, 1]))
-        return theta_sort_x[theta_sort_inverse_idx]
-
+        return x[grid.inverse_theta_idx]
     if surface_label == "zeta":
         assert len(x) == grid.num_zeta
-        nodes_per_zeta_surface = grid.num_nodes // grid.num_zeta
-        if no_jax:
-            return jnp.repeat(x, repeats=nodes_per_zeta_surface)
-        return jnp.repeat(
-            x, repeats=nodes_per_zeta_surface, total_repeat_length=grid.num_nodes
-        )
-
-    raise ValueError("Surface label must be 'rho', 'theta', or 'zeta'.")
+        return x[grid.inverse_zeta_idx]
 
 
 def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
-    """
-    Bulk surface integral function.
+    """Bulk surface integral function.
+
     Computes the surface integral of the specified quantity for all surfaces in the grid.
 
     Parameters
     ----------
-    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
@@ -185,7 +135,12 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
         Surface integrals of q over each surface in grid.
     """
     if surface_label == "theta" and not isinstance(grid, LinearGrid):
-        print("Nonlinear grids may have bad accuracy for theta surface computations.")
+        warnings.warn(
+            colored(
+                "Nonlinear grids may have bad accuracy for theta surface computations.",
+                "yellow",
+            )
+        )
     surface_label_nodes, unique_idx, ds = _get_proper_surface(grid, surface_label)
 
     # DESIRED ALGORITHM
@@ -213,14 +168,14 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
 def surface_averages(
     grid, q, sqrtg=1, surface_label="rho", match_grid=False, denominator=None
 ):
-    """
-    Bulk surface average function.
+    """Bulk surface average function.
+
     Computes the surface average of the specified quantity for all surfaces in the grid.
     See D'haeseleer flux coordinates eq. 4.9.11.
 
     Parameters
     ----------
-    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to average.
@@ -257,18 +212,19 @@ def surface_averages(
 
 
 def enclosed_volumes(grid, data, dr=0, match_grid=False):
-    """
-    Returns derivatives wrt rho of the positive volume enclosed by each rho surface in grid.
+    """Derivatives wrt rho of the positive volume enclosed by each rho surface in grid.
 
     Parameters
     ----------
-    grid : Grid or LinearGrid or ConcentricGrid or QuadratureGrid
+    grid : Grid
         Collocation grid containing the nodes to evaluate at.
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of covariant basis vectors and toroidal coords.
-        Keys are of the form 'X_y' meaning the derivative of X wrt y.
+            - dr = 0 requires 'e_theta', 'e_zeta', and 'Z'
+            - dr = 1 requires 'sqrt(g)'
+            - dr = 2 requires 'sqrt(g)_r'
     dr : int
-        Enclosed volume derivative order to return.
+        Derivative order.
     match_grid : bool
         False to return an array which assigns every surface integral to a single element of the array.
         This array will have length = number of unique surfaces in the grid.
@@ -282,8 +238,6 @@ def enclosed_volumes(grid, data, dr=0, match_grid=False):
         Derivative wrt rho of specified order of positive volume enclosed by flux surface.
     """
     if dr == 0:
-        from desc.compute import cross
-
         # data["V"] is the total volume, not the volume enclosed by the flux surface.
         # enclosed volume is computed using divergence theorem:
         # volume integral(div [0, 0, Z]) = surface integral(ds dot [0, 0, Z])
@@ -301,3 +255,45 @@ def enclosed_volumes(grid, data, dr=0, match_grid=False):
     if dr == 2:
         d2v_drho2 = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
         return expand(grid, d2v_drho2) if match_grid else d2v_drho2
+
+
+def cross(a, b, axis=-1):
+    """Batched vector cross product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
+
+
+def dot(a, b, axis=-1):
+    """Batched vector dot product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)

@@ -711,7 +711,7 @@ class InputReader:
                 p = inputs[-1]["pressure"][idxp[0], 1]
             else:
                 p = 0.0
-            idx = np.where(l == profile[:, 0][:, 0])[0]
+            idx = np.where(l == profile[:, 0])[0]
             if len(idx):
                 i = profile_2[idx[0], 1]
             else:

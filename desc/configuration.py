@@ -1212,6 +1212,8 @@ class _Configuration(IOAble, ABC):
                     inputs[arg].grid = grid
                 else:
                     inputs[arg] = None
+            elif arg == "grid":
+                inputs[arg] = grid
 
         return fun(**inputs, **kwargs)
 

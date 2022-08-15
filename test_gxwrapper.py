@@ -7,7 +7,7 @@ import numpy as np
 import jax
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5")[-1]
-eq.change_resolution(M=4,L=4,M_grid=4,L_grid=4)
+eq.change_resolution(M=6,L=6,M_grid=12,L_grid=12)
 gxw = GXWrapper(eq=eq)
 gxw.compute(R_lmn=eq.R_lmn,Z_lmn=eq.Z_lmn,L_lmn=eq.L_lmn,i_l=eq.i_l,p_l=eq.p_l,Psi=eq.Psi)
 #values = (eq.R_lmn,eq.Z_lmn,eq._L_lmn,eq.i_l,eq.p_l,eq.Psi)

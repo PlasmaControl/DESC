@@ -541,7 +541,7 @@ class GXWrapper(_Objective):
         argnum = np.arange(0,n,1)
         #fd = FiniteDiffDerivative(self.compute,argnum)
         
-        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values)
+        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-4)
         
         return (primal_out, jvp)
 

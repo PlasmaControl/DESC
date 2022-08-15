@@ -44,7 +44,7 @@
 
 [Time]
  dt = 0.01
- nstep  = 1000
+ nstep  = 5000
  nwrite = 100
  navg = 5000
 

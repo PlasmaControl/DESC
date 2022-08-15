@@ -79,8 +79,9 @@ class Grid(IOAble):
                 self.nodes[non_sym_idx, 0], return_counts=True
             )
             if len(nodes_per_rho_surf) > len(non_sym_per_rho_surf):
-                # edge case where theta curve near axis lacks theta > pi nodes
-                non_sym_per_rho_surf = np.insert(non_sym_per_rho_surf, 0, 0)
+                # edge case where theta curves near axis lacks theta > pi nodes
+                pad_count = len(nodes_per_rho_surf) - len(non_sym_per_rho_surf)
+                non_sym_per_rho_surf = np.pad(non_sym_per_rho_surf, (pad_count, 0))
             # assumes number of nodes to delete from each theta curve is constant over zeta
             scale = nodes_per_rho_surf / (nodes_per_rho_surf - non_sym_per_rho_surf)
             # arrange scale factors to match spacing's arbitrary ordering

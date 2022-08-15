@@ -5,6 +5,7 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixIota,
+    FixCurrent,  # still can't import from desc.objectives??
     FixPsi,
 )
 from ._generic import (

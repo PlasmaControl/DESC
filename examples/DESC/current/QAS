@@ -32,7 +32,7 @@ optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
+node_pattern = quad
 
 # pressure and iota/current profiles
 l:   0	p =   6.85517649E+04	c =   0

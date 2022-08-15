@@ -9,6 +9,8 @@ from desc.compute import (
     compute_contravariant_current_density,
 )
 from .objective_funs import _Objective
+import warnings
+from termcolor import colored
 
 
 class ForceBalance(_Objective):
@@ -496,7 +498,10 @@ class Energy(_Objective):
         """
         if self.grid is None:
             self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
             )
 
         self._dim_f = 1

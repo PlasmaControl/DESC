@@ -652,7 +652,7 @@ class ConcentricGrid(Grid):
         * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
         * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
         * ``None`` for no symmetry (Default), rotates halfway between other options
-    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
+    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
         pattern for radial coordinates
 
             * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
@@ -661,7 +661,7 @@ class ConcentricGrid(Grid):
               degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
             * ``'ocs'``: optimal concentric sampling to minimize the condition number
               of the resulting transform matrix, for doing inverse transform.
-            * ``None`` : linear spacing in r=[0,1]
+            * ``linear`` : linear spacing in r=[0,1]
 
     """
 

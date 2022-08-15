@@ -629,10 +629,11 @@ class InputReader:
 
         f.write(header + "\n")
 
-        f.write("# global parameters\n")
-        f.write("sym = {}\n".format(inputs[0]["sym"]))
-        f.write("NFP = {}\n".format(inputs[0]["NFP"]))
-        f.write("Psi = {}\n".format(inputs[0]["Psi"]))
+        # TODO: mobius stellarator has NFP = 0.5 and will not run
+        f.write("# global parameters \n")
+        f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
+        f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
+        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -674,31 +675,53 @@ class InputReader:
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
         f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
 
+        # TODO: confirm if merge conflict was resolved correctly
         f.write("\n# pressure and iota/current profiles\n")
         if "iota" in inputs[0].keys():
             char = "i"
             profile = inputs[0]["iota"]
+            profile_2 = inputs[-1]["iota"]
         elif "current" in inputs[0].keys():
             char = "c"
             profile = inputs[0]["current"]
+            profile_2 = inputs[-1]["current"]
         ls = np.unique(np.concatenate([inputs[0]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
-            idx = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            if len(idx):
-                p = inputs[0]["pressure"][idx[0], 1]
+            # <<<<<<< HEAD
+            #             idx = np.where(l == inputs[0]["pressure"][:, 0])[0]
+            #             if len(idx):
+            #                 p = inputs[0]["pressure"][idx[0], 1]
+            #             else:
+            #                 p = 0.0
+            #             idx = np.where(l == profile[:, 0])[0]
+            #             if len(idx):
+            #                 i = profile[idx[0], 1]
+            # =======
+            #             idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
+            #             if len(idxp):
+            #                 p = inputs[-1]["pressure"][idxp[0], 1]
+            #             else:
+            #                 p = 0.0
+            #             idxi = np.where(l == inputs[0]["iota"][:, 0])[0]
+            #             if len(idxi):
+            #                 i = inputs[-1]["iota"][idxi[0], 1]
+            # >>>>>>> master
+            idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
+            if len(idxp):
+                p = inputs[-1]["pressure"][idxp[0], 1]
             else:
                 p = 0.0
-            idx = np.where(l == profile[:, 0])[0]
+            idx = np.where(l == profile[:, 0][:, 0])[0]
             if len(idx):
-                i = profile[idx[0], 1]
+                i = profile_2[idx[0], 1]
             else:
                 i = 0.0
             f.write(
                 "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
             )
 
-        f.write("\n# fixed-boundary surface shape\n")
-        for (l, m, n, R1, Z1) in inputs[0]["surface"]:
+        f.write("\n# fixed-boundary surface shape \n")
+        for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
                     int(l), int(m), int(n), R1, Z1
@@ -776,7 +799,7 @@ class InputReader:
             "ftol": 1e-2,
             "xtol": 1e-6,
             "gtol": 1e-6,
-            "nfev": None,
+            "nfev": 50,
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -1222,7 +1245,43 @@ class InputReader:
 
         vmec_file.close()
 
-        return inputs
+        # default continuation stuff
+        res_step = 6
+        pres_step = 1 / 2
+        bdry_step = 1 / 4
+
+        # first we solve vacuum until we reach full L,M
+        # then pressure
+        # then 3d shaping
+        res_steps = max(inputs["L"] // res_step, 1)
+        pres_steps = (
+            0 if (inputs["pressure"][:, 1] == 0).all() else int(np.ceil(1 / pres_step))
+        )
+        bdry_steps = 0 if inputs["N"] == 0 else int(np.ceil(1 / bdry_step))
+
+        total_steps = res_steps + pres_steps + bdry_steps
+        inputs_arr = [inputs.copy() for _ in range(total_steps)]
+        for i in range(total_steps):
+            if i < res_steps:
+                inputs_arr[i]["L"] = min((i + 1) * res_step, inputs["L"])
+                inputs_arr[i]["L_grid"] = 2 * inputs_arr[i]["L"]
+                inputs_arr[i]["N"] = 0
+                inputs_arr[i]["N_grid"] = 0
+                inputs_arr[i]["pres_ratio"] = 0
+                inputs_arr[i]["bdry_ratio"] = 0
+            elif i < (res_steps + pres_steps):
+                inputs_arr[i]["N"] = 0
+                inputs_arr[i]["N_grid"] = 0
+                inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
+                inputs_arr[i]["pert_order"] = 2
+                inputs_arr[i]["bdry_ratio"] = 0
+            else:
+                inputs_arr[i]["pert_order"] = 2
+                inputs_arr[i]["bdry_ratio"] = (
+                    i - res_steps - pres_steps + 1
+                ) * bdry_step
+
+        return inputs_arr
 
 
 # NOTE: this has to be outside the class to work with autodoc

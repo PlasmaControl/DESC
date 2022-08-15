@@ -22,14 +22,14 @@ def test_vmec_input(tmpdir_factory):
     shutil.copyfile(input_path, tmp_path)
     ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
-    vmec_inputs[0].pop("output_path")
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
     desc_inputs = ir2.inputs
-    desc_inputs[0].pop("output_path")
-    eq = [equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)]
-    assert all(eq)
+    for d, v in zip(desc_inputs, vmec_inputs):
+        d.pop("output_path")
+        v.pop("output_path")
+    assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
 
 class TestInputReader(unittest.TestCase):

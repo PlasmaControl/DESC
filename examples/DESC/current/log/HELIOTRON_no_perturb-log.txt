@@ -1,0 +1,174 @@
+
+ ____  ____  _____   ___ 
+|  _ \| ___|/  ___|/ ___|
+| | \ | |_  | (__ | |
+| | | |  _| \___ \| |
+| |_/ | |__  ___) | |___ 
+|____/|____||____/ \____|
+                         
+
+DESC version 0.5.1+123.gd5b23bf.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 11.75 GB available memory
+Reading input from /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/current/HELIOTRON_no_perturb
+Outputs will be written to /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/current/HELIOTRON_no_perturb_output.h5
+================
+Step 1/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(12,6,1)
+Node pattern: quad
+Node resolution (L,M,N)=(24,12,2)
+Boundary ratio = 1.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 75
+================
+Building objective: force
+If this message appears, QuadratureGrid is used to solve eq.
+Precomputing transforms
+Timer: Precomputing transforms = 444 ms
+Timer: Objective build = 447 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 13.4 sec
+Timer: Jacobian compilation time = 24.2 sec
+Timer: Total compilation time = 37.7 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 538 ms
+Number of parameters: 177
+Number of objectives: 6250
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         6.7116e+10                                    5.56e+12    
+       1              2         8.8801e+09      5.82e+10       2.82e-01       3.51e+12    
+       2              3         6.0256e+09      2.85e+09       3.22e-01       4.04e+12    
+       3              4         2.1722e+08      5.81e+09       1.94e-01       6.53e+11    
+       4              6         8.3374e+07      1.34e+08       1.29e-01       1.22e+11    
+       5              7         8.1008e+07      2.37e+06       1.30e-01       5.77e+10    
+       6              8         7.8816e+07      2.19e+06       1.39e-01       7.94e+10    
+       7              9         7.0203e+07      8.61e+06       3.68e-02       5.03e+09    
+       8             10         6.8863e+07      1.34e+06       7.08e-02       2.47e+10    
+       9             12         6.7472e+07      1.39e+06       3.39e-02       6.38e+09    
+      10             13         6.6442e+07      1.03e+06       6.28e-02       3.43e+10    
+      11             14         6.5062e+07      1.38e+06       5.69e-02       4.55e+10    
+      12             16         6.4003e+07      1.06e+06       2.61e-02       1.28e+10    
+      13             17         6.3473e+07      5.29e+05       4.68e-02       4.79e+10    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 6.347e+07
+         Iterations: 13
+         Function evaluations: 17
+         Jacobian evaluations: 14
+Timer: Solution time = 11.8 sec
+Timer: Avg time per step = 912 ms
+Start of solver
+Total (sum of squares):  6.712e+10, 
+Total force:  3.664e+05 (N)
+End of solver
+Total (sum of squares):  6.347e+07, 
+Total force:  1.127e+04 (N)
+Saving latest iteration
+Timer: Iteration 1 total = 1.27 min
+================
+Step 2/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(18,9,2)
+Node pattern: quad
+Node resolution (L,M,N)=(36,18,4)
+Boundary ratio = 1.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 75
+================
+Building objective: force
+If this message appears, QuadratureGrid is used to solve eq.
+Precomputing transforms
+Timer: Precomputing transforms = 787 ms
+Timer: Objective build = 792 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 13.0 sec
+Timer: Jacobian compilation time = 30.4 sec
+Timer: Total compilation time = 43.5 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 507 ms
+Number of parameters: 648
+Number of objectives: 24642
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         9.6106e+26                                    5.25e+29    
+       1              8         3.8672e+26      5.74e+26       1.71e+03       4.97e+28    
+       2             10         2.5704e+26      1.30e+26       8.73e+02       1.68e+28    
+       3             11         1.9211e+26      6.49e+25       1.25e+03       5.32e+27    
+       4             13         1.7370e+26      1.84e+25       5.42e+02       2.57e+27    
+       5             14         1.6095e+26      1.27e+25       5.05e+02       9.46e+26    
+       6             15         1.4520e+26      1.57e+25       9.42e+02       1.87e+27    
+       7             17         1.3766e+26      7.55e+24       5.01e+02       1.67e+27    
+       8             18         1.3153e+26      6.13e+24       4.37e+02       8.55e+26    
+       9             19         1.2632e+26      5.21e+24       4.41e+02       8.69e+26    
+      10             20         1.2216e+26      4.16e+24       4.25e+02       1.14e+27    
+      11             21         1.1871e+26      3.46e+24       4.44e+02       2.84e+27    
+      12             22         1.1622e+26      2.49e+24       4.44e+02       4.80e+27    
+      13             23         1.1209e+26      4.13e+24       1.26e+02       2.04e+27    
+      14             24         1.0923e+26      2.86e+24       2.17e+02       9.55e+26    
+      15             25         1.0425e+26      4.98e+24       4.49e+02       6.23e+26    
+      16             26         9.7696e+25      6.55e+24       9.32e+02       2.49e+27    
+      17             28         9.5310e+25      2.39e+24       2.33e+02       2.46e+27    
+      18             29         9.3492e+25      1.82e+24       2.45e+02       1.43e+27    
+      19             30         9.2205e+25      1.29e+24       2.35e+02       1.87e+27    
+      20             31         9.0883e+25      1.32e+24       2.37e+02       1.84e+27    
+      21             32         8.9847e+25      1.04e+24       2.33e+02       2.25e+27    
+      22             33         8.8742e+25      1.11e+24       2.34e+02       2.28e+27    
+      23             34         8.7871e+25      8.71e+23       2.30e+02       2.63e+27    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 8.787e+25
+         Iterations: 23
+         Function evaluations: 34
+         Jacobian evaluations: 24
+Timer: Solution time = 2.47 min
+Timer: Avg time per step = 6.45 sec
+Start of solver
+Total (sum of squares):  9.611e+26, 
+Total force:  4.384e+13 (N)
+End of solver
+Total (sum of squares):  8.787e+25, 
+Total force:  1.326e+13 (N)
+Saving latest iteration
+Timer: Iteration 2 total = 3.63 min
+================
+Step 3/3
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,3)
+Node pattern: quad
+Node resolution (L,M,N)=(48,24,6)
+Boundary ratio = 1.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 75
+================
+Perturbing equilibrium
+Building objective: force
+If this message appears, QuadratureGrid is used to solve eq.
+Precomputing transforms
+Timer: Precomputing transforms = 1.16 sec
+Timer: Objective build = 1.17 sec
+Perturbing c_l
+Factorizing linear constraints
+Timer: linear constraint factorize = 698 ms
+Computing df

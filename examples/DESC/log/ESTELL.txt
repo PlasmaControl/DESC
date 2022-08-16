@@ -1,0 +1,322 @@
+
+ ____  ____  _____   ___ 
+|  _ \| ___|/  ___|/ ___|
+| | \ | |_  | (__ | |
+| | | |  _| \___ \| |
+| |_/ | |__  ___) | |___ 
+|____/|____||____/ \____|
+                         
+
+DESC version 0.5.1+122.gd536bb8.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 8.33 GB available memory
+Reading input from /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/ESTELL
+Outputs will be written to /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/ESTELL_output.h5
+================
+Step 1/4
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(12,6,0)
+Node pattern: jacobi
+Node resolution (L,M,N)=(24,12,0)
+Boundary ratio = 0.0
+Pressure ratio = 0.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 50
+================
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 435 ms
+Timer: Objective build = 438 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 1.67 sec
+Timer: Jacobian compilation time = 5.70 sec
+Timer: Total compilation time = 7.38 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 200 ms
+Number of parameters: 57
+Number of objectives: 182
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         3.8678e+10                                    2.80e+13    
+       1              2         1.2108e+09      3.75e+10       2.06e-01       3.17e+12    
+       2              3         4.6949e+07      1.16e+09       1.18e-01       4.10e+11    
+       3              4         5.8567e+06      4.11e+07       6.38e-02       4.26e+11    
+       4              5         1.0975e+06      4.76e+06       1.22e-01       1.47e+11    
+       5              6         3.9572e+04      1.06e+06       4.10e-02       4.39e+10    
+       6              7         3.8735e+04      8.36e+02       1.82e-02       2.94e+10    
+       7              8         4.2585e+01      3.87e+04       6.08e-03       4.00e+08    
+       8             10         1.8398e+01      2.42e+01       3.21e-03       2.90e+08    
+       9             11         1.0205e+01      8.19e+00       3.36e-03       6.72e+07    
+      10             13         5.5510e+00      4.65e+00       9.21e-04       3.02e+07    
+      11             14         5.3460e+00      2.05e-01       2.05e-03       1.62e+07    
+      12             15         4.6823e+00      6.64e-01       2.48e-04       9.27e+06    
+      13             17         4.6049e+00      7.74e-02       1.28e-04       9.79e+05    
+      14             18         4.5333e+00      7.16e-02       3.25e-04       1.12e+07    
+      15             19         4.5202e+00      1.31e-02       6.04e-04       3.05e+07    
+      16             20         4.4285e+00      9.17e-02       1.71e-04       4.76e+05    
+      17             21         4.4076e+00      2.09e-02       2.63e-04       7.06e+06    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 4.408e+00
+         Iterations: 17
+         Function evaluations: 21
+         Jacobian evaluations: 18
+Timer: Solution time = 1.49 sec
+Timer: Avg time per step = 87.7 ms
+Start of solver
+Total (sum of squares):  3.868e+10, 
+Total force:  2.781e+05 (N)
+End of solver
+Total (sum of squares):  4.408e+00, 
+Total force:  2.969e+00 (N)
+Saving latest iteration
+Timer: Iteration 1 total = 14.6 sec
+================
+Step 2/4
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,0)
+Node pattern: jacobi
+Node resolution (L,M,N)=(32,16,0)
+Boundary ratio = 0.0
+Pressure ratio = 0.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 50
+================
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 737 ms
+Timer: Objective build = 740 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 1.97 sec
+Timer: Jacobian compilation time = 5.42 sec
+Timer: Total compilation time = 7.40 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 258 ms
+Number of parameters: 222
+Number of objectives: 306
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         2.6977e+00                                    8.40e+08    
+       1              5         1.8018e-01      2.52e+00       9.58e-04       2.03e+08    
+       2              7         4.7628e-02      1.33e-01       3.80e-04       5.17e+06    
+       3              9         3.6497e-02      1.11e-02       1.63e-04       3.01e+06    
+       4             10         2.7400e-02      9.10e-03       2.67e-04       1.81e+07    
+       5             11         1.9713e-02      7.69e-03       2.21e-04       3.33e+07    
+       6             12         1.4242e-02      5.47e-03       2.01e-04       2.34e+07    
+       7             13         9.6674e-03      4.57e-03       2.02e-04       1.28e+07    
+       8             14         6.4141e-03      3.25e-03       1.88e-04       1.46e+07    
+       9             15         3.5885e-03      2.83e-03       2.05e-04       2.01e+07    
+      10             16         1.7366e-03      1.85e-03       2.93e-04       1.22e+07    
+      11             17         1.0894e-03      6.47e-04       3.65e-04       8.83e+06    
+      12             19         2.9404e-05      1.06e-03       9.85e-05       1.26e+06    
+      13             21         1.3335e-05      1.61e-05       4.78e-05       5.52e+05    
+      14             23         9.5342e-06      3.80e-06       2.21e-05       2.29e+05    
+      15             25         8.3553e-06      1.18e-06       1.02e-05       7.68e+04    
+      16             26         7.1305e-06      1.22e-06       1.61e-05       4.86e+05    
+      17             28         6.1376e-06      9.93e-07       7.07e-06       1.40e+05    
+      18             29         5.5920e-06      5.46e-07       1.25e-05       6.16e+05    
+      19             30         4.7094e-06      8.83e-07       1.23e-05       6.10e+05    
+      20             31         3.9681e-06      7.41e-07       1.23e-05       5.96e+05    
+      21             32         3.3899e-06      5.78e-07       1.22e-05       5.95e+05    
+      22             33         2.9869e-06      4.03e-07       1.20e-05       6.19e+05    
+      23             34         2.7552e-06      2.32e-07       1.16e-05       6.73e+05    
+      24             35         1.9522e-06      8.03e-07       2.89e-06       4.49e+04    
+      25             36         1.8952e-06      5.70e-08       5.81e-06       1.78e+05    
+      26             37         1.8140e-06      8.12e-08       5.87e-06       1.80e+05    
+      27             38         1.7458e-06      6.81e-08       6.01e-06       1.74e+05    
+      28             39         1.6878e-06      5.81e-08       6.17e-06       1.60e+05    
+      29             40         1.6385e-06      4.93e-08       6.28e-06       1.42e+05    
+      30             41         1.5972e-06      4.13e-08       6.30e-06       1.23e+05    
+      31             42         1.5627e-06      3.45e-08       6.23e-06       1.04e+05    
+      32             43         1.5338e-06      2.89e-08       6.08e-06       8.80e+04    
+      33             44         1.5090e-06      2.48e-08       5.88e-06       8.60e+04    
+      34             45         1.4870e-06      2.20e-08       5.67e-06       8.41e+04    
+      35             46         1.4667e-06      2.03e-08       5.48e-06       8.20e+04    
+      36             47         1.4474e-06      1.93e-08       5.32e-06       7.94e+04    
+      37             48         1.4288e-06      1.87e-08       5.19e-06       7.63e+04    
+      38             49         1.4105e-06      1.83e-08       5.10e-06       7.35e+04    
+      39             50         1.3925e-06      1.80e-08       5.02e-06       7.61e+04    
+Warning: Maximum number of function evaluations has been exceeded.
+         Current function value: 1.392e-06
+         Iterations: 39
+         Function evaluations: 50
+         Jacobian evaluations: 40
+Timer: Solution time = 5.27 sec
+Timer: Avg time per step = 135 ms
+Start of solver
+Total (sum of squares):  2.698e+00, 
+Total force:  2.323e+00 (N)
+End of solver
+Total (sum of squares):  1.392e-06, 
+Total force:  1.669e-03 (N)
+Saving latest iteration
+Timer: Iteration 2 total = 20.2 sec
+================
+Step 3/4
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,6)
+Node pattern: jacobi
+Node resolution (L,M,N)=(32,16,9)
+Boundary ratio = 0.5
+Pressure ratio = 0.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 50
+================
+Perturbing equilibrium
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 638 ms
+Timer: Objective build = 644 ms
+Perturbing Rb_lmn, Zb_lmn
+Factorizing linear constraints
+Timer: linear constraint factorize = 2.69 sec
+Computing df
+Timer: df computation = 29.7 sec
+Factoring df
+Timer: df/dx factorization = 13.8 sec
+Computing d^2f
+Timer: d^2f computation = 29.0 sec
+||dx||/||x|| =  9.334e-02
+Timer: Total perturbation = 1.46 min
+Compiling objective function and derivatives
+Timer: Objective compilation time = 3.13 ms
+Timer: Jacobian compilation time = 5.15 sec
+Timer: Total compilation time = 5.15 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 2.47 sec
+Number of parameters: 2958
+Number of objectives: 5814
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         1.9454e+10                                    9.40e+13    
+       1              2         8.6989e+08      1.86e+10       2.55e-01       8.75e+12    
+       2              3         2.9150e+07      8.41e+08       1.27e-01       1.51e+12    
+       3              4         6.7382e+06      2.24e+07       1.29e-01       7.18e+11    
+       4              5         5.2763e+05      6.21e+06       6.81e-02       8.60e+10    
+       5              6         2.6105e+05      2.67e+05       7.72e-02       1.56e+11    
+       6              7         8.8827e+04      1.72e+05       4.74e-02       3.80e+10    
+       7              8         2.7123e+04      6.17e+04       3.83e-02       3.99e+10    
+       8              9         5.9731e+03      2.11e+04       1.50e-02       1.46e+10    
+       9             10         2.1194e+03      3.85e+03       1.40e-02       7.58e+09    
+      10             12         3.3623e+02      1.78e+03       4.41e-03       3.26e+09    
+      11             14         5.3206e+01      2.83e+02       2.26e-03       1.13e+09    
+      12             16         3.1851e+00      5.00e+01       1.20e-03       2.67e+08    
+      13             18         1.5089e-01      3.03e+00       6.27e-04       5.39e+07    
+      14             20         1.2965e-02      1.38e-01       3.11e-04       1.43e+07    
+      15             22         5.8553e-03      7.11e-03       1.58e-04       5.81e+06    
+      16             24         4.9134e-03      9.42e-04       8.67e-05       9.14e+05    
+      17             26         4.8694e-03      4.41e-05       4.37e-05       3.23e+05    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 4.869e-03
+         Iterations: 17
+         Function evaluations: 26
+         Jacobian evaluations: 18
+Timer: Solution time = 6.48 min
+Timer: Avg time per step = 22.8 sec
+Start of solver
+Total (sum of squares):  1.945e+10, 
+Total force:  1.973e+05 (N)
+End of solver
+Total (sum of squares):  4.869e-03, 
+Total force:  9.869e-02 (N)
+Saving latest iteration
+Timer: Iteration 3 total = 8.34 min
+================
+Step 4/4
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,6)
+Node pattern: jacobi
+Node resolution (L,M,N)=(32,16,9)
+Boundary ratio = 1.0
+Pressure ratio = 0.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 50
+================
+Perturbing equilibrium
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 451 ms
+Timer: Objective build = 457 ms
+Perturbing Rb_lmn, Zb_lmn
+Factorizing linear constraints
+Timer: linear constraint factorize = 2.15 sec
+Computing df
+Timer: df computation = 30.2 sec
+Factoring df
+Timer: df/dx factorization = 14.1 sec
+Computing d^2f
+Timer: d^2f computation = 27.6 sec
+||dx||/||x|| =  9.433e-02
+Timer: Total perturbation = 1.39 min
+Compiling objective function and derivatives
+Timer: Objective compilation time = 2.70 ms
+Timer: Jacobian compilation time = 4.55 sec
+Timer: Total compilation time = 4.55 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 2.13 sec
+Number of parameters: 2958
+Number of objectives: 5814
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         4.6083e+10                                    2.02e+14    
+       1              2         1.5124e+09      4.46e+10       2.52e-01       1.82e+13    
+       2              3         3.8855e+07      1.47e+09       1.54e-01       1.87e+12    
+       3              4         6.5034e+06      3.24e+07       1.14e-01       4.82e+11    
+       4              5         2.0037e+06      4.50e+06       8.81e-02       1.55e+11    
+       5              6         5.4339e+05      1.46e+06       9.25e-02       5.98e+10    
+       6              7         1.6128e+05      3.82e+05       4.44e-02       1.36e+11    
+       7              8         9.5662e+04      6.56e+04       4.55e-02       1.29e+10    
+       8             10         1.5422e+04      8.02e+04       1.07e-02       5.12e+10    
+       9             12         6.4975e+02      1.48e+04       8.95e-03       4.05e+09    
+      10             14         7.4732e+01      5.75e+02       4.76e-03       2.67e+09    
+      11             16         9.0847e+00      6.56e+01       2.44e-03       7.12e+08    
+      12             18         2.2909e+00      6.79e+00       1.46e-03       2.23e+08    
+      13             20         1.8297e+00      4.61e-01       6.59e-04       3.27e+07    
+      14             22         1.7888e+00      4.10e-02       3.62e-04       4.87e+06    
+      15             23         1.7855e+00      3.25e-03       5.88e-04       2.01e+07    
+      16             24         1.7695e+00      1.61e-02       1.74e-04       1.74e+06    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 1.769e+00
+         Iterations: 16
+         Function evaluations: 24
+         Jacobian evaluations: 17
+Timer: Solution time = 6.26 min
+Timer: Avg time per step = 23.5 sec
+Start of solver
+Total (sum of squares):  4.608e+10, 
+Total force:  3.036e+05 (N)
+End of solver
+Total (sum of squares):  1.769e+00, 
+Total force:  1.881e+00 (N)
+Saving latest iteration
+Timer: Iteration 4 total = 8.02 min
+====================
+Done
+Timer: Total time = 16.9 min
+Output written to /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/ESTELL_output.h5
+====================

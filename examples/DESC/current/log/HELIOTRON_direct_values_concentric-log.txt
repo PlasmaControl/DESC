@@ -1,0 +1,105 @@
+
+ ____  ____  _____   ___ 
+|  _ \| ___|/  ___|/ ___|
+| | \ | |_  | (__ | |
+| | | |  _| \___ \| |
+| |_/ | |__  ___) | |___ 
+|____/|____||____/ \____|
+                         
+
+DESC version 0.5.1+132.g5c24a9f.dirty, using JAX backend, jax version=0.2.25, jaxlib version=0.1.76, dtype=float64
+Using device: CPU, with 9.95 GB available memory
+Reading input from /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/current/HELIOTRON_direct_values_concentric
+Outputs will be written to /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/current/HELIOTRON_direct_values_concentric_output.h5
+================
+Step 1/1
+================
+Spectral indexing: fringe
+Spectral resolution (L,M,N)=(24,12,3)
+Node pattern: jacobi
+Node resolution (L,M,N)=(36,18,6)
+Boundary ratio = 1.0
+Pressure ratio = 1.0
+Perturbation Order = 2
+Objective: force
+Optimizer: lsq-exact
+Function tolerance = 0.01
+Gradient tolerance = 1e-06
+State vector tolerance = 1e-06
+Max function evaluations = 150
+================
+Building objective: force
+Precomputing transforms
+Timer: Precomputing transforms = 574 ms
+Timer: Objective build = 580 ms
+Compiling objective function and derivatives
+Timer: Objective compilation time = 10.1 sec
+Timer: Jacobian compilation time = 21.6 sec
+Timer: Total compilation time = 31.8 sec
+Factorizing linear constraints
+Timer: linear constraint factorize = 989 ms
+Number of parameters: 1590
+Number of objectives: 4940
+Starting optimization
+   Iteration     Total nfev        Cost      Cost reduction    Step norm     Optimality   
+       0              1         5.4464e+10                                    1.16e+13    
+       1              3         5.7279e+09      4.87e+10       2.97e-01       1.10e+13    
+       2              4         6.0220e+08      5.13e+09       2.99e-01       2.75e+12    
+       3              6         3.4341e+07      5.68e+08       1.21e-01       6.97e+11    
+       4              8         5.7394e+06      2.86e+07       6.22e-02       2.16e+11    
+       5             10         2.2614e+06      3.48e+06       3.24e-02       2.86e+10    
+       6             12         1.8996e+06      3.62e+05       1.61e-02       1.99e+10    
+       7             14         1.8201e+06      7.95e+04       8.31e-03       2.65e+09    
+       8             15         1.7554e+06      6.47e+04       1.49e-02       5.57e+09    
+       9             16         1.7245e+06      3.09e+04       3.06e-02       8.88e+09    
+      10             17         1.5792e+06      1.45e+05       7.79e-03       2.26e+09    
+      11             18         1.5270e+06      5.23e+04       1.54e-02       7.50e+09    
+      12             19         1.4945e+06      3.25e+04       3.14e-02       5.14e+09    
+      13             20         1.3937e+06      1.01e+05       3.23e-02       1.67e+10    
+      14             21         1.3168e+06      7.69e+04       3.33e-02       3.06e+10    
+      15             22         1.2505e+06      6.62e+04       3.39e-02       3.34e+10    
+      16             23         1.1900e+06      6.05e+04       3.41e-02       1.68e+10    
+      17             24         1.1362e+06      5.38e+04       3.41e-02       6.19e+09    
+      18             25         1.0860e+06      5.03e+04       3.40e-02       6.50e+09    
+      19             26         1.0385e+06      4.75e+04       3.38e-02       6.85e+09    
+      20             27         9.9869e+05      3.98e+04       3.35e-02       7.98e+09    
+      21             28         8.5031e+05      1.48e+05       8.70e-03       1.07e+09    
+      22             29         8.4009e+05      1.02e+04       1.79e-02       2.67e+09    
+      23             30         8.1853e+05      2.16e+04       1.73e-02       3.45e+09    
+      24             31         7.9972e+05      1.88e+04       1.70e-02       3.33e+09    
+      25             32         7.8154e+05      1.82e+04       1.67e-02       2.74e+09    
+      26             33         7.6470e+05      1.68e+04       1.62e-02       2.25e+09    
+      27             34         7.4897e+05      1.57e+04       1.57e-02       3.32e+09    
+      28             35         7.3438e+05      1.46e+04       1.51e-02       4.81e+09    
+      29             36         7.2079e+05      1.36e+04       1.46e-02       6.27e+09    
+      30             37         7.0814e+05      1.26e+04       1.41e-02       8.02e+09    
+      31             38         6.9636e+05      1.18e+04       1.36e-02       1.00e+10    
+      32             39         6.8541e+05      1.09e+04       1.30e-02       1.10e+10    
+      33             40         6.7526e+05      1.02e+04       1.25e-02       1.11e+10    
+      34             41         6.6591e+05      9.35e+03       1.20e-02       1.11e+10    
+      35             42         6.5733e+05      8.58e+03       1.14e-02       1.10e+10    
+      36             43         6.4946e+05      7.87e+03       1.09e-02       1.07e+10    
+      37             44         6.4226e+05      7.21e+03       1.05e-02       9.70e+09    
+      38             45         6.3567e+05      6.59e+03       1.02e-02       7.57e+09    
+      39             46         6.2973e+05      5.94e+03       1.00e-02       3.78e+09    
+Optimization terminated successfully.
+`ftol` condition satisfied.
+         Current function value: 6.297e+05
+         Iterations: 39
+         Function evaluations: 46
+         Jacobian evaluations: 40
+Timer: Solution time = 4.23 min
+Timer: Avg time per step = 6.52 sec
+Start of solver
+Total (sum of squares):  5.446e+10, 
+Total force:  3.300e+05 (N)
+End of solver
+Total (sum of squares):  6.297e+05, 
+Total force:  1.122e+03 (N)
+Saving latest iteration
+Timer: Iteration 1 total = 5.20 min
+====================
+Done
+Timer: Total time = 5.21 min
+Output written to /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/DESC/current/HELIOTRON_direct_values_concentric_output.h5
+====================

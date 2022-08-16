@@ -113,6 +113,10 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
 
     Computes the surface integral of the specified quantity for all surfaces in the grid.
 
+    Notes
+    -----
+        LinearGrid will have better accuracy than QuadratureGrid for a theta surface.
+
     Parameters
     ----------
     grid : Grid
@@ -121,7 +125,6 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
         Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
-        Note for surface_label="theta" LinearGrid will have better accuracy than QuadratureGrid.
     match_grid : bool
         False to return a compressed array which assigns every surface integral to a single element.
         This array will have length = number of unique surfaces in the grid.
@@ -171,7 +174,11 @@ def surface_averages(
     """Bulk surface average function.
 
     Computes the surface average of the specified quantity for all surfaces in the grid.
-    See D'haeseleer flux coordinates eq. 4.9.11.
+
+    Notes
+    -----
+        See D'haeseleer flux coordinates eq. 4.9.11 for more details.
+        LinearGrid will have better accuracy than QuadratureGrid for a theta surface.
 
     Parameters
     ----------
@@ -182,19 +189,17 @@ def surface_averages(
     sqrtg : ndarray
         Magnitude of the 3D jacobian determinant, data["sqrt(g)"].
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
-        Note for surface_label="theta" LinearGrid will have better accuracy than QuadratureGrid.
+        The surface label of rho, theta, or zeta to compute the average over.
     match_grid : bool
-        False to return an array which assigns every surface integral to a single element of the array.
+        False to return an array which assigns every surface average to a single element of the array.
         This array will have length = number of unique surfaces in the grid.
-        True to return an array which assigns every surface integral to all indices in grid.nodes which
+        True to return an array which assigns every surface average to all indices in grid.nodes which
         are associated with that surface.
         This array will match the grid's pattern and have length = grid.num_nodes.
     denominator : ndarray
         The denominator in the surface average is independent of the quantity q.
         To avoid recomputing it for surface averages that include the sqrt(g) factor,
         some users may prefer to cache and supply the denominator.
-        See D'haeseleer flux coordinates eq. 4.9.11.
 
     Returns
     -------
@@ -202,9 +207,11 @@ def surface_averages(
         Surface averages of the given quantity, q, over each surface in grid.
     """
     if denominator is None:
-        if isinstance(sqrtg, int) and sqrtg == 1:
+        if jnp.ndim(sqrtg) == 0 or len(sqrtg) == 1:
             # shortcut to avoid unnecessary computation
-            denominator = 4 * jnp.pi ** 2 if surface_label == "rho" else 2 * jnp.pi
+            denominator = (
+                4 * jnp.pi ** 2 if surface_label == "rho" else 2 * jnp.pi
+            ) * sqrtg
         else:
             denominator = surface_integrals(grid, sqrtg, surface_label)
     averages = surface_integrals(grid, sqrtg * q, surface_label) / denominator

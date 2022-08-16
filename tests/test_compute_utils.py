@@ -1,7 +1,5 @@
-import pytest
 import numpy as np
 
-from desc import examples
 from desc.compute.utils import (
     compress,
     enclosed_volumes,
@@ -11,6 +9,7 @@ from desc.compute.utils import (
 )
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.equilibrium import Equilibrium
+import desc.io
 
 
 def random_grid(linear=False):
@@ -27,10 +26,15 @@ def random_grid(linear=False):
     )
 
 
-def benchmark(grid, q=1, surface_label="rho"):
-    """More intuitive implementation with loops of bulk surface integral function in compute.utils.
+def benchmark_integrals(grid, q=1, surface_label="rho"):
+    """Intuitive implementation of bulk surface integral function in compute.utils.
 
     Computes the surface integral of the specified quantity for all surfaces in the grid.
+
+    Notes
+    -----
+        See D'haeseleer flux coordinates eq. 4.9.11 for more details.
+        LinearGrid will have better accuracy than QuadratureGrid for a theta surface.
 
     Parameters
     ----------
@@ -40,7 +44,6 @@ def benchmark(grid, q=1, surface_label="rho"):
         Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
-        Note for surface_label="theta" LinearGrid will have better accuracy than QuadratureGrid.
 
     Returns
     -------
@@ -69,7 +72,7 @@ class TestComputeUtils:
         def test(surface_label):
             grid = random_grid()
             q = np.random.random_sample(size=grid.num_nodes)
-            integrals_1 = benchmark(grid, q, surface_label)
+            integrals_1 = benchmark_integrals(grid, q, surface_label)
             integrals_2 = surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(integrals_1, integrals_2)
 
@@ -123,20 +126,21 @@ class TestComputeUtils:
             np.testing.assert_allclose(areas, area)
 
         test("rho", 4 * np.pi ** 2)
-        test("theta", 2 * np.pi, linear=True)
+        test("theta", 2 * np.pi, True)
         test("zeta", 2 * np.pi)
 
-    def test_surface_area_weighted(self):
+    def test_surface_area_weighted(self, DSHAPE, HELIOTRON):
         """Test that rho surface integral(dt * dz * sqrt(g)) is monotonic increasing with rho."""
 
-        def test(eq, err_msg):
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             grid = random_grid()
             sqrtg = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
             areas = surface_integrals(grid, sqrtg)
-            np.testing.assert_allclose(areas, np.sort(areas), err_msg=err_msg)
+            np.testing.assert_allclose(areas, np.sort(areas))
 
-        test(examples.get("DSHAPE"), "DSHAPE")
-        test(examples.get("HELIOTRON"), "HELIOTRON")
+        test(DSHAPE)
+        test(HELIOTRON)
 
     def test_enclosed_volumes(self):
         """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
@@ -163,10 +167,11 @@ class TestComputeUtils:
             enclosed_volumes(grid, data, dr=2), volume_rr, rtol=1e-2, err_msg="dr=2"
         )
 
-    def test_total_volume(self):
+    def test_total_volume(self, DSHAPE, HELIOTRON):
         """Test that the volume enclosed by the last enclosed flux surfaces matches the device volume."""
 
-        def test(eq, err_msg):
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             grid = LinearGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
@@ -179,35 +184,36 @@ class TestComputeUtils:
             last_flux_surface_volume = enclosed_volumes(grid, data)[-1]
             device_volume = eq.compute("V", grid=grid)["V"]
             np.testing.assert_allclose(
-                last_flux_surface_volume, device_volume, rtol=1e-2, err_msg=err_msg
+                last_flux_surface_volume, device_volume, rtol=1e-2
             )
 
-        test(Equilibrium(), "torus")
-        test(examples.get("DSHAPE"), "DSHAPE")
-        test(examples.get("HELIOTRON"), "HELIOTRON")
+        test(DSHAPE)
+        test(HELIOTRON)
 
-    def test_surface_averages_identity_op(self):
+    def test_surface_averages_identity_op(self, DSHAPE, HELIOTRON):
         """Test that all surface averages of a flux surface function are identity operations."""
 
-        def test(eq, err_msg):
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             grid = random_grid()
             data = eq.compute("p", grid=grid)
             data = eq.compute("sqrt(g)", grid=grid, data=data)
             pressure_average = surface_averages(
                 grid, data["p"], data["sqrt(g)"], match_grid=True
             )
-            np.testing.assert_allclose(data["p"], pressure_average, err_msg=err_msg)
+            np.testing.assert_allclose(data["p"], pressure_average)
 
-        test(examples.get("DSHAPE"), "DSHAPE")
-        test(examples.get("HELIOTRON"), "HELIOTRON")
+        test(DSHAPE)
+        test(HELIOTRON)
 
-    def test_surface_averages_homomorphism(self):
+    def test_surface_averages_homomorphism(self, DSHAPE, HELIOTRON):
         """
         Test that all surface averages of a flux surface function are additive homomorphisms.
         Meaning average(a + b) = average(a) + average(b).
         """
 
-        def test(eq, err_msg):
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             grid = random_grid()
             data = eq.compute("|B|_t", grid=grid)
             a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
@@ -215,15 +221,16 @@ class TestComputeUtils:
             a_plus_b = surface_averages(
                 grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"]
             )
-            np.testing.assert_allclose(a_plus_b, a + b, err_msg=err_msg)
+            np.testing.assert_allclose(a_plus_b, a + b)
 
-        test(examples.get("DSHAPE"), "DSHAPE")
-        test(examples.get("HELIOTRON"), "HELIOTRON")
+        test(DSHAPE)
+        test(HELIOTRON)
 
-    def test_surface_averages_shortcut(self):
+    def test_surface_averages_shortcut(self, DSHAPE, HELIOTRON):
         """Test that surface_averages on single rho surface matches mean() shortcut."""
 
-        def test(eq, err_msg):
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             rho = (1 - 1e-4) * np.random.default_rng().random() + 1e-4
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -237,13 +244,13 @@ class TestComputeUtils:
             np.testing.assert_allclose(
                 surface_averages(grid, data["|B|"], data["sqrt(g)"]),
                 np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
-                err_msg=err_msg + " average with sqrt(g) fail",
+                err_msg="average with sqrt(g) fail",
             )
             np.testing.assert_allclose(
                 surface_averages(grid, data["|B|"]),
                 np.mean(data["|B|"]),
-                err_msg=err_msg + " average without sqrt(g) fail",
+                err_msg="average without sqrt(g) fail",
             )
 
-        test(examples.get("DSHAPE"), "DSHAPE")
-        test(examples.get("HELIOTRON"), "HELIOTRON")
+        test(DSHAPE)
+        test(HELIOTRON)

@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import data_index
-from desc.compute.utils import surface_averages
+from desc.compute.utils import dot, cross, surface_averages
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
@@ -48,48 +48,6 @@ def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
         ).all()
 
     return R_flag and Z_flag and L_flag
-
-
-def dot(a, b, axis=-1):
-    """Batched vector dot product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = sum(a*b, axis=axis)
-
-    """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
-
-
-def cross(a, b, axis=-1):
-    """Batched vector cross product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = a x b
-
-    """
-    return jnp.cross(a, b, axis=axis)
 
 
 def compute_flux_coords(
@@ -442,11 +400,11 @@ def compute_rotational_transform(
                 #   so that the else statement always executes.
                 enclosed_toroidal_current = current_from_fixed_iota
             else:
-                enclosed_toroidal_current = (
-                    mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=0)
-                )
-                # with open("heliotron current tesla-meter.pkl", "rb") as file:
-                #     enclosed_toroidal_current = pickle.load(file)
+                # enclosed_toroidal_current = (
+                #     mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=0)
+                # )
+                with open("debug/heliotron current tesla-meter.pkl", "rb") as file:
+                    enclosed_toroidal_current = pickle.load(file)
             term1 = data["psi_r"] / data["sqrt(g)"]
             term2 = data["g_tt"] * data["lambda_z"] - data["g_tz"] * (
                 1 + data["lambda_t"]
@@ -461,11 +419,11 @@ def compute_rotational_transform(
                 #   so that the else statement always executes.
                 enclosed_toroidal_current_r = current_r_from_fixed_iota
             else:
-                enclosed_toroidal_current_r = (
-                    mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=1)
-                )
-                # with open("heliotron current_r tesla-meter.pkl", "rb") as file:
-                #     enclosed_toroidal_current_r = pickle.load(file)
+                # enclosed_toroidal_current_r = (
+                #     mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=1)
+                # )
+                with open("debug/heliotron current_r tesla-meter.pkl", "rb") as file:
+                    enclosed_toroidal_current_r = pickle.load(file)
             g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
             g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
                 data["e_theta"], data["e_zeta_r"]

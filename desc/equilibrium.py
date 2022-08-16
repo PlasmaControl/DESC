@@ -484,8 +484,8 @@ class Equilibrium(_Configuration, IOAble):
         self,
         objective,
         constraint=None,
-        ftol=1e-6,
-        xtol=1e-6,
+        ftol=1e-2,
+        xtol=1e-4,
         maxiter=50,
         verbose=1,
         copy=False,
@@ -549,6 +549,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             objective.callback(objective.x(eq))
 
+        result = None
+
         iteration = 1
         success = None
         while success is None:
@@ -576,6 +578,8 @@ class Equilibrium(_Configuration, IOAble):
                 **perturb_options,
             )
             eq_new.solve(objective=constraint, **solve_options)
+
+            result = dc_opt if result is None else np.vstack((result, dc_opt))
 
             # update trust region radius
             cost_new = objective.compute_scalar(objective.x(eq_new))
@@ -635,11 +639,11 @@ class Equilibrium(_Configuration, IOAble):
             timer.disp("Total time")
 
         if copy:
-            return eq
+            return eq, result
         else:
             for attr in self._io_attrs_:
                 setattr(self, attr, getattr(eq, attr))
-            return self
+            return self, result
 
     def perturb(
         self,

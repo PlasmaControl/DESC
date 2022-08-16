@@ -67,7 +67,7 @@ def get_equilibrium_objective(mode="force"):
         objectives = Energy()
     elif mode == "force":
         objectives = ForceBalance()
-    elif mode == "force2":
+    elif mode == "forces":
         objectives = (RadialForceBalance(), HelicalForceBalance())
     elif mode == "vacuum":
         objectives = CurrentDensity()

@@ -245,7 +245,7 @@ class MagneticWell(_Objective):
         self._built = True
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi, **kwargs):
-        """Compute the magnetic well parameter.
+        """Compute a magnetic well parameter.
 
         Parameters
         ----------

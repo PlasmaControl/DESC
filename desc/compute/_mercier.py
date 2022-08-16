@@ -74,12 +74,7 @@ def compute_dmerc(
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion terms.
     """
     if check_derivs("Mercier DMerc", R_transform, Z_transform, L_transform):
-        data = compute_dshear(
-            i_l,
-            Psi,
-            iota,
-            data,
-        )
+        data = compute_dshear(i_l, Psi, iota, data)
         data = compute_dcurr(
             R_lmn,
             Z_lmn,

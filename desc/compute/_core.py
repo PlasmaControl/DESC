@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import data_index
-from desc.compute.utils import dot, cross
+from desc.compute.utils import cross, dot
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):

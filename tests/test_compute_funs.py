@@ -518,7 +518,7 @@ def test_compute_grad_p_volume_avg():
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
 
 
-def test_compute_dmerc(DSHAPE, HELIOTRON):
+def test_compute_dmerc(DSHAPE_examples, HELIOTRON):
     eq = Equilibrium()
     DMerc = eq.compute("Mercier DMerc")["Mercier DMerc"]
     np.testing.assert_allclose(DMerc, 0, err_msg="should be 0 in vacuum")
@@ -532,13 +532,13 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
         DMerc = compress(grid, eq.compute("Mercier DMerc", grid=grid)["Mercier DMerc"])
         all_close(DMerc, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.175, 0.8))
-    test(DSHAPE, "DSHAPE", (0.8, 1), atol=5e-2)
+    test(DSHAPE_examples, "DSHAPE", (0.175, 0.8))
+    test(DSHAPE_examples, "DSHAPE", (0.8, 1), atol=5e-2)
     test(HELIOTRON, "HELIOTRON", (0.1, 0.275), rtol=11e-2)
     test(HELIOTRON, "HELIOTRON", (0.275, 0.975), rtol=5e-2)
 
 
-def test_compute_dshear(DSHAPE, HELIOTRON):
+def test_compute_dshear(DSHAPE_examples, HELIOTRON):
     eq = Equilibrium()
     DShear = eq.compute("Mercier DShear")["Mercier DShear"]
     np.testing.assert_allclose(DShear, 0, err_msg="should be 0 in vacuum")
@@ -557,11 +557,11 @@ def test_compute_dshear(DSHAPE, HELIOTRON):
         ), "DShear should always have a stabilizing effect."
         all_close(DShear, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0, 1), 1e-12, 0)
+    test(DSHAPE_examples, "DSHAPE", (0, 1), 1e-12, 0)
     test(HELIOTRON, "HELIOTRON", (0, 1), 1e-12, 0)
 
 
-def test_compute_dcurr(DSHAPE, HELIOTRON):
+def test_compute_dcurr(DSHAPE_examples, HELIOTRON):
     eq = Equilibrium()
     DCurr = eq.compute("Mercier DCurr")["Mercier DCurr"]
     np.testing.assert_allclose(DCurr, 0, err_msg="should be 0 in vacuum")
@@ -575,11 +575,11 @@ def test_compute_dcurr(DSHAPE, HELIOTRON):
         DCurr = compress(grid, eq.compute("Mercier DCurr", grid=grid)["Mercier DCurr"])
         all_close(DCurr, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.075, 0.975))
+    test(DSHAPE_examples, "DSHAPE", (0.075, 0.975))
     test(HELIOTRON, "HELIOTRON", (0.16, 0.9), rtol=62e-3)
 
 
-def test_compute_dwell(DSHAPE, HELIOTRON):
+def test_compute_dwell(DSHAPE_examples, HELIOTRON):
     eq = Equilibrium()
     DWell = eq.compute("Mercier DWell")["Mercier DWell"]
     np.testing.assert_allclose(DWell, 0, err_msg="should be 0 in vacuum")
@@ -593,13 +593,13 @@ def test_compute_dwell(DSHAPE, HELIOTRON):
         DWell = compress(grid, eq.compute("Mercier DWell", grid=grid)["Mercier DWell"])
         all_close(DWell, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.11, 0.8))
+    test(DSHAPE_examples, "DSHAPE", (0.11, 0.8))
     test(HELIOTRON, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
     test(HELIOTRON, "HELIOTRON", (0.45, 0.6), atol=6e-1)
     test(HELIOTRON, "HELIOTRON", (0.6, 0.99))
 
 
-def test_compute_dgeod(DSHAPE, HELIOTRON):
+def test_compute_dgeod(DSHAPE_examples, HELIOTRON):
     eq = Equilibrium()
     DGeod = eq.compute("Mercier DGeod")["Mercier DGeod"]
     np.testing.assert_allclose(DGeod, 0, err_msg="should be 0 in vacuum")
@@ -616,7 +616,7 @@ def test_compute_dgeod(DSHAPE, HELIOTRON):
         ), "DGeod should always have a destabilizing effect."
         all_close(DGeod, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.15, 0.975))
+    test(DSHAPE_examples, "DSHAPE", (0.15, 0.975))
     test(HELIOTRON, "HELIOTRON", (0.15, 0.825), rtol=77e-3)
     test(HELIOTRON, "HELIOTRON", (0.825, 1), atol=12e-2)
 

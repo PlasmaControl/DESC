@@ -3320,13 +3320,13 @@ data_index["R0/a"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
-# Mercier stability
-data_index["DMerc"] = {
+# stability
+data_index["Mercier DMerc"] = {
     "label": "D_{Merc}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion",
-    "fun": "compute_DMerc",
+    "fun": "compute_dmerc",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3351,20 +3351,20 @@ data_index["DMerc"] = {
         [0, 1, 1],
     ],
 }
-data_index["DShear"] = {
+data_index["Mercier DShear"] = {
     "label": "D_{Shear}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion magnetic sheer term",
-    "fun": "compute_DShear",
+    "fun": "compute_dshear",
     "dim": 1,
 }
-data_index["DCurr"] = {
+data_index["Mercier DCurr"] = {
     "label": "D_{Curr}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion toroidal current term",
-    "fun": "compute_DCurr",
+    "fun": "compute_dcurr",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3389,12 +3389,12 @@ data_index["DCurr"] = {
         [0, 1, 1],
     ],
 }
-data_index["DWell"] = {
+data_index["Mercier DWell"] = {
     "label": "D_{Well}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion magnetic well term",
-    "fun": "compute_DWell",
+    "fun": "compute_dwell",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3407,12 +3407,12 @@ data_index["DWell"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["DGeod"] = {
+data_index["Mercier DGeod"] = {
     "label": "D_{Geod}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion geodesic curvature term",
-    "fun": "compute_DGeod",
+    "fun": "compute_dgeod",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3437,12 +3437,12 @@ data_index["DGeod"] = {
         [0, 1, 1],
     ],
 }
-data_index["AltWell"] = {
-    "label": "Alternative Magnetic Well",
+data_index["magnetic well"] = {
+    "label": "Magnetic Well",
     "units": "~",
     "units_long": "None",
-    "description": "alternative magnetic well parameter",
-    "fun": "compute_AltWell",
+    "description": "zero pressure case magnetic well parameter",
+    "fun": "compute_magnetic_well",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],

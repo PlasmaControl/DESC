@@ -22,7 +22,7 @@ from desc.compute.utils import (
 from desc.compute._core import check_derivs
 
 
-def compute_DMerc(
+def compute_dmerc(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -73,14 +73,14 @@ def compute_DMerc(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion terms.
     """
-    if check_derivs("DMerc", R_transform, Z_transform, L_transform):
-        data = compute_DShear(
+    if check_derivs("Mercier DMerc", R_transform, Z_transform, L_transform):
+        data = compute_dshear(
             i_l,
             Psi,
             iota,
             data,
         )
-        data = compute_DCurr(
+        data = compute_dcurr(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -92,7 +92,7 @@ def compute_DMerc(
             iota,
             data,
         )
-        data = compute_DWell(
+        data = compute_dwell(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -106,7 +106,7 @@ def compute_DMerc(
             iota,
             data,
         )
-        data = compute_DGeod(
+        data = compute_dgeod(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -118,11 +118,16 @@ def compute_DMerc(
             iota,
             data,
         )
-        data["DMerc"] = data["DShear"] + data["DCurr"] + data["DWell"] + data["DGeod"]
+        data["Mercier DMerc"] = (
+            data["Mercier DShear"]
+            + data["Mercier DCurr"]
+            + data["Mercier DWell"]
+            + data["Mercier DGeod"]
+        )
     return data
 
 
-def compute_DShear(
+def compute_dshear(
     i_l,
     Psi,
     iota,
@@ -151,11 +156,13 @@ def compute_DShear(
     """
     data = compute_toroidal_flux(Psi, iota, data=data)
     data = compute_rotational_transform(i_l, iota, data=data)
-    data["DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (16 * jnp.pi ** 2)
+    data["Mercier DShear"] = jnp.square(data["iota_r"] / data["psi_r"]) / (
+        16 * jnp.pi ** 2
+    )
     return data
 
 
-def compute_DCurr(
+def compute_dcurr(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -200,7 +207,7 @@ def compute_DCurr(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion toroidal current term.
     """
-    if check_derivs("DCurr", R_transform, Z_transform, L_transform):
+    if check_derivs("Mercier DCurr", R_transform, Z_transform, L_transform):
         grid = R_transform.grid
         data = compute_contravariant_metric_coefficients(
             R_lmn, Z_lmn, R_transform, Z_transform, data
@@ -229,7 +236,7 @@ def compute_DCurr(
         xi = mu_0 * data["J"] - jnp.atleast_2d(dI_dpsi).T * data["B"]
         sign_G = jnp.sign(surface_averages(grid, data["B_zeta"], match_grid=True))
 
-        data["DCurr"] = (
+        data["Mercier DCurr"] = (
             -sign_G
             / (16 * jnp.pi ** 4)
             * data["iota_r"]
@@ -239,7 +246,7 @@ def compute_DCurr(
     return data
 
 
-def compute_DWell(
+def compute_dwell(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -290,7 +297,7 @@ def compute_DWell(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion magnetic well term.
     """
-    if check_derivs("DWell", R_transform, Z_transform, L_transform):
+    if check_derivs("Mercier DWell", R_transform, Z_transform, L_transform):
         grid = R_transform.grid
         data = compute_pressure(p_l, pressure, data)
         data = compute_contravariant_metric_coefficients(
@@ -320,7 +327,7 @@ def compute_DWell(
         dp_dpsi = data["p_r"] / data["psi_r"]
         Bsq = dot(data["B"], data["B"])
 
-        data["DWell"] = (
+        data["Mercier DWell"] = (
             mu_0
             / (64 * jnp.pi ** 6)
             * dp_dpsi
@@ -333,7 +340,7 @@ def compute_DWell(
     return data
 
 
-def compute_DGeod(
+def compute_dgeod(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -378,7 +385,7 @@ def compute_DGeod(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of Mercier criterion geodesic curvature term.
     """
-    if check_derivs("DGeod", R_transform, Z_transform, L_transform):
+    if check_derivs("Mercier DGeod", R_transform, Z_transform, L_transform):
         grid = R_transform.grid
         data = compute_contravariant_metric_coefficients(
             R_lmn, Z_lmn, R_transform, Z_transform, data
@@ -402,7 +409,7 @@ def compute_DGeod(
         j_dot_b = mu_0 * dot(data["J"], data["B"])
         Bsq = dot(data["B"], data["B"])
 
-        data["DGeod"] = (
+        data["Mercier DGeod"] = (
             expand(
                 grid,
                 jnp.square(surface_integrals(grid, A * j_dot_b))
@@ -414,7 +421,7 @@ def compute_DGeod(
     return data
 
 
-def compute_AltWell(
+def compute_magnetic_well(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -428,7 +435,7 @@ def compute_AltWell(
     iota,
     data=None,
 ):
-    """Compute an alternative magnetic well parameter.
+    """Compute a magnetic well parameter.
 
     See equation 3.2 in
     Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
@@ -465,7 +472,7 @@ def compute_AltWell(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of the magnetic well parameter.
     """
-    if check_derivs("AltWell", R_transform, Z_transform, L_transform):
+    if check_derivs("magnetic well", R_transform, Z_transform, L_transform):
         grid = R_transform.grid
         data = compute_pressure(p_l, pressure, data)
         data = compute_contravariant_magnetic_field(
@@ -501,10 +508,9 @@ def compute_AltWell(
         ) / dv_drho
 
         V = enclosed_volumes(grid, data)
-        data["AltWell"] = expand(
+        data["magnetic well"] = expand(
             grid, V * (dthermal_drho + dmagnetic_av_drho) / dv_drho / Bsq_av
         )
-        # alternative that avoids computing the volume
-        # matches above implementation to a scale factor
-        # data["Well"] = data["rho"] * expand(grid, (dthermal_drho + dmagnetic_av_drho) / Bsq_av)
+        # alternative that avoids computing the volume and matches to a scale factor
+        # data["magnetic well"] = data["rho"] * expand(grid, (dthermal_drho + dmagnetic_av_drho) / Bsq_av)
     return data

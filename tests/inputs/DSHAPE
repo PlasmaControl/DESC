@@ -24,10 +24,10 @@ gtol = 1e-6
 nfev = 100
 
 # solver methods
-optimizer         = scipy-trf
+optimizer         = lsq-exact
 objective         = force
-spectral_indexing = ansi
-node_pattern      = cheb2
+spectral_indexing = fringe
+node_pattern      = jacobi
 
 # pressure and rotational transform profiles
 l:   0  p =  1.6E+3  i =  1.00

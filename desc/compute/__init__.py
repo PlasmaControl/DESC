@@ -31,12 +31,12 @@ from ._field import (
     compute_contravariant_current_density,
 )
 from ._mercier import (
-    compute_DMerc,
-    compute_DShear,
-    compute_DCurr,
-    compute_DWell,
-    compute_DGeod,
-    compute_AltWell,
+    compute_dmerc,
+    compute_dshear,
+    compute_dcurr,
+    compute_dwell,
+    compute_dgeod,
+    compute_magnetic_well,
 )
 from ._qs import compute_boozer_coords, compute_quasisymmetry_error
 from ._equil import compute_force_error, compute_energy

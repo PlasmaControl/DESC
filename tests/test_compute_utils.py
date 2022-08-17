@@ -3,7 +3,7 @@ import numpy as np
 import desc.io
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.compute.utils import (
-    _get_proper_surface,
+    _get_grid_surface,
     compress,
     surface_averages,
     surface_integrals,
@@ -49,11 +49,11 @@ def benchmark_integrals(grid, q=1, surface_label="rho"):
         Surface integrals of q over each surface in grid.
     """
     q = np.asarray(q)
-    surface_label_nodes, _, ds = _get_proper_surface(grid, surface_label)
+    nodes, _, ds = _get_grid_surface(grid, surface_label)
 
     surfaces = dict()
     # collect collocation node indices for each surface_label surface
-    for grid_column_idx, surface_label_value in enumerate(surface_label_nodes):
+    for grid_column_idx, surface_label_value in enumerate(nodes):
         surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
     # integration over non-contiguous elements
     integrals = list()
@@ -88,8 +88,8 @@ class TestComputeUtils:
                 grid, q, surface_label, match_grid=True
             )
 
-            surface_label_nodes, _, _ = _get_proper_surface(grid, surface_label)
-            _, inverse = np.unique(surface_label_nodes, return_inverse=True)
+            nodes, _, _ = _get_grid_surface(grid, surface_label)
+            _, inverse = np.unique(nodes, return_inverse=True)
             np.testing.assert_allclose(integrals[inverse], integrals_expand)
 
         test("rho")

@@ -59,7 +59,6 @@ def get_vmec_data(name, quantity):
 
     Returns
     -------
-    :rtype: (ndarray, ndarray)
     rho : ndarray
         Radial coordinate.
     quantity : ndarray

@@ -1,14 +1,13 @@
 import numpy as np
 
+import desc.io
+from desc.grid import ConcentricGrid, LinearGrid
 from desc.compute.utils import (
     _get_proper_surface,
     compress,
     surface_averages,
     surface_integrals,
 )
-from desc.grid import ConcentricGrid, LinearGrid
-from desc.equilibrium import Equilibrium
-import desc.io
 
 
 def random_grid(linear=False):
@@ -28,7 +27,7 @@ def random_grid(linear=False):
 def benchmark_integrals(grid, q=1, surface_label="rho"):
     """Intuitive implementation of bulk surface integral function in compute.utils.
 
-    Computes the surface integral of the specified quantity for all surfaces in the grid.
+    Computes surface integrals of the specified quantity for all surfaces in the grid.
 
     Notes
     -----
@@ -128,7 +127,7 @@ class TestComputeUtils:
         test("zeta", 2 * np.pi)
 
     def test_surface_area_weighted(self, DSHAPE, HELIOTRON):
-        """Test that rho surface integral(dt * dz * sqrt(g)) is monotonic increasing with rho."""
+        """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
@@ -141,7 +140,7 @@ class TestComputeUtils:
         test(HELIOTRON)
 
     def test_total_volume(self, DSHAPE, HELIOTRON):
-        """Test that the volume enclosed by the last enclosed flux surfaces matches the device volume."""
+        """Test that the volume enclosed by the LCFS is equal to the total volume."""
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
@@ -160,7 +159,7 @@ class TestComputeUtils:
         test(HELIOTRON)
 
     def test_surface_averages_identity_op(self, DSHAPE, HELIOTRON):
-        """Test that all surface averages of a flux surface function are identity operations."""
+        """Test that surface averages of flux functions are identity operations."""
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
@@ -177,7 +176,7 @@ class TestComputeUtils:
 
     def test_surface_averages_homomorphism(self, DSHAPE, HELIOTRON):
         """
-        Test that all surface averages of a flux surface function are additive homomorphisms.
+        Test that surface averages of flux surface functions are additive homomorphisms.
         Meaning average(a + b) = average(a) + average(b).
         """
 

@@ -1096,6 +1096,8 @@ class _Configuration(IOAble, ABC):
         for arg in sig.parameters.keys():
             if arg in arg_order:
                 inputs[arg] = getattr(self, arg)
+            elif arg == "grid":
+                inputs[arg] = grid
             elif arg == "R_transform":
                 inputs[arg] = Transform(
                     grid, self.R_basis, derivs=data_index[name]["R_derivs"]

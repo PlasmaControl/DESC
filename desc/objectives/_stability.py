@@ -1,13 +1,8 @@
-from desc.backend import jnp
-from desc.compute import (
-    data_index,
-    compute_dmerc,
-    compute_magnetic_well,
-)
-from desc.compute.utils import compress
+import numpy as np
+from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.utils import Timer
+from desc.compute import data_index, compute_mercier_stability, compute_magnetic_well
 from .objective_funs import _Objective
 
 
@@ -36,6 +31,7 @@ class MercierStability(_Objective):
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -59,6 +55,7 @@ class MercierStability(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
+
         """
         if self.grid is None:
             self.grid = LinearGrid(
@@ -66,7 +63,7 @@ class MercierStability(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=jnp.linspace(1 / 5, 1, 5),
+                rho=np.linspace(1 / 5, 1, 5),
             )
 
         self._dim_f = 1
@@ -131,8 +128,9 @@ class MercierStability(_Objective):
         -------
         DMerc : ndarray
             Mercier stability criterion.
+
         """
-        data = compute_dmerc(
+        data = compute_mercier_stability(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -145,7 +143,7 @@ class MercierStability(_Objective):
             self._pressure,
             self._iota,
         )
-        return self._shift_scale(compress(self.grid, data["Mercier DMerc"]))
+        return self._shift_scale(data["Mercier DMerc"])
 
 
 class MagneticWell(_Objective):
@@ -173,6 +171,7 @@ class MagneticWell(_Objective):
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -201,7 +200,7 @@ class MagneticWell(_Objective):
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=jnp.linspace(1 / 5, 1, 5),
+                rho=np.linspace(1 / 5, 1, 5),
             )
 
         self._dim_f = 1
@@ -266,6 +265,7 @@ class MagneticWell(_Objective):
         -------
         ndarray
             Magnetic well parameter.
+
         """
         data = compute_magnetic_well(
             R_lmn,
@@ -280,4 +280,4 @@ class MagneticWell(_Objective):
             self._pressure,
             self._iota,
         )
-        return self._shift_scale(compress(self.grid, data["magnetic well"]))
+        return self._shift_scale(data["magnetic well"])

@@ -5,7 +5,7 @@ from scipy.signal import convolve2d
 
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.compute.utils import surface_averages, compress
+from desc.compute.utils import compress, surface_averages
 
 # TODO: add tests for compute_geometry
 

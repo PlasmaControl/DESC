@@ -1,11 +1,10 @@
 import numpy as np
 
 from desc.compute.utils import (
+    _get_proper_surface,
     compress,
-    enclosed_volumes,
     surface_averages,
     surface_integrals,
-    _get_proper_surface,
 )
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.equilibrium import Equilibrium
@@ -141,31 +140,6 @@ class TestComputeUtils:
         test(DSHAPE)
         test(HELIOTRON)
 
-    def test_enclosed_volumes(self):
-        """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
-        torus = Equilibrium()
-        rho = np.linspace(1 / 128, 1, 128)
-        grid = LinearGrid(
-            M=torus.M_grid,
-            N=torus.N_grid,
-            NFP=torus.NFP,
-            sym=torus.sym,
-            rho=rho,
-        )
-        data = torus.compute("sqrt(g)_r", grid=grid)
-        volume = 20 * (np.pi * rho) ** 2
-        volume_r = 40 * np.pi ** 2 * rho
-        volume_rr = 40 * np.pi ** 2
-        np.testing.assert_allclose(
-            enclosed_volumes(grid, data), volume, rtol=1e-2, err_msg="dr=0"
-        )
-        np.testing.assert_allclose(
-            enclosed_volumes(grid, data, dr=1), volume_r, rtol=1e-2, err_msg="dr=1"
-        )
-        np.testing.assert_allclose(
-            enclosed_volumes(grid, data, dr=2), volume_rr, rtol=1e-2, err_msg="dr=2"
-        )
-
     def test_total_volume(self, DSHAPE, HELIOTRON):
         """Test that the volume enclosed by the last enclosed flux surfaces matches the device volume."""
 
@@ -178,13 +152,9 @@ class TestComputeUtils:
                 NFP=eq.NFP,
                 sym=eq.sym,
             )
-            data = eq.compute("e_theta", grid=grid)
-            data = eq.compute("e_zeta", grid=grid, data=data)
-            last_flux_surface_volume = enclosed_volumes(grid, data)[-1]
-            device_volume = eq.compute("V", grid=grid)["V"]
-            np.testing.assert_allclose(
-                last_flux_surface_volume, device_volume, rtol=1e-2
-            )
+            lcfs_volume = eq.compute("V enclosed", grid=grid)["V enclosed"][-1]
+            total_volume = eq.compute("V", grid=grid)["V"]
+            np.testing.assert_allclose(lcfs_volume, total_volume, rtol=1e-2)
 
         test(DSHAPE)
         test(HELIOTRON)

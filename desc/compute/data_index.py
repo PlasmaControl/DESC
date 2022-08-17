@@ -9,6 +9,7 @@ dim = (int) Dimension of the quantity: 0-D, 1-D, or 3-D.
 """
 
 data_index = {}
+
 # flux coordinates
 data_index["rho"] = {
     "label": "\\rho",
@@ -59,6 +60,33 @@ data_index["psi_rr"] = {
     "description": "Toroidal flux, second radial derivative",
     "fun": "compute_toroidal_flux",
     "dim": 1,
+}
+data_index["grad(psi)"] = {
+    "label": "\\nabla\\psi",
+    "units": "Wb / m",
+    "units_long": "Webers per meter",
+    "description": "Toroidal flux gradient",
+    "fun": "compute_toroidal_flux_gradient",
+    "dim": 3,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["|grad(psi)|"] = {
+    "label": "|\\nabla\\psi|",
+    "units": "Wb / m",
+    "units_long": "Webers per meter",
+    "description": "Toroidal flux gradient magnitude",
+    "fun": "compute_toroidal_flux_gradient",
+    "dim": 3,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["|grad(psi)|^2"] = {
+    "label": "|\\nabla\\psi|^{2}",
+    "units": "Wb / m",
+    "units_long": "Webers squared per square meter",
+    "description": "Toroidal flux gradient magnitude squared",
+    "fun": "compute_toroidal_flux_gradient",
+    "dim": 3,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
 # R
@@ -1291,6 +1319,88 @@ data_index["|grad(zeta)|"] = {
     "R_derivs": [[0, 0, 0]],
 }
 
+# geometry
+data_index["V"] = {
+    "label": "V",
+    "units": "m^{3}",
+    "units_long": "cubic meters",
+    "description": "Volume",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["A"] = {
+    "label": "A",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Cross-sectional area",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["R0"] = {
+    "label": "R_{0}",
+    "units": "m",
+    "units_long": "meters",
+    "description": "Major radius",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["a"] = {
+    "label": "a",
+    "units": "m",
+    "units_long": "meters",
+    "description": "Minor radius",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["R0/a"] = {
+    "label": "R_{0} / a",
+    "units": "~",
+    "units_long": "None",
+    "description": "Aspect ratio",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["V enclosed"] = {
+    "label": "V(\\rho)",
+    "units": "m^{3}",
+    "units_long": "cubic meters",
+    "description": "Volume enclosed",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["V_r enclosed"] = {
+    "label": "\\partial_{\\rho} V(\\rho)",
+    "units": "m^{3}",
+    "units_long": "cubic meters",
+    "description": "Volume enclosed, derivative wrt radial coordinate",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["V_rr enclosed"] = {
+    "label": "\\partial_{\\rho\\rho} V(\\rho)",
+    "units": "m^{3}",
+    "units_long": "cubic meters",
+    "description": "Volume enclosed, second derivative wrt radial coordinate",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+}
+
 # contravariant magnetic field
 data_index["B0"] = {
     "label": "\\psi' / \\sqrt{g}",
@@ -1993,6 +2103,16 @@ data_index["|B|"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
+data_index["|B|^2"] = {
+    "label": "|\\mathbf{B}|^{2}",
+    "units": "T",
+    "units_long": "Tesla",
+    "description": "Magnitude of magnetic field, squared",
+    "fun": "compute_magnetic_field_magnitude",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
 data_index["|B|_t"] = {
     "label": "\\partial_{\\theta} |\\mathbf{B}|",
     "units": "T",
@@ -2581,6 +2701,64 @@ data_index["(B*grad(|B|))_z"] = {
     ],
 }
 
+# Boozer magnetic field
+data_index["I"] = {
+    "label": "I",
+    "units": "T \\cdot m",
+    "units_long": "Tesla * meters",
+    "description": "Boozer toroidal current",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["I_r"] = {
+    "label": "\\partial_{\\rho} I",
+    "units": "T \\cdot m",
+    "units_long": "Tesla * meters",
+    "description": "Boozer toroidal current, derivative wrt radial coordinate",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
+}
+data_index["G"] = {
+    "label": "G",
+    "units": "T \\cdot m",
+    "units_long": "Tesla * meters",
+    "description": "Boozer poloidal current",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["G_r"] = {
+    "label": "\\partial_{\\rho} G",
+    "units": "T \\cdot m",
+    "units_long": "Tesla * meters",
+    "description": "Boozer poloidal current, derivative wrt radial coordinate",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
+}
+
 # contravariant current density
 data_index["J^rho"] = {
     "label": "J^{\\rho}",
@@ -2838,8 +3016,8 @@ data_index["J_parallel"] = {
         [0, 1, 1],
     ],
 }
-data_index["div_J_perp"] = {
-    "label": "\\nabla \\cdot \\mathbf{J}_{\perp}",
+data_index["div(J_perp)"] = {
+    "label": "\\nabla \\cdot \\mathbf{J}_{\\perp}",
     "units": "A \\cdot m^{-3}",
     "units_long": "Amperes / cubic meter",
     "description": "Divergence of plasma current density perpendicular to magnetic field",
@@ -2867,6 +3045,38 @@ data_index["div_J_perp"] = {
         [1, 0, 1],
         [0, 1, 1],
     ],
+}
+
+# energy
+data_index["W"] = {
+    "label": "W",
+    "units": "J",
+    "units_long": "Joules",
+    "description": "Plasma total energy",
+    "fun": "compute_energy",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["W_B"] = {
+    "label": "W_B",
+    "units": "J",
+    "units_long": "Joules",
+    "description": "Plasma magnetic energy",
+    "fun": "compute_energy",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["W_p"] = {
+    "label": "W_p",
+    "units": "J",
+    "units_long": "Joules",
+    "description": "Plasma thermodynamic energy",
+    "fun": "compute_energy",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0]],
 }
 
 # force error
@@ -3082,32 +3292,12 @@ data_index["|beta|"] = {
 }
 
 # quasi-symmetry
-data_index["I"] = {
-    "label": "I",
-    "units": "T \\cdot m",
-    "units_long": "Tesla * meters",
-    "description": "Boozer toroidal current",
-    "fun": "compute_quasisymmetry_error",
-    "dim": 1,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["G"] = {
-    "label": "G",
-    "units": "T \\cdot m",
-    "units_long": "Tesla * meters",
-    "description": "Boozer poloidal current",
-    "fun": "compute_quasisymmetry_error",
-    "dim": 1,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
 data_index["nu"] = {
     "label": "\\nu = \\zeta_{B} - \\zeta",
     "units": "rad",
     "units_long": "radians",
     "description": "Boozer toroidal stream function",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3116,8 +3306,8 @@ data_index["nu_t"] = {
     "label": "\\partial_{\\theta} \\nu",
     "units": "rad",
     "units_long": "radians",
-    "description": "Boozer toroidal stream function, first poloidal derivative",
-    "fun": "compute_boozer_coords",
+    "description": "Boozer toroidal stream function, derivative wrt poloidal angle",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3126,8 +3316,8 @@ data_index["nu_z"] = {
     "label": "\\partial_{\\zeta} \\nu",
     "units": "rad",
     "units_long": "radians",
-    "description": "Boozer toroidal stream function, first toroidal derivative",
-    "fun": "compute_boozer_coords",
+    "description": "Boozer toroidal stream function, derivative wrt toroidal angle",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3137,7 +3327,7 @@ data_index["theta_B"] = {
     "units": "rad",
     "units_long": "radians",
     "description": "Boozer poloidal angular coordinate",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3147,7 +3337,7 @@ data_index["zeta_B"] = {
     "units": "rad",
     "units_long": "radians",
     "description": "Boozer toroidal angular coordinate",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3157,7 +3347,7 @@ data_index["sqrt(g)_B"] = {
     "units": "~",
     "units_long": "None",
     "description": "Jacobian determinant of Boozer coordinates",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3167,7 +3357,7 @@ data_index["|B|_mn"] = {
     "units": "T",
     "units_long": "Tesla",
     "description": "Boozer harmonics of magnetic field",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
@@ -3177,7 +3367,7 @@ data_index["B modes"] = {
     "units": "",
     "units_long": "None",
     "description": "Boozer harmonics",
-    "fun": "compute_boozer_coords",
+    "fun": "compute_boozer_coordinates",
     "dim": 1,
 }
 data_index["f_C"] = {
@@ -3241,92 +3431,13 @@ data_index["f_T"] = {
     ],
 }
 
-# energy
-data_index["W"] = {
-    "label": "W",
-    "units": "J",
-    "units_long": "Joules",
-    "description": "Plasma total energy",
-    "fun": "compute_energy",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["W_B"] = {
-    "label": "W_B",
-    "units": "J",
-    "units_long": "Joules",
-    "description": "Plasma magnetic energy",
-    "fun": "compute_energy",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["W_p"] = {
-    "label": "W_p",
-    "units": "J",
-    "units_long": "Joules",
-    "description": "Plasma thermodynamic energy",
-    "fun": "compute_energy",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0]],
-}
-
-# geometry
-data_index["V"] = {
-    "label": "V",
-    "units": "m^{3}",
-    "units_long": "cubic meters",
-    "description": "Volume",
-    "fun": "compute_geometry",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["A"] = {
-    "label": "A",
-    "units": "m^{2}",
-    "units_long": "square meters",
-    "description": "Cross-sectional area",
-    "fun": "compute_geometry",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["R0"] = {
-    "label": "R_{0}",
-    "units": "m",
-    "units_long": "meters",
-    "description": "Major radius",
-    "fun": "compute_geometry",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["a"] = {
-    "label": "a",
-    "units": "m",
-    "units_long": "meters",
-    "description": "Minor radius",
-    "fun": "compute_geometry",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-data_index["R0/a"] = {
-    "label": "R_{0} / a",
-    "units": "~",
-    "units_long": "None",
-    "description": "Aspect ratio",
-    "fun": "compute_geometry",
-    "dim": 0,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-}
-
 # stability
-data_index["Mercier DMerc"] = {
-    "label": "D_{Merc}",
+data_index["D_Mercier"] = {
+    "label": "D_{Mercier}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion",
-    "fun": "compute_dmerc",
+    "fun": "compute_mercier_stability",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3351,20 +3462,20 @@ data_index["Mercier DMerc"] = {
         [0, 1, 1],
     ],
 }
-data_index["Mercier DShear"] = {
-    "label": "D_{Shear}",
+data_index["D_shear"] = {
+    "label": "D_{shear}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion magnetic sheer term",
-    "fun": "compute_dshear",
+    "fun": "compute_mercier_stability",
     "dim": 1,
 }
-data_index["Mercier DCurr"] = {
-    "label": "D_{Curr}",
+data_index["D_current"] = {
+    "label": "D_{current}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion toroidal current term",
-    "fun": "compute_dcurr",
+    "fun": "compute_mercier_stability",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3389,12 +3500,12 @@ data_index["Mercier DCurr"] = {
         [0, 1, 1],
     ],
 }
-data_index["Mercier DWell"] = {
-    "label": "D_{Well}",
+data_index["D_well"] = {
+    "label": "D_{well}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion magnetic well term",
-    "fun": "compute_dwell",
+    "fun": "compute_mercier_stability",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3407,12 +3518,12 @@ data_index["Mercier DWell"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["Mercier DGeod"] = {
-    "label": "D_{Geod}",
+data_index["D_geodesic"] = {
+    "label": "D_{geodesic}",
     "units": "~",
     "units_long": "None",
     "description": "Mercier stability criterion geodesic curvature term",
-    "fun": "compute_dgeod",
+    "fun": "compute_mercier_stability",
     "dim": 1,
     "R_derivs": [
         [0, 0, 0],
@@ -3441,7 +3552,7 @@ data_index["magnetic well"] = {
     "label": "Magnetic Well",
     "units": "~",
     "units_long": "None",
-    "description": "zero pressure case magnetic well parameter",
+    "description": "Magnetic well proxy for MHD stability",
     "fun": "compute_magnetic_well",
     "dim": 1,
     "R_derivs": [

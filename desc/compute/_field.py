@@ -1,10 +1,10 @@
 """Compute functions for magnetic field quantities."""
 
-from desc.backend import jnp
 from scipy.constants import mu_0
 
+from desc.backend import jnp
+from .utils import check_derivs, dot, surface_averages
 from ._core import (
-    check_derivs,
     compute_toroidal_flux,
     compute_rotational_transform,
     compute_lambda,
@@ -12,7 +12,6 @@ from ._core import (
     compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
 )
-from .utils import dot
 
 
 def compute_contravariant_magnetic_field(
@@ -59,7 +58,7 @@ def compute_contravariant_magnetic_field(
         component of the magnetic field, differentiated wrt y.
 
     """
-    data = compute_toroidal_flux(Psi, iota, data=data)
+    data = compute_toroidal_flux(Psi, iota.grid, data=data)
     data = compute_rotational_transform(i_l, iota, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
     data = compute_jacobian(
@@ -379,11 +378,12 @@ def compute_magnetic_field_magnitude(
 
     # 0th order term
     if check_derivs("|B|", R_transform, Z_transform, L_transform):
-        data["|B|"] = jnp.sqrt(
+        data["|B|^2"] = (
             data["B^theta"] ** 2 * data["g_tt"]
             + data["B^zeta"] ** 2 * data["g_zz"]
             + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
+        data["|B|"] = jnp.sqrt(data["|B|^2"])
 
     # 1st order derivatives
     # TODO: |B|_r
@@ -950,6 +950,76 @@ def compute_B_dot_gradB(
     return data
 
 
+def compute_boozer_magnetic_field(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    i_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
+    iota,
+    data=None,
+    **kwargs,
+):
+    """Compute covariant magnetic field components in Boozer coordinates.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of covariant magnetic field components
+        in Boozer coordinates.
+
+    """
+    grid = R_transform.grid
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
+    )
+
+    if check_derivs("I", R_transform, Z_transform, L_transform):
+        data["I"] = surface_averages(grid, data["B_theta"])
+    if check_derivs("I_r", R_transform, Z_transform, L_transform):
+        data["I_r"] = surface_averages(grid, data["B_theta_r"])
+    if check_derivs("G", R_transform, Z_transform, L_transform):
+        data["G"] = surface_averages(grid, data["B_zeta"])
+    if check_derivs("G_r", R_transform, Z_transform, L_transform):
+        data["G_r"] = surface_averages(grid, data["B_zeta_r"])
+
+    # TODO: add K(rho,theta,zeta)*grad(rho) term
+    return data
+
+
 def compute_contravariant_current_density(
     R_lmn,
     Z_lmn,
@@ -994,7 +1064,7 @@ def compute_contravariant_current_density(
         component of the current density J, differentiated wrt y.
 
     """
-    data = compute_covariant_magnetic_field(
+    data = compute_magnetic_field_magnitude(
         R_lmn,
         Z_lmn,
         L_lmn,
@@ -1006,8 +1076,18 @@ def compute_contravariant_current_density(
         iota,
         data=data,
     )
-    data = compute_covariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    # TODO: can remove this call if compute_|B| changed to use B_covariant
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        data=data,
     )
 
     if check_derivs("J^rho", R_transform, Z_transform, L_transform):
@@ -1038,11 +1118,6 @@ def compute_contravariant_current_density(
             + 2 * data["J^rho"] * data["J^theta"] * data["g_rt"]
             + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
             + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
-        )
-        data["|B|"] = jnp.sqrt(
-            data["B^theta"] ** 2 * data["g_tt"]
-            + data["B^zeta"] ** 2 * data["g_zz"]
-            + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
         data["J_parallel"] = (
             data["J^rho"] * data["B_rho"]

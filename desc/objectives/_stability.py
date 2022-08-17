@@ -263,7 +263,7 @@ class MagneticWell(_Objective):
 
         Returns
         -------
-        ndarray
+        magnetic_well : ndarray
             Magnetic well parameter.
 
         """

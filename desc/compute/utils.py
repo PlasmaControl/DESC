@@ -99,7 +99,6 @@ def _get_grid_surface(grid, surface_label):
 
     Returns
     -------
-    :rtype: (ndarray, ndarray, ndarray)
     nodes : ndarray
         The column in the grid corresponding to this surface_label's nodes.
     unique_idx : ndarray
@@ -141,7 +140,7 @@ def compress(grid, x, surface_label="rho"):
 
     Returns
     -------
-    ndarray
+    compress_x : ndarray
         x[grid.unique_surface_label_indices]
         This array will be sorted such that the
             first element corresponds to the value associated with the smallest surface
@@ -177,7 +176,7 @@ def expand(grid, x, surface_label="rho"):
 
     Returns
     -------
-    ndarray
+    expand_x : ndarray
         X expanded to match the grid's pattern.
 
     """

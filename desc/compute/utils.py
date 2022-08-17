@@ -149,19 +149,17 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
     # DESIRED ALGORITHM
     # surfaces = dict()
     # collect collocation node indices for each surface_label surface
-    # for index_in_grid_column, surface_label_value in enumerate(surface_label_nodes):
-    #     surfaces.setdefault(surface_label_value, list()).append(index_in_grid_column)
+    # for grid_column_idx, surface_label_value in enumerate(surface_label_nodes):
+    #     surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
     # integration over non-contiguous elements
-    # for i, e in enumerate(sorted(surfaces.items())):
-    #     _, surface_indices = e
-    #     integrals[i] = (ds * q)[surface_indices].sum()
+    # for _, surface_idx in sorted(surfaces.items()):
+    #     integrals.append((ds * q)[surface_idx].sum())
 
     # NO LOOP IMPLEMENTATION
     # Separate collocation nodes into bins with boundaries at unique values of the surface label.
     # This groups nodes with identical surface label values.
     # Each is assigned a weight of their contribution to the integral.
     # The elements of each bin are summed, performing the integration.
-
     surface_label_supremum = 7  # anything >= 1 for rho or 2pi for theta/zeta works
     bins = jnp.append(surface_label_nodes[unique_idx], surface_label_supremum)
     integrals = jnp.histogram(surface_label_nodes, bins, weights=ds * q)[0]

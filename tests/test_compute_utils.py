@@ -50,19 +50,18 @@ def benchmark_integrals(grid, q=1, surface_label="rho"):
     integrals : ndarray
         Surface integrals of q over each surface in grid.
     """
-    surface_label_nodes, unique_indices, ds = _get_proper_surface(grid, surface_label)
-    integrals = np.empty(len(unique_indices))
     q = np.asarray(q)
+    surface_label_nodes, _, ds = _get_proper_surface(grid, surface_label)
 
     surfaces = dict()
     # collect collocation node indices for each surface_label surface
-    for index_in_grid_column, surface_label_value in enumerate(surface_label_nodes):
-        surfaces.setdefault(surface_label_value, list()).append(index_in_grid_column)
+    for grid_column_idx, surface_label_value in enumerate(surface_label_nodes):
+        surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
     # integration over non-contiguous elements
-    for i, e in enumerate(sorted(surfaces.items())):
-        _, surface_indices = e
-        integrals[i] = (ds * q)[surface_indices].sum()
-    return integrals
+    integrals = list()
+    for _, surface_idx in sorted(surfaces.items()):
+        integrals.append((ds * q)[surface_idx].sum())
+    return np.asarray(integrals)
 
 
 class TestComputeUtils:
@@ -153,7 +152,7 @@ class TestComputeUtils:
             sym=torus.sym,
             rho=rho,
         )
-        data = torus.compute("sqrt(g)_rr", grid=grid)
+        data = torus.compute("sqrt(g)_r", grid=grid)
         volume = 20 * (np.pi * rho) ** 2
         volume_r = 40 * np.pi ** 2 * rho
         volume_rr = 40 * np.pi ** 2

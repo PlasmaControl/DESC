@@ -112,7 +112,7 @@ def DSHAPE(tmpdir_factory):
 @pytest.fixture(scope="session")
 def DSHAPE_examples(tmpdir_factory):
     """Run DSHAPE example that matches input in examples/DESC."""
-    input_path = ".//tests//inputs//DSHAPE_example"
+    input_path = ".//tests//inputs//DSHAPE_examples"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
     desc_nc_path = output_dir.join("DSHAPE_out.nc")

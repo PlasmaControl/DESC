@@ -254,17 +254,17 @@ def compute_magnetic_well(
         B2_avg = surface_averages(
             grid,
             data["|B|^2"],
-            sqrt_g=data["sqrt(g)"],
+            sqrt_g=jnp.abs(data["sqrt(g)"]),
             denominator=data["V_r enclosed"],
         )
         dp_drho = 2 * mu_0 * compress(grid, data["p_r"])
         dB2_drho = (
             surface_integrals(
                 grid,
-                data["sqrt(g)_r"] * data["|B|^2"]
-                + data["sqrt(g)"] * 2 * dot(data["B"], data["B_r"]),
+                jnp.abs(data["sqrt(g)_r"]) * data["|B|^2"]
+                + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
             )
-            - surface_integrals(grid, data["sqrt(g)_r"]) * B2_avg
+            - surface_integrals(grid, jnp.abs(data["sqrt(g)_r"])) * B2_avg
         ) / data["V_r enclosed"]
         data["magnetic well"] = (
             data["V enclosed"] * (dp_drho + dB2_drho) / (data["V_r enclosed"] * B2_avg)

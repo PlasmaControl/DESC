@@ -265,7 +265,7 @@ def surface_averages(
         If False (default), the result is a single value for each surface in the grid.
         If True, the result has repeated values to match the number of grid nodes.
     denominator : ndarray
-        Volume over the other two coordinates besides surface_label.
+        Surface area of the surface being averaged over. Sign must match sqrt_g.
         This can be supplied to avoid redundant computations.
 
     Returns

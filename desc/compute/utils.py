@@ -195,7 +195,7 @@ def expand(grid, x, surface_label="rho"):
         return x[grid.inverse_zeta_idx]
 
 
-def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
+def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", match_grid=False):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -226,6 +226,7 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
             )
         )
 
+    q = jnp.atleast_1d(q)
     nodes, unique_idx, ds = _get_grid_surface(grid, surface_label)
     max_surface_val = 1 if surface_label == "rho" else 2 * jnp.pi
     bins = jnp.append(nodes[unique_idx], max_surface_val)
@@ -273,6 +274,9 @@ def surface_averages(
         Surface averages of q over each surface in grid.
 
     """
+    q = jnp.atleast_1d(q)
+    sqrt_g = jnp.atleast_1d(sqrt_g)
+
     if denominator is None:
         if sqrt_g.size == 1:
             denominator = (
@@ -280,5 +284,6 @@ def surface_averages(
             ) * sqrt_g
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
+
     averages = surface_integrals(grid, sqrt_g * q, surface_label) / denominator
     return expand(grid, averages, surface_label) if match_grid else averages

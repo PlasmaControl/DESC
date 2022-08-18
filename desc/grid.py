@@ -581,9 +581,8 @@ class QuadratureGrid(Grid):
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        # quadrature weights do not need scaling, but need to adjust dr spacing
+        # quadrature weights do not need scaling
         self._weights = self.spacing.prod(axis=1)
-        self._spacing[:, 0] /= np.sum(self.spacing[self.unique_rho_idx, 0])
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """Create grid nodes and weights.

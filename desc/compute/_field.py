@@ -989,7 +989,7 @@ def compute_boozer_magnetic_field(
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) of covariant magnetic field components
+        Dictionary of ndarray, shape(num_rho,) of covariant magnetic field components
         in Boozer coordinates.
 
     """

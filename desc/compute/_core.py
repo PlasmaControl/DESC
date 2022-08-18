@@ -738,22 +738,23 @@ def compute_geometry(
     grid = R_transform.grid
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
-    data["A"] = jnp.mean(
-        surface_integrals(
-            grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+    if check_derivs("V enclosed", R_transform, Z_transform):
+        data["V enclosed"] = jnp.abs(
+            surface_integrals(
+                grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
+            )
         )
-    )
-    data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
-    data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-    data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
-
-    data["V enclosed"] = jnp.abs(
-        surface_integrals(
-            grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
+    if check_derivs("V_r enclosed", R_transform, Z_transform):
+        data["V_r enclosed"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
+        data["A"] = jnp.mean(
+            surface_integrals(
+                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+            )
         )
-    )
-    data["V_r enclosed"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
+        data["a"] = jnp.sqrt(data["A"] / jnp.pi)
+        data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
     if check_derivs("V_rr enclosed", R_transform, Z_transform):
         data["V_rr enclosed"] = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
 

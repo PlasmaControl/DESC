@@ -81,19 +81,19 @@ class MercierStability(_Objective):
         self._R_transform = Transform(
             self.grid,
             eq.R_basis,
-            derivs=data_index["Mercier DMerc"]["R_derivs"],
+            derivs=data_index["D_Mercier"]["R_derivs"],
             build=True,
         )
         self._Z_transform = Transform(
             self.grid,
             eq.Z_basis,
-            derivs=data_index["Mercier DMerc"]["R_derivs"],
+            derivs=data_index["D_Mercier"]["R_derivs"],
             build=True,
         )
         self._L_transform = Transform(
             self.grid,
             eq.L_basis,
-            derivs=data_index["Mercier DMerc"]["L_derivs"],
+            derivs=data_index["D_Mercier"]["L_derivs"],
             build=True,
         )
 
@@ -143,7 +143,7 @@ class MercierStability(_Objective):
             self._pressure,
             self._iota,
         )
-        return self._shift_scale(data["Mercier DMerc"])
+        return self._shift_scale(data["D_Mercier"])
 
 
 class MagneticWell(_Objective):

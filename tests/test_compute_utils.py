@@ -139,25 +139,6 @@ class TestComputeUtils:
         test(DSHAPE)
         test(HELIOTRON)
 
-    def test_total_volume(self, DSHAPE, HELIOTRON):
-        """Test that the volume enclosed by the LCFS is equal to the total volume."""
-
-        def test(stellarator):
-            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-            )
-            lcfs_volume = eq.compute("V enclosed", grid=grid)["V enclosed"][-1]
-            total_volume = eq.compute("V", grid=grid)["V"]
-            np.testing.assert_allclose(lcfs_volume, total_volume, rtol=1e-2)
-
-        test(DSHAPE)
-        test(HELIOTRON)
-
     def test_surface_averages_identity_op(self, DSHAPE, HELIOTRON):
         """Test that surface averages of flux functions are identity operations."""
 

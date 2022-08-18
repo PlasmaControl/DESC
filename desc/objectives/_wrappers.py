@@ -250,9 +250,34 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
-
         GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
+
+        LHS  = GxFx @ Fc - Gc
+        
+        #I = jnp.eye(len(xg),len(self._Z))
+        #print("The shape of I is " + str(I.shape))
+        #print("The shape of Z is " + str(self._Z.shape))
+        #print("The shape of Fx_reduced_inv is " + str(Fx_reduced_inv.shape))
+        #print("The shape of Fc is " + str(Fc.shape))
+        #print("The shape of Fx is " + str(Fx.shape))
+        #t = I @ self._Z @ Fx_reduced_inv @ Fc
+        #print("The shape of t is " + str(t.shape))
+
+        #GxFxFc = jnp.array([])
+        #for i in range(len(t[0])):
+        #    GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(t[:,i],xg)])
+#        GxFxFc = self._objective.jvp(t,xg)
+
+
+        #Gc = jnp.array([])
+        #print("The shape of xg is " + str(xg.shape))
+        #print("The shape of dxdc is " + str(dxdc.shape))
+        #for i in range(len(dxdc[0])):
+        #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
+        #Gc = self._objective.jvp(dxdc,xg)
+
+        #LHS = GxFxFc - Gc
+        print("The shape of LHS is " + str(LHS))
         return -LHS
 
     def hess(self, x):
@@ -535,7 +560,8 @@ class GXWrapper(_Objective):
         #print("values are " + str(values))
         #print("tangents are " + str(tangents))
         R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values
-        primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        #primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        primal_out = jnp.atleast_1d(0.0)
         
         n = len(values) 
         argnum = np.arange(0,n,1)

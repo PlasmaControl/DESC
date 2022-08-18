@@ -2,9 +2,12 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --ntasks-per-socket=1
-#SBATCH --time=20:00:00
+#SBATCH --time=10:00:00
 #SBATCH --gpus-per-task=1
 #SBATCH --gpu-bind=map_gpu:0,1,2,3
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=pkim1236@terpmail.umd.edu
+
 
 module load cudatoolkit 
 module load openmpi/gcc/4.0.4/64

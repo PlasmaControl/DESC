@@ -71,6 +71,7 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     gtol=1e-6,  # stopping tolerance on the gradient
     maxiter=5,  # maximum number of iterations
     options={
+        "initial_trust_radius":0.01,
         "perturb_options": {"order": 2, "verbose": 0},  # use 2nd-order perturbations
         "solve_options": {"ftol": 1e-2, "xtol": 1e-6, "gtol": 1e-6, "verbose": 0}, # for equilibrium subproblem
     },
@@ -78,5 +79,5 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_MN6_4modes.h5')
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_MN6_4modes_test.h5')
 

@@ -35,7 +35,7 @@ from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plo
 
 #%%
 eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
-eq_init.change_resolution(M=4,M_grid=8,N=2,N_grid=4,L=4,L_grid=8)
+eq_init.change_resolution(M=6,M_grid=12,L=6,L_grid=12)
 optimizer = Optimizer("lsq-exact")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=2)
 idx_Rss = eq_init.surface.R_basis.get_idx(M=-1, N=-2)
@@ -58,7 +58,9 @@ constraints = (
 
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
 #plot_grid(grid_vol);
-objective_fT = ObjectiveFunction((QuasisymmetryTripleProduct(grid=grid_vol),GXWrapper(target=0.1)), verbose=0,use_jit=False)
+#objective_fT = ObjectiveFunction((QuasisymmetryTripleProduct(grid=grid_vol),GXWrapper(target=0.1)), verbose=0,use_jit=False)
+objective_fT = ObjectiveFunction(GXWrapper(target=0.2), verbose=0,use_jit=False)
+
 
 eq_qs_T_unc, result_T_unc = eq_init.optimize(
     objective=objective_fT,
@@ -69,6 +71,7 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     gtol=1e-6,  # stopping tolerance on the gradient
     maxiter=5,  # maximum number of iterations
     options={
+        "initial_trust_radius":0.1,
         "perturb_options": {"order": 2, "verbose": 0},  # use 2nd-order perturbations
         "solve_options": {"ftol": 1e-2, "xtol": 1e-6, "gtol": 1e-6, "verbose": 0}, # for equilibrium subproblem
     },
@@ -76,5 +79,5 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs.h5')
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_stel.h5')
 

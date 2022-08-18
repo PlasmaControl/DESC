@@ -3,13 +3,8 @@ from termcolor import colored
 import warnings
 
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import LinearGrid
-from desc.basis import (
-    zernike_radial_coeffs,
-)
+from desc.basis import zernike_radial_coeffs
 from desc.profiles import PowerSeriesProfile, SplineProfile
-from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
 
 

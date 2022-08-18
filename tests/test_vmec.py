@@ -282,7 +282,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     )
 
     # straight field-line grid to compare quantities
-    grid = LinearGrid(L=16, M=5, N=5, NFP=eq.NFP)
+    grid = LinearGrid(L=15, M=2, N=2, NFP=eq.NFP)
     vartheta_vmec = VMECIO.compute_theta_coords(
         vmec.variables["lmns"][:],
         vmec.variables["xm"][:],

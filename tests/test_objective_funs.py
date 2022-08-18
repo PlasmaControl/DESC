@@ -36,7 +36,7 @@ class TestObjectiveFunction(unittest.TestCase):
         np.testing.assert_allclose(AR, 10)
 
     def test_energy(self):
-        eq = Equilibrium()
+        eq = Equilibrium(node_pattern="quad")
         obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
         W = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.p_l, eq.Psi)
         np.testing.assert_allclose(W, 10)

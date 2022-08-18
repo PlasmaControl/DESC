@@ -29,6 +29,8 @@ from desc.derivatives import Derivative
 # )
 
 from scipy.constants import mu_0
+import warnings
+from termcolor import colored
 
 class ForceBalance(_Objective):
     """Radial and helical MHD force balance.
@@ -83,16 +85,30 @@ class ForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation=None,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation=None,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 2 * self.grid.num_nodes
 
@@ -660,16 +676,30 @@ class RadialForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="cos",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation="cos",
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -793,16 +823,30 @@ class HelicalForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="sin",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation="sin",
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -894,7 +938,7 @@ class Energy(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str
@@ -927,9 +971,39 @@ class Energy(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+            if eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                warnings.warn(
+                    colored(
+                        "Energy objective built using grid "
+                        + "that is not the quadrature grid! "
+                        + "This is not recommended and may result in poor convergence. "
+                        "yellow",
+                    )
+                )
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation=None,
+                    node_pattern=eq.node_pattern,
+                )
+
+            else:
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 1
 

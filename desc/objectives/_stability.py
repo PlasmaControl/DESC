@@ -66,7 +66,7 @@ class MercierStability(_Objective):
                 rho=np.linspace(1 / 5, 1, 5),
             )
 
-        self._dim_f = 1
+        self._dim_f = self.grid.num_rho
 
         timer = Timer()
         if verbose > 0:
@@ -203,7 +203,7 @@ class MagneticWell(_Objective):
                 rho=np.linspace(1 / 5, 1, 5),
             )
 
-        self._dim_f = 1
+        self._dim_f = self.grid.num_rho
 
         timer = Timer()
         if verbose > 0:

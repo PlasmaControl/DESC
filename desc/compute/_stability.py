@@ -138,40 +138,28 @@ def compute_mercier_stability(
         )
 
     if check_derivs("D_well", R_transform, Z_transform, L_transform):
-        dp_dpsi = compress(grid, data["p_r"] / data["psi_r"])
+        dp_dpsi = mu_0 * compress(grid, data["p_r"] / data["psi_r"])
         d2V_dpsi2 = (
             data["V_rr(r)"]
             - data["V_r(r)"] * compress(grid, data["psi_rr"] / data["psi_r"])
         ) / compress(grid, data["psi_r"]) ** 2
         data["D_well"] = (
-            mu_0
-            / (2 * jnp.pi) ** 6
-            * dp_dpsi
+            dp_dpsi
             * (
                 compress(grid, jnp.sign(data["psi"])) * d2V_dpsi2
-                - mu_0
-                * dp_dpsi
+                - dp_dpsi
                 * surface_integrals(grid, dS / (data["|B|^2"] * data["|grad(psi)|"]))
             )
             * surface_integrals(grid, dS * data["|B|^2"] / data["|grad(psi)|"] ** 3)
-        )
+        ) / (2 * jnp.pi) ** 6
 
     if check_derivs("D_geodesic", R_transform, Z_transform, L_transform):
+        J_dot_B = mu_0 * dot(data["J"], data["B"])
+        grad_psi_3 = data["|grad(psi)|"] ** 3
         data["D_geodesic"] = (
-            (
-                surface_integrals(
-                    grid,
-                    dS * mu_0 * dot(data["J"], data["B"]) / data["|grad(psi)|"] ** 3,
-                )
-            )
-            ** 2
-            - surface_integrals(grid, dS * data["|B|^2"] / data["|grad(psi)|"] ** 3)
-            * surface_integrals(
-                grid,
-                dS
-                * (mu_0 * dot(data["J"], data["B"])) ** 2
-                / (data["|B|^2"] * data["|grad(psi)|"] ** 3),
-            )
+            surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
+            - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
+            * surface_integrals(grid, dS * J_dot_B ** 2 / (data["|B|^2"] * grad_psi_3))
         ) / (2 * jnp.pi) ** 6
 
     if check_derivs("D_Mercier", R_transform, Z_transform, L_transform):

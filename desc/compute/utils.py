@@ -195,7 +195,7 @@ def expand(grid, x, surface_label="rho"):
         return x[grid.inverse_zeta_idx]
 
 
-def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", match_grid=False):
+def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -206,10 +206,6 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", match_grid=Fa
         Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
-    match_grid : bool
-        Whether to expand the result to match the dimension of the grid.
-        If False (default), the result is a single value for each surface in the grid.
-        If True, the result has repeated values to match the number of grid nodes.
 
     Returns
     -------
@@ -231,17 +227,11 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", match_grid=Fa
     max_surface_val = 1 if surface_label == "rho" else 2 * jnp.pi
     bins = jnp.append(nodes[unique_idx], max_surface_val)
     integrals = jnp.histogram(nodes, bins=bins, weights=ds * q)[0]
-
-    return expand(grid, integrals, surface_label) if match_grid else integrals
+    return expand(grid, integrals, surface_label=surface_label)
 
 
 def surface_averages(
-    grid,
-    q,
-    sqrt_g=jnp.array([1]),
-    surface_label="rho",
-    match_grid=False,
-    denominator=None,
+    grid, q, sqrt_g=jnp.array([1]), surface_label="rho", denominator=None
 ):
     """Compute the surface average of a quantity for all surfaces in the grid.
 
@@ -260,10 +250,6 @@ def surface_averages(
         Coordinate system Jacobian determinant; see data_index["sqrt(g)"].
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
-    match_grid : bool
-        Whether to expand the result to match the dimension of the grid.
-        If False (default), the result is a single value for each surface in the grid.
-        If True, the result has repeated values to match the number of grid nodes.
     denominator : ndarray
         Surface area of the surface being averaged over. Sign must match sqrt_g.
         This can be supplied to avoid redundant computations.
@@ -286,4 +272,4 @@ def surface_averages(
             denominator = surface_integrals(grid, sqrt_g, surface_label)
 
     averages = surface_integrals(grid, sqrt_g * q, surface_label) / denominator
-    return expand(grid, averages, surface_label) if match_grid else averages
+    return averages

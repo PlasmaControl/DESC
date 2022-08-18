@@ -5,6 +5,7 @@ from scipy.signal import convolve2d
 
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.compute.utils import compress  # TODO: remove when we change eq.compute dim
 
 
 # convolve kernel is reverse of FD coeffs
@@ -40,6 +41,7 @@ def all_close(
         relative tolerance
     atol : float
         absolute tolerance
+
     """
     minimum, maximum = rho_range
     interval = np.where((minimum < rho) & (rho < maximum))
@@ -61,35 +63,13 @@ def get_vmec_data(name, quantity):
         Radial coordinate.
     quantity : ndarray
         Variable from VMEC output.
+
     """
     f = Dataset("tests/inputs/wout_" + name + ".nc")
     rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
     quantity = np.asarray(f.variables[quantity])
     f.close()
     return rho, quantity
-
-
-def get_grid(eq, rho):
-    """
-    Parameters
-    ----------
-    eq : Equilibrium
-        DESC equilibrium.
-    rho: ndarray
-        Rho values over which the grid will be defined.
-
-    Returns
-    -------
-    LinearGrid
-        Defined over the given rho array with resolution matching equilibrium's.
-    """
-    return LinearGrid(
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-        sym=eq.sym,
-        rho=np.atleast_1d(rho),
-    )
 
 
 # TODO: add more tests for compute_geometry
@@ -101,7 +81,7 @@ def test_total_volume(DummyStellarator):
     )
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
-    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
+    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"][0]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume, rtol=1e-2)
 
@@ -412,10 +392,10 @@ def test_currents(DSHAPE):
     data_full = eq.compute("I", grid_full)
     data_sym = eq.compute("I", grid_sym)
 
-    np.testing.assert_allclose(data_full["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"], data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["G"], data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_full["I"][0], data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["I"][0], data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_full["G"][0], data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["G"][0], data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow
@@ -529,8 +509,8 @@ def test_compute_dmerc(DSHAPE_examples, HELIOTRON):
     ):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DMerc")
-        grid = get_grid(eq, rho)
-        DMerc = eq.compute("D_Mercier", grid=grid)["D_Mercier"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DMerc = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
         all_close(DMerc, vmec, rho, rho_range, rtol, atol)
 
     test(DSHAPE_examples, "DSHAPE", (0.175, 0.8))
@@ -549,11 +529,11 @@ def test_compute_dshear(DSHAPE_examples, HELIOTRON):
     ):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DShear")
-        grid = get_grid(eq, rho)
-        DShear = eq.compute("D_shear", grid=grid)["D_shear"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DShear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
         assert np.all(
             DShear[np.isfinite(DShear)] >= 0
-        ), "DShear should always have a stabilizing effect."
+        ), "D_shear should always have a stabilizing effect."
         all_close(DShear, vmec, rho, rho_range, rtol, atol)
 
     test(DSHAPE_examples, "DSHAPE", (0, 1), 1e-12, 0)
@@ -570,8 +550,8 @@ def test_compute_dcurr(DSHAPE_examples, HELIOTRON):
     ):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DCurr")
-        grid = get_grid(eq, rho)
-        DCurr = eq.compute("D_current", grid=grid)["D_current"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DCurr = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
         all_close(DCurr, vmec, rho, rho_range, rtol, atol)
 
     test(DSHAPE_examples, "DSHAPE", (0.075, 0.975))
@@ -588,8 +568,8 @@ def test_compute_dwell(DSHAPE_examples, HELIOTRON):
     ):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DWell")
-        grid = get_grid(eq, rho)
-        DWell = eq.compute("D_well", grid=grid)["D_well"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DWell = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
         all_close(DWell, vmec, rho, rho_range, rtol, atol)
 
     test(DSHAPE_examples, "DSHAPE", (0.11, 0.8))
@@ -608,8 +588,8 @@ def test_compute_dgeod(DSHAPE_examples, HELIOTRON):
     ):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DGeod")
-        grid = get_grid(eq, rho)
-        DGeod = eq.compute("D_geodesic", grid=grid)["D_geodesic"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DGeod = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
         assert np.all(
             DGeod[np.isfinite(DGeod)] <= 0
         ), "DGeod should always have a destabilizing effect."
@@ -624,8 +604,10 @@ def test_compute_magnetic_well(DSHAPE, HELIOTRON):
     def test(stellarator, name):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DWell")
-        grid = get_grid(eq, rho)
-        magnetic_well = eq.compute("magnetic well", grid=grid)["magnetic well"]
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        magnetic_well = compress(
+            grid, eq.compute("magnetic well", grid=grid)["magnetic well"]
+        )
         # sign should match for finite non-zero pressure cases
         assert len(np.where(np.sign(magnetic_well) != np.sign(vmec))) <= 1
 

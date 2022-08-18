@@ -6,8 +6,6 @@ from desc.backend import jnp
 from .utils import (
     check_derivs,
     dot,
-    compress,
-    expand,
     surface_averages,
     surface_integrals,
 )
@@ -119,39 +117,38 @@ def compute_mercier_stability(
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
 
     if check_derivs("D_shear", R_transform, Z_transform, L_transform):
-        data["D_shear"] = compress(
-            grid, (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
-        )
+        data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
 
     if check_derivs("D_current", R_transform, Z_transform, L_transform):
         Xi = (
-            mu_0 * data["J"]
-            - jnp.atleast_2d(expand(grid, data["I_r"]) / data["psi_r"]).T * data["B"]
+            mu_0 * data["J"] - jnp.atleast_2d(data["I_r"] / data["psi_r"]).T * data["B"]
         )
         data["D_current"] = (
             -jnp.sign(data["G"])
             / (2 * jnp.pi) ** 4
-            * compress(grid, data["iota_r"] / data["psi_r"])
+            * data["iota_r"]
+            / data["psi_r"]
             * surface_integrals(
                 grid, dS / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"])
             )
         )
 
     if check_derivs("D_well", R_transform, Z_transform, L_transform):
-        dp_dpsi = mu_0 * compress(grid, data["p_r"] / data["psi_r"])
+        dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
         d2V_dpsi2 = (
             data["V_rr(r)"]
-            - data["V_r(r)"] * compress(grid, data["psi_rr"] / data["psi_r"])
-        ) / compress(grid, data["psi_r"]) ** 2
+            - data["V_r(r)"] * data["psi_rr"] / data["psi_r"] / data["psi_r"] ** 2
+        )
         data["D_well"] = (
             dp_dpsi
             * (
-                compress(grid, jnp.sign(data["psi"])) * d2V_dpsi2
+                jnp.sign(data["psi"]) * d2V_dpsi2
                 - dp_dpsi
                 * surface_integrals(grid, dS / (data["|B|^2"] * data["|grad(psi)|"]))
             )
             * surface_integrals(grid, dS * data["|B|^2"] / data["|grad(psi)|"] ** 3)
-        ) / (2 * jnp.pi) ** 6
+            / (2 * jnp.pi) ** 6
+        )
 
     if check_derivs("D_geodesic", R_transform, Z_transform, L_transform):
         J_dot_B = mu_0 * dot(data["J"], data["B"])
@@ -245,7 +242,7 @@ def compute_magnetic_well(
             sqrt_g=jnp.abs(data["sqrt(g)"]),
             denominator=data["V_r(r)"],
         )
-        dp_drho = 2 * mu_0 * compress(grid, data["p_r"])
+        dp_drho = 2 * mu_0 * data["p_r"]
         dB2_drho = (
             surface_integrals(
                 grid,

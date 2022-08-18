@@ -84,9 +84,7 @@ class TestComputeUtils:
             grid = random_grid()
             q = np.random.random_sample(size=grid.num_nodes)
             integrals = surface_integrals(grid, q, surface_label)
-            integrals_expand = surface_integrals(
-                grid, q, surface_label, match_grid=True
-            )
+            integrals_expand = surface_integrals(grid, q, surface_label)
 
             nodes, _, _ = _get_grid_surface(grid, surface_label)
             _, inverse = np.unique(nodes, return_inverse=True)
@@ -103,9 +101,7 @@ class TestComputeUtils:
             grid = random_grid()
             q = np.random.random_sample(size=grid.num_nodes)
             integrals = surface_integrals(grid, q, surface_label)
-            integrals_expand = surface_integrals(
-                grid, q, surface_label, match_grid=True
-            )
+            integrals_expand = surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(
                 integrals, compress(grid, integrals_expand, surface_label)
             )
@@ -147,9 +143,7 @@ class TestComputeUtils:
             grid = random_grid()
             data = eq.compute("p", grid=grid)
             data = eq.compute("sqrt(g)", grid=grid, data=data)
-            pressure_average = surface_averages(
-                grid, data["p"], data["sqrt(g)"], match_grid=True
-            )
+            pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
             np.testing.assert_allclose(data["p"], pressure_average)
 
         test(DSHAPE)

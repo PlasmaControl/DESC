@@ -3469,7 +3469,7 @@ data_index["D_shear"] = {
     "description": "Mercier stability criterion magnetic sheer term",
     "fun": "compute_mercier_stability",
     "dim": 1,
-    "R_derivs": [[0, 0, 0]],
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0]],
 }
 data_index["D_current"] = {

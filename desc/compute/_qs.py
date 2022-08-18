@@ -1,7 +1,7 @@
 """Compute functions for quasisymmetry objectives."""
 
 from desc.backend import jnp, put, sign
-from .utils import check_derivs
+from .utils import check_derivs, expand
 from ._field import (
     compute_magnetic_field_magnitude,
     compute_covariant_magnetic_field,
@@ -192,6 +192,7 @@ def compute_quasisymmetry_error(
         Key "QS_FF" is the flux function metric, key "QS_TP" is the triple product.
 
     """
+    grid = R_transform.grid
     data = compute_B_dot_gradB(
         R_lmn,
         Z_lmn,
@@ -224,7 +225,9 @@ def compute_quasisymmetry_error(
     if check_derivs("f_C", R_transform, Z_transform, L_transform):
         data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
             data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
-        ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
+        ) - (M * expand(grid, data["G"]) + N * expand(grid, data["I"])) * data[
+            "B*grad(|B|)"
+        ]
 
     # QS triple product (T^4/m^2)
     if check_derivs("f_T", R_transform, Z_transform, L_transform):

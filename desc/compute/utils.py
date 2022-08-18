@@ -1,6 +1,9 @@
 import numpy as np
+import warnings
+from termcolor import colored
 
 from desc.backend import jnp
+from desc.grid import ConcentricGrid
 from .data_index import data_index
 
 
@@ -214,6 +217,15 @@ def surface_integrals(grid, q=1, surface_label="rho", match_grid=False):
         Surface integrals of q over each surface in grid.
 
     """
+    if surface_label == "theta" and isinstance(grid, ConcentricGrid):
+        warnings.warn(
+            colored(
+                "Integrals over constant theta surfaces are poorly defined for "
+                + "ConcentricGrid.",
+                "yellow",
+            )
+        )
+
     nodes, unique_idx, ds = _get_grid_surface(grid, surface_label)
     max_surface_val = 1 if surface_label == "rho" else 2 * jnp.pi
     bins = jnp.append(nodes[unique_idx], max_surface_val)

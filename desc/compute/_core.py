@@ -731,21 +731,21 @@ def compute_geometry(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of geometric quantities with the keys
-        volume "V", enclosed volume "V enclosed", cross-sectional area "A",
+        volume "V", enclosed volume "V(r)", cross-sectional area "A",
         minor radius "a", major radius "R0", aspect ration "R0/a".
 
     """
     grid = R_transform.grid
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    if check_derivs("V enclosed", R_transform, Z_transform):
-        data["V enclosed"] = jnp.abs(
+    if check_derivs("V(r)", R_transform, Z_transform):
+        data["V(r)"] = jnp.abs(
             surface_integrals(
                 grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
             )
         )
-    if check_derivs("V_r enclosed", R_transform, Z_transform):
-        data["V_r enclosed"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+    if check_derivs("V_r(r)", R_transform, Z_transform):
+        data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
         data["A"] = jnp.mean(
             surface_integrals(
@@ -755,7 +755,7 @@ def compute_geometry(
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
         data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
-    if check_derivs("V_rr enclosed", R_transform, Z_transform):
-        data["V_rr enclosed"] = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
+    if check_derivs("V_rr(r)", R_transform, Z_transform):
+        data["V_rr(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
 
     return data

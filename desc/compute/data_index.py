@@ -1365,7 +1365,7 @@ data_index["R0/a"] = {
     "dim": 0,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["V enclosed"] = {
+data_index["V(r)"] = {
     "label": "V(\\rho)",
     "units": "m^{3}",
     "units_long": "cubic meters",
@@ -1374,7 +1374,7 @@ data_index["V enclosed"] = {
     "dim": 0,
     "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["V_r enclosed"] = {
+data_index["V_r(r)"] = {
     "label": "\\partial_{\\rho} V(\\rho)",
     "units": "m^{3}",
     "units_long": "cubic meters",
@@ -1383,7 +1383,7 @@ data_index["V_r enclosed"] = {
     "dim": 0,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["V_rr enclosed"] = {
+data_index["V_rr(r)"] = {
     "label": "\\partial_{\\rho\\rho} V(\\rho)",
     "units": "m^{3}",
     "units_long": "cubic meters",

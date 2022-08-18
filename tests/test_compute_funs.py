@@ -101,7 +101,7 @@ def test_total_volume(DummyStellarator):
     )
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
-    lcfs_volume = eq.compute("V enclosed", grid=grid)["V enclosed"]
+    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume, rtol=1e-2)
 

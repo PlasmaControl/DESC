@@ -140,8 +140,8 @@ def compute_mercier_stability(
     if check_derivs("D_well", R_transform, Z_transform, L_transform):
         dp_dpsi = compress(grid, data["p_r"] / data["psi_r"])
         d2V_dpsi2 = (
-            data["V_rr enclosed"]
-            - data["V_r enclosed"] * compress(grid, data["psi_rr"] / data["psi_r"])
+            data["V_rr(r)"]
+            - data["V_r(r)"] * compress(grid, data["psi_rr"] / data["psi_r"])
         ) / compress(grid, data["psi_r"]) ** 2
         data["D_well"] = (
             mu_0
@@ -255,7 +255,7 @@ def compute_magnetic_well(
             grid,
             data["|B|^2"],
             sqrt_g=jnp.abs(data["sqrt(g)"]),
-            denominator=data["V_r enclosed"],
+            denominator=data["V_r(r)"],
         )
         dp_drho = 2 * mu_0 * compress(grid, data["p_r"])
         dB2_drho = (
@@ -265,9 +265,9 @@ def compute_magnetic_well(
                 + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
             )
             - surface_integrals(grid, jnp.abs(data["sqrt(g)_r"])) * B2_avg
-        ) / data["V_r enclosed"]
+        ) / data["V_r(r)"]
         data["magnetic well"] = (
-            data["V enclosed"] * (dp_drho + dB2_drho) / (data["V_r enclosed"] * B2_avg)
+            data["V(r)"] * (dp_drho + dB2_drho) / (data["V_r(r)"] * B2_avg)
         )
 
         # equivalent method (besides scaling factor) that avoids computing the volume

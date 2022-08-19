@@ -2,6 +2,7 @@ import numpy as np
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.transform import Transform
+from desc.compute.utils import compress
 from desc.compute import data_index, compute_mercier_stability, compute_magnetic_well
 from .objective_funs import _Objective
 
@@ -143,7 +144,7 @@ class MercierStability(_Objective):
             self._pressure,
             self._iota,
         )
-        return self._shift_scale(data["D_Mercier"])
+        return self._shift_scale(compress(self.grid, data["D_Mercier"]))
 
 
 class MagneticWell(_Objective):
@@ -280,4 +281,4 @@ class MagneticWell(_Objective):
             self._pressure,
             self._iota,
         )
-        return self._shift_scale(data["magnetic well"])
+        return self._shift_scale(compress(self.grid, data["magnetic well"]))

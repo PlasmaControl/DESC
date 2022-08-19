@@ -70,7 +70,9 @@ class TestComputeUtils:
             grid = random_grid()
             q = np.random.random_sample(size=grid.num_nodes)
             integrals_1 = benchmark_integrals(grid, q, surface_label)
-            integrals_2 = surface_integrals(grid, q, surface_label)
+            integrals_2 = compress(
+                grid, surface_integrals(grid, q, surface_label), surface_label
+            )
             np.testing.assert_allclose(integrals_1, integrals_2)
 
         test("rho")

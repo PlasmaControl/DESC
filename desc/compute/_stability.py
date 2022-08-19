@@ -114,6 +114,7 @@ def compute_mercier_stability(
     )
 
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
+    grad_psi_3 = data["|grad(psi)|"] ** 3
 
     if check_derivs("D_shear", R_transform, Z_transform, L_transform):
         data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
@@ -127,9 +128,7 @@ def compute_mercier_stability(
             / (2 * jnp.pi) ** 4
             * data["iota_r"]
             / data["psi_r"]
-            * surface_integrals(
-                grid, dS / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"])
-            )
+            * surface_integrals(grid, dS / grad_psi_3 * dot(Xi, data["B"]))
         )
 
     if check_derivs("D_well", R_transform, Z_transform, L_transform):
@@ -144,13 +143,12 @@ def compute_mercier_stability(
                 - dp_dpsi
                 * surface_integrals(grid, dS / (data["|B|^2"] * data["|grad(psi)|"]))
             )
-            * surface_integrals(grid, dS * data["|B|^2"] / data["|grad(psi)|"] ** 3)
+            * surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
             / (2 * jnp.pi) ** 6
         )
 
     if check_derivs("D_geodesic", R_transform, Z_transform, L_transform):
         J_dot_B = mu_0 * dot(data["J"], data["B"])
-        grad_psi_3 = data["|grad(psi)|"] ** 3
         data["D_geodesic"] = (
             surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
             - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
@@ -245,7 +243,7 @@ def compute_magnetic_well(
         # Thermal pressure is constant over a rho surface.
         # surface average(pressure) = thermal + surface average(magnetic)
         dp_drho = 2 * mu_0 * data["p_r"]
-        dB2_drho = (
+        dB2_drho_avg = (
             surface_integrals(
                 grid,
                 jnp.abs(data["sqrt(g)_r"]) * data["|B|^2"]
@@ -254,10 +252,10 @@ def compute_magnetic_well(
             - surface_integrals(grid, jnp.abs(data["sqrt(g)_r"])) * B2_avg
         ) / data["V_r(r)"]
         data["magnetic well"] = (
-            data["V(r)"] * (dp_drho + dB2_drho) / (data["V_r(r)"] * B2_avg)
+            data["V(r)"] * (dp_drho + dB2_drho_avg) / (data["V_r(r)"] * B2_avg)
         )
 
         # equivalent method (besides scaling factor) that avoids computing the volume
-        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_drho) / B2_avg
+        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_drho_avg) / B2_avg
 
     return data

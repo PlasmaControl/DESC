@@ -82,7 +82,7 @@ class Grid(IOAble):
                 self.nodes[non_sym_idx, 0], return_counts=True
             )
             if len(nodes_per_rho_surf) > len(non_sym_per_rho_surf):
-                # edge case where surface closest to axis lacks theta > pi nodes
+                # edge case where surfaces closest to axis lack theta > pi nodes
                 pad_count = len(nodes_per_rho_surf) - len(non_sym_per_rho_surf)
                 non_sym_per_rho_surf = np.pad(non_sym_per_rho_surf, (pad_count, 0))
             # assumes number of theta nodes to delete is constant over zeta

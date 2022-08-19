@@ -221,7 +221,8 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
             colored(
-                "Integrals over constant theta surfaces are poorly defined for ConcentricGrid.",
+                "Integrals over constant theta surfaces are poorly defined for"
+                + "ConcentricGrid.",
                 "yellow",
             )
         )

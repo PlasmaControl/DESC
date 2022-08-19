@@ -11,13 +11,10 @@ from desc.compute.utils import (
 )
 
 
-def random_grid(linear=False):
-    rng = np.random.default_rng()
-    L = rng.integers(low=1, high=4)
-    M = rng.integers(low=7, high=20)
-    N = rng.integers(low=1, high=20)
-    NFP = rng.integers(low=1, high=20)
-    sym = True if rng.integers(2) > 0 else False
+def test_grid(linear=False):
+    # Good to have enough resolution in L, M, N, so that this
+    # grid's features are not unique to low resolution.
+    L, M, N, NFP, sym = 5, 11, 9, 13, True
     return (
         LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=sym)
         if linear
@@ -48,7 +45,7 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     weights = np.asarray(ds * q)
 
     surfaces = dict()
-    # collect collocation node indices for each surface_label surface
+    # collect node indices for each surface_label surface
     for grid_column_idx, surface_label_value in enumerate(nodes):
         surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
     # integration over non-contiguous elements
@@ -63,7 +60,7 @@ class TestComputeUtils:
         """Test that compress() and expand() are inverse operations for surface functions."""
 
         def test(surface_label):
-            grid = random_grid()
+            grid = test_grid()
             # enforce r is a surface function via compression
             r = compress(
                 grid, np.random.random_sample(size=grid.num_nodes), surface_label
@@ -79,7 +76,7 @@ class TestComputeUtils:
         """Test the bulk surface averaging against a more intuitive implementation."""
 
         def test(surface_label):
-            grid = random_grid()
+            grid = test_grid()
             q = np.random.random_sample(size=grid.num_nodes)
             integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(
@@ -95,7 +92,7 @@ class TestComputeUtils:
         """Test the surface integral(ds) is 4pi^2, 2pi for rho, zeta surfaces."""
 
         def test(surface_label):
-            grid = random_grid(linear=surface_label == "theta")
+            grid = test_grid(linear=surface_label == "theta")
             areas = surface_integrals(grid, surface_label=surface_label)
             correct_area = 4 * np.pi ** 2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area)
@@ -109,7 +106,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = random_grid()
+            grid = test_grid()
             sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
             areas = compress(grid, surface_integrals(grid, sqrt_g))
             np.testing.assert_allclose(areas, np.sort(areas))
@@ -122,7 +119,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = random_grid()
+            grid = test_grid()
             data = eq.compute("p", grid=grid)
             data = eq.compute("sqrt(g)", grid=grid, data=data)
             pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -139,7 +136,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = random_grid()
+            grid = test_grid()
             data = eq.compute("|B|_t", grid=grid)
             a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
             b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
